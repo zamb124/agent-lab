@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request, Response
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.companies_operations import (
     CompanyCreated,
     CompanyCreatePayload,
@@ -36,13 +36,13 @@ class SystemAccessRequest(StrictBaseModel):
 
 
 @router.post("/check-slug", response_model=CompanySlugCheckResult)
-async def check_slug(body: CompanySlugCheckPayload, container: ContainerDep) -> CompanySlugCheckResult:
-    return await op_companies_slug_check(body, user=require_context().user, container=container)
+async def check_slug(body: CompanySlugCheckPayload, di: Di) -> CompanySlugCheckResult:
+    return await op_companies_slug_check(body, user=require_context().user, di=di)
 
 
 @router.post("", response_model=CompanyCreated)
 async def create_company(
-    request_body: CreateCompanyRequest, request: Request, response: Response, container: ContainerDep
+    request_body: CreateCompanyRequest, request: Request, response: Response, di: Di
 ) -> CompanyCreated:
     """Создание компании; SESSION JWT перевыпускается на неё в cookie (граница HTTP)."""
     user = require_context().user
@@ -51,7 +51,7 @@ async def create_company(
             name=request_body.name, slug=request_body.slug, public_host=request.headers.get("host", "")
         ),
         user=user,
-        container=container,
+        di=di,
     )
     session_token = get_token_service().create_token(user.user_id, created.company_id, email=user.email)
     attach_session_auth_cookie(response, request, session_token)
@@ -60,22 +60,22 @@ async def create_company(
 
 @router.post("/{company_id}/system-access", response_model=SystemAccessGranted)
 async def enter_company_as_system_member(
-    company_id: str, payload: SystemAccessRequest, container: ContainerDep
+    company_id: str, payload: SystemAccessRequest, di: Di
 ) -> SystemAccessGranted:
     return await op_companies_system_access_grant(
         SystemAccessGrantPayload(company_id=company_id, role=payload.role),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{company_id}/system-access", response_model=SystemAccessRevoked)
 async def leave_company_as_system_member(
-    company_id: str, request: Request, response: Response, container: ContainerDep
+    company_id: str, request: Request, response: Response, di: Di
 ) -> SystemAccessRevoked:
     user = require_context().user
     revoked = await op_companies_system_access_revoke(
-        SystemAccessRevokePayload(company_id=company_id), user=user, container=container
+        SystemAccessRevokePayload(company_id=company_id), user=user, di=di
     )
     if revoked.switched_to_system:
         system_roles = user.companies.get(SYSTEM_COMPANY_ID)

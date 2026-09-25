@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_annotation_create,
     op_flows_evaluation_annotation_delete,
@@ -66,7 +67,6 @@ from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_suite_update,
     op_flows_evaluation_suites_list,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.evaluation_lab import (
     EvaluationActiveMonitorCyclesRequest,
     EvaluationActiveMonitorCyclesResult,
@@ -149,48 +149,48 @@ router = APIRouter(tags=["evaluation"])
 
 @router.get("/evaluator-catalog", response_model=EvaluationBuiltinEvaluatorCatalog)
 async def get_evaluation_evaluator_catalog(
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationBuiltinEvaluatorCatalog:
     return await op_flows_evaluation_evaluator_catalog(
         EmptyPayload(),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/suites", response_model=EvaluationSuite)
 async def create_evaluation_suite(
     request: EvaluationSuiteCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationSuite:
     return await op_flows_evaluation_suite_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites", response_model=ListResponse[EvaluationSuite])
 async def list_evaluation_suites(
-    container: ContainerDep,
+    di: Di,
     flow_id: Annotated[str, Query(description="ID агента")],
 ) -> ListResponse[EvaluationSuite]:
     return await op_flows_evaluation_suites_list(
         EvaluationFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}", response_model=EvaluationSuite)
 async def get_evaluation_suite(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationSuite:
     return await op_flows_evaluation_suite_item(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -198,24 +198,24 @@ async def get_evaluation_suite(
 async def update_evaluation_suite(
     suite_id: str,
     request: EvaluationSuiteUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationSuite:
     return await op_flows_evaluation_suite_update(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/suites/{suite_id}/archive", response_model=EvaluationSuite)
 async def archive_evaluation_suite(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationSuite:
     return await op_flows_evaluation_suite_archive(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -223,24 +223,24 @@ async def archive_evaluation_suite(
 async def create_evaluation_case(
     suite_id: str,
     request: EvaluationCaseCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_create(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/cases", response_model=ListResponse[EvaluationCase])
 async def list_evaluation_cases(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationCase]:
     return await op_flows_evaluation_cases_list(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -248,12 +248,12 @@ async def list_evaluation_cases(
 async def get_evaluation_case(
     suite_id: str,
     case_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_item(
         EvaluationSuiteCaseIdPayload(suite_id=suite_id, case_id=case_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -262,12 +262,12 @@ async def update_evaluation_case(
     suite_id: str,
     case_id: str,
     request: EvaluationCaseUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_update(
         request.model_copy(update={"suite_id": suite_id, "case_id": case_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -275,12 +275,12 @@ async def update_evaluation_case(
 async def delete_evaluation_case(
     suite_id: str,
     case_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationDeletedResponse:
     return await op_flows_evaluation_case_delete(
         EvaluationSuiteCaseIdPayload(suite_id=suite_id, case_id=case_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -288,12 +288,12 @@ async def delete_evaluation_case(
 async def import_evaluation_cases(
     suite_id: str,
     request: EvaluationCaseImportRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCaseImportResult:
     return await op_flows_evaluation_case_import(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -301,12 +301,12 @@ async def import_evaluation_cases(
 async def create_evaluation_case_from_dialog(
     suite_id: str,
     request: EvaluationDialogCaseCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_from_dialog(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -314,12 +314,12 @@ async def create_evaluation_case_from_dialog(
 async def create_evaluation_case_from_case_run(
     suite_id: str,
     request: EvaluationCaseRunCaseCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_from_case_run(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -327,48 +327,48 @@ async def create_evaluation_case_from_case_run(
 async def create_evaluation_case_from_trace(
     suite_id: str,
     request: EvaluationTraceCaseCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCase:
     return await op_flows_evaluation_case_from_trace(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/rubrics", response_model=EvaluationRubricWithVersion)
 async def create_evaluation_rubric(
     request: EvaluationRubricCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRubricWithVersion:
     return await op_flows_evaluation_rubric_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/rubrics", response_model=ListResponse[EvaluationRubric])
 async def list_evaluation_rubrics(
-    container: ContainerDep,
+    di: Di,
     flow_id: Annotated[str, Query(description="ID агента")],
 ) -> ListResponse[EvaluationRubric]:
     return await op_flows_evaluation_rubrics_list(
         EvaluationFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/rubrics/{rubric_id}", response_model=EvaluationRubric)
 async def get_evaluation_rubric(
     rubric_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRubric:
     return await op_flows_evaluation_rubric_item(
         EvaluationRubricIdPayload(rubric_id=rubric_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -376,24 +376,24 @@ async def get_evaluation_rubric(
 async def update_evaluation_rubric(
     rubric_id: str,
     request: EvaluationRubricUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRubric:
     return await op_flows_evaluation_rubric_update(
         request.model_copy(update={"rubric_id": rubric_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/rubrics/{rubric_id}/archive", response_model=EvaluationRubric)
 async def archive_evaluation_rubric(
     rubric_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRubric:
     return await op_flows_evaluation_rubric_archive(
         EvaluationRubricIdPayload(rubric_id=rubric_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -401,116 +401,116 @@ async def archive_evaluation_rubric(
 async def create_evaluation_rubric_version(
     rubric_id: str,
     request: EvaluationRubricVersionCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRubricVersion:
     return await op_flows_evaluation_rubric_version_create(
         request.model_copy(update={"rubric_id": rubric_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/rubrics/{rubric_id}/versions", response_model=ListResponse[EvaluationRubricVersion])
 async def list_evaluation_rubric_versions(
     rubric_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationRubricVersion]:
     return await op_flows_evaluation_rubric_versions_list(
         EvaluationRubricIdPayload(rubric_id=rubric_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/runs", response_model=EvaluationRunWithCases)
 async def create_evaluation_run(
     request: EvaluationRunCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRunWithCases:
     return await op_flows_evaluation_run_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/compare", response_model=EvaluationRunComparison)
 async def compare_evaluation_runs(
-    container: ContainerDep,
+    di: Di,
     left_run_id: Annotated[str, Query(description="ID базового запуска")],
     right_run_id: Annotated[str, Query(description="ID сравниваемого запуска")],
 ) -> EvaluationRunComparison:
     return await op_flows_evaluation_compare_runs(
         EvaluationCompareRunsPayload(left_run_id=left_run_id, right_run_id=right_run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/run-jobs/enqueue-pending", response_model=EvaluationPendingRunJobsEnqueueResult)
 async def enqueue_pending_evaluation_run_jobs(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> EvaluationPendingRunJobsEnqueueResult:
     return await op_flows_evaluation_run_jobs_enqueue_pending(
         EvaluationPendingJobsPayload(limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}", response_model=EvaluationRunWithCases)
 async def get_evaluation_run(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRunWithCases:
     return await op_flows_evaluation_run_get(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/runs/{run_id}/cancel", response_model=EvaluationRunWithCases)
 async def cancel_evaluation_run(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRunWithCases:
     return await op_flows_evaluation_run_cancel(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}/cases", response_model=ListResponse[EvaluationCaseRun])
 async def list_evaluation_case_runs(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationCaseRun]:
     return await op_flows_evaluation_run_cases(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}/events", response_model=ListResponse[EvaluationRunEvent])
 async def list_evaluation_run_events(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationRunEvent]:
     return await op_flows_evaluation_run_events(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}/events-page", response_model=EvaluationRunEventsPage)
 async def list_evaluation_run_events_page(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
     after_sequence: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> EvaluationRunEventsPage:
@@ -521,31 +521,31 @@ async def list_evaluation_run_events_page(
             limit=limit,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/case-runs/{case_run_id}/trace", response_model=EvaluationCaseRunTrace)
 async def get_evaluation_case_run_trace(
     case_run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationCaseRunTrace:
     return await op_flows_evaluation_case_run_trace(
         EvaluationCaseRunIdPayload(case_run_id=case_run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/pairwise-judgments", response_model=EvaluationPairwiseJudgment)
 async def create_evaluation_pairwise_judgment(
     request: EvaluationPairwiseJudgeRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationPairwiseJudgment:
     return await op_flows_evaluation_pairwise_judgment_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -555,12 +555,12 @@ async def create_evaluation_pairwise_judgment(
 )
 async def list_evaluation_pairwise_judgments_for_case_run(
     case_run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationPairwiseJudgment]:
     return await op_flows_evaluation_pairwise_judgments_list(
         EvaluationCaseRunIdPayload(case_run_id=case_run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -568,24 +568,24 @@ async def list_evaluation_pairwise_judgments_for_case_run(
 async def create_evaluation_annotation(
     run_id: str,
     request: EvaluationAnnotationCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationAnnotation:
     return await op_flows_evaluation_annotation_create(
         request.model_copy(update={"run_id": run_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}/annotations", response_model=ListResponse[EvaluationAnnotation])
 async def list_evaluation_annotations(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationAnnotation]:
     return await op_flows_evaluation_annotations_list(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -593,51 +593,51 @@ async def list_evaluation_annotations(
 async def update_evaluation_annotation(
     annotation_id: str,
     request: EvaluationAnnotationUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationAnnotation:
     return await op_flows_evaluation_annotation_update(
         request.model_copy(update={"annotation_id": annotation_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/annotations/{annotation_id}", response_model=EvaluationDeletedResponse)
 async def delete_evaluation_annotation(
     annotation_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationDeletedResponse:
     return await op_flows_evaluation_annotation_delete(
         EvaluationAnnotationIdPayload(annotation_id=annotation_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/runs", response_model=ListResponse[EvaluationRun])
 async def list_evaluation_runs(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> ListResponse[EvaluationRun]:
     return await op_flows_evaluation_runs_list(
         EvaluationRunsListPayload(suite_id=suite_id, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/matrix", response_model=EvaluationResultsMatrix)
 async def get_evaluation_results_matrix(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query(description="ID ветки")],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> EvaluationResultsMatrix:
     return await op_flows_evaluation_matrix_get(
         EvaluationMatrixPayload(suite_id=suite_id, branch_id=branch_id, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -646,24 +646,24 @@ async def set_evaluation_baseline(
     suite_id: str,
     branch_id: str,
     request: EvaluationBaselineSetRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationBaseline:
     return await op_flows_evaluation_baseline_set(
         request.model_copy(update={"suite_id": suite_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/baselines", response_model=ListResponse[EvaluationBaseline])
 async def list_evaluation_baselines(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationBaseline]:
     return await op_flows_evaluation_baselines_list(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -671,19 +671,19 @@ async def list_evaluation_baselines(
 async def get_evaluation_baseline(
     suite_id: str,
     branch_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationBaseline:
     return await op_flows_evaluation_baseline_item(
         EvaluationBaselineItemPayload(suite_id=suite_id, branch_id=branch_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/baseline-compare", response_model=EvaluationBaselineComparison)
 async def compare_evaluation_run_with_baseline(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query(description="ID ветки")],
     run_id: Annotated[str, Query(description="ID сравниваемого запуска")],
 ) -> EvaluationBaselineComparison:
@@ -694,7 +694,7 @@ async def compare_evaluation_run_with_baseline(
             run_id=run_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -702,36 +702,36 @@ async def compare_evaluation_run_with_baseline(
 async def create_evaluation_gate_policy(
     suite_id: str,
     request: EvaluationGatePolicyCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationGatePolicy:
     return await op_flows_evaluation_gate_policy_create(
         request.model_copy(update={"suite_id": suite_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/gate-policies", response_model=ListResponse[EvaluationGatePolicy])
 async def list_evaluation_gate_policies(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationGatePolicy]:
     return await op_flows_evaluation_gate_policies_list(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/gate-policies/{gate_policy_id}", response_model=EvaluationGatePolicy)
 async def get_evaluation_gate_policy(
     gate_policy_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationGatePolicy:
     return await op_flows_evaluation_gate_policy_item(
         EvaluationGatePolicyIdPayload(gate_policy_id=gate_policy_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -739,24 +739,24 @@ async def get_evaluation_gate_policy(
 async def update_evaluation_gate_policy(
     gate_policy_id: str,
     request: EvaluationGatePolicyUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationGatePolicy:
     return await op_flows_evaluation_gate_policy_update(
         request.model_copy(update={"gate_policy_id": gate_policy_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/gate-policies/{gate_policy_id}/archive", response_model=EvaluationGatePolicy)
 async def archive_evaluation_gate_policy(
     gate_policy_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationGatePolicy:
     return await op_flows_evaluation_gate_policy_archive(
         EvaluationGatePolicyIdPayload(gate_policy_id=gate_policy_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -764,72 +764,72 @@ async def archive_evaluation_gate_policy(
 async def run_evaluation_gate_policy(
     gate_policy_id: str,
     request: EvaluationGatePolicyRunRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationRunWithCases:
     return await op_flows_evaluation_gate_policy_run(
         request.model_copy(update={"gate_policy_id": gate_policy_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/runs/{run_id}/gate-result", response_model=EvaluationGateResult)
 async def get_evaluation_gate_result(
     run_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationGateResult:
     return await op_flows_evaluation_gate_result(
         EvaluationRunIdPayload(run_id=run_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/monitors", response_model=EvaluationMonitor)
 async def create_evaluation_monitor(
     request: EvaluationMonitorCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitor:
     return await op_flows_evaluation_monitor_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/monitor-cycles/run-active", response_model=EvaluationActiveMonitorCyclesResult)
 async def run_active_evaluation_monitor_cycles(
     request: EvaluationActiveMonitorCyclesRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationActiveMonitorCyclesResult:
     return await op_flows_evaluation_monitor_cycles_run_active(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/suites/{suite_id}/monitors", response_model=ListResponse[EvaluationMonitor])
 async def list_evaluation_monitors(
     suite_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EvaluationMonitor]:
     return await op_flows_evaluation_monitors_list(
         EvaluationSuiteIdPayload(suite_id=suite_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/monitors/{monitor_id}", response_model=EvaluationMonitor)
 async def get_evaluation_monitor(
     monitor_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitor:
     return await op_flows_evaluation_monitor_item(
         EvaluationMonitorIdPayload(monitor_id=monitor_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -837,24 +837,24 @@ async def get_evaluation_monitor(
 async def update_evaluation_monitor(
     monitor_id: str,
     request: EvaluationMonitorUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitor:
     return await op_flows_evaluation_monitor_update(
         request.model_copy(update={"monitor_id": monitor_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/monitors/{monitor_id}/archive", response_model=EvaluationMonitor)
 async def archive_evaluation_monitor(
     monitor_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitor:
     return await op_flows_evaluation_monitor_archive(
         EvaluationMonitorIdPayload(monitor_id=monitor_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -862,12 +862,12 @@ async def archive_evaluation_monitor(
 async def sample_evaluation_monitor(
     monitor_id: str,
     request: EvaluationMonitorSampleRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitorSampleResult:
     return await op_flows_evaluation_monitor_sample(
         request.model_copy(update={"monitor_id": monitor_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -875,12 +875,12 @@ async def sample_evaluation_monitor(
 async def run_evaluation_monitor_cycle(
     monitor_id: str,
     request: EvaluationMonitorCycleRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitorCycleResult:
     return await op_flows_evaluation_monitor_run_cycle(
         request.model_copy(update={"monitor_id": monitor_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -892,12 +892,12 @@ async def create_evaluation_case_from_monitor_observation(
     monitor_id: str,
     trace_id: str,
     request: EvaluationMonitorObservationCaseCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EvaluationMonitorObservationCurationResult:
     return await op_flows_evaluation_monitor_observation_case_create(
         request.model_copy(update={"monitor_id": monitor_id, "trace_id": trace_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -907,11 +907,11 @@ async def create_evaluation_case_from_monitor_observation(
 )
 async def list_evaluation_monitor_observations(
     monitor_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> ListResponse[EvaluationMonitorObservation]:
     return await op_flows_evaluation_monitor_observations(
         EvaluationMonitorObservationsPayload(monitor_id=monitor_id, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )

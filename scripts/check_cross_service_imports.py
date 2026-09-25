@@ -6,14 +6,14 @@ CI-gate: сервисы не импортируют друг друга.
 - `apps/<svc>_worker/**` → `apps.<svc>.*` (воркер — часть владельца);
 - `apps.<x>.tasks.task_names` / `apps.<x>_worker.tasks.task_names` из любого сервиса
   (declare_task + enqueue — единственный контракт постановки задачи);
-- `apps.platform_tasks.wiring` из воркеров и scheduler (домен без HTTP-процесса);
+- `apps.worker_manifest` из воркеров и scheduler (модуль без HTTP-процесса);
 - репозитории и доменные модели владельца (`apps.<svc>.db.*`, `apps.<svc>.models.*`,
   `apps.flows.src.db.*`, `apps.flows.src.models.*`) — канон межсервисного доступа к данным
   при доступной БД peer-домена (architecture.mdc);
-- библиотечные домены без HTTP-процесса (`apps.agent`, `apps.platform_tasks`): их можно
+- библиотечные домены без HTTP-процесса (`apps.agent`, `apps.worker_manifest`): их можно
   импортировать из хостов, сами они не импортируют ни один сервис.
 
-Любое другое ребро `apps/<a> → apps/<b>` (services, config, dependencies, container, api,
+Любое другое ребро `apps/<a> → apps/<b>` (services, config, dependencies, api,
 runtime) — FAIL: общий код уезжает в `core/`, владелец подключается через `core/clients`.
 """
 
@@ -26,7 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPS_ROOT = REPO_ROOT / "apps"
 SKIP_DIR_NAMES: frozenset[str] = frozenset({"vendor", "__pycache__", "desktop"})
-LIBRARY_DOMAINS: frozenset[str] = frozenset({"agent", "platform_tasks"})
+LIBRARY_DOMAINS: frozenset[str] = frozenset({"agent", "worker_manifest"})
 
 
 def _service_of(path: Path) -> str:

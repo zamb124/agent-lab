@@ -171,21 +171,6 @@ class OfficeDocumentPreviewResponse(BaseModel):
     editor_mode: Literal["view"] = "view"
 
 
-class OfficeDocumentRevisionItem(BaseModel):
-    revision_id: str
-    revision_number: int
-    file_id: str
-    created_by_user_id: str
-    created_at: datetime
-
-
-class OfficeDocumentEventItem(BaseModel):
-    event_id: str
-    event_type: str
-    user_id: str
-    created_at: datetime
-
-
 class OfficeDocumentAiSummaryResponse(BaseModel):
     file_id: str
     summary: str

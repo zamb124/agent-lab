@@ -5,22 +5,18 @@ TaskIQ задачи пересчета Daily Summary для CRM.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING
-
-from sqlalchemy import and_, select
 
 import core.tracing.attributes as trace_attributes
-from apps.crm.container import get_crm_container
-from apps.crm.db.models import CRMEntity, CRMTask
-from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.task import CRM_TASK_TERMINAL_STATUSES, CRMTask
 from apps.crm.services.crm_summary_broadcast import broadcast_crm_daily_summary_updated
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.namespace_notification_recipients import (
     normalize_namespace_for_broadcast,
 )
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import (
     build_auth_token_for_company,
     set_crm_context,
@@ -36,9 +32,6 @@ from core.tracing.operation_span import traced_operation
 from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_company
 
-if TYPE_CHECKING:
-    from apps.crm.container import CRMContainer
-
 logger = get_logger(__name__)
 
 
@@ -48,14 +41,14 @@ async def _notify_daily_summary_updated(
     namespace: str | None,
     summary_state: JsonObject,
     *,
-    container: "CRMContainer",
+    di: Di,
 ) -> None:
     await broadcast_crm_daily_summary_updated(
         company_id=company_id,
         namespace=namespace,
         date_str=date_str,
         state=summary_state,
-        authz=container.authz_service,
+        authz=di.authz_service,
     )
     normalized_namespace = normalize_namespace_for_broadcast(namespace)
 
@@ -85,12 +78,10 @@ async def _notify_daily_summary_updated(
 
 async def _snapshot_crm_task_if_present(
     *,
-    container: "CRMContainer",
     task_id: str,
     company_id: str,
 ) -> None:
-    repo = container.task_repository
-    row = await repo.get_for_worker(task_id, company_id)
+    row = await CRMTask.by_company_and_task_id(company_id, task_id)
     if row is None:
         logger.warning(
             "crm_summary_rebuild_task_row_missing",
@@ -100,7 +91,6 @@ async def _snapshot_crm_task_if_present(
         return
     await publish_crm_task_snapshot_for_user(
         user_id=row.user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -115,6 +105,8 @@ async def rebuild_daily_summary_task(
     auth_token: str | None = None,
     user_id: str | None = None,
     task_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """Пересчитывает и сохраняет summary в Redis state.
 
@@ -123,7 +115,7 @@ async def rebuild_daily_summary_task(
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await build_auth_token_for_company(
-            company_id=company_id, user_id=user_id
+            company_id=company_id, user_id=user_id, authz=di.authz_service
         )
     await set_crm_context(
         company_id=company_id,
@@ -131,10 +123,8 @@ async def rebuild_daily_summary_task(
         auth_token=resolved_auth_token,
         user_id=user_id,
     )
-    container = get_crm_container()
-
     if task_id:
-        journal = await container.task_repository.get_for_worker(task_id, company_id)
+        journal = await CRMTask.by_company_and_task_id(company_id, task_id)
         if journal is None:
             raise ValueError(f"CRM task not found: {task_id}")
         if journal.status in CRM_TASK_TERMINAL_STATUSES:
@@ -146,7 +136,7 @@ async def rebuild_daily_summary_task(
             )
             return {"skipped": True, "journal_status": journal.status, "task_id": task_id}
 
-        await container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="running",
@@ -155,7 +145,7 @@ async def rebuild_daily_summary_task(
             started_at=datetime.now(timezone.utc),
         )
         await _snapshot_crm_task_if_present(
-            container=container, task_id=task_id, company_id=company_id
+            task_id=task_id, company_id=company_id
         )
 
     try:
@@ -169,13 +159,13 @@ async def rebuild_daily_summary_task(
                 "platform.crm.summary_namespace": namespace or "",
             },
         ):
-            state = await container.entity_service.rebuild_daily_summary(
+            state = await di.entity_service.rebuild_daily_summary(
                 date_str=date_str,
                 namespace=namespace,
             )
     except Exception as exc:
         if task_id:
-            await container.task_repository.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 company_id,
                 status="failed",
@@ -185,12 +175,12 @@ async def rebuild_daily_summary_task(
                 completed_at=datetime.now(timezone.utc),
             )
             await _snapshot_crm_task_if_present(
-                container=container, task_id=task_id, company_id=company_id
+                task_id=task_id, company_id=company_id
             )
         raise
 
     if task_id:
-        await container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="completed",
@@ -199,7 +189,7 @@ async def rebuild_daily_summary_task(
             completed_at=datetime.now(timezone.utc),
         )
         await _snapshot_crm_task_if_present(
-            container=container, task_id=task_id, company_id=company_id
+            task_id=task_id, company_id=company_id
         )
 
     if state.get("revalidating") is False and state.get("stale") is False:
@@ -208,7 +198,7 @@ async def rebuild_daily_summary_task(
             date_str=date_str,
             namespace=namespace,
             summary_state=state,
-            container=container,
+            di=di,
         )
     logger.info("crm.summary.daily_rebuilt", company_id=company_id, namespace=namespace, date=date_str, reason=reason)
     return state
@@ -224,12 +214,14 @@ async def rebuild_period_summary_task(
     auth_token: str | None = None,
     user_id: str | None = None,
     task_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """Пересчитывает и сохраняет period summary в Redis и S3."""
     resolved_auth_token = auth_token
     if resolved_auth_token is None:
         resolved_auth_token = await build_auth_token_for_company(
-            company_id=company_id, user_id=user_id
+            company_id=company_id, user_id=user_id, authz=di.authz_service
         )
     await set_crm_context(
         company_id=company_id,
@@ -237,10 +229,8 @@ async def rebuild_period_summary_task(
         auth_token=resolved_auth_token,
         user_id=user_id,
     )
-    container = get_crm_container()
-
     if task_id:
-        journal = await container.task_repository.get_for_worker(task_id, company_id)
+        journal = await CRMTask.by_company_and_task_id(company_id, task_id)
         if journal is None:
             raise ValueError(f"CRM task not found: {task_id}")
         if journal.status in CRM_TASK_TERMINAL_STATUSES:
@@ -252,7 +242,7 @@ async def rebuild_period_summary_task(
             )
             return {"skipped": True, "journal_status": journal.status, "task_id": task_id}
 
-        await container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="running",
@@ -261,7 +251,7 @@ async def rebuild_period_summary_task(
             started_at=datetime.now(timezone.utc),
         )
         await _snapshot_crm_task_if_present(
-            container=container, task_id=task_id, company_id=company_id
+            task_id=task_id, company_id=company_id
         )
 
     try:
@@ -275,14 +265,14 @@ async def rebuild_period_summary_task(
                 "platform.crm.period_to": date_to,
             },
         ):
-            state = await container.entity_service.rebuild_period_summary(
+            state = await di.entity_service.rebuild_period_summary(
                 date_from=date_from,
                 date_to=date_to,
                 namespace=namespace,
             )
     except Exception as exc:
         if task_id:
-            await container.task_repository.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 company_id,
                 status="failed",
@@ -292,12 +282,12 @@ async def rebuild_period_summary_task(
                 completed_at=datetime.now(timezone.utc),
             )
             await _snapshot_crm_task_if_present(
-                container=container, task_id=task_id, company_id=company_id
+                task_id=task_id, company_id=company_id
             )
         raise
 
     if task_id:
-        await container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="completed",
@@ -306,7 +296,7 @@ async def rebuild_period_summary_task(
             completed_at=datetime.now(timezone.utc),
         )
         await _snapshot_crm_task_if_present(
-            container=container, task_id=task_id, company_id=company_id
+            task_id=task_id, company_id=company_id
         )
 
     if state.get("revalidating") is False and state.get("stale") is False:
@@ -322,7 +312,7 @@ async def rebuild_period_summary_task(
                 "entities": state.get("entities", []),
                 "generated_at": state.get("generated_at"),
             },
-            container=container,
+            di=di,
         )
     logger.info("crm.summary.period_rebuilt", company_id=company_id, namespace=namespace, date_from=date_from, date_to=date_to, reason=reason)
     return state
@@ -333,6 +323,8 @@ async def reconcile_daily_summary_task(
     days_back: int = 1,
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Периодическая reconcile-задача.
@@ -341,60 +333,19 @@ async def reconcile_daily_summary_task(
     и ставит пересчет по event-driven пути с дедупликацией.
     """
     _ = company_id
-    container = get_crm_container()
     since_date = date.today() - timedelta(days=days_back)
 
-    company_ids_stmt = (
-        select(CRMEntity.company_id)
-        .distinct()
-        .where(
-            and_(
-                CRMEntity.entity_type == "note",
-                CRMEntity.note_date.is_not(None),
-                CRMEntity.note_date >= since_date,
-            )
-        )
-        .order_by(CRMEntity.company_id)
-    )
-    async with container.crm_db.session() as session:
-        raw_company_ids: Sequence[tuple[str]] = (
-            await session.execute(company_ids_stmt)
-        ).tuples().all()
-        distinct_company_ids: list[str] = [row[0] for row in raw_company_ids if row[0]]
+    distinct_company_ids = await CRMEntity.distinct_note_company_ids_since(since_date)
 
     enqueued_count = 0
     total_rows_processed = 0
     for cid in distinct_company_ids:
-        company_stmt = (
-            select(
-                CRMEntity.company_id,
-                CRMEntity.namespace,
-                CRMEntity.note_date,
-            )
-            .distinct()
-            .where(
-                and_(
-                    CRMEntity.entity_type == "note",
-                    CRMEntity.note_date.is_not(None),
-                    CRMEntity.note_date >= since_date,
-                    CRMEntity.company_id == cid,
-                )
-            )
-        )
-        async with container.crm_db.session() as session:
-            raw_company_rows: Sequence[tuple[str, str, date | None]] = (
-                await session.execute(company_stmt)
-            ).tuples().all()
-            company_rows: list[tuple[str, str, date]] = [
-                (row_company_id, row_namespace, row_note_date)
-                for row_company_id, row_namespace, row_note_date in raw_company_rows
-                if row_note_date is not None
-            ]
+        company_rows = await CRMEntity.distinct_note_scopes_since(since_date, cid)
 
         total_rows_processed += len(company_rows)
         tick_id = str(uuid.uuid4())
         tick_started = datetime.now(timezone.utc)
-        _ = await container.task_repository.create(
+        _ = await CRMTask.create(
             CRMTask(
                 task_id=tick_id,
                 task_type="reconcile_daily_summary_tick",
@@ -416,14 +367,14 @@ async def reconcile_daily_summary_task(
         enqueued_company = 0
         for row_company_id, row_namespace, row_note_date in company_rows:
             await set_crm_context(company_id=row_company_id, namespace=row_namespace)
-            queued = await container.entity_service.enqueue_daily_summary_rebuild(
+            queued = await di.entity_service.enqueue_daily_summary_rebuild(
                 date_str=row_note_date.isoformat(),
                 namespace=row_namespace,
             )
             if queued:
                 enqueued_company += 1
         tick_done = datetime.now(timezone.utc)
-        await container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             tick_id,
             cid,
             status="completed",

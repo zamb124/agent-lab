@@ -8,7 +8,7 @@ import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date
 import { worktrackerInspectorStyles } from '../styles/worktracker-inspector.styles.js';
 import {
     assigneeUserId,
-} from '../utils/work-item-detail-shared.js';
+} from '../_helpers/work-item-detail-shared.js';
 import './worktracker-inspector-row.js';
 import './worktracker-priority-picker.js';
 import './worktracker-assignee-picker.js';

@@ -7,17 +7,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from core.container.base import BaseContainer
+from core.di.platform import PlatformDi
 from core.errors.boundary import PlatformNotFoundError
 from core.identity.flow_employee import (
     flow_employee_curator_user_ids,
     is_flow_employee,
     require_flow_employee_flow_id,
 )
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.pagination import ListResponse
 from core.request_scope import require_company_viewer
-from core.websocket import EmptyPayload
+from core.websocket import EmptyPayload, Operation
 
 
 class TeamMemberResponse(BaseModel):
@@ -33,15 +33,15 @@ class TeamMemberResponse(BaseModel):
 
 
 async def op_team_members_list(
-    payload: EmptyPayload, *, user: User, container: BaseContainer
+    payload: EmptyPayload, *, user: User, di: PlatformDi
 ) -> ListResponse[TeamMemberResponse]:
     """Roster активной компании с признаками flow-сотрудников; Check `company` viewer."""
     _ = payload, user
-    scope = await require_company_viewer(container.authz_service)
-    company = await container.company_repository.get(scope.company_id)
+    scope = await require_company_viewer(di.authz_service)
+    company = await Company.get(scope.company_id)
     if company is None:
         raise PlatformNotFoundError(f"Company {scope.company_id} not found", error_code="not_found")
-    users_by_id = await container.user_repository.get_many(list(company.members.keys()))
+    users_by_id = await User.get_many(list(company.members.keys()))
     members: list[TeamMemberResponse] = []
     for member_user_id, roles in company.members.items():
         member_user = users_by_id.get(member_user_id)
@@ -62,3 +62,8 @@ async def op_team_members_list(
             )
         )
     return ListResponse[TeamMemberResponse](items=members)
+
+
+TEAM_MEMBERS_LIST_OPERATION: Operation[EmptyPayload, PlatformDi] = Operation(
+    payload_model=EmptyPayload, fn=op_team_members_list
+)

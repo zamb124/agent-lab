@@ -7,13 +7,17 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+import asyncpg
 import pytest_asyncio
+from asyncpg.exceptions import (
+    DuplicateDatabaseError,
+    InvalidCatalogNameError,
+    PostgresConnectionError,
+)
 from httpx import AsyncClient
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, OperationalError
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from core.config import get_settings
+from core.types import parse_json_object
 
 CUSTOMER_DATABASE = "platform_datasource_customer"
 CUSTOMER_HOST = "localhost"
@@ -28,9 +32,8 @@ _MAKE_TEST_UP = (
     "datasource tests. Start the stack with: make test-up"
 )
 _SCHEMA_RE = re.compile(r"^dsu[0-9a-f]+$")
-_POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
-_ADMIN_URL = f"{_POSTGRES_TEST}/platform_shared"
-_CUSTOMER_URL = f"{_POSTGRES_TEST}/{CUSTOMER_DATABASE}"
+_CONNECT_TIMEOUT = 30.0
+_COMMAND_TIMEOUT = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,44 +47,40 @@ class CustomerDatasource:
     seed_name: str
 
 
-def _sqlstate(exc: DBAPIError) -> str:
-    orig = exc.orig
-    if orig is None:
-        raise ValueError("DBAPIError has no orig") from exc
-    raw = orig.sqlstate
-    if not isinstance(raw, str):
-        raise TypeError(f"sqlstate must be str, got {type(raw).__name__}")
-    return raw
+async def _connect(database: str) -> asyncpg.Connection:
+    try:
+        return await asyncpg.connect(
+            host=CUSTOMER_HOST,
+            port=CUSTOMER_PORT,
+            user=CUSTOMER_USERNAME,
+            password=CUSTOMER_PASSWORD,
+            database=database,
+            ssl="disable",
+            timeout=_CONNECT_TIMEOUT,
+            command_timeout=_COMMAND_TIMEOUT,
+        )
+    except (OSError, PostgresConnectionError, InvalidCatalogNameError) as exc:
+        raise RuntimeError(_MAKE_TEST_UP) from exc
 
 
 async def ensure_customer_database() -> None:
     """CREATE DATABASE if missing. Existing docker volumes skip init.sql."""
-    engine = create_async_engine(_ADMIN_URL, isolation_level="AUTOCOMMIT")
+    connection = await _connect("platform_shared")
     try:
-        async with engine.connect() as connection:
-            result = await connection.execute(
-                text("SELECT 1 FROM pg_database WHERE datname = :name"),
-                {"name": CUSTOMER_DATABASE},
-            )
-            exists = result.scalar()
-            if exists is not None:
-                return
+        exists = await connection.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1",
+            CUSTOMER_DATABASE,
+        )
+        if exists is None:
             try:
-                await connection.execute(text(f"CREATE DATABASE {CUSTOMER_DATABASE}"))
-            except DBAPIError as exc:
-                if _sqlstate(exc) != "42P04":
-                    raise
-            await connection.execute(
-                text(
-                    f"GRANT ALL PRIVILEGES ON DATABASE {CUSTOMER_DATABASE} TO {CUSTOMER_USERNAME}"
-                )
-            )
-    except OperationalError as exc:
-        raise RuntimeError(_MAKE_TEST_UP) from exc
-    except OSError as exc:
-        raise RuntimeError(_MAKE_TEST_UP) from exc
+                _ = await connection.execute(f"CREATE DATABASE {CUSTOMER_DATABASE}")
+            except DuplicateDatabaseError as exc:
+                _ = exc
+        _ = await connection.execute(
+            f"GRANT ALL PRIVILEGES ON DATABASE {CUSTOMER_DATABASE} TO {CUSTOMER_USERNAME}"
+        )
     finally:
-        await engine.dispose()
+        await connection.close()
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -101,28 +100,19 @@ async def customer_datasource(
     if _SCHEMA_RE.fullmatch(schema_name) is None:
         raise ValueError(f"datasource test schema is not a safe identifier: {schema_name}")
     qualified_table = f"{schema_name}.items"
-    engine = create_async_engine(_CUSTOMER_URL)
+    connection = await _connect(CUSTOMER_DATABASE)
     try:
-        async with engine.begin() as connection:
-            await connection.execute(text(f"CREATE SCHEMA {schema_name}"))
-            await connection.execute(
-                text(
-                    f"CREATE TABLE {qualified_table} "
-                    "(id integer PRIMARY KEY, name text NOT NULL)"
-                )
-            )
-            await connection.execute(
-                text(f"INSERT INTO {qualified_table} (id, name) VALUES (:id, :name)"),
-                {"id": SEED_ITEM_ID, "name": SEED_ITEM_NAME},
-            )
-    except OperationalError as exc:
-        raise RuntimeError(_MAKE_TEST_UP) from exc
-    except DBAPIError as exc:
-        if _sqlstate(exc) == "3D000":
-            raise RuntimeError(_MAKE_TEST_UP) from exc
-        raise
+        _ = await connection.execute(f"CREATE SCHEMA {schema_name}")
+        _ = await connection.execute(
+            f"CREATE TABLE {qualified_table} (id integer PRIMARY KEY, name text NOT NULL)"
+        )
+        _ = await connection.execute(
+            f"INSERT INTO {qualified_table} (id, name) VALUES ($1, $2)",
+            SEED_ITEM_ID,
+            SEED_ITEM_NAME,
+        )
     finally:
-        await engine.dispose()
+        await connection.close()
 
     created = await flows_client.post(
         "/flows/api/v1/datasources",
@@ -143,9 +133,9 @@ async def customer_datasource(
         raise AssertionError(
             f"customer datasource create failed: {created.status_code} {created.text}"
         )
-    payload = created.json()
-    datasource_id = payload["datasource_id"]
-    if not isinstance(datasource_id, str) or not datasource_id.strip():
+    parsed = parse_json_object(created.text, "datasource create")
+    datasource_id = parsed["datasource_id"]
+    if not isinstance(datasource_id, str) or datasource_id.strip() == "":
         raise AssertionError("customer datasource create: datasource_id required")
 
     yield CustomerDatasource(
@@ -166,18 +156,19 @@ async def customer_datasource(
         raise AssertionError(
             f"customer datasource teardown delete failed: {deleted.status_code} {deleted.text}"
         )
-    drop_engine = create_async_engine(_CUSTOMER_URL)
+    drop_connection = await _connect(CUSTOMER_DATABASE)
     try:
-        async with drop_engine.begin() as connection:
-            await connection.execute(text(f"DROP SCHEMA {schema_name} CASCADE"))
+        _ = await drop_connection.execute(f"DROP SCHEMA {schema_name} CASCADE")
     finally:
-        await drop_engine.dispose()
+        await drop_connection.close()
 
 
 def platform_shared_database_name() -> str:
     shared_url = get_settings().database.shared_url
+    if shared_url is None or shared_url == "":
+        raise ValueError("database.shared_url is not set")
     parsed = urlparse(shared_url)
     database_name = parsed.path.lstrip("/")
-    if not database_name:
+    if database_name == "":
         raise ValueError(f"platform shared DSN has empty database name: {shared_url!r}")
     return database_name

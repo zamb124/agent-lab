@@ -8,7 +8,6 @@ import pytest
 from a2a.types import Message, Part
 from a2a.types.a2a_pb2 import ROLE_USER, Role
 
-from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import (
     NodeFailedPayload,
     RunStartedPayload,
@@ -44,9 +43,9 @@ def _manual_superstep_payload(step: str) -> SuperstepCommittedPayload:
 
 
 @pytest.fixture
-def workflow_runtime(app: object) -> DurableWorkflowRuntime:
+def workflow_runtime(app: object, di) -> DurableWorkflowRuntime:
     _ = app
-    return get_container().workflow_runtime
+    return di.workflow_runtime
 
 
 class TestDurableWorkflowProjection:

@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 from core.files.create_spec import FileCreateSpec
 from tests.flows.integration.mcp_catalog_helpers import (
     build_verified_catalog_entry,
@@ -33,10 +32,10 @@ async def test_mcp_branding_non_system_put_forbidden(
     auth_headers_company2,
     unique_id: str,
     app,
+    di,
 ):
     _ = app
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         b"icon",
         original_name="icon.png",
@@ -52,10 +51,9 @@ async def test_mcp_branding_non_system_put_forbidden(
 
 
 @pytest.mark.asyncio
-async def test_mcp_branding_private_file_rejected(client, unique_id: str, app):
+async def test_mcp_branding_private_file_rejected(client, unique_id: str, app, di):
     _ = app
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=False),
         b"icon",
         original_name="private.png",
@@ -70,10 +68,9 @@ async def test_mcp_branding_private_file_rejected(client, unique_id: str, app):
 
 
 @pytest.mark.asyncio
-async def test_mcp_branding_upsert_list_servers_and_delete(client, unique_id: str, app):
+async def test_mcp_branding_upsert_list_servers_and_delete(client, unique_id: str, app, di):
     _ = app
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         b"icon-payload",
         original_name="mcp-icon.png",
@@ -123,9 +120,8 @@ async def test_mcp_branding_upsert_list_servers_and_delete(client, unique_id: st
 
 
 @pytest.mark.asyncio
-async def test_mcp_branding_slug_suggest_searches_catalog(client, local_mcp_http_url: str) -> None:
-    container = as_flow_runtime_container(get_container())
-    existing_entry = await container.mcp_catalog_repository.get("context7_catalog")
+async def test_mcp_branding_slug_suggest_searches_catalog(client, local_mcp_http_url: str, di) -> None:
+    existing_entry = await MCPCatalogEntry.get("context7_catalog")
     if existing_entry is None:
         entry = build_verified_catalog_entry(
             catalog_id="context7_catalog",
@@ -134,7 +130,7 @@ async def test_mcp_branding_slug_suggest_searches_catalog(client, local_mcp_http
             title="Context7",
             description="Up-to-date library documentation for LLM",
         )
-        _ = await persist_catalog_entry(container=container, entry=entry)
+        _ = await persist_catalog_entry(entry=entry)
 
     response = await client.get(
         "/flows/api/v1/mcp/branding/slug-suggest",
@@ -144,14 +140,13 @@ async def test_mcp_branding_slug_suggest_searches_catalog(client, local_mcp_http
     assert "context7_catalog" in response.json()["slugs"]
 
     if existing_entry is None:
-        _ = await container.mcp_catalog_repository.delete("context7_catalog")
+        _ = await MCPCatalogEntry.delete_by_id("context7_catalog")
 
 
 @pytest.mark.asyncio
-async def test_mcp_branding_list_pagination_offset(client, unique_id: str, app) -> None:
+async def test_mcp_branding_list_pagination_offset(client, unique_id: str, app, di) -> None:
     _ = app
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         b"icon-payload",
         original_name="mcp-icon.png",
@@ -185,10 +180,9 @@ async def test_mcp_branding_list_pagination_offset(client, unique_id: str, app) 
 
 
 @pytest.mark.asyncio
-async def test_mcp_branding_put_invalid_server_id(client, unique_id: str, app) -> None:
+async def test_mcp_branding_put_invalid_server_id(client, unique_id: str, app, di) -> None:
     _ = app
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         b"icon-payload",
         original_name="mcp-icon.png",
@@ -227,11 +221,11 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     client,
     unique_id: str,
     app,
+    di,
 ) -> None:
     _ = app
     _ = unique_id
-    container = get_container()
-    record = await container.files_service.create(
+    record = await di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         b"icon-payload",
         original_name="mcp-icon.png",
@@ -246,7 +240,7 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     assert put_resp.status_code == 200, put_resp.text
     icon_url = put_resp.json()["icon_url"]
 
-    existing = await container.mcp_server_repository.get(alias_server_id)
+    existing = await MCPServerConfig.get(MCPServerConfig.row_id(alias_server_id))
     created_manual = existing is None
     if created_manual:
         manual_server = MCPServerConfig(
@@ -256,7 +250,7 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
             transport_type=MCPTransportType.HTTP,
             source=MCPServerSource.MANUAL,
         )
-        _ = await container.mcp_server_repository.set(manual_server)
+        _ = await MCPServerConfig.set(manual_server)
 
     list_response = await client.get(
         "/flows/api/v1/mcp/servers",
@@ -268,7 +262,7 @@ async def test_mcp_servers_list_includes_branding_icon_via_alias(
     assert matched[0]["icon_url"] == icon_url
 
     if created_manual:
-        _ = await container.mcp_server_repository.delete(alias_server_id)
+        _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(alias_server_id))
     del_resp = await client.delete(f"/flows/api/v1/mcp/branding/{canonical_server_id}")
     assert del_resp.status_code == 200, del_resp.text
     assert del_resp.json() == {"status": "deleted", "server_id": canonical_server_id}

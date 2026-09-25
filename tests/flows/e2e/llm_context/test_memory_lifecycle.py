@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
 from tests.flows.e2e.llm_context.harness import (
+    _documents_matching,
     cleanup_flow_context,
     context_config,
     run_context_flow,
@@ -18,7 +20,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_memory_off_does_not_write_compaction_episode(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -28,7 +30,7 @@ async def test_memory_off_does_not_write_compaction_episode(
     _ = app
     flow_id = f"ctx-memory-off-{unique_id}"
     context_id = f"context-memory-off-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="Memory is disabled.",
@@ -37,7 +39,7 @@ async def test_memory_off_does_not_write_compaction_episode(
     )
     try:
         _, state = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_MEMORY_OFF_{unique_id}",
             response="memory off",
@@ -51,7 +53,7 @@ async def test_memory_off_does_not_write_compaction_episode(
                 marker=f"OLD_MEMORY_OFF_{unique_id}",
             ),
         )
-        documents = await container.rag_repository.list_with_filters(
+        documents = await _documents_matching(
             llm_context_memory_namespace_id("system"),
             {
                 "flow_id": flow_id,
@@ -63,7 +65,7 @@ async def test_memory_off_does_not_write_compaction_episode(
         assert documents == []
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.group_sync import sync_user_groups
 from core.authz.ids import is_openfga_user_subject_id
-from core.container.base import BaseContainer
+from core.authz.service import AuthzService
 from core.models.identity_models import User, UserStatus
 from core.types import JsonObject
 
@@ -32,7 +32,7 @@ def _dual_write_runtime_authz(*, user_id: str, attributes: JsonObject) -> bool:
 
 
 async def ensure_persisted_runtime_user(
-    container: BaseContainer,
+    authz: AuthzService,
     *,
     user_id: str,
     company_id: str,
@@ -60,7 +60,7 @@ async def ensure_persisted_runtime_user(
 
     clean_roles = _clean_roles(roles)
     now = datetime.now(timezone.utc)
-    existing = await container.user_repository.get(clean_user_id)
+    existing = await User.get(clean_user_id)
     runtime_attrs: JsonObject = dict(attributes) if attributes is not None else {}
     runtime_attrs["runtime_identity"] = True
 
@@ -90,13 +90,13 @@ async def ensure_persisted_runtime_user(
             changed = True
         if changed:
             existing.updated_at = now
-            _ = await container.user_repository.set(existing)
+            _ = await User.set(existing)
             if _dual_write_runtime_authz(
                 user_id=existing.user_id, attributes=existing.attributes
             ):
                 try:
                     await sync_user_groups(
-                        container.authz_service,
+                        authz,
                         user_id=existing.user_id,
                         groups=existing.groups,
                         company_ids=list(existing.companies.keys()),
@@ -104,13 +104,13 @@ async def ensure_persisted_runtime_user(
                         previous_company_ids=list(previous_user.companies.keys()),
                     )
                     await sync_company_member_roles(
-                        container.authz_service,
+                        authz,
                         company_id=clean_company_id,
                         user_id=existing.user_id,
                         roles=list(existing.companies[clean_company_id]),
                     )
                 except Exception:
-                    _ = await container.user_repository.set(previous_user)
+                    _ = await User.set(previous_user)
                     raise
             return existing
         return existing
@@ -129,23 +129,23 @@ async def ensure_persisted_runtime_user(
         created_at=now,
         updated_at=now,
     )
-    _ = await container.user_repository.set(user)
+    _ = await User.set(user)
     if _dual_write_runtime_authz(user_id=user.user_id, attributes=user.attributes):
         try:
             await sync_user_groups(
-                container.authz_service,
+                authz,
                 user_id=user.user_id,
                 groups=user.groups,
                 company_ids=list(user.companies.keys()),
                 previous_groups=[],
             )
             await sync_company_member_roles(
-                container.authz_service,
+                authz,
                 company_id=clean_company_id,
                 user_id=user.user_id,
                 roles=clean_roles,
             )
         except Exception:
-            _ = await container.user_repository.delete(user.user_id)
+            _ = await User.delete_by_id(user.user_id)
             raise
     return user

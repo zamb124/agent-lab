@@ -14,7 +14,7 @@ Webhook для приёма уведомлений от Т-Банка (JSON Noti
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.clients.payment import PaymentProviderFactory
 from core.logging import get_logger
 from core.models.payment_models import TinkoffNotificationPayload
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
 @router.post("/webhook/{provider_name}")
 async def payment_webhook(
     provider_name: str,
-    container: ContainerDep,
+    di: Di,
     request: Request,
 ) -> PlainTextResponse:
     try:
@@ -60,7 +60,7 @@ async def payment_webhook(
         return PlainTextResponse("OK")
 
     webhook_payload = TinkoffNotificationPayload.model_validate(raw_body)
-    await container.payment_service.process_webhook(
+    await di.payment_service.process_webhook(
         verification_result=verification,
         provider_name=provider_name,
         raw_data=webhook_payload,

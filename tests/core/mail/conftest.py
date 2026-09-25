@@ -5,66 +5,14 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import get_settings
 from core.config.models import MailConfig
 from core.context import clear_context, set_context
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxFolderRepository,
-    MailboxSyncCursorRepository,
-    MailMessageRepository,
-)
+from core.mail.attachment_index import MailAttachmentFileIndex
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
 from tests.core.mail.fakes import RecordingMailServerPort
 from tests.fixtures.auth import set_test_company_member_roles
-
-
-@pytest.fixture()
-def mail_connection_repository(app) -> CompanyMailConnectionRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return CompanyMailConnectionRepository(db_url=shared_url)
-
-
-@pytest.fixture()
-def mailbox_binding_repository(app) -> MailboxBindingRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return MailboxBindingRepository(db_url=shared_url)
-
-
-@pytest.fixture()
-def mailbox_sync_cursor_repository(app) -> MailboxSyncCursorRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return MailboxSyncCursorRepository(db_url=shared_url)
-
-
-@pytest.fixture()
-def mailbox_folder_repository(app) -> MailboxFolderRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return MailboxFolderRepository(db_url=shared_url)
-
-
-@pytest.fixture()
-def mail_message_repository(app) -> MailMessageRepository:
-    _ = app
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
-    return MailMessageRepository(db_url=shared_url)
 
 
 @pytest.fixture()
@@ -74,33 +22,21 @@ def recording_mail_port() -> RecordingMailServerPort:
 
 @pytest.fixture()
 def mail_service(
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
-    mailbox_folder_repository: MailboxFolderRepository,
-    mail_message_repository: MailMessageRepository,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
 ) -> MailService:
     return MailService(
-        connection_repository=mail_connection_repository,
-        binding_repository=mailbox_binding_repository,
-        sync_cursor_repository=mailbox_sync_cursor_repository,
-        folder_repository=mailbox_folder_repository,
-        message_repository=mail_message_repository,
-        authz=container.authz_service,
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        authz=di.authz_service,
+        namespace_service=di.namespace_service,
         mail_config=MailConfig(),
         port_override=recording_mail_port,
-        files_service=container.files_service,
-        attachment_file_index=container.mail_attachment_file_index,
+        files_service=di.files_service,
+        attachment_file_index=MailAttachmentFileIndex(di.shared_storage),
     )
 
 
 async def seed_mail_company_member(
-    container,
+    di,
     *,
     company_id: str,
     user_id: str,
@@ -124,11 +60,10 @@ async def seed_mail_company_member(
         owner_user_id=user_id,
         members={user_id: ["owner", "admin"]},
     )
-    await container.user_repository.set(user)
-    await container.company_repository.set(company)
+    await User.set(user)
+    await Company.set(company)
     await set_test_company_member_roles(
-        container.company_repository,
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],
@@ -145,12 +80,12 @@ async def seed_mail_company_member(
 
 
 @pytest.fixture()
-def mail_member_context(container, unique_id: str):
+def mail_member_context(di, unique_id: str):
     """Function-scoped helper: seed + context; clears context on teardown."""
 
     async def _seed(*, company_id: str, user_id: str, display_name: str | None = None):
         return await seed_mail_company_member(
-            container,
+            di,
             company_id=company_id,
             user_id=user_id,
             unique_id=unique_id,

@@ -6,14 +6,14 @@ HTML для document/json для API; anonymous-страницы без 403.
 
 import pytest
 
-from core.models.identity_models import Company
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio
 async def test_company_host_mismatch_403_json(
-    frontend_client, auth_token, frontend_container, unique_id: str
+    frontend_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """Чужой субдомен + Accept: application/json — JSON с detail."""
     other_slug = f"other-{unique_id}"
@@ -25,8 +25,7 @@ async def test_company_host_mismatch_403_json(
         members={"u_foreign": ["owner"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
         frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
@@ -40,13 +39,12 @@ async def test_company_host_mismatch_403_json(
         body = response.json()
         assert "detail" in body
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_company_host_mismatch_403_html(
-    frontend_client, auth_token, frontend_container, unique_id: str
+    frontend_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """Тот же сценарий, браузерный Accept — HTML-страница ошибки."""
     other_slug = f"ohtml-{unique_id}"
@@ -58,8 +56,7 @@ async def test_company_host_mismatch_403_html(
         members={"u_foreign2": ["owner"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
         frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
@@ -75,20 +72,19 @@ async def test_company_host_mismatch_403_html(
         assert "HTTP 403" in text
         assert "localStorage" in text and "platform_theme" in text
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_x_company_id_conflicts_with_subdomain_403(
-    frontend_client, auth_token, frontend_container, unique_id: str
+    frontend_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """X-Company-Id не равен компании субдомена — 403 при поддомене в Host."""
     token_service = get_token_service()
     td = token_service.validate_token(auth_token)
     if td is None or not td.company_id:
         raise AssertionError("ожидается company_id в токене")
-    company = await frontend_container.company_repository.get(td.company_id)
+    company = await Company.get(td.company_id)
     if company is None or not company.subdomain:
         raise AssertionError("компания с subdomain")
     other_slug = f"oxc-{unique_id}"
@@ -100,8 +96,7 @@ async def test_x_company_id_conflicts_with_subdomain_403(
         members={"u_oxc": ["owner"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
         frontend_client.cookies.set("auth_token", auth_token)
         r = await frontend_client.get(
@@ -115,13 +110,12 @@ async def test_x_company_id_conflicts_with_subdomain_403(
         assert r.status_code == 403
         assert r.json()["detail"]
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_policy_anonymous_200_on_foreign_company_subdomain(
-    frontend_client, auth_token, frontend_container, unique_id: str
+    frontend_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """Anonymous /policy: не 403, даже если сессия с другой компанией, Host — чужая компания."""
     other_slug = f"pol-{unique_id}"
@@ -133,8 +127,7 @@ async def test_policy_anonymous_200_on_foreign_company_subdomain(
         members={"u_pol": ["owner"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
         frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
@@ -144,13 +137,12 @@ async def test_policy_anonymous_200_on_foreign_company_subdomain(
         assert response.status_code == 200
         assert "<!DOCTYPE html>" in response.text
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_flows_path_wrong_company_host_403(
-    flows_client, auth_token, frontend_container, unique_id: str
+    flows_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """GET /flows/... (a2a) с Host чужого субдомена — 403 в middleware, не 200."""
     other_slug = f"flw-{unique_id}"
@@ -162,8 +154,7 @@ async def test_flows_path_wrong_company_host_403(
         members={"u_flw": ["owner"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
         flows_client.cookies.set("auth_token", auth_token)
         response = await flows_client.get(
@@ -176,20 +167,19 @@ async def test_flows_path_wrong_company_host_403(
         assert response.status_code == 403
         assert "detail" in response.json()
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_session_host_mismatch_rebinds_200_and_set_cookie(
-    frontend_client, auth_token, frontend_container, unique_id: str
+    frontend_client, auth_token, frontend_di, unique_id: str
 ) -> None:
     """JWT с компанией A, Host — субдомен B; пользователь в обеих — перевыпуск сессии под B (без 307)."""
     token_service = get_token_service()
     td = token_service.validate_token(auth_token)
     if td is None:
         raise AssertionError("token")
-    home = await frontend_container.company_repository.get(td.company_id)
+    home = await Company.get(td.company_id)
     if home is None or not home.subdomain:
         raise AssertionError("home company subdomain")
 
@@ -202,14 +192,13 @@ async def test_session_host_mismatch_rebinds_200_and_set_cookie(
         members={td.user_id: ["member"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
     try:
-        user = await frontend_container.user_repository.get(td.user_id)
+        user = await User.get(td.user_id)
         if user is None:
             raise AssertionError("user")
         user.companies[other_cid] = ["member"]
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         frontend_client.cookies.set("auth_token", auth_token)
         response = await frontend_client.get(
@@ -228,17 +217,16 @@ async def test_session_host_mismatch_rebinds_200_and_set_cookie(
         ]
         assert any("auth_token=" in v for v in set_cookie_vals)
     finally:
-        restored = await frontend_container.user_repository.get(td.user_id)
+        restored = await User.get(td.user_id)
         if restored is not None and other_cid in restored.companies:
             del restored.companies[other_cid]
-            await frontend_container.user_repository.set(restored)
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+            await User.set(restored)
+        await Company.delete_by_id(other_cid)
 
 
 @pytest.mark.asyncio
 async def test_stale_session_company_rebinds_to_host(
-    frontend_client, frontend_container, unique_id: str
+    frontend_client, frontend_di, unique_id: str
 ) -> None:
     """JWT с company_id вне user.companies; Host — компания из membership — rebind на Host company."""
     from core.models.identity_models import User
@@ -255,8 +243,7 @@ async def test_stale_session_company_rebinds_to_host(
         members={user_id: ["member"]},
         subdomain=other_slug,
     )
-    await frontend_container.company_repository.set(other)
-    await frontend_container.subdomain_repository.set_mapping(other_slug, other_cid)
+    await Company.set(other)
 
     user = User(
         user_id=user_id,
@@ -264,7 +251,7 @@ async def test_stale_session_company_rebinds_to_host(
         companies={other_cid: ["member"]},
         active_company_id=stale_cid,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
 
     token_service = get_token_service()
     bad_token = token_service.create_token(user_id, stale_cid, roles=["member"])
@@ -287,5 +274,4 @@ async def test_stale_session_company_rebinds_to_host(
         ]
         assert any("auth_token=" in v for v in set_cookie_vals)
     finally:
-        await frontend_container.subdomain_repository.delete(other_slug)
-        await frontend_container.company_repository.delete(other_cid)
+        await Company.delete_by_id(other_cid)

@@ -4,9 +4,8 @@ TaskIQ задачи для инициализации компаний и system
 
 from pathlib import Path
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.services.agent_toolkit_service import bootstrap_agent_toolkits_from_registry
+from apps.flows.di import Di
+from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 from apps.flows.src.services.hitl_demo_queue import (
@@ -23,8 +22,9 @@ from apps.flows.src.services.platform_assistant_skills import seed_platform_assi
 from apps.flows.src.tasks.task_names import TASK_INIT_COMPANY_RESOURCES
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.group_sync import sync_user_groups
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.tasks import platform_task
@@ -37,7 +37,9 @@ logger = get_logger(__name__)
 async def init_company_resources(
     company_id: str,
     company_name: str = "",
-    subdomain: str = ""
+    subdomain: str = "",
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Универсальная задача инициализации ресурсов для компании.
@@ -88,15 +90,14 @@ async def init_company_resources(
     _ = set_context(company_context)
 
     try:
-        container = get_container()
         await sync_company_member_roles(
-            container.authz_service,
+            di.authz_service,
             company_id=company_id,
             user_id="system",
             roles=["owner", "admin"],
         )
         await sync_user_groups(
-            container.authz_service,
+            di.authz_service,
             user_id="system",
             groups=["admin", "developers"],
             company_ids=[company_id],
@@ -109,14 +110,12 @@ async def init_company_resources(
 
         # Загружаем tools (для ВСЕХ компаний, включая system)
         loaded_tools = await load_tools_to_db(
-        container.tool_repository,
-        flow_access_service=container.flow_access_service,
-    )
+            flow_access_service=di.flow_access_service,
+        )
         logger.info("flows.company_init.tools_loaded", company_id=company_id, count=len(loaded_tools))
 
         try:
-            runtime_container = as_flow_runtime_container(container)
-            seed_stats = await upsert_allowlist_seed_entries_only(container=runtime_container)
+            seed_stats = await upsert_allowlist_seed_entries_only()
             logger.info(
                 "flows.mcp.allowlist.seed.upserted.verified",
                 company_id=company_id,
@@ -124,9 +123,15 @@ async def init_company_resources(
                 verified=seed_stats.verified,
                 verify_failed=seed_stats.verify_failed,
             )
-            _ = await ensure_default_mcp_servers_for_company(container=runtime_container)
-            catalog_stats = await provision_mcp_catalog_for_company(container=runtime_container)
-            synced = await sync_auto_mcp_servers_for_company(container=runtime_container)
+            _ = await ensure_default_mcp_servers_for_company()
+            catalog_stats = await provision_mcp_catalog_for_company(
+                variables_service=di.variables_service,
+                flow_access_service=di.flow_access_service,
+            )
+            synced = await sync_auto_mcp_servers_for_company(
+                variables_service=di.variables_service,
+                flow_access_service=di.flow_access_service,
+            )
             logger.info(
                 "flows.mcp.catalog_added.catalog_updated.servers.tools",
                 company_id=company_id,
@@ -146,11 +151,8 @@ async def init_company_resources(
 
         loader = FlowsLoader(
             bundles_dir=bundles_dir,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=registry_path,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
 
         # Универсальный метод - работает и для system и для company
@@ -160,31 +162,29 @@ async def init_company_resources(
             filter_public=(company_id != "system")
         )
 
-        toolkits_loaded = await bootstrap_agent_toolkits_from_registry(
-            container.agent_toolkit_repository,
+        toolkits_loaded = await AgentToolkit.bootstrap_agent_toolkits_from_registry(
             registry_path,
             filter_public=(company_id != "system"),
         )
         stats["agent_toolkits"] = toolkits_loaded
 
         seeded_variables = await seed_demo_company_variables(
-            container.variables_service,
+            di.variables_service,
             company_id,
         )
         stats["demo_variables"] = seeded_variables
 
         seeded_skills = await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             company_id,
         )
         stats["platform_assistant_skills"] = seeded_skills
 
-        stored_company = await container.company_repository.get(company_id)
+        stored_company = await Company.get(company_id)
         member_user_ids: list[str] = []
         if stored_company is not None:
             member_user_ids = await hitl_demo_operator_user_ids(
-                container.authz_service, company_id
+                di.authz_service, company_id
             )
             owner_user_id = stored_company.owner_user_id
             if (
@@ -199,16 +199,16 @@ async def init_company_resources(
                     else ["owner", "admin"]
                 )
                 await sync_company_member_roles(
-                    container.authz_service,
+                    di.authz_service,
                     company_id=company_id,
                     user_id=owner_user_id,
                     roles=owner_roles,
                 )
                 member_user_ids = await hitl_demo_operator_user_ids(
-                    container.authz_service, company_id
+                    di.authz_service, company_id
                 )
         await ensure_example_hitl_queue(
-            container.work_item_service,
+            di.work_item_service,
             company_id,
             member_user_ids=member_user_ids,
         )

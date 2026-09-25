@@ -1,4 +1,4 @@
-"""Repository roundtrip: variables, attachments, correlation, CRM map."""
+"""WorkItem roundtrip: variables, attachments, correlation, CRM map."""
 
 from __future__ import annotations
 
@@ -21,10 +21,7 @@ from core.worktracker.models import (
 pytestmark = pytest.mark.asyncio
 
 
-async def test_repository_save_and_load_work_item(
-    worktracker_repository,
-    unique_id: str,
-) -> None:
+async def test_repository_save_and_load_work_item(unique_id: str) -> None:
     now = datetime.now(timezone.utc)
     item = WorkItem(
         work_item_id=f"wi_repo_{unique_id}",
@@ -45,17 +42,24 @@ async def test_repository_save_and_load_work_item(
         updated_at=now,
         state=WorkItemState.OPEN,
     )
-    saved = await worktracker_repository.save_work_item(item)
-    loaded = await worktracker_repository.get_work_item("system", saved.work_item_id)
+    _ = await WorkItem.set(item)
+    loaded = await WorkItem.objects.filter(
+        company_id="system",
+        work_item_id=item.work_item_id,
+    ).get_or_none()
+    assert loaded is not None
     assert loaded.variables["k"].value == "v"
     assert loaded.attachments[0].file_id == f"f_{unique_id}"
     assert loaded.links[0].entity_id == f"ent_{unique_id}"
+    item.title = f"Repo updated {unique_id}"
+    updated = await WorkItem.set(item)
+    assert updated is True
+    reloaded = await WorkItem.get(item.work_item_id)
+    assert reloaded is not None
+    assert reloaded.title == item.title
 
 
-async def test_find_by_completion_correlation(
-    worktracker_repository,
-    unique_id: str,
-) -> None:
+async def test_find_by_completion_correlation(unique_id: str) -> None:
     correlation_id = f"corr-{unique_id}"
     now = datetime.now(timezone.utc)
     item = WorkItem(
@@ -76,19 +80,16 @@ async def test_find_by_completion_correlation(
         updated_at=now,
         state=WorkItemState.OPEN,
     )
-    saved = await worktracker_repository.save_work_item(item)
-    found = await worktracker_repository.find_work_item_by_correlation(
+    _ = await WorkItem.set(item)
+    found = await WorkItem.find_work_item_by_correlation(
         "system",
         correlation_id,
     )
     assert found is not None
-    assert found.work_item_id == saved.work_item_id
+    assert found.work_item_id == item.work_item_id
 
 
-async def test_map_work_item_ids_by_crm_entities(
-    worktracker_repository,
-    unique_id: str,
-) -> None:
+async def test_map_work_item_ids_by_crm_entities(unique_id: str) -> None:
     entity_id = f"ent_map_{unique_id}"
     now = datetime.now(timezone.utc)
     item = WorkItem(
@@ -102,9 +103,9 @@ async def test_map_work_item_ids_by_crm_entities(
         updated_at=now,
         state=WorkItemState.OPEN,
     )
-    saved = await worktracker_repository.save_work_item(item)
-    mapping = await worktracker_repository.map_work_item_ids_by_crm_entities(
+    _ = await WorkItem.set(item)
+    mapping = await WorkItem.map_work_item_ids_by_crm_entities(
         "system",
         [entity_id],
     )
-    assert mapping[entity_id] == saved.work_item_id
+    assert mapping[entity_id] == item.work_item_id

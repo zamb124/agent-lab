@@ -1,20 +1,17 @@
-"""HTTP client for cross-process file operations + get_bytes via shared FileRepository.
+"""HTTP client for cross-process file operations + get_bytes via shared FileRecord.
 
 Upload/register идут на Files API **целевого сервиса** (не frontend-канон).
-`get_bytes` читает shared FileRepository напрямую.
+`get_bytes` читает shared FileRecord напрямую.
 """
 
 from __future__ import annotations
 
 from core.clients.service_client import ServiceClient
-from core.config import get_settings
-from core.context import get_context
-from core.db.storage import Storage
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
-from core.files.file_repository import FileRepository
 from core.files.models import FileRecord
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.urls import (
     files_api_prefix,
     normalize_files_route_segment,
@@ -47,7 +44,6 @@ class FilesClient:
         *,
         service: str | None = None,
         service_client: ServiceClient | None = None,
-        file_repository: FileRepository | None = None,
     ) -> None:
         """
         Args:
@@ -57,7 +53,6 @@ class FilesClient:
         self._http: ServiceClient = (
             service_client if service_client is not None else ServiceClient()
         )
-        self._file_repository: FileRepository | None = file_repository
         self._route_segment: str
         self._http_service: str
         if service is None:
@@ -69,21 +64,10 @@ class FilesClient:
     def _prefix(self) -> str:
         return files_api_prefix(self._route_segment)
 
-    def _require_file_repository(self) -> FileRepository:
-        if self._file_repository is not None:
-            return self._file_repository
-        shared_url = get_settings().database.shared_url
-        if shared_url is None or not shared_url.strip():
-            raise ValueError("database.shared_url is required for FilesClient.get_bytes")
-        self._file_repository = FileRepository(
-            storage=Storage(db_url=shared_url, get_context_func=get_context)
-        )
-        return self._file_repository
-
     async def get_record(self, file_id: str) -> FileRecord:
         if file_id.strip() == "":
             raise ValueError("FilesClient.get_record: file_id required")
-        record = await self._require_file_repository().get(file_id)
+        record = await FileRecord.get(file_id)
         if record is None:
             raise ValueError(f"File not found: {file_id}")
         return record
@@ -151,7 +135,7 @@ class FilesClient:
         spec: FileCreateSpec,
         *,
         s3_key: str,
-        s3_bucket: str,
+        storage_id: str,
         original_name: str,
         content_type: str,
         file_size: int,
@@ -159,7 +143,7 @@ class FilesClient:
         body: JsonObject = {
             "spec": require_json_object(spec.model_dump(mode="json"), "spec"),
             "s3_key": s3_key,
-            "s3_bucket": s3_bucket,
+            "storage_id": storage_id,
             "original_name": original_name,
             "content_type": content_type,
             "file_size": file_size,
@@ -174,12 +158,12 @@ class FilesClient:
 
     async def get_bytes(self, file_id: str) -> bytes:
         record = await self.get_record(file_id)
-        s3_bucket = record.s3_bucket
-        s3_key = record.s3_key
-        if s3_bucket == "" or s3_key == "":
-            raise ValueError(f"File {file_id} has empty s3_bucket/s3_key")
-        s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
-        try:
-            return await s3_client.download_bytes(s3_key)
-        finally:
-            await s3_client.close()
+        if record.storage_id == "" or record.s3_key == "":
+            raise ValueError(f"File {file_id} has empty storage_id/s3_key")
+        if record.company_id is None or record.company_id == "":
+            raise ValueError(f"File {file_id} has no company_id")
+        handle = await FileGate().open_record(
+            record,
+            SystemPrincipal(company_id=record.company_id),
+        )
+        return await handle.read_bytes()

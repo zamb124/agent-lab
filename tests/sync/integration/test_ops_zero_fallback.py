@@ -26,6 +26,7 @@ _NO_REQUIRED_FIELDS_OPS: frozenset[str] = frozenset(
         "sync/channels/list_requested",
         "sync/calls/turn_credentials_requested",
         "sync/company_members/list_requested",
+        "sync/namespaces/list_requested",
     }
 )
 

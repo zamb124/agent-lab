@@ -22,13 +22,10 @@ from core.models.billing_models import (
 )
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-from core.tracing.models import BillingSettlementSpan
+from core.tracing.models import Span
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 if TYPE_CHECKING:
-    from core.db.repositories.company_repository import CompanyRepository
-    from core.db.repositories.usage_repository import UsageRepository
-    from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
 
 from core.billing.default_settlement_rules import default_settlement_rules_document
@@ -124,18 +121,12 @@ class BillingService:
 
     def __init__(
         self,
-        company_repository: "CompanyRepository",
-        user_repository: "UserRepository",
-        usage_repository: "UsageRepository",
         tariff_prices: dict[TariffPlan, dict[str, dict[str, float]]] | None = None,
         resource_base_prices: dict[str, dict[str, float]] | None = None,
         shared_storage: Storage | None = None,
         balance_enforcement_enabled: bool = True,
         balance_enforcement_exempt_company_ids: list[str] | None = None,
     ):
-        self._company_repository: CompanyRepository = company_repository
-        self._user_repository: UserRepository = user_repository
-        self._usage_repository: UsageRepository = usage_repository
         self._shared_storage: Storage | None = shared_storage
 
         if tariff_prices is None:
@@ -193,7 +184,7 @@ class BillingService:
             raise ValueError('notification_service cannot be empty')
         if cid in self._balance_enforcement_exempt_company_ids:
             return
-        company = await self._company_repository.get(cid)
+        company = await Company.get(cid)
         if company is None:
             raise ValueError(f"Company {cid} not found")
         if company.balance <= 0:
@@ -250,7 +241,7 @@ class BillingService:
             return True
         if cid in self._balance_enforcement_exempt_company_ids:
             return True
-        company = await self._company_repository.get(cid)
+        company = await Company.get(cid)
         if company is None:
             return False
         return company.balance > 0
@@ -270,7 +261,7 @@ class BillingService:
             return False, "quantity должна быть >= 1"
 
         # ВАЖНО: загружаем актуальную компанию из БД для проверки реального баланса
-        actual_company = await self._company_repository.get(company.company_id)
+        actual_company = await Company.get(company.company_id)
         if not actual_company:
             return False, f"Компания {company.company_id} не найдена"
 
@@ -389,7 +380,7 @@ class BillingService:
         """
         if self._shared_storage is None:
             return 0
-        companies = await self._company_repository.list(limit=limit)
+        companies = await Company.list(limit=limit)
         for company in companies:
             _ = await self.load_settlement_rules_document_for_company(company.company_id)
         return len(companies)
@@ -434,7 +425,7 @@ class BillingService:
         context = get_context()
         session_id = context.session_id if context else None
 
-        actual_company = await self._company_repository.get(company.company_id)
+        actual_company = await Company.get(company.company_id)
         if not actual_company:
             raise ValueError(f"Company {company.company_id} not found in the database")
 
@@ -463,7 +454,7 @@ class BillingService:
             cost_origin=cost_origin,
         )
 
-        _ = await self._usage_repository.set(usage_record)
+        _ = await UsageRecord.set(usage_record)
 
         if not is_company:
             balance_before = actual_company.balance
@@ -478,7 +469,7 @@ class BillingService:
                 spent_before=spent_before,
                 current_month_spent=actual_company.current_month_spent,
             )
-            _ = await self._company_repository.set(actual_company)
+            _ = await Company.set(actual_company)
             company.balance = actual_company.balance
             company.current_month_spent = actual_company.current_month_spent
         else:
@@ -489,7 +480,7 @@ class BillingService:
     async def settle_span_rule_charge(
         self,
         *,
-        span: BillingSettlementSpan,
+        span: Span,
         rule: SettlementRule,
         settlement: SpanBillingSettlement,
     ) -> str:
@@ -507,11 +498,11 @@ class BillingService:
         if not uid:
             raise ValueError(f"span {span_id}: span column has no user_id")
 
-        user = await self._user_repository.get(uid)
+        user = await User.get(uid)
         if user is None:
             raise ValueError(f"span {span_id}: user {uid} not found")
 
-        company = await self._company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"span {span_id}: company {company_id} not found")
 
@@ -553,7 +544,7 @@ class BillingService:
     async def settle_pending_span_in_job(
         self,
         *,
-        span: BillingSettlementSpan,
+        span: Span,
         settlement: SpanBillingSettlement,
         rules_doc: SettlementRulesDocument,
     ) -> int:
@@ -625,10 +616,7 @@ class BillingService:
 
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        if not self._usage_repository:
-            raise RuntimeError('UsageRepository is not configured. Cannot load statistics.')
-
-        all_usage_records = await self._usage_repository.list(limit=10000)
+        all_usage_records = await UsageRecord.list_company_since(company_id, current_month)
 
         stats: CompanyUsageStats = {
             "total_cost": 0.0,
@@ -640,11 +628,6 @@ class BillingService:
         user_ids: set[str] = set()
 
         for record in all_usage_records:
-            if record.timestamp < current_month:
-                continue
-            if record.company_id != company_id:
-                continue
-
             stats["total_cost"] += record.cost
             stats["total_calls"] += record.quantity
 
@@ -662,7 +645,7 @@ class BillingService:
             user_ids.add(record.user_id)
 
         if user_ids:
-            users_dict = await self._user_repository.get_many(list(user_ids))
+            users_dict = await User.get_many(list(user_ids))
             for user_id in user_ids:
                 if user_id in users_dict:
                     stats["by_user"][user_id]["user_name"] = users_dict[user_id].name
@@ -674,11 +657,11 @@ class BillingService:
     async def reset_monthly_billing(self, company_id: str):
         """Сбрасывает месячный биллинг компании (вызывается в начале месяца)"""
 
-        company = await self._company_repository.get(company_id)
+        company = await Company.get(company_id)
         if not company:
             raise ValueError(f"Company {company_id} not found")
         company.current_month_spent = 0.0
         company.billing_period_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        _ = await self._company_repository.set(company)
+        _ = await Company.set(company)
         logger.info("billing.monthly_reset", company_id=company_id)

@@ -45,7 +45,7 @@ class IntegrationRegistry:
     async def dispatch_credential_saved(self, credential: IntegrationCredential) -> None:
         connector = self._by_provider.get(credential.provider)
         if connector is None:
-            raise KeyError(f"No connector for provider {credential.provider}")
+            return
         await connector.on_credential_saved(credential)
 
     async def build_manifest(

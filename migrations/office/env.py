@@ -1,5 +1,7 @@
 """
-Alembic env для БД сервиса office (привязки документов OnlyOffice).
+Alembic env для БД platform_office.
+
+Office больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -14,11 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.office.db.models import (  # noqa: F401
-    OfficeDocumentBinding,
-    OfficeDocumentCatalog,
-)
-from core.db.models import Base
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -28,10 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "office_document_bindings",
-    "office_document_catalogs",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

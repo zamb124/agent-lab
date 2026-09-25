@@ -15,13 +15,13 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from core.authz.company_sync import remove_company_member
-from core.container.base import BaseContainer
+from core.authz.service import AuthzService
 from core.identity.company_membership import (
     remove_company_membership,
     sync_existing_company_member,
 )
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.models.identity_models import User, UserStatus
+from core.models.identity_models import Company, User, UserStatus
 from core.types import JsonObject
 
 FLOW_EMPLOYEE_KIND = "flow_employee"
@@ -87,7 +87,7 @@ def _clean_curators(curator_user_ids: Sequence[str]) -> list[str]:
 
 
 async def ensure_flow_employee(
-    container: BaseContainer,
+    authz: AuthzService,
     *,
     flow_id: str,
     company_id: str,
@@ -116,7 +116,7 @@ async def ensure_flow_employee(
         FLOW_EMPLOYEE_CURATORS_ATTR: list(curators),
     }
     user = await ensure_persisted_runtime_user(
-        container,
+        authz,
         user_id=user_id,
         company_id=clean_company_id,
         name=name,
@@ -139,15 +139,15 @@ async def ensure_flow_employee(
         user_changed = True
     if user_changed:
         user.updated_at = now
-        _ = await container.user_repository.set(user)
+        _ = await User.set(user)
 
-    company = await container.company_repository.get(clean_company_id)
+    company = await Company.get(clean_company_id)
     if company is None:
         raise ValueError(f"ensure_flow_employee: company {clean_company_id} not found")
     existing_member_roles = company.members.get(user_id, [])
     merged_member_roles = list(dict.fromkeys([*existing_member_roles, *user.companies[clean_company_id]]))
     if merged_member_roles != existing_member_roles:
-        stored = await container.company_repository.put_member_roles(
+        stored = await Company.put_member_roles(
             clean_company_id,
             user_id,
             merged_member_roles,
@@ -155,7 +155,7 @@ async def ensure_flow_employee(
         company.members = stored.members
         company.updated_at = stored.updated_at
     await sync_existing_company_member(
-        authz=container.authz_service,
+        authz=authz,
         company_id=clean_company_id,
         user_id=user_id,
         roles=merged_member_roles,
@@ -165,7 +165,7 @@ async def ensure_flow_employee(
 
 
 async def deactivate_flow_employee(
-    container: BaseContainer,
+    authz: AuthzService,
     *,
     flow_id: str,
     company_id: str,
@@ -181,8 +181,8 @@ async def deactivate_flow_employee(
     user_id = flow_employee_user_id(clean_flow_id)
     now = datetime.now(timezone.utc)
 
-    user = await container.user_repository.get(user_id)
-    company = await container.company_repository.get(clean_company_id)
+    user = await User.get(user_id)
+    company = await Company.get(clean_company_id)
     if user is not None and company is not None and (
         clean_company_id in user.companies or user_id in company.members
     ):
@@ -190,9 +190,7 @@ async def deactivate_flow_employee(
             user.status = UserStatus.INACTIVE
             user.updated_at = now
         await remove_company_membership(
-            company_repository=container.company_repository,
-            user_repository=container.user_repository,
-            authz=container.authz_service,
+            authz=authz,
             company=company,
             user=user,
             allow_empty_companies=True,
@@ -209,14 +207,14 @@ async def deactivate_flow_employee(
             changed = True
         if changed:
             user.updated_at = now
-            _ = await container.user_repository.set(user)
+            _ = await User.set(user)
 
     if company is not None and user_id in company.members:
         del company.members[user_id]
         company.updated_at = now
-        _ = await container.company_repository.set(company)
+        _ = await Company.set(company)
         await remove_company_member(
-            container.authz_service,
+            authz,
             company_id=clean_company_id,
             user_id=user_id,
         )

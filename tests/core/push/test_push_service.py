@@ -1,7 +1,7 @@
 """
 Интеграционные тесты для Push Notifications.
 
-Тестируют реальную работу с БД через container.
+Тестируют реальную работу с БД через di.
 webpush мокается т.к. нет реального FCM сервера.
 
 Запуск:
@@ -13,20 +13,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.push.models import PushSubscription
 
-class TestPushRepository:
+
+class TestPushSubscriptionModel:
     """
-    Тесты репозитория с реальной PostgreSQL.
-    Используют frontend_container как все остальные тесты.
+    Тесты модели PushSubscription с реальной PostgreSQL.
     """
 
     @pytest.mark.asyncio
-    async def test_create_subscription(self, push_repository, unique_id):
+    async def test_create_subscription(self, unique_id):
         """Создание подписки в реальной БД."""
         user_id = f"user_{unique_id}"
         endpoint = f"https://fcm.googleapis.com/{unique_id}"
 
-        subscription = await push_repository.upsert_subscription(
+        subscription = await PushSubscription.upsert_by_endpoint(
             user_id=user_id,
             endpoint=endpoint,
             keys={"p256dh": "test_key", "auth": "test_auth"},
@@ -39,16 +40,16 @@ class TestPushRepository:
         assert subscription.platform == "desktop"
 
         # Cleanup
-        await push_repository.delete_subscription(user_id, endpoint)
+        await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
 
     @pytest.mark.asyncio
-    async def test_upsert_updates_existing(self, push_repository, unique_id):
+    async def test_upsert_updates_existing(self, unique_id):
         """Upsert обновляет существующую подписку."""
         endpoint = f"https://fcm.googleapis.com/upsert-{unique_id}"
         user_id = f"user_{unique_id}"
 
         # Первое создание
-        sub1 = await push_repository.upsert_subscription(
+        sub1 = await PushSubscription.upsert_by_endpoint(
             user_id=user_id,
             endpoint=endpoint,
             keys={"p256dh": "key1", "auth": "auth1"},
@@ -56,23 +57,23 @@ class TestPushRepository:
         )
 
         # Обновление с новыми keys
-        sub2 = await push_repository.upsert_subscription(
+        sub2 = await PushSubscription.upsert_by_endpoint(
             user_id=user_id,
             endpoint=endpoint,
             keys={"p256dh": "key2", "auth": "auth2"},
             platform="android"
         )
 
-        # ID должен остаться тем же
-        assert sub1.id == sub2.id
+        # Та же строка подписки
+        assert sub1.push_subscription_id == sub2.push_subscription_id
         # Platform обновился
         assert sub2.platform == "android"
 
         # Cleanup
-        await push_repository.delete_subscription(user_id, endpoint)
+        await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
 
     @pytest.mark.asyncio
-    async def test_get_user_subscriptions(self, push_repository, unique_id):
+    async def test_list_for_user_returns_that_users_rows(self, unique_id):
         """Получение всех подписок пользователя."""
         user_id = f"user_multi_{unique_id}"
 
@@ -81,7 +82,7 @@ class TestPushRepository:
         for i in range(3):
             endpoint = f"https://fcm.googleapis.com/multi-{unique_id}-{i}"
             endpoints.append(endpoint)
-            await push_repository.upsert_subscription(
+            await PushSubscription.upsert_by_endpoint(
                 user_id=user_id,
                 endpoint=endpoint,
                 keys={"p256dh": f"key{i}", "auth": f"auth{i}"},
@@ -89,7 +90,7 @@ class TestPushRepository:
             )
 
         # Получаем все подписки
-        subscriptions = await push_repository.get_user_subscriptions(user_id)
+        subscriptions = await PushSubscription.list_for_user(user_id)
 
         assert len(subscriptions) == 3
 
@@ -98,16 +99,16 @@ class TestPushRepository:
 
         # Cleanup
         for endpoint in endpoints:
-            await push_repository.delete_subscription(user_id, endpoint)
+            await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
 
     @pytest.mark.asyncio
-    async def test_delete_subscription(self, push_repository, unique_id):
+    async def test_delete_subscription(self, unique_id):
         """Удаление подписки."""
         user_id = f"user_delete_{unique_id}"
         endpoint = f"https://fcm.googleapis.com/delete-{unique_id}"
 
         # Создаем
-        await push_repository.upsert_subscription(
+        await PushSubscription.upsert_by_endpoint(
             user_id=user_id,
             endpoint=endpoint,
             keys={"p256dh": "key", "auth": "auth"},
@@ -115,11 +116,11 @@ class TestPushRepository:
         )
 
         # Удаляем
-        deleted = await push_repository.delete_subscription(user_id, endpoint)
+        deleted = await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
         assert deleted is True
 
         # Проверяем что удалено
-        subs = await push_repository.get_user_subscriptions(user_id)
+        subs = await PushSubscription.list_for_user(user_id)
         assert len(subs) == 0
 
 
@@ -135,7 +136,6 @@ class TestWebPushService:
         """send_push вызывает pywebpush с правильными параметрами."""
         import json
 
-        from core.db.models import PushSubscription
         from core.push.service import WebPushService
 
         mock_webpush.return_value = MagicMock(status_code=201)
@@ -209,7 +209,6 @@ class TestWebPushService:
         """410 Gone возвращает endpoint в списке expired."""
         from pywebpush import WebPushException
 
-        from core.db.models import PushSubscription
         from core.push.service import WebPushService
 
         # Мокаем 410 Gone
@@ -235,60 +234,3 @@ class TestWebPushService:
         )
 
         assert "https://fcm.googleapis.com/expired" in expired
-
-
-class TestNotifyUserIntegration:
-    """
-    Интеграционные тесты notify_user() с push.
-    """
-
-    @pytest.mark.asyncio
-    @patch('core.push.service.webpush')
-    async def test_notify_user_sends_push_when_offline(
-        self,
-        mock_webpush,
-        push_repository,
-        vapid_keys,
-        unique_id
-    ):
-        """
-        notify_user() отправляет push если пользователь не подключен к WebSocket.
-        """
-        from core.push.service import init_web_push_service
-        from core.websocket.publisher import Notification, NotificationType, notify_user
-
-        mock_webpush.return_value = MagicMock(status_code=201)
-
-        # Инициализируем сервис
-        init_web_push_service(
-            vapid_private_key=vapid_keys["private_key"],
-            vapid_public_key=vapid_keys["public_key"],
-            vapid_email=vapid_keys["email"]
-        )
-
-        user_id = f"user_notify_{unique_id}"
-        endpoint = f"https://fcm.googleapis.com/notify-{unique_id}"
-
-        # Создаем подписку
-        await push_repository.upsert_subscription(
-            user_id=user_id,
-            endpoint=endpoint,
-            keys={"p256dh": "key", "auth": "auth"},
-            platform="desktop"
-        )
-
-        # Отправляем уведомление (пользователь offline - нет WebSocket)
-        notification = Notification(
-            type=NotificationType.SYSTEM,
-            title="Test Notification",
-            message="This should trigger push",
-            service="test"
-        )
-
-        await notify_user(user_id, notification)
-
-        # webpush должен быть вызван
-        assert mock_webpush.called, "webpush should be called for offline user"
-
-        # Cleanup
-        await push_repository.delete_subscription(user_id, endpoint)

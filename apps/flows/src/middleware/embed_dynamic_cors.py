@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
-from apps.flows.src.container import get_container
 from apps.flows.src.services.embed_target_resolver import resolve_embed_target
 
 
@@ -33,7 +32,7 @@ class EmbedDynamicCorsMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         origin = (request.headers.get("origin") or "").strip()
-        target = await resolve_embed_target(get_container(), embed_id)
+        target = await resolve_embed_target(embed_id)
         if target is None:
             return JSONResponse(status_code=404, content={"detail": "Embed config not found"})
         if not target.active:

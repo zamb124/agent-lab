@@ -103,7 +103,7 @@ def test_parse_value_over_nominal_fallback():
 
 def test_parse_raises_when_usd_absent():
     """Отсутствие USD в ответе ЦБ вызывает _CbrParseError."""
-    with pytest.raises(_provider._CbrParseError, match="USD не найден"):
+    with pytest.raises(_provider._CbrParseError, match="USD not found in CBR response"):
         _parse_usd_rate(_SAMPLE_XML_NO_USD)
 
 
@@ -116,7 +116,7 @@ def test_parse_raises_on_broken_xml():
 def test_parse_raises_on_bad_date():
     """Неверный формат даты в атрибуте Date вызывает _CbrParseError."""
     xml = _SAMPLE_XML.replace('Date="01.05.2026"', 'Date="not-a-date"')
-    with pytest.raises(_provider._CbrParseError, match="Неверный формат Date"):
+    with pytest.raises(_provider._CbrParseError, match="Invalid Date format"):
         _parse_usd_rate(xml)
 
 
@@ -126,7 +126,7 @@ def test_parse_raises_on_zero_rate():
         "<VunitRate>74,8014</VunitRate>",
         "<VunitRate>0</VunitRate>",
     )
-    with pytest.raises(_provider._CbrParseError, match="некорректен"):
+    with pytest.raises(_provider._CbrParseError, match="USD rate from CBR is invalid"):
         _parse_usd_rate(xml)
 
 

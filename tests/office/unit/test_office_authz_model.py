@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.timeout(60)]
 async def test_office_catalog_parent_ttu_and_company_visible(
     authz_service: AuthzService,
     unique_id: str,
-    frontend_container,
+    frontend_di,
 ) -> None:
     company_id = f"co-office-{unique_id}"
     owner_id = f"owner-{unique_id}"
@@ -36,27 +36,21 @@ async def test_office_catalog_parent_ttu_and_company_visible(
     parent_id = f"cat-parent-{unique_id}"
     child_id = f"cat-child-{unique_id}"
 
-    company_repository = frontend_container.company_repository
-    user_repository = frontend_container.user_repository
     company = Company(company_id=company_id, name="Office", subdomain=f"o-{unique_id}")
     owner = User(user_id=owner_id, name="Owner", companies={})
     member = User(user_id=member_id, name="Member", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(owner)
-    _ = await user_repository.set(member)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
+    _ = await User.set(member)
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=owner,
         roles=["owner"],
     )
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=member,

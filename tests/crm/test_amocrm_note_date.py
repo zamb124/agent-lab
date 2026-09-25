@@ -6,15 +6,16 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CRMEntity
 from apps.crm.integrations.amocrm.mapping import AMO_PROVIDER_ID
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
@@ -51,7 +52,7 @@ def test_note_date_invalid_input_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_upsert_note_without_note_date_sets_today(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -65,8 +66,8 @@ async def test_upsert_note_without_note_date_sets_today(
     set_context(ctx)
     try:
         ent, created = await upsert_canonical_by_external_ref(
-            entity_repo=crm_container.entity_repository,
-            entity_access=crm_container.crm_entity_access_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -87,7 +88,7 @@ async def test_upsert_note_without_note_date_sets_today(
 
 @pytest.mark.asyncio
 async def test_upsert_note_update_backfills_null_note_date(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -115,11 +116,16 @@ async def test_upsert_note_update_backfills_null_note_date(
             user_id=system_user_id,
             note_date=None,
         )
-        _ = await crm_container.entity_repository.create(ent0)
+        ent0 = await CRMEntity.create(ent0)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            ent0,
+            replace=False,
+        )
 
         ent1, created1 = await upsert_canonical_by_external_ref(
-            entity_repo=crm_container.entity_repository,
-            entity_access=crm_container.crm_entity_access_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,

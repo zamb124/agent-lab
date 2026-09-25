@@ -1,13 +1,17 @@
 import pytest
 import pytest_asyncio
 
-from apps.platform_tasks.wiring import wire_worker
 from apps.search.config import SearchIntegrationConfig, get_search_settings, reset_search_settings
-from apps.search.container import SearchContainer, get_search_container, reset_search_container
-from apps.search.services import MetaSearchService
+from apps.search.di import SearchDi
+from apps.search.services.meta import MetaSearchService
 from apps.search.services.provider_availability import ProviderAvailabilityStore
+from apps.worker_manifest import wire_worker
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
+from core.di import open_di
+from core.di.kit import ProcessIdentity
+from core.files.urls import resolve_files_route_segment
+from core.models.identity_models import Company
 from core.search.index_models import SearchIndexCrawlTaxonomy
 
 _ = wire_worker("search")
@@ -70,13 +74,24 @@ async def reset_index_provider_availability_before_search_test(request):
         await redis_client.close()
 
 
-@pytest.fixture
-def search_container(setup_database_before_tests) -> SearchContainer:
+async def _open_search_di():
+    async with open_di(
+        SearchDi,
+        settings=get_search_settings(),
+        identity=ProcessIdentity(
+            service_name="search",
+            files_route_segment=resolve_files_route_segment("search"),
+        ),
+        database="search_url",
+    ) as di:
+        yield di
+
+
+@pytest_asyncio.fixture
+async def search_di(setup_database_before_tests):
     _ = setup_database_before_tests
-    reset_search_container()
-    container = get_search_container()
-    yield container
-    reset_search_container()
+    async for di in _open_search_di():
+        yield di
 
 
 @pytest.fixture
@@ -98,24 +113,25 @@ async def provider_state_store(unique_id):
 def build_meta_search_service(
     config: SearchIntegrationConfig,
     store: ProviderAvailabilityStore,
-    search_container: SearchContainer,
+    search_di,
 ) -> MetaSearchService:
+    meta = search_di.meta_search_service
     return MetaSearchService(
         config,
         store,
-        search_container.billing_service,
-        search_container.index_search_provider,
-        search_container.serp_cache_service,
+        search_di.billing_service,
+        meta._index_provider,
+        meta._serp_cache_service,
     )
 
 
 @pytest.fixture
-def meta_search_service_builder(search_container):
+def meta_search_service_builder(search_di):
     def _build(
         config: SearchIntegrationConfig,
         store: ProviderAvailabilityStore,
     ) -> MetaSearchService:
-        return build_meta_search_service(config, store, search_container)
+        return build_meta_search_service(config, store, search_di)
 
     return _build
 
@@ -129,20 +145,16 @@ def make_search_index_slug(unique_id: str) -> str:
 def search_crawl_low_min_extract_chars(monkeypatch):
     monkeypatch.setenv("CRAWL__MIN_EXTRACT_CHARS", "50")
     reset_search_settings()
-    reset_search_container()
     yield
     monkeypatch.delenv("CRAWL__MIN_EXTRACT_CHARS", raising=False)
     reset_search_settings()
-    reset_search_container()
 
 
-@pytest.fixture
-def crawl_search_container(search_crawl_low_min_extract_chars, setup_database_before_tests):
+@pytest_asyncio.fixture
+async def crawl_search_di(search_crawl_low_min_extract_chars, setup_database_before_tests):
     _ = search_crawl_low_min_extract_chars, setup_database_before_tests
-    reset_search_container()
-    container = get_search_container()
-    yield container
-    reset_search_container()
+    async for di in _open_search_di():
+        yield di
 
 
 @pytest.fixture
@@ -158,73 +170,25 @@ def enable_serp_rerank(monkeypatch):
     reset_search_settings()
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def ensure_platform_search_worker_prerequisites(
-    setup_database_before_tests,
-    frontend_container,
-):
-    """Worker context (build_system_admin_job_context) и seed runet требуют system admin email."""
-    _ = setup_database_before_tests
-    from core.identity.system_bootstrap import (
-        ADMIN_ROLE,
-        SYSTEM_ADMIN_EMAIL,
-        ensure_system_admin_membership,
-        ensure_system_company_exists,
-    )
-    from core.models.identity_models import SYSTEM_COMPANY_ID, User
-
-    company = await ensure_system_company_exists(
-        company_repository=frontend_container.company_repository,
-        subdomain_repository=frontend_container.subdomain_repository,
-    )
-    _, admin_user = await ensure_system_admin_membership(
-        company_repository=frontend_container.company_repository,
-        subdomain_repository=frontend_container.subdomain_repository,
-        user_repository=frontend_container.user_repository,
-        authz=frontend_container.authz_service,
-    )
-    if admin_user is None:
-        admin_user_id = "user_zambas124_yandex_ru_test"
-        admin_user = User(
-            user_id=admin_user_id,
-            name="Platform System Admin",
-            emails=[SYSTEM_ADMIN_EMAIL],
-            companies={SYSTEM_COMPANY_ID: [ADMIN_ROLE]},
-        )
-        await frontend_container.user_repository.set(admin_user)
-        member_roles = list(company.members.get(admin_user_id, []))
-        if ADMIN_ROLE not in member_roles:
-            member_roles.append(ADMIN_ROLE)
-        company.members[admin_user_id] = member_roles
-        await frontend_container.company_repository.set(company)
-        from core.authz.company_sync import sync_company_member_roles
-
-        await sync_company_member_roles(
-            frontend_container.authz_service,
-            company_id=SYSTEM_COMPANY_ID,
-            user_id=admin_user_id,
-            roles=member_roles,
-        )
-
-    from tests.fixtures.search_runet import ensure_runet_platform_index_seeded
-
-    await ensure_runet_platform_index_seeded()
+async def ensure_platform_search_worker_prerequisites(search_worker_prerequisites) -> None:
+    _ = search_worker_prerequisites
 
 
 @pytest_asyncio.fixture
-async def search_system_context(search_container, unique_id, auth_token_system):
+async def search_system_context(search_di, unique_id, auth_token_system):
     from core.context import clear_context, set_context
     from core.models.context_models import Context
     from core.models.i18n_models import Language
-    from core.models.identity_models import Company, User
+    from core.models.identity_models import User
     from core.utils.tokens import get_token_service
 
     token_data = get_token_service().validate_token(auth_token_system)
     if token_data is None:
         raise ValueError("Invalid auth token")
-    user_record = await search_container.user_repository.get(token_data.user_id)
+    user_record = await User.get(token_data.user_id)
     if user_record is None:
         raise ValueError(f"User {token_data.user_id} not found")
-    company_record = await search_container.company_repository.get(token_data.company_id)
+    company_record = await Company.get(token_data.company_id)
     if company_record is None:
         raise ValueError(f"Company {token_data.company_id} not found")
 

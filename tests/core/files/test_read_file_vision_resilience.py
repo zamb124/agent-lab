@@ -55,7 +55,7 @@ def test_transcode_avif_to_jpeg() -> None:
 
 def test_transcode_svg_behavior() -> None:
     if _cairosvg is None:
-        with pytest.raises(FileReadError, match="SVG-транскод недоступен"):
+        with pytest.raises(FileReadError, match="SVG transcode is unavailable"):
             transcode_to_jpeg(_MINIMAL_SVG, file_name="icon.svg", mime="image/svg+xml")
         return
     payload, mime = transcode_to_jpeg(_MINIMAL_SVG, file_name="icon.svg", mime="image/svg+xml")
@@ -94,7 +94,7 @@ def test_prepare_visual_payload_compression_modes(compression: CompressionMode) 
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_image_vision_heic_from_corpus(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
@@ -103,7 +103,7 @@ async def test_read_image_vision_heic_from_corpus(
     entry = next(entry for entry in CORPUS if entry.relative_path == "img/DA-1p.heic")
     require_heic_entry_supported(entry.relative_path)
     mock_llm_with_queue(["MOCK_VISION"])
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     from apps.flows.tools.files.files import read_file
 
     state = ExecutionState.create(
@@ -131,14 +131,14 @@ async def test_read_image_vision_heic_from_corpus(
 @pytest.mark.timeout(120)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_image_vision_shrink_on_error_flag_accepted(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "img/example.jpg")
     mock_llm_with_queue(["MOCK_VISION"])
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     from apps.flows.tools.files.files import read_file
 
     state = ExecutionState.create(

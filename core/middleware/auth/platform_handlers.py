@@ -8,7 +8,6 @@ from typing import assert_never, override
 from fastapi import HTTPException, Request
 from pydantic import Field, ValidationError
 
-from core.container import BaseContainer
 from core.logging import get_logger
 from core.models.base import FlexibleBaseModel
 from core.models.identity_models import Company, User, UserStatus
@@ -37,9 +36,6 @@ class TelegramWebhookPayload(FlexibleBaseModel):
 class PlatformHandler(ABC):
     """Базовый обработчик платформы"""
 
-    def __init__(self, container: BaseContainer) -> None:
-        self.container: BaseContainer = container
-
     async def extract_company_from_webhook_path(self, path: str, platform: str) -> Company:
         """Извлекает компанию из пути webhook"""
         prefix = f"/flows/api/v1/webhook/{platform}/"
@@ -53,7 +49,7 @@ class PlatformHandler(ABC):
             raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
 
         company_id = parts[1]
-        company = await self.container.company_repository.get(company_id)
+        company = await Company.get(company_id)
 
         if not company:
             raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
@@ -108,8 +104,8 @@ class TelegramHandler(PlatformHandler):
         return user, metadata
 
 
-def get_platform_handler(platform: WebhookPlatform, container: BaseContainer) -> PlatformHandler:
+def get_platform_handler(platform: WebhookPlatform) -> PlatformHandler:
     """Возвращает обработчик для платформы"""
     if platform == "telegram":
-        return TelegramHandler(container)
+        return TelegramHandler()
     assert_never(platform)

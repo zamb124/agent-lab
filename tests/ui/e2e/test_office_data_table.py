@@ -27,10 +27,10 @@ async def test_office_data_table_host_edit_delete_and_tabular_export(
     ui_page_system: Page,
     unique_id: str,
     office_client_http,
-    auth_headers_system,
+    auth_headers_system, frontend_di,
 ) -> None:
     namespace = await office_e2e_open_with_namespace(
-        office_ui, ui_page_system, unique_id, suffix="dtable"
+        office_ui, ui_page_system, unique_id, suffix="dtable", di=frontend_di
     )
     headers = office_e2e_namespace_headers(auth_headers_system, namespace)
     original_name = f"e2e-table-{unique_id}.sqlite"

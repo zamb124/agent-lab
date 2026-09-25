@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.browser.dependencies import ContainerDep
+from apps.browser.di import Di
 from apps.browser.models.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
@@ -61,12 +61,12 @@ AGENT_CONTROL_TAKEOVER_WAIT_SEC = 300.0
 AGENT_CONTROL_TAKEOVER_POLL_SEC = 0.25
 
 
-async def _require_company_view_when_user_context(container: ContainerDep) -> None:
+async def _require_company_view_when_user_context(di: Di) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         return
     company_id = context.active_company.company_id
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 class ControlNavigateResponse(TypedDict):
@@ -339,10 +339,10 @@ def _features_dict(runtime: BrowserRuntimeFacade) -> dict[str, bool]:
 @router.post("/sessions", response_model=ControlSessionCreateResponse)
 async def create_control_session(
     body: ControlSessionCreateBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlSessionCreateResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     settings = runtime.settings
     sid = body.session_id if body.session_id else f"sess-{uuid.uuid4().hex}"
     run_id = body.run_id if body.run_id else f"run-{sid}"
@@ -416,10 +416,10 @@ async def create_control_session(
 async def control_navigate(
     session_id: str,
     body: ControlNavigateBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlNavigateResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         if body.new_tab:
             try:
@@ -492,10 +492,10 @@ async def control_navigate(
 async def control_observe(
     session_id: str,
     body: ControlObserveBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlObserveResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -553,10 +553,10 @@ async def control_observe(
 async def control_action(
     session_id: str,
     body: ControlActionBody,
-    container: ContainerDep,
+    di: Di,
 ) -> JsonObject:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -626,10 +626,10 @@ def _interaction_for_session(
 async def control_click(
     session_id: str,
     body: ControlClickBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -691,10 +691,10 @@ async def _viewport_size(
 async def control_pointer_click(
     session_id: str,
     body: ControlPointerClickBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlPointerClickResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -741,10 +741,10 @@ async def control_pointer_click(
 async def control_human_takeover(
     session_id: str,
     body: ControlHumanTakeoverBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlHumanTakeoverResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -766,10 +766,10 @@ async def control_human_takeover(
 @router.post("/sessions/{session_id}/human-takeover/release")
 async def control_human_takeover_release(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlHumanTakeoverResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     record = await runtime.lease_manager.end_human_takeover(session_id)
     out = ControlHumanTakeoverResponse(
         ok=True,
@@ -788,10 +788,10 @@ async def control_human_takeover_release(
 async def control_pointer_key(
     session_id: str,
     body: ControlPointerKeyBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -818,10 +818,10 @@ async def control_pointer_key(
 async def control_pointer_text(
     session_id: str,
     body: ControlPointerTextBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -848,10 +848,10 @@ async def control_pointer_text(
 async def control_fill(
     session_id: str,
     body: ControlFillBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -891,10 +891,10 @@ async def control_fill(
 async def control_press(
     session_id: str,
     body: ControlPressBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -917,10 +917,10 @@ async def control_press(
 async def control_wait(
     session_id: str,
     body: ControlWaitBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlOkResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     async with _agent_control_exclusive(runtime, session_id):
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
@@ -949,10 +949,10 @@ async def control_wait(
 @router.get("/sessions/{session_id}/status", response_model=ControlSessionStatusResponse)
 async def control_session_status(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlSessionStatusResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -994,13 +994,13 @@ async def control_session_status(
 @router.get("/sessions/{session_id}/screenshot")
 async def control_session_screenshot(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
     image_format: Annotated[Literal["jpeg", "png"], Query(alias="format")] = "jpeg",
     quality: Annotated[int, Query(ge=1, le=100)] = 70,
     full_page: Annotated[bool, Query()] = False,
 ) -> Response:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
@@ -1041,10 +1041,10 @@ async def control_session_screenshot(
 @router.delete("/sessions/{session_id}")
 async def delete_control_session(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlDeleteResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     await runtime.lease_manager.kill_session(
         session_id,
         warm_idle_sec=runtime.settings.warm_idle_sec,
@@ -1076,7 +1076,7 @@ class ControlSaveStateResponse(TypedDict):
 async def save_control_session_state(
     session_id: str,
     body: ControlSaveStateBody,
-    container: ContainerDep,
+    di: Di,
 ) -> ControlSaveStateResponse:
     """
     Сохранить состояние активной сессии в Redis и вернуть `state_key`.
@@ -1084,8 +1084,8 @@ async def save_control_session_state(
     Полученный `state_key` передаётся в create-session как `restore_state_key`,
     чтобы поднять новый контекст с теми же cookies/storage (warm/restore).
     """
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:

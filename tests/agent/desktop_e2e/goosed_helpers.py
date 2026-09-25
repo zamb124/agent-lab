@@ -326,13 +326,14 @@ async def prepare_goosed_developer_session(
     desktop: HumanitecDesktopProcess,
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
+    di,
 ) -> str:
     await ensure_humanitec_paired_and_llm_ready(
         desktop,
         page,
         agent_frontend_http_client,
         auth_token,
-    )
+    di)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     session_id = await goosed_start_session(page, workspace_dir)
     await goosed_resume_session(page, session_id)
@@ -341,6 +342,7 @@ async def prepare_goosed_developer_session(
 
 
 async def prepare_goosed_session_with_extensions(
+    di,
     page: Page,
     workspace_dir: Path,
     *,
@@ -354,7 +356,7 @@ async def prepare_goosed_session_with_extensions(
         page,
         agent_frontend_http_client,
         auth_token,
-    )
+    di)
     for extension_display_name in enabled_extensions:
         await enable_extension_in_settings(page, extension_display_name)
     workspace_dir.mkdir(parents=True, exist_ok=True)

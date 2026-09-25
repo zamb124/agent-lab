@@ -219,6 +219,21 @@ BUILTIN_TOOL_SPECS: tuple[tuple[str, str], ...] = (
     ("apps.flows.tools.web.web_browser", "browser_page_snapshot"),
     ("apps.flows.src.tools.handoff_tools", "handoff_to_flow"),
     ("apps.flows.src.tools.handoff_tools", "handback_to_parent"),
+    ("apps.flows.tools.stock.stock_tools", "stock_warehouse_pulse"),
+    ("apps.flows.tools.stock.stock_tools", "stock_quants_list"),
+    ("apps.flows.tools.stock.stock_tools", "stock_products_list"),
+    ("apps.flows.tools.stock.stock_tools", "stock_products_create"),
+    ("apps.flows.tools.stock.stock_tools", "stock_locations_list"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_list"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_create"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_confirm"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_assign"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_validate"),
+    ("apps.flows.tools.stock.stock_tools", "stock_transfers_cancel"),
+    ("apps.flows.tools.stock.stock_tools", "stock_barcode_resolve"),
+    ("apps.flows.tools.stock.stock_tools", "stock_move_apply_decision"),
+    ("apps.flows.tools.stock.stock_tools", "stock_valuation_product_value"),
+    ("apps.flows.tools.stock.stock_tools", "stock_valuation_layers_list"),
 )
 
 

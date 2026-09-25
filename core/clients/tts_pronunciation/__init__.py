@@ -11,8 +11,8 @@
   и встроенные словари.
 
 Cascade источников правил:
-    platform_pronunciation_rules (system/superadmin)
-    → company_pronunciation_rules (per-company)
+    pronunciation_rules с company_id = null (платформа)
+    → pronunciation_rules компании
     → SpeechOverride.pronunciation_rules (per-call)
 
 Точка входа: ``TtsTextPipeline`` из ``.pipeline``.

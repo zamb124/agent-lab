@@ -1,66 +1,49 @@
 ---
-description: "Platform Namespace: company_workspace / personal / technical, ensure_personal on membership, RAG namespace_id"
+description: "Platform Namespace: kind, personal при членстве, запись только NamespaceService, OpenFGA, RAG namespace_id. Читать при работе с пространствами любого сервиса"
+globs:
+  - "core/namespace/**"
 alwaysApply: false
 ---
-# Platform Namespace
 
-Единый реестр пространств компании в shared DB (`Namespace` / `NamespaceService`). Не путать с RAG `namespace_id` (часто совпадает со `name`, но это ось B), IMAP `NAMESPACE`, i18n JSON ns, K8s.
+# Namespace
 
-## Kind
+Реестр пространств компании в `platform_shared`: модель `Namespace`, сценарии — `NamespaceService` (`core/namespace/service.py`). Не путать с IMAP `NAMESPACE`, i18n namespace и Kubernetes namespace.
 
-| kind | Смысл | Create | Sidebar (employee) | Admin console | CRM template |
-|---|---|---|---|---|---|
-| `company_workspace` | Отдел/проект (NetWorkle/Office/Sync) | admin / CRM template / lightweight | да | да | да для CRM product create |
-| `personal` | Именной каталог юзера (mail, private RAG) | **только** `ensure_personal_namespace` при membership | нет (чужие) | **да** | нет |
-| `technical` | Vector/system (`office-catalog-*`, `llm-memory-*`, `wiki-restricted-*`, …) | сервисы через `get_or_create(..., kind=technical)` | нет | diagnostics only | нет |
+## Модель
 
-Поля: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`).
+- `Namespace` — таблица `namespaces`, алиас `shared`; первичный ключ `namespace_id` = `{company_id}:{name}`, уникальность `(company_id, name)`; адрес внутри компании — `name`.
+- Поля домена: `kind`, `owner_user_id` (обязателен при `kind=personal`, иначе `null`), `is_default`, `sync_settings`, `crm_settings`.
+- `kind`:
 
-## Personal — инвариант membership
+| `kind` | Смысл | Создание |
+|---|---|---|
+| `company_workspace` | отдел или проект | admin, CRM-шаблон, lightweight create |
+| `personal` | личный каталог пользователя (почта, private RAG) | только `ensure_personal_namespace` |
+| `technical` | системные слоты (`office-catalog-*`, `llm-memory-*`, `wiki-restricted-*`) | `get_or_create(..., kind=technical)` в сервисах |
 
-При любом появлении `user` как member `company` всегда есть personal ns:
+## Инварианты
 
-- slug `name = user-{user_id}`
-- `description` = `User.name` (именная подпись; slug не меняется при rename)
-- ровно один на `(company_id, user_id)`
-- API: `NamespaceService.ensure_personal_namespace(user_id, display_name=...)`
-- хук: после записи membership (+ safety-net в mail/RAG ingest)
-- backfill: task/миграция для существующих members
-- hard-delete при leave — нет в v1
+1. Член компании всегда имеет ровно один personal namespace: `name = user-{user_id}`, `description = User.name`; создаёт `NamespaceService.ensure_personal_namespace(user_id, display_name=...)` после записи членства. `[без гейта]`
+2. Единственная точка создания, изменения и удаления строки — `NamespaceService`; каждое изменение сопровождается dual-write OpenFGA в том же call path (fail-closed); `ensure_default`, `ensure_exists`, `get_or_create` дописывают tuples, если строка есть, а tuples нет.
+3. OpenFGA type — `platform_namespace:{company_id}/{name}`; Check до existence (`AuthzService.require_can_view`): нет права — 403, 404 — только после успешного Check → `authorization.mdc`.
+4. Почта и личная семантика пишут только в personal namespace владельца; несколько `MailboxBinding` пользователя — один personal namespace с `mailbox_binding_id` в metadata. `[без гейта]`
+5. RAG `namespace_id` для `company_workspace` и `personal` — `Namespace.name` плюс фильтр `company_id` в поиске; `technical` — свой slug в том же реестре; запись и поиск RAG требуют строки реестра (`require_registered_rag_namespace`) → `rag.mdc`.
+6. Списки: `list_company_workspaces` — продуктовые пикеры (CRM, Sync, Office); `NamespaceService.list()` без `kinds` — консоль (`company_workspace` + `personal`, без `technical`).
+7. Personal namespace — не CRM-сущность `member`: CRM-сущности живут в `company_workspace`.
 
-Mail / личная семантика пишут **только** в personal ns владельца. Несколько `MailboxBinding` → один personal ns; в metadata — `mailbox_binding_id`.
+## Интеграции
 
-Personal ≠ CRM `member` entity (entity живёт в `default` company_workspace).
+- Sync хранит только `Namespace.sync_settings`; имя, описание и `crm_settings` меняет CRM → `sync.mdc`, `crm.mdc`.
+- Выбор пространства в UI — `setPlatformNamespaceSelection`; в запросе — заголовок `X-Platform-Namespace` или `PlatformEvent.meta.namespace` → `office.mdc`, `wiki.mdc`.
+- Общий `op_namespaces_list` (`core/namespace/operations.py`) регистрируют каталоги office, rag и wiki → `architecture.mdc` § Операция op_*.
 
-Админ видит personal в console list (реестр). Контент RAG/mail — owner или FGA `platform_namespace` / binding ACL; видимость записи ≠ ACL контента.
+## Запреты
 
-## OpenFGA
+1. Создание или запись `Namespace` мимо `NamespaceService`. `[без гейта]`
+2. `kind=personal` вне `ensure_personal_namespace`. `[без гейта]`
+3. RAG `namespace_id` вида `{company_id}_{namespace}`. `[без гейта]`
+4. Свой реестр «workspace» в сервисе.
 
-- Type `platform_namespace:{company_id}/{name}`
-- Dual-write после SQL в `NamespaceService` (`company` link; personal + `owner`). `ensure_default` / `ensure_exists` / `get_or_create` дописывают tuples, если SQL-запись уже есть, а FGA пустой.
-- Check **до** existence: `AuthzService.require_can_view(AuthzObject.platform_namespace(...))` (RAG, middleware namespace header). Нет tuples / нет объекта → **403**; 404 только после успешного Check.
-- Helpers/backfill: `core/namespace/authz/`; `uv run python -m core.namespace.authz.backfill`
+## Гейты
 
-## RAG `namespace_id`
-
-- company_workspace / personal: `namespace_id = Namespace.name` (bare slug), плюс filter `company_id` в vector search
-- **Не** формула `{company_id}_{namespace}` (устаревший drift в docs)
-- technical: свой slug (`office-catalog-{catalog_id}`, `llm-memory-…`, `wiki-restricted-{namespace}`) в том же registry с `kind=technical`
-- mutating/search API: запись должна быть в registry (`require_registered_rag_namespace`)
-
-## Lifecycle
-
-Единственная точка конструкции: `core/namespace/service.py::NamespaceService`. Прямой `Namespace(...)` + `repository.set` вне сервиса запрещён. Create/delete → dual-write FGA в том же path (fail-closed).
-
-- `ensure_default` → `kind=company_workspace`, `is_default=True`
-- CRM `POST /namespaces` + template → `company_workspace`
-- lightweight create (без template) → `company_workspace` без материализации типов
-- list product UI (CRM/Sync/Office picker): `list_company_workspaces` — только `company_workspace`
-- `NamespaceService.list()` без `kinds` — product list для admin/console (`company_workspace` + `personal`, без `technical`)
-- admin console может явно фильтровать `kind=personal`
-
-## Потребители
-
-- **Sync:** `channel.namespace` — slug `company_workspace`; ACL каналов — OpenFGA, не namespace; Sync пишет только `Namespace.sync_settings`; UI без namespace switcher (→ **`sync.mdc`** § «Namespace»).
-- **CRM / Office / Wiki:** namespace — граница данных; выбор в UI — `setPlatformNamespaceSelection` (CRM/Office) или заголовок `X-Platform-Namespace` / `PlatformEvent.meta.namespace` (Office, Wiki) (→ **`crm.mdc`**, **`office.mdc`**, **`wiki.mdc`**).
-- **RAG / Mail:** `namespace_id = Namespace.name`; личная почта и private RAG — personal ns владельца (→ **`rag.mdc`**, **`mail.mdc`**).
+- `scripts/check_authz_dual_write.py`, `scripts/check_authz_backfill_completeness.py` (`make lint`) — dual-write и backfill `platform_namespace` (`core/namespace/authz/`).

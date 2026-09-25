@@ -84,10 +84,6 @@ def test_registry_platform_provider_options_labels_humanitec_llm():
 
 @pytest.mark.asyncio
 async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
-    class Repo:
-        async def list_by_provider(self, provider):
-            raise AssertionError(f"unexpected repository call for {provider}")
-
     redis = AsyncMock()
     redis.get.return_value = serialize_platform_free_models(
         [
@@ -102,7 +98,7 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
             )
         ]
     )
-    service = LLMModelsService(Repo(), AsyncMock(), redis)  # pyright: ignore[reportArgumentType]
+    service = LLMModelsService(AsyncMock(), redis)
     assert await service.get_model_ids_by_provider_capability(
         HUMANITEC_LLM_PROVIDER,
         AICapability.LLM_CHAT,

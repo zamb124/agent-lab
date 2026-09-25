@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import cast
 
 import pytest
 
@@ -16,8 +15,6 @@ from core.config.models import (
     MailLocalDevConfig,
     MailSystemConfig,
 )
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.user_repository import UserRepository
 from core.mail.exceptions import MailConfigError
 from core.mail.models import (
     CompanyMailConnection,
@@ -28,35 +25,20 @@ from core.mail.models import (
     MailConnectionStatus,
     MailProvider,
 )
-from core.mail.ports import MailServerPort
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxSyncCursorRepository,
-)
 from core.mail.service import MailService
 from tests.core.mail.fakes import RecordingMailServerPort
 
 
 def _make_service(
     *,
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
     recording_mail_port: RecordingMailServerPort,
-    company_repository: CompanyRepository,
-    user_repository: UserRepository,
     mailbox_passwords: dict[str, str],
 ) -> MailService:
     shared_url = get_settings().database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для mail tests")
     return MailService(
-        connection_repository=mail_connection_repository,
-        binding_repository=mailbox_binding_repository,
-        sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
         authz=build_authz_service(),
-        company_repository=company_repository,
-        user_repository=user_repository,
         mail_config=MailConfig(
             system=MailSystemConfig(enabled=False),
             live_test=MailLiveTestConfig(enabled=False),
@@ -66,23 +48,21 @@ def _make_service(
                 mailbox_passwords=mailbox_passwords,
             ),
         ),
-        port_override=cast(MailServerPort, cast(object, recording_mail_port)),
+        port_override=recording_mail_port,
     )
 
 
 @pytest.mark.asyncio
 async def test_local_dev_binding_secret_uses_conf_password(
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
     recording_mail_port: RecordingMailServerPort,
-    container: object,
+    di,
     unique_id: str,
 ) -> None:
     now = datetime.now(timezone.utc)
     company_id = f"maillocal_{unique_id}"
     email = f"user@{company_id}.example.com"
     conn_id = f"mailconn_{unique_id}"
-    _ = await mail_connection_repository.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=conn_id,
             company_id=company_id,
@@ -100,7 +80,7 @@ async def test_local_dev_binding_secret_uses_conf_password(
             updated_at=now,
         )
     )
-    binding = await mailbox_binding_repository.upsert(
+    binding = await MailboxBinding.upsert_by_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_{unique_id}",
             company_id=company_id,
@@ -116,11 +96,7 @@ async def test_local_dev_binding_secret_uses_conf_password(
         )
     )
     service = _make_service(
-        mail_connection_repository=mail_connection_repository,
-        mailbox_binding_repository=mailbox_binding_repository,
         recording_mail_port=recording_mail_port,
-        company_repository=cast(CompanyRepository, getattr(container, "company_repository")),
-        user_repository=cast(UserRepository, getattr(container, "user_repository")),
         mailbox_passwords={email: "from-conf-local"},
     )
     secret = service.binding_secret(binding)
@@ -129,10 +105,8 @@ async def test_local_dev_binding_secret_uses_conf_password(
 
 @pytest.mark.asyncio
 async def test_local_dev_bind_existing_mailbox_skips_set_password(
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
     recording_mail_port: RecordingMailServerPort,
-    container: object,
+    di,
     unique_id: str,
 ) -> None:
     now = datetime.now(timezone.utc)
@@ -140,7 +114,7 @@ async def test_local_dev_bind_existing_mailbox_skips_set_password(
     domain = f"{company_id}.example.com"
     email = f"desk@{domain}"
     conn_id = f"mailconn2_{unique_id}"
-    _ = await mail_connection_repository.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=conn_id,
             company_id=company_id,
@@ -166,11 +140,7 @@ async def test_local_dev_bind_existing_mailbox_skips_set_password(
     recording_mail_port.mailbox_passwords[email] = "server-password-unchanged"
 
     service = _make_service(
-        mail_connection_repository=mail_connection_repository,
-        mailbox_binding_repository=mailbox_binding_repository,
         recording_mail_port=recording_mail_port,
-        company_repository=cast(CompanyRepository, getattr(container, "company_repository")),
-        user_repository=cast(UserRepository, getattr(container, "user_repository")),
         mailbox_passwords={email: "from-conf-local"},
     )
     binding = await service.bind_mailbox(
@@ -190,10 +160,8 @@ async def test_local_dev_bind_existing_mailbox_skips_set_password(
 
 @pytest.mark.asyncio
 async def test_local_dev_bind_existing_mailbox_without_conf_password_raises(
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
     recording_mail_port: RecordingMailServerPort,
-    container: object,
+    di,
     unique_id: str,
 ) -> None:
     now = datetime.now(timezone.utc)
@@ -201,7 +169,7 @@ async def test_local_dev_bind_existing_mailbox_without_conf_password_raises(
     domain = f"{company_id}.example.com"
     email = f"desk@{domain}"
     conn_id = f"mailconn3_{unique_id}"
-    _ = await mail_connection_repository.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=conn_id,
             company_id=company_id,
@@ -226,11 +194,7 @@ async def test_local_dev_bind_existing_mailbox_without_conf_password_raises(
     )
     recording_mail_port.mailbox_passwords[email] = "server-password-unchanged"
     service = _make_service(
-        mail_connection_repository=mail_connection_repository,
-        mailbox_binding_repository=mailbox_binding_repository,
         recording_mail_port=recording_mail_port,
-        company_repository=cast(CompanyRepository, getattr(container, "company_repository")),
-        user_repository=cast(UserRepository, getattr(container, "user_repository")),
         mailbox_passwords={},
     )
     with pytest.raises(MailConfigError, match="mailbox_passwords"):

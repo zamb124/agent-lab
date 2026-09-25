@@ -2,14 +2,16 @@
 
 from a2a.types import Message
 
+from apps.flows.di import Di
+from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.channels.types import PreparedTaskParams
-from apps.flows.src.container import get_container
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.a2a import message_from_json_dict
-from core.context import Context, set_context
+from core.context import set_context
 from core.files.file_ref import FileRef
 from core.flow_ui.action import ui_action_from_message
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.tasks import platform_task
 from core.tracing.context import set_current_trace_context
 from core.types import JsonObject, require_json_object
@@ -34,6 +36,8 @@ async def process_flow_task(
     context_data: JsonObject | None = None,
     trace_context: JsonObject | None = None,
     initiator_user_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Обрабатывает запрос через агента.
@@ -68,7 +72,24 @@ async def process_flow_task(
     context.session_id = session_id
     _ = set_context(context)
 
-    channel_instance = get_container().get_channel(channel, flow_id)
+    channel_instance = get_channel(
+        channel,
+        flow_id,
+        variables_service=di.variables_service,
+        authz_service=di.authz_service,
+        workflow_runtime=di.workflow_runtime,
+        redis_client=di.redis_client,
+        handoff_orchestrator_service=di.handoff_orchestrator_service,
+        flow_factory=di.flow_factory,
+        tool_registry=di.tool_registry,
+        projection_service=di.a2a_task_projection_service,
+        shared_storage=di.shared_storage,
+        channel_registry=di.channel_registry,
+        mail_service=di.mail_service,
+        flow_ui_share_service=di.flow_ui_share_service,
+        hitl_conversation_service=di.hitl_conversation_service,
+        files_service=di.files_service,
+    )
     file_refs = [FileRef.model_validate(item) for item in files] if files is not None else []
     parsed_message: Message | None = (
         message_from_json_dict(message) if message is not None else None

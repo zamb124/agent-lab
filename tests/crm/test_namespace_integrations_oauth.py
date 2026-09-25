@@ -16,12 +16,12 @@ from core.integrations.oauth_service import OAUTH_STATE_PREFIX
 ])
 @pytest.mark.asyncio
 async def test_amocrm_authorize_redirect_uri_uses_brand_host(
-    crm_container,
+    crm_di,
     unique_id: str,
     host: str,
     expected_apex: str,
 ) -> None:
-    connector = crm_container.integration_registry.get("amocrm")
+    connector = crm_di.integration_registry.get("amocrm")
     url = await connector.build_authorize_url(
         namespace_name=f"ns_{unique_id}",
         subdomain="testsub",
@@ -31,7 +31,7 @@ async def test_amocrm_authorize_redirect_uri_uses_brand_host(
         brand_host=host,
     )
     state_token = parse_qs(urlparse(url).query)["state"][0]
-    state_raw = await crm_container.oauth_service._storage.get(
+    state_raw = await crm_di.oauth_service._storage.get(
         f"{OAUTH_STATE_PREFIX}:{state_token}",
         force_global=True,
     )

@@ -28,7 +28,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-segmented-control.js';
 import { asString, isPlainObject } from '../_helpers/flows-resolvers.js';
 import { formatJsonPretty } from '@platform/lib/utils/json-format.js';
-import { TRIGGER_TYPES } from '../constants/trigger-types.js';
+import { TRIGGER_TYPES } from '../_helpers/trigger-types.js';
 import {
     EMAIL_FILTER_PRESETS,
     MAPPING_EXAMPLES,
@@ -37,7 +37,7 @@ import {
     buildTelegramCurl,
     buildWebhookCurl,
     buildWebhookEndpointUrl,
-} from '../constants/trigger-samples.js';
+} from '../_helpers/trigger-samples.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
 

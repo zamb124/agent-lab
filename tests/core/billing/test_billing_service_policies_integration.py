@@ -1,6 +1,6 @@
 """
 BillingService: can_use_resource, stats, reset_monthly_billing, ошибки merge прайса.
-Реальные репозитории и storage (frontend_container).
+Реальные репозитории и storage (frontend_di).
 """
 
 
@@ -17,8 +17,8 @@ from core.billing.service import (
     company_resource_prices_storage_key,
     company_settlement_rules_storage_key,
 )
-from core.models.billing_models import DEFAULT_TARIFF_PRICES, UsageType
-from core.models.identity_models import Company
+from core.models.billing_models import DEFAULT_TARIFF_PRICES, UsageRecord, UsageType
+from core.models.identity_models import Company, User
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
@@ -30,19 +30,16 @@ def _minimal_base_prices() -> dict:
 async def test_billing_service_init_requires_resource_base_prices() -> None:
     with pytest.raises(ValueError, match="resource_base_prices"):
         BillingService(
-            object(),  # type: ignore[arg-type]
-            object(),  # type: ignore[arg-type]
-            object(),  # type: ignore[arg-type]
             tariff_prices=DEFAULT_TARIFF_PRICES,
             resource_base_prices=None,  # type: ignore[arg-type]
         )
 
 
 @pytest.mark.asyncio
-async def test_can_use_resource_quantity_below_one(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    user = await frontend_container.user_repository.get(system_user_id)
-    company = await frontend_container.company_repository.get("system")
+async def test_can_use_resource_quantity_below_one(frontend_di, system_user_id) -> None:
+    billing = frontend_di.billing_service
+    user = await User.get(system_user_id)
+    company = await Company.get("system")
     assert user is not None and company is not None
     ok, reason = await billing.can_use_resource(user, company, "llm:x", quantity=0)
     assert ok is False
@@ -50,9 +47,9 @@ async def test_can_use_resource_quantity_below_one(frontend_container, system_us
 
 
 @pytest.mark.asyncio
-async def test_can_use_resource_company_missing_in_db(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    user = await frontend_container.user_repository.get(system_user_id)
+async def test_can_use_resource_company_missing_in_db(frontend_di, system_user_id) -> None:
+    billing = frontend_di.billing_service
+    user = await User.get(system_user_id)
     assert user is not None
     ghost = Company(
         company_id="no_such_company_ever_12345",
@@ -67,13 +64,10 @@ async def test_can_use_resource_company_missing_in_db(frontend_container, system
 
 
 @pytest.mark.asyncio
-async def test_can_use_resource_insufficient_balance(frontend_container, unique_id, system_user_id) -> None:
+async def test_can_use_resource_insufficient_balance(frontend_di, unique_id, system_user_id) -> None:
     """Изолированный BillingService со своим прайсом (shared_storage=None):
     без записи глобального billing:resource_base_prices_json — parallel-safe."""
     billing = BillingService(
-        frontend_container.company_repository,
-        frontend_container.user_repository,
-        frontend_container.usage_repository,
         tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices={"llm": {"*": 9999.0}},
         shared_storage=None,
@@ -88,8 +82,8 @@ async def test_can_use_resource_insufficient_balance(frontend_container, unique_
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
-    user = await frontend_container.user_repository.get(system_user_id)
+    await Company.set(company)
+    user = await User.get(system_user_id)
     assert user is not None
     ok, reason = await billing.can_use_resource(user, company, "llm:any", quantity=1)
     assert ok is False
@@ -97,8 +91,8 @@ async def test_can_use_resource_insufficient_balance(frontend_container, unique_
 
 
 @pytest.mark.asyncio
-async def test_can_use_resource_monthly_budget_block(frontend_container, unique_id, system_user_id) -> None:
-    billing = frontend_container.billing_service
+async def test_can_use_resource_monthly_budget_block(frontend_di, unique_id, system_user_id) -> None:
+    billing = frontend_di.billing_service
     cid = f"budget_{unique_id}"
     company = Company(
         company_id=cid,
@@ -109,31 +103,31 @@ async def test_can_use_resource_monthly_budget_block(frontend_container, unique_
         monthly_budget=1.0,
         current_month_spent=0.5,
     )
-    await frontend_container.company_repository.set(company)
-    user = await frontend_container.user_repository.get(system_user_id)
+    await Company.set(company)
+    user = await User.get(system_user_id)
     assert user is not None
     key = company_resource_prices_storage_key(cid)
-    await frontend_container.shared_storage.set(key, json.dumps({"llm": {"*": 10.0}}), force_global=True)
+    await frontend_di.shared_storage.set(key, json.dumps({"llm": {"*": 10.0}}), force_global=True)
     ok, reason = await billing.can_use_resource(user, company, "llm:x", quantity=1)
     assert ok is False
     assert "лимит" in reason.lower() or "Превышен" in reason
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
-async def test_get_resource_cost_invalid_resource_name_format(frontend_container, system_user_id) -> None:
-    billing = frontend_container.billing_service
-    company = await frontend_container.company_repository.get("system")
+async def test_get_resource_cost_invalid_resource_name_format(frontend_di, system_user_id) -> None:
+    billing = frontend_di.billing_service
+    company = await Company.get("system")
     assert company is not None
-    with pytest.raises(ValueError, match="Неверный формат"):
+    with pytest.raises(ValueError, match="Invalid resource_name format"):
         await billing.get_resource_cost_for_company(company, "no_colon")
 
 
 @pytest.mark.asyncio
 async def test_tool_billing_category_always_zero_even_with_storage_override(
-    frontend_container, unique_id, system_user_id
+    frontend_di, unique_id, system_user_id
 ) -> None:
-    billing = frontend_container.billing_service
+    billing = frontend_di.billing_service
     cid = f"toolm_{unique_id}"
     company = Company(
         company_id=cid,
@@ -142,12 +136,12 @@ async def test_tool_billing_category_always_zero_even_with_storage_override(
         members={system_user_id: ["owner"]},
         balance=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     key = company_resource_prices_storage_key(cid)
-    await frontend_container.shared_storage.set(key, json.dumps({"tool": {"*": 10.0}}), force_global=True)
+    await frontend_di.shared_storage.set(key, json.dumps({"tool": {"*": 10.0}}), force_global=True)
     unit = await billing.get_resource_cost_for_company(company, "tool:calc")
     assert unit == 0.0
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 def test_merge_resource_base_price_override_invalid_json_raises() -> None:
@@ -167,17 +161,17 @@ def test_merge_resource_base_price_override_invalid_json_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_get_effective_resource_base_prices_for_company_invalid_override_raises(
-    frontend_container, unique_id
+    frontend_di, unique_id
 ) -> None:
-    billing = frontend_container.billing_service
+    billing = frontend_di.billing_service
     cid = f"badov_{unique_id}"
     key = company_resource_prices_storage_key(cid)
-    await frontend_container.shared_storage.set(key, "[]", force_global=True)
+    await frontend_di.shared_storage.set(key, "[]", force_global=True)
     try:
         with pytest.raises(ValueError, match="must be a JSON object"):
             await billing.get_effective_resource_base_prices_for_company(cid)
     finally:
-        await frontend_container.shared_storage.delete(key, force_global=True)
+        await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 def test_parse_settlement_rules_invalid_root_raises() -> None:
@@ -185,15 +179,15 @@ def test_parse_settlement_rules_invalid_root_raises() -> None:
     load_settlement_rules_document): без записи глобального storage-ключа."""
     from core.billing.settlement_rules import parse_settlement_rules_json
 
-    with pytest.raises(ValueError, match="корень должен"):
+    with pytest.raises(ValueError, match="root must be an object"):
         parse_settlement_rules_json("[]")
 
 
 @pytest.mark.asyncio
 async def test_record_usage_then_get_company_usage_stats(
-    frontend_container, unique_id, system_user_id
+    frontend_di, unique_id, system_user_id
 ) -> None:
-    billing = frontend_container.billing_service
+    billing = frontend_di.billing_service
     cid = f"stats_{unique_id}"
     company = Company(
         company_id=cid,
@@ -204,8 +198,8 @@ async def test_record_usage_then_get_company_usage_stats(
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
-    user = await frontend_container.user_repository.get(system_user_id)
+    await Company.set(company)
+    user = await User.get(system_user_id)
     assert user is not None
 
     usage_id = await billing.record_usage(
@@ -224,7 +218,7 @@ async def test_record_usage_then_get_company_usage_stats(
     assert stats["by_resource"]["llm:test"]["cost"] == pytest.approx(3.5)
     assert stats["by_user"][system_user_id]["cost"] == pytest.approx(3.5)
 
-    rec = (await frontend_container.usage_repository.admin_search_usage_records(
+    rec = (await UsageRecord.admin_search_usage_records(
         company_id=cid, limit=50
     )).items
     ids = {r.usage_id for r in rec}
@@ -232,8 +226,8 @@ async def test_record_usage_then_get_company_usage_stats(
 
 
 @pytest.mark.asyncio
-async def test_reset_monthly_billing(frontend_container, unique_id, system_user_id) -> None:
-    billing = frontend_container.billing_service
+async def test_reset_monthly_billing(frontend_di, unique_id, system_user_id) -> None:
+    billing = frontend_di.billing_service
     cid = f"reset_{unique_id}"
     company = Company(
         company_id=cid,
@@ -244,25 +238,25 @@ async def test_reset_monthly_billing(frontend_container, unique_id, system_user_
         monthly_budget=0.0,
         current_month_spent=42.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     await billing.reset_monthly_billing(cid)
-    updated = await frontend_container.company_repository.get(cid)
+    updated = await Company.get(cid)
     assert updated is not None
     assert updated.current_month_spent == 0.0
 
 
 @pytest.mark.asyncio
-async def test_reset_monthly_billing_unknown_company_raises(frontend_container) -> None:
-    billing = frontend_container.billing_service
-    with pytest.raises(ValueError, match="не найдена"):
+async def test_reset_monthly_billing_unknown_company_raises(frontend_di) -> None:
+    billing = frontend_di.billing_service
+    with pytest.raises(ValueError, match="not found"):
         await billing.reset_monthly_billing("company_does_not_exist_xyz")
 
 
 @pytest.mark.asyncio
 async def test_load_settlement_rules_empty_company_json_materializes_code_default(
-    frontend_container, unique_id, system_user_id
+    frontend_di, unique_id, system_user_id
 ) -> None:
-    billing = frontend_container.billing_service
+    billing = frontend_di.billing_service
     cid = f"empty_rules_{unique_id}"
     company = Company(
         company_id=cid,
@@ -273,29 +267,29 @@ async def test_load_settlement_rules_empty_company_json_materializes_code_defaul
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     ckey = company_settlement_rules_storage_key(cid)
-    prev = await frontend_container.shared_storage.get(ckey, force_global=True)
+    prev = await frontend_di.shared_storage.get(ckey, force_global=True)
     try:
-        await frontend_container.shared_storage.set(ckey, "{}", force_global=True)
+        await frontend_di.shared_storage.set(ckey, "{}", force_global=True)
         doc = await billing.load_settlement_rules_document_for_company(cid)
         assert len(doc.rules) >= 1
-        raw_after = await frontend_container.shared_storage.get(ckey, force_global=True)
+        raw_after = await frontend_di.shared_storage.get(ckey, force_global=True)
         assert raw_after is not None
         assert len(json.loads(raw_after).get("rules", [])) >= 1
     finally:
         if prev is not None:
-            await frontend_container.shared_storage.set(ckey, prev, force_global=True)
+            await frontend_di.shared_storage.set(ckey, prev, force_global=True)
         else:
-            await frontend_container.shared_storage.delete(ckey, force_global=True)
+            await frontend_di.shared_storage.delete(ckey, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_load_settlement_rules_for_company_ignores_legacy_global_json(
-    frontend_container, unique_id, system_user_id
+    frontend_di, unique_id, system_user_id
 ) -> None:
     """Per-company пустой каталог не копирует billing:settlement_rules_json — только кодовый дефолт."""
-    billing = frontend_container.billing_service
+    billing = frontend_di.billing_service
     cid = f"no_migrate_sr_{unique_id}"
     company = Company(
         company_id=cid,
@@ -306,9 +300,9 @@ async def test_load_settlement_rules_for_company_ignores_legacy_global_json(
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     ckey = company_settlement_rules_storage_key(cid)
-    await frontend_container.shared_storage.delete(ckey, force_global=True)
+    await frontend_di.shared_storage.delete(ckey, force_global=True)
     global_doc = {
         "version": 1,
         "application_mode": "first_win",
@@ -323,9 +317,9 @@ async def test_load_settlement_rules_for_company_ignores_legacy_global_json(
         ],
     }
     expected_n = len(default_settlement_rules_document().rules)
-    prev_global = await frontend_container.shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+    prev_global = await frontend_di.shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
     try:
-        await frontend_container.shared_storage.set(
+        await frontend_di.shared_storage.set(
             STORAGE_SETTLEMENT_RULES_JSON,
             json.dumps(global_doc),
             force_global=True,
@@ -333,15 +327,15 @@ async def test_load_settlement_rules_for_company_ignores_legacy_global_json(
         doc = await billing.load_settlement_rules_document_for_company(cid)
         assert len(doc.rules) == expected_n
         assert doc.rules[0].rule_id != f"g_{unique_id}"
-        raw_co = await frontend_container.shared_storage.get(ckey, force_global=True)
+        raw_co = await frontend_di.shared_storage.get(ckey, force_global=True)
         assert raw_co is not None
         stored_ids = {r["rule_id"] for r in json.loads(raw_co)["rules"]}
         assert f"g_{unique_id}" not in stored_ids
     finally:
-        await frontend_container.shared_storage.delete(ckey, force_global=True)
+        await frontend_di.shared_storage.delete(ckey, force_global=True)
         if prev_global is not None:
-            await frontend_container.shared_storage.set(
+            await frontend_di.shared_storage.set(
                 STORAGE_SETTLEMENT_RULES_JSON, prev_global, force_global=True
             )
         else:
-            await frontend_container.shared_storage.delete(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+            await frontend_di.shared_storage.delete(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)

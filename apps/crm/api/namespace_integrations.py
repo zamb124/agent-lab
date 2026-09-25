@@ -4,15 +4,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.api import (
     AutoNoteAiAnalyzeUpdateRequest,
     IntegrationAuthorizeResponse,
     IntegrationAutoSyncUpdateRequest,
     IntegrationManifestItem,
     IntegrationSyncStats,
-    TaskResponse,
 )
+from apps.crm.models.task import CRMTask
 from apps.crm.realtime.operations import (
     CrmIntegrationAuthorizePayload,
     CrmIntegrationAutoNoteAiPayload,
@@ -38,12 +38,12 @@ router = APIRouter(prefix="/namespaces", tags=["namespace-integrations"])
 )
 async def list_namespace_integrations(
     namespace_name: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[IntegrationManifestItem]:
     return await op_namespace_integrations_list(
         CrmIntegrationNamespacePayload(namespace_name=namespace_name),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -55,7 +55,7 @@ async def integration_authorize_url(
     request: Request,
     namespace_name: str,
     provider: str,
-    container: ContainerDep,
+    di: Di,
     subdomain: Annotated[str, Query(min_length=1)],
     return_path: Annotated[str, Query(min_length=1)],
     return_origin: Annotated[str | None, Query()] = None,
@@ -72,7 +72,7 @@ async def integration_authorize_url(
             brand_host=request.headers.get("host"),
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -84,7 +84,7 @@ async def integration_auto_sync_patch(
     namespace_name: str,
     provider: str,
     body: IntegrationAutoSyncUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> IntegrationManifestItem:
     return await op_namespace_integrations_auto_sync(
         CrmIntegrationAutoSyncPayload(
@@ -95,7 +95,7 @@ async def integration_auto_sync_patch(
             auto_sync_timezone=body.auto_sync_timezone,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -107,7 +107,7 @@ async def integration_auto_note_ai_analyze_patch(
     namespace_name: str,
     provider: str,
     body: AutoNoteAiAnalyzeUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> IntegrationManifestItem:
     return await op_namespace_integrations_auto_note_ai(
         CrmIntegrationAutoNoteAiPayload(
@@ -116,7 +116,7 @@ async def integration_auto_note_ai_analyze_patch(
             auto_note_ai_analyze=body.auto_note_ai_analyze,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -124,15 +124,15 @@ async def integration_auto_note_ai_analyze_patch(
 async def integration_sync(
     namespace_name: str,
     provider: str,
-    container: ContainerDep,
+    di: Di,
     response: Response,
-) -> TaskResponse | IntegrationSyncStats:
+) -> CRMTask | IntegrationSyncStats:
     result = await op_namespace_integrations_sync(
         CrmIntegrationProviderPayload(namespace_name=namespace_name, provider_id=provider),
         user=require_context().user,
-        container=container,
+        di=di,
     )
-    if isinstance(result, TaskResponse):
+    if isinstance(result, CRMTask):
         response.status_code = 202
     return result
 
@@ -141,14 +141,14 @@ async def integration_sync(
 async def integration_custom_fields_sync(
     namespace_name: str,
     provider: str,
-    container: ContainerDep,
+    di: Di,
     response: Response,
-) -> TaskResponse | IntegrationSyncStats:
+) -> CRMTask | IntegrationSyncStats:
     result = await op_namespace_integrations_custom_fields_sync(
         CrmIntegrationProviderPayload(namespace_name=namespace_name, provider_id=provider),
         user=require_context().user,
-        container=container,
+        di=di,
     )
-    if isinstance(result, TaskResponse):
+    if isinstance(result, CRMTask):
         response.status_code = 202
     return result

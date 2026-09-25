@@ -8,7 +8,6 @@ State и messages - A2A типы.
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
@@ -65,26 +64,26 @@ class TestReactAgentWithToolCalls:
         )
 
     @pytest.mark.asyncio
-    async def test_tool_call_returns_result(self, app, flow_config, calculator_tool):
+    async def test_tool_call_returns_result(self, app, flow_config, calculator_tool, di):
         """Tool вызывается и результат возвращается в агента."""
         runner = LlmNodeRunner(
             node_config=flow_config,
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         assert runner is not None
 
     @pytest.mark.asyncio
-    async def test_multiple_tool_calls(self, app, flow_config, calculator_tool):
+    async def test_multiple_tool_calls(self, app, flow_config, calculator_tool, di):
         """Несколько вызовов tools подряд."""
         runner = LlmNodeRunner(
             node_config=flow_config,
             tools=[calculator_tool],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         assert runner is not None
 
@@ -105,14 +104,14 @@ class TestReactAgentStreaming:
         )
 
     @pytest.mark.asyncio
-    async def test_streaming_yields_events(self, app, flow_config):
+    async def test_streaming_yields_events(self, app, flow_config, di):
         """Streaming режим возвращает события."""
         runner = LlmNodeRunner(
             node_config=flow_config,
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         assert runner is not None
 
@@ -146,7 +145,7 @@ class TestToolExecution:
         assert "1" in result
 
     @pytest.mark.asyncio
-    async def test_parallel_tool_interrupt_keeps_completed_sibling_state(self, app, unique_id: str):
+    async def test_parallel_tool_interrupt_keeps_completed_sibling_state(self, app, unique_id: str, di):
         """При parallel tools interrupt не теряет state успешных соседних tools."""
         _ = app
         node_config = NodeConfig(
@@ -160,7 +159,7 @@ class TestToolExecution:
             tools=[_InterruptingTool(), _StateWritingTool()],
             llm=None,
             prompt="Test",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         context_id = f"test-context-{unique_id}"
         state = ExecutionState(
@@ -170,7 +169,7 @@ class TestToolExecution:
             session_id=f"test_agent:{context_id}",
         )
         await ensure_workflow_started(
-            container=get_container(),
+            di=di,
             state=state,
             flow_id=state.session_flow_id,
             branch_id=state.branch_id,

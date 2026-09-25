@@ -31,12 +31,11 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtoMessage
 
+from apps.flows.di import Di
 from apps.flows.src.channels import PermissionDenied
 from apps.flows.src.channels.a2a import A2AChannel
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.dependencies import ContainerDep
-from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
+from apps.flows.src.channels.factory import get_channel
+from apps.flows.src.durable_execution.models import WorkflowProjectionMismatchError
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.services.embed_target_resolver import EmbedTarget, resolve_embed_target
 from core.a2a import (
@@ -72,6 +71,7 @@ from core.identity.embed_guest_turns import (
 )
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
+from core.models.context_models import Context
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.utils.tokens import TokenData, TokenType
@@ -91,8 +91,37 @@ def _actor_company_id() -> str:
     return require_active_company().company_id
 
 
-async def _require_view_flow(container: ContainerDep, flow_id: str) -> None:
-    await container.authz_service.require_can_view(
+def _a2a_channel(
+    di: Di,
+    flow_id: str,
+    *,
+    context: Context | None,
+    flow_config: FlowConfig,
+) -> A2AChannel:
+    return get_channel(
+        "a2a",
+        flow_id,
+        context=context,
+        flow_config=flow_config,
+        variables_service=di.variables_service,
+        authz_service=di.authz_service,
+        workflow_runtime=di.workflow_runtime,
+        redis_client=di.redis_client,
+        handoff_orchestrator_service=di.handoff_orchestrator_service,
+        flow_factory=di.flow_factory,
+        tool_registry=di.tool_registry,
+        projection_service=di.a2a_task_projection_service,
+        shared_storage=di.shared_storage,
+        channel_registry=di.channel_registry,
+        mail_service=di.mail_service,
+        flow_ui_share_service=di.flow_ui_share_service,
+        hitl_conversation_service=di.hitl_conversation_service,
+        files_service=di.files_service,
+    )
+
+
+async def _require_view_flow(di: Di, flow_id: str) -> None:
+    await di.authz_service.require_can_view(
         AuthzObject.flow(flow_id, company_id=_actor_company_id()), user_id=_actor_user_id()
     )
 
@@ -364,7 +393,7 @@ def _turn_limit_key_part(value: str) -> str:
 
 async def _embed_session_guest_turn_limit_error(
     *,
-    container: FlowContainer,
+    di: Di,
     embed_target: EmbedTarget | None,
     token_data: TokenData,
     method: str | None,
@@ -388,7 +417,7 @@ async def _embed_session_guest_turn_limit_error(
         f"{embed_target.embed_id.strip()}:{_turn_limit_key_part(subject)}"
     )
     try:
-        count_raw: JsonValue = await container.redis_client.eval(
+        count_raw: JsonValue = await di.redis_client.eval(
             _EMBED_GUEST_TURN_LUA,
             1,
             key,
@@ -551,19 +580,18 @@ def _sse_error_response(rpc_id: JsonRpcId | None, code: int, message: str) -> St
 
 
 async def _get_flow_config(
-    flow_id: str, container: FlowContainer, version: str | None = None,
+    flow_id: str, version: str | None = None,
 ) -> FlowConfig | None:
     """
     Получает конфигурацию агента.
 
     Аргументы:
         flow_id: ID агента
-        container: DI-контейнер
         version: Версия агента (опционально). Если не указана - возвращает latest.
     """
     if version:
-        return await container.flow_repository.get_version(flow_id, version)
-    return await container.flow_repository.get(flow_id)
+        return await FlowConfig.get_version(flow_id, version)
+    return await FlowConfig.get_latest(flow_id)
 
 
 def _get_base_url(request: Request) -> str:
@@ -574,7 +602,7 @@ def _get_base_url(request: Request) -> str:
 async def get_agent_card_well_known(
     flow_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     v: str | None = None,
 ) -> JsonObject:
     """
@@ -583,18 +611,13 @@ async def get_agent_card_well_known(
     Параметры query:
         v: версия агента (опционально)
     """
-    await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container, version=v)
+    await _require_view_flow(di, flow_id)
+    config = await _get_flow_config(flow_id, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     context = get_context()
-    channel = A2AChannel(
-        flow_id,
-        context=context,
-        flow_config=config,
-        container=as_flow_runtime_container(container),
-    )
+    channel = _a2a_channel(di, flow_id, context=context, flow_config=config)
     base_url = _get_base_url(request)
     try:
         return await channel.get_agent_card(base_url)
@@ -606,7 +629,7 @@ async def get_agent_card_well_known(
 async def get_agent_card(
     flow_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     v: str | None = None,
 ) -> JsonObject:
     """
@@ -615,18 +638,13 @@ async def get_agent_card(
     Параметры query:
         v: версия агента (опционально)
     """
-    await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container, version=v)
+    await _require_view_flow(di, flow_id)
+    config = await _get_flow_config(flow_id, version=v)
     if not config:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
 
     context = get_context()
-    channel = A2AChannel(
-        flow_id,
-        context=context,
-        flow_config=config,
-        container=as_flow_runtime_container(container),
-    )
+    channel = _a2a_channel(di, flow_id, context=context, flow_config=config)
     base_url = _get_base_url(request)
     try:
         return await channel.get_agent_card(base_url)
@@ -675,7 +693,7 @@ async def _json_rpc_handler_internal(
     *,
     flow_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     v: str | None = None,
     embed_target: EmbedTarget | None = None,
 ):
@@ -790,7 +808,7 @@ async def _json_rpc_handler_internal(
 
     if _is_embed_session_token(token_data) and isinstance(token_data, TokenData):
         lim_err = await _embed_session_guest_turn_limit_error(
-            container=container,
+            di=di,
             embed_target=embed_target,
             token_data=token_data,
             method=method,
@@ -821,8 +839,8 @@ async def _json_rpc_handler_internal(
     version = v or version_raw
 
     if embed_target is None and not _is_flow_ui_share_token(token_data):
-        await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container, version=version)
+        await _require_view_flow(di, flow_id)
+    config = await _get_flow_config(flow_id, version=version)
     if not config:
         version_info = f" version '{version}'" if version else ""
         return JSONResponse(
@@ -836,12 +854,7 @@ async def _json_rpc_handler_internal(
     # Получаем Context из middleware (установлен при авторизации)
     context = get_context()
 
-    handler = A2AChannel(
-        flow_id,
-        context=context,
-        flow_config=config,
-        container=as_flow_runtime_container(container),
-    )
+    handler = _a2a_channel(di, flow_id, context=context, flow_config=config)
 
     # Группы пользователя для проверки прав доступа
     # 1. Из metadata (для тестов и внутренних вызовов)
@@ -1023,13 +1036,13 @@ async def _json_rpc_handler_internal(
 async def json_rpc_handler(
     flow_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     v: str | None = None,
 ):
     return await _json_rpc_handler_internal(
         flow_id=flow_id,
         request=request,
-        container=container,
+        di=di,
         v=v,
     )
 
@@ -1038,10 +1051,10 @@ async def json_rpc_handler(
 async def json_rpc_embed_handler(
     embed_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     v: str | None = None,
 ):
-    embed_target = await resolve_embed_target(container, embed_id)
+    embed_target = await resolve_embed_target(embed_id)
     if embed_target is None:
         return JSONResponse(
             {
@@ -1063,7 +1076,7 @@ async def json_rpc_embed_handler(
     return await _json_rpc_handler_internal(
         flow_id=embed_target.flow_id,
         request=request,
-        container=container,
+        di=di,
         v=v,
         embed_target=embed_target,
     )
@@ -1074,7 +1087,7 @@ async def _flow_interface_internal(
     flow_id: str,
     branch_id: str,
     request: Request,
-    container: FlowContainer,
+    di: Di,
     embed_target: EmbedTarget | None = None,
 ) -> FlowInterfaceResponse:
     token_data_raw = _request_state_mapping(request).get("token_data")
@@ -1082,8 +1095,8 @@ async def _flow_interface_internal(
     is_embed_session = _is_embed_session_token(token_data)
     is_share_session = _is_flow_ui_share_token(token_data)
     if embed_target is None and not is_share_session and not is_embed_session:
-        await _require_view_flow(container, flow_id)
-    config = await _get_flow_config(flow_id, container)
+        await _require_view_flow(di, flow_id)
+    config = await _get_flow_config(flow_id)
     if config is None:
         raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
     if embed_target is None and config.branches and branch_id != "default":
@@ -1112,7 +1125,7 @@ async def _flow_interface_internal(
         if claims_error is not None:
             raise HTTPException(status_code=403, detail=claims_error)
         try:
-            grant = await container.flow_ui_share_service.authorize(
+            grant = await di.flow_ui_share_service.authorize(
                 grant_id=str(token_data.metadata["flow_ui_share_grant_id"]),
                 company_id=token_data.company_id,
                 flow_id=flow_id,
@@ -1174,7 +1187,7 @@ async def _flow_interface_internal(
 async def get_flow_interface(
     flow_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     branch_id: str = "default",
 ) -> FlowInterfaceResponse:
     """Документ интерфейса и права для авторизованной поверхности платформы."""
@@ -1182,7 +1195,7 @@ async def get_flow_interface(
         flow_id=flow_id,
         branch_id=branch_id,
         request=request,
-        container=container,
+        di=di,
     )
 
 
@@ -1190,10 +1203,10 @@ async def get_flow_interface(
 async def get_embed_interface(
     embed_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowInterfaceResponse:
     """Документ интерфейса embed-поверхности с настройками EmbedConfig."""
-    embed_target = await resolve_embed_target(container, embed_id)
+    embed_target = await resolve_embed_target(embed_id)
     if embed_target is None:
         raise HTTPException(status_code=404, detail=f"Embed not found: {embed_id}")
     if not embed_target.active:
@@ -1202,6 +1215,6 @@ async def get_embed_interface(
         flow_id=embed_target.flow_id,
         branch_id=embed_target.branch_id,
         request=request,
-        container=container,
+        di=di,
         embed_target=embed_target,
     )

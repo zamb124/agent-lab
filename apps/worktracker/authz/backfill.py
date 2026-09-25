@@ -7,15 +7,15 @@ import asyncio
 import sys
 from typing import cast
 
-from sqlalchemy import text
-
-from apps.worktracker.container import get_worktracker_container
+from apps.worktracker.di import WorktrackerDi
 from core.config import get_settings
+from core.di import ProcessIdentity, open_di
 from core.logging import get_logger
 from core.worktracker.authz_tuples import (
     work_queue_company_link,
     work_queue_owner_tuple,
 )
+from core.worktracker.models import WorkQueue
 
 logger = get_logger(__name__)
 
@@ -25,24 +25,22 @@ async def backfill_worktracker_authz(*, limit: int | None = None) -> int:
     if not settings.openfga.enabled:
         raise RuntimeError("openfga.enabled must be true for Worktracker authz backfill")
 
-    container = get_worktracker_container()
-    authz = container.authz_service
-    db = container.worktracker_db
+    identity = ProcessIdentity(service_name="worktracker", files_route_segment="worktracker")
+    async with open_di(
+        WorktrackerDi,
+        settings=settings,
+        identity=identity,
+        database="worktracker_url",
+    ) as di:
+        authz = di.authz_service
     written = 0
 
-    async with db.session() as session:
-        company_sql = (
-            "SELECT work_queue_id, company_id, owner_user_id "
-            "FROM work_queues ORDER BY work_queue_id"
-        )
-        if limit is not None:
-            company_sql = f"{company_sql} LIMIT {int(limit)}"
-        company_rows = list((await session.execute(text(company_sql))).mappings().all())
+    company_rows = await WorkQueue.list_by_work_queue_id(limit=limit)
 
     for row in company_rows:
-        work_queue_id = cast(str, row["work_queue_id"])
-        company_id = cast(str, row["company_id"])
-        owner_user_id = cast(str, row["owner_user_id"])
+        work_queue_id = row.work_queue_id
+        company_id = row.company_id
+        owner_user_id = row.owner_user_id
         writes = [
             work_queue_company_link(work_queue_id, company_id),
             work_queue_owner_tuple(work_queue_id, owner_user_id),

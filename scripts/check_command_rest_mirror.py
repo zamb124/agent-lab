@@ -54,6 +54,7 @@ FACTORY_CANON_SERVICES = {
     "search",
     "secrets",
     "scheduler",
+    "stock",
 }
 
 COMMAND_WS_SERVICES = {
@@ -68,6 +69,7 @@ COMMAND_WS_SERVICES = {
     "secrets",
     "scheduler",
     "frontend",
+    "stock",
 }
 
 COMMAND_WS_HTTP_ALLOWLIST: frozenset[str] = frozenset(

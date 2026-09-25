@@ -7,7 +7,6 @@ from urllib.parse import urlsplit
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.flows.src.container import get_container
 from core.utils.tokens import TokenType, get_token_service
 from tests.flows._flow_ui_session import a2a_send, text_message
 from tests.flows.a2a_conformance.helpers.flows import create_echo_flow, delete_flow
@@ -187,6 +186,7 @@ async def test_flow_ui_share_editor_grant_authorizes_interaction(
     app: object,
     auth_token_system: str,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     _, company_id = _token_scope(auth_token_system)
@@ -198,7 +198,7 @@ async def test_flow_ui_share_editor_grant_authorizes_interaction(
         grant_id, _ = await _create_share(
             client, flow_id=flow_id, context_id=context_id, permission="editor"
         )
-        grant = await get_container().flow_ui_share_service.authorize(
+        grant = await di.flow_ui_share_service.authorize(
             grant_id=grant_id,
             company_id=company_id,
             flow_id=flow_id,
@@ -211,7 +211,7 @@ async def test_flow_ui_share_editor_grant_authorizes_interaction(
             client, flow_id=flow_id, context_id=context_id, permission="viewer"
         )
         with pytest.raises(PermissionError):
-            _ = await get_container().flow_ui_share_service.authorize(
+            _ = await di.flow_ui_share_service.authorize(
                 grant_id=viewer_grant_id,
                 company_id=company_id,
                 flow_id=flow_id,

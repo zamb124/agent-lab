@@ -2,7 +2,7 @@
  * Страница продукта RAG — Knowledge Base
  */
 import { ProductLandingPage } from '../../components/product-landing/product-landing-page.js';
-import { landRagAbilityUrl } from '../../utils/land-product-images.js';
+import { landRagAbilityUrl } from '../../_helpers/land-product-images.js';
 
 export class ProductRagPage extends ProductLandingPage {
     static productKey = 'rag';

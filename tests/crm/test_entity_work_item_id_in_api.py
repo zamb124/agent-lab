@@ -14,7 +14,7 @@ async def test_task_entity_response_includes_work_item_id(
 ) -> None:
     namespace = f"g_{unique_id}"
     create_resp = await crm_client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json={
             "entity_type": "task",
             "name": f"Task {unique_id}",

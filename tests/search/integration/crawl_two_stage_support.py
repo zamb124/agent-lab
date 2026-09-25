@@ -8,9 +8,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from core.crawl.models import (
+    CrawlDomain,
     CrawlDomainSeed,
     CrawlEnrichedPage,
+    CrawlJob,
+    CrawlProfile,
     CrawlProfileCreateRequest,
+    CrawlUrl,
     SitemapEntry,
 )
 from core.search.index_models import SearchIndexCreateRequest
@@ -22,7 +26,6 @@ from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
-    from apps.search.container import SearchContainer
 
 REAL_CRAWL_DOMAIN = "example.com"
 REAL_CRAWL_QUERY = "documentation examples"
@@ -41,7 +44,7 @@ def deterministic_enriched_page(unique_id: str) -> CrawlEnrichedPage:
 
 
 async def setup_example_com_crawl(
-    search_container: SearchContainer,
+    search_di,
     *,
     unique_id: str,
     llm_enrichment_enabled: bool,
@@ -50,7 +53,7 @@ async def setup_example_com_crawl(
     crawl_profile_id = f"cr_{search_index_id}"[:64]
     rag_namespace_id = f"{search_index_id}:ns"
 
-    await search_container.search_index_service.create(
+    await search_di.search_index_service.create(
         SearchIndexCreateRequest(
             search_index_id=search_index_id,
             display_name=f"Two-stage crawl {unique_id}",
@@ -58,7 +61,7 @@ async def setup_example_com_crawl(
             rag_collection_id=search_index_id,
         )
     )
-    await search_container.crawl_service.create_profile(
+    await search_di.crawl_service.create_profile(
         CrawlProfileCreateRequest(
             crawl_profile_id=crawl_profile_id,
             search_index_id=search_index_id,
@@ -68,25 +71,25 @@ async def setup_example_com_crawl(
         )
     )
     if llm_enrichment_enabled:
-        await search_container.crawl_profile_repository.set_llm_enrichment(
+        await CrawlProfile.set_llm_enrichment(
             crawl_profile_id,
             llm_enrichment_enabled=True,
             enrichment_model="test-enrichment-model",
         )
 
-    await search_container.crawl_domain_repository.upsert_seed_batch(
+    await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         [CrawlDomainSeed(domain=REAL_CRAWL_DOMAIN, category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
     domain = (
-        await search_container.crawl_domain_repository.list_due(
+        await CrawlDomain.list_due(
             crawl_profile_id,
             now=datetime.now(UTC),
             limit=1,
         )
     )[0]
-    await search_container.crawl_url_repository.upsert_from_sitemap(
+    await CrawlUrl.upsert_from_sitemap(
         domain.crawl_domain_id,
         [SitemapEntry(url=f"https://{REAL_CRAWL_DOMAIN}/")],
     )
@@ -94,22 +97,24 @@ async def setup_example_com_crawl(
 
 
 async def run_layer1_fetch(
-    search_container: SearchContainer,
+    search_di,
     *,
     crawl_profile_id: str,
     crawl_domain_id: str,
 ) -> tuple[str, str]:
-    job = await search_container.crawl_job_repository.start(
+    job = await CrawlJob.start(
         crawl_profile_id,
         "manual",
         schedule_task_id=None,
     )
     from apps.search_worker.tasks.crawl_tasks import crawl_fetch_url
 
-    _ = await crawl_fetch_url(crawl_domain_id, job.crawl_job_id, crawl_profile_id, 1)
-    job_after = await search_container.crawl_job_repository.get(job.crawl_job_id)
+    _ = await crawl_fetch_url(
+        crawl_domain_id, job.crawl_job_id, crawl_profile_id, 1, di=search_di
+    )
+    job_after = await CrawlJob.get(job.crawl_job_id)
     assert job_after.urls_indexed >= 1
-    url_page = await search_container.crawl_url_repository.list_page_for_profile(
+    url_page = await CrawlUrl.list_page_for_profile(
         crawl_profile_id=crawl_profile_id,
         crawl_status="indexed",
         domain=REAL_CRAWL_DOMAIN,
@@ -125,7 +130,7 @@ async def run_layer1_fetch(
 
 
 async def run_layer2_enrich(
-    search_container: SearchContainer,
+    search_di,
     *,
     crawl_url_id: str,
     crawl_job_id: str,
@@ -137,15 +142,13 @@ async def run_layer2_enrich(
     trace_id = f"crawl:enrich:{crawl_url_id}"
     set_context(
         await build_system_admin_job_context(
-            company_repository=search_container.company_repository,
-            user_repository=search_container.user_repository,
             trace_id=trace_id,
             session_id=f"search:{trace_id}",
             channel="search",
         )
     )
     try:
-        await search_container.crawl_orchestrator_service.enrich_one_url(
+        await search_di.crawl_orchestrator_service.enrich_one_url(
             crawl_url_id,
             crawl_job_id,
             crawl_profile_id,

@@ -141,7 +141,7 @@ async def test_viz_editor_config_cross_company_forbidden(
     )
     assert response.status_code == 403
     detail = response.json().get("detail") or ""
-    assert "компани" in detail.lower()
+    assert "company" in detail.lower()
 
 
 async def test_viz_invalid_json_editor_config_422(
@@ -162,9 +162,9 @@ async def test_viz_invalid_json_editor_config_422(
         f"/documents/api/v1/files/{file_id}/editor-config",
         headers=auth_headers_system,
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == 400, response.text
     detail = response.json().get("detail") or ""
     assert isinstance(detail, str)
-    assert detail != ""
+    assert "viz document JSON is invalid" in detail
     with pytest.raises(ValueError):
         _ = parse_viz_document_bytes(b"{not-json")

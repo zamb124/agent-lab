@@ -4,10 +4,13 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import ClassVar
+from typing import ClassVar, Self
 
+from oxyde import atomic
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from core.db.storage import Storage
+from core.models.identity_models import Company
 from core.types import JsonObject
 
 
@@ -127,11 +130,77 @@ class Transaction(BaseModel):
         json_schema_extra={"readonly": True},
     )
 
+    @classmethod
+    async def finalize_credit(cls, storage: Storage, transaction: Self) -> Company | None:
+        if transaction.balance_applied:
+            return None
+        async with atomic(using="shared"):
+            data = await storage.get(
+                transaction_storage_key(transaction),
+                force_global=True,
+                for_update=True,
+            )
+            stored = cls.model_validate_json(data) if data is not None else None
+            if stored is not None and stored.balance_applied:
+                return None
+            effective = stored if stored is not None else transaction
+            effective.status = PaymentStatus.SUCCESS
+            effective.external_payment_id = transaction.external_payment_id
+            effective.completed_at = transaction.completed_at
+            effective.balance_applied = True
+            external_payment_id = effective.external_payment_id
+            if external_payment_id is not None:
+                if external_payment_id == "":
+                    raise ValueError("external_payment_id must be non-empty")
+                claimed = await storage.insert_once(
+                    external_payment_storage_key(
+                        payment_provider=effective.payment_provider,
+                        external_payment_id=external_payment_id,
+                    ),
+                    ExternalPaymentClaim(
+                        transaction_id=effective.transaction_id
+                    ).model_dump_json(),
+                    force_global=True,
+                )
+                if not claimed:
+                    raise ValueError(
+                        "External payment operation is already linked to another transaction: "
+                        + external_payment_id
+                    )
+            _ = await storage.set(
+                transaction_storage_key(effective),
+                effective.model_dump_json(),
+                force_global=True,
+            )
+            return await Company.add_balance(effective.company_id, effective.amount)
+
 
 class ExternalPaymentClaim(BaseModel):
     """Идемпотентная привязка внешней операции провайдера к транзакции платформы."""
 
     transaction_id: str
+
+
+def transaction_storage_key(transaction: Transaction) -> str:
+    return (
+        f"payment:{transaction.company_id}:"
+        + f"{transaction.payment_provider.value}:{transaction.transaction_id}"
+    )
+
+
+def transaction_storage_key_by_id(
+    *,
+    company_id: str,
+    payment_provider: PaymentProviderType,
+    transaction_id: str,
+) -> str:
+    return f"payment:{company_id}:{payment_provider.value}:{transaction_id}"
+
+
+def external_payment_storage_key(
+    *, payment_provider: PaymentProviderType, external_payment_id: str
+) -> str:
+    return f"payment_external:{payment_provider.value}:{external_payment_id}"
 
 
 class PaymentSyncCandidate(BaseModel):

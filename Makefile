@@ -1,8 +1,8 @@
 .PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
-.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-realtime-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon check-a2a-fixtures check-a2a-fixtures-remote build-i18n
+.PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-realtime-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon check-dependency-injection-canon check-a2a-fixtures check-a2a-fixtures-remote build-i18n
 .PHONY: clean-i18n-unused base
-.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill k8s-gpu-sync k8s-gpu-prune
+.PHONY: render-helm-app-conf require-image-tag k8s-deploy k8s-template k8s-lint k8s-status k8s-logs k8s-rollback k8s-helm-clear-pending k8s-helm-adopt-orphans k8s-secrets-sync k8s-uninstall k8s-health k8s-backup k8s-restore k8s-reset-databases k8s-decommission-compose k8s-cluster-reset k8s-openfga-bootstrap k8s-openfga-backfill k8s-gpu-sync k8s-gpu-prune
 
 STRESS_NUMERIC_TARGETS := $(shell seq 1 300 2>/dev/null)
 STRESS_GOAL_RPS := $(firstword $(filter $(STRESS_NUMERIC_TARGETS),$(MAKECMDGOALS)))
@@ -63,6 +63,7 @@ openfga-backfill:
 	uv run python -m apps.crm.authz && \
 	uv run python -m apps.office.authz && \
 	uv run python -m apps.wiki.authz && \
+	uv run python -m apps.stock.authz && \
 	uv run python -m apps.sync.authz && \
 	uv run python -m apps.worktracker.authz && \
 	uv run python -m core.mail.authz && \
@@ -85,7 +86,7 @@ dev-minio-restart:
 	docker-compose -f docker-compose-dev.yaml restart minio
 	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
 
-# Недостающие БД на старом томе Postgres + миграции Alembic.
+# Недостающие БД на старом томе Postgres + накат 0001_initial.
 dev-bootstrap-postgres:
 	uv run python -m scripts.db_migrate upgrade
 	@echo "Postgres dev: ensure databases + миграции через scripts.db_migrate"
@@ -147,6 +148,9 @@ check-logging:
 
 check-taskiq-canon:
 	@uv run python scripts/check_taskiq_canon.py
+
+check-dependency-injection-canon:
+	@uv run python scripts/check_dependency_injection_canon.py
 
 check-no-uvicorn:
 	@./scripts/check_no_uvicorn.sh
@@ -210,6 +214,7 @@ check-voice-canon: check-voice-resolver check-speakable-parity check-tts-pipelin
 
 check-files-canon:
 	@uv run python scripts/check_files_canon.py
+	@uv run python scripts/check_object_store_canon.py
 	@bash scripts/check_files_ui_canon.sh
 
 check-tool-tags:
@@ -399,6 +404,10 @@ k8s-health:
 k8s-backup:
 	@PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/backup-postgres.sh $(if $(S3),--s3 $(S3),)
 
+# Пустые сервисные БД и Redis под 0001_initial. CONFIRM=1 обязателен. Перед этим — make k8s-backup.
+k8s-reset-databases:
+	@CONFIRM="$${CONFIRM:-0}" PLATFORM_NS=$(K8S_NAMESPACE) bash deploy/scripts/reset-service-databases.sh
+
 # Восстановление: make k8s-restore FILE=backups/dump-...sql.gz [YES=1 — без подтверждения]
 k8s-restore:
 	@if [ -z "$(FILE)" ]; then echo "Usage: make k8s-restore FILE=<path/to/dump.sql.gz>"; exit 1; fi
@@ -472,6 +481,7 @@ help:
 	@echo "============================================================================"
 	@echo "  make check-events-canon - core lib + apps + ui-factories + REST-зеркало + i18n"
 	@echo "  make check-taskiq-canon - TaskSpec / enqueue / wire_worker канон"
+	@echo "  make check-dependency-injection-canon - Pure DI application graph + legacy ratchet"
 	@echo "  make check-embed-esm   - автономный embed: замыкание импортов без bare lit/@platform"
 	@echo "  make check-i18n         - JSON ru/en парность"
 	@echo "  make check-i18n-keys    - Cross-check код ↔ JSON"
@@ -486,9 +496,8 @@ help:
 	@echo "============================================================================"
 	@echo "Миграции БД:"
 	@echo "============================================================================"
-	@echo "  make migrate                      - Применить миграции для всех сервисов"
-	@echo "  make migrate-new m=\"...\" s=shared - Создать новую autogenerate ревизию"
-	@echo "  make migrate-empty m=\"...\" s=crm  - Создать пустую ревизию"
+	@echo "  make migrate                      - Накатить 0001_initial всех баз"
+	@echo "  make migrate-new [s=flows]        - Снять диф моделей в 0001_initial.py"
 	@echo ""
 	@echo "============================================================================"
 	@echo "Kubernetes / Helm деплой (см. deploy/README.md и deploy/cluster-setup.md):"
@@ -512,21 +521,6 @@ help:
 	@echo "  make k8s-restore FILE=<path>  - Восстановление дампа в pod postgres-0"
 	@echo ""
 	@echo "============================================================================"
-	@echo "Семантический поиск по коду (claude-context MCP: Ollama + Milvus):"
-	@echo "============================================================================"
-	@echo "  make zed-search                  - Полная настройка: host Ollama Metal + Milvus + watcher"
-	@echo "  make zed-search-check            - Health-check MCP Compose (ручной / по запросу)"
-	@echo "  make zed-search-update           - Обновить MCP-пакет до свежей версии из npm"
-	@echo "  make zed-search-test             - Интеграционные тесты (поиск, переиндексация, healthcheck)"
-	@echo "  make zed-search-status            - Статус всех компонентов"
-	@echo "  make zed-search-down              - Остановить Milvus"
-	@echo "  make zed-search-logs              - Логи Milvus"
-	@echo "  make zed-search-watch             - Watcher автоиндексации (foreground)"
-	@echo "  make zed-search-watch-install     - launchd-агент (автозапуск при логине)"
-	@echo "  make zed-search-watch-uninstall   - убрать launchd-агент"
-	@echo "  make zed-search-reindex           - Мгновенная переиндексация (touch триггера)"
-	@echo ""
-	@echo "============================================================================"
 	@echo "Документация (Zensical):"
 	@echo "============================================================================"
 	@echo "  make doc        - docs_prepare + zensical RU/EN build → documentation-dist/"
@@ -539,7 +533,6 @@ include mk/app.mk
 include mk/agent.mk
 include mk/test.mk
 include mk/migrate.mk
-include mk/search.mk
 
 # Документация
 .PHONY: doc doc-serve doc-serve-zensical doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build

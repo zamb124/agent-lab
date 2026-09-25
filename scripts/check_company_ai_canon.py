@@ -25,7 +25,7 @@
    company-AI namespace запрещены.
 
 7. Старый flows-owned model catalog запрещён: каталог моделей живёт только в
-   ``core.ai.model_catalog_repository`` / shared namespace ``ai_model_catalog:*``.
+   ``core.ai.models.AIModelRecord`` / таблица ``ai_models``.
 
 8. ``core.clients.llm.factory`` запрещён как service-level public API. Вызовы
    создаются через ``core.ai.runtime``; factory остаётся только внутренним
@@ -215,7 +215,6 @@ PROVIDER_WHITELIST_PATHS = (
     "core/config/",
     "core/ai/company_settings/",
     "core/billing/default_settlement_rules.py",
-    "core/db/models/platform.py",
     "core/integrations/models.py",
     "core/middleware/dev_inter_service_proxy.py",
     "core/models/calendar_models.py",
@@ -555,7 +554,7 @@ def main() -> int:
         if _OLD_FREE_POOL_DISCOVERY_RE.search(text) and rel != "scripts/check_company_ai_canon.py":
             failures.append(
                 f"{rel}: free-pool provider-specific discovery is forbidden; "
-                "build Humanitec LLMs free pool from core.ai.model_catalog_repository"
+                "build Humanitec LLMs free pool from core.ai.models.AIModelRecord"
             )
         if _OLD_FREE_POOL_PROVIDERS_CONFIG_RE.search(text) and rel != "scripts/check_company_ai_canon.py":
             failures.append(
@@ -594,7 +593,7 @@ def main() -> int:
             if _OLD_FLOWS_LLM_MODEL_REPOSITORY_RE.search(text):
                 failures.append(
                     f"{rel}: flows-owned LLM model catalog repository is forbidden; "
-                    "use core.ai.model_catalog_repository"
+                    "use core.ai.models.AIModelRecord"
                 )
             if _OLD_FLOWS_LLM_MODEL_RECORD_RE.search(text):
                 failures.append(
@@ -604,7 +603,7 @@ def main() -> int:
             if _OLD_LLM_MODEL_STORAGE_PREFIX_RE.search(text):
                 failures.append(
                     f"{rel}: old llm_model:* storage namespace is forbidden; "
-                    "use ai_model_catalog:*"
+                    "use core.ai.models.AIModelRecord"
                 )
 
         if not _path_starts_with_any(rel, AI_TRANSPORT_CONSTRUCTOR_WHITELIST_PATHS):

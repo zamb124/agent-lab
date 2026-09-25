@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from core.state import ExecutionState
 from core.state.interrupt import (
@@ -74,7 +74,7 @@ def llm_hitl_flow_create_payload(*, flow_id: str) -> JsonObject:
 
 
 async def attach_hitl_to_session(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     *,
     mode: HandoffMode,
@@ -82,13 +82,13 @@ async def attach_hitl_to_session(
     session_id: str,
     queue_slug: str | None = None,
 ) -> ParkedHitlSession:
-    state = await container.workflow_runtime.get_state(session_id)
+    state = await di.workflow_runtime.get_state(session_id)
     if state is None:
         raise RuntimeError(f"HITL session {session_id} is missing")
     resolved_slug = queue_slug
     if resolved_slug is None:
         resolved_slug = f"hitl-q-{unique_id}"
-        await container.work_item_service.create_queue(
+        await di.work_item_service.create_queue(
             company_id="system",
             name=f"HITL {unique_id}",
             slug=resolved_slug,
@@ -103,7 +103,7 @@ async def attach_hitl_to_session(
         node_id="hitl",
         tool_call_id=None,
     )
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="Ожидается оператор",
         task_title="HITL",
@@ -132,7 +132,7 @@ async def attach_hitl_to_session(
             )
         }
     )
-    await container.workflow_runtime.save_state(session_id, parked, snapshot=True)
+    await di.workflow_runtime.save_state(session_id, parked, snapshot=True)
     return ParkedHitlSession(
         flow_id=parked.session_flow_id,
         context_id=parked.context_id,
@@ -146,7 +146,7 @@ async def attach_hitl_to_session(
 
 
 async def park_hitl_session(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     *,
     mode: HandoffMode,
@@ -154,7 +154,7 @@ async def park_hitl_session(
     flow_id: str | None = None,
 ) -> ParkedHitlSession:
     queue_slug = f"hitl-q-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system",
         name=f"HITL {unique_id}",
         slug=queue_slug,
@@ -172,9 +172,9 @@ async def park_hitl_session(
         branch_id="default",
         content="wait",
     )
-    await container.workflow_runtime.save_state(session_id, state, snapshot=True)
+    await di.workflow_runtime.save_state(session_id, state, snapshot=True)
     return await attach_hitl_to_session(
-        container,
+        di,
         unique_id,
         mode=mode,
         owner_user_id=owner_user_id,

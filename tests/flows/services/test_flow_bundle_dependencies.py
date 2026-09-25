@@ -15,14 +15,11 @@ def bundles_dir() -> Path:
 
 
 @pytest.fixture
-def loader(bundles_dir: Path, container) -> FlowsLoader:
+def loader(bundles_dir: Path, di) -> FlowsLoader:
     return FlowsLoader(
         bundles_dir=bundles_dir,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=bundles_dir.parent / "registry.yaml",
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
 
 
@@ -36,7 +33,7 @@ def test_read_depends_on_flow_ids_from_handoff_parent(loader: FlowsLoader, bundl
     assert deps == ["handoff_demo_child"]
 
 
-def test_expand_detects_cycle(loader: FlowsLoader, tmp_path: Path, container) -> None:
+def test_expand_detects_cycle(loader: FlowsLoader, tmp_path: Path, di) -> None:
     parent_dir = tmp_path / "cycle_parent"
     child_dir = tmp_path / "cycle_child"
     parent_dir.mkdir()
@@ -51,11 +48,8 @@ def test_expand_detects_cycle(loader: FlowsLoader, tmp_path: Path, container) ->
     )
     cycle_loader = FlowsLoader(
         bundles_dir=tmp_path,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=tmp_path / "registry.yaml",
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     with pytest.raises(ValueError, match="Cycle in depends_on_flow_ids"):
         cycle_loader._expand_bundle_ids_with_dependencies(["cycle_parent"])

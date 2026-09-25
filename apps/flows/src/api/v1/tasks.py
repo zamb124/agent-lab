@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from google.protobuf.json_format import MessageToDict
 from pydantic import Field
 
+from apps.flows.di import Di
 from apps.flows.realtime.durable_operations import (
     op_flows_durable_branches,
     op_flows_durable_fork,
@@ -29,7 +30,6 @@ from apps.flows.realtime.durable_operations import (
     op_flows_sessions_state_update,
 )
 from apps.flows.src.channels.types import FlowTaskResult
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.durable_execution.models import WorkflowBranchResult
 from apps.flows.src.models.durable_api import (
     DurableForkPayload,
@@ -78,14 +78,14 @@ class TaskSubmitRequest(StrictBaseModel):
 
 
 @router.post("/submit")
-async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> JsonObject:
+async def submit_task(request: TaskSubmitRequest, di: Di) -> JsonObject:
     """Отправляет задачу на выполнение. Возвращает A2A Task (ProtoJSON)."""
     task_id = str(uuid.uuid4())
     context = get_context()
     if context is None:
         raise ValueError("Context is required. Context must be created in middleware.")
     user_id = request.user_id if request.user_id is not None else context.user.user_id
-    await container.authz_service.require_can_view(
+    await di.authz_service.require_can_view(
         AuthzObject.flow(request.flow_id, company_id=require_active_company().company_id),
         user_id=user_id,
     )
@@ -105,9 +105,9 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
         # Создаем новый context_id и формируем session_id
         context_id = str(uuid.uuid4())
         session_id = f"{request.flow_id}:{context_id}"
-    logger.info("flows.api.database_url", db_url=container.db_url)
+    logger.info("flows.api.database_url", db_url=di.database.flows_url)
 
-    state = await container.workflow_runtime.get_state(session_id)
+    state = await di.workflow_runtime.get_state(session_id)
 
     if state is None:
         branch_id = request.branch_id
@@ -193,7 +193,7 @@ async def submit_task(request: TaskSubmitRequest, container: ContainerDep) -> Js
 
 @router.get("/state", response_model=ExecutionState)
 async def get_state(
-    container: ContainerDep,
+    di: Di,
     session_id: str | None = None,
     context_id: str | None = None,
     flow_id: str | None = None,
@@ -205,14 +205,14 @@ async def get_state(
             flow_id=flow_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.put("/state", response_model=ExecutionState)
 async def update_state(
     request: DurableSessionStateUpdatePayload,
-    container: ContainerDep,
+    di: Di,
     session_id: str | None = None,
     context_id: str | None = None,
     flow_id: str | None = None,
@@ -226,14 +226,14 @@ async def update_state(
             }
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{session_id}/history", response_model=WorkflowHistoryResponse)
 async def get_state_history(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
     execution_branch_id: str | None = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -246,19 +246,19 @@ async def get_state_history(
             offset=offset,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{session_id}/branches", response_model=WorkflowBranchesResponse)
 async def list_execution_branches(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> WorkflowBranchesResponse:
     return await op_flows_durable_branches(
         DurableSessionIdPayload(session_id=session_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -266,12 +266,12 @@ async def list_execution_branches(
 async def fork_state(
     session_id: str,
     request: DurableForkPayload,
-    container: ContainerDep,
+    di: Di,
 ) -> WorkflowBranchResult:
     return await op_flows_durable_fork(
         request.model_copy(update={"session_id": session_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -279,12 +279,12 @@ async def fork_state(
 async def rewind_state(
     session_id: str,
     request: DurableRewindPayload,
-    container: ContainerDep,
+    di: Di,
 ) -> WorkflowBranchResult:
     return await op_flows_durable_rewind(
         request.model_copy(update={"session_id": session_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -292,12 +292,12 @@ async def rewind_state(
 async def manual_state_patch(
     session_id: str,
     request: DurableManualPatchPayload,
-    container: ContainerDep,
+    di: Di,
 ) -> WorkflowBranchResult:
     return await op_flows_durable_manual_patch(
         request.model_copy(update={"session_id": session_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -305,12 +305,12 @@ async def manual_state_patch(
 async def retry_from_failure(
     session_id: str,
     request: DurableRetryPayload,
-    container: ContainerDep,
+    di: Di,
 ) -> WorkflowBranchResult:
     return await op_flows_durable_retry_from_failure(
         request.model_copy(update={"session_id": session_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -318,7 +318,7 @@ async def retry_from_failure(
 async def get_state_at_sequence(
     session_id: str,
     sequence: int,
-    container: ContainerDep,
+    di: Di,
     execution_branch_id: str | None = None,
 ) -> ExecutionState:
     return await op_flows_durable_state_at(
@@ -328,5 +328,5 @@ async def get_state_at_sequence(
             execution_branch_id=execution_branch_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

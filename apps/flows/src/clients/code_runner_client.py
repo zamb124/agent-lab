@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.runners.remote import RemoteCodeRunner
+from core.capabilities import CAPABILITY_LANGUAGE_SET
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 
@@ -13,16 +13,10 @@ class CodeRunnerClient:
 
     _runner: RemoteCodeRunner
 
-    def __init__(
-        self,
-        language: str = "python",
-        runner: RemoteCodeRunner | None = None,
-    ) -> None:
-        self._runner = (
-            runner
-            if runner is not None
-            else require_current_container().get_code_runner(language=language)
-        )
+    def __init__(self, language: str = "python") -> None:
+        if language not in CAPABILITY_LANGUAGE_SET:
+            raise ValueError(f"Unsupported language: {language}")
+        self._runner = RemoteCodeRunner(language)
 
     async def execute_tool(
         self,

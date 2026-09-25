@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import override
 
 import pytest
+from taskiq import InMemoryBroker
+from taskiq.abc.broker import AsyncBroker
 from taskiq.scheduler.scheduled_task import ScheduledTask
 
 from core.scheduler.models import (
@@ -18,63 +20,25 @@ from core.scheduler.models import (
 from core.scheduler.service import SchedulerService
 
 
-class _InMemorySchedulerRepository:
-    def __init__(self, task: PlatformScheduledTask | None = None) -> None:
-        self.task = task
-        self.updated_next_run_at: Optional[datetime] = None
+def _broker(queue_name: str) -> AsyncBroker:
+    _ = queue_name
+    return InMemoryBroker()
 
-    async def save(self, task: PlatformScheduledTask) -> PlatformScheduledTask:
-        self.task = task
-        return task
 
-    async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask | None:
-        if self.task is None:
-            return None
-        if self.task.company_id != company_id:
-            return None
-        if self.task.schedule_task_id != schedule_task_id:
-            return None
-        return self.task
+class _FixedScheduleService(SchedulerService):
+    def __init__(self, schedule_id: str) -> None:
+        super().__init__(redis_url="redis://localhost:6379/0", broker_for_queue=_broker)
+        self._schedule_id: str = schedule_id
 
-    async def list(self, company_id: str, filters: PlatformScheduleFilter) -> list[PlatformScheduledTask]:
-        if self.task is None:
-            return []
-        if self.task.company_id != company_id:
-            return []
-        return [self.task]
-
-    async def update_status(
-        self,
-        company_id: str,
-        schedule_task_id: str,
-        status: ScheduledTaskStatus,
-        *,
-        schedule_id: str | None = None,
-        last_run_at: datetime | None = None,
-        next_run_at: datetime | None = None,
-        error_message: str | None = None,
-    ) -> bool:
-        if self.task is None:
-            return False
-        if self.task.company_id != company_id or self.task.schedule_task_id != schedule_task_id:
-            return False
-        self.task.status = status
-        if schedule_id is not None:
-            self.task.schedule_id = schedule_id
-        if last_run_at is not None:
-            self.task.last_run_at = last_run_at
-        if next_run_at is not None:
-            self.task.next_run_at = next_run_at
-            self.updated_next_run_at = next_run_at
-        if error_message is not None:
-            self.task.error_message = error_message
-        self.task.updated_at = datetime.now(timezone.utc)
-        return True
+    @override
+    async def _create_schedule(self, task: PlatformScheduledTask) -> str:
+        _ = task
+        return self._schedule_id
 
 
 class _FakeScheduleSource:
     def __init__(self, schedules: list[ScheduledTask]) -> None:
-        self._schedules = schedules
+        self._schedules: list[ScheduledTask] = schedules
 
     async def startup(self) -> None:
         return None
@@ -85,17 +49,7 @@ class _FakeScheduleSource:
 
 @pytest.mark.asyncio
 async def test_create_cron_schedule_sets_next_run_at() -> None:
-    repository = _InMemorySchedulerRepository()
-    service = SchedulerService(
-        repository=repository,
-        redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
-    )
-
-    async def _fake_create_schedule(task: PlatformScheduledTask) -> str:
-        return "schedule-1"
-
-    service._create_schedule = _fake_create_schedule  # type: ignore[method-assign]
+    service = _FixedScheduleService("schedule-1")
 
     before_create = datetime.now(timezone.utc)
     request = PlatformScheduleCreateRequest(
@@ -136,17 +90,17 @@ async def test_list_enriches_missing_next_run_at_for_pending_cron() -> None:
         next_run_at=None,
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     service = SchedulerService(
-        repository=repository,
         redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
+        broker_for_queue=_broker,
     )
 
     items = await service.list(company_id="system", filters=PlatformScheduleFilter())
+    saved = [item for item in items if item.schedule_task_id == task.schedule_task_id]
 
-    assert len(items) == 1
-    assert items[0].next_run_at is not None
+    assert len(saved) == 1
+    assert saved[0].next_run_at is not None
 
 
 @pytest.mark.asyncio
@@ -172,21 +126,11 @@ async def test_resume_cron_schedule_updates_next_run_at() -> None:
         next_run_at=None,
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
-    service = SchedulerService(
-        repository=repository,
-        redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
-    )
-
-    async def _fake_create_schedule(task: PlatformScheduledTask) -> str:
-        return "schedule-2"
-
-    service._create_schedule = _fake_create_schedule  # type: ignore[method-assign]
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
+    service = _FixedScheduleService("schedule-2")
 
     resumed = await service.resume(company_id="system", schedule_task_id="task-1")
 
-    assert repository.updated_next_run_at is not None
     assert resumed.next_run_at is not None
     assert resumed.schedule_id == "schedule-2"
     assert resumed.status == ScheduledTaskStatus.PENDING
@@ -215,11 +159,10 @@ async def test_get_redis_snapshot_returns_taskiq_schedule_data(monkeypatch: pyte
         next_run_at=None,
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     service = SchedulerService(
-        repository=repository,
         redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
+        broker_for_queue=_broker,
     )
     redis_schedule = ScheduledTask(
         task_name="sync_llm_models_task",
@@ -270,11 +213,10 @@ async def test_get_redis_snapshot_handles_missing_schedule_id_without_redis_call
         next_run_at=None,
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     service = SchedulerService(
-        repository=repository,
         redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
+        broker_for_queue=_broker,
     )
     monkeypatch.setattr(
         "core.scheduler.service.get_schedule_source",
@@ -310,11 +252,10 @@ async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPa
         next_run_at=datetime.now(timezone.utc) + timedelta(seconds=60),
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     service = SchedulerService(
-        repository=repository,
         redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
+        broker_for_queue=_broker,
     )
     captured_labels: dict[str, str] = {}
 
@@ -337,7 +278,7 @@ async def test_run_now_adds_required_logging_labels(monkeypatch: pytest.MonkeyPa
         },
     )
 
-    await service.run_now(company_id="system", schedule_task_id="task-run-now")
+    _ = await service.run_now(company_id="system", schedule_task_id="task-run-now")
 
     assert captured_labels["queue_name"] == "idle"
     assert captured_labels["request_id"] == "req-1"
@@ -368,11 +309,10 @@ async def test_run_now_forwards_canonical_schedule_task_payload(monkeypatch: pyt
         next_run_at=datetime.now(timezone.utc) + timedelta(seconds=60),
         error_message=None,
     )
-    repository = _InMemorySchedulerRepository(task=task)
+    _ = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
     service = SchedulerService(
-        repository=repository,
         redis_url="redis://localhost:6379/0",
-        broker_for_queue=lambda _q: object(),
+        broker_for_queue=_broker,
     )
     captured_kwargs: dict[str, str] = {}
 
@@ -394,9 +334,70 @@ async def test_run_now_forwards_canonical_schedule_task_payload(monkeypatch: pyt
         },
     )
 
-    await service.run_now(company_id="system", schedule_task_id="task-run-now")
+    _ = await service.run_now(company_id="system", schedule_task_id="task-run-now")
 
     assert captured_kwargs == {
         "schedule_task_id": "task-run-now",
         "company_id": "system",
     }
+
+
+def _schedule_task(
+    *,
+    schedule_task_id: str,
+    company_id: str,
+    task_name: str,
+    created_at: datetime,
+) -> PlatformScheduledTask:
+    return PlatformScheduledTask(
+        schedule_task_id=schedule_task_id,
+        company_id=company_id,
+        schedule_id=None,
+        target_service="flows",
+        task_name=task_name,
+        queue_name=None,
+        schedule_type=PlatformScheduleType.CRON,
+        cron="*/1 * * * *",
+        interval_seconds=None,
+        run_at=None,
+        timezone="UTC",
+        payload={},
+        status=ScheduledTaskStatus.PENDING,
+        created_by_user_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+        last_run_at=None,
+        next_run_at=None,
+        error_message=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_upsert_by_schedule_task_id_updates_same_row(unique_id: str) -> None:
+    schedule_task_id = f"{unique_id}_schedule"
+    created_at = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+    task = _schedule_task(
+        schedule_task_id=schedule_task_id,
+        company_id="system",
+        task_name="first",
+        created_at=created_at,
+    )
+    inserted = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
+    assert inserted.schedule_task_id == schedule_task_id
+    task.task_name = "second"
+    updated = await PlatformScheduledTask.upsert_by_schedule_task_id(task)
+    assert updated.schedule_task_id == schedule_task_id
+    stored = await PlatformScheduledTask.find_in_company("system", schedule_task_id)
+    assert stored is not None
+    assert stored.task_name == "second"
+    assert stored.created_at == created_at
+    assert await PlatformScheduledTask.find_in_company(f"{unique_id}_other", schedule_task_id) is None
+    with pytest.raises(ValueError, match="schedule_task_id cannot be empty"):
+        _ = await PlatformScheduledTask.upsert_by_schedule_task_id(
+            _schedule_task(
+                schedule_task_id="",
+                company_id="system",
+                task_name="empty",
+                created_at=created_at,
+            )
+        )

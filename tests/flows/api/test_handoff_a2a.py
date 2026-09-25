@@ -25,13 +25,13 @@ def _interrupt_kind_value(body) -> str:
     return kind.value
 
 
-async def _save_flow(container, flow_config: dict[str, Any]) -> bool:
+async def _save_flow(di, flow_config: dict[str, Any]) -> bool:
     config = FlowConfig.model_validate(flow_config)
-    saved = await container.flow_repository.set(config)
+    saved = await FlowConfig.create_version(config)
     ctx = require_context()
     if ctx.active_company is None:
         raise AssertionError("active company required for flow authz sync")
-    await container.flow_access_service.sync_flow_saved(
+    await di.flow_access_service.sync_flow_saved(
         config,
         company_id=ctx.active_company.company_id,
         owner_user_id=ctx.user.user_id,
@@ -98,11 +98,11 @@ async def _send_message(
 class TestHandoffA2A:
     @pytest.mark.asyncio
     async def test_k1_handoff_returns_input_required(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
 
@@ -129,20 +129,20 @@ class TestHandoffA2A:
         assert interrupt["body"]["target_flow_id"] == child_fid
 
         parent_session = f"{parent_fid}:{context_id}"
-        parent_state = await container.workflow_runtime.get_state(parent_session)
+        parent_state = await di.workflow_runtime.get_state(parent_session)
         assert parent_state is not None
         assert parent_state.handoff_depth == 1
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert child_state is not None
 
     @pytest.mark.asyncio
     async def test_k2_user_reply_routes_to_child(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k2-{unique_id}"
@@ -164,7 +164,7 @@ class TestHandoffA2A:
         assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_before = await container.workflow_runtime.get_state(child_session)
+        child_before = await di.workflow_runtime.get_state(child_session)
         assert child_before is not None
 
         second = await _send_message(
@@ -178,22 +178,22 @@ class TestHandoffA2A:
         _validate_jsonrpc_response(second_data)
 
         parent_session = f"{parent_fid}:{context_id}"
-        parent_state = await container.workflow_runtime.get_state(parent_session)
+        parent_state = await di.workflow_runtime.get_state(parent_session)
         assert parent_state is not None
         assert parent_state.interrupt is not None
         assert _interrupt_kind_value(parent_state.interrupt.body) == "handoff"
 
-        child_after = await container.workflow_runtime.get_state(child_session)
+        child_after = await di.workflow_runtime.get_state(child_session)
         assert child_after is not None
         assert len(child_after.messages) >= len(child_before.messages)
 
     @pytest.mark.asyncio
     async def test_k3_child_ask_user_resume_in_child(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k3-{unique_id}"
@@ -220,7 +220,7 @@ class TestHandoffA2A:
         assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert child_state is not None
 
         second = await _send_message(
@@ -236,18 +236,18 @@ class TestHandoffA2A:
             "TASK_STATE_COMPLETED",
         )
 
-        parent_state = await container.workflow_runtime.get_state(f"{parent_fid}:{context_id}")
+        parent_state = await di.workflow_runtime.get_state(f"{parent_fid}:{context_id}")
         assert parent_state is not None
         assert parent_state.interrupt is not None
         assert _interrupt_kind_value(parent_state.interrupt.body) == "handoff"
 
     @pytest.mark.asyncio
     async def test_k4_handback_resumes_parent(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k4-{unique_id}"
@@ -275,7 +275,7 @@ class TestHandoffA2A:
 
         parent_session = f"{parent_fid}:{context_id}"
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_before = await container.workflow_runtime.get_state(child_session)
+        child_before = await di.workflow_runtime.get_state(child_session)
         assert child_before is not None
 
         second = await _send_message(
@@ -291,8 +291,8 @@ class TestHandoffA2A:
             "TASK_STATE_COMPLETED",
         )
 
-        parent_state = await container.workflow_runtime.get_state(parent_session)
-        child_after = await container.workflow_runtime.get_state(child_session)
+        parent_state = await di.workflow_runtime.get_state(parent_session)
+        child_after = await di.workflow_runtime.get_state(child_session)
         assert parent_state is not None
         assert child_after is not None
         assert len(child_after.messages) >= len(child_before.messages)
@@ -308,7 +308,7 @@ class TestHandoffA2A:
 
     @pytest.mark.asyncio
     async def test_k5_handoff_chain_three_levels(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         fid_a = f"ht-k5-a-{unique_id}"
         fid_b = f"ht-k5-b-{unique_id}"
@@ -326,7 +326,7 @@ class TestHandoffA2A:
             (fid_a, [{"tool_id": "handoff_to_flow", "description": "H"}]),
         ):
             await _save_flow(
-                container,
+                di,
                 {
                     "flow_id": fid,
                     "name": fid,
@@ -387,7 +387,7 @@ class TestHandoffA2A:
             "TASK_STATE_COMPLETED",
         )
 
-        parent_state = await container.workflow_runtime.get_state(f"{fid_a}:{context_id}")
+        parent_state = await di.workflow_runtime.get_state(f"{fid_a}:{context_id}")
         assert parent_state is not None
         assert parent_state.response == "parent a final"
         assert len(parent_state.child_workflows) >= 1
@@ -396,9 +396,9 @@ class TestHandoffA2A:
         assert parent_state.child_workflows[child_b_key].status == "completed"
 
     @pytest.mark.asyncio
-    async def test_k6_handoff_max_depth_exceeded(self, container, unique_id):
+    async def test_k6_handoff_max_depth_exceeded(self, di, unique_id):
         """Превышение handoff_max_depth — контракт orchestrator (без monkeypatch)."""
-        orchestrator = container.handoff_orchestrator_service
+        orchestrator = di.handoff_orchestrator_service
         from apps.flows.config import get_settings
         from tests.flows.durable_runtime_harness import workflow_state
 
@@ -411,11 +411,11 @@ class TestHandoffA2A:
 
     @pytest.mark.asyncio
     async def test_k7_cancel_parent_cancels_child(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-k7-{unique_id}"
@@ -448,18 +448,18 @@ class TestHandoffA2A:
         assert cancel_data["result"]["status"]["state"] == "TASK_STATE_CANCELED"
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         if child_state is not None:
             # ExecutionTaskState — kebab; wire CancelTask уже проверен как TASK_STATE_CANCELED выше.
             assert child_state.terminal_task_state in ("canceled", None)
 
     @pytest.mark.asyncio
     async def test_k8_invalid_target_flow_failed(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_fid = f"ht-k8-{unique_id}"
         await _save_flow(
-            container,
+            di,
             {
                 "flow_id": parent_fid,
                 "name": "Parent",
@@ -492,11 +492,11 @@ class TestHandoffA2A:
 
     @pytest.mark.asyncio
     async def test_k9_stream_keeps_open_on_handoff(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         mock_llm_with_queue(
@@ -546,15 +546,15 @@ class TestHandoffA2A:
 
     @pytest.mark.asyncio
     async def test_demo_bundles_handoff_roundtrip(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         repo_root = Path(__file__).resolve().parents[3]
         parent_path = repo_root / "apps/flows/bundles/handoff_demo_parent/flow.json"
         child_path = repo_root / "apps/flows/bundles/handoff_demo_child/flow.json"
         parent_cfg = json.loads(parent_path.read_text(encoding="utf-8"))
         child_cfg = json.loads(child_path.read_text(encoding="utf-8"))
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         parent_fid = parent_cfg["flow_id"]
         child_fid = child_cfg["flow_id"]
         context_id = f"ctx-demo-{unique_id}"

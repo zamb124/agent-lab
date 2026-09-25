@@ -14,9 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from apps.flows.config import get_settings
+from apps.flows.di import FlowsDi
 from apps.flows.tools.files.files import read_file
 from core.billing import set_billing_service
 from core.context import set_context
+from core.di import ProcessIdentity, open_di
 from core.files.file_ref import FileRef
 from core.models.context_models import Context
 from core.models.identity_models import User
@@ -54,9 +57,17 @@ async def _run(args: ManualReadFileCliArgs) -> int:
         print(f"Файл не найден: {file_path}", file=sys.stderr)
         return 1
 
-    from apps.flows.src.container import get_container as get_flows_container
+    async with open_di(
+        FlowsDi,
+        settings=get_settings(),
+        identity=ProcessIdentity(service_name="flows", files_route_segment="flows"),
+        database="flows_url",
+    ) as di:
+        set_billing_service(di.billing_service)
+        return await _read_local_file(args, file_path)
 
-    set_billing_service(get_flows_container().billing_service)
+
+async def _read_local_file(args: ManualReadFileCliArgs, file_path: Path) -> int:
     set_context(
         Context(
             user=User(user_id="manual_user", name="Manual User"),

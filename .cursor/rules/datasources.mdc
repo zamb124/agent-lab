@@ -1,79 +1,58 @@
 ---
-description: "Datasource: живая БД как NodeType.DATASOURCE, HTTP+WS на flows, OpenFGA type datasource"
+description: "Datasource: живая БД как NodeType.DATASOURCE, подключения и коннекторы, протокол introspect/query/execute, OpenFGA, tools db_*, capability db.*. Читать при правке datasource"
+globs:
+  - "core/datasources/**"
+  - "core/clients/datasource_client.py"
+  - "apps/flows/src/services/datasources/**"
+  - "apps/flows/realtime/datasource_operations.py"
+  - "apps/flows/src/api/v1/datasources.py"
+  - "apps/flows/tools/datasources/**"
+  - "apps/capability_gateway/services/db_capabilities.py"
 alwaysApply: false
 ---
-# Datasource (живые базы как шаг графа)
 
-## Инвариант
+# Datasource
 
-Живая БД — **шаг графа**, не resource.
+Живая база данных компании — шаг графа (`NodeType.DATASOURCE`), а не ресурс. HTTP и команды живут во flows; отдельного сервиса нет.
 
-| Сущность | Имена | Смысл |
-|---|---|---|
-| Спека | `connector_id`, `DatasourceConnectorSpec` | postgres / mysql / clickhouse / mcp / flow |
-| Подключение компании | `datasource_id`, `DatasourceConnection` | host/port/database_name/username + `password_encrypted`. Не пароль в FlowConfig |
-| Нода | `NodeType.DATASOURCE` = `"datasource"` | `{ connector_id, datasource_id, datasource_operation, sql }` |
-| Протокол | один | `introspect` / `query` / `execute` |
+## Модель
 
-- **Не** `ResourceType.DATASOURCE`, **не** executable resource, **не** `NodeType.postgres`/`mysql`.
-- Resource-ноды остаются portless (`edge_involves_resource_node`). Datasource **может** иметь рёбра.
-- Пароль: Fernet (`core.secrets.crypto.encrypt_secret`), как mail — **не** в JSON flow и **не** в args LLM.
-- Host только из `DatasourceConnection`. Deny-list: blocked hosts + точное `(host, port, database)` из URL полей `DatabaseConfig` (кроме redis) + k8s `postgres.platform.svc`.
-- Sole PDP = OpenFGA type `datasource` (скелет как `flow`: company/platform/owner/viewer/editor, `admin from platform` на can_view/edit).
-- Tag tools: `datasources` (не путать с `tables` = sqlite-файл, публичный id `file_id`).
-- HTTP+WS на **flows** (`/flows/api/v1/datasources`, `FLOWS_OPERATIONS` / `op_flows_datasources_*`). Отдельный сервис `apps/datasource` не заводится.
-- Backfill tuples: `uv run python -m core.datasources.authz.backfill` (в `make openfga-backfill` и cluster script).
-- `core/` не импортирует `apps/`. MCP/flow executors — в `apps/flows/src/services/datasources/`, инжект в `DatasourceService` из `FlowContainer`.
-- Sandbox: capability `db.*` через gateway → `DatasourceClient` → flows. TCP/драйверы в sandbox запрещены.
-- Палитра: секция **Источники** (`category: sources`). Карточки из `list_connectors()`, drop → `type: datasource` + `connector_id`. Иконка карточки и канвы — `DatasourceConnectorSpec.icon` (`<platform-icon colored>` в палитре; канва — `<img>`). Platform ids: `postgres` / `mysql` / `clickhouse` — официальные локальные SVG в `core/frontend/static/assets/icons/` (Slonik с wiki.postgresql.org/wiki/Logo; дельфин Sakila в цветах MySQL; logomark ClickHouse). MCP/flow stamp без своего знака — `database`. Runtime не ходит на офсайты за лого. На полке ресурсов: RAG → «База знаний», Data table → «Таблица».
-- Lara: `datasource_node_helper` в `LARA_NODE_HELPER_BRANCH_BY_TYPE` + ветка в `apps/flows/bundles/lara/flow.json`.
+- `DatasourceConnectorSpec` (`connector_id`): `postgres`, `mysql`, `clickhouse` — платформенные (`core/datasources/catalog.py`, без `company_id`, не сохраняются); `mcp` и `flow` — stamp-коннекторы компании.
+- `DatasourceConnection` (`datasource_id`): host, port, `database_name`, username, `password_encrypted` (Fernet `encrypt_secret`), `ssl_mode`, `allowed_operations` (по умолчанию `["select"]`), `statement_timeout_ms` (15 с), `max_rows` (1000).
+- Модели — `core/datasources/models.py`; сценарий и dispatch протокола — `DatasourceService` (`core/datasources/service.py`); `test` = introspect с `as_test=True`.
+- Нода — `{connector_id, datasource_id, datasource_operation, sql}`; протокол один: `introspect`, `query`, `execute`.
 
-## Слои
+## Инварианты
 
-| Модуль | Роль |
-|---|---|
-| `core/datasources/models.py` | Pydantic-контракты, `DatasourceOperation`, Create/Patch, protocol results |
-| `core/datasources/catalog.py` | Platform specs `postgres` / `mysql` / `clickhouse` |
-| `core/datasources/sql_policy.py` | Один statement, `:name` → `$1` / `%s` / `%(name)s`, classify SELECT/INSERT/UPDATE/DELETE |
-| `core/datasources/deny_list.py` | Blocked hosts + exact platform DSN `(host, port, database)` |
-| `core/datasources/drivers/` | postgres (asyncpg), mysql (asyncmy), clickhouse (clickhouse-connect) |
-| `core/datasources/repository.py` | connections + connectors |
-| `core/datasources/service.py` | Authz + protocol dispatch; `test` = INTROSPECT `as_test=True` |
-| `core/datasources/authz/` | tuple helpers + backfill |
-| `apps/flows/src/api/v1/datasources.py` | REST-зеркало CRUD + protocol (`op_flows_datasources_*`) |
-| `apps/flows/realtime/datasource_operations.py` | один `op_*` на verb для REST и Centrifugo RPC |
-| `core/clients/datasource_client.py` | `ServiceClient` → service `"flows"` |
-| `apps/flows/src/runtime/nodes.py` `DatasourceNode` | Durable activity; пустой `datasource_id` → `ValueError` |
-| `apps/flows/tools/datasources/datasource_tools.py` | `db_schema` / `db_query` / `db_execute`, tag `datasources` |
-| `apps/capability_gateway/services/db_capabilities.py` | `db.schema` / `db.query` / `db.execute`, `sdk_namespace="db"` |
+1. Пароль — только в `DatasourceConnection`, не в JSON flow и не в аргументах LLM или MCP.
+2. Host — только из `DatasourceConnection`; deny-list (`core/datasources/deny_list.py`): заблокированные хосты, точные `(host, port, database)` баз платформы из `DatabaseConfig`, `postgres.platform.svc`.
+3. SQL — один statement (`core/datasources/sql_policy.py`), `:name` → плейсхолдер драйвера, параметры 1:1 (лишние и недостающие — `ValueError`); операция классифицируется и сверяется с `allowed_operations`.
+4. Драйверы — `core/datasources/drivers/` (asyncpg, asyncmy, clickhouse-connect) с таймаутом `statement_timeout_ms`; MCP-executor — `structuredContent` → модели протокола; flow-executor — `session_id = {flow_id}:ds-{uuid}`, результат `state.datasource_result` или `state.result`; executors — `apps/flows/src/services/datasources/`.
+5. Company stamp (`upsert_connector`) не может занять id `postgres`/`mysql`/`clickhouse` и `executor=platform`.
+6. Доступ — OpenFGA `datasource` (`datasource:{company}/{datasource_id}`): introspect и query — `can_view`, execute — `can_edit`, список — SQL ∩ `batch_check`, несуществующий id — `AuthzDenied`; dual-write с компенсацией → `authorization.mdc`.
+7. Нода: `connector_id` обязателен при сохранении, пустой `datasource_id` — `ValueError` в runtime; execute — `SideEffectPolicy.non_idempotent`, query и introspect — idempotent; результат — `state["datasource_result"]` и `state["result"]`; нода может иметь рёбра и быть tool через `NodeAsToolWrapper`.
+8. Sandbox: `import db` / `await db.schema|query|execute` — capability `db.*` через gateway → `DatasourceClient` → flows; TCP и драйверы в code-runner запрещены; `db.*` не входит в `STATIC_PLATFORM_CAPABILITIES`.
 
-## Authorization
+## Контракты
 
-Sole PDP — OpenFGA `datasource`. Object key `datasource:{company}/{datasource_id}` (`format_namespace_key`). Dual-write fail-closed: create → `authz.write` + SQL compensate `delete` если FGA падает; delete → FGA-first `authz.delete`, затем SQL delete; SQL fail → `authz.write` тех же tuples и `raise`. List = SQL ∩ `batch_check`. introspect/query/`can_view`; execute/`can_edit`. Несуществующий id → `AuthzDenied`. Канон → **`authorization.mdc`**.
+- Команды — `op_flows_datasources_*` (`apps/flows/realtime/datasource_operations.py`) в `FLOWS_OPERATIONS`, REST — `/flows/api/v1/datasources` (`apps/flows/src/api/v1/datasources.py`).
+- Клиент — `core/clients/datasource_client.py` (`ServiceClient` → `flows`).
+- Tools — `db_schema`, `db_query`, `db_execute` (tag `datasources`, `apps/flows/tools/datasources/`); tag `tables` — другое: SQLite-файл по `file_id`.
+- Play ноды на канве — `POST /flows/api/v1/code/execute` (тот же handler, что code и MCP).
 
-## Протокол и драйверы
+## UI
 
-- Platform executor: TCP только из `DatasourceConnection`; named params обязательны 1:1 (лишние/недостающие → `ValueError`). `statement_timeout_ms` — postgres `command_timeout`, mysql `connect_timeout` + `SET SESSION max_execution_time`, clickhouse `connect_timeout`/`send_receive_timeout`.
-- Default connection: `allowed_operations=["select"]`, timeout 15s, `max_rows` 1000.
-- MCP executor: tool args **без** пароля; `as_test=True` → `DatasourceTestResult`; иначе `structuredContent` → protocol models.
-- Flow executor: `session_id = {flow_id}:ds-{uuid}`; контракт `state.datasource_result` или `state.result`; `get_flow` → `None` = `ValueError`.
-- Company stamp `upsert_connector`: нельзя `executor=platform` и нельзя занять id `postgres|mysql|clickhouse`.
+1. Палитра — секция «Источники» (`category: sources`) из `list_connectors()`; иконка — `DatasourceConnectorSpec.icon` из локальных SVG `core/frontend/static/assets/icons/`, runtime не грузит логотипы извне.
+2. Инспектор: выбор и правка подключения (пустой пароль — без ротации), «Проверить» — `flows/datasource_test`, «Схема» — `flows/datasource_introspect`; SQL — `platform-field` type=text; переключение на execute — `platformConfirm`; SSL по умолчанию `require`.
+3. Lara — `datasource_node_helper` в `LARA_NODE_HELPER_BRANCH_BY_TYPE`.
 
-## Нода и UI
+## Запреты
 
-- `connector_id` обязателен на save; `datasource_id` на save может быть пустым, runtime падает.
-- `datasource_operation` + `sql` (для query/execute). Execute → `SideEffectPolicy.non_idempotent`; query/introspect → idempotent.
-- Пишет `state["datasource_result"]` и `state["result"]` + `state_mapping`.
-- Datasource **не** в запрете рёбер resource-нод.
-- Нода как tool — `NodeAsToolWrapper` (как mcp, не как resource).
-- Play на канве = `POST /flows/api/v1/code/execute` (тот же handler, что code/MCP): гоняет introspect/query/execute ноды, пузырь diff, `previewExecutionState`. Не introspect-only.
-- Инспектор: combobox (`name · host:port`) + create и edit выбранного подключения (host/port/database/username/password optional/`ssl_mode`/`allowed_operations`/timeout/`max_rows`; пустой пароль = не ротировать; delete → confirm). **Проверить** → `flows/datasource_test` (ошибка — `.test-line` error, `silent`). **Схема** → `flows/datasource_introspect`; клик таблицы → `SELECT * FROM {table} LIMIT 50`; клик колонки → `:column`. SQL: `platform-field` type=text, `:name` hint, params Play берёт из Mapping / Input state. Пустой `datasource_id` — warning, save не блокируется. Смена на execute и Play при execute → `platformConfirm`. SSL default `require`; hint для localhost, без автоподстановки `disable`.
-- Отдельной страницы Settings для подключений нет.
+1. `ResourceType.DATASOURCE`, `NodeType.postgres`/`mysql`, executable resource для БД.
+2. Отдельный сервис datasource в `apps/`; импорт `apps/` из `core/datasources`.
+3. Фолбек тестов на DSN платформы.
 
-## Тесты
+## Гейты
 
-Живой Postgres **не** `platform_shared`: БД `platform_datasource_customer` (`migrations/postgres/init.sql` + фикстура `CREATE DATABASE` если volume старый). Фикстура `tests/fixtures/datasources.py` (`customer_datasource`): schema `dsu{unique_id}`, `ssl_mode=disable`. Нет БД — `raise` с текстом `make test-up`, не фолбек на platform DSN. mysql/clickhouse в test-stack не поднимаются; timeout драйверов — connect к недоступному host. MCP stamp — `tests/fixtures/mcp_modes_stub.py`; flow stamp — `test_datasource_flow_connector.py` (test/introspect/execute, missing flow → `ValueError`).
-
-## Sandbox
-
-`import db` / `await db.schema|query|execute`. Нет TCP к живым БД из code-runner. Eval SDK namespace `db` строится из capability manifest. `db.*` не входит в generic `STATIC_PLATFORM_CAPABILITIES` (нужен `datasource_id`); в capability CI — bucket `db.` как у `tables.*`.
+- `scripts/check_authz_backfill_completeness.py` (`make lint`) — backfill `datasource` (`uv run python -m core.datasources.authz.backfill`).
+- `tests/fixtures/datasources.py` (`customer_datasource`, БД `platform_datasource_customer`), `test_datasource_flow_connector.py`, `tests/fixtures/mcp_modes_stub.py`.

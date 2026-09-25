@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di
 from core.ai.runtime import create_voice_tts_streamer
 from core.authz.models import AuthzObject
 from core.billing.service import COST_ORIGIN_PLATFORM
@@ -48,14 +48,14 @@ synthesize_router = APIRouter(prefix="/api/v1", tags=["voice-synthesize"])
 
 
 async def _require_company_view_when_user_context(
-    container: ContainerDep,
+    di: Di,
     *,
     company_id: str,
 ) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         return
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _http_status_for_litserve_tts_error(exc: TTSLitserveHttpError) -> int:
@@ -97,7 +97,7 @@ class SynthesizeRequest(BaseModel):
         },
     },
 )
-async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> StreamingResponse:
+async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
     ctx = require_context()
     company = ctx.active_company
     if company is None or company.company_id == "":
@@ -107,7 +107,7 @@ async def synthesize(body: SynthesizeRequest, container: ContainerDep) -> Stream
         )
     company_id = company.company_id
 
-    await _require_company_view_when_user_context(container, company_id=company_id)
+    await _require_company_view_when_user_context(di, company_id=company_id)
 
     override = SpeechOverride(
         provider=body.provider,

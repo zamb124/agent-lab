@@ -33,16 +33,26 @@ from apps.flows.src.a2a.share_task_redaction import (
     artifact_event_for_share_viewer,
     task_for_share_viewer,
 )
+from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.channels.base import BaseChannel
 from apps.flows.src.channels.types import ChannelRequestContext, PreparedTaskParams
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import (
+    ChannelRegistryProtocol,
+    FlowFactoryProtocol,
+    ToolRegistryProtocol,
+)
+from apps.flows.src.durable_execution import DurableWorkflowRuntime
 from apps.flows.src.files import (
     extract_incoming_a2a_files,
     format_a2a_files_content,
     transcribe_incoming_audio_files,
 )
 from apps.flows.src.files.ssrf_fetch import fetch_public_url_bytes
+from apps.flows.src.models.a2a_projection import A2ATaskEvent, A2ATaskProjection
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
+from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from apps.flows.src.state.cancellation import CANCEL_KEY_TTL
 from apps.flows.src.streaming import Emitter
 from apps.flows.src.streaming.base import StreamEvent
@@ -54,14 +64,20 @@ from core.a2a import (
     mapping_from_struct,
     struct_from_mapping,
 )
+from core.authz.service import AuthzService
+from core.clients.redis_client import RedisClient
 from core.config.testing import is_testing
-from core.context import Context, require_context, set_current_channel
+from core.context import require_context, set_current_channel
+from core.db.storage import Storage
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import FileRef, file_id_from_download_url, stored_file_ref
 from core.files.registry import default_retention_for_source
+from core.files.service import FilesService
 from core.flow_ui.action import ui_action_from_message
 from core.flow_ui.projection import assert_fields_outside_redacted
 from core.logging import get_logger
+from core.mail.service import MailService
+from core.models.context_models import Context
 from core.models.flow_ui_share import FlowUIShareGrant
 from core.state import ExecutionState
 from core.state.interrupt import OperatorTaskInterrupt
@@ -73,7 +89,8 @@ from core.tasks.push_notifications import (
     set_push_config,
 )
 from core.types import JsonObject
-from core.worktracker.models import build_conversation_ref
+from core.variables.service import VariablesService
+from core.worktracker.models import WorkItem, build_conversation_ref
 
 logger = get_logger(__name__)
 
@@ -157,14 +174,40 @@ class A2AChannel(BaseChannel):
         context: Context | None = None,
         flow_config: FlowConfig | None = None,
         *,
-        container: FlowRuntimeContainer,
+        variables_service: VariablesService,
+        authz_service: AuthzService,
+        workflow_runtime: DurableWorkflowRuntime,
+        redis_client: RedisClient,
+        handoff_orchestrator_service: HandoffOrchestratorService,
+        flow_factory: FlowFactoryProtocol,
+        tool_registry: ToolRegistryProtocol,
+        projection_service: A2ATaskProjectionService,
+        shared_storage: Storage,
+        channel_registry: ChannelRegistryProtocol,
+        mail_service: MailService,
+        flow_ui_share_service: FlowUIShareService,
+        hitl_conversation_service: HitlConversationService,
+        files_service: FilesService,
     ) -> None:
         super().__init__(
             flow_id,
             context=context,
             flow_config=flow_config,
-            container=container,
+            variables_service=variables_service,
+            authz_service=authz_service,
+            workflow_runtime=workflow_runtime,
+            redis_client=redis_client,
+            handoff_orchestrator_service=handoff_orchestrator_service,
+            flow_factory=flow_factory,
+            tool_registry=tool_registry,
+            projection_service=projection_service,
+            shared_storage=shared_storage,
+            channel_registry=channel_registry,
+            mail_service=mail_service,
         )
+        self._flow_ui_share_service: FlowUIShareService = flow_ui_share_service
+        self._hitl_conversation_service: HitlConversationService = hitl_conversation_service
+        self._files_service: FilesService = files_service
 
     def _share_grant_id(self) -> str | None:
         raw = self.context.metadata.get("flow_ui_share_grant_id") if self.context else None
@@ -181,7 +224,7 @@ class A2AChannel(BaseChannel):
             return None
         if self.context is None or self.context.active_company is None:
             raise PermissionError("Flow UI share requires an active company")
-        return await self.container.flow_ui_share_service.authorize(
+        return await self._flow_ui_share_service.authorize(
             grant_id=grant_id,
             company_id=self.context.active_company.company_id,
             flow_id=self.flow_id,
@@ -221,7 +264,7 @@ class A2AChannel(BaseChannel):
     async def _operator_task_interrupt_state(
         self, *, company_id: str, context_id: str
     ) -> ExecutionState | None:
-        state = await self.container.workflow_runtime.get_state(
+        state = await self._workflow_runtime.get_state(
             self._generate_session_id(context_id),
             company_id=company_id,
         )
@@ -239,13 +282,13 @@ class A2AChannel(BaseChannel):
         Owner filter would hide the customer's parked task from a queue member
         opening the WorkItem card. Share grants keep their own context path.
         """
-        task = await self.container.a2a_task_repository.get_task(
+        task = await A2ATaskProjection.get_task(
             company_id=company_id,
             task_id=task_id,
         )
         if task is None:
             return None
-        scoped = await self.container.a2a_task_repository.get_task_for_context(
+        scoped = await A2ATaskProjection.get_task_for_context(
             company_id=company_id,
             flow_id=self.flow_id,
             context_id=task.context_id,
@@ -275,7 +318,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            task = await self.container.a2a_task_repository.get_task_for_context(
+            task = await A2ATaskProjection.get_task_for_context(
                 company_id=company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -283,7 +326,7 @@ class A2AChannel(BaseChannel):
             )
         else:
             grant = None
-            task = await self.container.a2a_task_repository.get_task_for_owner(
+            task = await A2ATaskProjection.get_task_for_owner(
                 company_id=company_id,
                 owner_user_id=owner_user_id,
                 task_id=task_id,
@@ -314,7 +357,7 @@ class A2AChannel(BaseChannel):
         Доступ уже проверен ``_projected_task``; здесь только чтение ledger в scope компании.
         """
         company_id, _ = self._task_access_scope()
-        snapshot = await self.container.a2a_task_repository.get_submitted_task(
+        snapshot = await A2ATaskEvent.get_submitted_task(
             company_id=company_id,
             task_id=task_id,
         )
@@ -329,7 +372,7 @@ class A2AChannel(BaseChannel):
 
     async def _latest_sequence(self, task_id: str) -> int:
         company_id, _ = self._task_access_scope()
-        return await self.container.a2a_task_repository.get_latest_sequence(
+        return await A2ATaskProjection.get_latest_sequence(
             company_id=company_id,
             task_id=task_id,
         )
@@ -339,7 +382,7 @@ class A2AChannel(BaseChannel):
     ) -> AsyncGenerator[StreamEvent, None]:
         """Yield lossless status/artifact updates from the durable A2A ledger."""
         company_id, _ = self._task_access_scope()
-        stored_events = await self.container.a2a_task_repository.list_events_after_sequence(
+        stored_events = await A2ATaskProjection.list_events_after_sequence(
             company_id=company_id,
             task_id=task_id,
             after_sequence=after_sequence,
@@ -376,7 +419,7 @@ class A2AChannel(BaseChannel):
                 "user_groups": self._get_user_groups_from_context(self.context),
             }
         )
-        emitter = Emitter.from_container(self.container, exec_state)
+        emitter = Emitter.open(self._projection_service, exec_state)
         await emitter.emit_text(content, append=False, last_chunk=True)
 
     async def _handle_takeover_user_reply(
@@ -391,7 +434,7 @@ class A2AChannel(BaseChannel):
         if work_item_id is None:
             raise ValueError("takeover_work_item_id is required for takeover user reply")
 
-        item = await self.container.work_item_service.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         ref = build_conversation_ref(item)
         if ref is None:
             raise ValueError(f"WorkItem {work_item_id!r} without a session conversation reference")
@@ -400,7 +443,7 @@ class A2AChannel(BaseChannel):
             if prepared.message is not None
             else f"{work_item_id}:{prepared.task_id}"
         )
-        _ = await self.container.hitl_conversation_service.append_user_message(
+        _ = await self._hitl_conversation_service.append_user_message(
             company_id=company_id,
             work_item_id=work_item_id,
             ref=ref,
@@ -423,7 +466,7 @@ class A2AChannel(BaseChannel):
             raise ValueError("takeover user reply requires parked OperatorTaskInterrupt")
         if parked_state.task_id != parked_task_id:
             parked_state = parked_state.model_copy(update={"task_id": parked_task_id})
-        emitter = await Emitter.create_ensured(self.container, parked_state)
+        emitter = await Emitter.create_ensured(self._projection_service, parked_state)
         await emitter.emit_interrupt(interrupt)
         parked_task = await self._projected_task(parked_task_id)
         if not parked_task.HasField("status"):
@@ -464,7 +507,7 @@ class A2AChannel(BaseChannel):
                     raise ValueError("Part.url has no uri")
                 linked_file_id = file_id_from_download_url(inc.uri)
                 if linked_file_id:
-                    record = await self.container.files_service.get_optional(linked_file_id)
+                    record = await self._files_service.get_optional(linked_file_id)
                     if record is None:
                         raise ValueError(f"Part.url with unknown file_id: {linked_file_id}")
                     if record.company_id != company_id:
@@ -497,7 +540,7 @@ class A2AChannel(BaseChannel):
                 retention=default_retention_for_source(FileSourceKind.FLOW_SESSION),
                 post_create=FilePostCreate(is_public=False),
             )
-            record = await self.container.files_service.create(
+            record = await self._files_service.create(
                 spec=spec,
                 data=data,
                 original_name=inc.original_name,
@@ -513,7 +556,7 @@ class A2AChannel(BaseChannel):
                 "Auto-STT of incoming audio attachments requires active_company in the request context"
             )
         return await transcribe_incoming_audio_files(
-            container=self.container,
+            files_service=self._files_service,
             files_data=files_data,
             company_id=self.context.active_company.company_id,
         )
@@ -600,7 +643,7 @@ class A2AChannel(BaseChannel):
 
         prior = await self._prior_projection(prepared.task_id)
         timeout = 120.0 if is_testing() else 300.0
-        subscriber = EventSubscriber(self.container.redis_client)
+        subscriber = EventSubscriber(self._redis_client)
         ready_event = asyncio.Event()
 
         async def collect_with_subscription() -> list[StreamEvent]:
@@ -656,7 +699,7 @@ class A2AChannel(BaseChannel):
         snapshot_sequence = (
             0 if prior is None else await self._latest_sequence(prepared.task_id)
         )
-        subscriber = EventSubscriber(self.container.redis_client)
+        subscriber = EventSubscriber(self._redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
@@ -727,7 +770,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            task = await self.container.a2a_task_repository.get_task_for_context(
+            task = await A2ATaskProjection.get_task_for_context(
                 company_id=company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -736,7 +779,7 @@ class A2AChannel(BaseChannel):
             # GetTask/CancelTask id may be context_id (same contract as
             # BaseChannel._resolve_session_id_for_a2a_lookup).
             if task is None and params.id == share_context:
-                shared_tasks, _ = await self.container.a2a_task_repository.list_tasks_for_context(
+                shared_tasks, _ = await A2ATaskProjection.list_tasks_for_context(
                     company_id=company_id,
                     flow_id=self.flow_id,
                     context_id=share_context,
@@ -747,13 +790,13 @@ class A2AChannel(BaseChannel):
                 task = shared_tasks[0] if shared_tasks else None
         else:
             grant = None
-            task = await self.container.a2a_task_repository.get_task_for_owner(
+            task = await A2ATaskProjection.get_task_for_owner(
                 company_id=company_id,
                 owner_user_id=owner_user_id,
                 task_id=params.id,
             )
             if task is None:
-                task = await self.container.a2a_task_repository.get_latest_for_context(
+                task = await A2ATaskProjection.get_latest_for_context(
                     company_id=company_id,
                     owner_user_id=owner_user_id,
                     flow_id=self.flow_id,
@@ -791,7 +834,7 @@ class A2AChannel(BaseChannel):
 
         # Worker CancellationToken keys by task_id; params.id may be context_id.
         cancel_task_id = accessible.id
-        _ = await self.container.redis_client.set(
+        _ = await self._redis_client.set(
             f"cancel:{cancel_task_id}", "1", ttl=CANCEL_KEY_TTL
         )
 
@@ -809,7 +852,7 @@ class A2AChannel(BaseChannel):
                     {"platformEventId": f"terminal:{task.id}:canceled"}
                 )
             )
-            _ = await self.container.a2a_task_projection_service.publish(
+            _ = await self._projection_service.publish(
                 company_id=company_id,
                 event=cancel_event,
             )
@@ -852,7 +895,7 @@ class A2AChannel(BaseChannel):
         timeout = (
             120.0 if is_testing() else float(get_flows_settings().default_flow_timeout_seconds)
         )
-        subscriber = EventSubscriber(self.container.redis_client)
+        subscriber = EventSubscriber(self._redis_client)
         event_queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         ready_event = asyncio.Event()
 
@@ -867,7 +910,7 @@ class A2AChannel(BaseChannel):
         try:
             _ = await ready_event.wait()
             snapshot, snapshot_sequence = (
-                await self.container.a2a_task_repository.get_task_with_sequence(
+                await A2ATaskProjection.get_task_with_sequence(
                     company_id=company_id,
                     task_id=task.id,
                 )
@@ -933,7 +976,7 @@ class A2AChannel(BaseChannel):
                 context_id=share_context,
                 require_editor=False,
             )
-            tasks, total = await self.container.a2a_task_repository.list_tasks_for_context(
+            tasks, total = await A2ATaskProjection.list_tasks_for_context(
                 company_id=ctx.active_company.company_id,
                 flow_id=self.flow_id,
                 context_id=share_context,
@@ -942,7 +985,7 @@ class A2AChannel(BaseChannel):
                 offset=offset,
             )
         else:
-            tasks, total = await self.container.a2a_task_repository.list_tasks(
+            tasks, total = await A2ATaskProjection.list_tasks(
                 company_id=ctx.active_company.company_id,
                 owner_user_id=user_id,
                 flow_id=self.flow_id,
@@ -959,7 +1002,7 @@ class A2AChannel(BaseChannel):
                 )
                 if parked is not None:
                     tasks, total = (
-                        await self.container.a2a_task_repository.list_tasks_for_context(
+                        await A2ATaskProjection.list_tasks_for_context(
                             company_id=ctx.active_company.company_id,
                             flow_id=self.flow_id,
                             context_id=context_id,

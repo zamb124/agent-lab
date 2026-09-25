@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from apps.flows.src.models.agent_toolkit import AgentToolkit
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.mcp_catalog_provisioner import MCPCatalogProvisionStats
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
@@ -50,7 +52,7 @@ def _init_company_skip_mcp_network_sync(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_init_company_resources_for_system(container, unique_id: str):
+async def test_init_company_resources_for_system(di, unique_id: str):
     """
     Тест загрузки всех агентов в system namespace.
 
@@ -68,7 +70,7 @@ async def test_init_company_resources_for_system(container, unique_id: str):
     result = await init_company_resources(
         company_id="system",
         company_name="System",
-        subdomain="system"
+        subdomain="system", di=di
     )
 
     assert result["status"] == "completed"
@@ -87,7 +89,7 @@ async def test_init_company_resources_for_system(container, unique_id: str):
 
 @pytest.mark.asyncio
 async def test_init_company_resources_for_regular_company(
-    container,
+    di,
     unique_id: str
 ):
     """
@@ -99,7 +101,8 @@ async def test_init_company_resources_for_regular_company(
     3. Контекст устанавливается для компании
     """
     from apps.flows.src.tasks.company_init_tasks import init_company_resources
-    from core.context import Context, clear_context, set_context
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
     test_company_id = f"test_company_{unique_id}"
@@ -111,7 +114,7 @@ async def test_init_company_resources_for_regular_company(
     result = await init_company_resources(
         company_id=test_company_id,
         company_name=test_company_name,
-        subdomain=f"test-{unique_id}"
+        subdomain=f"test-{unique_id}", di=di
     )
 
     assert result["status"] == "completed"
@@ -136,8 +139,7 @@ async def test_init_company_resources_for_regular_company(
     set_context(test_context)
 
     try:
-        agent_repo = container.flow_repository
-        agents = await agent_repo.list(limit=1000)
+        agents = await FlowConfig.list_current(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
 
         print(f"📋 Загруженные агенты в {test_company_id}: {agent_ids}")
@@ -157,12 +159,13 @@ async def test_init_company_resources_for_regular_company(
 
 
 @pytest.mark.asyncio
-async def test_flows_loader_filter_public(container, unique_id: str):
+async def test_flows_loader_filter_public(di, unique_id: str):
     """
     Прямой тест FlowsLoader.load_all_for_company с фильтрацией.
     """
     from apps.flows.src.services.flows_loader import FlowsLoader
-    from core.context import Context, clear_context, set_context
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
     test_company_id = f"test_filter_{unique_id}"
@@ -188,11 +191,8 @@ async def test_flows_loader_filter_public(container, unique_id: str):
     try:
         loader = FlowsLoader(
             bundles_dir=bundles_dir,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=registry_path,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
 
         # Тест 1: Загрузка с фильтром (только public)
@@ -203,12 +203,12 @@ async def test_flows_loader_filter_public(container, unique_id: str):
 
         print(f"📊 С фильтром: {stats_filtered}")
 
-        agents_filtered = await container.flow_repository.list(limit=1000)
+        agents_filtered = await FlowConfig.list_current(limit=1000)
         filtered_count = len(agents_filtered)
 
         # Очищаем для второго теста
         for agent in agents_filtered:
-            await container.flow_repository.delete(agent.flow_id)
+            await FlowConfig.delete_by_flow_id(agent.flow_id)
 
         # Тест 2: Загрузка без фильтра (все агенты)
         stats_all = await loader.load_all_for_company(
@@ -218,7 +218,7 @@ async def test_flows_loader_filter_public(container, unique_id: str):
 
         print(f"📊 Без фильтра: {stats_all}")
 
-        agents_all = await container.flow_repository.list(limit=1000)
+        agents_all = await FlowConfig.list_current(limit=1000)
         all_count = len(agents_all)
 
         # Без фильтра должно быть больше или равно
@@ -236,7 +236,7 @@ async def test_flows_loader_filter_public(container, unique_id: str):
 
 
 @pytest.mark.asyncio
-async def test_system_vs_company_loading(container, unique_id: str):
+async def test_system_vs_company_loading(di, unique_id: str):
     """
     Сравнение загрузки для system vs обычной компании.
 
@@ -254,7 +254,7 @@ async def test_system_vs_company_loading(container, unique_id: str):
     system_result = await init_company_resources(
         company_id="system",
         company_name="System",
-        subdomain="system"
+        subdomain="system", di=di
     )
 
     system_agents_count = system_result["flows"]
@@ -267,7 +267,7 @@ async def test_system_vs_company_loading(container, unique_id: str):
     company_result = await init_company_resources(
         company_id=test_company_id,
         company_name="Test VS",
-        subdomain=f"test-vs-{unique_id}"
+        subdomain=f"test-vs-{unique_id}", di=di
     )
 
     company_agents_count = company_result["flows"]
@@ -288,11 +288,12 @@ async def test_system_vs_company_loading(container, unique_id: str):
 
 @pytest.mark.asyncio
 async def test_init_company_resources_bootstraps_public_agent_toolkits(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     from apps.flows.src.tasks.company_init_tasks import init_company_resources
-    from core.context import Context, clear_context, set_context
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
     test_company_id = f"test_toolkits_{unique_id}"
@@ -302,6 +303,7 @@ async def test_init_company_resources_bootstraps_public_agent_toolkits(
         company_id=test_company_id,
         company_name=f"Toolkits {unique_id}",
         subdomain=f"toolkits-{unique_id}",
+        di=di,
     )
 
     assert result["status"] == "completed"
@@ -319,11 +321,11 @@ async def test_init_company_resources_bootstraps_public_agent_toolkits(
     )
     set_context(test_context)
     try:
-        lara = await container.agent_toolkit_repository.get("lara")
+        lara = await AgentToolkit.by_toolkit_id("lara")
         assert lara is not None
         assert lara.default_enabled is True
         assert "lara" in lara.flow_ids
-        toolkit = await container.agent_toolkit_repository.get("humanitec_core")
+        toolkit = await AgentToolkit.by_toolkit_id("humanitec_core")
         assert toolkit is not None
         assert toolkit.default_enabled is False
         assert "humanitec_agent" in toolkit.flow_ids
@@ -335,7 +337,7 @@ async def test_init_company_resources_bootstraps_public_agent_toolkits(
             "files",
             "browser",
         }
-        toolkits = await container.agent_toolkit_repository.list(limit=100)
+        toolkits = await AgentToolkit.list_agent_toolkits()
         loaded_ids = {item.toolkit_id for item in toolkits}
         assert public_ids.issubset(loaded_ids)
     finally:
@@ -344,11 +346,12 @@ async def test_init_company_resources_bootstraps_public_agent_toolkits(
 
 @pytest.mark.asyncio
 async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     from apps.flows.src.tasks.company_init_tasks import init_company_resources
-    from core.context import Context, clear_context, set_context
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company, User
 
     test_company_id = f"test_toolkits_merge_{unique_id}"
@@ -359,6 +362,7 @@ async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
         company_id=test_company_id,
         company_name=f"Toolkits merge {unique_id}",
         subdomain=f"toolkits-merge-{unique_id}",
+        di=di,
     )
 
     test_context = Context(
@@ -373,10 +377,10 @@ async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
     )
     set_context(test_context)
     try:
-        toolkit = await container.agent_toolkit_repository.get("humanitec_core")
+        toolkit = await AgentToolkit.by_toolkit_id("humanitec_core")
         assert toolkit is not None
         updated = toolkit.model_copy(update={"flow_ids": [*toolkit.flow_ids, extra_flow]})
-        _ = await container.agent_toolkit_repository.set(updated)
+        _ = await AgentToolkit.set(updated)
     finally:
         clear_context()
 
@@ -384,11 +388,12 @@ async def test_init_company_resources_rebootstrap_preserves_toolkit_membership(
         company_id=test_company_id,
         company_name=f"Toolkits merge {unique_id}",
         subdomain=f"toolkits-merge-{unique_id}",
+        di=di,
     )
 
     set_context(test_context)
     try:
-        merged = await container.agent_toolkit_repository.get("humanitec_core")
+        merged = await AgentToolkit.by_toolkit_id("humanitec_core")
         assert merged is not None
         assert extra_flow in merged.flow_ids
         assert "humanitec_agent" in merged.flow_ids

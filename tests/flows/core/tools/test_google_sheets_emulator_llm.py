@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.state import ExecutionState
@@ -102,9 +101,9 @@ async def _run_single_tool_flow(
     tool_call_args: dict[str, Any],
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
+    di,
 ) -> tuple[dict[str, Any], ExecutionState]:
     flow_id = f"sheets_emu_{flow_suffix}_{unique_id}"
-    container = get_container()
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=f"Sheets emu {flow_suffix}",
@@ -119,23 +118,23 @@ async def _run_single_tool_flow(
         },
         edges=[],
     )
-    await container.flow_repository.set(flow_config)
+    await FlowConfig.create_version(flow_config)
     mock_llm_with_queue(
         [
             {"type": "tool_call", "tool": tool_call_name, "args": tool_call_args},
             {"type": "text", "content": "Готово."},
         ]
     )
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     state = _make_state(unique_id, flow_id, google_api_emulator)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
     )
     final_state = await flow.run(state)
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     return final_state, final_state
 
 
@@ -145,6 +144,7 @@ async def test_create_spreadsheet_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
+    di,
 ) -> None:
     _ = app
     result, state = await _run_single_tool_flow(
@@ -155,6 +155,7 @@ async def test_create_spreadsheet_via_llm_node(
         {"title": f"Agent Sheets {unique_id}", "sheet_titles": ["Main"]},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -168,6 +169,7 @@ async def test_get_metadata_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Meta {unique_id}")
@@ -179,6 +181,7 @@ async def test_get_metadata_via_llm_node(
         {"spreadsheet_id": book.spreadsheet_id},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -192,6 +195,7 @@ async def test_list_sheets_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(
@@ -205,6 +209,7 @@ async def test_list_sheets_via_llm_node(
         {"spreadsheet_id": book.spreadsheet_id},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     titles = _tool_payloads_from_state(state)[0]["titles"]
     assert "Alpha" in titles and "Beta" in titles
@@ -217,6 +222,7 @@ async def test_get_and_batch_get_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Get {unique_id}")
@@ -231,6 +237,7 @@ async def test_get_and_batch_get_via_llm_node(
         {"spreadsheet_id": book.spreadsheet_id, "range": "Sheet1!A1:B1"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["values"] == [["hello", unique_id]]
 
@@ -245,6 +252,7 @@ async def test_get_and_batch_get_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert len(_tool_payloads_from_state(state)[0]["value_ranges"]) == 2
 
@@ -256,6 +264,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Write {unique_id}")
@@ -274,6 +283,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
@@ -289,6 +299,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
@@ -305,6 +316,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
@@ -316,6 +328,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         {"spreadsheet_id": sid, "range": "Sheet1!A1"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
@@ -327,6 +340,7 @@ async def test_update_batch_update_append_clear_via_llm_node(
         {"spreadsheet_id": sid, "ranges": ["Sheet1!B1", "Sheet1!C1"]},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["spreadsheet_id"] == sid
 
@@ -338,6 +352,7 @@ async def test_share_and_structure_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Struct {unique_id}")
@@ -351,6 +366,7 @@ async def test_share_and_structure_via_llm_node(
         {"spreadsheet_id": sid, "anyone": True, "role": "reader"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["anyone"] is True
 
@@ -367,6 +383,7 @@ async def test_share_and_structure_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["email"] == "peer@example.com"
 
@@ -378,6 +395,7 @@ async def test_share_and_structure_via_llm_node(
         {"spreadsheet_id": sid, "title": f"Tab-{unique_id}"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     sheet_id = _tool_payloads_from_state(add_state)[0]["sheet_id"]
     assert isinstance(sheet_id, int)
@@ -394,6 +412,7 @@ async def test_share_and_structure_via_llm_node(
         },
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(rename_state)[0]["title"] == f"Renamed-{unique_id}"
 
@@ -405,5 +424,6 @@ async def test_share_and_structure_via_llm_node(
         {"spreadsheet_id": sid, "sheet_id": sheet_id},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(delete_state)[0]["sheet_id"] == sheet_id

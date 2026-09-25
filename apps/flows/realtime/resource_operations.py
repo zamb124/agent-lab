@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.resource import (
     ResourceDefinition,
     ResourceDeletedResponse,
@@ -31,13 +31,13 @@ async def op_flows_resources_list(
     payload: ResourceListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[ResourceDefinition]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     resources, total = await asyncio.gather(
-        container.resource_repository.list(limit=payload.limit, offset=payload.offset),
-        container.resource_repository.count_all(),
+        ResourceDefinition.list(limit=payload.limit, offset=payload.offset),
+        ResourceDefinition.count_all(),
     )
     if payload.type is not None:
         resources = [item for item in resources if item.type == payload.type]
@@ -53,11 +53,11 @@ async def op_flows_resources_item(
     payload: ResourceIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ResourceDefinition:
     _ = user
-    _ = await require_company_member(container)
-    resource = await container.resource_repository.get(payload.resource_id)
+    _ = await require_company_member(di)
+    resource = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
     if resource is None:
         raise_not_found(LookupError("Resource not found"))
     return resource
@@ -67,18 +67,18 @@ async def op_flows_resources_create(
     payload: ResourceDefinition,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ResourceDefinition:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
         _ = payload.get_typed_config()
     except ValueError as exc:
         raise_invalid(exc)
-    existing = await container.resource_repository.get(payload.resource_id)
+    existing = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
     if existing is not None:
         raise_conflict(ValueError(f"Resource '{payload.resource_id}' already exists"))
-    _ = await container.resource_repository.set(payload)
+    _ = await ResourceDefinition.set(payload)
     logger.info("flows.resource.created", resource_id=payload.resource_id)
     return payload
 
@@ -87,11 +87,11 @@ async def op_flows_resources_update(
     payload: ResourceUpdatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ResourceDefinition:
     _ = user
-    _ = await require_company_member(container)
-    resource = await container.resource_repository.get(payload.resource_id)
+    _ = await require_company_member(di)
+    resource = await ResourceDefinition.get(ResourceDefinition.row_id(payload.resource_id))
     if resource is None:
         raise_not_found(LookupError("Resource not found"))
     fields_set = payload.model_fields_set
@@ -123,7 +123,7 @@ async def op_flows_resources_update(
         _ = updated_resource.get_typed_config()
     except ValueError as exc:
         raise_invalid(exc)
-    _ = await container.resource_repository.set(updated_resource)
+    _ = await ResourceDefinition.set(updated_resource)
     logger.info("flows.resource.updated", resource_id=payload.resource_id)
     return updated_resource
 
@@ -132,11 +132,11 @@ async def op_flows_resources_remove(
     payload: ResourceIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ResourceDeletedResponse:
     _ = user
-    _ = await require_company_member(container)
-    deleted = await container.resource_repository.delete(payload.resource_id)
+    _ = await require_company_member(di)
+    deleted = await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(payload.resource_id))
     if not deleted:
         raise_not_found(LookupError("Resource not found"))
     logger.info("flows.resource.deleted", resource_id=payload.resource_id)

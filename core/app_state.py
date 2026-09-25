@@ -12,20 +12,20 @@ from core.utils.tokens import TokenData
 
 if TYPE_CHECKING:
     from core.config import BaseSettings
-    from core.container import BaseContainer
+    from core.di.kit import ServiceDi
     from core.models.context_models import Context
     from core.models.identity_models import User
 
 
 @runtime_checkable
 class PlatformAppState(Protocol):
-    container: BaseContainer
+    di: ServiceDi
     settings: BaseSettings
 
 
 def require_platform_app_state(request: Request) -> PlatformAppState:
     app = cast(FastAPI, request.app)
-    if not hasattr(app.state, "container") or not hasattr(app.state, "settings"):
+    if not hasattr(app.state, "di") or not hasattr(app.state, "settings"):
         raise RuntimeError("Platform app state is not configured")
     return cast(PlatformAppState, cast(object, app.state))
 

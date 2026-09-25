@@ -9,7 +9,6 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from apps.flows.src.db import FlowRepository
 from apps.flows.src.models.flow_config import FlowConfig
 from core.clients.documents_client import DocumentsClient
 from core.clients.files_client import FilesClient
@@ -49,13 +48,11 @@ class CodeAgentSourceService:
     def __init__(
         self,
         *,
-        flow_repository: FlowRepository,
         files_service: FilesService,
         files_client: FilesClient,
         documents_client: DocumentsClient,
         guest_runtime_client: GuestRuntimeClient,
     ) -> None:
-        self._flows: FlowRepository = flow_repository
         self._files: FilesService = files_service
         self._file_bytes: FilesClient = files_client
         self._documents: DocumentsClient = documents_client
@@ -429,7 +426,7 @@ class CodeAgentSourceService:
         )
 
     async def _require_flow(self, flow_id: str) -> FlowConfig:
-        flow = await self._flows.get(flow_id)
+        flow = await FlowConfig.get_latest(flow_id)
         if flow is None:
             raise LookupError(f"flow not found: {flow_id}")
         return flow
@@ -479,7 +476,7 @@ class CodeAgentSourceService:
             updated = True
         if not updated:
             raise LookupError(f"code_agent node not found: {node_id}")
-        saved = await self._flows.set(flow)
+        saved = await FlowConfig.create_version(flow)
         if not saved:
             raise RuntimeError("failed to persist flow after code_agent source update")
 

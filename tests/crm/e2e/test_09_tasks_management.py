@@ -12,7 +12,7 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from core.worktracker.models import WorkItemKind, WorkItemState
+from core.worktracker.models import Board, WorkItem, WorkItemKind, WorkItemState
 from tests.crm.e2e._json_helpers import json_object, object_list, object_str
 
 
@@ -38,7 +38,7 @@ class TestTasksManagement:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Задача {unique_id}",
             "description": "Описание задачи",
@@ -58,22 +58,22 @@ class TestTasksManagement:
     async def test_create_task_pairs_work_item(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        resp = await crm_client.post("/crm/api/v1/entities/", json={
+        resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Paired {unique_id}",
             "namespace": f"g_{unique_id}",
         }, headers=auth_headers_system)
         entity_id = _entity_id(resp)
-        item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
+        item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
         assert item is not None
         assert item.kind is WorkItemKind.CRM_ACTIVITY
         assert item.state is WorkItemState.OPEN
         assert item.board_id is not None
-        board = await crm_container.work_item_service.get_board(
+        board = await Board.get_board(
             company_id="system",
             board_id=item.board_id,
         )
@@ -83,7 +83,7 @@ class TestTasksManagement:
     async def test_activity_tasks_create_is_primary_pair_path(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
@@ -121,7 +121,7 @@ class TestTasksManagement:
         )
 
         entity_id = object_str(entity.get("entity_id"), field="entity_id")
-        persisted = await crm_container.crm_work_item_service.get_for_task(
+        persisted = await crm_di.crm_work_item_service.get_for_task(
             company_id="system",
             entity_id=entity_id,
         )
@@ -138,7 +138,7 @@ class TestTasksManagement:
         test_user_id = f"test_user_{unique_id}"
         namespace = f"g_{unique_id}"
         for i in range(3):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": "task",
                 "name": f"Task {i} {unique_id}",
                 "user_id": test_user_id,
@@ -171,7 +171,7 @@ class TestTasksManagement:
     ) -> None:
         test_user_id = f"test_user_{unique_id}"
         namespace = f"g_{unique_id}"
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Tagged {unique_id}",
             "tags": ["ivan"],
@@ -202,12 +202,12 @@ class TestTasksManagement:
     async def test_update_task_lifecycle_status(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """Lifecycle status CRM-узла ≠ канбан WorkItem.state."""
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Задача {unique_id}",
             "namespace": f"g_{unique_id}",
@@ -225,7 +225,7 @@ class TestTasksManagement:
         task = _http_json(get_resp)
         assert object_str(task.get("status"), field="status") == "completed"
 
-        item = await crm_container.work_item_service.find_by_crm_entity("system", task_id)
+        item = await WorkItem.find_work_item_by_crm_entity("system", task_id)
         assert item is not None
         # Lifecycle completed на CRM-узле не обязан переводить WorkItem в done.
         assert item.state is WorkItemState.OPEN

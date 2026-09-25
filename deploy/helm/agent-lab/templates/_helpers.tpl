@@ -263,18 +263,16 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: auth-demo-password
       optional: true
-{{- /* S3: только секреты для prod-бакета shvedzilla (Selectel).
-     default_bucket и полная структура buckets — в conf.json (ConfigMap). */}}
-- name: S3__BUCKETS__SHVEDZILLA__ACCESS_KEY_ID
+- name: S3__ACCESS_KEY_ID
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: selectel-access-key
-- name: S3__BUCKETS__SHVEDZILLA__SECRET_ACCESS_KEY
+      key: minio-root-user
+- name: S3__SECRET_ACCESS_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: selectel-secret-key
+      key: minio-root-password
 - name: PUSH__ENABLED
   value: "true"
 - name: PUSH__VAPID_PUBLIC_KEY
@@ -738,8 +736,8 @@ Init-containers для всех app/worker подов:
   1. wait-postgres — pg_isready на Service postgres:5432 (до 180s).
   2. db-migrate    — `python -m scripts.db_migrate upgrade` для всех сервисных БД.
 
-Alembic держит DDL-блокировку на alembic_version → параллельный старт нескольких pods
-не вызывает гонок: один мигрирует, остальные видят head и no-op'ятся.
+Oxyde берёт pg_try_advisory_lock на время apply. Параллельный старт подов ждёт:
+один пишет 0001_initial в oxyde_migrations, остальные после lock видят запись и выходят.
 
 Использование в Deployment / StatefulSet с доступом к Postgres:
   spec:

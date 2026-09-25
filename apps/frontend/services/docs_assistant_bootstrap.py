@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
+from core.db.storage import SharedStorage
 from core.docs.assistant import (
     DOCS_ASSISTANT_BRANCH_ID,
     DOCS_ASSISTANT_EMBED_ID,
@@ -26,17 +27,15 @@ from core.docs.assistant import (
 )
 from core.identity.system_bootstrap import ensure_system_company_exists
 from core.logging import get_logger
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
+from core.models.context_models import Context
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.i18n_models import Language
 from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.utils.background import run_with_log_context
 
-if TYPE_CHECKING:
-    from fastapi import FastAPI
-
-    from apps.frontend.container import FrontendContainer
-
 logger = get_logger(__name__)
+
+_bootstrap_task: asyncio.Task[None] | None = None
 
 
 def _docs_corpus_paths(project_root: Path) -> dict[str, Path]:
@@ -65,10 +64,8 @@ def _system_user() -> User:
     )
 
 
-async def _set_system_context(container: "FrontendContainer", *, session_id: str) -> Company:
+async def _set_system_context(*, session_id: str) -> Company:
     company = await ensure_system_company_exists(
-        company_repository=container.company_repository,
-        subdomain_repository=container.subdomain_repository,
     )
     _ = set_context(
         Context(
@@ -83,16 +80,15 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
     return company
 
 
-async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> EmbedConfig:
+async def ensure_docs_assistant_embed_config() -> EmbedConfig:
     """Создаёт или обновляет фиксированный public docs assistant embed в company system."""
-    _ = await _set_system_context(container, session_id="docs_assistant_embed_bootstrap")
+    _ = await _set_system_context(session_id="docs_assistant_embed_bootstrap")
     try:
-        repo = container.embed_config_repository
-        mapping_repo = container.embed_mapping_repository
-        previous = await repo.get(DOCS_ASSISTANT_EMBED_ID)
+        previous = await EmbedConfig.get(DOCS_ASSISTANT_EMBED_ID)
         now = datetime.now(timezone.utc)
         config = EmbedConfig(
             embed_id=DOCS_ASSISTANT_EMBED_ID,
+            company_id=SYSTEM_COMPANY_ID,
             name="Documentation Assistant",
             flow_id=DOCS_ASSISTANT_FLOW_ID,
             branch_id=DOCS_ASSISTANT_BRANCH_ID,
@@ -118,10 +114,7 @@ async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> 
             ),
             updated_at=now,
         )
-        _ = await repo.set(config)
-        _ = await mapping_repo.set(
-            EmbedMapping(embed_id=DOCS_ASSISTANT_EMBED_ID, company_id=SYSTEM_COMPANY_ID)
-        )
+        _ = await EmbedConfig.set(config)
         logger.info(
             "docs_assistant_embed_upserted",
             embed_id=config.embed_id,
@@ -133,8 +126,8 @@ async def ensure_docs_assistant_embed_config(container: "FrontendContainer") -> 
         clear_context()
 
 
-async def _load_manifest(container: "FrontendContainer") -> DocsRagManifest:
-    raw = await container.shared_storage.get(DOCS_MANIFEST_STORAGE_KEY)
+async def _load_manifest(storage: SharedStorage) -> DocsRagManifest:
+    raw = await storage.get(DOCS_MANIFEST_STORAGE_KEY)
     if raw is None:
         return DocsRagManifest()
     try:
@@ -143,8 +136,8 @@ async def _load_manifest(container: "FrontendContainer") -> DocsRagManifest:
         raise ValueError("docs assistant manifest has invalid schema") from exc
 
 
-async def _save_manifest(container: "FrontendContainer", manifest: DocsRagManifest) -> None:
-    _ = await container.shared_storage.set(
+async def _save_manifest(storage: SharedStorage, manifest: DocsRagManifest) -> None:
+    _ = await storage.set(
         DOCS_MANIFEST_STORAGE_KEY,
         manifest.model_dump_json(),
     )
@@ -168,8 +161,8 @@ async def _delete_document_if_present(
         )
 
 
-async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsPage]) -> None:
-    _ = await _set_system_context(container, session_id="docs_assistant_rag_bootstrap")
+async def _sync_docs_rag_index(storage: SharedStorage, pages: list[DocsPage]) -> None:
+    _ = await _set_system_context(session_id="docs_assistant_rag_bootstrap")
     try:
         client = RagClient()
         _ = await client.create_namespace(
@@ -177,7 +170,7 @@ async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsP
             description=DOCS_RAG_NAMESPACE_DESCRIPTION,
         )
         build_hash = docs_build_hash(pages)
-        manifest = await _load_manifest(container)
+        manifest = await _load_manifest(storage)
         manifest_pages = dict(manifest.pages)
 
         current_ids = {page.document_id for page in pages}
@@ -229,7 +222,7 @@ async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsP
         manifest.updated_at = datetime.now(timezone.utc)
         manifest.namespace_id = DOCS_RAG_NAMESPACE_ID
         manifest.pages = manifest_pages
-        await _save_manifest(container, manifest)
+        await _save_manifest(storage, manifest)
         logger.info(
             "docs_assistant_rag_synced",
             namespace_id=DOCS_RAG_NAMESPACE_ID,
@@ -243,11 +236,11 @@ async def _sync_docs_rag_index(container: "FrontendContainer", pages: list[DocsP
 
 
 async def ensure_docs_assistant_ready(
-    container: "FrontendContainer",
+    storage: SharedStorage,
     *,
     project_root: Path,
 ) -> None:
-    _ = await ensure_docs_assistant_embed_config(container)
+    _ = await ensure_docs_assistant_embed_config()
     pages = load_docs_assistant_pages(project_root)
     if not pages:
         logger.warning(
@@ -256,20 +249,19 @@ async def ensure_docs_assistant_ready(
         )
         return
     try:
-        await _sync_docs_rag_index(container, pages)
+        await _sync_docs_rag_index(storage, pages)
     except Exception:
         logger.exception("docs_assistant_rag_sync_failed")
 
 
 def schedule_docs_assistant_bootstrap(
-    app: "FastAPI",
-    container: "FrontendContainer",
+    storage: SharedStorage,
     *,
     project_root: Path,
 ) -> None:
-    task = run_with_log_context(
-        ensure_docs_assistant_ready(container, project_root=project_root),
+    global _bootstrap_task
+    _bootstrap_task = run_with_log_context(
+        ensure_docs_assistant_ready(storage, project_root=project_root),
         name="frontend.docs_assistant_bootstrap",
         background_kind="startup",
     )
-    app.state.docs_assistant_bootstrap_task = task

@@ -189,7 +189,7 @@ async def test_d13_revoke_mid_session_tunnel_closed(
     paired_desktop_deep_link: PairedDesktopDeepLink,
     agent_frontend_http_client: AsyncClient,
     unique_id: str,
-    frontend_container,
+    frontend_di,
 ) -> None:
     _ = unique_id
     device_id = paired_desktop_deep_link.device_id
@@ -197,7 +197,7 @@ async def test_d13_revoke_mid_session_tunnel_closed(
     assert delete_response.status_code in {200, 204}
     paired_desktop_deep_link.desktop.wait_for_credentials_cleared()
     await wait_for_device_offline(agent_frontend_http_client, device_id)
-    deny_raw = await frontend_container.shared_storage.get(
+    deny_raw = await frontend_di.shared_storage.get(
         f"{TOKEN_DENY_PREFIX}{device_id}",
         force_global=True,
     )

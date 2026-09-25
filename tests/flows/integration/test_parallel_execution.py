@@ -23,18 +23,16 @@ pytestmark = pytest.mark.real_taskiq
 
 
 @pytest.fixture(autouse=True)
-def require_taskiq_worker(taskiq_worker, container):
+def require_taskiq_worker(taskiq_worker):
     """Все тесты в этом модуле требуют реальный TaskIQ worker."""
-    container.use_worker = True
-    yield
-    container.use_worker = False
+    _ = taskiq_worker
 
 
 class TestParallelNodeExecution:
     """Тесты параллельного выполнения нод в графе."""
 
     @pytest.fixture
-    async def setup_parallel_flow(self, app, container, unique_id):
+    async def setup_parallel_flow(self, app, di, unique_id):
         """
         Создает flow с fan-out: start -> [node_a, node_b, node_c] -> final
 
@@ -72,12 +70,12 @@ class TestParallelNodeExecution:
                 {"from_node": "final", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_fanout_nodes_execute_in_parallel(
-        self, app, container, setup_parallel_flow, unique_id, mock_context,
+        self, app, di, setup_parallel_flow, unique_id, mock_context,
         code_runner_python_service: None,
     ):
         """
@@ -120,7 +118,7 @@ class TestParallelNodeExecution:
 
     @pytest.mark.asyncio
     async def test_parallel_nodes_timestamps_overlap(
-        self, app, container, setup_parallel_flow, unique_id, mock_context,
+        self, app, di, setup_parallel_flow, unique_id, mock_context,
         code_runner_python_service: None,
     ):
         """
@@ -169,7 +167,7 @@ class TestParallelNodesMerge:
     """Тесты корректного merge результатов параллельных нод."""
 
     @pytest.fixture
-    async def setup_merge_flow(self, app, container, unique_id):
+    async def setup_merge_flow(self, app, di, unique_id):
         """
         Создает flow где каждая нода пишет в разные поля state.
         Проверяем что все поля сохраняются после merge.
@@ -206,12 +204,12 @@ class TestParallelNodesMerge:
                 {"from_node": "final", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_different_fields_preserved_after_merge(
-        self, app, container, setup_merge_flow, unique_id, mock_context,
+        self, app, di, setup_merge_flow, unique_id, mock_context,
         code_runner_python_service: None,
     ):
         """

@@ -4,7 +4,7 @@ import traceback
 
 from fastapi import APIRouter
 
-from apps.code_runner_python.dependencies import ContainerDep
+from apps.code_runner_python.di import Di
 from apps.code_runner_python.services.executor import SERVICE_NAME
 from core.capabilities import (
     CodeExecutionRequest,
@@ -17,11 +17,11 @@ router = APIRouter(prefix="/execute", tags=["code-execution"])
 
 @router.post("", response_model=CodeExecutionResponse)
 async def execute_code(
-    container: ContainerDep,
+    di: Di,
     request: CodeExecutionRequest,
 ) -> CodeExecutionResponse:
     try:
-        return await container.executor.execute(request)
+        return await di.executor.execute(request)
     except Exception as exc:
         return code_execution_failed_response(
             request,

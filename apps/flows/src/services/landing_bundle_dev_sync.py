@@ -11,8 +11,8 @@ from pathlib import Path
 import yaml
 
 from apps.flows.config import FlowSettings
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.context import clear_context, set_context
 from core.logging import get_logger
@@ -37,7 +37,10 @@ def landing_public_demo_bundle_ids_from_registry(registry_path: Path) -> tuple[s
     )
 
 
-async def sync_landing_public_demo_flows_from_bundles(container: FlowContainer, settings: FlowSettings) -> None:
+async def sync_landing_public_demo_flows_from_bundles(
+    flow_access_service: FlowAccessService,
+    settings: FlowSettings,
+) -> None:
     if settings.server.env != "development":
         return
 
@@ -69,11 +72,8 @@ async def sync_landing_public_demo_flows_from_bundles(container: FlowContainer, 
     try:
         loader = FlowsLoader(
             bundles_dir=bundles_dir,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=registry_path,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=flow_access_service,
         )
         for bundle_id in bundle_ids:
             try:

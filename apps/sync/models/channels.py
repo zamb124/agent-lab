@@ -33,7 +33,7 @@ class ChannelRead(BaseModel):
 
     channel_id: str = Field(description="Идентификатор канала.")
     namespace: str = Field(
-        description="Платформенный namespace, в котором живёт канал (1:1 c shared NamespaceRepository).",
+        description="Платформенный namespace, в котором живёт канал (имя записи Namespace).",
     )
     type: ChannelType = Field(description="Тип канала.")
     name: str | None = Field(
@@ -97,7 +97,7 @@ class ChannelCreate(BaseModel):
     namespace: str | None = Field(
         default=None,
         description=(
-            "Платформенный namespace (1:1 с shared NamespaceRepository). "
+            "Платформенный namespace (имя записи Namespace). "
             "Для topic обязателен; для direct/calendar_meeting если опущен — "
             "используется 'default'."
         ),

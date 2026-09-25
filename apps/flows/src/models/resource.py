@@ -5,10 +5,11 @@ Resource = переиспользуемый компонент доступны�
 Поддерживает inline определение и ссылку на shared ресурс из БД.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import ClassVar, Literal, Self, TypeAlias, assert_never
+from typing import ClassVar, Literal, Self, TypeAlias, assert_never, override
 
+from oxyde import Field as DbField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.ai.llm_config import (
@@ -16,8 +17,10 @@ from core.ai.llm_config import (
     ReasoningEffort,
     validate_fallback_model_configs,
 )
+from core.context.context import get_context
 from core.llm_context.models import LLMContextPatch
 from core.models import StrictBaseModel
+from core.models.platform_model import CompanyScopedModel
 from core.rag.rag_resource_bind import RagResourceBindParams
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -135,27 +138,30 @@ ResourceConfigUnion: TypeAlias = (
 )
 
 
-class ResourceDefinition(StrictBaseModel):
-    """
-    Полное определение ресурса.
+class ResourceDefinition(CompanyScopedModel):
+    """Shared-ресурс компании. Таблица ``resources`` в базе flows."""
 
-    Используется для:
-    - Хранения shared ресурсов в БД
-    - Inline определения в FlowConfig
-    """
+    __database_alias__: ClassVar[str | None] = "flows"
 
-    resource_id: str = Field(..., description="Уникальный ID ресурса")
-    type: ResourceType = Field(..., description="Тип ресурса")
-    name: str | None = Field(default=None, description="Название для отображения")
-    description: str | None = Field(default=None, description="Описание ресурса")
-    config: JsonObject = Field(..., description="Конфигурация ресурса")
-    tags: list[str] = Field(default_factory=list, description="Теги для группировки")
-    permission: list[str] = Field(
+    class Meta:
+        is_table: bool = True
+        table_name: str = "resources"
+        unique_together: list[tuple[str, str]] = [("company_id", "resource_id")]
+
+    resource_id: str = DbField(min_length=1, db_index=True, description="Уникальный ID ресурса")
+    type: ResourceType = DbField(description="Тип ресурса")
+    config: JsonObject = DbField(db_type="JSONB", description="Конфигурация ресурса")
+    company_id: str = DbField(default="", db_index=True)
+    resource_row_id: str = DbField(default="", db_pk=True, db_type="TEXT")
+    name: str | None = DbField(default=None, description="Название для отображения")
+    description: str | None = DbField(default=None, description="Описание ресурса")
+    tags: list[str] = DbField(default_factory=list, description="Теги для группировки")
+    permission: list[str] = DbField(
         default_factory=list,
         description="Группы с доступом. Пустой список = company-visible (member компании)",
     )
-    created_at: datetime | None = Field(default=None)
-    updated_at: datetime | None = Field(default=None)
+    created_at: datetime | None = DbField(default=None)
+    updated_at: datetime | None = DbField(default=None)
 
     @field_validator("permission", mode="before")
     @classmethod
@@ -166,6 +172,45 @@ class ResourceDefinition(StrictBaseModel):
         if isinstance(v, str):
             return [v]
         return v
+
+    @classmethod
+    def row_id(cls, resource_id: str) -> str:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
+            raise ValueError("resource_id requires an active company")
+        if resource_id == "" or ":" in resource_id or ":" in ctx.active_company.company_id:
+            raise ValueError("resource_id and company_id must not contain ':'")
+        return f"{ctx.active_company.company_id}:{resource_id}"
+
+    @model_validator(mode="after")
+    def bind_company(self) -> Self:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            return self
+        company_id = ctx.active_company.company_id
+        if company_id == "":
+            raise ValueError("company_id is required")
+        if self.company_id == "":
+            self.company_id = company_id
+        elif self.company_id != company_id:
+            raise ValueError("company_id does not match the active company")
+        expected = type(self).row_id(self.resource_id)
+        if self.resource_row_id == "":
+            self.resource_row_id = expected
+        elif self.resource_row_id != expected:
+            raise ValueError("resource_row_id does not match company_id and resource_id")
+        return self
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        expected = type(self).row_id(self.resource_id)
+        if self.company_id == "" or self.resource_row_id != expected:
+            raise ValueError("resource_row_id does not match the active company")
+        now = datetime.now(timezone.utc)
+        if is_create and self.created_at is None:
+            self.created_at = now
+        self.updated_at = now
+        _ = update_fields
 
     def get_typed_config(self) -> ResourceConfigUnion:
         """Возвращает типизированный конфиг."""

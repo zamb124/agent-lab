@@ -7,7 +7,6 @@ import asyncio
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
 from core.context import require_context
 from core.flow_ui.document import FlowUIDocument
 from core.state import ExecutionState
@@ -70,13 +69,13 @@ def _lead_form_interface() -> FlowUIDocument:
     )
 
 
-async def _wait_state_response(session_id: str, *, needle: str) -> ExecutionState:
+async def _wait_state_response(session_id: str, *, needle: str, di) -> ExecutionState:
     for _ in range(80):
-        state = await get_container().workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         if state is not None and state.response and needle in str(state.response):
             return state
         await asyncio.sleep(0.25)
-    state = await get_container().workflow_runtime.get_state(session_id)
+    state = await di.workflow_runtime.get_state(session_id)
     raise AssertionError(f"response {needle!r} missing for {session_id}; state={state!r}")
 
 
@@ -85,13 +84,14 @@ async def test_ui_action_fields_become_state_and_state_artifact_follows_interfac
     client: AsyncClient,
     app: object,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     _ = require_context()
     flow_id = f"a2a_flow_ui_{unique_id}"
     context_id = f"ctx-a2a-{unique_id}"
     session_id = f"{flow_id}:{context_id}"
-    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE)
+    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE, di=di)
     try:
         task = await a2a_send(
             client,
@@ -106,7 +106,7 @@ async def test_ui_action_fields_become_state_and_state_artifact_follows_interfac
         assert task["contextId"] == context_id
         assert task["status"]["state"] == "TASK_STATE_COMPLETED", task
 
-        state = await _wait_state_response(session_id, needle="ECHO:")
+        state = await _wait_state_response(session_id, needle="ECHO:", di=di)
         assert state.name == f"Ann-{unique_id}"  # pyright: ignore[reportAttributeAccessIssue]
         assert state.email == "ann@example.com"  # pyright: ignore[reportAttributeAccessIssue]
         assert state.ui_action is not None
@@ -136,12 +136,13 @@ async def test_ui_action_rejects_unknown_field_and_missing_required(
     client: AsyncClient,
     app: object,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     _ = require_context()
     flow_id = f"a2a_flow_ui_reject_{unique_id}"
     context_id = f"ctx-reject-{unique_id}"
-    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE)
+    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE, di=di)
     try:
         unknown = await a2a_send_error(
             client,
@@ -164,7 +165,7 @@ async def test_ui_action_rejects_unknown_field_and_missing_required(
         )
         assert "required field 'name'" in str(missing_required), missing_required
 
-        assert await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}") is None
+        assert await di.workflow_runtime.get_state(f"{flow_id}:{context_id}") is None
     finally:
         await delete_flow(client, flow_id)
 
@@ -174,13 +175,14 @@ async def test_text_turn_after_ui_action_keeps_fields_in_state(
     client: AsyncClient,
     app: object,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     _ = require_context()
     flow_id = f"a2a_flow_ui_text_{unique_id}"
     context_id = f"ctx-text-{unique_id}"
     session_id = f"{flow_id}:{context_id}"
-    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE)
+    _ = await ensure_flow(flow_id=flow_id, interface=_lead_form_interface(), code=ECHO_FIELDS_CODE, di=di)
     try:
         _ = await a2a_send(
             client,
@@ -194,7 +196,7 @@ async def test_text_turn_after_ui_action_keeps_fields_in_state(
             flow_id=flow_id,
             message=text_message(context_id=context_id, text=f"hello-{unique_id}"),
         )
-        state = await _wait_state_response(session_id, needle=f"ECHO:hello-{unique_id}")
+        state = await _wait_state_response(session_id, needle=f"ECHO:hello-{unique_id}", di=di)
         assert state.name == "Ann"  # pyright: ignore[reportAttributeAccessIssue]
         assert state.ui_action is None
         assert state_from_task(follow_up)["name"] == "Ann"
@@ -231,6 +233,7 @@ async def test_ui_action_resumes_ask_user_on_the_same_task(
     unique_id: str,
     mock_llm_with_queue: object,
     sync_tools: object,
+    di,
 ) -> None:
     """ask_user → INPUT_REQUIRED; ответ формой (ui-action) продолжает тот же A2A Task."""
     _ = app
@@ -253,7 +256,7 @@ async def test_ui_action_resumes_ask_user_on_the_same_task(
         assert interrupted["status"]["state"] == "TASK_STATE_INPUT_REQUIRED", interrupted
         task_id = str(interrupted["id"])
 
-        state_after_interrupt = await get_container().workflow_runtime.get_state(session_id)
+        state_after_interrupt = await di.workflow_runtime.get_state(session_id)
         assert state_after_interrupt is not None
         assert state_after_interrupt.interrupt is not None
         assert state_after_interrupt.terminal_task_state == "input-required"
@@ -273,7 +276,7 @@ async def test_ui_action_resumes_ask_user_on_the_same_task(
         assert resumed["status"]["state"] == "TASK_STATE_COMPLETED", resumed
         assert "Hello, FlowUI!" in text_of(resumed, "response")
 
-        state = await get_container().workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         assert state is not None
         assert state.interrupt is None
         assert state.name == "FlowUI"  # pyright: ignore[reportAttributeAccessIssue]

@@ -8,7 +8,7 @@ from typing import cast, override
 
 import pytest
 
-from apps.flows.src.container import get_container
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FrozenStateFieldError
 from core.flow_ui.document import FlowUIMarkdownText
@@ -80,17 +80,17 @@ class _DummyNode(BaseNode):
         self._copy_state_back(source, target, full_trust=full_trust)
 
 
-def test_apply_output_mapping_rejects_frozen_key(app) -> None:
+def test_apply_output_mapping_rejects_frozen_key(app, di) -> None:
     _ = app
-    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
+    node = _DummyNode("n1", config={"type": "test_dummy"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)  # pyright: ignore[reportArgumentType]
     state = _minimal_state()
     with pytest.raises(FrozenStateFieldError):
         node.apply_output_mapping_for_test(state, {"session_id": "x:y"})
 
 
-def test_copy_state_back_preserves_target_identity_when_not_full_trust(app) -> None:
+def test_copy_state_back_preserves_target_identity_when_not_full_trust(app, di) -> None:
     _ = app
-    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
+    node = _DummyNode("n1", config={"type": "test_dummy"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)  # pyright: ignore[reportArgumentType]
     tgt = _minimal_state()
     src_dict = tgt.model_dump(exclude_none=False)
     src_dict["task_id"] = "forged"
@@ -116,10 +116,10 @@ def test_runtime_node_merge_propagates_handback_terminal_state() -> None:
     assert not should_skip_field_on_runtime_node_state_merge("terminal_task_state")
 
 
-def test_copy_state_back_forwards_pending_ui_events(app) -> None:
+def test_copy_state_back_forwards_pending_ui_events(app, di) -> None:
     """Очередь ui-событий — PrivateAttr; copy_state_back переносит её в целевой state и очищает исходный."""
     _ = app
-    node = _DummyNode("n1", config={"type": "test_dummy"}, container=get_container())  # pyright: ignore[reportArgumentType]
+    node = _DummyNode("n1", config={"type": "test_dummy"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)  # pyright: ignore[reportArgumentType]
     target = _minimal_state()
     source = target.runtime_copy()
     render = render_conversation(source, [FlowUIMarkdownText(block_id="card", markdown="preview")])

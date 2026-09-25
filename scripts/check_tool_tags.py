@@ -27,6 +27,7 @@ TOOL_TAG_WHITELIST: frozenset[str] = frozenset(
         "flows",
         "device",
         "text",
+        "stock",
         "misc",
     }
 )

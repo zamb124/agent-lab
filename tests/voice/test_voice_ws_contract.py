@@ -32,9 +32,9 @@ from starlette.websockets import WebSocketDisconnect
 
 
 @contextmanager
-def _websocket_session(client: TestClient, url: str):
+def _websocket_session(client: TestClient, url: str, cookies: dict[str, str]):
     """Starlette TestClient: при выходе из сессии fut.result() после cancel даёт CancelledError."""
-    cm = client.websocket_connect(url)
+    cm = client.websocket_connect(url, cookies=cookies)
     ws = cm.__enter__()
     try:
         yield ws
@@ -44,13 +44,20 @@ def _websocket_session(client: TestClient, url: str):
 
 
 def _ws_url(session_id: str) -> str:
-    return f"/voice/api/ws/session/{session_id}?company_id=test-company"
+    return (
+        f"/voice/api/ws/session/{session_id}?company_id=system"
+        "&stt_provider_name=mock&tts_provider_name=mock&vad_provider_name=mock"
+    )
 
 
 def _find_text_frame(ws, predicate, *, max_frames: int = 80) -> dict[str, object] | None:
     """Читает фреймы и возвращает первый text-JSON, удовлетворяющий predicate."""
     for _ in range(max_frames):
         msg = ws.receive()
+        if msg.get("type") in {"websocket.close", "websocket.disconnect"}:
+            raise AssertionError(
+                f"voice websocket closed: code={msg.get('code')} reason={msg.get('reason')}"
+            )
         text = msg.get("text")
         if text is None:
             continue
@@ -71,7 +78,9 @@ def test_voice_ws_requires_company_id(voice_app, unique_id: str) -> None:
 
 
 @pytest.mark.timeout(30)
-def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
+def test_voice_ws_full_text_frame_contract(
+    voice_app, unique_id: str, auth_token_system: str
+) -> None:
     """Полный контракт text/binary фреймов uplink и downlink.
 
     Тест намеренно объединяет несколько проверок: каждая отдельная
@@ -81,7 +90,9 @@ def test_voice_ws_full_text_frame_contract(voice_app, unique_id: str) -> None:
     """
     with TestClient(voice_app) as client:
         sid = f"contract-{unique_id}"
-        with _websocket_session(client, _ws_url(sid)) as ws:
+        with _websocket_session(
+            client, _ws_url(sid), {"auth_token": auth_token_system}
+        ) as ws:
             media_cfg = _find_text_frame(ws, lambda f: f.get("type") == "media_config")
             assert media_cfg is not None
             mime = media_cfg.get("mime")

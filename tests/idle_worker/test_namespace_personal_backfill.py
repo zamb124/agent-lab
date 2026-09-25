@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.idle_worker.container import reset_container, set_container
 from apps.idle_worker.tasks.namespace_personal_backfill_tasks import (
     namespace_personal_backfill,
 )
@@ -16,17 +15,10 @@ from core.namespace import personal_namespace_name
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
-@pytest.fixture(autouse=True)
-def _bind_idle_container(frontend_container):
-    set_container(frontend_container)
-    yield
-    reset_container()
-
-
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_namespace_personal_backfill_creates_missing_personal(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     company_id = f"bfco_{unique_id}"
@@ -47,8 +39,8 @@ async def test_namespace_personal_backfill_creates_missing_personal(
         owner_user_id=user_id,
         members={user_id: ["member"]},
     )
-    await frontend_container.user_repository.set(user)
-    await frontend_container.company_repository.set(company)
+    await User.set(user)
+    await Company.set(company)
 
     set_context(
         Context(
@@ -59,14 +51,14 @@ async def test_namespace_personal_backfill_creates_missing_personal(
         )
     )
     try:
-        before = await frontend_container.namespace_service.get(
+        before = await frontend_di.namespace_service.get(
             personal_namespace_name(user_id)
         )
         assert before is None
     finally:
         clear_context()
 
-    result = await namespace_personal_backfill(company_id=company_id)
+    result = await namespace_personal_backfill(company_id=company_id, di=frontend_di)
     assert result["ensured"] >= 1
     assert result["companies"] == 1
 
@@ -79,7 +71,7 @@ async def test_namespace_personal_backfill_creates_missing_personal(
         )
     )
     try:
-        personal = await frontend_container.namespace_service.get(
+        personal = await frontend_di.namespace_service.get(
             personal_namespace_name(user_id)
         )
         assert personal is not None

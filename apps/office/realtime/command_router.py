@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.office.container import OfficeContainer, get_office_container
+from apps.office.di import OfficeDi
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
     OfficeDocumentFromFileRequest,
@@ -119,14 +119,11 @@ from apps.office.realtime.operations import (
 )
 from core.data_tables.models import DataTableCreateRequest
 from core.documents.placement import DocsEnsurePathRequest, DocsPlacement
-from core.identity.team_operations import op_team_members_list
-from core.logging import get_logger
+from core.identity.team_operations import TEAM_MEMBERS_LIST_OPERATION
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
+OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeDi]] = {
     "office/integration/status_requested": Operation(
         payload_model=EmptyPayload, fn=op_integration_status
     ),
@@ -139,9 +136,7 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
     "office/namespaces/create_requested": Operation(
         payload_model=OfficeNamespaceCreateRequest, fn=op_namespaces_create
     ),
-    "office/company_members/list_requested": Operation(
-        payload_model=EmptyPayload, fn=op_team_members_list
-    ),
+    "office/company_members/list_requested": TEAM_MEMBERS_LIST_OPERATION,
     "office/catalogs/list_requested": Operation(
         payload_model=EmptyPayload, fn=op_catalogs_list
     ),
@@ -335,8 +330,3 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeContainer]] = {
         payload_model=OfficeDataTableImportPayload, fn=op_data_tables_import
     ),
 }
-
-
-def register_office_ws_commands() -> None:
-    register_service_operations(OFFICE_OPERATIONS, get_office_container)
-    logger.info("office.documents.ws.command.handlers", OFFICE_OPERATIONS_count=len(OFFICE_OPERATIONS))

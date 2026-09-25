@@ -16,46 +16,24 @@ _crm_summary_worker_settings = CRMSettings.model_validate(
 )
 setup_worker_logging_early("crm_summary_worker", logging_config=_crm_summary_worker_settings.logging)
 set_settings(_crm_summary_worker_settings)
-_segment = resolve_files_route_segment("crm_summary_worker")
-set_files_route_segment(_segment)
+set_files_route_segment(resolve_files_route_segment("crm_summary_worker"))
 
 import importlib
 
-from taskiq import TaskiqState
+from apps.crm_worker.di import CrmWorkerDi
+from apps.worker_manifest import wire_worker
+from core.tasks.worker_bootstrap import build_worker
 
-from apps.crm.container import get_crm_container
-from apps.platform_tasks.wiring import wire_worker
-from core.billing import set_billing_service
-from core.files.processors import initialize_default_processors
-from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
-
-# side-effect: register CRM platform event catalog types for this process
-_ = importlib.import_module("apps.crm.events")
 _ = importlib.import_module("apps.crm.events")
 
 broker = wire_worker("crm_summary")
-
-
-async def _startup(state: TaskiqState) -> None:
-    container = get_crm_container()
-    container.bind_files_route_segment(_segment)
-    state.container = container
-
-    initialize_default_processors(container.file_repository)
-    set_billing_service(container.billing_service)
-    init_worker_tracing("crm_summary_worker", container)
-
-
-async def _shutdown(state: TaskiqState) -> None:
-    _ = state
-
-
 worker_app = build_worker(
     broker,
     service_name="crm_summary_worker",
     queue="crm_summary",
-    on_startup=_startup,
-    on_shutdown=_shutdown,
+    settings=_crm_summary_worker_settings,
+    di_class=CrmWorkerDi,
+    database="crm_url",
 )
 
 __all__ = ["worker_app"]

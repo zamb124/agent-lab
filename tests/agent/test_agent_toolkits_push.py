@@ -28,14 +28,14 @@ async def _wait_pubsub_message(pubsub, *, timeout_seconds: float) -> dict[str, o
 async def test_manage_create_publishes_toolkits_updated(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
+    di,
     unique_id: str,
 ) -> None:
     from tests.agent._helpers import company_id_from_auth_token
 
     auth_token = auth_headers["Authorization"].removeprefix("Bearer ").strip()
     company_id = company_id_from_auth_token(auth_token)
-    pubsub = await container.redis_client.open_pubsub()
+    pubsub = await di.redis_client.open_pubsub()
     await pubsub.subscribe(TUNNEL_TOOLKITS_UPDATED_CHANNEL)
     toolkit_id = f"tk_push_{unique_id}"
     try:

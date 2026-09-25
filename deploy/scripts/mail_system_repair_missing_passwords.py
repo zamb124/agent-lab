@@ -26,60 +26,73 @@ logger = get_logger(__name__)
 
 
 async def _repair() -> int:
-    from apps.frontend.container import get_frontend_container
+    from apps.frontend.di import FrontendDi
+    from core.config import get_settings
+    from core.di import open_di
+    from core.di.kit import ProcessIdentity
+    from core.files.urls import resolve_files_route_segment
 
-    container = get_frontend_container()
-    mail_service = container.mail_service
-    connection = await mail_service.get_connection(SYSTEM_COMPANY_ID)
-    if connection is None:
-        raise RuntimeError("company_mail_connections: system connection missing")
-    bindings = await mail_service._binding_repository.list_by_company(SYSTEM_COMPANY_ID)
-    port = mail_service.port_for_connection(connection)
-    repaired = 0
-    skipped = 0
-    for binding in bindings:
-        if binding.password_encrypted and binding.password_encrypted.strip():
-            skipped += 1
-            continue
-        password = secrets.token_urlsafe(24)
-        spec = MailboxEnsureSpec(
-            mail_domain=connection.mail_domain,
-            local_part=binding.local_part,
-            password=password,
-        )
-        _ = await port.ensure_mailbox(spec)
-        if hasattr(port, "set_mailbox_password"):
-            await port.set_mailbox_password(spec)
-        elif hasattr(port, "_call"):
-            email_address = f"{binding.local_part}@{connection.mail_domain}".lower()
-            _ = await port._call(
-                "email.edit",
-                {
-                    "elid": email_address,
-                    "passwd": password,
-                    "confirm": password,
-                    "sok": "ok",
-                },
+    settings = get_settings()
+    async with open_di(
+        FrontendDi,
+        settings=settings,
+        identity=ProcessIdentity(
+            service_name="frontend",
+            files_route_segment=resolve_files_route_segment("frontend"),
+        ),
+        database="shared_url",
+    ) as di:
+        mail_service = di.mail_service
+        connection = await mail_service.get_connection(SYSTEM_COMPANY_ID)
+        if connection is None:
+            raise RuntimeError("company_mail_connections: system connection missing")
+        bindings = await mail_service._binding_repository.list_by_company(SYSTEM_COMPANY_ID)
+        port = mail_service.port_for_connection(connection)
+        repaired = 0
+        skipped = 0
+        for binding in bindings:
+            if binding.password_encrypted and binding.password_encrypted.strip():
+                skipped += 1
+                continue
+            password = secrets.token_urlsafe(24)
+            spec = MailboxEnsureSpec(
+                mail_domain=connection.mail_domain,
+                local_part=binding.local_part,
+                password=password,
             )
-        else:
-            raise RuntimeError(f"port cannot set mailbox password: {type(port)!r}")
-        updated = binding.model_copy(
-            update={"password_encrypted": encrypt_secret(password)},
-        )
-        _ = await mail_service._binding_repository.upsert(updated)
-        repaired += 1
+            _ = await port.ensure_mailbox(spec)
+            if hasattr(port, "set_mailbox_password"):
+                await port.set_mailbox_password(spec)
+            elif hasattr(port, "_call"):
+                email_address = f"{binding.local_part}@{connection.mail_domain}".lower()
+                _ = await port._call(
+                    "email.edit",
+                    {
+                        "elid": email_address,
+                        "passwd": password,
+                        "confirm": password,
+                        "sok": "ok",
+                    },
+                )
+            else:
+                raise RuntimeError(f"port cannot set mailbox password: {type(port)!r}")
+            updated = binding.model_copy(
+                update={"password_encrypted": encrypt_secret(password)},
+            )
+            _ = await mail_service._binding_repository.upsert(updated)
+            repaired += 1
+            logger.info(
+                "mail.system.password_repaired",
+                email_address=binding.email_address,
+                mailbox_binding_id=binding.mailbox_binding_id,
+            )
         logger.info(
-            "mail.system.password_repaired",
-            email_address=binding.email_address,
-            mailbox_binding_id=binding.mailbox_binding_id,
+            "mail.system.password_repair_done",
+            repaired=repaired,
+            skipped=skipped,
+            total=len(bindings),
         )
-    logger.info(
-        "mail.system.password_repair_done",
-        repaired=repaired,
-        skipped=skipped,
-        total=len(bindings),
-    )
-    return repaired
+        return repaired
 
 
 def main() -> None:

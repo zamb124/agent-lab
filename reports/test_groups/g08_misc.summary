@@ -1,0 +1,4 @@
+GROUP g08_misc rc=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 381 passed, 4 skipped, 2 warnings in 41.50s ==================

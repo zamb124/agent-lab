@@ -8,7 +8,7 @@ import { marketingProductPageStyles } from '@platform/lib/styles/shared/marketin
 import '@platform/lib/components/platform-button.js';
 import '../landing/landing-header.js';
 import '../landing/landing-footer.js';
-import { applyPublicDocumentMeta } from '../../utils/public-document-meta.js';
+import { applyPublicDocumentMeta } from '../../_helpers/public-document-meta.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 
 /** @typedef {'hero' | 'gallery' | 'features' | 'steps' | 'benefits' | 'use-cases' | 'faq' | 'cta'} ProductLandingSection */

@@ -7,7 +7,6 @@ from contextlib import contextmanager
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from apps.capability_gateway.services.rag_capabilities import RAG_CLIENT_METHOD_NAMES
 from core.capabilities import (
     CapabilityCallRequest,
@@ -74,9 +73,8 @@ def _execution_context(*, namespace: str) -> CapabilityExecutionContext:
     )
 
 
-async def test_rag_capabilities_cover_every_client_method() -> None:
-    container = get_capability_gateway_container()
-    manifest = await container.capability_registry.manifest()
+async def test_rag_capabilities_cover_every_client_method(capability_gateway_di) -> None:
+    manifest = await capability_gateway_di.capability_registry.manifest()
     names = {item.name for item in manifest.capabilities}
     expected = {f"rag.{method}" for method in RAG_CLIENT_METHOD_NAMES}
     assert expected <= names
@@ -90,17 +88,16 @@ async def test_rag_capabilities_cover_every_client_method() -> None:
 
 
 async def test_rag_capability_create_namespace_and_ingest_text(
-    frontend_container,
+    frontend_di,
     unique_id: str,
-) -> None:
-    company = await frontend_container.company_repository.get("system")
+capability_gateway_di) -> None:
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     namespace = f"rag_cap_{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
-    container = get_capability_gateway_container()
-    registry = container.capability_registry
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
+    registry = capability_gateway_di.capability_registry
     context = _execution_context(namespace=namespace)
 
     with _namespace_context(user=user, company=company, namespace=namespace):

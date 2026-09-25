@@ -266,7 +266,7 @@ def test_llm_provider_block_rejects_unknown_slug():
     from core.config.llm_openai_compat import llm_provider_block
     from core.config.models import LLMConfig
 
-    with pytest.raises(ValueError, match="не поддержан для OpenAI-совместимого API"):
+    with pytest.raises(ValueError, match="is not supported for the OpenAI-compatible API"):
         llm_provider_block(LLMConfig(), "cloudflare")
 
 
@@ -403,5 +403,5 @@ def test_retry_after_ttl_seconds_empty_header_raises():
         headers={"Retry-After": "  "},
         request=httpx.Request("POST", "https://example.test/v1/chat/completions"),
     )
-    with pytest.raises(ValueError, match="Retry-After header пустой"):
+    with pytest.raises(ValueError, match="Retry-After header is empty"):
         retry_after_ttl_seconds(response)

@@ -41,7 +41,7 @@ import '@platform/lib/components/fields/platform-field.js';
 import { listAvailableUiIcons } from '@platform/lib/utils/file-icons.js';
 import './schema-field-builder.js';
 import { buildSchemaFromRows } from './schema-field-builder.js';
-import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
+import { entityTypeNoteSubtreeLocked } from '../_helpers/entity-type-note-subtree-lock.js';
 
 const ENTITY_TYPE_UI_ICON_NAMES = Object.freeze(listAvailableUiIcons());
 

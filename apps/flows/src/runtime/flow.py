@@ -19,7 +19,7 @@ import asyncio
 import time
 from collections.abc import Mapping, Sequence
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import FlowFactoryProtocol, ToolRegistryProtocol
 from apps.flows.src.durable_execution import (
     BreakpointHitPayload,
     EdgeActivatedPayload,
@@ -29,7 +29,6 @@ from apps.flows.src.durable_execution import (
     NodeFailedPayload,
     NodeScheduledPayload,
     NodeWriteRecordedPayload,
-    SideEffectPolicy,
     SuperstepCommittedPayload,
     SuperstepStartedPayload,
     WorkflowAppendResult,
@@ -52,6 +51,10 @@ from apps.flows.src.runtime.exceptions import (
     EdgeConditionError,
     FlowInterrupt,
 )
+from apps.flows.src.runtime.execution_context import (
+    FlowExecutionContext,
+    execution_context_for,
+)
 from apps.flows.src.runtime.flow_interface_context import flow_interface_scope
 from apps.flows.src.runtime.state_diff import (
     build_canvas_result_preview,
@@ -62,6 +65,7 @@ from apps.flows.src.runtime.state_diff import (
 from apps.flows.src.state.cancellation import FlowCancelled, check_cancellation
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming import Emitter
+from apps.flows.src.streaming.emitter import EmitterFactory
 from core.errors import (
     FlowInfiniteLoopError,
     FlowPrematureCompletionError,
@@ -83,10 +87,9 @@ from core.types import (
     parse_json_object,
     require_json_array,
     require_json_object,
-    require_json_value,
 )
 
-from .nodes import BaseNode, create_node
+from .nodes import BaseNode, NodeConstructor, create_node
 
 logger = get_logger(__name__)
 
@@ -119,7 +122,8 @@ class Flow:
         config: JsonObject | None = None,
         *,
         interface: FlowUIDocument,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        emitter_factory: EmitterFactory,
     ):
         self.flow_id: str = flow_id
         self.interface: FlowUIDocument = interface
@@ -130,9 +134,8 @@ class Flow:
         self.tags: list[str] = tags or []
         self.variables: JsonObject = variables or {}
         self.config: JsonObject = config or {}  # Полный inline FlowConfig
-        self.container: FlowRuntimeContainer = container
-        for node in nodes.values():
-            node.container = self.container
+        self.execution: FlowExecutionContext = execution
+        self.emitter_factory: EmitterFactory = emitter_factory
 
         self.edges: list[Edge] = [Edge.model_validate(edge) for edge in edges]
 
@@ -150,13 +153,8 @@ class Flow:
         event_type: WorkflowEventType = WorkflowEventType.state_projection_committed,
         payload: WorkflowEventPayload | None = None,
     ) -> WorkflowAppendResult:
-        if state.session_flow_id != self.flow_id:
-            raise RuntimeError(
-                f"Flow {self.flow_id!r} cannot checkpoint session for flow "
-                + f"{state.session_flow_id!r}"
-            )
-        return await self.container.workflow_runtime.record_state_event(
-            state.session_id,
+        return await self.execution.checkpoint_state(
+            self.flow_id,
             state,
             event_type=event_type,
             payload=payload,
@@ -168,23 +166,7 @@ class Flow:
     ) -> list[WorkflowAppendResult]:
         if not events:
             return []
-        for event in events:
-            state = (
-                ExecutionState.model_validate(event.state)
-                if isinstance(event.state, dict)
-                else event.state
-            )
-            if state.session_flow_id != self.flow_id:
-                raise RuntimeError(
-                    f"Flow {self.flow_id!r} cannot checkpoint session for flow "
-                    + f"{state.session_flow_id!r}"
-                )
-        return await self.container.workflow_runtime.record_state_events(
-            events[0].state.session_id
-            if isinstance(events[0].state, ExecutionState)
-            else str(events[0].state["session_id"]),
-            events,
-        )
+        return await self.execution.checkpoint_state_events(self.flow_id, events)
 
     @staticmethod
     def _clone_state(state: ExecutionState) -> ExecutionState:
@@ -250,9 +232,7 @@ class Flow:
                 f"Flow {self.flow_id!r} requires session_id with the same flow id, "
                 + f"got {state.session_id!r}"
             )
-        position = await self.container.workflow_runtime.get_active_execution_position(
-            state.session_id
-        )
+        position = await self.execution.active_position(state.session_id)
         if position is None:
             raise RuntimeError(
                 f"Flow {self.flow_id!r} requires durable workflow instance "
@@ -444,7 +424,7 @@ class Flow:
         iterations = 0
         max_graph_iterations = get_graph_max_iterations()
 
-        emitter = await Emitter.create_ensured(self.container, state)
+        emitter = await self.emitter_factory.create(state)
 
         trace_ctx = None
         if is_tracing_enabled():
@@ -1244,53 +1224,17 @@ class Flow:
             to_node=to_node,
             input_payload=input_payload,
         )
-        runtime = self.container.workflow_runtime
-        completed = await runtime.record_activity_scheduled(
+        return await self.execution.activities.execute_code_condition(
+            activity_id=activity_id,
             session_id=state.session_id,
-            activity_id=activity_id,
-            activity_type="code_condition",
+            from_node=from_node,
             input_payload=input_payload,
-            node_id=from_node,
-            idempotency_key=activity_id,
-            side_effect_policy=SideEffectPolicy.idempotent,
+            code=code,
+            language=language,
+            entrypoint=entrypoint,
+            state=state,
+            code_runners=self.execution.code_runners,
         )
-        if completed is not None:
-            result = require_json_value(
-                completed.get("result"),
-                "edge.code_condition.result",
-            )
-            return bool(result)
-
-        started = await runtime.record_activity_started(activity_id=activity_id)
-        if not started:
-            raise RuntimeError(f"Failed to mark code condition activity as started: {activity_id!r}")
-
-        condition_state = state.model_copy(deep=True)
-        runner = self.container.get_code_runner(language=language)
-        try:
-            result = await runner.execute_tool(code, {}, condition_state, entrypoint=entrypoint)
-        except Exception as exc:
-            completed_failed = await runtime.record_activity_completed(
-                activity_id=activity_id,
-                error=str(exc),
-            )
-            if not completed_failed:
-                raise RuntimeError(
-                    f"Failed to mark code condition activity as failed: {activity_id!r}"
-                ) from exc
-            raise ValueError(
-                f"Edge code condition: execution error language={language!r}: {exc}"
-            ) from exc
-        condition_result = bool(result)
-        completed_ok = await runtime.record_activity_completed(
-            activity_id=activity_id,
-            result_json={"result": condition_result},
-        )
-        if not completed_ok:
-            raise RuntimeError(
-                f"Failed to mark code condition activity as completed: {activity_id!r}"
-            )
-        return condition_result
 
     async def _durable_edge_activity_id(
         self,
@@ -1334,7 +1278,9 @@ class Flow:
         config: Mapping[str, object],
         variables: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        node_constructor: NodeConstructor,
+        tool_registry: ToolRegistryProtocol,
+        flow_factory: FlowFactoryProtocol,
     ) -> "Flow":
         """
         Создаёт flow из FlowConfig.
@@ -1363,7 +1309,9 @@ class Flow:
             nodes[node_id] = await create_node(
                 node_id,
                 require_json_object(node_config, f"flow_config.nodes.{node_id}"),
-                container=container,
+                node_constructor=node_constructor,
+                tool_registry=tool_registry,
+                flow_factory=flow_factory,
             )
 
         # variables: pre-resolved runtime payload > persisted resolved_variables > authored variables из конфига (по приоритету).
@@ -1423,5 +1371,6 @@ class Flow:
             interface=FlowUIDocument.model_validate(
                 require_json_object(config_json.get("interface"), "flow_config.interface")
             ),
-            container=container,
+            execution=execution_context_for(node_constructor.workflow_runtime),
+            emitter_factory=node_constructor.emitter_factory,
         )

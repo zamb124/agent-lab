@@ -73,26 +73,26 @@ async def _ui_e2e_worker_env() -> None:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_system(frontend_container) -> str:
+async def auth_token_system(frontend_di) -> str:
     """Owner worker-компании (имя фикстуры сохранено для совместимости с E2E)."""
-    return await create_ui_e2e_owner_token(frontend_container)
+    return await create_ui_e2e_owner_token(frontend_di)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_system_user2(frontend_container, auth_token_system: str) -> str:
+async def auth_token_system_user2(frontend_di, auth_token_system: str) -> str:
     _ = auth_token_system
-    return await create_ui_e2e_member_token(frontend_container)
+    return await create_ui_e2e_member_token(frontend_di)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_company2(frontend_container) -> str:
-    return await create_ui_e2e_company2_owner_token(frontend_container)
+async def auth_token_company2(frontend_di) -> str:
+    return await create_ui_e2e_company2_owner_token(frontend_di)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def auth_token_company2_user2(frontend_container, auth_token_company2: str) -> str:
+async def auth_token_company2_user2(frontend_di, auth_token_company2: str) -> str:
     _ = auth_token_company2
-    return await create_ui_e2e_company2_member_token(frontend_container)
+    return await create_ui_e2e_company2_member_token(frontend_di)
 
 
 @pytest_asyncio.fixture
@@ -123,13 +123,13 @@ async def _ui_e2e_identities_ready(
 
 @pytest_asyncio.fixture(scope="session")
 async def _ui_subdomain_mappings(
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     auth_token_company2: str,
 ) -> None:
     """Субдомены worker-компаний для Lit-SPA с frontend-контекстом."""
     _ = auth_token_system, auth_token_company2
-    await ensure_ui_subdomain_mappings(frontend_container)
+    await ensure_ui_subdomain_mappings(frontend_di)
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -139,10 +139,11 @@ async def _ui_e2e_company_resources(
     flows_service,
     taskiq_worker,
     crm_service,
+    di,
+    crm_di,
 ) -> None:
     """Public flows/tools/Lara + CRM types для worker-компаний (не shared system)."""
     _ = flows_service, taskiq_worker, crm_service
-    from apps.crm.container import get_crm_container
     from apps.flows.src.tasks.company_init_tasks import init_company_resources
     from tests.sync.api._helpers import _temporary_company_context
     from tests.ui.e2e_worker import (
@@ -160,13 +161,14 @@ async def _ui_e2e_company_resources(
             company_id=company_id,
             company_name=f"UI E2E {company_id}",
             subdomain=subdomain,
+            di=di,
         )
         if init_result.get("status") != "completed":
             raise AssertionError(
                 f"init_company_resources failed for {company_id}: {init_result}"
             )
         with _temporary_company_context(company_id, subdomain=subdomain):
-            await get_crm_container().company_init_service.initialize_company(company_id)
+            await crm_di.company_init_service.initialize_company(company_id)
 
 
 async def _new_browser_context(

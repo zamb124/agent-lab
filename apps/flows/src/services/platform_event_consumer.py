@@ -17,12 +17,15 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import DurableWorkflowRuntime
 from apps.flows.src.events import FLOWS_HITL_TURN_APPENDED
 from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
+from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from apps.flows.src.triggers.handlers.platform_event import (
     dispatch_platform_event_triggers,
 )
+from core.authz.service import AuthzService
+from core.clients.redis_client import RedisClient
 from core.events import PlatformEvent, PlatformEventGroupConsumer
 from core.identity.flow_employee import is_flow_employee_user_id
 from core.logging import get_logger
@@ -75,10 +78,16 @@ class PlatformEventConsumerService:
     def __init__(
         self,
         *,
-        container: FlowRuntimeContainer,
+        redis_client: RedisClient,
+        workflow_runtime: DurableWorkflowRuntime,
+        authz_service: AuthzService,
+        hitl_work_item_service: HitlWorkItemService,
         employee_inbox_service: EmployeeInboxService,
     ) -> None:
-        self._container: FlowRuntimeContainer = container
+        self._redis_client: RedisClient = redis_client
+        self._workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self._authz_service: AuthzService = authz_service
+        self._hitl_work_item_service: HitlWorkItemService = hitl_work_item_service
         self._employee_inbox: EmployeeInboxService = employee_inbox_service
 
     def build_group_consumer(self, *, consumer_name: str) -> PlatformEventGroupConsumer:
@@ -96,7 +105,9 @@ class PlatformEventConsumerService:
         elif event.type == WORK_ITEM_COMPLETED:
             await self._route_work_item_completed(event)
         fired = await dispatch_platform_event_triggers(
-            container=self._container,
+            redis_client=self._redis_client,
+            workflow_runtime=self._workflow_runtime,
+            authz_service=self._authz_service,
             event=event,
         )
         if fired:
@@ -218,7 +229,7 @@ class PlatformEventConsumerService:
             if not hook.binding:
                 continue
             try:
-                await self._container.hitl_work_item_service.resume_from_completion(
+                await self._hitl_work_item_service.resume_from_completion(
                     work_item_id=item.work_item_id,
                     binding=hook.binding,
                     resolution=resolution,

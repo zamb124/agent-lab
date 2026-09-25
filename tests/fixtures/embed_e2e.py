@@ -10,8 +10,7 @@ from core.utils.tokens import get_token_service
 
 
 @pytest_asyncio.fixture
-async def embed_test_auth(frontend_container, unique_id):
-    from apps.flows.src.container import get_container
+async def embed_test_auth(frontend_di, di, unique_id):
     from apps.flows.src.models.flow_config import Edge, FlowConfig
 
     company_id = f"test_company_{unique_id}"
@@ -20,7 +19,7 @@ async def embed_test_auth(frontend_container, unique_id):
         name="Test Company",
         owner_user_id="test_user",
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
 
     user_id = f"test_user_{unique_id}"
     user = User(
@@ -30,12 +29,11 @@ async def embed_test_auth(frontend_container, unique_id):
         companies={company_id: ["admin"]},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     from tests.fixtures.auth import set_test_company_member_roles
 
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["admin"],
@@ -49,7 +47,6 @@ async def embed_test_auth(frontend_container, unique_id):
             channel="test",
         )
     )
-    flows_container = get_container()
     flow_id = f"test_agent_{unique_id}"
     agent = FlowConfig(
         flow_id=flow_id,
@@ -68,8 +65,8 @@ async def embed_test_auth(frontend_container, unique_id):
         },
         edges=[Edge(from_node="main", to_node=None)],
     )
-    await flows_container.flow_repository.set(agent)
-    await flows_container.flow_access_service.sync_flow_saved(
+    await FlowConfig.create_version(agent)
+    await di.flow_access_service.sync_flow_saved(
         agent,
         company_id=company_id,
         owner_user_id=user_id,
@@ -87,8 +84,8 @@ async def embed_test_auth(frontend_container, unique_id):
             channel="test",
         )
     )
-    await flows_container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id=company_id, branch_ids=[]
     )
-    await flows_container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     clear_context()

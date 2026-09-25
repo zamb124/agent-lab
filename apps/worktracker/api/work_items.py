@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.worktracker.dependencies import ContainerDep
+from apps.worktracker.di import Di
 from apps.worktracker.realtime.operations import (
     WorkItemAssignPayload,
     WorkItemCommentPayload,
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/work-items", tags=["work-items"])
 
 @router.get("", response_model=OffsetPage[WorkItem])
 async def list_work_items(
-    container: ContainerDep,
+    di: Di,
     board_id: Annotated[str | None, Query()] = None,
     namespace: Annotated[str | None, Query()] = None,
     kind: Annotated[WorkItemKind | None, Query()] = None,
@@ -78,38 +78,38 @@ async def list_work_items(
             offset=offset,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/mine/summary", response_model=WorkItemMineSummary)
-async def mine_work_items_summary(container: ContainerDep) -> WorkItemMineSummary:
+async def mine_work_items_summary(di: Di) -> WorkItemMineSummary:
     return await op_work_items_mine_summary(
         WorkItemsMineSummaryPayload(),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{work_item_id}", response_model=WorkItem)
-async def get_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+async def get_work_item(di: Di, work_item_id: str) -> WorkItem:
     return await op_work_items_get(
         WorkItemIdPayload(work_item_id=work_item_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("", response_model=WorkItem, status_code=201)
-async def create_work_item(container: ContainerDep, body: WorkItemCreateRequest) -> WorkItem:
+async def create_work_item(di: Di, body: WorkItemCreateRequest) -> WorkItem:
     return await op_work_items_create(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.patch("/{work_item_id}", response_model=WorkItem)
 async def update_work_item(
-    container: ContainerDep, work_item_id: str, body: WorkItemUpdateRequest
+    di: Di, work_item_id: str, body: WorkItemUpdateRequest
 ) -> WorkItem:
     return await op_work_items_update(
         WorkItemUpdatePayload(
@@ -124,24 +124,24 @@ async def update_work_item(
             attachments=body.attachments,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/assign", response_model=WorkItem)
 async def assign_work_item(
-    container: ContainerDep, work_item_id: str, body: WorkItemAssignRequest
+    di: Di, work_item_id: str, body: WorkItemAssignRequest
 ) -> WorkItem:
     return await op_work_items_assign(
         WorkItemAssignPayload(work_item_id=work_item_id, assignment=body.assignment),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/move", response_model=WorkItem)
 async def move_work_item(
-    container: ContainerDep, work_item_id: str, body: WorkItemMoveRequest
+    di: Di, work_item_id: str, body: WorkItemMoveRequest
 ) -> WorkItem:
     return await op_work_items_move(
         WorkItemMovePayload(
@@ -150,22 +150,22 @@ async def move_work_item(
             state=body.state,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/claim", response_model=WorkItem)
-async def claim_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+async def claim_work_item(di: Di, work_item_id: str) -> WorkItem:
     return await op_work_items_claim(
         WorkItemIdPayload(work_item_id=work_item_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/comments", response_model=WorkItemComment, status_code=201)
 async def add_comment(
-    container: ContainerDep, work_item_id: str, body: WorkItemCommentRequest
+    di: Di, work_item_id: str, body: WorkItemCommentRequest
 ) -> WorkItemComment:
     return await op_work_items_comment(
         WorkItemCommentPayload(
@@ -174,22 +174,22 @@ async def add_comment(
             files=body.files,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{work_item_id}/comments", response_model=WorkItemCommentsList)
-async def list_comments(container: ContainerDep, work_item_id: str) -> WorkItemCommentsList:
+async def list_comments(di: Di, work_item_id: str) -> WorkItemCommentsList:
     return await op_work_items_comments_list(
         WorkItemIdPayload(work_item_id=work_item_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/complete", response_model=WorkItem)
 async def complete_work_item(
-    container: ContainerDep, work_item_id: str, body: WorkItemCompleteRequest
+    di: Di, work_item_id: str, body: WorkItemCompleteRequest
 ) -> WorkItem:
     return await op_work_items_complete(
         WorkItemCompletePayload(
@@ -199,14 +199,14 @@ async def complete_work_item(
             terminal_state=body.terminal_state,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/cancel", response_model=WorkItem)
-async def cancel_work_item(container: ContainerDep, work_item_id: str) -> WorkItem:
+async def cancel_work_item(di: Di, work_item_id: str) -> WorkItem:
     return await op_work_items_cancel(
         WorkItemIdPayload(work_item_id=work_item_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

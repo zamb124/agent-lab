@@ -13,7 +13,7 @@ Endpoints (в приложении под префиксом /{server.name}, н�
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Protocol
+from typing import Annotated, ClassVar, NoReturn, Protocol
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -27,13 +27,13 @@ from core.api.integration_oauth_error_html import (
     oauth_error_correlation_ids,
     resolve_oauth_integration_locale,
 )
-from core.app_state import require_platform_app_state
 from core.clients.google_workspace_scopes import (
     GOOGLE_OAUTH_SERVICE_CANONICAL,
     scopes_for_google_service,
 )
 from core.config import get_settings
 from core.context import get_context, require_context
+from core.di.platform import Di
 from core.integrations.company_credentials import (
     CompanyIntegrationConfigError,
     CompanyIntegrationPermissionError,
@@ -66,10 +66,6 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
 
-if TYPE_CHECKING:
-    from core.container import BaseContainer
-
-
 class FlowResumeHandler(Protocol):
     def __call__(
         self,
@@ -93,10 +89,6 @@ class FlowResumeHandler(Protocol):
 # Реестр callback для resume flow после OAuth.
 # Регистрируется из apps/ при старте сервиса (apps/flows/main.py).
 _flow_resume_handler: FlowResumeHandler | None = None
-
-
-def _integration_container(request: Request) -> BaseContainer:
-    return require_platform_app_state(request).container
 
 
 def set_flow_resume_handler(handler: FlowResumeHandler) -> None:
@@ -138,24 +130,24 @@ class FlowResumeContext(BaseModel):
 
 
 @router.get("/credentials", response_model=ListResponse[CredentialInfo])
-async def list_credentials(request: Request) -> ListResponse[CredentialInfo]:
+async def list_credentials(di: Di) -> ListResponse[CredentialInfo]:
     return await op_integrations_credentials_list(
         EmptyPayload(),
         user=require_context().user,
-        container=_integration_container(request),
+        di=di,
     )
 
 
 @router.delete("/credentials/{provider}/{service}", response_model=IntegrationDeletedResponse)
 async def delete_credential(
-    request: Request,
+    di: Di,
     provider: str,
     service: str,
 ) -> IntegrationDeletedResponse:
     return await op_integrations_credentials_remove(
         IntegrationCredentialRefPayload(provider=provider, service=service),
         user=require_context().user,
-        container=_integration_container(request),
+        di=di,
     )
 
 
@@ -183,6 +175,7 @@ class GoogleWorkspaceAuthorizeResponse(BaseModel):
 )
 async def authorize_google_workspace(
     request: Request,
+    di: Di,
     return_path: Annotated[
         str,
         Query(description="Путь на платформе после OAuth (внутри origin)"),
@@ -207,7 +200,7 @@ async def authorize_google_workspace(
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
-    oauth = _integration_container(request).oauth_service
+    oauth = di.oauth_service
     oauth_locale = resolve_oauth_integration_locale(
         request.headers.get("accept-language"),
         language_cookie=request.cookies.get("language"),
@@ -235,12 +228,12 @@ async def authorize_google_workspace(
     response_model=GoogleWorkspaceCompanyCredentialPublic,
 )
 async def get_google_workspace_company_credential(
-    request: Request,
+    di: Di,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
     return await op_integrations_workspace_company_get(
         EmptyPayload(),
         user=require_context().user,
-        container=_integration_container(request),
+        di=di,
     )
 
 
@@ -249,13 +242,13 @@ async def get_google_workspace_company_credential(
     response_model=GoogleWorkspaceCompanyCredentialPublic,
 )
 async def put_google_workspace_company_credential(
-    request: Request,
+    di: Di,
     payload: GoogleWorkspaceCompanyCredentialPut,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
     return await op_integrations_workspace_company_put(
         payload,
         user=require_context().user,
-        container=_integration_container(request),
+        di=di,
     )
 
 
@@ -264,12 +257,12 @@ async def put_google_workspace_company_credential(
     response_model=IntegrationDeletedResponse,
 )
 async def delete_google_workspace_company_credential(
-    request: Request,
+    di: Di,
 ) -> IntegrationDeletedResponse:
     return await op_integrations_workspace_company_delete(
         EmptyPayload(),
         user=require_context().user,
-        container=_integration_container(request),
+        di=di,
     )
 
 
@@ -278,7 +271,7 @@ async def delete_google_workspace_company_credential(
     response_model=GoogleWorkspaceSystemReconcileResult,
 )
 async def reconcile_google_workspace_system(
-    request: Request,
+    di: Di,
 ) -> GoogleWorkspaceSystemReconcileResult:
     """Seed system company Google Workspace SA from conf (admin @ system)."""
     ctx = get_context()
@@ -289,9 +282,8 @@ async def reconcile_google_workspace_system(
             status_code=403,
             detail="system reconcile requires company_id=system",
         )
-    container = _integration_container(request)
-    await container.authz_service.require_company_admin(company_id=SYSTEM_COMPANY_ID)
-    service = container.company_integration_credential_service
+    await di.authz_service.require_company_admin(company_id=SYSTEM_COMPANY_ID)
+    service = di.company_integration_credential_service
     try:
         return await service.reconcile_system_google_workspace()
     except (
@@ -305,6 +297,7 @@ async def reconcile_google_workspace_system(
 @router.get("/oauth/callback", response_model=None)
 async def oauth_callback(
     request: Request,
+    di: Di,
     state: Annotated[str | None, Query()] = None,
     code: Annotated[str | None, Query()] = None,
     error: Annotated[str | None, Query()] = None,
@@ -324,7 +317,7 @@ async def oauth_callback(
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing required parameters: code and state")
 
-    oauth_service = _integration_container(request).oauth_service
+    oauth_service = di.oauth_service
     accept_language = request.headers.get("accept-language")
     fallback_locale = resolve_oauth_integration_locale(
         accept_language,

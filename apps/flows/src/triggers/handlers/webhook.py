@@ -7,13 +7,13 @@ WebhookTriggerHandler — inbound HTTP webhook → TriggerExecutor.
 
 from typing import override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import (
     TriggerConfig,
     TriggerStatus,
     TriggerType,
     WebhookTriggerConfig,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
     BaseTriggerHandler,
@@ -30,8 +30,8 @@ class WebhookTriggerHandler(BaseTriggerHandler):
 
     trigger_type: TriggerType = TriggerType.WEBHOOK
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
-        super().__init__(base_url, container=container)
+    def __init__(self, base_url: str) -> None:
+        super().__init__(base_url)
         self._executor: TriggerExecutor = TriggerExecutor()
 
     @override
@@ -80,7 +80,7 @@ class WebhookTriggerHandler(BaseTriggerHandler):
         trigger_id: str,
         payload: JsonObject,
     ) -> JsonObject:
-        flow_config = await self.container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
         if flow_config is None:
             raise TriggerRegistrationError(
                 trigger_type="webhook",

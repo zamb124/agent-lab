@@ -16,28 +16,32 @@ from apps.flows.tools.wiki.wiki_tools import (
     wiki_list_tree,
     wiki_update_markdown,
 )
-from core.worktracker.models import UserActor, WorkItemPriority, WorkItemState
+from core.worktracker.models import UserActor, WorkItem, WorkItemPriority, WorkItemState
 
 
 @pytest.mark.asyncio
-async def test_worktracker_client_delegates_get() -> None:
-    service = MagicMock()
-    service.get = AsyncMock(return_value=MagicMock(work_item_id="wi_1"))
-    client = WorktrackerClient(service)
+async def test_worktracker_client_delegates_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    expected = MagicMock(work_item_id="wi_1")
+    require = AsyncMock(return_value=expected)
+    monkeypatch.setattr(WorkItem, "require_in_company", require)
+    client = WorktrackerClient(MagicMock())
     item = await client.get("company_a", "wi_1")
-    service.get.assert_awaited_once_with("company_a", "wi_1")
+    require.assert_awaited_once_with("company_a", "wi_1")
     assert item.work_item_id == "wi_1"
 
 
 @pytest.mark.asyncio
-async def test_worktracker_client_delegates_list_and_complete() -> None:
+async def test_worktracker_client_delegates_list_and_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = MagicMock()
-    service.list = AsyncMock(return_value=[])
+    listed = AsyncMock(return_value=[])
+    monkeypatch.setattr(WorkItem, "list_work_items", listed)
     service.complete = AsyncMock(return_value=MagicMock(newly_terminal=True))
     client = WorktrackerClient(service)
     items = await client.list("c1", assignee_user_id="u1", exclude_terminal=True)
     assert items == []
-    service.list.assert_awaited_once()
+    listed.assert_awaited_once()
     completion = await client.complete(
         company_id="c1",
         work_item_id="wi_2",
@@ -68,11 +72,8 @@ async def test_worktracker_client_delegates_queue_and_board() -> None:
 
 @pytest.mark.asyncio
 async def test_team_client_resolve_requires_query() -> None:
-    client = TeamClient(
-        company_repository=MagicMock(),
-        user_repository=MagicMock(),
-    )
-    with pytest.raises(ValueError, match="query обязателен"):
+    client = TeamClient()
+    with pytest.raises(ValueError, match="query is required"):
         await client.resolve_user("   ", limit=5)
 
 

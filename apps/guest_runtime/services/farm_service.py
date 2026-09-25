@@ -11,7 +11,6 @@ from pathlib import Path
 
 import httpx
 
-from apps.guest_runtime.db.repository import GuestRuntimeRepository
 from apps.guest_runtime.services.deny import assert_source_allowed
 from apps.guest_runtime.services.lease_store import GuestLeaseStore
 from apps.guest_runtime.services.slots import (
@@ -58,6 +57,7 @@ from core.guest_runtime.models import (
     GuestRuntime,
     GuestRuntimeLogsResponse,
     GuestRuntimeStatusResponse,
+    guest_runtime_id,
 )
 from core.logging import get_logger
 from core.logging.attributes import (
@@ -88,12 +88,10 @@ class GuestFarmService:
     def __init__(
         self,
         *,
-        repository: GuestRuntimeRepository,
         lease_store: GuestLeaseStore,
         files_client: FilesClient,
         farm: GuestRuntimeFarmConfig,
     ) -> None:
-        self._repository: GuestRuntimeRepository = repository
         self._leases: GuestLeaseStore = lease_store
         self._files: FilesClient = files_client
         self._farm_config: GuestRuntimeFarmConfig = farm
@@ -235,8 +233,8 @@ class GuestFarmService:
         return await self._leases.get(flow_id, node_id)
 
     async def status(self, flow_id: str, node_id: str) -> GuestRuntimeStatusResponse:
-        runtime_id = GuestRuntimeRepository.runtime_id(flow_id, node_id)
-        runtime = await self._repository.get(runtime_id)
+        runtime_id = guest_runtime_id(flow_id, node_id)
+        runtime = await GuestRuntime.get(runtime_id)
         lease = await self._leases.get(flow_id, node_id)
         return GuestRuntimeStatusResponse(runtime=runtime, lease=lease)
 
@@ -266,15 +264,15 @@ class GuestFarmService:
         lease = await self._leases.get(flow_id, node_id)
         if lease is not None:
             await self._stop_lease(lease)
-        runtime_id = GuestRuntimeRepository.runtime_id(flow_id, node_id)
-        runtime = await self._repository.get(runtime_id)
+        runtime_id = guest_runtime_id(flow_id, node_id)
+        runtime = await GuestRuntime.get(runtime_id)
         if runtime is None:
             return
         if lease is None and runtime.image_digest is not None:
             await maybe_delete_docker_image(
                 runtime.image_digest, GuestExecutorKind(self._farm_config.executor)
             )
-        deleted = await self._repository.delete(runtime_id)
+        deleted = await GuestRuntime.delete_by_id(runtime_id)
         if not deleted:
             raise RuntimeError(f"failed to delete GuestRuntime {runtime_id}")
 
@@ -351,7 +349,7 @@ class GuestFarmService:
             logger.info("guest.image.gc", digest=lease.image_digest)
 
     async def _persist_runtime(self, runtime: GuestRuntime) -> GuestRuntime:
-        saved = await self._repository.set(runtime)
+        saved = await GuestRuntime.set(runtime)
         if not saved:
             raise RuntimeError("failed to persist GuestRuntime")
         return runtime
@@ -379,8 +377,8 @@ class GuestFarmService:
         assert_source_allowed(body.files, contents)
         digest_hex = compute_source_digest(contents)
         executor = GuestExecutorKind(farm.executor)
-        runtime_id = GuestRuntimeRepository.runtime_id(body.flow_id, body.node_id)
-        previous = await self._repository.get(runtime_id)
+        runtime_id = guest_runtime_id(body.flow_id, body.node_id)
+        previous = await GuestRuntime.get(runtime_id)
         if executor == GuestExecutorKind.INPROCESS:
             image_digest = f"inprocess:{digest_hex}"
             image_bytes = total_bytes
@@ -502,10 +500,8 @@ class GuestFarmService:
     ) -> None:
         farm = self._farm_config
         used = 0
-        runtimes = await self._repository.list(limit=1000)
+        runtimes = await GuestRuntime.company_guest_runtimes(company_id)
         for runtime in runtimes:
-            if runtime.company_id != company_id:
-                continue
             if runtime.image_digest == new_digest:
                 return
             if runtime.image_bytes is not None:

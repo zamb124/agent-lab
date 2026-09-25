@@ -29,8 +29,8 @@ import '@platform/lib/components/fields/platform-field.js';
 import '../components/crm-mini-graph.js';
 import '../components/entity-card.js';
 import '../components/crm-related-neighbor-rows.js';
-import { extractNeighborEdges } from '../utils/neighbor-edges.js';
-import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
+import { extractNeighborEdges } from '../_helpers/neighbor-edges.js';
+import { searchScorePercent, relationshipConfidencePercent } from '../_helpers/search-score-percent.js';
 
 const ENTITIES_NAME = 'crm/entities';
 const ENTITY_CARD_OP = 'crm/entity_card';

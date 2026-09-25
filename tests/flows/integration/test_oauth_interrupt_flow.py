@@ -20,23 +20,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from core.clients.google_docs_client import GoogleDocsClient
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 from core.state import ExecutionState, InterruptKind
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_flow
 
 
 @pytest.fixture()
-def credential_repository(app) -> IntegrationCredentialRepository:
-    from core.config import get_settings
-    settings = get_settings()
-    return IntegrationCredentialRepository(db_url=settings.database.shared_url)
-
-
 def _build_flow_config(flow_id: str) -> FlowConfig:
     return FlowConfig(
         flow_id=flow_id,
@@ -96,10 +88,9 @@ class TestOAuthInterruptFlow:
         self,
         app,
         mock_llm_with_queue,
-        credential_repository,
         unique_id,
         monkeypatch,
-    ) -> None:
+    di) -> None:
         """
         Flow с gdocs tool без credentials -> FlowInterrupt(OAuthInterrupt).
         """
@@ -107,7 +98,7 @@ class TestOAuthInterruptFlow:
         context_user_id = "test_user"
 
         for service in ("workspace", "docs", "sheets"):
-            await credential_repository.delete_by_user_provider_service(
+            await IntegrationCredential.delete_by_user_provider_service(
                 company_id="system",
                 user_id=context_user_id,
                 provider=IntegrationProvider.GOOGLE,
@@ -122,10 +113,9 @@ class TestOAuthInterruptFlow:
             },
         ])
 
-        container = get_container()
         flow_id = f"oauth-test-{unique_id}"
         flow_config = _build_flow_config(flow_id)
-        flow = await container.flow_factory.create_flow(flow_config)
+        flow = await di.flow_factory.create_flow(flow_config, tool_registry=di.tool_registry)
 
         state = ExecutionState(
             task_id=f"task-{unique_id}",
@@ -137,7 +127,7 @@ class TestOAuthInterruptFlow:
 
         flow.variables = {}
 
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result.interrupt is not None, "state.interrupt должен быть установлен"
         assert result.interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
@@ -150,17 +140,16 @@ class TestOAuthInterruptFlow:
         self,
         app,
         mock_llm_with_queue,
-        credential_repository,
         unique_id,
         monkeypatch,
-    ) -> None:
+    di) -> None:
         """
         Полный цикл: interrupt -> вставка credential -> resume -> успех.
         """
         _patch_oauth_config(monkeypatch)
 
         for service in ("workspace", "docs", "sheets"):
-            await credential_repository.delete_by_user_provider_service(
+            await IntegrationCredential.delete_by_user_provider_service(
                 company_id="system",
                 user_id="test_user",
                 provider=IntegrationProvider.GOOGLE,
@@ -184,10 +173,9 @@ class TestOAuthInterruptFlow:
         context_user_id = "test_user"
         context_company_id = "system"
 
-        container = get_container()
         flow_id = f"oauth-resume-{unique_id}"
         flow_config = _build_flow_config(flow_id)
-        flow = await container.flow_factory.create_flow(flow_config)
+        flow = await di.flow_factory.create_flow(flow_config, tool_registry=di.tool_registry)
 
         state = ExecutionState(
             task_id=f"task-{unique_id}",
@@ -199,7 +187,7 @@ class TestOAuthInterruptFlow:
 
         flow.variables = {}
 
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert result.interrupt.body.kind == InterruptKind.OAUTH_REQUIRED
@@ -217,7 +205,7 @@ class TestOAuthInterruptFlow:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(credential)
+        await IntegrationCredential.upsert_by_credential_id(credential)
 
         monkeypatch.setattr(
             "core.clients.google_docs_client.GoogleDocsClient.create_document",
@@ -226,7 +214,7 @@ class TestOAuthInterruptFlow:
 
         result.content = "oauth_completed:google:workspace"
 
-        resumed = await run_flow(container=container, flow=flow, state=result)
+        resumed = await run_flow(di=di, flow=flow, state=result)
 
         assert resumed.interrupt is None, \
             f"interrupt должен быть None после resume, получили: {resumed.interrupt}"
@@ -234,7 +222,7 @@ class TestOAuthInterruptFlow:
         assert "Resume Doc" in resumed.response or "Документ создан" in resumed.response
 
         for service in ("workspace", "docs", "sheets"):
-            await credential_repository.delete_by_user_provider_service(
+            await IntegrationCredential.delete_by_user_provider_service(
                 company_id=context_company_id,
                 user_id=context_user_id,
                 provider=IntegrationProvider.GOOGLE,

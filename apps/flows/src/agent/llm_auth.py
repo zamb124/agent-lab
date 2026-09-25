@@ -17,13 +17,13 @@ from typing import Literal
 from fastapi import Request
 
 from apps.flows.src.agent.device_auth import require_active_device_bearer
-from apps.flows.src.dependencies import ContainerDep
 from core.capabilities import verify_execution_token
 from core.clients.onlyoffice import OnlyOfficeJwtError, verify_onlyoffice_jwt_hs256
 from core.context import get_context, set_context
+from core.db.storage import SharedStorage
 from core.logging import bind_test_scope, get_logger
 from core.models.context_models import Context
-from core.models.identity_models import UserStatus
+from core.models.identity_models import Company, User, UserStatus
 from core.office.jwt_secret import resolve_onlyoffice_jwt_secret
 from core.office.platform_ai_claims import (
     OfficePlatformAiClaims,
@@ -74,7 +74,6 @@ def _request_host(request: Request) -> str:
 
 
 async def _set_context_for_company_user(
-    container: ContainerDep,
     *,
     user_id: str,
     company_id: str,
@@ -89,7 +88,7 @@ async def _set_context_for_company_user(
             "company_id is required in token",
             error_code="token_company_id_required",
         )
-    user = await container.user_repository.get(user_id)
+    user = await User.get(user_id)
     if user is None:
         raise WsCommandError(
             "unauthorized",
@@ -102,7 +101,7 @@ async def _set_context_for_company_user(
             "user is inactive",
             error_code="user_inactive",
         )
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise WsCommandError(
             "unauthorized",
@@ -130,7 +129,6 @@ async def _set_context_for_company_user(
 
 
 async def _set_context_from_device_token(
-    container: ContainerDep,
     *,
     token_data: TokenData,
     request: Request,
@@ -153,7 +151,6 @@ async def _set_context_from_device_token(
         "device_id": device_id.strip(),
     }
     await _set_context_for_company_user(
-        container,
         user_id=token_data.user_id,
         company_id=token_data.company_id.strip(),
         request=request,
@@ -163,7 +160,6 @@ async def _set_context_from_device_token(
 
 
 async def _set_context_from_office_ai_claims(
-    container: ContainerDep,
     *,
     claims: OfficePlatformAiClaims,
     request: Request,
@@ -174,7 +170,6 @@ async def _set_context_from_office_ai_claims(
         "viewer_scope": claims.viewer_scope,
     }
     await _set_context_for_company_user(
-        container,
         user_id=claims.user_id,
         company_id=claims.company_id,
         request=request,
@@ -186,7 +181,7 @@ async def _set_context_from_office_ai_claims(
 
 async def require_llm_proxy_auth(
     request: Request,
-    container: ContainerDep,
+    shared_storage: SharedStorage,
 ) -> LlmProxyAuthResult:
     """
     Device JWT, execution token (guest code_agent) или OnlyOffice editor JWT с ``platformAi``.
@@ -216,7 +211,6 @@ async def require_llm_proxy_auth(
         if execution_namespace is None:
             execution_namespace = "default"
         await _set_context_for_company_user(
-            container,
             user_id=claims.user_id.strip(),
             company_id=claims.company_id,
             request=request,
@@ -235,9 +229,8 @@ async def require_llm_proxy_auth(
     if platform_token is not None:
         purpose = platform_token.metadata.get("token_purpose")
         if purpose == "device":
-            await require_active_device_bearer(request, container)
+            await require_active_device_bearer(request, shared_storage)
             await _set_context_from_device_token(
-                container,
                 token_data=platform_token,
                 request=request,
             )
@@ -266,7 +259,7 @@ async def require_llm_proxy_auth(
             error_code="llm_proxy_token_invalid",
         ) from exc
 
-    await _set_context_from_office_ai_claims(container, claims=claims, request=request)
+    await _set_context_from_office_ai_claims(claims=claims, request=request)
     office_context = get_context()
     if office_context is None or office_context.active_company is None:
         raise RuntimeError("context with active_company is required after OnlyOffice auth")

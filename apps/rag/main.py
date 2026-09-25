@@ -3,14 +3,19 @@
 """
 
 import importlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 
-from fastapi import FastAPI
-
+from apps.rag.config import RAGSettings, get_rag_settings
+from apps.rag.di import RagDi
+from apps.rag.realtime.command_router import RAG_OPERATIONS
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
+from core.di import recipe
 from core.files.reader.service import FileReader
+from core.files.service import FilesService
 from core.logging import get_logger
+from core.rag.factory import get_rag_provider
 
 from .api import (
     documents_router,
@@ -18,44 +23,38 @@ from .api import (
     providers_router,
     search_router,
 )
-from .config import RAGSettings, get_rag_settings
-from .container import RAGContainer, get_rag_container
-from .realtime.command_router import register_rag_ws_commands
 
 logger = get_logger(__name__)
 _ = importlib.import_module("apps.rag.events")
 
 
-async def on_startup(app: FastAPI, container: RAGContainer, settings: RAGSettings) -> None:
-    """Кастомная логика при запуске сервиса RAG"""
-    _ = app
+async def rag_http_lifecycle(
+    settings: RAGSettings,
+    files_service: FilesService,
+) -> AsyncIterator[None]:
+    """Провайдер и persist ассетов FileReader, пока rag включён."""
     logger.info("rag.service")
-
-    register_rag_ws_commands()
-    if not settings.rag.enabled:
+    if settings.rag.enabled:
+        _ = get_rag_provider(settings=settings)
+        FileReader.configure_asset_persist(files_service)
+        logger.info("rag.startup.default_provider", provider=settings.rag.default_provider)
+        enabled_providers = [
+            name for name, config in settings.rag.providers.items() if config.enabled
+        ]
+        logger.info("rag.startup.enabled_providers", providers=enabled_providers)
+    else:
         logger.warning("rag.rag")
-        return
-    _ = container.rag_provider
-    FileReader.configure_asset_persist(container.files_service)
-    logger.info("rag.startup.default_provider", provider=settings.rag.default_provider)
-
-    enabled_providers = [
-        name for name, config in settings.rag.providers.items()
-        if config.enabled
-    ]
-    logger.info("rag.startup.enabled_providers", providers=enabled_providers)
-
-
-async def on_shutdown(app: FastAPI, container: RAGContainer) -> None:
-    """Кастомная логика при остановке сервиса RAG"""
-    _ = app, container
+    yield
     logger.info("rag.service")
 
 
 app = create_service_app(
-    service_name="rag",
-    settings_class=RAGSettings,
-    get_container=get_rag_container,
+    "rag",
+    RAGSettings,
+    RagDi,
+    database="rag_url",
+    operations=RAG_OPERATIONS,
+    lifecycle=(recipe(rag_http_lifecycle),),
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     routers=[
         providers_router,
@@ -63,8 +62,6 @@ app = create_service_app(
         documents_router,
         search_router,
     ],
-    on_startup=on_startup,
-    on_shutdown=on_shutdown,
     cors_origins=["*"],
     api_version="v1",
     title="RAG Service",
@@ -79,4 +76,3 @@ if __name__ == "__main__":
     from core.app.server import serve
 
     serve("rag", "apps.rag.main:app", get_rag_settings())
-

@@ -81,10 +81,11 @@ class CoverageSummary(TypedDict):
     paths: dict[str, str]
 
 
-def _run_command(args: list[str], *, cwd: Path | None = None) -> None:
+def _run_command(args: list[str], *, env: dict[str, str]) -> None:
     completed = subprocess.run(
         args,
-        cwd=cwd or _REPO_ROOT,
+        cwd=_REPO_ROOT,
+        env=env,
         check=False,
         text=True,
         capture_output=True,
@@ -156,10 +157,11 @@ def _combine_python_coverage(run_dir: Path) -> None:
     if not data_path.is_file() and not fragment_paths:
         return
     if fragment_paths:
-        combine_args = ["uv", "run", "coverage", "combine", "--keep"]
-        combine_args.extend(str(path) for path in fragment_paths)
+        # Данные pytest уже лежат в data_path: combine без --append начинает его с чистого листа.
+        combine_args = ["uv", "run", "coverage", "combine"]
         if data_path.is_file():
-            combine_args.append(str(data_path))
+            combine_args.append("--append")
+        combine_args.extend(str(path) for path in fragment_paths)
         completed = subprocess.run(
             combine_args,
             cwd=_REPO_ROOT,
@@ -185,10 +187,7 @@ def _export_python_coverage(run_dir: Path) -> Path | None:
     summary_path = python_dir / "summary.json"
     env = os.environ.copy()
     env["COVERAGE_FILE"] = str(data_path)
-    _run_command(
-        ["uv", "run", "coverage", "json", "-o", str(summary_path)],
-        cwd=_REPO_ROOT,
-    )
+    _run_command(["uv", "run", "coverage", "json", "-o", str(summary_path)], env=env)
     subprocess.run(
         ["uv", "run", "coverage", "html", "-d", str(html_dir)],
         cwd=_REPO_ROOT,

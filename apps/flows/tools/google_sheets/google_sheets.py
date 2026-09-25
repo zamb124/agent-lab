@@ -34,9 +34,12 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
     return state
 
 
-async def _get_sheets_client(state: ExecutionState | None) -> GoogleSheetsClient:
+async def _get_sheets_client(
+    state: ExecutionState | None,
+    google_workspace_client: GoogleWorkspaceClient,
+) -> GoogleSheetsClient:
     execution_state = _require_state(state)
-    material = await GoogleWorkspaceClient().resolve_auth(execution_state)
+    material = await google_workspace_client.resolve_auth(execution_state)
     return GoogleSheetsClient(
         credentials_json=material.credentials_json,
         access_token=material.access_token,
@@ -254,8 +257,10 @@ async def sheets_create_spreadsheet(
     title: str,
     sheet_titles: list[str] | None = None,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.create_spreadsheet(title, sheet_titles=sheet_titles)
     return _tool_payload(result)
 
@@ -272,8 +277,10 @@ async def sheets_create_spreadsheet(
 async def sheets_get_metadata(
     spreadsheet_id: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.get_metadata(spreadsheet_id)
     return _tool_payload(result)
 
@@ -287,8 +294,10 @@ async def sheets_get_metadata(
 async def sheets_list_sheets(
     spreadsheet_id: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.list_sheets(spreadsheet_id)
     return _tool_payload(result)
 
@@ -307,8 +316,10 @@ async def sheets_get_values(
     range: str,
     value_render_option: str = ValueRenderOption.FORMATTED_VALUE.value,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.get_values(
         spreadsheet_id,
         range,
@@ -328,8 +339,10 @@ async def sheets_batch_get_values(
     ranges: list[str],
     value_render_option: str = ValueRenderOption.FORMATTED_VALUE.value,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.batch_get_values(
         spreadsheet_id,
         ranges,
@@ -353,8 +366,10 @@ async def sheets_update_values(
     values: list[SheetRowInput],
     value_input_option: str = ValueInputOption.USER_ENTERED.value,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.update_values(
         spreadsheet_id,
         range,
@@ -375,8 +390,10 @@ async def sheets_batch_update_values(
     data: list[SheetsBatchUpdateItem],
     value_input_option: str = ValueInputOption.USER_ENTERED.value,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     writes: list[ValueRangeWrite] = []
     for item in data:
         # FunctionTool после model_dump отдаёт nested items как dict —
@@ -408,8 +425,10 @@ async def sheets_append_rows(
     value_input_option: str = ValueInputOption.USER_ENTERED.value,
     insert_data_option: str = InsertDataOption.INSERT_ROWS.value,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.append_rows(
         spreadsheet_id,
         range,
@@ -430,8 +449,10 @@ async def sheets_clear_values(
     spreadsheet_id: str,
     range: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.clear_values(spreadsheet_id, range)
     return _tool_payload(result)
 
@@ -446,8 +467,10 @@ async def sheets_batch_clear_values(
     spreadsheet_id: str,
     ranges: list[str],
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.batch_clear_values(spreadsheet_id, ranges)
     return _tool_payload(result)
 
@@ -467,8 +490,10 @@ async def sheets_share(
     role: str = "reader",
     anyone: bool = False,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.share(
         spreadsheet_id,
         role=_parse_share_role(role),
@@ -488,8 +513,10 @@ async def sheets_add_sheet(
     spreadsheet_id: str,
     title: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.add_sheet(spreadsheet_id, title)
     return _tool_payload(result)
 
@@ -505,8 +532,10 @@ async def sheets_rename_sheet(
     sheet_id: int,
     title: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.rename_sheet(spreadsheet_id, sheet_id, title)
     return _tool_payload(result)
 
@@ -521,8 +550,10 @@ async def sheets_delete_sheet(
     spreadsheet_id: str,
     sheet_id: int,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_sheets_client(state)
+    client = await _get_sheets_client(state, google_workspace_client)
     result = await client.delete_sheet(spreadsheet_id, sheet_id)
     return _tool_payload(result)
 

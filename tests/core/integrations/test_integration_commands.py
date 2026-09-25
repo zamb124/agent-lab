@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.di import FlowsDi
 from core.config import get_settings
 from core.context import reset_context, set_context
 from core.integrations.models import (
@@ -22,7 +22,6 @@ from core.integrations.operations import (
     op_integrations_credentials_remove,
     op_integrations_workspace_company_get,
 )
-from core.integrations.repository import IntegrationCredentialRepository
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.websocket import EmptyPayload, WsCommandError
@@ -31,12 +30,11 @@ from tests.fixtures.ai_provider_defaults import make_test_company
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
 
 
-@pytest.fixture()
-def credential_repository() -> IntegrationCredentialRepository:
+@pytest.fixture(autouse=True)
+def credential_repository() -> None:
     shared_url = get_settings().database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для тестов integrations")
-    return IntegrationCredentialRepository(db_url=shared_url)
 
 
 @contextmanager
@@ -57,14 +55,13 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 
 async def _insert_credential(
-    repo: IntegrationCredentialRepository,
     *,
     credential_id: str,
     user_id: str,
     service: str,
 ) -> None:
     now = datetime.now(timezone.utc)
-    await repo.upsert(
+    await IntegrationCredential.upsert_by_credential_id(
         IntegrationCredential(
             credential_id=credential_id,
             company_id="system",
@@ -82,14 +79,13 @@ async def _insert_credential(
 async def test_credentials_list_rest_match_op(
     flows_client: AsyncClient,
     auth_headers_system: dict[str, str],
-    credential_repository: IntegrationCredentialRepository,
     system_user_id: str,
     unique_id: str,
+    di: FlowsDi,
 ) -> None:
-    container: FlowContainer = get_container()
+    di = di
     service = f"svc-cmd-{unique_id}"
     await _insert_credential(
-        credential_repository,
         credential_id=f"cred-cmd-{unique_id}",
         user_id=system_user_id,
         service=service,
@@ -103,7 +99,7 @@ async def test_credentials_list_rest_match_op(
         op_result = await op_integrations_credentials_list(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_result.model_dump(mode="json") == http.json()
     services = {item.service for item in op_result.items}
@@ -116,8 +112,9 @@ async def test_credentials_remove_missing_rest_match_op(
     flows_client: AsyncClient,
     auth_headers_system: dict[str, str],
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
-    container: FlowContainer = get_container()
+    di = di
     http = await flows_client.delete(
         "/flows/api/v1/integrations/credentials/google/missing-cmd",
         headers=auth_headers_system,
@@ -129,7 +126,7 @@ async def test_credentials_remove_missing_rest_match_op(
             _ = await op_integrations_credentials_remove(
                 IntegrationCredentialRefPayload(provider="google", service="missing-cmd"),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "not_found"
 
@@ -138,8 +135,9 @@ async def test_workspace_company_get_rest_match_op(
     flows_client: AsyncClient,
     auth_headers_system: dict[str, str],
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
-    container: FlowContainer = get_container()
+    di = di
     http = await flows_client.get(
         "/flows/api/v1/integrations/credentials/google/workspace/company",
         headers=auth_headers_system,
@@ -149,6 +147,6 @@ async def test_workspace_company_get_rest_match_op(
         op_result = await op_integrations_workspace_company_get(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_result.model_dump(mode="json") == http.json()

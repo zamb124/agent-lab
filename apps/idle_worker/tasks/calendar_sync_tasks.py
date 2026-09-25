@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import (
     TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK,
     TASK_CALENDAR_SYNC_TICK,
@@ -29,7 +29,7 @@ from core.config import get_settings
 from core.events import publish_event_to_user
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.logging import get_logger
-from core.models import CalendarEventSource, CalendarIntegration, CalendarProvider
+from core.models import CalendarEvent, CalendarEventSource, CalendarIntegration, CalendarProvider
 from core.tasks import platform_task
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -94,7 +94,7 @@ async def _load_existing_event_ids(
 
 async def _send_new_event_notifications(
     *,
-    container: IdleWorkerContainer,
+    di: Di,
     company_id: str,
     user_id: str,
     provider: CalendarProvider,
@@ -104,7 +104,7 @@ async def _send_new_event_notifications(
     sent = 0
     for event_id in new_event_ids:
         dedup_key = f"calendar:notify:{company_id}:{user_id}:{provider.value}:{event_id}"
-        existing = await container.shared_storage.get(key=dedup_key, force_global=True)
+        existing = await di.shared_storage.get(key=dedup_key, force_global=True)
         if existing is not None:
             continue
         await publish_event_to_user(
@@ -133,7 +133,7 @@ async def _send_new_event_notifications(
                 action_url="/",
             ),
         )
-        _ = await container.shared_storage.set(
+        _ = await di.shared_storage.set(
             key=dedup_key,
             value=json.dumps({"sent_at": datetime.now(timezone.utc).isoformat()}),
             ttl=dedup_ttl_seconds,
@@ -145,7 +145,7 @@ async def _send_new_event_notifications(
 
 async def _sync_single_integration(
     *,
-    container: IdleWorkerContainer,
+    di: Di,
     semaphore: asyncio.Semaphore,
     integration: CalendarIntegration,
     start_at: datetime,
@@ -153,7 +153,7 @@ async def _sync_single_integration(
     dedup_ttl_seconds: int,
 ) -> tuple[int, int]:
     async with semaphore:
-        calendar_service = container.calendar_service
+        calendar_service = di.calendar_service
         provider = CalendarProvider(integration.provider)
         source = calendar_source_for_provider(provider)
 
@@ -184,7 +184,7 @@ async def _sync_single_integration(
         if not integration.settings.notifications_enabled or len(new_event_ids) == 0:
             return len(new_event_ids), 0
         sent = await _send_new_event_notifications(
-            container=container,
+            di=di,
             company_id=integration.company_id,
             user_id=integration.user_id,
             provider=provider,
@@ -198,6 +198,8 @@ async def _sync_single_integration(
 async def calendar_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     settings = get_settings()
     config = settings.calendar_sync
@@ -217,13 +219,11 @@ async def calendar_sync_tick(
     if not settings.database.shared_url:
         raise ValueError("database.shared_url is required for calendar sync task")
 
-    container = get_container()
 
     start_tick = datetime.now(timezone.utc)
     start_at = start_tick - timedelta(days=config.lookback_days)
     end_at = _add_months(start_tick, config.lookahead_months)
 
-    credential_repository = container.integration_credential_repository
     calendar_providers = (
         IntegrationProvider.GOOGLE,
         IntegrationProvider.YANDEX,
@@ -233,7 +233,7 @@ async def calendar_sync_tick(
     all_creds: list[IntegrationCredential] = []
     for calendar_provider in calendar_providers:
         all_creds.extend(
-            await credential_repository.list_by_provider_service(
+            await IntegrationCredential.list_by_provider_service(
                 provider=calendar_provider,
                 service="calendar",
                 limit=config.max_integrations_per_tick,
@@ -265,7 +265,7 @@ async def calendar_sync_tick(
     semaphore = asyncio.Semaphore(config.max_parallel_integrations)
     tasks = [
         _sync_single_integration(
-            container=container,
+            di=di,
             semaphore=semaphore,
             integration=integration,
             start_at=start_at,
@@ -337,6 +337,8 @@ async def calendar_sync_tick(
 async def calendar_sync_meeting_reminder_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     """
     Напоминание за ~15 минут до start_at: platform-событие с Sync-ссылкой,
@@ -354,13 +356,12 @@ async def calendar_sync_meeting_reminder_tick(
     window_start = now + timedelta(minutes=14)
     window_end = now + timedelta(minutes=16)
 
-    container = get_container()
-    events = await container.calendar_event_repository.list_platform_sync_meeting_reminder_window(
+    events = await CalendarEvent.list_platform_sync_meeting_reminder_window(
         window_start=window_start,
         window_end=window_end,
         limit=config.sync_meeting_reminder_limit,
     )
-    calendar_service = container.calendar_service
+    calendar_service = di.calendar_service
     sent = 0
     for event in events:
         action_url = event.deep_link
@@ -370,7 +371,7 @@ async def calendar_sync_meeting_reminder_tick(
             token = event.metadata[SYNC_LINK_TOKEN_META]
             if token == "":
                 raise ValueError(f"Event {event.event_id} has no {SYNC_LINK_TOKEN_META} in metadata.")
-            action_url = await container.short_link_service.mint_sync_call_join(
+            action_url = await di.short_link_service.mint_sync_call_join(
                 token, event.end_at, event.company_id
             )
         recipients = await calendar_service.sync_meeting_reminder_recipient_user_ids(event)

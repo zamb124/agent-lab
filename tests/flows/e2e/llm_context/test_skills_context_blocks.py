@@ -5,7 +5,8 @@ from typing import Any
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.models.agent_skill import AgentSkill
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.flows.e2e.llm_context.harness import (
@@ -39,7 +40,7 @@ def _captured_tool_names(call: dict[str, Any]) -> set[str]:
 @pytest.mark.parametrize(("profile", "expect_index"), [("off", False), ("standard", True)])
 async def test_skills_index_respects_context_profile(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -52,7 +53,7 @@ async def test_skills_index_respects_context_profile(
     flow_id = f"ctx-skills-{profile}-{unique_id}"
     agent_skill_id = f"ctx-skill-{profile}-{unique_id}"
     with service_client_asgi_auth_context(auth_headers_system):
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=agent_skill_id,
                 name="context-skill",
@@ -60,7 +61,7 @@ async def test_skills_index_respects_context_profile(
                 body_markdown="## Context skill body",
             )
         )
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             single_node_flow(
                 flow_id=flow_id,
                 prompt="Use the attached skill when appropriate.",
@@ -70,7 +71,7 @@ async def test_skills_index_respects_context_profile(
         )
     try:
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_SKILL_{profile}_{unique_id}",
             response="skill response",
@@ -86,9 +87,9 @@ async def test_skills_index_respects_context_profile(
         assert (f"skill-description-{profile}-{unique_id}" in prompt) is expect_index
     finally:
         with service_client_asgi_auth_context(auth_headers_system):
-            await container.agent_skill_service.delete(agent_skill_id)
+            await AgentSkill.delete_by_agent_skill_id(agent_skill_id)
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

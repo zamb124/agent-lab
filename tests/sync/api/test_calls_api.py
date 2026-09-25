@@ -12,9 +12,9 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.sync.db.models import SyncCall
-from apps.sync.db.repositories.call_repository import CallRepository
+from apps.sync.models.call import SyncCall
 from tests.sync.api._helpers import seed_namespace_via_repo
+from tests.sync.conftest import require_sync_di
 
 
 @pytest.mark.asyncio
@@ -116,7 +116,7 @@ async def test_full_link_flow(
     Полный flow: создание namespace → channel → ссылка → публичное чтение info.
     """
     namespace = f"ns_{unique_id}_call"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
@@ -164,7 +164,7 @@ async def test_join_link_flow_registered_and_guest(
     одну LiveKit комнату. Умещается в 5s: одна пара TaskIQ-вызовов + LiveKit.
     """
     namespace = f"ns_{unique_id}_join"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
@@ -230,14 +230,13 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
-    call_repo: CallRepository,
     sync_user_id: str,
     company_id: str,
     unique_id: str,
 ) -> None:
     """Ссылка с call_id (как из оверлея) — гость попадает в тот же звонок, без комнаты link-*."""
     namespace = f"ns_{unique_id}_linkatt"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
@@ -249,8 +248,8 @@ async def test_create_link_with_call_id_guest_joins_same_livekit_call(
 
     existing_call_id = uuid4().hex
     room_name = f"call-{uuid4().hex[:16]}"
-    await call_repo.create_call(
-        SyncCall(
+    _ = await SyncCall.objects.create(
+        instance=SyncCall(
             call_id=existing_call_id,
             company_id=company_id,
             channel_id=channel_id,
@@ -290,13 +289,12 @@ async def test_create_link_call_id_wrong_channel_returns_400(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
-    call_repo: CallRepository,
     sync_user_id: str,
     company_id: str,
     unique_id: str,
 ) -> None:
     namespace = f"ns_{unique_id}_linkwrong"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     ch1 = await sync_client.post(
         "/sync/api/v1/channels/",
@@ -313,8 +311,8 @@ async def test_create_link_call_id_wrong_channel_returns_400(
     channel_b = ch2.json()["channel_id"]
 
     call_id = uuid4().hex
-    await call_repo.create_call(
-        SyncCall(
+    _ = await SyncCall.objects.create(
+        instance=SyncCall(
             call_id=call_id,
             company_id=company_id,
             channel_id=channel_a,
@@ -346,7 +344,7 @@ async def test_short_join_url_redirects_to_sync_join(
 ) -> None:
     """GET /l/{code} на frontend (shared БД) отдаёт 303 на /sync/join/{link_token}."""
     namespace = f"ns_{unique_id}_short"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
@@ -387,7 +385,7 @@ async def test_invite_uses_persistent_link_livekit_room_name(
 ) -> None:
     """После создания постоянной ссылки invite в том же канале использует link-{prefix}, не call-."""
     namespace = f"ns_{unique_id}_invlk"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
@@ -430,7 +428,7 @@ async def test_persistent_channel_link_create_twice_same_token(
 ) -> None:
     """Два POST /calls/links без call_id для одного канала — один и тот же link_token."""
     namespace = f"ns_{unique_id}_persist"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
@@ -462,13 +460,12 @@ async def test_join_after_call_ended_new_call_same_livekit_room(
     sync_client,
     sync_auth_headers,
     sync_db_clean: None,
-    call_repo: CallRepository,
     company_id: str,
     unique_id: str,
 ) -> None:
     """После ended следующий join создаёт новый SyncCall с тем же livekit_room_name."""
     namespace = f"ns_{unique_id}_endedjoin"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     ch_r = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,
@@ -500,9 +497,9 @@ async def test_join_after_call_ended_new_call_same_livekit_room(
     room_name = call1_r.json()["livekit_room_name"]
     assert isinstance(room_name, str) and room_name != ""
 
-    await call_repo.update_call_status(
-        call_id1, "ended", ended_at=datetime.now(UTC)
-    )
+    if not isinstance(call_id1, str) or call_id1 == "":
+        raise TypeError("call_id must be a non-empty string")
+    await SyncCall.mark_call_status(call_id1, "ended", ended_at=datetime.now(UTC))
 
     join2 = await sync_client.post(
         f"/sync/api/v1/calls/join/{token}",

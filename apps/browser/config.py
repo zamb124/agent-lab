@@ -61,7 +61,7 @@ class BrowserSettings(BaseSettings):
 
     Связи:
     - Создаётся в `get_browser_settings` через общий загрузчик конфигурации.
-    - Передаётся в DI-контейнер и далее преобразуется в runtime view.
+    - Передаётся в BrowserDi и далее преобразуется в runtime view.
 
     Состояние:
     - Содержит секцию `browser` с runtime-параметрами.

@@ -11,7 +11,6 @@ from core.short_links.payloads import (
     ShortLinkPayload,
     SyncCallJoinPayload,
 )
-from core.short_links.repository import ShortLinkRepository
 from core.short_links.service import ShortLinkService, require_platform_public_base_url
 
 __all__ = [
@@ -24,7 +23,6 @@ __all__ = [
     "FlowUISessionSharePayload",
     "ShortLinkPayload",
     "SyncCallJoinPayload",
-    "ShortLinkRepository",
     "ShortLinkService",
     "require_platform_public_base_url",
 ]

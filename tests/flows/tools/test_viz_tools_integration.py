@@ -30,8 +30,8 @@ def _file_ids(state: ExecutionState) -> list[str]:
     return [item.file_id for item in state.files if item.file_id]
 
 
-async def _assert_viz_on_s3(container, file_id: str) -> VizDocument:
-    record = await container.files_service.get(file_id)
+async def _assert_viz_on_s3(di, file_id: str) -> VizDocument:
+    record = await di.files_service.get(file_id)
     assert record.content_type == VIZ_CONTENT_TYPE
     assert record.original_name.endswith(".viz")
     raw = await FilesClient().get_bytes(file_id)
@@ -40,7 +40,7 @@ async def _assert_viz_on_s3(container, file_id: str) -> VizDocument:
     return document
 
 
-async def test_create_viz_mermaid_persists(app, container, unique_id: str) -> None:
+async def test_create_viz_mermaid_persists(app, di, unique_id: str) -> None:
     _ = app
     require_s3_configured()
     state = _execution_state(unique_id)
@@ -66,14 +66,14 @@ async def test_create_viz_mermaid_persists(app, container, unique_id: str) -> No
     file_id = file_payload["file_id"]
     assert isinstance(file_id, str) and file_id
     assert file_id in _file_ids(state)
-    document = await _assert_viz_on_s3(container, file_id)
+    document = await _assert_viz_on_s3(di, file_id)
     assert document.kind.value == "flowchart"
     assert document.engine.value == "mermaid"
     assert document.title == title
     assert document.spec.get("source") == source
 
 
-async def test_create_viz_echarts_persists(app, container, unique_id: str) -> None:
+async def test_create_viz_echarts_persists(app, di, unique_id: str) -> None:
     _ = app
     require_s3_configured()
     state = _execution_state(unique_id)
@@ -98,7 +98,7 @@ async def test_create_viz_echarts_persists(app, container, unique_id: str) -> No
     assert block["engine"] == "echarts"
     file_id = require_json_object(out["file"], "create_viz.file")["file_id"]
     assert isinstance(file_id, str)
-    document = await _assert_viz_on_s3(container, file_id)
+    document = await _assert_viz_on_s3(di, file_id)
     assert document.engine.value == "echarts"
     assert document.spec.get("option") == option
 
@@ -114,7 +114,7 @@ async def test_create_viz_rejects_invalid(app, unique_id: str) -> None:
     assert state.files == []
 
 
-async def test_update_viz_creates_new_version(app, container, unique_id: str) -> None:
+async def test_update_viz_creates_new_version(app, di, unique_id: str) -> None:
     _ = app
     require_s3_configured()
     state = _execution_state(unique_id)
@@ -146,7 +146,7 @@ async def test_update_viz_creates_new_version(app, container, unique_id: str) ->
     assert isinstance(new_file_id, str)
     assert new_file_id != previous_file_id
     assert new_file_id in _file_ids(state)
-    document = await _assert_viz_on_s3(container, new_file_id)
+    document = await _assert_viz_on_s3(di, new_file_id)
     assert document.title == f"V2 {unique_id}"
     assert document.spec.get("source") == new_source
     old_body = await FilesClient().get_bytes(previous_file_id)
@@ -154,7 +154,7 @@ async def test_update_viz_creates_new_version(app, container, unique_id: str) ->
     assert old_body != new_body
 
 
-async def test_export_viz_svg_and_json(app, container, unique_id: str) -> None:
+async def test_export_viz_svg_and_json(app, di, unique_id: str) -> None:
     _ = app
     require_s3_configured()
     state = _execution_state(unique_id)
@@ -198,10 +198,10 @@ async def test_export_viz_svg_and_json(app, container, unique_id: str) -> None:
     json_bytes = await FilesClient().get_bytes(json_file_id)
     document = VizDocument.model_validate(json.loads(json_bytes.decode("utf-8")))
     assert document.title == title
-    _ = await container.files_service.get(json_file_id)
+    _ = await di.files_service.get(json_file_id)
 
 
-async def test_viz_open_file_returns_blocks(app, container, unique_id: str) -> None:
+async def test_viz_open_file_returns_blocks(app, di, unique_id: str) -> None:
     _ = app
     require_s3_configured()
     state = _execution_state(unique_id)
@@ -231,4 +231,4 @@ async def test_viz_open_file_returns_blocks(app, container, unique_id: str) -> N
     assert block["type"] == "viz"
     assert block["file_id"] == file_id
     assert _file_ids(state) == files_before
-    _ = await _assert_viz_on_s3(container, file_id)
+    _ = await _assert_viz_on_s3(di, file_id)

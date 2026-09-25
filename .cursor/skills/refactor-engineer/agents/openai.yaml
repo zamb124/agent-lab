@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refactor Engineer"
+  short_description: "Align platform code with the .cursor/rules canon one slice at a time"
+  default_prompt: "Use $refactor-engineer to find the highest-priority canon violation, add a detector if it is missing, and fix one cohesive slice end-to-end."

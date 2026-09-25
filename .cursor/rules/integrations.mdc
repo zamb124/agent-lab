@@ -1,172 +1,59 @@
 ---
-description: "Интеграции: A2A, ServiceClient, get_httpx_client, внешние flows, OAuth для внешних сервисов"
+description: "Исходящий HTTP: ServiceClient, DevInterServiceProxy, get_httpx_client и ProxyStrategy, внешние A2A-агенты, external_api, OAuth-коннекторы. Читать при вызове peer или внешнего API"
+globs:
+  - "core/clients/service_client.py"
+  - "core/http/**"
+  - "core/integrations/**"
+  - "core/api/integrations.py"
+  - "core/middleware/dev_inter_service_proxy.py"
 alwaysApply: false
 ---
+
 # Интеграции
 
-Зона: клиенты (`ServiceClient`, `get_httpx_client`, dev-proxy), внешние flows по A2A, `external_api` нода, OAuth-интеграции. LLM streaming — **`streaming.mdc`**; A2A wire и вложения `Part` — **`a2a.mdc`**; выбор «репозиторий vs ServiceClient» — **`architecture.mdc`** § «Межсервисный доступ к данным».
+Исходящий HTTP платформы идёт тремя путями: `ServiceClient` к peer-сервису, `get_httpx_client` к внешнему API, A2A к внешнему агенту. OAuth внешних сервисов — один механизм `core/integrations/`. Выбор «модель владельца или `ServiceClient`» → `architecture.mdc` § Межсервисный доступ.
 
-## HTTP клиенты
+## Модель
 
-### Межсервисный доступ
+- `IntegrationCredential` (`core/integrations/models.py`, таблица `integration_credentials`) — единственное хранилище внешних подключений; ключ `(company_id, user_id, provider, service)`; `provider` — вендор, `service` — область использования, токены — только здесь или в secrets.
+- User OAuth — `user_id=<user>`; company service account — `user_id=COMPANY_INTEGRATION_USER_ID` (`__company__`), `token_type=service_account`, SA JSON (Fernet) в `access_token`, `metadata.impersonate_email`; `system` — seed из конфига через reconcile.
+- `OAuthService` (`core/integrations/oauth_service.py`: `build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token`) — поле `PlatformDi`; сценарий получает его constructor-аргументом (`CalendarService` → `mail.mdc`).
 
-**HTTP к API другого сервиса** — **только** `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
+## Канон
 
-```python
-from core.clients import ServiceClient
-client = ServiceClient()
-response = await client.get("flows", "/flows/api/v1/flows/")
-response = await client.post("crm", "/crm/api/v1/entities/", json=data)
-```
+1. Peer-сервис по HTTP — только `ServiceClient` (`core/clients/service_client.py`): передаёт `Authorization`, `X-Trace-Id`, `X-Request-Id`, `X-Company-Id`, `X-User-Id`, `X-Platform-Namespace` и всегда signed `X-Platform-Context-*` при `active_company`; значения заголовков — latin-1 (Unicode-идентичность — в JWT). Documents — BFF `ServiceClient("office", "/documents/api/v1/...")`.
+2. Внешний API — `get_httpx_client(timeout=..., strategy=ProxyStrategy.<...>)` (`core/http/client.py`, `trust_env=False`); стратегия — `DIRECT_FIRST` (по умолчанию), `PROXY_FIRST`, `DIRECT_ONLY`, `PROXY_ONLY`, `SMART`; аргумент `proxy=` — `ValueError`.
+3. `SMART`: прямой канал, при `ConnectError`/`ConnectTimeout` или 403/429/451 (401 — `proxy.retry_http_401_via_proxy`) при активном `settings.proxy` — повтор через egress с ротацией; успешный egress запоминается в Redis `platform:http_egress:prefer_proxy:{origin}` (TTL `proxy.prefer_proxy_ttl_seconds`).
+4. Обмен OAuth `code`, userinfo, refresh у Yandex/Google/GitHub/Apple — `request_public_oauth` (попытки напрямую, затем блок `PROXY_ONLY`, затем снова напрямую).
+5. Внешний агент — только A2A 1.0 (`a2a.mdc`): `remote_flow` с direct URL, Skill ID (`branch_id` → `params.metadata.branch`), `metadata_template` → `params.metadata` через `MappingResolver`; endpoint обязан отдавать `GET /.well-known/agent-card.json` и принимать PascalCase JSON-RPC с `A2A-Version: 1.0`; регистрация — `flow_discovery` (`apps/flows/src/services/flow_discovery.py`).
+6. Нода `external_api`: входы — `input_mapping`; значения подставляются в `{ключ}` URL и мержатся поверх `body_template`; заголовки и тело поддерживают `@state:`/`@var:` (вложенные пути `@var:a.b.c`); для вызова как tool — `parameters_schema`.
+7. OAuth-поток: `build_auth_url(..., flow_context=...)` кладёт контекст flow в state; callback `GET /{server.name}/api/v1/integrations/oauth/callback` после `complete_oauth` возобновляет flow `enqueue(TASK_PROCESS_FLOW, is_resume=True, ...)` → `flows_runtime.mdc` § Прерывания; редирект — на допустимый `return_origin` (`is_allowed_integration_return_origin`) или `platform_public_base_url` + `return_path`.
+8. Ошибка после `complete_oauth` (`GuidedIntegrationError`, `ValueError`) — JSON (`detail`, `code`, `guided`) или HTML (`oauth_callback_prefers_html_response`); локаль — `oauth_ui_locale` из state, затем cookie/`Accept-Language`.
+9. Команды credentials и Google Workspace company SA — `op_integrations_*` (`core/integrations/operations.py`) + REST `core/api/integrations.py`.
+10. `company_id` credentials — только из `get_context().active_company`; flow не подменяет его через `input_mapping` или `state.variables`.
+11. Google Docs/Sheets — один Connect `service=workspace`; auth — только `GoogleWorkspaceClient().resolve_auth(state)`: `state.variables` (`google_service_account`, `google_access_token`, `google_impersonate_email`) → per-user OAuth `workspace` (затем старые `docs`/`sheets`) → company SA → `FlowInterrupt(body=OAuthInterrupt(..., service=workspace))`.
 
-Сервисы: `flows`, `crm`, `frontend`, `rag`, `sync`, `office`, `scheduler`, `voice` (и др. по `ServerConfig`/`get_service_url`). Документы — на BFF: `ServiceClient("office", "/documents/api/v1/...")` (секреты OnlyOffice только в процессе `apps/office`). В проде Document Server — на субдомене `onlyoffice.{domain}` (единый Ingress `path: /`); см. `office.mdc`.
+### DevInterServiceProxy
 
-`ServiceClient` автоматически передаёт `trace_id`, `request_id`, авторизацию, `X-Company-Id`, `X-User-Id`, `X-Platform-Namespace` из `get_context()` (см. `logging.mdc`, `architecture.mdc`).
+1. В `development`/`test` при локальном Host (`core.utils.domain.is_local`) `DevInterServiceProxyMiddleware` (`core/middleware/dev_inter_service_proxy.py`) пересылает `/flows/...`, `/crm/...`, `/voice/...`, `/documents/...` на `server.*_service_url` чужого процесса с тем же `Host`, что у браузера (иначе `CompanyResolver` не видит субдомен).
+2. `GET/OPTIONS /frontend/api/platform/brand` не проксируется: роутер бренда есть на каждом сервисе.
+3. Префиксы OnlyOffice (`/web-apps`, `/common`, `/cache`, `/fonts`, `/sdkjs`, `/downloadfile`, `/{semver}-{hex}/...`) при `server.document_server_dev_upstream_url` уходят на Document Server с `Host` браузера → `office.mdc`.
+4. В production прокси не включается.
 
-**Заголовки httpx** должны быть encodable в latin-1: не класть в заголовки сырой `user_id` с Unicode (например гость `guest:…:Кириллица`). Контекст пользователя — в JWT (`Authorization`), см. `_build_interservice_auth_headers` в `apps/sync/realtime/tasks.py`.
+## Запреты
 
-### DevInterServiceProxy (development/test)
+1. `httpx.AsyncClient()` напрямую — между сервисами и к внешним API.
+2. Своя OAuth-логика в сервисе; per-vendor таблица подключений (`company_*_connections`).
+3. `remote_flow` по `flow_id` реестра; второй протокол внешних агентов.
+4. Скрытый глобальный резолвер credentials в tools вне `GoogleWorkspaceClient`.
 
-Браузер и тот же origin (shell на :8002, API flows на :8001): без ingress в `development`/`test` при локальном Host срабатывает `DevInterServiceProxyMiddleware` в `create_service_app`. Путь `/flows/...`, `/crm/...`, `/voice/...`, `/documents/...` пересылается на `server.*_service_url` (если текущий процесс — не целевой сервис). В upstream уходит **тот же `Host`, что у браузера** (`qqq.lvh.me:8002`), не `localhost:8001` — иначе `CompanyResolver` не видит субдомен и `/flows` (frontend) уводит на выбор компании, `/sync` часто в `anonymous`.
+## Исключения
 
-`GET/OPTIONS /frontend/api/platform/brand` не проксируется: `create_service_app` монтирует `platform_brand` на каждом сервисе. Иначе одиночный `scripts/run.py flows` (без frontend:8002) отдаёт 502, sync bootstrap не ставит `window.__PLATFORM_BRAND__`, и SPA падает в `getPlatformI18nVars`.
+- Исключение: почта — свои `CompanyMailConnection` и `MailboxBinding` (IMAP/SMTP домен) → `mail.mdc`. `[без гейта]`
+- Исключение: чтение старых credentials `service=docs`/`sheets` в цепочке Google Workspace; новые пишутся только `workspace`. `[без гейта]`
+- Исключение: `google_workspace.api_bases` — override URL Google только для test/dev (эмулятор). `[без гейта]`
 
-Префиксы OnlyOffice (`/web-apps`, `/common`, `/cache`, `/fonts`, `/sdkjs`, `/downloadfile`) и пути `/{semver}-{hex}/{web-apps,sdkjs,fonts,doc}/...` (co-editing / Socket.IO) при заданном `server.document_server_dev_upstream_url` уходят на Document Server с `Host` = `Host` запроса браузера — иначе подписанные URL DS указывают на порт контейнера и ломают CORS.
+## Гейты
 
-Локальный Host — `core.utils.domain.is_local`. В production с внешним доменом прокси не включается.
-
-### Внешние API — `get_httpx_client`
-
-```python
-from core.http import ProxyStrategy, get_httpx_client, request_public_oauth
-
-async with get_httpx_client(timeout=30.0, strategy=ProxyStrategy.SMART) as client:
-    response = await client.get(url)            # внешний API: прямой канал, при блокировке — egress
-
-response = await request_public_oauth("POST", token_url, data=payload)  # обмен code / userinfo / refresh
-```
-
-`strategy` (`ProxyStrategy`: `DIRECT_FIRST` default, `PROXY_FIRST`, `DIRECT_ONLY`, `PROXY_ONLY`, `SMART`) — единственный способ управлять прокси; аргумент `proxy=` → `ValueError`. Детали стратегий и `settings.proxy` — **`configuration.mdc`** § «Прокси и исходящие OAuth».
-
-**Запрещено:** `httpx.AsyncClient()` напрямую.
-
-## Внешние flows (A2A)
-
-```python
-await container.flow_discovery.init_from_config(config.external_flows.flows)
-
-external_flow = await container.flow_discovery.register_agent(
-    url="http://remote-flow:8080",
-    auth_headers={"Authorization": "Bearer token"},
-)
-```
-
-`RemoteFlowNode` в FlowConfig — только direct A2A URL (registry `flow_id` запрещён):
-
-```json
-{"type": "remote_flow", "url": "https://partner.example/flows/api/v1/agent",
- "input_mapping": {"content": "@state:user_query"}, "branch_id": "default",
- "metadata_template": "{\"variables\": {\"order_id\": \"@state:order.id\", \"token\": \"@var:api_token\"}}"}
-```
-
-`branch_id` — Skill ID из Agent Card `skills[]` (у платформенного flow = `branch_id` удалённого графа); в wire уходит как `params.metadata.branch` если не `default`.
-
-`metadata_template` — JSON-объект → `SendMessage params.metadata` после `MappingResolver` (`@state:` / `@var:` как у `body_template`). У peer платформы ключ `variables` мержится в variables flow.
-
-Требования к внешнему endpoint (A2A 1.0): header `A2A-Version: 1.0`, `GET /.well-known/agent-card.json` (Card с `supportedInterfaces` / `protocolVersion: "1.0"` / `skills[]`), JSON-RPC `SendMessage` (PascalCase).
-
-## External API node
-
-```json
-{"type": "external_api",
- "url": "https://@var:api.host/v1/items/{item_id}?dry_run=@state:flags.dry_run",
- "method": "POST",
- "headers": {"Authorization": "Bearer @var:auth.token", "X-Trace-Id": "@state:trace_id"},
- "body_template": "{\"payload\": \"@state:content\"}",
- "input_mapping": {"item_id": "@state:order.id"},
- "parameters_schema": {
-   "type": "object",
-   "properties": {
-     "item_id": {"type": "string", "description": "Path placeholder {item_id} when invoked as LLM tool"}
-   },
-   "required": ["item_id"]
- }
-}
-```
-
-Входы ноды: **input_mapping** (как у остальных нод); значения из резолва подставляются в `{ключ}` URL и мержатся поверх резолва **body_template**; строки заголовков и тела поддерживают **@state:** / **@var:**. Отдельной таблицы query/path/header-параметров нет — при необходимости query в строке URL. Для тула без графового маппинга — **parameters_schema** в конфиге (как у NodeAsToolWrapper).
-
-`@var:` поддерживает вложенные пути: `@var:api.host` → `variables["api"]["host"]`; `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`.
-
-## OAuth интеграции (универсальный механизм)
-
-Модуль `core/integrations/` — единый OAuth2 flow для всех внешних интеграций (Google, Yandex, будущие). Не дублировать OAuth-логику в сервисах.
-
-| Файл | Назначение |
-|---|---|
-| `core/integrations/models.py` | `IntegrationProvider`, `IntegrationCredential`, `OAuthProviderConfig`, payload/delete для command-router |
-| `core/integrations/repository.py` | `IntegrationCredentialRepository` — CRUD для `integration_credentials` (shared БД) |
-| `core/integrations/constants.py` | `COMPANY_INTEGRATION_USER_ID`, `TOKEN_TYPE_SERVICE_ACCOUNT` |
-| `core/integrations/company_credentials.py` | Company-owned SA credentials (Google Workspace и аналоги) |
-| `core/integrations/oauth_service.py` | `OAuthService.build_auth_url`, `complete_oauth`, `refresh_token`, `get_valid_token` |
-| `core/integrations/operations.py` | `op_integrations_*` credentials list/remove и Google Workspace company get/put/delete — REST и WS RPC зовут одну функцию |
-| `core/api/integrations.py` | Тонкий REST тех же `op_*`; OAuth callback `GET /{server.name}/api/v1/integrations/oauth/callback` и authorize остаются HTTP (браузерный redirect). Дефолтный `redirect_uri` в `OAuthService.build_auth_url` совпадает с callback; после успеха — редирект на `post_auth_redirect_origin` + `return_path` (если в state был допустимый `return_origin` при старте, см. `core.utils.domain.is_allowed_integration_return_origin`), иначе — `platform_public_base_url` + `return_path` |
-| `core/integrations/guided_integration_error.py` | `GuidedIntegrationError` / `GuidedIntegrationLink` — структурированная ошибка OAuth post-save (CRM и др.), текст RU/EN |
-| `core/api/integration_oauth_error_html.py` | HTML страницы ошибки callback (SSR); локаль: state `oauth_ui_locale`, затем cookie/`Accept-Language` (`resolve_oauth_integration_locale`) |
-
-Ошибки после `complete_oauth`, в т.ч. из хука `set_oauth_credential_saved_hook` (нет `FlowInterrupt`): если проброшен `GuidedIntegrationError`, колбэк отдаёт **application/json** с полями `detail`, `code`, `guided` (структурированный блок для клиентов/UI), либо **text/html** (переход браузера): **`oauth_callback_prefers_html_response`** — `Sec-Fetch-Dest: document` **или** `Accept` с `text/html` / `application/xhtml+xml` при отличном от «только JSON» первичном типе (прокси без Fetch Metadata; `*/*` и явный `application/json` → JSON). Локали текста для HTML и для полей внутри `guided`: приоритет **`oauth_ui_locale` из OAuth state** (пишется при `build_auth_url` из запроса authorize — cookie `language` + `Accept-Language`), затем cookie/`Accept-Language` на самом callback (`resolve_oauth_integration_locale`). Для ошибок **`ValueError`** из `complete_oauth` действует то же правило HTML против JSON без структуры `guided`. `PlatformHttpErrorEnvelopeMiddleware` обогащает JSON с кодом ответа >= 400 как обычно.
-
-`BaseContainer` предоставляет `oauth_service` и `integration_credential_repository` для всех сервисов.
-
-### Канон коннекторов (без per-vendor таблиц)
-
-Единственное хранилище внешних подключений — **`integration_credentials`** + `OAuthService` / `IntegrationCredentialRepository`. Ключ: `(company_id, user_id, provider, service)`.
-
-| Слой | Как |
-|---|---|
-| User OAuth | `user_id=<user>`, обычный OAuth |
-| Company SA / shared | `user_id=COMPANY_INTEGRATION_USER_ID` (`__company__`), `token_type=service_account`, SA JSON Fernet в `access_token`, `metadata.impersonate_email` |
-| system | Seed из conf → тот же company-credential для `company_id=system`; UI PUT запрещён, только reconcile |
-
-Не плодить per-vendor таблицы (`company_*_connections`) для OAuth/SA коннекторов. Исключение — mail (IMAP/SMTP домен + bindings), см. `mail.mdc`.
-
-Константа: `COMPANY_INTEGRATION_USER_ID` в `core/integrations/constants.py`.
-
-API company Google Workspace SA: `op_integrations_workspace_company_*` + тонкий `GET/PUT/DELETE .../integrations/credentials/google/workspace/company` (admin). System: `POST .../integrations/google/workspace/system/reconcile` остаётся HTTP.
-
-Google Docs/Sheets: один Connect — `service=workspace` (scopes documents+spreadsheets+drive.file). Prior `docs`/`sheets` credentials — только чтение существующих записей. Client: `GoogleWorkspaceClient().resolve_auth(state)` в `apps/flows/src/clients/google_workspace_client.py`.
-
-Proactive user Connect (без interrupt): `GET .../credentials/google/workspace/authorize` → `{authorize_url}`; UI — `flows.integrations` modal (`flows/google_workspace_authorize`). Company SA status/admin form — те же company endpoints через `flows/google_workspace_company_*`.
-
-`google_workspace.api_bases` (`GoogleWorkspaceApiBases`) — override Sheets/Docs/Drive/token URL только для test/dev (эмулятор); прод без override = официальные Google REST bases.
-
-### Приоритет credentials (Google Workspace tools)
-
-1. **`state.variables`** — `google_service_account` / `google_access_token` / `google_impersonate_email` (override для тестов/админ-flows).
-2. **Per-user OAuth** — `service=workspace`, затем prior `docs`/`sheets`; `company_id`/`user_id` из `get_context()`.
-3. **Company SA** — credential `user_id=__company__`, `service=workspace`.
-4. **Нет ничего** — `FlowInterrupt(body=OAuthInterrupt(..., service=workspace))`, pause + auto-resume после callback.
-
-### Auto-resume после OAuth
-
-- `OAuthInterrupt` (`core/state/interrupt.py`): `kind=oauth_required`, поля `question`, `auth_url`, `provider`, `service`.
-- `build_auth_url(..., flow_context=...)` сохраняет в OAuth state (Storage) контекст flow: `flow_id`, `session_id`, `task_id`, `context_id`, `branch_id`, `channel`, `context_data`.
-- OAuth callback после `complete_oauth` — если `flow_context` есть, вызывает `enqueue(TASK_PROCESS_FLOW, is_resume=True, content="oauth_completed:...")`.
-- SSE: `emit_interrupt` для `OAUTH_REQUIRED` шлёт `statusUpdate` с `TASK_STATE_INPUT_REQUIRED` и `metadata.platform_oauth_continue=true` (без `final` на wire) — SSE остаётся открытым.
-- UI: `interruptKind === 'oauth_required'` — кнопка/ссылка авторизации (`target=_blank`); после закрытия `SendStreamingMessage` chat поднимает `SubscribeToTask` (`runA2aTaskLiveTail`), как HITL. Question/кнопка для `service=workspace` — i18n `platform_chat.interrupt_oauth_workspace_*`.
-
-### Безопасность и прозрачность
-
-- `company_id` для чтения/записи credentials — **только** из `get_context().active_company.company_id`. Разработчик flow не может подменить через `input_mapping` или `state.variables`.
-- Google Docs/Sheets auth — единый `GoogleWorkspaceClient().resolve_auth`; тулы не дублируют цепочку credentials. Другие интеграции — явная логика в туле/сервисе без скрытых глобальных резолверов.
-
-### CalendarService
-
-Делегирует OAuth в `OAuthService` (через конструктор). Credentials — в `integration_credentials`, calendar-специфичные настройки — в `metadata.calendar_settings` JSONB.
-
-## КРИТИЧНЫЕ ПРАВИЛА
-
-1. Между сервисами для данных — репозиторий при доступной БД; для HTTP — только `ServiceClient`. Прямой `httpx.AsyncClient` между сервисами запрещён.
-2. Внешние API — `get_httpx_client` с явным `strategy=`. OAuth-провайдеры — `request_public_oauth`.
-3. Внешние агенты — только A2A Protocol 1.0 (`a2a.mdc`), `RemoteFlowNode` по direct URL.
-4. OAuth внешних сервисов — через `core/integrations/OAuthService`, не дублировать в сервисах.
+- Запрет прямого `httpx.AsyncClient` в `apps/`/`core/` `[без гейта]`; аргумент `proxy=` — `ValueError` в `get_httpx_client`.
+- `tests/core/api/test_integration_oauth_error_locale.py`, `tests/core/clients/test_google_workspace_scopes.py` — OAuth callback и scopes Workspace.

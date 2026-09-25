@@ -310,8 +310,10 @@ async def test_request_without_namespace_header_falls_into_default_space(
     assert wiki_page["wiki_page_id"] not in {item["wiki_page_id"] for item in body["items"]}
 
 
-async def test_unknown_namespace_is_rejected(wiki_app, auth_headers_system):
+async def test_unknown_namespace_is_rejected(wiki_app, wiki_di, auth_headers_system):
     from httpx import ASGITransport, AsyncClient
+
+    _ = wiki_di
 
     async with AsyncClient(
         transport=ASGITransport(app=wiki_app),
@@ -324,12 +326,12 @@ async def test_unknown_namespace_is_rejected(wiki_app, auth_headers_system):
 
 
 async def test_require_scope_without_namespace_view_returns_403(
-    wiki_client, wiki_container, wiki_namespace: str
+    wiki_client, wiki_di, wiki_namespace: str
 ) -> None:
     obj = AuthzObject.platform_namespace("system", wiki_namespace)
-    tuples = await wiki_container.authz_service.list_tuples(obj)
+    tuples = await wiki_di.authz_service.list_tuples(obj)
     if tuples:
-        await wiki_container.authz_service.delete(tuples)
+        await wiki_di.authz_service.delete(tuples)
     response = await wiki_client.get(PAGES_URL)
     assert response.status_code == 403
 

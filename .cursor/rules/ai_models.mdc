@@ -1,116 +1,80 @@
 ---
-description: "AI models/provider canon: core.ai catalog, resolver, runtime, shared model catalog, platform free LLMs (humanitec_llm)"
+description: "AI-модели: core.ai (каталог, resolver, runtime), пул humanitec_llm и scoring, cooldown, контекстный слой core.llm_context, словарь LLM-имён. Читать при любом вызове модели"
+globs:
+  - "core/ai/**"
+  - "core/llm_context/**"
+  - "core/clients/llm/**"
+  - "core/clients/nano_banana.py"
+  - "core/config/llm_openai_compat.py"
 alwaysApply: false
 ---
-# AI Models — единый канон
 
-Вся платформа использует один AI-layer:
+# AI-модели
 
-`core.ai` = provider/capability catalog + shared model catalog + company settings + resolver + runtime.
+Любой выбор и вызов модели (LLM, vision, image gen, embedding, rerank) — через `core.ai`: capability → requirements → `resolve_ai_model` → `core.ai.runtime`. Сервисы не знают эндпоинты провайдеров и не создают provider-specific клиенты.
 
-## Public API
+## Модель
 
-- Capabilities: `core.ai.providers.AICapability`.
-- Provider specs: `core.ai.providers`.
-- One call config: `core.ai.llm_config.LLMCallConfig`.
-- Requirements/selection: `core.ai.requirements.AIRequestRequirements`, `AISelection`.
-- Resolution: `core.ai.resolver.resolve_ai_model(...)`.
-- Execution: `core.ai.runtime`.
+- Capabilities — `AICapability` (`core.ai.providers`); спецификации провайдеров — `core.ai.providers` (новый провайдер добавляется там один раз, нестандартный discovery — adapter `core.ai.adapters.*`).
+- Каталог — `AIModelRecord` (`core/ai/models.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет.
+- Overlay оценок — `LLMModelScore` (таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`).
+- Вызов — `LLMCallConfig` (`core/ai/llm_config.py`); выбор — `AIRequestRequirements`, `AISelection` (`core.ai.requirements`).
+- Модель — не строка: строка допустима только как выбор пользователя и сразу резолвится в typed record.
 
-Сервисы не создают provider-specific клиенты и не знают эндпоинты OpenRouter/BotHub/Groq/HuggingFace/LitServe/etc.
+## Инварианты
 
-## Каталог моделей
+1. Выбор — только `resolve_ai_model(capability, requirements, selection)` (`core/ai/resolver.py`); исполнение — только `core.ai.runtime` (chat/stream, vision, embeddings, rerank, capability bridges); LLM-клиент — `create_llm_client_for_capability(AICapability.LLM_CHAT)`.
+2. Discovery моделей — только adapters; `LLMModelsService` (`core/ai/llm_models_service.py`) оркестрирует adapter registry → records → scheduler; задачи `sync_llm_models_task`, `refresh_platform_free_models_task` — `core/ai/task_names.py` (очередь `idle`); `conf.json` задаёт credentials и параметры, не список провайдеров.
+3. `humanitec_llm` — виртуальный провайдер поверх бесплатного пула (UI label — `platform_brands.*.llms_display_label`); модели `auto` и `<provider>:<model_id>`; пул — `AIModelRecord` + `PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`; провайдер в пуле, если `provider_is_configured_for_free_pool` (`core/config/llm_openai_compat.py`); ключи пула — только `conf.json`/`conf.local.json` (`llm.<provider>.api_key` + `api_keys`), BYOK компании — один `api_key_encrypted`.
+4. Scoring: есть AA (OpenRouter benchmarks, импорт на refresh пула) → `score = intelligence_index`, иначе `catalog_heuristic`; плюс `clamp(editorial_prior)` (`EDITORIAL_PRIOR_CAP`, `core/ai/scoring.py`); `enabled=false` убирает модель; снимок — Redis `llm:platform:free_models:v1`; `auto` фильтрует по требованиям запроса (tools, files, `response_format`) и режет `max_candidates_total`.
+5. Fail-closed: ошибка HTTP каталога или AA валит задачу без затирания старого снимка; пустые `records` — `raise` до записи Redis; битый payload — `raise`.
+6. Cooldown кандидата — Redis-ключ по `candidate_key` со значением `AIProviderErrorRecord` (TTL — `Retry-After` 429 или `candidate_cooldown_seconds`); классификация — только `core.ai.provider_error` (`AIProviderErrorClass`, включая `content_filter`); `AIAvailabilityStatus` каталога — другая ось; Redis недоступен — ошибка.
+7. Settings `GET /frontend/api/platform/llm-model-scores` (только `system`) читает cooldown без live-ping; smoke — отдельная команда `probe-providers`.
+8. Fallback — typed `fallback_models: list[LLMCallConfig]`; пустой бесплатный пул не обрывает authored fallback (`RuntimeError` только при пустой итоговой цепочке); `paid_fallback` ≠ `fallback_models`.
+9. Embedding выбирается с учётом размерности (`storage_dimension` = размерность pgvector); rerank — capability `AICapability.RERANK` с override модели.
+10. Image gen — `AICapability.IMAGE_GEN`; `NanoBananaClient` (`core/clients/nano_banana.py`) резолвит модель через `core.ai.resolver` и клиент через `core.ai.runtime`.
+11. Файлы из ответа LLM (изображения, аудио) — через `files_service`/`audio_processor` в S3, аудио — со STT.
+12. Биллинг вызова — `LLMClient.prepare_billing()` + `record_llm_client_response` → `billing.mdc`; LLM во flows — только `.stream()` → `a2a.mdc`.
 
-- Единственный каталог моделей — `core.ai.model_catalog_repository.AIModelCatalogRepository`.
-- Storage namespace — `ai_model_catalog:*`.
-- Record — `core.ai.models.AIModelRecord`: provider, id, modalities, pricing/`is_free`, typed AA indices, embedding dimensions. Score и editorial на записи нет.
-- Модель — не строка. Строка допустима только как пользовательский выбор, который сразу резолвится в typed record/selection.
+### Контекстный слой
 
-Запрещены отдельные таблицы/namespace `llm_model:*`, `embedding_models`, `rerank_models`, `free_models` и flows-owned model repository/model.
+1. `core/llm_context/**` + `core/clients/llm/context_layer.py` компилируют system/profile, активное окно, память, RAG и результаты tools в лимит токенов для `LLMClient.chat/stream/invoke` (`llm_context`, `llm_context_blocks`, `llm_context_source_registry`); самодельные «большие промпты» в `apps/*` запрещены.
+2. Слои политики: `settings.llm_context` → `CompanyAIProviders.llm_context` → ресурс `llm_context` → `NodeConfig.llm_context` → `llm.chat(llm_context=...)`; поздний слой — patch раннего.
+3. Профиль — `IdentityLLMContextProfileSource` (блок `kind=profile` stable prefix).
+4. Память: RAG отбирает эпизоды, упаковка и рендер `kind=memory` — строго хронологически; запись и сжатие памяти — фоновые, их ошибка логируется и не ломает успешный run.
+5. Известный `context_length` модели — жёсткий clamp; selected/dropped/usage пишутся в metadata и traces; большие результаты tools сжимаются детерминированно без LLM.
+6. Prompt caching — stable-prefix hash компилятора; provider-native controls мержатся только в `context_layer.py`.
 
-## Discovery
+### Словарь LLM
 
-- Provider-specific model discovery живёт только в `core.ai.adapters.*`.
-- `core/ai/llm_models_service.py::LLMModelsService` (`BaseContainer.llm_models_service`) — только orchestration: adapter registry → records → shared repository → scheduler; задачи `sync_llm_models_task` / `refresh_platform_free_models_task` объявлены в `core/ai/task_names.py` (очередь `idle`).
-- Новый provider добавляется один раз в `core.ai.providers`; если discovery нестандартный — отдельный adapter в `core.ai.adapters`.
-- `conf.json` задаёт credentials/base_url/models_url/enabled-параметры, но не список существующих providers.
+| Понятие | Имя | Уточнение |
+|---|---|---|
+| ID модели / провайдер / источник | `model`, `provider`, `source` | `model_name`, `llm_provider`, `llm_source` — только runtime-атрибуты `LLMClient` и metadata |
+| Base URL / ключ / Yandex folder | `base_url`, `api_key`, `folder_id` | не `url`, `key`, `fid` |
+| Заголовки клиента | `default_headers` | не путать с overlays |
+| Overlay тела / заголовков: конфиг | `extra_request_body`, `extra_request_headers` | `LLMCallConfig`, ресурсы, bridge `core.ai.runtime`; `@var:` резолвится до transport |
+| Overlay тела / заголовков: вызов | `extra_body`, `extra_headers` | только `LLMClient.stream/chat/invoke`, мержатся последними |
+| Окно модели | `context_length` | не `max_tokens` |
+| Сообщения | `messages` → `normalized_messages` (A2A) → `openai_messages` | `normalized` запрещён |
+| Контекст | `llm_context`, `llm_context_blocks` (`LLMContextBlock`), `llm_context_source_registry` | не `history`, `memory_items`, `chunks` |
+| Structured output | `response_model` (`chat()`), `response_format` (transport), `json_output` (`invoke()`) | не смешивать |
+| Кандидаты | `candidate`, `candidates` | `fallback` — только `fallback_models` и платный fallback |
+| Usage / ответ | `usage_data` (нормализованный), `usage` (сырой); `content`, `reasoning`, `tool_calls`; `full_content`, `full_reasoning` | — |
 
-## Resolve и runtime
-
-- Выбор модели идёт только через `resolve_ai_model(capability, requirements, selection)`.
-- Исполнение идёт только через `core.ai.runtime`: LLM chat/stream, vision, embeddings, rerank и capability bridges.
-- `get_llm(...)`, `core.clients.llm.factory`, прямой `AIEmbeddingClient(...)`, прямой `AIRerankerHTTPClient(...)`, прямые `httpx` к AI provider endpoints вне adapters/runtime запрещены.
-- Старые concrete resolver-ы (`resolve_llm_for_capability`, `resolve_embedding_for_company`, `resolve_rerank_for_company`) запрещены.
-
-## Platform free LLMs (humanitec_llm)
-
-`humanitec_llm` — virtual provider поверх free pool, не отдельный внешний provider. Технический id провайдера; UI label — `platform_brands.*.llms_display_label` (например Linnex LLMs / Humanitec LLMs).
-
-- Модели: `auto` и concrete refs вида `<provider>:<model_id>` из shared free catalog.
-- Free pool строится из `AIModelCatalogRepository` и canonical `core.ai.providers.PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER`.
-- `llm.platform_free_pool.providers` в конфиге запрещён.
-- `auto` выбирает по `AIRequestRequirements + computed_scoring + availability`.
-- Провайдер в free-pool настроен, если `collect_provider_api_keys` непустой; для account-free-tier ещё нужен `smoke_model`. Один предикат: `core.config.llm_openai_compat.provider_is_configured_for_free_pool` — refresh, runtime и adapter `is_configured`.
-- Пул аккаунтов для `humanitec_llm` / auto — только `conf.json` / `conf.local.json`: `llm.<provider>.api_key` + `api_keys`. Company BYOK — один `api_key_encrypted`; extra-keys в company metadata нет.
-- Redis-снимок free-pool — scored catalog (per-provider cap каталога). На вызове: filter tools/files/`response_format` текущего запроса, затем `max_candidates_total`. `requirement_bonus` на refresh не вызывается (quality-only: AA/heuristic/editorial).
-- Cooldown кандидата — Redis-ключ по `candidate_key`; значение — JSON `AIProviderErrorRecord` (`error_class`, `http_status`, `error_text`, `set_at`). TTL = `Retry-After` с 429, иначе `candidate_cooldown_seconds`. Классификация — только `core.ai.provider_error` (`AIProviderErrorClass`, `classify_ai_provider_http`, `classify_ai_provider_error`). HTTP-таблица, billing/content-filter маркеры и OpenRouter 401 `Missing Authentication header` не дублируются. In-process dict нет; Redis недоступен — ошибка. Битый payload, в том числе legacy `"1"`, — `raise`.
-- `content_filter` входит в `AIProviderErrorClass` (400 с `content_filter` / `ResponsibleAIPolicyViolation`). Catalog `AIAvailabilityStatus` — отдельная ось discovery (`unknown`/`available`/`unavailable`/`disabled`), не Redis cooldown и не `rate_limited`.
-- Settings GET `/frontend/api/platform/llm-model-scores` (только `system`) читает Redis cooldown и отдаёт `providers[]` + `availability` на item. Live-ping на GET запрещён.
-- Probe провайдеров — отдельная команда `POST .../probe-providers` (smoke chat), не часть GET. Успех не сбрасывает cooldown чужих моделей.
-
-## Platform model scoring
-
-Один контур, который читается сверху вниз:
-
-```text
-каталог провайдера → is_free?
-                → AA (OpenRouter), если есть
-                → score = AA.intelligence | catalog_heuristic
-                → + editorial_prior из БД, если строка есть
-                → Redis ranked list
-                → auto: filter текущего запроса → cap max_candidates_total
-```
-
-- `AIModelRecord` хранит modalities, pricing/`is_free` и typed AA indices. Score и editorial в каталоге нет.
-- `llm_model_scores` — только overlay компании `system`: `enabled`, `editorial_prior`, `note`. Computed score, AA и seed-рейтинги в БД не пишутся.
-- Redis `llm:platform:free_models:v1` — ranked snapshot с computed `score`.
-- Есть AA → `score = intelligence_index`. Нет AA → `catalog_heuristic` (size/context/tools). Не выдумывать AA.
-- Overlay: `score += clamp(editorial_prior)` (`EDITORIAL_PRIOR_CAP` в `core/ai/scoring.py`). `enabled=false` → модели нет в pool.
-- Tie-break при равном score — `_record_sort_key` (context, tools, created, provider, id).
-- `conf.json` не хранит рейтинги, seed `items[]`, blend/weights. Overlay правится в Settings UI только у `system`.
-- AA импортируется с OpenRouter `GET /api/v1/benchmarks?source=artificial-analysis` на refresh free-pool (~55 мин), не на catalog sync каждые 60s.
-- Per-company рейтинги не делаются: компания выбирает `humanitec_llm`/`auto` или конкретную модель / BYOK.
-
-Fail-closed: ошибка HTTP каталога/AA → задача scheduler падает, старый catalog/Redis не затирается пустотой. Пустой `records` на refresh/rescore → `raise` **до** записи Redis (`models:[]` не пишется). Битый Redis payload → `raise`. Adapter `list_models` не возвращает `[]` из-за «не настроен».
-
-Пустой или отсутствующий free-pool на LLM-вызове не обрывает authored `fallback_models` (company / эффективный node config): expand `humanitec_llm` auto / missing pinned возвращает `[]`, цепочка идёт дальше; `RuntimeError` только если итоговая цепочка пуста. `paid_fallback` ≠ `fallback_models`. Конструктор `humanitec_llm` не требует живой free-pool, если есть не-humanitec fallback.
-
-## Embedding / Rerank / Fallback
-
-- Embedding selection dimension-aware: `storage_dimension` должен совпадать с активной pgvector dimension; иначе resolver/UI fail-closed.
-- Rerank — обычная capability `AICapability.RERANK` с provider/model override, не policy-string `none/provider_litserve/openrouter`.
-- Fallback — typed `fallback_models: list[LLMCallConfig]`; raw JSON textarea, `string[]` и урезанные модели запрещены.
+В `core/clients/llm/**` локальные имена `data`, `result`, `response`, `raw`, `cfg`, `temp`, `out`, `val`, `txt`, `msg`, `tc`, `mc`, `idx` запрещены; имена — `http_response`, `response_payload`, `provider_config`, `resolved_headers`, `choice_message`, `tool_call_delta`, `candidate_index`.
 
 ## UI
 
-- Settings UI получает providers/models/capabilities только из backend catalog.
-- UI не хранит provider allowlist и не дублирует capability filters.
-- Для каждой capability показываются только совместимые модели; несовместимость объясняется backend reason.
+- Настройки получают провайдеров, модели и совместимость по capability только из backend-каталога; allowlist провайдеров и фильтры capability в UI не дублируются; несовместимость объясняет backend.
+- Fallback-цепочка редактируется как `LLMCallConfig[]` тем же редактором модели; raw JSON и `string[]` запрещены.
 
-## Gates
+## Запреты
 
-Канон закреплён `scripts/check_company_ai_canon.py`. При изменении AI-layer запускать:
+1. `get_llm(...)`, `core.clients.llm.factory`, прямые `AIEmbeddingClient(...)`/`AIRerankerHTTPClient(...)`, прямой HTTP к AI-провайдерам вне adapters и runtime; старые resolver-ы `resolve_llm_for_capability`, `resolve_embedding_for_company`, `resolve_rerank_for_company`.
+2. Таблицы или namespaces моделей вне `ai_models` (`llm_model:*`, `embedding_models`, `rerank_models`, `free_models`); `llm.platform_free_pool.providers` в конфиге; рейтинги в `conf.json`; per-company рейтинги.
+3. In-process dict cooldown; `[]` из adapter `list_models` вместо ошибки.
 
-```bash
-make test-static
-uv run pytest -q tests/core/ai/test_platform_model_scoring_fixtures.py
-uv run pytest -q tests/core/clients/test_llm_external_provider_live.py --tb=short
-uv run pytest -q tests/core/ai/test_platform_model_scoring_live.py -m network  # conf.local.json keys
-```
+## Гейты
 
-Обновление scoring fixtures после смены catalog/AA/heuristic:
-
-```bash
-uv run python scripts/generate_llm_scoring_fixtures.py
-uv run python scripts/generate_llm_scoring_fixtures.py --check  # drift gate, network + keys
-```
+- `scripts/check_company_ai_canon.py` (`make check-events-canon`) — `core.ai` как единственный AI-слой.
+- `tests/core/ai/test_platform_model_scoring_fixtures.py`; `scripts/generate_llm_scoring_fixtures.py --check` (сеть + ключи) — drift scoring.

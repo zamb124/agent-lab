@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from apps.flows.src.models.agent_toolkit import AgentToolkit
-from apps.flows.src.services.agent_toolkit_service import bootstrap_agent_toolkits_from_registry
 from apps.flows.src.services.flows_loader import FlowsLoader
 
 
@@ -22,32 +21,28 @@ def registry_path(bundles_dir: Path) -> Path:
 
 
 @pytest.fixture
-def loader(bundles_dir: Path, container) -> FlowsLoader:
+def loader(bundles_dir: Path, di) -> FlowsLoader:
     return FlowsLoader(
         bundles_dir=bundles_dir,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=bundles_dir.parent / "registry.yaml",
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
 
 
 @pytest.mark.asyncio
 async def test_registry_defines_lara_toolkit_as_desktop_default(
-    registry_path: Path, container
+    registry_path: Path, di
 ) -> None:
-    loaded = await bootstrap_agent_toolkits_from_registry(
-        container.agent_toolkit_repository,
+    loaded = await AgentToolkit.bootstrap_agent_toolkits_from_registry(
         registry_path,
         filter_public=False,
     )
     assert loaded >= 1
-    lara = await container.agent_toolkit_repository.get("lara")
+    lara = await AgentToolkit.by_toolkit_id("lara")
     assert lara is not None
     assert "lara" in lara.flow_ids
     assert lara.default_enabled is True
-    core = await container.agent_toolkit_repository.get("humanitec_core")
+    core = await AgentToolkit.by_toolkit_id("humanitec_core")
     assert core is not None
     assert "humanitec_agent" in core.flow_ids
     assert core.default_enabled is False

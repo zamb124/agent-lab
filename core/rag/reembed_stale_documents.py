@@ -14,12 +14,10 @@ from collections import defaultdict
 
 from core.billing import get_billing_service
 from core.config import get_settings
-from core.container.base import BaseContainer
 from core.context import clear_context, set_context
 from core.context.job_context import build_job_context, pick_company_billing_user
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
+from core.models.identity_models import Company
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
 from core.rag.factory import get_rag_provider
 from core.rag.models import RAGReembedTickResult
@@ -30,14 +28,13 @@ logger = get_logger(__name__)
 
 async def execute_reembed_tick(
     *,
-    container: BaseContainer,
     channel: str,
     schedule_task_id: str,
 ) -> RAGReembedTickResult:
     """
     Запускает один тик перевекторизации для воркера.
 
-    Берёт in-process pgvector-провайдер из фабрики, репозитории — из ``container``.
+    Берёт in-process pgvector-провайдер из фабрики.
     Возвращает унифицированный dict-результат для TaskIQ.
     """
     if not schedule_task_id or not schedule_task_id.strip():
@@ -64,8 +61,6 @@ async def execute_reembed_tick(
 
     reembedded, by_company_written = await _run_reembed_round(
         provider=provider,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
         batch_size=batch_size,
         target_embedding_model=target_model,
         schedule_task_id=schedule_task_id,
@@ -94,8 +89,6 @@ async def execute_reembed_tick(
 async def _run_reembed_round(
     *,
     provider: PgVectorProvider,
-    company_repository: CompanyRepository,
-    user_repository: UserRepository,
     batch_size: int,
     target_embedding_model: str,
     schedule_task_id: str,
@@ -123,7 +116,7 @@ async def _run_reembed_round(
 
     for cid in sorted(groups.keys()):
         slice_pairs = groups[cid]
-        company = await company_repository.get(cid)
+        company = await Company.get(cid)
         if company is None:
             logger.warning(
                 "reembed_stale.company_missing_skip",
@@ -143,7 +136,6 @@ async def _run_reembed_round(
         try:
             bill_user = await pick_company_billing_user(
                 company=company,
-                user_repository=user_repository,
             )
         except ValueError:
             logger.error(

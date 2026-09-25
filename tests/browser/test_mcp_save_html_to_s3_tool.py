@@ -1,3 +1,4 @@
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from __future__ import annotations
 
 import json
@@ -45,7 +46,7 @@ class _FakeFilesService:
             raise ValueError("expected non-empty bytes")
         return SimpleNamespace(
             file_id="file_test_1",
-            s3_bucket="files",
+            storage_id=PLATFORM_STORAGE_ID,
             s3_key="files/file_test_1.html",
             storage_url=None,
             file_size=len(data),
@@ -61,7 +62,7 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
       <a href="https://example.org/second">second</a>
     </body></html>
     """.strip()
-    container = SimpleNamespace(
+    di = SimpleNamespace(
         browser_runtime=SimpleNamespace(
             lease_manager=_FakeLeaseManager(_FakePage("https://example.com/root", html))
         ),
@@ -70,7 +71,7 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
     result = await _tool_call(
         tool_name="browser_save_html_to_s3",
         arguments={"session_id": "sess-1", "links_limit": 5},
-        container=container,  # pyright: ignore[reportArgumentType]
+        di=di,  # pyright: ignore[reportArgumentType]
     )
     assert result.is_error is False
     text_raw = result.content[0].get("text")

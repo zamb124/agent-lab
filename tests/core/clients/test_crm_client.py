@@ -45,14 +45,14 @@ def _namespace_context(*, user: User, company: Company, namespace: str, auth_tok
 
 async def test_crm_client_create_note_and_get_entity(
     crm_client,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     unique_id: str,
 ) -> None:
     _ = crm_client
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     namespace = "default"
 
@@ -92,16 +92,16 @@ async def test_crm_client_create_note_and_get_entity(
 
 async def test_crm_client_search_entities(
     crm_client,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     from tests.fixtures.crm_test_setup import wait_for_crm_semantic_search_hit
 
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
 
     marker = f"crm_client_search_{unique_id}"

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.sync.dependencies import ContainerDep
+from apps.sync.di import Di
 from apps.sync.models.channels import ChannelRead
 from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.realtime.operations import (
@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.get("/members", response_model=OffsetPage[CompanyMemberRead])
 async def list_company_members(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[CompanyMemberRead]:
@@ -29,7 +29,7 @@ async def list_company_members(
     return await op_company_members_list(
         CompanyMembersListPayload(limit=limit, offset=offset),
         user=user,
-        container=container,
+        di=di,
     )
 
 
@@ -38,7 +38,7 @@ async def list_company_members(
 )
 async def list_shared_channels_with_member(
     peer_user_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ChannelRead]:
@@ -48,5 +48,5 @@ async def list_shared_channels_with_member(
             peer_user_id=peer_user_id, limit=limit, offset=offset
         ),
         user=user,
-        container=container,
+        di=di,
     )

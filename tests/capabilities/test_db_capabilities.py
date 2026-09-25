@@ -5,16 +5,14 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from core.types import require_json_object
 from tests.fixtures.datasources import CustomerDatasource
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(180)]
 
 
-async def test_db_capabilities_in_manifest() -> None:
-    container = get_capability_gateway_container()
-    manifest = await container.capability_registry.manifest()
+async def test_db_capabilities_in_manifest(capability_gateway_di) -> None:
+    manifest = await capability_gateway_di.capability_registry.manifest()
     names = {item.name for item in manifest.capabilities}
     assert "db.schema" in names
     assert "db.query" in names

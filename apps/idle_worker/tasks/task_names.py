@@ -12,15 +12,15 @@ TASK_PUSH_CONFIG_GET = declare_task("push_config_get", queue="idle")
 TASK_PUSH_CONFIG_LIST = declare_task("push_config_list", queue="idle")
 TASK_PUSH_CONFIG_DELETE = declare_task("push_config_delete", queue="idle")
 TASK_PUSH_NOTIFICATION_SEND = declare_task(
-    "push_notification_send", queue="idle", retry=True, max_retries=5
+    "push_notification_send", queue="a2a_push", retry=True, max_retries=5
 )
 TASK_SEND_TASK_UPDATE = declare_task(
-    "send_task_update", queue="idle", retry=True, max_retries=3
+    "send_task_update", queue="a2a_push", retry=True, max_retries=3
 )
-TASK_SEND_TASK_COMPLETED = declare_task("send_task_completed", queue="idle")
-TASK_SEND_TASK_FAILED = declare_task("send_task_failed", queue="idle")
+TASK_SEND_TASK_COMPLETED = declare_task("send_task_completed", queue="a2a_push")
+TASK_SEND_TASK_FAILED = declare_task("send_task_failed", queue="a2a_push")
 TASK_SEND_TASK_INPUT_REQUIRED = declare_task(
-    "send_task_input_required", queue="idle"
+    "send_task_input_required", queue="a2a_push"
 )
 
 TASK_INIT_NEW_COMPANY = declare_task(
@@ -46,6 +46,9 @@ TASK_FILE_RETENTION_PURGE_TICK = declare_task(
 )
 TASK_FILE_RETENTION_BACKFILL_TICK = declare_task(
     "file_retention_backfill_tick", queue="idle", scheduled=True
+)
+TASK_STORAGE_MIGRATION_TICK = declare_task(
+    "storage_migration_tick", queue="idle", retry=True, max_retries=3
 )
 
 TASK_PLATFORM_SCHEDULES_GC_TICK = declare_task(
@@ -77,4 +80,5 @@ __all__ = [
     "TASK_SEND_TASK_INPUT_REQUIRED",
     "TASK_SEND_TASK_UPDATE",
     "TASK_SPAN_BILLING_SETTLEMENT_TICK",
+    "TASK_STORAGE_MIGRATION_TICK",
 ]

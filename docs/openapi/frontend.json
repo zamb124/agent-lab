@@ -542,7 +542,7 @@
           "companies"
         ],
         "summary": "Check Slug",
-        "description": "Проверка доступности slug для субдомена\n\nАргументы:\n    request: Запрос с slug\n    container: DI контейнер\n\nВозвращает:\n    Информация о доступности slug",
+        "description": "Проверка доступности slug для субдомена\n\nАргументы:\n    request: Запрос с slug\n    di: Service Kit\n\nВозвращает:\n    Информация о доступности slug",
         "operationId": "check_slug_frontend_api_companies_check_slug_post",
         "requestBody": {
           "content": {
@@ -587,7 +587,7 @@
           "companies"
         ],
         "summary": "Create Company",
-        "description": "Создание новой компании\n\nАргументы:\n    request_data: Данные компании\n    request: FastAPI request\n    container: DI контейнер\n\nВозвращает:\n    Информация о созданной компании и URL для редиректа",
+        "description": "Создание новой компании\n\nАргументы:\n    request_data: Данные компании\n    request: FastAPI request\n    di: Service Kit\n\nВозвращает:\n    Информация о созданной компании и URL для редиректа",
         "operationId": "create_company_frontend_api_companies_post",
         "requestBody": {
           "content": {

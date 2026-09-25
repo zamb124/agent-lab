@@ -15,11 +15,11 @@ import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, ClassVar, Literal, NotRequired, Protocol, TypedDict, cast
+from typing import ClassVar, Literal, NotRequired, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy.exc import IntegrityError
 
+import core.tracing.attributes as trace_attributes
 from apps.crm.constants_graph import (
     COMPANY_ENTITY_TYPE,
     IN_CONTEXT_RELATIONSHIP_TYPE,
@@ -28,21 +28,13 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
 )
-from apps.crm.db.integrity import is_unique_violation
-from apps.crm.db.models import CRMEntity, CRMTask, EntityType, Relationship, RelationshipType
-from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
-from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
-from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.events import (
     CRM_ENTITY_CREATED,
     CRM_ENTITY_DELETED,
     CRM_ENTITY_UPDATED,
     publish_crm_entity_event,
 )
+from apps.crm.models.access_request import AccessRequest
 from apps.crm.models.api import (
     AIAnalysisDraftApplyResult,
     AIAnalysisDraftPatchRequest,
@@ -57,6 +49,18 @@ from apps.crm.models.api import (
     DraftEntityPatch,
     EntityMergeRequest,
 )
+from apps.crm.models.company_mapping import CompanyMapping
+from apps.crm.models.crm_entity import (
+    CRMEntity,
+    encode_entity_cursor,
+    entity_namespace,
+    index_crm_entity,
+    resolve_crm_company_id,
+)
+from apps.crm.models.entity_type import EntityType
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.relationship_type import RelationshipType
+from apps.crm.models.task import CRMTask
 from apps.crm.services.attachment_service import AttachmentService
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_summary_broadcast import (
@@ -96,32 +100,36 @@ from core.logging import get_logger
 from core.models.i18n_models import Language
 from core.models.identity_models import NamespaceCRMSettings
 from core.namespace import NamespaceService
+from core.rag import BaseRAGProvider
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.models import RAGMetadataFilter, RAGSearchOptions
+from core.rag.post_retrieval_rerank import RerankScoreCache, apply_rerank_after_retrieve
+from core.rag.search_options_resolver import resolve_platform_search_options
+from core.rag_indexing_schema import SearchChannelsDefaults
 from core.tasks import enqueue
 from core.test_scope import MOCK_LLM_SIDE_EFFECT_CRM_SUMMARY, mock_llm_side_effect_enqueue_labels
-from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.tracing.operation_span import traced_operation
+from core.types import (
+    JsonObject,
+    JsonValue,
+    require_json_array,
+    require_json_object,
+    require_json_value,
+)
 
 logger = get_logger(__name__)
 from apps.crm.config import get_crm_settings  # noqa: E402
+from apps.crm.services.crm_entity_access_service import CrmEntityAccessService  # noqa: E402
 from apps.crm.services.crm_work_item_service import (  # noqa: E402
     CrmTaskWorkSeed,
     CrmWorkItemService,
 )
+from apps.crm.services.note_markdown_format_schedule import (  # noqa: E402
+    schedule_note_markdown_format,
+)
 from core.config import get_settings  # noqa: E402
 from core.utils.chunked_async import map_reduce_tree, run_chunked_map  # noqa: E402
 from core.worktracker.models import UserActor  # noqa: E402
-
-if TYPE_CHECKING:
-    from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
-
-
-class NoteMarkdownFormatScheduler(Protocol):
-    def __call__(
-        self,
-        *,
-        note_id: str,
-        company_id: str,
-        namespace: str,
-    ) -> Awaitable[bool]: ...
 
 
 class EntityTypePromptField(TypedDict):
@@ -353,10 +361,8 @@ class EntityService:
 
     def __init__(
         self,
-        entity_repo: EntityRepository,
-        entity_type_repo: EntityTypeRepository,
-        relationship_type_repo: RelationshipTypeRepository,
-        relationship_repo: RelationshipRepository,
+        rag: BaseRAGProvider,
+        rerank_score_cache: RerankScoreCache,
         namespace_service: NamespaceService,
         attachment_service: AttachmentService,
         a2a_client: A2AClient,
@@ -364,17 +370,11 @@ class EntityService:
         daily_summary_artifact_service: DailySummaryArtifactService,
         user_person_service: UserPersonService,
         authz: AuthzService,
-        access_request_repo: AccessRequestRepository,
-        company_mapping_repo: CompanyMappingRepository,
-        entity_access: "CrmEntityAccessService",
-        task_repository: TaskRepository | None = None,
-        crm_work_item_service: CrmWorkItemService | None = None,
-        note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = None,
+        entity_access: CrmEntityAccessService,
+        crm_work_item_service: CrmWorkItemService,
     ) -> None:
-        self._entity_repo: EntityRepository = entity_repo
-        self._entity_type_repo: EntityTypeRepository = entity_type_repo
-        self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
-        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._rag: BaseRAGProvider = rag
+        self._rerank_score_cache: RerankScoreCache = rerank_score_cache
         self._namespace_service: NamespaceService = namespace_service
         self._attachment_service: AttachmentService = attachment_service
         self._a2a_client: A2AClient = a2a_client
@@ -384,14 +384,8 @@ class EntityService:
         )
         self._user_person_service: UserPersonService = user_person_service
         self._authz: AuthzService = authz
-        self._access_request_repo: AccessRequestRepository = access_request_repo
-        self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
         self._entity_access: CrmEntityAccessService = entity_access
-        self._task_repository: TaskRepository | None = task_repository
-        self._crm_work_item_service: CrmWorkItemService | None = crm_work_item_service
-        self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler | None = (
-            note_markdown_format_scheduler
-        )
+        self._crm_work_item_service: CrmWorkItemService = crm_work_item_service
 
     def _get_company_id(self) -> str:
         context = get_context()
@@ -409,7 +403,7 @@ class EntityService:
     async def _platform_company_entity_ids(self) -> frozenset[str]:
         """ID CRM-сущностей активной платформенной компании (атрибут platform_company_id)."""
         company_id = self._get_company_id()
-        rows = await self._entity_repo.find_by_attribute(
+        rows = await CRMEntity.all_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
@@ -458,19 +452,21 @@ class EntityService:
             if sub_clean == "":
                 return
 
-        entity_type_model = await self._entity_type_repo.get_by_type_id(
-            entity_type,
+        entity_type_model = await EntityType.by_company_namespace_and_type_id(
+            company_id=self._get_company_id(),
             namespace=namespace,
-        )
+            type_id=entity_type,
+        ).get_or_none()
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {entity_type}")
 
         sub_clean = entity_subtype.strip() if isinstance(entity_subtype, str) else ""
         if sub_clean:
-            subtype_model = await self._entity_type_repo.get_by_type_id(
-                sub_clean,
+            subtype_model = await EntityType.by_company_namespace_and_type_id(
+                company_id=self._get_company_id(),
                 namespace=namespace,
-            )
+                type_id=sub_clean,
+            ).get_or_none()
             if subtype_model is None:
                 raise ValueError(f"Entity subtype not found: {sub_clean}")
 
@@ -486,11 +482,17 @@ class EntityService:
         Перед проверкой приводит значения полей с type integer/number из строковой формы,
         если это однозначно (типичный вывод LLM).
         """
+        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
+            sub_clean = entity_subtype.strip() if isinstance(entity_subtype, str) else ""
+            if sub_clean == "":
+                return
+
         type_id = entity_subtype or entity_type
-        entity_type_model = await self._entity_type_repo.get_by_type_id(
-            type_id,
+        entity_type_model = await EntityType.by_company_namespace_and_type_id(
+            company_id=self._get_company_id(),
             namespace=namespace,
-        )
+            type_id=type_id,
+        ).get_or_none()
         if entity_type_model is None:
             raise ValueError(f"Entity type not found: {type_id}")
 
@@ -741,10 +743,11 @@ class EntityService:
         field_specs: dict[str, JsonObject] = {}
         type_id = entity_subtype or entity_type
         if type_id is not None:
-            entity_type_model = await self._entity_type_repo.get_by_type_id(
-                type_id,
+            entity_type_model = await EntityType.by_company_namespace_and_type_id(
+                company_id=self._get_company_id(),
                 namespace=namespace,
-            )
+                type_id=type_id,
+            ).get_or_none()
             if entity_type_model is None:
                 raise ValueError(f"Entity type not found: {type_id}")
             field_specs = self._collect_entity_type_field_specs(entity_type_model)
@@ -817,42 +820,38 @@ class EntityService:
         return ns.crm_settings
 
     async def _validate_voice_target(self, entity_id: str, company_id: str) -> None:
-        ent = await self._entity_repo.get(entity_id)
+        ent = await CRMEntity.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Voice entity not found: {entity_id}")
-        et = await self._entity_type_repo.get_by_type_id(
-            ent.entity_type,
+        et = await EntityType.by_company_namespace_and_type_id(
+            company_id=company_id,
             namespace=ent.namespace,
-        )
+            type_id=ent.entity_type,
+        ).get_or_none()
         if et is None or not et.is_voice_target:
             raise ValueError(
                 f"Type {ent.entity_type!r} cannot be a note voice (is_voice_target=False)"
             )
 
     async def _validate_context_target(self, entity_id: str, company_id: str) -> None:
-        ent = await self._entity_repo.get(entity_id)
+        ent = await CRMEntity.get(entity_id)
         if ent is None or ent.company_id != company_id:
             raise ValueError(f"Context entity not found: {entity_id}")
-        et = await self._entity_type_repo.get_by_type_id(
-            ent.entity_type,
+        et = await EntityType.by_company_namespace_and_type_id(
+            company_id=company_id,
             namespace=ent.namespace,
-        )
+            type_id=ent.entity_type,
+        ).get_or_none()
         if et is None or not et.is_context_anchor:
             raise ValueError("Note context must be a type with the context-anchor flag")
 
-    async def _get_existing_outgoing_target(
-        self,
-        source_entity_id: str,
-        relationship_type: str,
-    ) -> str | None:
-        rels = await self._relationship_repo.get_outgoing(source_entity_id, relationship_type)
-        if not rels:
-            return None
-        return rels[0].target_entity_id
-
     async def get_note_voice_entity_id(self, note_id: str) -> str | None:
         """Возвращает entity_id автора заметки (note_voice relationship), если есть."""
-        return await self._get_existing_outgoing_target(note_id, NOTE_VOICE_RELATIONSHIP_TYPE)
+        return await Relationship.target_by_source_and_type(
+            self._get_company_id(),
+            note_id,
+            NOTE_VOICE_RELATIONSHIP_TYPE,
+        )
 
     async def _resolve_voice_entity_id_for_note(
         self,
@@ -914,7 +913,8 @@ class EntityService:
         resolved_context_id: str | None,
     ) -> None:
         company_id = self._get_company_id()
-        _ = await self._relationship_repo.delete_outgoing_by_source_and_types(
+        _ = await Relationship.delete_by_source_and_types(
+            company_id,
             note_id,
             [NOTE_VOICE_RELATIONSHIP_TYPE, IN_CONTEXT_RELATIONSHIP_TYPE],
         )
@@ -955,11 +955,7 @@ class EntityService:
 
     async def _create_system_relationship(self, row: Relationship) -> None:
         """Idempotent create: concurrent note_voice/in_context writers share the unique edge."""
-        try:
-            _ = await self._relationship_repo.create(row)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
+        _ = await Relationship.ensure_edge(row)
 
     async def apply_imported_note_graph_links(
         self,
@@ -971,7 +967,7 @@ class EntityService:
     ) -> None:
         ns = self._resolve_namespace_for_write(namespace)
         company_id = self._get_company_id()
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
         mention_ids = self.extract_linked_entity_ids_from_description(note.description or "")
@@ -992,11 +988,14 @@ class EntityService:
         )
 
     async def resolved_entity_ids_for_note(self, note_id: str) -> list[str]:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
         from_text = self.extract_linked_entity_ids_from_description(note.description or "")
-        rels = await self._relationship_repo.get_by_entity(note_id)
+        rels = await Relationship.touching_in_company(
+            note_id,
+            self._get_company_id(),
+        ).all()
         from_edges: list[str] = []
         for rel in rels:
             if rel.source_entity_id != note_id:
@@ -1060,7 +1059,7 @@ class EntityService:
             None,
             self._normalize_namespace(namespace),
         )
-        entities, _, _ = await self._entity_repo.list_by_cursor(
+        page = await CRMEntity.cursor_page(
             entity_type=eff_type,
             entity_subtype=None,
             namespace=self._normalize_namespace(namespace),
@@ -1068,7 +1067,7 @@ class EntityService:
             filter_field_types={"note_date": "date"},
             limit=1000,
         )
-        return entities
+        return page.items
 
     @staticmethod
     def _build_source_version(notes: list[CRMEntity]) -> JsonObject:
@@ -1101,8 +1100,6 @@ class EntityService:
         entity_subtype: str | None = None,
     ) -> None:
         """Создать/синхронизировать парный WorkItem(crm_activity) для CRM-задачи."""
-        if self._crm_work_item_service is None:
-            raise ValueError("crm_work_item_service is required for tasks")
         resolved_subtype = (
             entity_subtype if entity_subtype is not None else entity.entity_subtype
         )
@@ -1119,8 +1116,6 @@ class EntityService:
 
     async def _delete_task_work_item(self, entity: CRMEntity) -> None:
         """Удалить парный WorkItem CRM-задачи при удалении графового узла."""
-        if self._crm_work_item_service is None:
-            return
         await self._crm_work_item_service.delete_for_task(
             company_id=entity.company_id, entity_id=entity.entity_id
         )
@@ -1189,8 +1184,57 @@ class EntityService:
             entity_subtype=entity_subtype,
         )
 
-        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and kwargs.get("note_date") is None:
-            kwargs["note_date"] = datetime.now(UTC).date()
+        raw_note_date = kwargs.pop("note_date", None)
+        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and raw_note_date is None:
+            raw_note_date = datetime.now(UTC).date()
+        note_date: date | None
+        if raw_note_date is None:
+            note_date = None
+        elif isinstance(raw_note_date, datetime):
+            note_date = raw_note_date.date()
+        elif isinstance(raw_note_date, date):
+            note_date = raw_note_date
+        else:
+            raise ValueError("note_date must be a date")
+
+        raw_attachment_ids = kwargs.pop("attachment_ids", None)
+        attachment_ids: list[str] = []
+        if raw_attachment_ids is not None:
+            for attachment_id in require_json_array(raw_attachment_ids, "attachment_ids"):
+                if not isinstance(attachment_id, str):
+                    raise ValueError("attachment_ids must be a list of strings")
+                attachment_ids.append(attachment_id)
+
+        raw_source_entity_id = kwargs.pop("source_entity_id", None)
+        if raw_source_entity_id is not None and not isinstance(raw_source_entity_id, str):
+            raise ValueError("source_entity_id must be a string")
+        source_entity_id = raw_source_entity_id
+
+        raw_source_company_id = kwargs.pop("source_company_id", None)
+        if raw_source_company_id is not None and not isinstance(raw_source_company_id, str):
+            raise ValueError("source_company_id must be a string")
+        source_company_id = raw_source_company_id
+
+        raw_status = kwargs.pop("status", None)
+        if raw_status is None:
+            status = "active"
+        elif isinstance(raw_status, str) and raw_status != "":
+            status = raw_status
+        else:
+            raise ValueError("status must be a string")
+
+        raw_relevance = kwargs.pop("relevance", None)
+        if raw_relevance is None:
+            relevance = 1.0
+        elif isinstance(raw_relevance, bool) or not isinstance(raw_relevance, (int, float)):
+            raise ValueError("relevance must be a number")
+        else:
+            relevance = float(raw_relevance)
+
+        if "namespace" in kwargs:
+            _ = kwargs.pop("namespace")
+        if len(kwargs) > 0:
+            raise ValueError("Unsupported entity fields: " + ", ".join(sorted(kwargs)))
 
         entity = CRMEntity(
             user_id=user_id,
@@ -1202,7 +1246,13 @@ class EntityService:
             attributes=attributes or {},
             tags=tags or [],
             company_id=self._get_company_id(),
-            **kwargs,
+            namespace=namespace,
+            note_date=note_date,
+            attachment_ids=attachment_ids,
+            source_entity_id=source_entity_id,
+            source_company_id=source_company_id,
+            status=status,
+            relevance=relevance,
         )
 
         attachment_text_merged = False
@@ -1228,12 +1278,15 @@ class EntityService:
                 )
             entity.description = merged_desc
 
-        _ = await self._entity_repo.create(entity)
+        entity = await CRMEntity.create(entity)
+        await index_crm_entity(self._rag, entity, replace=False)
         logger.info("crm.entity.created", entity_id=entity.entity_id, entity_type=entity.full_type)
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            _ = await self._entity_repo.delete(entity.entity_id)
+            removed = await CRMEntity.take_by_id(entity.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
 
         if entity.entity_type == "task":
@@ -1256,9 +1309,8 @@ class EntityService:
             )
 
         if attachment_text_merged:
-            if self._note_markdown_format_scheduler is None:
-                raise ValueError("note_markdown_format_scheduler is required")
-            _ = await self._note_markdown_format_scheduler(
+            _ = await schedule_note_markdown_format(
+                authz=self._authz,
                 note_id=entity.entity_id,
                 company_id=entity.company_id,
                 namespace=entity.namespace,
@@ -1315,11 +1367,7 @@ class EntityService:
     ) -> CRMEntity | None:
         """Получает entity по ID"""
 
-        return await self._entity_repo.get(entity_id)
-
-    async def list_entities_by_ids_ordered(self, entity_ids: list[str]) -> list[CRMEntity]:
-        """Сущности по списку id в заданном порядке; отсутствующие id пропускаются."""
-        return await self._entity_repo.list_by_entity_ids_ordered(entity_ids)
+        return await CRMEntity.get(entity_id)
 
     @staticmethod
     def _entity_merge_scalar_value(entity: CRMEntity, key: str) -> object:
@@ -1373,8 +1421,8 @@ class EntityService:
         if survivor_id == source_id:
             raise ValueError("survivor_entity_id and source_entity_id must differ")
 
-        survivor = await self._entity_repo.get(survivor_id)
-        source = await self._entity_repo.get(source_id)
+        survivor = await CRMEntity.get(survivor_id)
+        source = await CRMEntity.get(source_id)
         if survivor is None:
             raise ValueError(f"Survivor entity not found: {survivor_id}")
         if source is None:
@@ -1393,8 +1441,8 @@ class EntityService:
         ):
             raise ValueError("Merging two notes is not supported")
 
-        mapping_survivor = await self._company_mapping_repo.get_by_entity(survivor_id)
-        mapping_source = await self._company_mapping_repo.get_by_entity(source_id)
+        mapping_survivor = await CompanyMapping.for_entity(survivor_id)
+        mapping_source = await CompanyMapping.for_entity(source_id)
         if mapping_survivor is not None or mapping_source is not None:
             raise ValueError("Merging an entity from company_mapping is forbidden")
 
@@ -1481,19 +1529,25 @@ class EntityService:
         merged_tags = _union_str_lists(survivor.tags, source.tags)
         merged_attachments = _union_str_lists(survivor.attachment_ids, source.attachment_ids)
 
-        _ = await self._relationship_repo.rewrite_entity_id(company_id, source_id, survivor_id)
-        _ = await self._relationship_repo.deduplicate_relationships_for_entity(survivor_id)
+        _ = await Relationship.rewrite_entity_id(
+            company_id,
+            source_id,
+            survivor_id,
+        )
+        await Relationship.deduplicate_for_entity(survivor_id)
 
-        _ = await self._entity_repo.rewrite_source_entity_id_references(
+        _ = await CRMEntity.rewrite_source_entity_id(
             company_id, source_id, survivor_id
         )
 
-        _ = await self._access_request_repo.remap_entity_resource_id(
-            company_id, source_id, survivor_id
+        _ = await AccessRequest.rewrite_entity_resource_id(
+            company_id,
+            source_id,
+            survivor_id,
         )
-        _ = await self._access_request_repo.deduplicate_pending_entity_requests(survivor_id)
+        await AccessRequest.deduplicate_pending_for_entity(survivor_id)
 
-        survivor_for_authz = await self._entity_repo.get(survivor_id)
+        survivor_for_authz = await CRMEntity.get(survivor_id)
         if survivor_for_authz is None:
             raise ValueError("Survivor entity not found after merge")
         await self._entity_access.sync_entity_merged(
@@ -1501,14 +1555,15 @@ class EntityService:
             survivor=survivor_for_authz,
         )
 
-        source_fresh = await self._entity_repo.get(source_id)
+        source_fresh = await CRMEntity.get(source_id)
         if source_fresh is None:
             raise ValueError("Source entity disappeared before merge completed")
         source_fresh.attachment_ids = []
         source_fresh.updated_at = datetime.now(UTC)
-        _ = await self._entity_repo.update(source_fresh)
+        source_fresh = await CRMEntity.save_loaded(source_fresh)
+        await index_crm_entity(self._rag, source_fresh, replace=True)
 
-        surv = await self._entity_repo.get(survivor_id)
+        surv = await CRMEntity.get(survivor_id)
         if surv is None:
             raise ValueError("Survivor entity not found after relationship transfer")
         for key in _MERGE_SCALAR_KEYS:
@@ -1523,17 +1578,18 @@ class EntityService:
             namespace=surv.namespace,
             entity_subtype=surv.entity_subtype,
         )
-        _ = await self._entity_repo.update(surv)
+        surv = await CRMEntity.save_loaded(surv)
+        await index_crm_entity(self._rag, surv, replace=True)
 
         _ = await self._delete_entity_with_saga(source_id)
 
         # Парный WorkItem source-узла больше не нужен (узел удалён); survivor сохраняет свой.
-        if source.entity_type == "task" and self._crm_work_item_service is not None:
+        if source.entity_type == "task":
             await self._crm_work_item_service.delete_for_task(
                 company_id=company_id, entity_id=source_id
             )
 
-        out = await self._entity_repo.get(survivor_id)
+        out = await CRMEntity.get(survivor_id)
         if out is None:
             raise ValueError("Survivor entity not found after merge")
         return (out, source_id)
@@ -1553,7 +1609,7 @@ class EntityService:
         отсутствующий ключ удаляется. Частичный merge — на call site.
         """
 
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
 
@@ -1657,7 +1713,8 @@ class EntityService:
             entity.description = merged_desc
 
         entity.updated_at = datetime.now(UTC)
-        _ = await self._entity_repo.update(entity)
+        entity = await CRMEntity.save_loaded(entity)
+        await index_crm_entity(self._rag, entity, replace=True)
 
         logger.info("crm.entity.updated", entity_id=entity_id)
 
@@ -1738,7 +1795,8 @@ class EntityService:
                     voice_entity_in_payload=True,
                 )
             else:
-                resolved_voice = await self._get_existing_outgoing_target(
+                resolved_voice = await Relationship.target_by_source_and_type(
+                    company_id,
                     entity.entity_id,
                     NOTE_VOICE_RELATIONSHIP_TYPE,
                 )
@@ -1750,7 +1808,8 @@ class EntityService:
                     context_entity_in_payload=True,
                 )
             else:
-                resolved_context = await self._get_existing_outgoing_target(
+                resolved_context = await Relationship.target_by_source_and_type(
+                    company_id,
                     entity.entity_id,
                     IN_CONTEXT_RELATIONSHIP_TYPE,
                 )
@@ -1805,7 +1864,7 @@ class EntityService:
         db_has_more = True
 
         for _ in range(max_iterations):
-            entities, repo_cursor, repo_has_more = await self._entity_repo.list_by_cursor(
+            page = await CRMEntity.cursor_page(
                 entity_type=eff_entity_type,
                 entity_subtype=entity_subtype,
                 namespace=namespace,
@@ -1814,6 +1873,9 @@ class EntityService:
                 limit=limit * oversample_factor,
                 cursor=current_cursor,
             )
+            entities = page.items
+            repo_cursor = page.next_cursor
+            repo_has_more = page.has_more
             filtered = await self._entity_access.batch_filter_readable(
                 entities,
                 user_id,
@@ -1833,7 +1895,7 @@ class EntityService:
         next_cursor = None
         if result and has_more:
             last = result[-1]
-            next_cursor = self._entity_repo.encode_cursor(last.created_at, last.entity_id)
+            next_cursor = encode_entity_cursor(last.created_at, last.entity_id)
 
         return result, next_cursor, has_more
 
@@ -1848,7 +1910,7 @@ class EntityService:
             min_created_at,
             max_created_at,
             total_entities,
-        ) = await self._entity_repo.get_created_at_bounds(
+        ) = await CRMEntity.created_at_bounds(
             entity_type=entity_type,
             entity_subtype=entity_subtype,
             namespace=namespace,
@@ -1883,7 +1945,10 @@ class EntityService:
                 continue
             visited.add(entity_id)
 
-            relationships = await self._relationship_repo.get_by_entity(entity_id)
+            relationships = await Relationship.touching_in_company(
+                entity_id,
+                self._get_company_id(),
+            ).all()
             relationships_by_entity[entity_id] = relationships
 
             for relationship in relationships:
@@ -1917,7 +1982,7 @@ class EntityService:
         )
 
         # Получаем source_entity_id и entity_type для всех сущностей в компоненте
-        entities = await self._entity_repo.get_by_ids(component_order)
+        entities = await CRMEntity.list_by_ids(component_order)
         source_entity_id_map = {e.entity_id: e.source_entity_id for e in entities}
         entity_type_map = {e.entity_id: e.entity_type for e in entities}
 
@@ -1989,7 +2054,7 @@ class EntityService:
         if not exclusive_entity_ids:
             return []
 
-        entities = await self._entity_repo.get_by_ids(exclusive_entity_ids)
+        entities = await CRMEntity.list_by_ids(exclusive_entity_ids)
         return [
             {
                 "entity_id": entity.entity_id,
@@ -2006,7 +2071,7 @@ class EntityService:
         self,
         entity_id: str,
     ) -> CRMEntity:
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError(f"Entity not found for deletion: {entity_id}")
 
@@ -2015,13 +2080,24 @@ class EntityService:
 
         async def delete_relationships() -> None:
             nonlocal deleted_relationships
-            relationships = await self._relationship_repo.get_by_entity(entity_id)
+            relationships = await Relationship.touching_in_company(
+                entity_id,
+                self._get_company_id(),
+            ).all()
             deleted_relationships = relationships.copy()
-            _ = await self._relationship_repo.delete_by_entity(entity_id)
+            deleted = await Relationship.touching_in_company(
+                entity_id,
+                self._get_company_id(),
+            ).delete()
+            logger.info(
+                "crm.relationship.deleted_for_entity",
+                entity_id=entity_id,
+                count=deleted,
+            )
 
         async def restore_relationships() -> None:
             for relationship in deleted_relationships:
-                _ = await self._relationship_repo.create(relationship)
+                _ = await Relationship.ensure_edge(relationship)
 
         async def delete_attachments() -> None:
             _ = await self._attachment_service.delete_all_attachments(entity_id)
@@ -2031,11 +2107,14 @@ class EntityService:
 
         async def delete_entity_from_db() -> None:
             await self._entity_access.sync_entity_deleted(entity)
-            _ = await self._entity_repo.delete(entity_id)
+            removed = await CRMEntity.take_by_id(entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
 
         async def restore_entity_to_db() -> None:
-            _ = await self._entity_repo.create(entity)
-            await self._entity_access.sync_entity_created(entity)
+            restored = await CRMEntity.create(entity)
+            await index_crm_entity(self._rag, restored, replace=False)
+            await self._entity_access.sync_entity_created(restored)
 
         saga.add_step(
             SagaStep(
@@ -2089,7 +2168,7 @@ class EntityService:
         Эксклюзивная сущность - та, у которой после удаления note не остается связей
         с сущностями вне удаляемого подграфа и которая была создана этой заметкой.
         """
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             logger.warning("crm.entity.delete_missing", entity_id=entity_id)
             return False
@@ -2099,7 +2178,7 @@ class EntityService:
                 entity_id
             )
             for related_entity_id in exclusive_related_entity_ids:
-                related_entity = await self._entity_repo.get(related_entity_id)
+                related_entity = await CRMEntity.get(related_entity_id)
                 if related_entity is None:
                     logger.info(
                         "crm.entity.note_exclusive.already_deleted",
@@ -2149,6 +2228,106 @@ class EntityService:
 
         return True
 
+    async def search_similar(
+        self,
+        query: str,
+        entity_type: str | None = None,
+        entity_subtype: str | None = None,
+        namespace: str | None = None,
+        filters: JsonObject | None = None,
+        filter_field_types: dict[str, str] | None = None,
+        limit: int = 10,
+        company_id: str | None = None,
+    ) -> list[tuple[CRMEntity, float]]:
+        cid = resolve_crm_company_id(company_id)
+        resolved_namespace = resolve_namespace_or_raise(namespace)
+        actx = get_context()
+        if actx is None or actx.user.user_id.strip() == "":
+            raise ValueError("User context is required for CRM semantic search.")
+        user_id = actx.user.user_id.strip()
+        async with traced_operation(
+            "crm.semantic.search_entities",
+            event_type="crm.search",
+            operation_category="embedding",
+            extra_attributes={
+                trace_attributes.ATTR_TENANT_COMPANY_ID: cid,
+                trace_attributes.ATTR_USER_ID: user_id,
+                trace_attributes.ATTR_CRM_QUERY_MODE: "semantic_vector",
+                trace_attributes.ATTR_CRM_ENTITY_TYPE: entity_type or "",
+                "platform.crm.search_limit": limit,
+                "platform.crm.namespace": resolved_namespace,
+            },
+        ) as search_span:
+            search_filters: RAGMetadataFilter = {"company_id": cid}
+            if entity_type is not None and entity_type != "":
+                search_filters["entity_type"] = entity_type
+            settings = get_settings()
+            retrieve_limit = max(limit * 4, limit)
+            resolved_search_options = resolve_platform_search_options(
+                settings=settings,
+                per_channel_top_k=retrieve_limit * 3,
+                overrides=RAGSearchOptions(
+                    channels=SearchChannelsDefaults(semantic=True, lexical=False),
+                    rerank=True,
+                ),
+            )
+            search_results = await self._rag.search(
+                namespace_id=resolved_namespace,
+                query=query,
+                limit=retrieve_limit,
+                filters=search_filters,
+                search_options=resolved_search_options,
+            )
+            search_results = await apply_rerank_after_retrieve(
+                results=search_results,
+                query=query,
+                provider_name=RAG_IN_PROCESS_PROVIDER_ID,
+                request_rerank=resolved_search_options.rerank,
+                profile_sd=None,
+                settings=settings,
+                request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
+                score_cache=self._rerank_score_cache,
+            )
+            if len(search_results) == 0:
+                logger.info("crm.entity.similarity_empty", query_preview=query[:50])
+                search_span.set_attribute("platform.crm.search_hits_raw", 0)
+                return []
+            resolved_order: list[str] = []
+            score_by_resolved: dict[str, float] = {}
+            for item in search_results:
+                entity_id = item.document_id
+                if entity_id not in score_by_resolved:
+                    score_by_resolved[entity_id] = item.score
+                    resolved_order.append(entity_id)
+                elif item.score > score_by_resolved[entity_id]:
+                    score_by_resolved[entity_id] = item.score
+            matched = await CRMEntity.matching_by_ids(
+                company_id=cid,
+                entity_ids=resolved_order,
+                entity_type=entity_type,
+                entity_subtype=entity_subtype,
+                namespace=namespace,
+                filters=filters,
+                filter_field_types=filter_field_types,
+            )
+            entities_by_id = {row.entity_id: row for row in matched}
+            scored_entities: list[tuple[CRMEntity, float]] = []
+            for document_id in resolved_order:
+                row = entities_by_id.get(document_id)
+                if row is None:
+                    continue
+                score = score_by_resolved[document_id]
+                scored_entities.append((row, max(0.0, min(1.0, float(score)))))
+                if len(scored_entities) >= limit:
+                    break
+            search_span.set_attribute("platform.crm.search_results_count", len(scored_entities))
+            logger.info(
+                "crm.entity.search_similarity",
+                query_preview=query[:50],
+                result_count=len(scored_entities),
+            )
+            return scored_entities
+
     async def search_entities(
         self,
         query: str,
@@ -2160,7 +2339,7 @@ class EntityService:
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
         """Семантический поиск entities с фильтрацией по грантам. Возвращает (entity, score)."""
-        results = await self._entity_repo.search_with_similarity(
+        results = await self.search_similar(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
@@ -2189,15 +2368,52 @@ class EntityService:
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float, str]]:
         """Гибридный поиск RRF (tsvector + pgvector) с фильтрацией по грантам."""
-        results = await self._entity_repo.hybrid_search(
-            query=query,
-            entity_type=entity_type,
-            entity_subtype=entity_subtype,
-            namespace=namespace,
-            filters=filters,
-            filter_field_types=filter_field_types,
-            limit=limit,
+        k = 60
+        rrf_max = 2.0 / (k + 1)
+        fts_entities = await CRMEntity.fts_ranked(
+            query,
+            entity_type,
+            entity_subtype,
+            namespace,
+            filters,
+            filter_field_types,
+            limit * 3,
         )
+        semantic_entities = await self.search_similar(
+            query,
+            entity_type,
+            entity_subtype,
+            namespace,
+            filters,
+            filter_field_types,
+            limit * 3,
+        )
+        fts_ranks: dict[str, int] = {}
+        fts_map: dict[str, CRMEntity] = {}
+        for rank, (entity, _) in enumerate(fts_entities, start=1):
+            fts_ranks[entity.entity_id] = rank
+            fts_map[entity.entity_id] = entity
+        sem_ranks: dict[str, int] = {}
+        sem_map: dict[str, CRMEntity] = {}
+        for rank, (entity, _) in enumerate(semantic_entities, start=1):
+            sem_ranks[entity.entity_id] = rank
+            sem_map[entity.entity_id] = entity
+        scored: list[tuple[str, float, str]] = []
+        for entity_id in set(fts_ranks) | set(sem_ranks):
+            rrf_score = 0.0
+            in_fts = entity_id in fts_ranks
+            in_sem = entity_id in sem_ranks
+            if in_fts:
+                rrf_score += 1.0 / (k + fts_ranks[entity_id])
+            if in_sem:
+                rrf_score += 1.0 / (k + sem_ranks[entity_id])
+            match_type = "hybrid" if in_fts and in_sem else ("text" if in_fts else "semantic")
+            scored.append((entity_id, rrf_score, match_type))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        entity_pool = {**fts_map, **sem_map}
+        results: list[tuple[CRMEntity, float, str]] = []
+        for entity_id, rrf_score, match_type in scored[:limit]:
+            results.append((entity_pool[entity_id], min(1.0, rrf_score / rrf_max), match_type))
         entities = [entity for entity, _, _ in results]
         user_id = self._get_user_id()
         company_id = self._get_company_id()
@@ -2218,7 +2434,7 @@ class EntityService:
         limit: int = 100,
     ) -> list[tuple[CRMEntity, float]]:
         """FTS поиск с ранжированием по ts_rank и фильтрацией по грантам."""
-        results = await self._entity_repo.fts_search_ranked(
+        results = await CRMEntity.fts_ranked(
             query=query,
             entity_type=entity_type,
             entity_subtype=entity_subtype,
@@ -2241,7 +2457,7 @@ class EntityService:
         namespace: str | None = None,
     ) -> JsonObject:
         """Фасетная агрегация: по entity_type, status, месяц создания."""
-        return await self._entity_repo.aggregate_facets(namespace=namespace)
+        return await CRMEntity.facet_counts(namespace=namespace)
 
     async def search_mentions(
         self,
@@ -2268,7 +2484,7 @@ class EntityService:
 
         combined_query = " ".join(unique_phrases)
 
-        scored = await self._entity_repo.search_with_similarity(
+        scored = await self.search_similar(
             query=combined_query,
             namespace=namespace,
             limit=limit,
@@ -2379,7 +2595,7 @@ class EntityService:
         note_id: str,
         snapshot: AIAnalyzeResponse,
     ) -> None:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if not note:
             raise ValueError(f"Note not found: {note_id}")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
@@ -2445,7 +2661,7 @@ class EntityService:
         *,
         apply_failures: list[dict[str, str]] | None = None,
     ) -> None:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             return
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
@@ -2475,7 +2691,7 @@ class EntityService:
         _ = await self._persist_note_analysis_attributes(note, attrs)
 
     async def clear_note_analysis_error(self, note_id: str) -> None:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             return
         attrs = dict(note.attributes or {})
@@ -2495,10 +2711,12 @@ class EntityService:
     ) -> CRMEntity:
         """Пишет только JSONB attributes. Полный merge строки затирал бы description
         (markdown) и вызывал resync note_voice через update_entity."""
-        return await self._entity_repo.update_attributes(
+        stored = await CRMEntity.update_attributes(
             note.entity_id,
             require_json_object(attrs, "note.attributes"),
         )
+        await index_crm_entity(self._rag, stored, replace=True)
+        return stored
 
     async def _validate_draft_repair_patch_list(
         self,
@@ -2564,11 +2782,14 @@ class EntityService:
 
         ns_for_types = self._resolve_namespace_for_write(note.namespace)
 
-        entity_rows = await self._entity_type_repo.load_all_entity_types_for_company(
+        entity_rows = await EntityType.catalog(
             namespace=ns_for_types
         )
-        rel_rows = await self._relationship_type_repo.list_all_by_company(include_system=True)
-        parent_map = await self._entity_type_repo.get_parent_type_id_map_for_namespace(ns_for_types)
+        rel_rows = await RelationshipType.in_company(
+            self._get_company_id(),
+            include_system=True,
+        ).order_by("type_id").all()
+        parent_map = {row.type_id: row.parent_type_id for row in entity_rows}
 
         cleaned_failures: list[dict[str, str]] = []
         if isinstance(failures_raw, list):
@@ -2671,7 +2892,7 @@ class EntityService:
         return updated
 
     async def discard_note_analysis_draft(self, note_id: str) -> None:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             raise ValueError("Note not found")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
@@ -2703,7 +2924,7 @@ class EntityService:
         self,
         note_id: str,
     ) -> tuple[CRMEntity, AIAnalysisDraftStored]:
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if not note:
             raise ValueError(f"Entity not found: {note_id}")
         if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
@@ -2902,7 +3123,10 @@ class EntityService:
 
         valid_rel_type_ids = {
             t.type_id
-            for t in await self._relationship_type_repo.list_all_by_company(include_system=True)
+            for t in await RelationshipType.in_company(
+                self._get_company_id(),
+                include_system=True,
+            ).order_by("type_id").all()
         }
 
         seen_new_rel: set[str] = set()
@@ -2994,7 +3218,7 @@ class EntityService:
                     f"dedup_action=merge requires dedup_existing_id (draft_entity_id={did})"
                 )
             async with _lock_for_merge_target(existing_id):
-                existing_row = await self._entity_repo.get(existing_id)
+                existing_row = await CRMEntity.get(existing_id)
                 if not existing_row:
                     raise ValueError(f"dedup_existing_id not found in DB: {existing_id}")
                 merged_attrs = _strip_draft_only_entity_attrs(
@@ -3101,7 +3325,10 @@ class EntityService:
         note, draft = await self._load_analysis_draft_from_note(note_id)
         namespace = self._resolve_namespace_for_write(note.namespace)
 
-        all_types = await self._relationship_type_repo.list_all_by_company(include_system=True)
+        all_types = await RelationshipType.in_company(
+            self._get_company_id(),
+            include_system=True,
+        ).order_by("type_id").all()
         valid_type_ids = {t.type_id for t in all_types}
 
         draft_entity_ids = {e.draft_entity_id for e in draft.entities if e.draft_entity_id}
@@ -3180,7 +3407,7 @@ class EntityService:
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
-            saved = await self._relationship_repo.ensure_edge(row)
+            saved = await Relationship.ensure_edge(row)
             if saved.relationship_id == row.relationship_id:
                 return saved.relationship_id
             return None
@@ -3250,7 +3477,11 @@ class EntityService:
         cur: str | None = leaf_type_id
         while cur and cur not in seen:
             seen.add(cur)
-            row = await self._entity_type_repo.get_by_type_id(cur, namespace=namespace)
+            row = await EntityType.by_company_namespace_and_type_id(
+                company_id=self._get_company_id(),
+                namespace=namespace,
+                type_id=cur,
+            ).get_or_none()
             if row is None:
                 raise ValueError(f"Entity type not found: {leaf_type_id}")
             if row.type_id == NOTE_ROOT_ENTITY_TYPE_ID:
@@ -3282,7 +3513,9 @@ class EntityService:
         """Возвращает множество type_id, принадлежащих ветке note (включая note и дочерние типы)."""
         all_types = entity_types
         if all_types is None:
-            all_types = await self._entity_type_repo.list_catalog_by_namespace(namespace)
+            all_types = await EntityType.catalog(
+                namespace=namespace
+            )
         children_by_parent: dict[str | None, list[str]] = {}
         for et in all_types:
             children_by_parent.setdefault(et.parent_type_id, []).append(et.type_id)
@@ -3357,8 +3590,12 @@ class EntityService:
         """
         namespace = self._resolve_namespace_for_write(request.namespace)
         await self._ensure_namespace_exists(namespace)
-        entity_types = await self._entity_type_repo.list_catalog_by_namespace(namespace)
-        relationship_types = await self._relationship_type_repo.get_with_prompts()
+        entity_types = await EntityType.catalog(
+            namespace=namespace
+        )
+        relationship_types = await RelationshipType.all_with_prompt(
+            self._get_company_id(),
+        )
 
         prompt = self._build_composite_prompt(
             entity_types,
@@ -3375,7 +3612,7 @@ class EntityService:
                 ctx.user.user_id,
                 company_id,
             )
-            member_entity = await self._entity_repo.get(member_entity_id)
+            member_entity = await CRMEntity.get(member_entity_id)
             if member_entity:
                 known_entities.append(
                     {
@@ -3389,7 +3626,7 @@ class EntityService:
                 )
                 _known_entity_rows.append(member_entity)
 
-            company_entities = await self._entity_repo.find_by_attribute(
+            company_entities = await CRMEntity.all_by_entity_type_and_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
                 attribute_value=company_id,
@@ -3413,7 +3650,7 @@ class EntityService:
             for eid in resolved_for_note:
                 if any(ke.get("entity_id") == eid for ke in known_entities):
                     continue
-                row = await self._entity_repo.get(eid)
+                row = await CRMEntity.get(eid)
                 if row is None:
                     continue
                 known_entities.append(
@@ -3535,7 +3772,7 @@ class EntityService:
         return ai_result
 
     async def _load_all_entity_types_for_namespace(self, namespace: str) -> list[EntityType]:
-        return await self._entity_type_repo.list_catalog_by_namespace(namespace)
+        return await EntityType.catalog(namespace=namespace)
 
     def _build_composite_prompt(
         self,
@@ -3733,7 +3970,7 @@ class EntityService:
             occupied.add(row_key(ent))
 
         for mid in mentioned_entity_ids:
-            row = await self._entity_repo.get(mid)
+            row = await CRMEntity.get(mid)
             if not row:
                 raise ValueError(f"Mentioned entity not found: {mid}")
             if row.company_id != company_id:
@@ -4344,7 +4581,7 @@ class EntityService:
             seen_ids.add(entity_id)
             entity_ids.append(entity_id)
 
-        relationships_by_note = await self._relationship_repo.get_neighbors(
+        relationships_by_note = await Relationship.neighbors_for_entities(
             note_ids,
             relationship_types=list(_RESOLVED_NOTE_NEIGHBOR_REL_TYPES),
         )
@@ -4365,7 +4602,7 @@ class EntityService:
 
         if not entity_ids:
             return []
-        rows = await self._entity_repo.list_by_entity_ids_ordered(
+        rows = await CRMEntity.list_by_ids_in_order(
             entity_ids,
             company_id=self._get_company_id(),
         )
@@ -4516,7 +4753,7 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            _ = await self._relationship_repo.ensure_edge(row)
+            _ = await Relationship.ensure_edge(row)
 
     async def sync_note_mentions_from_applied_entities(
         self, note_id: str, entity_ids: list[str]
@@ -4528,7 +4765,7 @@ class EntityService:
         """
         if not entity_ids:
             return
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
         namespace = self._resolve_namespace_for_write(note.namespace)
@@ -4553,19 +4790,22 @@ class EntityService:
                 created_at=now,
                 updated_at=now,
             )
-            _ = await self._relationship_repo.ensure_edge(row)
+            _ = await Relationship.ensure_edge(row)
 
     async def enrich_note_description_with_mention_tokens(self, note_id: str) -> None:
         """
         После apply AI-анализа: вставляет [@Name](entity:id) токены в description
         для сущностей, связанных с заметкой через linked/mentions связи.
         """
-        note = await self._entity_repo.get(note_id)
+        note = await CRMEntity.get(note_id)
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
         if not note.description:
             return
-        relationships = await self._relationship_repo.get_by_entity(note_id)
+        relationships = await Relationship.touching_in_company(
+            note_id,
+            note.company_id,
+        ).all()
         linked_target_ids = [
             r.target_entity_id
             for r in relationships
@@ -4576,7 +4816,7 @@ class EntityService:
             return
         entities: list[dict[str, object]] = []
         for entity_id in linked_target_ids:
-            entity = await self._entity_repo.get(entity_id)
+            entity = await CRMEntity.get(entity_id)
             if not entity or not entity.name:
                 continue
             entry: dict[str, object] = {"entity_id": entity_id, "name": entity.name}
@@ -5083,23 +5323,20 @@ class EntityService:
         user_id = self._get_user_id()
         normalized_namespace = self._normalize_namespace(namespace)
         task_namespace = normalized_namespace or SUMMARY_ALL_NAMESPACES_TASK_KEY
-        task_id: str | None = None
-
-        if self._task_repository is not None:
-            task_row = CRMTask(
-                task_id=str(uuid.uuid4()),
-                task_type="daily_summary",
-                status="running",
-                stage="summarizing_day",
-                progress_pct=10,
-                company_id=company_id,
-                namespace=task_namespace,
-                user_id=user_id,
-                started_at=datetime.now(UTC),
-                data={"date_str": date_str, "reason": "event"},
-            )
-            _ = await self._task_repository.create(task_row)
-            task_id = task_row.task_id
+        task_row = CRMTask(
+            task_id=str(uuid.uuid4()),
+            task_type="daily_summary",
+            status="running",
+            stage="summarizing_day",
+            progress_pct=10,
+            company_id=company_id,
+            namespace=task_namespace,
+            user_id=user_id,
+            started_at=datetime.now(UTC),
+            data={"date_str": date_str, "reason": "event"},
+        )
+        created_task = await CRMTask.create(task_row)
+        task_id = created_task.task_id
 
         _ = await enqueue(
             CRM_REBUILD_DAILY_SUMMARY,
@@ -5491,27 +5728,24 @@ class EntityService:
         user_id = self._get_user_id()
         normalized_namespace = self._normalize_namespace(namespace)
         task_namespace = normalized_namespace or SUMMARY_ALL_NAMESPACES_TASK_KEY
-        task_id: str | None = None
-
-        if self._task_repository is not None:
-            task_row = CRMTask(
-                task_id=str(uuid.uuid4()),
-                task_type="period_summary",
-                status="running",
-                stage="summarizing_day",
-                progress_pct=10,
-                company_id=company_id,
-                namespace=task_namespace,
-                user_id=user_id,
-                started_at=datetime.now(UTC),
-                data={
-                    "date_from": date_from,
-                    "date_to": date_to,
-                    "reason": "event",
-                },
-            )
-            _ = await self._task_repository.create(task_row)
-            task_id = task_row.task_id
+        task_row = CRMTask(
+            task_id=str(uuid.uuid4()),
+            task_type="period_summary",
+            status="running",
+            stage="summarizing_day",
+            progress_pct=10,
+            company_id=company_id,
+            namespace=task_namespace,
+            user_id=user_id,
+            started_at=datetime.now(UTC),
+            data={
+                "date_from": date_from,
+                "date_to": date_to,
+                "reason": "event",
+            },
+        )
+        created_task = await CRMTask.create(task_row)
+        task_id = created_task.task_id
 
         _ = await enqueue(
             CRM_REBUILD_PERIOD_SUMMARY,
@@ -5689,11 +5923,14 @@ class EntityService:
             Словарь с полной информацией о entity
         """
 
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
 
-        relationships = await self._relationship_repo.get_by_entity(entity_id)
+        relationships = await Relationship.touching_in_company(
+                entity_id,
+                self._get_company_id(),
+            ).all()
 
         related_entity_ids: set[str] = set()
         for rel in relationships:
@@ -5702,7 +5939,7 @@ class EntityService:
             else:
                 related_entity_ids.add(rel.source_entity_id)
 
-        related_entities = await self._entity_repo.get_by_ids(list(related_entity_ids))
+        related_entities = await CRMEntity.list_by_ids(list(related_entity_ids))
         related_entities_payload = await self._related_entities_as_api_dicts(related_entities)
 
         attachments = await self._attachment_service.get_attachments(entity_id)
@@ -5750,10 +5987,10 @@ class EntityService:
         if not entity_ids:
             return {}
 
-        entities = await self._entity_repo.get_by_ids(entity_ids)
+        entities = await CRMEntity.list_by_ids(entity_ids)
         entities_by_id = {e.entity_id: e for e in entities}
 
-        relationships_by_entity = await self._relationship_repo.get_neighbors(entity_ids)
+        relationships_by_entity = await Relationship.neighbors_for_entities(entity_ids)
 
         all_related_ids: set[str] = set()
         for eid, rels in relationships_by_entity.items():
@@ -5765,7 +6002,7 @@ class EntityService:
         all_related_ids -= set(entity_ids)
 
         related_entities = (
-            await self._entity_repo.get_by_ids(list(all_related_ids)) if all_related_ids else []
+            await CRMEntity.list_by_ids(list(all_related_ids)) if all_related_ids else []
         )
         related_payload_by_id: dict[str, JsonObject] = {}
         if related_entities:
@@ -5789,7 +6026,7 @@ class EntityService:
         center_payload_by_id: dict[str, JsonObject] = {}
         if center_entities:
             enriched_centers = await build_entity_responses_with_semantic_index(
-                self._entity_repo,
+                self._rag,
                 center_entities,
                 crm_work_item_service=self._crm_work_item_service,
             )
@@ -5839,7 +6076,7 @@ class EntityService:
 
     async def _entity_as_api_dict(self, entity: CRMEntity) -> JsonObject:
         enriched = await build_entity_responses_with_semantic_index(
-            self._entity_repo,
+            self._rag,
             [entity],
             crm_work_item_service=self._crm_work_item_service,
         )
@@ -5851,7 +6088,7 @@ class EntityService:
         if not entities:
             return []
         enriched = await build_entity_responses_with_semantic_index(
-            self._entity_repo,
+            self._rag,
             entities,
             crm_work_item_service=self._crm_work_item_service,
         )
@@ -5905,7 +6142,7 @@ class EntityService:
         async def search_one(entity: AIExtractedEntity) -> list[tuple[CRMEntity, float]]:
             search_query = f"{entity.name} {entity.description or ''}"
             async with rag_sem:
-                return await self._entity_repo.search_with_similarity(
+                return await self.search_similar(
                     query=search_query,
                     entity_type=entity.entity_type,
                     namespace=namespace,

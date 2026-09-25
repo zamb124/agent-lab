@@ -7,7 +7,6 @@ from contextlib import contextmanager
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from apps.capability_gateway.services.worktracker_capabilities import (
     WORKTRACKER_CLIENT_METHOD_NAMES,
 )
@@ -73,9 +72,8 @@ def _execution_context() -> CapabilityExecutionContext:
     )
 
 
-async def test_worktracker_capabilities_cover_client_methods() -> None:
-    container = get_capability_gateway_container()
-    manifest = await container.capability_registry.manifest()
+async def test_worktracker_capabilities_cover_client_methods(capability_gateway_di) -> None:
+    manifest = await capability_gateway_di.capability_registry.manifest()
     names = {item.name for item in manifest.capabilities}
     expected = {f"worktracker.{method}" for method in WORKTRACKER_CLIENT_METHOD_NAMES}
     assert expected <= names
@@ -90,16 +88,15 @@ async def test_worktracker_capabilities_cover_client_methods() -> None:
 
 
 async def test_worktracker_capability_create_and_get(
-    frontend_container,
+    frontend_di,
     unique_id: str,
-) -> None:
-    company = await frontend_container.company_repository.get("system")
+capability_gateway_di) -> None:
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     title = f"Capability task {unique_id}"
-    container = get_capability_gateway_container()
-    registry = container.capability_registry
+    registry = capability_gateway_di.capability_registry
     context = _execution_context()
 
     with _company_context(user=user, company=company):

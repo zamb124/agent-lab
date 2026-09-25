@@ -48,6 +48,8 @@ from core.files.default_storage import get_default_storage
 from core.files.file_ref import FileRef, FileRefSource, file_id_from_download_url
 from core.files.media.transcriber import MediaTranscriber
 from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import (
     CompressionMode,
@@ -66,7 +68,6 @@ from core.files.reader.models import (
     merge_file_ref_read_options,
 )
 from core.files.reader.vision import prepare_visual_payload
-from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
@@ -286,29 +287,30 @@ async def _read_stored_file_by_id(file_id: str) -> tuple[bytes, str]:
     record = await storage.get(file_id)
     if record is None:
         raise FileReadError(f"File not found in storage: {file_id}")
-    s3_bucket = record.s3_bucket
     s3_key = record.s3_key
-    if s3_bucket != "" and s3_key != "":
-        s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
+    if record.storage_id != "" and s3_key != "":
+        if record.company_id is None or record.company_id == "":
+            raise FileReadError(f"File has no company: {file_id}")
         try:
-            try:
-                raw = await s3_client.download_bytes(s3_key)
-            except Exception as exc:
-                code = _s3_error_code(exc)
-                if code is None:
-                    raise
-                if code in ("NoSuchKey", "404", "NotFound"):
-                    raise FileReadError(
-                        "File not found in storage: metadata exists, object is missing "
-                        + "(bucket cleanup, environment change, or stale identifier). "
-                        + f"file_id={file_id}"
-                    ) from exc
+            handle = await FileGate().open_record(
+                record,
+                SystemPrincipal(company_id=record.company_id),
+            )
+            raw = await handle.read_bytes()
+        except Exception as exc:
+            code = _s3_error_code(exc)
+            if code is None:
+                raise
+            if code in ("NoSuchKey", "404", "NotFound"):
                 raise FileReadError(
-                    f"Object storage error while reading the file (code {code}): {file_id}"
+                    "File not found in storage: metadata exists, object is missing "
+                    + "(bucket cleanup, environment change, or stale identifier). "
+                    + f"file_id={file_id}"
                 ) from exc
-            return raw, record.original_name
-        finally:
-            await s3_client.close()
+            raise FileReadError(
+                f"Object storage error while reading the file (code {code}): {file_id}"
+            ) from exc
+        return raw, record.original_name
     storage_url = record.storage_url
     if storage_url is not None and storage_url.startswith(("http://", "https://")):
         raw = await _read_http_bytes(storage_url)

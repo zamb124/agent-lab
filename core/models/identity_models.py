@@ -2,14 +2,18 @@
 Модели для системы идентификации и авторизации.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from enum import Enum
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self, override
 
+from oxyde import Field as DbField
+from oxyde import Index, atomic, execute_raw
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.models.billing_models import TariffPlan
-from core.types import JsonObject
+from core.models.platform_model import CompanyScopedModel, PlatformModel
+from core.types import JsonObject, parse_json_object, require_json_object
 
 
 class UserStatus(str, Enum):
@@ -41,20 +45,25 @@ def is_platform_user_id(user_id: str) -> bool:
     return user_id not in ("", ANONYMOUS_USER_ID) and not user_id.startswith(GUEST_USER_ID_PREFIX)
 
 
-class User(BaseModel):
-    """
-    Основная модель пользователя (хранится в user:user_id).
-    Содержит только общие данные, без привязки к провайдерам.
-    """
+class User(PlatformModel):
+    """Пользователь. Глобальная таблица ``users`` в ``platform_shared``."""
 
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
     model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "user"})
 
-    user_id: str = Field(
+    user_id: str = DbField(
+        db_pk=True,
         title="ID пользователя",
         description="Уникальный ID пользователя в системе",
         json_schema_extra={"readonly": True},
     )
-    name: str = Field(
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "users"
+
+    name: str = DbField(
         title="Имя",
         description="Отображаемое имя; при сохранении ФИО может выставляться из имени и фамилии",
         max_length=200,
@@ -153,26 +162,102 @@ class User(BaseModel):
         json_schema_extra={"readonly": True},
     )
 
+    @classmethod
+    async def find_by_email(cls, email: str) -> User | None:
+        matches = await cls.find_all_by_email_ci(email)
+        if not matches:
+            return None
+        return matches[0]
 
-class Company(BaseModel):
+    @classmethod
+    async def find_all_by_email_ci(cls, email: str) -> list[User]:
+        norm = email.strip().lower()
+        if not norm:
+            raise ValueError("search email cannot be empty")
+        table = cls.get_table_name()
+        rows = await execute_raw(
+            f"""
+            SELECT row_to_json({table}) AS item
+            FROM {table}
+            WHERE EXISTS (
+                SELECT 1 FROM unnest(emails) AS email
+                WHERE lower(email) = $1
+            )
+            ORDER BY user_id
+            """,
+            [norm],
+            using="shared",
+        )
+        return [_user_from_row(row) for row in rows]
+
+    @classmethod
+    async def search_by_query(cls, query: str, limit: int = 20) -> list[User]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        table = cls.get_table_name()
+        pattern = _like_contains(query)
+        rows = await execute_raw(
+            f"""
+            SELECT row_to_json({table}) AS item
+            FROM {table}
+            WHERE name ILIKE $1 ESCAPE '\\'
+               OR EXISTS (
+                    SELECT 1 FROM unnest(emails) AS email
+                    WHERE email ILIKE $1 ESCAPE '\\'
+               )
+            ORDER BY user_id
+            LIMIT $2
+            """,
+            [pattern, limit],
+            using="shared",
+        )
+        return [_user_from_row(row) for row in rows]
+
+
+def _like_contains(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _user_from_row(row: object) -> User:
+    parsed = require_json_object(row, "user")
+    raw_item = parsed["item"] if "item" in parsed else parsed
+    if isinstance(raw_item, str):
+        payload = parse_json_object(raw_item, "user")
+    else:
+        payload = require_json_object(raw_item, "user")
+    return User.model_validate(payload)
+
+
+class Company(PlatformModel):
+    """Компания. Глобальная таблица ``companies`` в ``platform_shared``.
+
+    ``members`` — JSON-поле этой модели: состав ролей читается вместе с компанией.
     """
-    Модель компании (хранится в company:company_id).
-    Компания содержит свою собственную изолированную конфигурацию.
-    """
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(json_schema_extra={"storage_prefix": "company"})
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
 
-    company_id: str = Field(
+    company_id: str = DbField(
+        db_pk=True,
         title="ID компании",
         description="Уникальный ID компании",
         json_schema_extra={"readonly": True},
     )
-    name: str = Field(
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "companies"
+        indexes: list[Index] = [
+            Index(["subdomain"], unique=True, where="subdomain IS NOT NULL"),
+        ]
+
+    name: str = DbField(
         title="Название",
         description="Название компании",
         json_schema_extra={"placeholder": "Моя компания"},
     )
-    subdomain: str | None = Field(
+    subdomain: str | None = DbField(
         default=None,
         title="Поддомен",
         description="Поддомен компании (company.humanitec.ru)",
@@ -251,21 +336,116 @@ class Company(BaseModel):
         json_schema_extra={"readonly": True},
     )
 
+    @classmethod
+    async def page_named_after_system(
+        cls, *, limit: int, offset: int
+    ) -> tuple[list[Self], bool]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        system = await cls.get(SYSTEM_COMPANY_ID)
+        if system is None:
+            raise ValueError("system company is required")
+        if offset == 0:
+            head = [system]
+            rest_offset = 0
+            rest_limit = limit - 1
+        else:
+            head = []
+            rest_offset = offset - 1
+            rest_limit = limit
+        rest = await (
+            cls.objects.exclude(company_id=SYSTEM_COMPANY_ID)
+            .order_by("name", "company_id")
+            .limit(rest_limit + 1)
+            .offset(rest_offset)
+            .all()
+        )
+        has_more = len(rest) > rest_limit
+        return [*head, *rest[:rest_limit]], has_more
 
-class AuthSession(BaseModel):
-    """Модель сессии авторизации"""
+    @classmethod
+    async def by_subdomain(cls, subdomain: str) -> Self | None:
+        if subdomain == "":
+            raise ValueError("subdomain is required")
+        return await cls.objects.filter(subdomain=subdomain).get_or_none()
 
-    session_id: str = Field(
+    @classmethod
+    async def put_member_roles(
+        cls,
+        company_id: str,
+        user_id: str,
+        roles: Sequence[str],
+    ) -> Self:
+        if not company_id.strip():
+            raise ValueError("company_id is required")
+        if not user_id.strip():
+            raise ValueError("user_id is required")
+        normalized = [role.strip() for role in roles if role.strip()]
+        if not normalized:
+            raise ValueError("company membership roles must be non-empty")
+        async with atomic(using="shared"):
+            company = await cls.objects.filter(company_id=company_id).for_update().get()
+            members = dict(company.members)
+            members[user_id] = list(normalized)
+            company.members = members
+            _ = await company.save(update_fields=["members"])
+            return company
+
+    @classmethod
+    async def add_balance(cls, company_id: str, amount: float) -> Self:
+        if company_id == "":
+            raise ValueError("company_id is required")
+        async with atomic(using="shared"):
+            company = await cls.objects.filter(company_id=company_id).for_update().get_or_none()
+            if company is None:
+                raise ValueError(f"Company {company_id} not found")
+            company.balance += amount
+            _ = await company.save(update_fields=["balance"])
+            return company
+
+    @classmethod
+    async def discard_member(cls, company_id: str, user_id: str) -> Self:
+        if not company_id.strip():
+            raise ValueError("company_id is required")
+        if not user_id.strip():
+            raise ValueError("user_id is required")
+        async with atomic(using="shared"):
+            company = await cls.objects.filter(company_id=company_id).for_update().get()
+            if user_id not in company.members:
+                raise ValueError(f"company member not found: {user_id}")
+            members = dict(company.members)
+            del members[user_id]
+            company.members = members
+            _ = await company.save(update_fields=["members"])
+            return company
+
+
+class AuthSession(PlatformModel):
+    """Сессия входа. Глобальная таблица ``auth_sessions`` в ``platform_shared``."""
+
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+
+    session_id: str = DbField(
+        db_pk=True,
         title="ID сессии",
         description="Уникальный ID сессии авторизации",
         json_schema_extra={"readonly": True},
     )
-    user_id: str = Field(
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "auth_sessions"
+
+    user_id: str = DbField(
+        db_index=True,
         title="ID пользователя",
         description="Ссылка на пользователя",
         json_schema_extra={"readonly": True},
     )
-    provider: AuthProvider = Field(
+    provider: AuthProvider = DbField(
         title="Провайдер", description="Провайдер авторизации", json_schema_extra={"readonly": True}
     )
     access_token: str | None = Field(
@@ -316,13 +496,37 @@ class ProviderUserInfo(BaseModel):
     raw_data: JsonObject = Field(default_factory=dict, description="Сырые данные от провайдера")
 
 
-class UserProviderRecord(BaseModel):
-    """Сохраненная связь пользователя с внешним OAuth-провайдером."""
+class UserProviderRecord(PlatformModel):
+    """Одна связь пользователя с OAuth-провайдером. Таблица ``user_providers``."""
 
-    provider_name: AuthProvider = Field(description="Провайдер авторизации")
-    email: str = Field(description="Email пользователя у провайдера")
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+
+    user_provider_id: str = DbField(db_pk=True, description="provider_name:provider_user_id")
+    user_id: str = DbField(db_index=True, description="Пользователь платформы")
+    provider_user_id: str = DbField(db_index=True, description="ID пользователя у провайдера")
+    provider_name: AuthProvider = DbField(description="Провайдер авторизации")
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "user_providers"
+        unique_together: list[tuple[str, str]] = [("provider_name", "provider_user_id")]
+
+    email: str = DbField(description="Email пользователя у провайдера")
     avatar_url: str | None = Field(default=None, description="URL аватара у провайдера")
     metadata: JsonObject = Field(default_factory=dict, description="Данные профиля провайдера")
+
+    @classmethod
+    async def find_by_provider_user_id(cls, provider_user_id: str) -> Self | None:
+        if provider_user_id == "":
+            raise ValueError("provider_user_id is required")
+        return await cls.objects.filter(provider_user_id=provider_user_id).first()
+
+    @classmethod
+    async def list_by_user_id(cls, user_id: str) -> list[Self]:
+        if user_id == "":
+            raise ValueError("user_id is required")
+        return await cls.objects.filter(user_id=user_id).all()
 
 
 class AuthRequest(BaseModel):
@@ -475,18 +679,31 @@ class NamespaceKind(str, Enum):
     TECHNICAL = "technical"
 
 
-class Namespace(BaseModel):
-    """
-    Namespace (изолированная область данных).
-    Используется всеми сервисами для организации данных внутри компании.
+class Namespace(CompanyScopedModel):
+    """Пространство компании. Таблица ``namespaces`` в ``platform_shared``.
+
+    Внутри компании пространство адресуется ``name``. Первичный ключ строки —
+    ``namespace_id`` = ``company_id:name``, чтобы ``default`` мог быть у каждой компании.
     """
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(
-        json_schema_extra={"storage_prefix": "namespace"}
+    __database_alias__: ClassVar[str | None] = "shared"
+
+    namespace_id: str = DbField(default="", db_pk=True)
+    name: str = DbField(
+        db_index=True,
+        title="Название",
+        description="Имя namespace (например 'default', 'sales')",
     )
+    company_id: str = DbField(db_index=True, title="ID компании", description="ID компании-владельца")
 
-    name: str = Field(title="Название", description="Имя namespace (например 'default', 'sales')")
-    company_id: str = Field(title="ID компании", description="ID компании-владельца")
+    class Meta:
+        is_table: bool = True
+        table_name: str = "namespaces"
+        unique_together: list[tuple[str, str]] = [("company_id", "name")]
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        self.namespace_id = f"{self.company_id}:{self.name}"
     description: str | None = Field(
         default=None, title="Описание", description="Описание namespace"
     )
@@ -505,13 +722,15 @@ class Namespace(BaseModel):
         title="Владелец",
         description="user_id владельца; обязателен для kind=personal",
     )
-    crm_settings: NamespaceCRMSettings | None = Field(
+    crm_settings: NamespaceCRMSettings | None = DbField(
         default=None,
+        db_type="JSONB",
         title="Настройки CRM",
         description="Опционально: UI заметок и значения по умолчанию",
     )
-    sync_settings: NamespaceSyncSettings | None = Field(
+    sync_settings: NamespaceSyncSettings | None = DbField(
         default=None,
+        db_type="JSONB",
         title="Настройки Sync",
         description="Опционально: дефолты транскрипции и речи в ленту для каналов пространства",
     )
@@ -536,6 +755,90 @@ class Namespace(BaseModel):
         elif self.owner_user_id is not None:
             raise ValueError("owner_user_id is only allowed for kind=personal")
         return self
+
+    @classmethod
+    async def by_name(cls, name: str) -> Self | None:
+        return await cls.objects.filter(name=name).get_or_none()
+
+    @classmethod
+    async def delete_by_name(cls, name: str) -> bool:
+        deleted = await cls.objects.filter(name=name).delete()
+        return deleted > 0
+
+    @classmethod
+    async def list_by_kind(
+        cls,
+        kinds: list[NamespaceKind],
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[Self]:
+        return await (
+            cls.objects.filter(kind__in=kinds)
+            .order_by("name")
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    @classmethod
+    async def count_by_kind(cls, kinds: list[NamespaceKind]) -> int:
+        return await cls.objects.filter(kind__in=kinds).count()
+
+    @classmethod
+    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+        # Живая таблица ещё key/value. Менеджер отрезал бы одну компанию.
+        sql = (
+            "SELECT value->>'name' AS name, "
+            "value->>'company_id' AS company_id, "
+            "value->>'kind' AS kind, "
+            "value->>'owner_user_id' AS owner_user_id "
+            "FROM namespaces "
+            "WHERE value->>'company_id' IS NOT NULL "
+            "AND value->>'name' IS NOT NULL "
+            "ORDER BY key"
+        )
+        params: list[int] = []
+        if limit is not None:
+            sql = f"{sql} LIMIT $1"
+            params = [limit]
+        rows = await execute_raw(sql, params, using="shared")
+        namespaces: list[Self] = []
+        for row in rows:
+            parsed = require_json_object(row, "namespace")
+            name = parsed["name"]
+            company_id = parsed["company_id"]
+            if not isinstance(name, str) or name == "":
+                raise ValueError("namespaces.name is required")
+            if not isinstance(company_id, str) or company_id == "":
+                raise ValueError("namespaces.company_id is required")
+            kind = NamespaceKind.COMPANY_WORKSPACE
+            kind_cell = parsed["kind"]
+            if kind_cell == NamespaceKind.PERSONAL.value:
+                kind = NamespaceKind.PERSONAL
+            elif kind_cell == NamespaceKind.TECHNICAL.value:
+                kind = NamespaceKind.TECHNICAL
+            owner_user_id: str | None = None
+            owner_cell = parsed["owner_user_id"]
+            if isinstance(owner_cell, str) and owner_cell.strip() != "":
+                owner_user_id = owner_cell.strip()
+            if kind == NamespaceKind.PERSONAL and owner_user_id is None:
+                raise ValueError(
+                    f"personal namespace {name} missing owner_user_id for backfill"
+                )
+            if kind != NamespaceKind.PERSONAL:
+                owner_user_id = None
+            namespaces.append(
+                cls.model_validate(
+                    {
+                        "name": name,
+                        "company_id": company_id,
+                        "kind": kind,
+                        "owner_user_id": owner_user_id,
+                    }
+                )
+            )
+        return namespaces
 
 
 class AuthResult(BaseModel):

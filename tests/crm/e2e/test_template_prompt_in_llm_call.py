@@ -30,12 +30,13 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm.container import CRMContainer
+from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     NamespaceTemplateSeed,
     NamespaceTemplateTypeSpec,
 )
+from core.context import require_active_company
 from core.types import JsonObject
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 
@@ -264,7 +265,7 @@ class TestTemplatePromptReachesLLM:
         await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_title,
@@ -338,7 +339,7 @@ class TestTemplatePromptReachesLLM:
         await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_title,
@@ -385,17 +386,17 @@ class TestTemplatePromptReachesLLM:
     async def test_user_edited_relationship_type_prompt_reaches_llm(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         mock_llm_redis: MockLlmRedisFactory,
         mock_llm_capture: MockLlmCaptureFactory,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """
-        Прямая правка системного `RelationshipType.prompt` через репозиторий
-        (как это делает любое UI/SDK, общающееся с БД компании) тоже уходит
+        Прямая правка системного `RelationshipType.prompt` тоже уходит
         в финальный analyze prompt.
         """
+        _ = crm_di
         ns_name = await _create_namespace_from_template(
             crm_client, auth_headers_system, "sales", unique_id
         )
@@ -407,20 +408,22 @@ class TestTemplatePromptReachesLLM:
             "КОГДА НЕ ИСПОЛЬЗОВАТЬ: для блокировок и владения."
         )
 
-        repo = crm_container.relationship_type_repository
-        all_types = await repo.list_by_company(include_system=True, limit=1000)
+        company_id = require_active_company().company_id
+        all_types = await RelationshipType.in_company(
+            company_id, include_system=True
+        ).all()
         mentions_row = next((row for row in all_types if row.type_id == "mentions"), None)
         assert mentions_row is not None, "у компании system должен быть тип mentions"
         original_prompt = mentions_row.prompt
         try:
             mentions_row.prompt = new_prompt
-            _ = await repo.update(mentions_row)
+            _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
 
             note_title = f"Звонок probe {unique_id}"
             await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
             note_resp = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "note",
                     "name": note_title,
@@ -456,7 +459,7 @@ class TestTemplatePromptReachesLLM:
             )
         finally:
             mentions_row.prompt = original_prompt
-            _ = await repo.update(mentions_row)
+            _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
 
     @pytest.mark.asyncio
     async def test_seed_specific_type_prompt_visible_in_llm_for_that_namespace(
@@ -486,7 +489,7 @@ class TestTemplatePromptReachesLLM:
         await mock_llm_redis(_analyze_mock_redis_queue(note_title))
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_title,

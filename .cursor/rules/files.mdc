@@ -1,143 +1,98 @@
 ---
-description: "Files API: FilesService, FileCreateSpec, chunked upload on every service, platform/file_create"
+description: "Файлы: FilesService, FileCreateSpec, chunked upload, Documents bind, download, retention, DataTable, S3/MinIO, реестр типов, FileReader. Читать при работе с байтами файла"
+globs:
+  - "core/files/**"
+  - "core/documents/**"
+  - "core/data_tables/**"
+  - "core/clients/files_client.py"
+  - "core/frontend/static/lib/utils/platform-file-upload.js"
+  - "core/frontend/static/lib/utils/platform-files-url.js"
 alwaysApply: false
 ---
-# Files API — единый контракт платформы
 
-## Публичный API
+# Файлы
 
-| Слой | Контракт |
-|---|---|
-| Python | `container.files_service` — `create`, `register_s3`, `get`, `bind`, `delete`, `save`; `container.chunked_upload_service` — init/part/complete/abort |
-| HTTP upload | **Только** chunked `/{segment}/api/v1/files/uploads*` (mount в `create_service_app` при `include_platform_routers`; office → `/documents/api/v1/files/...`) |
-| Cross-pod | `core/clients/files_client.py::FilesClient` → chunked HTTP на segment целевого процесса (`service=` или segment текущего процесса); `get_bytes` через shared `FileRepository` |
-| UI upload | `uploadPlatformFile` / `resolvePlatformFileRefs` (`platform-file-upload.js`) + factory `platform/file_create` |
-| UI URL | `resolvePlatformFilesApiBase` / `buildPlatformFileDownloadUrl` / `extractPlatformFileDownloadId` (`platform-files-url.js`); segment — `setPlatformFilesRouteSegment` из `PlatformApp.getBaseUrl()` (`/frontend` для root SPA, `/crm` → `crm`, …) |
-| UI pick | `platform.file_picker` — Documents browse + upload; props `acceptMimePrefix`, `uploadSpec`, host browse factories |
+Файл платформы — `FileRecord` (таблица `files` в `platform_shared`) + объект S3; наружу — `FileRef` и same-origin URL. Байты входят только через Files API или `FilesService.create`, каждый durable файл виден в Документах компании. Documents-сервис → `office.mdc`.
 
-Каждый сервис с `include_platform_routers` монтирует свой Files router: `/{segment}/api/v1/files/*` (office — `documents`).
+## Модель
 
-Download URL на `FileRecord` — `/{creating-service-segment}/api/v1/files/download/{file_id}` (segment процесса, который создал файл). Любой другой сервис с тем же mount может стримить тот же `file_id` через свой prefix (`GET /{segment}/api/v1/files/download/{file_id}`) — источник данных shared `FileRepository` + S3.
+- `FileRecord` — строка и JSON-ответ; `s3_key` и `storage_id` пишутся в таблицу и не сериализуются; доступ к байтам проверяет `FileGate`.
+- `FileRef` (`file_id`, `original_name`, `url`, `content_type`, `file_size`, `checksum`, `is_public`, `created_at`, `capabilities`) — публичная форма в API и `state.files`; проекция записи — `stored_file_ref`; имена `name`, `path`, `mime_type`, `size`, `type` для файла запрещены.
+- `FileCreateSpec` (`core/files/create_spec.py`) — единственный вход создания; дефолты по `FileSourceKind` — `core/files/registry.py`; `FileRetentionSpec` обязателен (`retention_kind`, `expires_at`).
+- Типы файлов — `core/files/types.py`: `FileCategory`, `FILE_TYPE_REGISTRY` (`FileTypeEntry`: расширение, MIME, категория), функции `extensions_for`, `mimes_for`, `ext_to_mime`, `ext_to_category`, `mime_to_category`, `accept_string_for`.
+- `FileCategory.VIZ` (`.viz`, JSON `VizDocument`) и `FileCategory.DATA_TABLE` (`.sqlite`, `application/vnd.sqlite3`; загрузка `.db` нормализуется в `.sqlite`) открываются handler'ами Office; публичный id — `file_id`.
 
-`is_public=true` на `FileRecord` разрешает анонимный `GET .../files/download/{file_id}` (`_ensure_file_record_access` не требует компанию). Картинка AgentIdentity в embed `<img>` — public `flow_asset` (`buildFlowAssetFileCreateSpecJson({ flowId, isPublic: true })`). Непубличный файл без cookie/компании — 403. Wiki-файлы публичными не делают — см. исключение ниже.
+## Инварианты
 
-### Upload limits (`FilesConfig`)
+### Загрузка
 
-| Поле | Default | Смысл |
-|---|---|---|
-| `max_upload_bytes` | 512 MiB | потолок одного файла |
-| `chunk_size_bytes` | 5 MiB | размер части (S3 multipart min 5 MiB кроме последней) |
-| `upload_session_ttl_seconds` | 86400 | TTL Redis-сессии незавершённого upload |
+1. Байты из браузера — только chunked `/{segment}/api/v1/files/uploads*`: `POST /uploads` (init: `spec`, `original_name`, `content_type`, `file_size` → `upload_id`, `file_id`, `chunk_size_bytes`), `PUT /uploads/{upload_id}/parts/{n}`, `POST .../complete` → `FileRef`, `DELETE` — abort; S3 multipart, сессия в Redis, даже 1 байт — одна part; сервер держит в памяти только текущую part.
+2. Files router монтирует `create_service_app` на каждом сервисе с `include_platform_routers` (office — `/documents/api/v1/files/...`); лимиты — `FilesConfig` (`max_upload_bytes`, `chunk_size_bytes`, `upload_session_ttl_seconds`), UI читает `GET .../files/upload-config`.
+3. UI: `uploadPlatformFile`/`resolvePlatformFileRefs` (`platform-file-upload.js`) + фабрика `platform/file_create`; выбор — модалка `platform.file_picker`; URL — `resolvePlatformFilesApiBase`, `buildPlatformFileDownloadUrl`, `extractPlatformFileDownloadId` (`platform-files-url.js`), segment — `setPlatformFilesRouteSegment` из `PlatformApp.getBaseUrl()`.
+4. Доменная операция после upload принимает только `file_id` (CRM attachment, документ Office, RAG `index-file`, вложение письма).
+5. A2A из UI платформы — сначала upload, затем только `Part.url`; готовый `FileRef` не загружается повторно; `Part.raw` — только внешние клиенты → `a2a.mdc`.
+6. Серверная запись байтов (входящая почта, сгенерированные артефакты, внешний `Part.raw`, пустые шаблоны Office) — `FilesService.create`; cross-pod — `FilesClient` (`core/clients/files_client.py`).
 
-`GET /{segment}/api/v1/files/upload-config` отдаёт те же числа для UI.
+### Documents bind
 
-### Chunked upload (единственный клиентский путь байтов)
+1. Каждый durable `FilesService.create`/`register_s3` получает `DocsPlacement` и строку в Документах (`FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`) либо exempt; сбой bind — компенсация `FilesService.delete` и `raise`.
+2. Placement — `default_docs_placement(source_kind, source_ref)`, дерево путей — `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Flows/{flow}/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`); namespace — `resolve_namespace_or_raise()`; caller заполняет полный `source_ref`.
+3. Exempt — `office_document` (Office биндит сам), `generated_ephemeral`, `platform_auxiliary`.
+4. Новый источник — `FileSourceKind` + строка registry + placement или exempt, не новый HTTP endpoint. Источники со своим контрактом: `MAIL_MESSAGE` (идемпотентность — `MailAttachmentFileIndex`), `CODE_AGENT_SOURCE` (`node_id` обязателен → `guest_runtime.mdc`), `WIKI_PAGE` (`wiki_page_id` + `namespace_id`, retention permanent).
 
-| Method | Path |
-|---|---|
-| `POST` | `/uploads` — init (`spec`, `original_name`, `content_type`, `file_size`) → `{ upload_id, file_id, chunk_size_bytes }` |
-| `PUT` | `/uploads/{upload_id}/parts/{part_number}` — raw body чанка (лимит = `chunk_size_bytes`, не весь файл) |
-| `POST` | `/uploads/{upload_id}/complete` → `FileRef` |
-| `DELETE` | `/uploads/{upload_id}` — abort |
+### Выдача
 
-Под капотом: S3 multipart. Сессия в Redis. Даже 1-байтный файл идёт через chunked session (одна part).
+1. Download — `GET /{segment}/api/v1/files/download/{file_id}`: streaming + `Range`/206 (`stream_s3_file`); любой сервис с Files router отдаёт любой `file_id`; `file_id` из URL любого segment — `file_id_from_download_url`.
+2. `is_public=true` разрешает анонимный download; непубличный без компании — 403.
+3. Наружу — только same-origin URL; `get_public_url()` и прямой URL S3/MinIO в ответах запрещены.
 
-HTTP upload **не** читает весь файл в RAM: только текущий part (≤ `chunk_size_bytes`).
+### DataTable
 
-**Запрещено:** FormData/`UploadFile` single-shot на любом `/{svc}/api/v1/files/`; `single_shot_max_bytes`; `createMultipartFileUploadOp`; прямой FormData upload байтов в CRM/Office/RAG/domain UI; base64 file upload в Flow UI и public search (landing).
+1. Табличная база — обычный файл, создаётся `DataTableService.create` (`core/data_tables/service.py`) через `FilesService.create`; scope: `FLOW_ASSET` (между сессиями, permanent), `FLOW_SESSION` (TTL сессии), `OFFICE_DOCUMENT` (каталог Документов).
+2. Promote сессии в asset — новая копия `FLOW_ASSET`, а не смена `source_kind`; запись — office HTTP или capability `tables.*` под одним Redis lock; `sqlite3`/`open()` в sandbox нет.
 
-### Public search
+### Retention
 
-Landing `/search`: browser File → chunked `POST/PUT /frontend/api/v1/files/uploads*` под JWT `embed_session` (company=`system`), в A2A только `Part.url`. `readAsDataURL` / base64 `files[].data` в payload run запрещены.
+Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_cron`, `core/files/purge.py`).
 
-### Mail compose
+### S3
 
-`<platform-markdown-editor>` attach → `uploadPlatformFile` → `{ file_id, url, … }`. Send `POST .../api/mail/messages/send` принимает `attachments[].file_id` (не `content`/`content_base64`). Worker `send_message` резолвит байты через `read_stored_file_by_id` для SMTP.
+1. Байты читает и пишет только `FileGate` (`core/files/object_store/gate.py`). `aioboto3` и `S3ClientFactory` — внутри `core/files/object_store`.
+2. Платформенный MinIO — `settings.s3` (`storage_id=platform`). Хранилище компании — `ObjectStorage`; маршрут записи — `StorageRoute` по `FileSourceKind`, иначе дефолт компании, иначе `platform`. `FileRecord.storage_id` — адрес уже записанных байтов, маршрут его не меняет.
+3. Доступ — `authorize_file`: публичный файл, `SignedFileGrant` на свой `file_id`, иначе компания принципала совпадает с `FileRecord.company_id`; сессия дополнительно проверяет `company#can_view` и родителя по `source_kind`.
+4. Новое подключение становится `active` только после probe. Смена endpoint — новая строка и перенос `storage_migration_tick`. Удаление при живых файлах — `conflict`.
+5. MinIO создаёт бакет при первой записи, если `provider=minio`. Прокси для MinIO и localhost выключен. Сдвиг часов SigV4 — `core/files/s3_sigv4_clock.py`.
 
-Mail inbound: materialize на **sync persist** (`MailService._materialize_attachments` → `FilesService.create` + `MailAttachmentFileIndex`); `MailAttachment.content` — `Field(exclude=True)`, API отдаёт `file_id`. UI download — `url` \| `file_id` + `openFileViewer`.
+### Типы в UI
 
-Доменные операции после upload принимают только `file_id`:
+1. Реестр типов приходит `GET /api/platform/file-types` в slice `state.fileTypes`; чтение — `selectExtensionsFor`, `selectMimesFor`, `selectAcceptStringFor`, `selectIsAllowedFile` (`@platform/lib/events/reducers/file-types.js`).
+2. Хардкод списков расширений, MIME и accept-строк запрещён в Python и JS; новый тип — одна запись `FILE_TYPE_REGISTRY`.
 
-| Сервис | После chunked upload |
-|---|---|
-| CRM attachments | `POST /crm/api/v1/entities/{id}/attachments` JSON `{ file_id }` |
-| Office Documents | `POST /documents/api/v1/documents` JSON `{ file_id, title?, catalog_id? }` |
-| RAG | `POST /rag/api/v1/namespaces/{id}/documents/index-file` JSON `{ file_id, … }` |
+### FileReader
 
-### Download
+1. Продуктовый контракт — `await FileReader().read(source, ReadFileArgs(...), file_name=..., file_id=...) -> FileExtract` (`source`: bytes, path, `file_id`, `FileRef`); `FileExtract.pages[]` — `UniversalPage` + `ExtractBlock` + `FileRef`.
+2. Формат-специфика — только внутри reader'а; оркестрация не ветвится по формату; LLM tool `read_file` рендерит `render_file_result(extract, args)`.
+3. Потребители: flows `read_file`, RAG (`ReadFileArgs(page_end=-1)`), CRM `file_text_reader`, capability `files.read`, Office preview; байты по `file_id` — `read_stored_file_by_id`.
+4. Ассеты figure-блоков пишутся как `FileRef` при `ReadFileArgs.persist_assets_namespace` (`FileSourceKind.RAG_DOCUMENT`, без повторной индексации); `configure_asset_persist(files_service)` — на старте rag и rag_worker.
+5. Зашифрованный PDF без пароля — успешный `read` с пустым текстом и warning.
 
-`GET /{segment}/api/v1/files/download/{file_id}` — streaming + `Range` / 206 (`stream_s3_file`). UI строит URL через `buildPlatformFileDownloadUrl` от segment текущего SPA (`/crm/...` → `/crm/api/v1/files/download/...`); сохранённый `FileRecord.url` может быть с segment сервиса-создателя — `extractPlatformFileDownloadId` / `file_id_from_download_url` принимают любой segment. Large file не материализуется целиком в blob/base64.
+## Запреты
 
-### Chat / A2A
+1. FormData/`UploadFile` single-shot на Files API, `single_shot_max_bytes`, `createMultipartFileUploadOp`, фабрики `*/file_upload`, base64/DataURL байтов в Flow UI, публичном поиске и payload.
+2. Durable `FileRecord` без Documents bind (кроме exempt).
+3. `FileReader.read_raw`, `_get_or_extract`, `build_file_extract` в `apps/` и `core/rag/`; отдельный RAG-only extract.
+4. Моки `S3Client` в тестах — реальный MinIO (фикстура `minio_bucket`).
 
-Platform UI: **сначала** `uploadPlatformFile` / `resolvePlatformFileRefs`, в A2A только `Part.url`. `buildA2aFileParts` / `ChatController.send` fail-closed на `raw`/`data`/`file.bytes`. Уже есть `FileRef` (`file_id`+`url`) — **без** повторного upload. `Part.raw` — только external/conformance HTTP-клиенты (не platform JS builder).
+## Исключения
 
-### Server-side `FilesService.create`
+- Исключение: публичный сайт wiki отдаёт файлы контента только через `GET /wiki/api/v1/public/pages/{link_token}/files/{file_id}` с проверкой, что `file_id` есть в контенте поддерева (`apps/wiki/content/public_media.py`); `is_public=True` для wiki-файлов запрещён. `[без гейта]`
+- Исключение: хардкод MIME в runtime-логике, не являющейся whitelist типов: `apps/office/services/document_type.py`, `core/files/audio_transcode.py`, `core/files/media/chunked_stt.py`. `[без гейта]`
+- Исключение: `SyncFile.storage_url` пишет только финализация записи звонка (`raw_file_id` ссылается на `sync_files`). `[без гейта]`
 
-In-process запись байтов (mail inbound, generated artifacts, A2A external `Part.raw`, empty Office templates) — не HTTP upload. Клиентские байты с браузера — **только** chunked.
+## Гейты
 
-## FileCreateSpec
-
-Единственный вход: `core/files/create_spec.py`. Defaults — `core/files/registry.py`. Новый источник = `FileSourceKind` + registry row + DocsPlacement mapping (или explicit exempt), **не** новый HTTP endpoint.
-
-## Durable create ⇒ Documents bind
-
-Инвариант: каждый durable `FilesService.create` / `register_s3` либо получает `DocsPlacement` и строку в Documents explorer, либо exempt, либо падает (create не возвращает файл без каталога).
-
-| Механика | Где |
-|---|---|
-| Auto placement | `default_docs_placement(source_kind, source_ref)` в `core/files/registry.py` |
-| Path tree | `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Flows/…/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`, …) |
-| Bind | `FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`. Exempt (`office_document` / `generated_ephemeral` / `platform_auxiliary`) — без bind. Иначе bind обязателен: сбой (office down/`ServiceClientError`/нет hook) → compensation `FilesService.delete` (S3 + `FileRecord`) и `raise`. Orphan durable `FileRecord` без каталога запрещён |
-| Namespace | `resolve_namespace_or_raise()` из Context (`active_namespace`) |
-| Exempt | `office_document` (Office upload уже биндит), `generated_ephemeral`, `platform_auxiliary` |
-
-Caller заполняет полный `source_ref` (для path), не руками собирает `DocsPlacement` (кроме редкого override).
-
-CI: `scripts/check_files_canon.py` — каждый `FileSourceKind` ∈ auto-map ∪ exempt.
-
-Mail inbound: `FileSourceKind.MAIL_MESSAGE` (`mailbox_binding_id` + `mail_uid` + `mailbox_email`, optional `mail_subject`); path `Mail/{email}/{subject|uid}`; idempotency `MailAttachmentFileIndex`; materialize на sync persist; UI `openFile` / download по `file_id`.
-
-Code agent source: `FileSourceKind.CODE_AGENT_SOURCE` (`flow_id` или `flow_slug` + **`node_id`**, optional `relative_dir`); path `Flows/{flow}/code_agent/{node_id}/{relative_dir…}`; retention как `FLOW_ASSET` (permanent). Нет `node_id` → `raise`. Канон → **`guest_runtime.mdc`**.
-
-Wiki page media: `FileSourceKind.WIKI_PAGE` (`wiki_page_id` + `namespace_id`); retention permanent (`FileRetentionKind.WIKI_PAGE`); path `Wiki/{namespace_id}/{wiki_page_id}`; JS `buildWikiPageFileCreateSpecJson`. UI выбора — `platform.file_picker` (не `prompt`, не `platform_auxiliary` для cover/image/file страницы).
-
-## DataTable (SQLite file)
-
-Табличная база — обычный платформенный файл (`FileCategory.DATA_TABLE`, `.sqlite`, MIME `application/vnd.sqlite3`). Публичный id = `file_id`. Создание — `FilesService.create` (как любой durable file) через `DataTableService.create`.
-
-| Scope | `FileSourceKind` | Documents path | Retention |
-|---|---|---|---|
-| Таблица агента (между сессиями) | `FLOW_ASSET` | `Flows/{flow}/…sqlite` | permanent |
-| Таблица сессии | `FLOW_SESSION` | `Flows/{flow}/{session_id}/…sqlite` | `flow_session_ttl_seconds` |
-| Файл в Documents UI | `OFFICE_DOCUMENT` | каталог namespace | как office document |
-
-Promote session → asset: новый `FLOW_ASSET` file (copy), не тихий rewrite `source_kind`. Writer: office HTTP + Redis lock; code-нода — capability `tables.*` (in-process `DataTableService`, тот же lock). `sqlite3` / `open()` в sandbox нет.
-
-## Внутренности (private, не импортировать из apps)
-
-- `core/files/storage.py` — S3 + FileRecord persistence
-- `core/files/purge.py` — expired purge
-- `core/files/backfill.py` — retention backfill для legacy rows
-
-## Retention
-
-`FileRetentionSpec` обязателен в каждом `create`. `FileRecord.retention_kind` + `expires_at`. Purge: TaskIQ `file_retention_purge_tick` (idle queue, scheduler cron `files.retention.purge_cron`).
-
-## RAG
-
-Загрузка байтов — только через Files chunked API. Индексация — `POST /rag/api/v1/namespaces/{id}/documents/index-file` или явный `post_create.rag_index_namespace` в `FileCreateSpec` (hook на `BaseContainer.files_service`). `FileSourceKind.RAG_DOCUMENT` сам по себе индекс не ставит: persist ассетов FileReader пишет `FileRef` + Documents bind, без повторного index-file.
-
-## Исключение: гостевая выдача wiki
-
-Анонимный публичный сайт wiki не ходит в `/{segment}/api/v1/files/download/*` (там нужна компания). Файлы из контента опубликованного поддерева отдаёт только `GET /wiki/api/v1/public/pages/{link_token}/files/{file_id}`: токен сайта + проверка, что `file_id` есть в контенте страницы поддерева (`apps/wiki/content/public_media.py`). Парсинг `file_id` из сохранённых URL в контенте — `file_id_from_download_url` (любой segment). Помечать wiki-файлы `is_public=True` нельзя — это открыло бы их вне публикации страницы.
-
-## Запрещено
-
-`FileProcessor`, `build_file_api_router`, FormData/`UploadFile` single-shot на Files API, `*/file_upload` factory names, `upload_namespace_document`, `persist_uploaded*`, `single_shot_max_bytes`, `createMultipartFileUploadOp`, byte→base64/DataURL в Flow UI submit path.
-
-Flow UI file components проецируют ordinary `Part.url`/`Part.raw` lossless: platform browser upload сначала идёт chunked Files API и отправляет `Part.url`; external A2A `raw` остаётся поддержан. Renderer не исполняет raw content inline и валидирует file ownership/content type. Канон → **`flow_ui.mdc`**.
-
-Orphan durable `FileRecord` без Documents bind (кроме exempt).
-
-CI: `scripts/check_files_canon.py`, `scripts/check_files_ui_canon.sh`.
+- `scripts/check_files_canon.py` (`make lint`) — каждый `FileSourceKind` в auto-map или exempt.
+- `scripts/check_object_store_canon.py` (`make lint`) — `S3ClientFactory` и `aioboto3` только в `core/files/object_store`.
+- `scripts/check_files_ui_canon.sh` (`make lint`) — chunked upload в UI.
+- `scripts/check_file_reader_canon.py` (`make check-events-canon`) — `read_raw` и внутренние функции вне `core/files/reader/`.
+- `scripts/check_corpus_manifest_complete.py` (`make check-events-canon`) — корпус `tests/core/files/example-docs/` (Git LFS, `make sync-example-docs`) покрыт manifest.

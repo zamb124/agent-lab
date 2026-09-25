@@ -46,11 +46,10 @@ async def test_get_file_metadata_404(
 async def test_upload_returns_503_when_s3_disabled(
     sync_auth_headers,
     sync_db_clean: None,
+    frontend_app,
 ) -> None:
-    from apps.frontend.main import app
-
     async with _temporary_settings({"s3.enabled": False}):
-        transport = ASGITransport(app=app)
+        transport = ASGITransport(app=frontend_app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as client:
             r = await client.post(
                 "/frontend/api/v1/files/uploads",

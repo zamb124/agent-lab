@@ -20,11 +20,13 @@ from livekit.protocol.egress import EgressInfo
 from redis.asyncio.client import Redis
 
 import core.tracing.attributes as trace_attributes
-from apps.sync.container import SyncContainer, get_sync_container
-from apps.sync.db.models import SyncFile
-from apps.sync.db.repositories.meeting_repository import call_recording_read
+from apps.sync.di import Di
 from apps.sync.events import event_call_recording_failed, event_message_updated
 from apps.sync.message_read_helpers import message_read_from_entity
+from apps.sync.models.call import SyncCall
+from apps.sync.models.files import SyncFile
+from apps.sync.models.meetings import CallRecordingRead, SyncCallRecording
+from apps.sync.models.message import SyncMessage, SyncMessageContent
 from apps.sync.models.messages import (
     CallTranscriptContent,
     CallTranscriptEntry,
@@ -60,8 +62,8 @@ from core.files.models import (
     FileStatus,
     VideoAttachmentContent,
 )
-from core.files.s3_client import S3ClientFactory
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.tasks import enqueue, platform_task
 from core.tracing.operation_span import traced_operation
 from core.types import parse_json_object
@@ -254,12 +256,12 @@ async def _resolve_livekit_egress_result(
     )
 
 
-async def _load_message_read(container: SyncContainer, *, message_id: str, company_id: str) -> MessageRead:
-    message_entity = await container.message_repository.get_by_id_for_company(message_id, company_id)
+async def _load_message_read(*, message_id: str, company_id: str) -> MessageRead:
+    message_entity = await SyncMessage.find_in_company(company_id, message_id)
     if message_entity is None:
         raise ValueError(f"Message {message_id} not found.")
-    contents = await container.message_repository.list_contents(message_id)
-    sender = await sender_brief_for_message(container.user_repository, message_entity.sender_user_id)
+    contents = await SyncMessageContent.list_for_message(message_id)
+    sender = await sender_brief_for_message(message_entity.sender_user_id, resolve_user=True)
     return message_read_from_entity(m=message_entity, contents=contents, sender=sender)
 
 
@@ -387,7 +389,7 @@ def _extract_video_info(contents: list[MessageContentModel]) -> VideoAttachmentC
     raise ValueError("Message does not contain file/video.")
 
 async def _send_message_as_actor(
-    container: SyncContainer,
+    di: Di,
     *,
     company_id: str,
     actor_user_id: str,
@@ -399,10 +401,10 @@ async def _send_message_as_actor(
     Компания и пользователь берутся из реестра (Zero-Guess: нет записи — ошибка),
     членство проверяет `build_job_context`.
     """
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise ValueError(f"company not found: {company_id}")
-    user = await container.user_repository.get(actor_user_id)
+    user = await User.get(actor_user_id)
     if user is None:
         raise ValueError(f"actor user not found: {actor_user_id}")
     previous = get_context()
@@ -417,7 +419,7 @@ async def _send_message_as_actor(
         )
     )
     try:
-        return await op_messages_send(payload, user=user, container=container)
+        return await op_messages_send(payload, user=user, di=di)
     finally:
         if previous is not None:
             _ = set_context(previous)
@@ -439,14 +441,14 @@ async def _register_platform_file_record_for_call_recording(
     started_by_user_id: str,
     raw_original_name: str,
     raw_storage_url: str,
+    storage_id: str,
 ) -> int:
     """
     GET /{segment}/api/v1/files/download/{id} на любом mount читает FileRepository (shared).
     Без записи здесь — 404 для плеера, скачивания и transcribe_video.
     """
     settings = get_settings()
-    bucket_key = settings.s3.default_bucket
-    if not settings.s3.enabled or bucket_key == "":
+    if not settings.s3.enabled or settings.s3.bucket_name == "":
         raise ValueError("S3 is not configured: cannot register the meeting recording in FileRepository.")
 
     s3_key = _call_recording_s3_object_key(
@@ -454,12 +456,11 @@ async def _register_platform_file_record_for_call_recording(
         call_id=call_id,
         recording_id=recording_id,
     )
-    s3_client = S3ClientFactory.create_client_for_bucket(bucket_key)
+    from core.files.object_store.pool import client_for
+    from core.files.object_store.resolver import resolve_storage_id
+
+    s3_client = await client_for(await resolve_storage_id(storage_id))
     meta = await s3_client.get_object_metadata(s3_key)
-    provider_name = s3_client.provider_name
-    logical_bucket_key = s3_client.require_bucket_config_key()
-    s3_endpoint_url = s3_client.endpoint_url
-    await s3_client.close()
 
     content_length = meta.content_length
     if content_length < 0:
@@ -472,11 +473,9 @@ async def _register_platform_file_record_for_call_recording(
     download_prefix = f"{api_prefix.rstrip('/')}/files/download"
     file_record = FileRecord(
         file_id=raw_file_id,
-        provider=provider_name,
         original_name=raw_original_name,
         s3_key=s3_key,
-        s3_bucket=logical_bucket_key,
-        s3_endpoint=s3_endpoint_url,
+        storage_id=storage_id,
         storage_url=raw_storage_url,
         content_type=content_type,
         file_size=content_length,
@@ -486,24 +485,24 @@ async def _register_platform_file_record_for_call_recording(
         is_public=True,
         download_url=f"{download_prefix}/{raw_file_id}",
     )
-    container = get_sync_container()
-    _ = await container.file_repository.set(file_record)
+    _ = await FileRecord.set(file_record)
     return content_length
 
 
 @platform_task(SYNC_FINALIZE_RECORDING)
-async def sync_finalize_recording_task(recording_id: str, company_id: str, actor_user_id: str) -> None:
+async def sync_finalize_recording_task(
+    recording_id: str, company_id: str, actor_user_id: str, *, di: Di
+) -> None:
     logger.info(
         "sync.sync_finalize_recording_task",
         recording_id=recording_id,
         company_id=company_id,
         actor=actor_user_id,
     )
-    container = get_sync_container()
-    recording = await container.call_recording_repository.get(recording_id)
+    recording = await SyncCallRecording.get(recording_id)
     if recording is None or recording.company_id != company_id:
         raise ValueError(f"Recording {recording_id} not found.")
-    call = await container.call_repository.get_call(recording.call_id, company_id)
+    call = await SyncCall.require_company_call(recording.call_id, company_id)
     if call.livekit_room_name is None:
         raise ValueError(f"Call {call.call_id} has no livekit_room_name.")
     if recording.started_by_user_id is None or recording.started_by_user_id == "":
@@ -559,6 +558,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 started_by_user_id=recording.started_by_user_id,
                 raw_original_name=raw_original_name,
                 raw_storage_url=raw_storage_url,
+                storage_id=recording.storage_id,
             )
             raw_file = SyncFile(
                 file_id=raw_file_id,
@@ -569,18 +569,18 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 storage_url=raw_storage_url,
                 checksum=None,
             )
-            existing_raw = await container.sync_file_repository.get(raw_file_id)
+            existing_raw = await SyncFile.get(raw_file_id)
             if existing_raw is None:
-                _ = await container.sync_file_repository.create(raw_file)
+                _ = await SyncFile.set(raw_file)
             else:
                 existing_raw.original_name = raw_original_name
                 existing_raw.content_type = "video/mp4"
                 existing_raw.file_size = recording_file_size
                 existing_raw.storage_url = raw_storage_url
                 existing_raw.checksum = None
-                _ = await container.sync_file_repository.update(existing_raw)
+                _ = await existing_raw.save(using="sync")
 
-            await container.call_recording_repository.mark_status(
+            await SyncCallRecording.mark_call_recording_status(
                 recording.recording_id,
                 status="uploaded",
                 provider_job_id=provider_job_id,
@@ -611,7 +611,7 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
             )
             send_payload = MessagesSendPayload(channel_id=recording.channel_id, body=video_body)
             _ = await _send_message_as_actor(
-                container,
+                di,
                 company_id=company_id,
                 actor_user_id=recording.started_by_user_id,
                 payload=send_payload,
@@ -625,15 +625,15 @@ async def sync_finalize_recording_task(recording_id: str, company_id: str, actor
                 error=str(exc),
                 exc_info=True,
             )
-            await container.call_recording_repository.mark_status(
+            await SyncCallRecording.mark_call_recording_status(
                 recording.recording_id,
                 status="failed",
                 error=str(exc),
             )
-            failed_row = await container.call_recording_repository.get(recording_id)
+            failed_row = await SyncCallRecording.get(recording_id)
             if failed_row is not None:
-                failed_read = call_recording_read(failed_row)
-                fail_recipients = await container.channel_access_service.list_member_user_ids(
+                failed_read = CallRecordingRead.model_validate(failed_row.model_dump())
+                fail_recipients = await di.channel_access_service.list_member_user_ids(
                     failed_read.channel_id
                 )
                 await publish_events(
@@ -654,6 +654,7 @@ async def transcribe_audio_message_core(
     message_id: str,
     company_id: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
     if channel_id == "":
         raise ValueError("channel_id is required.")
@@ -664,8 +665,7 @@ async def transcribe_audio_message_core(
     if actor_user_id == "":
         raise ValueError("actor_user_id is required.")
 
-    container = get_sync_container()
-    source_message = await container.message_repository.get_by_id_for_company(message_id, company_id)
+    source_message = await SyncMessage.find_in_company(company_id, message_id)
     if source_message is None:
         raise ValueError(f"Message {message_id} not found.")
     if source_message.channel_id != channel_id:
@@ -673,7 +673,7 @@ async def transcribe_audio_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Cannot transcribe a deleted message.")
 
-    source_contents = await container.message_repository.list_contents(message_id)
+    source_contents = await SyncMessageContent.list_for_message(message_id)
     audio_info = _extract_audio_info(source_contents)
     if audio_info.file_id == "":
         raise ValueError("file/audio.file_id is required.")
@@ -733,17 +733,16 @@ async def transcribe_audio_message_core(
                     transcription_text=transcript_text.strip(),
                     transcription_error=None,
                 )
-                await container.message_repository.replace_message_contents(
+                await SyncMessage.replace_contents(
                     message_id=message_id,
                     contents=done_contents,
                     edited_at=datetime.now(tz=UTC),
                 )
                 done_message = await _load_message_read(
-                    container,
                     message_id=message_id,
                     company_id=company_id,
                 )
-                done_recipients = await container.channel_access_service.list_member_user_ids(
+                done_recipients = await di.channel_access_service.list_member_user_ids(
                     channel_id
                 )
                 await publish_events(
@@ -762,17 +761,16 @@ async def transcribe_audio_message_core(
                 transcription_text=None,
                 transcription_error=STT_FAILED_ERROR_CODE,
             )
-            await container.message_repository.replace_message_contents(
+            await SyncMessage.replace_contents(
                 message_id=message_id,
                 contents=failed_contents,
                 edited_at=datetime.now(tz=UTC),
             )
             failed_message = await _load_message_read(
-                container,
                 message_id=message_id,
                 company_id=company_id,
             )
-            fail_audio_recipients = await container.channel_access_service.list_member_user_ids(
+            fail_audio_recipients = await di.channel_access_service.list_member_user_ids(
                     channel_id
                 )
             await publish_events(
@@ -802,12 +800,14 @@ async def sync_transcribe_audio_message_task(
     message_id: str,
     company_id: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
     await transcribe_audio_message_core(
         channel_id=channel_id,
         message_id=message_id,
         company_id=company_id,
         actor_user_id=actor_user_id,
+        di=di,
     )
 
 
@@ -817,9 +817,9 @@ async def transcribe_video_message_core(
     message_id: str,
     company_id: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
-    container = get_sync_container()
-    source_message = await container.message_repository.get_by_id_for_company(message_id, company_id)
+    source_message = await SyncMessage.find_in_company(company_id, message_id)
     if source_message is None:
         raise ValueError(f"Message {message_id} not found.")
     if source_message.channel_id != channel_id:
@@ -827,7 +827,7 @@ async def transcribe_video_message_core(
     if source_message.deleted_at is not None:
         raise ValueError("Cannot transcribe a deleted message.")
 
-    source_contents = await container.message_repository.list_contents(message_id)
+    source_contents = await SyncMessageContent.list_for_message(message_id)
     video_info = _extract_video_info(source_contents)
     if video_info.file_id == "":
         raise ValueError("file/video.file_id is required.")
@@ -876,17 +876,16 @@ async def transcribe_video_message_core(
                 transcription_text=transcript_text.strip(),
                 transcription_error=None,
             )
-            await container.message_repository.replace_message_contents(
+            await SyncMessage.replace_contents(
                 message_id=message_id,
                 contents=done_contents,
                 edited_at=datetime.now(tz=UTC),
             )
             done_message = await _load_message_read(
-                container,
                 message_id=message_id,
                 company_id=company_id,
             )
-            done_video_recipients = await container.channel_access_service.list_member_user_ids(
+            done_video_recipients = await di.channel_access_service.list_member_user_ids(
                     channel_id
                 )
             await publish_events(
@@ -905,17 +904,16 @@ async def transcribe_video_message_core(
             transcription_text=None,
             transcription_error=str(exc),
         )
-        await container.message_repository.replace_message_contents(
+        await SyncMessage.replace_contents(
             message_id=message_id,
             contents=failed_contents,
             edited_at=datetime.now(tz=UTC),
         )
         failed_message = await _load_message_read(
-            container,
             message_id=message_id,
             company_id=company_id,
         )
-        fail_video_recipients = await container.channel_access_service.list_member_user_ids(
+        fail_video_recipients = await di.channel_access_service.list_member_user_ids(
                     channel_id
                 )
         await publish_events(
@@ -942,12 +940,14 @@ async def sync_transcribe_video_message_task(
     message_id: str,
     company_id: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
     await transcribe_video_message_core(
         channel_id=channel_id,
         message_id=message_id,
         company_id=company_id,
         actor_user_id=actor_user_id,
+        di=di,
     )
 
 
@@ -958,6 +958,7 @@ async def sync_aggregate_call_transcript_task(
     call_id: str,
     company_id: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
     if channel_id == "" or call_id == "" or company_id == "" or actor_user_id == "":
         raise ValueError("channel_id, call_id, company_id, and actor_user_id are required.")
@@ -975,15 +976,14 @@ async def sync_aggregate_call_transcript_task(
             trace_attributes.ATTR_CALL_ID: call_id,
         },
     ) as aggregate_span:
-        container = get_sync_container()
-        rows = await container.message_repository.list_root_lane_by_call(
+        rows = await SyncMessage.list_root_lane_by_call(
             channel_id=channel_id,
             call_id=call_id,
             company_id=company_id,
         )
         aggregate_span.set_attribute("platform.sync.call_aggregate_lane_count", len(rows))
         for m in rows:
-            contents = await container.message_repository.list_contents(m.message_id)
+            contents = await SyncMessageContent.list_for_message(m.message_id)
             has_audio = any(c.type == MessageContentType.FILE_AUDIO for c in contents)
             has_video = any(c.type == MessageContentType.FILE_VIDEO for c in contents)
             if has_audio:
@@ -994,10 +994,11 @@ async def sync_aggregate_call_transcript_task(
                         message_id=m.message_id,
                         company_id=company_id,
                         actor_user_id=actor_user_id,
+                        di=di,
                     )
             if has_video:
                 video = _extract_video_info(
-                    await container.message_repository.list_contents(m.message_id)
+                    await SyncMessageContent.list_for_message(m.message_id)
                 )
                 if video.transcription_status != AudioTranscriptionStatus.DONE:
                     await transcribe_video_message_core(
@@ -1005,16 +1006,17 @@ async def sync_aggregate_call_transcript_task(
                         message_id=m.message_id,
                         company_id=company_id,
                         actor_user_id=actor_user_id,
+                        di=di,
                     )
 
         transcript_entries: list[CallTranscriptEntry] = []
-        fresh_rows = await container.message_repository.list_root_lane_by_call(
+        fresh_rows = await SyncMessage.list_root_lane_by_call(
             channel_id=channel_id,
             call_id=call_id,
             company_id=company_id,
         )
         for m in fresh_rows:
-            contents = await container.message_repository.list_contents(m.message_id)
+            contents = await SyncMessageContent.list_for_message(m.message_id)
             only_boundary = (
                 len(contents) == 1
                 and contents[0].type == MessageContentType.CALL_BOUNDARY
@@ -1022,7 +1024,7 @@ async def sync_aggregate_call_transcript_task(
             if only_boundary:
                 continue
 
-            sender = await sender_brief_for_message(container.user_repository, m.sender_user_id)
+            sender = await sender_brief_for_message(m.sender_user_id, resolve_user=True)
             parts: list[str] = []
             for c in sorted(contents, key=lambda x: x.order):
                 if c.type == MessageContentType.TEXT_PLAIN:
@@ -1078,7 +1080,7 @@ async def sync_aggregate_call_transcript_task(
         )
         send_payload = MessagesSendPayload(channel_id=channel_id, body=agg_body)
         _ = await _send_message_as_actor(
-            container,
+            di,
             company_id=company_id,
             actor_user_id=actor_user_id,
             payload=send_payload,
@@ -1098,6 +1100,7 @@ async def sync_speech_to_chat_poll_task(
     company_id: str,
     is_continuation: bool = False,
     delay_override_seconds: float | None = None,
+    di: Di,
 ) -> None:
     """Keyword-only args: иначе SessionLockMiddleware принимает company_id за session_id.
 
@@ -1108,8 +1111,7 @@ async def sync_speech_to_chat_poll_task(
         await asyncio.sleep(delay_override_seconds)
     else:
         await asyncio.sleep(_speech_to_chat_poll_sleep_seconds(is_continuation=is_continuation))
-    container = get_sync_container()
-    call_row = await container.call_repository.get_call(call_id, company_id)
+    call_row = await SyncCall.require_company_call(call_id, company_id)
     poll_user_id = call_row.created_by_user_id
 
     async with traced_operation(
@@ -1124,7 +1126,9 @@ async def sync_speech_to_chat_poll_task(
             trace_attributes.ATTR_CALL_ID: call_id,
         },
     ):
-        outcome = await run_speech_to_chat_poll_cycle(call_id=call_id, company_id=company_id)
+        outcome = await run_speech_to_chat_poll_cycle(
+            call_id=call_id, company_id=company_id, di=di
+        )
     if outcome.schedule_next:
         stc = get_settings().calls.speech_to_chat
         next_delay = (

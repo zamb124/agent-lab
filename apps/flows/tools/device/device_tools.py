@@ -55,9 +55,13 @@ def _require_device_id(state: "ExecutionState") -> str:
     permission=list(STANDARD_USER_TOOL_GROUPS),
     effects=["read"],
 )
-async def device_tools_list(*, state: "ExecutionState") -> JsonObject:
+async def device_tools_list(
+    *,
+    state: "ExecutionState",
+    device_client: DeviceClient,
+) -> JsonObject:
     device_id = _require_device_id(state)
-    result = await DeviceClient().tools_list(
+    result = await device_client.tools_list(
         device_id,
         timeout_seconds=_DEVICE_TOOL_TIMEOUT_SECONDS,
     )
@@ -86,6 +90,7 @@ async def device_tools_call(
     arguments: JsonObject | None = None,
     *,
     state: "ExecutionState",
+    device_client: DeviceClient,
 ) -> JsonObject:
     device_id = _require_device_id(state)
     tool_name = name.strip()
@@ -93,7 +98,7 @@ async def device_tools_call(
         raise ValueError("name is required")
     call_arguments = arguments if arguments is not None else {}
     _ = require_json_object(call_arguments, "device_tools_call.arguments")
-    result = await DeviceClient().tools_call(
+    result = await device_client.tools_call(
         device_id,
         name=tool_name,
         arguments=call_arguments,

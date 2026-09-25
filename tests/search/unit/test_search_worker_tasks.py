@@ -1,8 +1,8 @@
 """Direct in-process тесты TaskIQ tick-задач search_worker.
 
 Тесты в ``test_crawl_scheduler_task_kwargs.py`` проверяют только signatures.
-Эти тесты вызывают ``crawl_reclaim_stale_fetching`` через ``get_search_container()``
-singleton (поисковая БД поднята ``make test-up``) и проверяют структуру ответа
+Эти тесты вызывают ``crawl_reclaim_stale_fetching`` с ``di`` процесса
+(поисковая БД поднята ``make test-up``) и проверяют структуру ответа
 и side-effects в БД (reclaim stale fetching/finish stale running).
 
 ``crawl_orchestrator_tick`` требует реального crawl_profile_id — покрыт
@@ -30,9 +30,11 @@ def test_crawl_orchestrator_tick_signature_requires_crawl_profile_id() -> None:
 def test_crawl_reclaim_stale_fetching_signature_has_only_optional_kwargs() -> None:
     """``crawl_reclaim_stale_fetching`` — все параметры опциональные."""
     signature = inspect.signature(crawl_tasks.crawl_reclaim_stale_fetching)
-    for param in signature.parameters.values():
+    for name, param in signature.parameters.items():
+        if name == "di":
+            continue
         assert param.default is not inspect.Parameter.empty, (
-            f"parameter {param.name} must have default"
+            f"parameter {name} must have default"
         )
 
 
@@ -40,11 +42,13 @@ def test_crawl_reclaim_stale_fetching_signature_has_only_optional_kwargs() -> No
 @pytest.mark.asyncio
 async def test_crawl_reclaim_stale_fetching_runs_noop_on_clean_db(
     unique_id: str,
+    search_di,
 ) -> None:
     """Reclaim тик на БД без stale-джобов возвращает корректную структуру без ошибок."""
     result = await crawl_tasks.crawl_reclaim_stale_fetching(
         schedule_task_id=f"reclaim_{unique_id}",
         company_id=None,
+        di=search_di,
     )
 
     assert isinstance(result, dict)

@@ -2,21 +2,22 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
 from core.docs.assistant import (
     DOCS_ASSISTANT_BRANCH_ID,
     DOCS_ASSISTANT_EMBED_ID,
     DOCS_ASSISTANT_FLOW_ID,
     DOCS_ASSISTANT_SESSION_ISSUER,
 )
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import SYSTEM_COMPANY_ID, User
+from core.models.context_models import Context
+from core.models.embed_models import EmbedConfig, EmbedStatus
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.utils.tokens import get_token_service
 
 
 @pytest_asyncio.fixture
-async def system_docs_embed(frontend_container):
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+async def system_docs_embed(frontend_di):
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
     user = User(
         user_id="test_docs_assistant_system",
@@ -35,6 +36,7 @@ async def system_docs_embed(frontend_container):
     )
     config = EmbedConfig(
         embed_id=DOCS_ASSISTANT_EMBED_ID,
+        company_id=SYSTEM_COMPANY_ID,
         name="Documentation Assistant",
         flow_id=DOCS_ASSISTANT_FLOW_ID,
         branch_id=DOCS_ASSISTANT_BRANCH_ID,
@@ -43,10 +45,7 @@ async def system_docs_embed(frontend_container):
         show_launcher=False,
         created_by="test",
     )
-    await frontend_container.embed_config_repository.set(config)
-    await frontend_container.embed_mapping_repository.set(
-        EmbedMapping(embed_id=DOCS_ASSISTANT_EMBED_ID, company_id=SYSTEM_COMPANY_ID)
-    )
+    await EmbedConfig.set(config)
     clear_context()
     yield config
     set_context(
@@ -57,15 +56,14 @@ async def system_docs_embed(frontend_container):
             channel="test",
         )
     )
-    await frontend_container.embed_config_repository.delete(DOCS_ASSISTANT_EMBED_ID)
-    await frontend_container.embed_mapping_repository.delete_by_embed_id(DOCS_ASSISTANT_EMBED_ID)
+    await EmbedConfig.delete_by_id(DOCS_ASSISTANT_EMBED_ID)
     clear_context()
 
 
 @pytest.mark.asyncio
 async def test_public_docs_assistant_session_mints_token(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     system_docs_embed,
 ):
     _ = system_docs_embed
@@ -98,7 +96,7 @@ async def test_public_docs_assistant_session_mints_token(
     assert token_data.metadata["allowed_origin"] == "http://testserver"
     assert token_data.metadata["issued_by"] == DOCS_ASSISTANT_SESSION_ISSUER
 
-    guest = await frontend_container.user_repository.get(token_data.user_id)
+    guest = await User.get(token_data.user_id)
     assert guest is not None
     assert guest.active_company_id == SYSTEM_COMPANY_ID
     assert guest.companies[SYSTEM_COMPANY_ID] == ["guest"]

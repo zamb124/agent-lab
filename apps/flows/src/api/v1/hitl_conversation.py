@@ -12,11 +12,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from apps.flows.di import Di
 from apps.flows.realtime.hitl_operations import (
     op_flows_hitl_conversation_get,
     op_flows_hitl_conversation_send,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.hitl_conversation import (
     ConversationSnapshot,
     ConversationTurn,
@@ -29,20 +29,20 @@ router = APIRouter(prefix="/hitl", tags=["hitl-conversation"])
 
 
 @router.get("/{work_item_id}/conversation", response_model=ConversationSnapshot)
-async def get_conversation(container: ContainerDep, work_item_id: str) -> ConversationSnapshot:
+async def get_conversation(di: Di, work_item_id: str) -> ConversationSnapshot:
     return await op_flows_hitl_conversation_get(
         HitlConversationWorkItemPayload(work_item_id=work_item_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{work_item_id}/conversation/messages", response_model=ConversationTurn)
 async def send_operator_message(
-    container: ContainerDep, work_item_id: str, body: OperatorMessageRequest
+    di: Di, work_item_id: str, body: OperatorMessageRequest
 ) -> ConversationTurn:
     return await op_flows_hitl_conversation_send(
         body.model_copy(update={"work_item_id": work_item_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )

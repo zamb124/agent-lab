@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Never
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import Di
 from apps.flows.src.models.observability_api import (
     ObservabilityLogsQueryPayload,
     ObservabilityLogsResponse,
@@ -17,6 +17,7 @@ from apps.flows.src.models.observability_api import (
 from core.clients.loki_client import LokiClient, LokiClientError, LokiLogEntry
 from core.clients.tempo_client import TempoClientError
 from core.models.identity_models import User
+from core.tracing.models import Span
 from core.tracing.span_tree import build_span_tree
 from core.types import JsonObject
 from core.websocket import (
@@ -60,9 +61,9 @@ async def _tempo_trace_ids(awaitable: Awaitable[list[str]]) -> list[str]:
         raise_observability(exc)
 
 
-def _require_loki(container: FlowContainer) -> LokiClient:
-    client = container.loki_client
-    if client is None:
+def _require_loki(di: Di) -> LokiClient:
+    client = di.loki_client
+    if not client.is_configured:
         raise_unavailable(RuntimeError(_LOKI_UNCONFIGURED))
     return client
 
@@ -105,13 +106,13 @@ def _append_unique_span(
 
 
 async def _spans_for_trace_ids(
-    container: FlowContainer,
+    di: Di,
     trace_ids: list[str],
 ) -> list[JsonObject]:
     all_spans: list[JsonObject] = []
     seen_span_ids: set[str] = set()
     for tid in trace_ids:
-        spans = await _tempo_spans(container.tempo_client.get_trace(tid))
+        spans = await _tempo_spans(di.tempo_client.get_trace(tid))
         for span in spans:
             _append_unique_span(all_spans, seen_span_ids, span)
     return all_spans
@@ -141,11 +142,11 @@ async def op_flows_logs_by_trace(
     payload: ObservabilityLogsQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityLogsResponse:
     _ = user
     trace_id = _require_lookup(payload.trace_id, "trace_id")
-    loki = _require_loki(container)
+    loki = _require_loki(di)
     entries = await _run_loki(
         loki.query_by_trace_id(
             trace_id,
@@ -161,11 +162,11 @@ async def op_flows_logs_by_session(
     payload: ObservabilityLogsQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityLogsResponse:
     _ = user
     session_id = _require_lookup(payload.session_id, "session_id")
-    loki = _require_loki(container)
+    loki = _require_loki(di)
     entries = await _run_loki(
         loki.query_by_session_id(
             session_id,
@@ -181,11 +182,11 @@ async def op_flows_logs_by_request(
     payload: ObservabilityLogsQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityLogsResponse:
     _ = user
     request_id = _require_lookup(payload.request_id, "request_id")
-    loki = _require_loki(container)
+    loki = _require_loki(di)
     entries = await _run_loki(
         loki.query_by_request_id(
             request_id,
@@ -201,11 +202,11 @@ async def op_flows_logs_by_span(
     payload: ObservabilityLogsQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityLogsResponse:
     _ = user
     span_id = _require_lookup(payload.span_id, "span_id")
-    loki = _require_loki(container)
+    loki = _require_loki(di)
     entries = await _run_loki(
         loki.query_by_span_id(
             span_id,
@@ -221,11 +222,11 @@ async def op_flows_logs_by_user(
     payload: ObservabilityLogsQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityLogsResponse:
     _ = user
     user_id = _require_lookup(payload.user_id, "user_id")
-    loki = _require_loki(container)
+    loki = _require_loki(di)
     entries = await _run_loki(
         loki.query_by_user_id(
             user_id,
@@ -241,10 +242,11 @@ async def op_flows_traces_search(
     payload: ObservabilityTraceSearchPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityTraceSearchResponse:
     _ = user
-    traces, total = await container.span_repository.search_traces(
+    _ = di
+    traces, total = await Span.search_traces(
         flow_id=payload.flow_id,
         task_id=payload.task_id,
         limit=payload.limit,
@@ -257,16 +259,16 @@ async def op_flows_traces_by_session(
     payload: ObservabilityTraceQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     session_id = _require_lookup(payload.session_id, "session_id")
     raw_ids = await _tempo_trace_ids(
-        container.tempo_client.search_trace_ids_by_attribute(
+        di.tempo_client.search_trace_ids_by_attribute(
             _ATTR_SESSION_AGENT, session_id, limit=payload.limit
         )
     )
-    spans = await _spans_for_trace_ids(container, raw_ids)
+    spans = await _spans_for_trace_ids(di, raw_ids)
     return _tree_response(spans, session_id=session_id)
 
 
@@ -274,16 +276,16 @@ async def op_flows_traces_by_task(
     payload: ObservabilityTraceQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     task_id = _require_lookup(payload.task_id, "task_id")
     raw_ids = await _tempo_trace_ids(
-        container.tempo_client.search_trace_ids_by_attribute(
+        di.tempo_client.search_trace_ids_by_attribute(
             _ATTR_TASK_ID, task_id, limit=payload.limit
         )
     )
-    spans = await _spans_for_trace_ids(container, raw_ids)
+    spans = await _spans_for_trace_ids(di, raw_ids)
     return _tree_response(spans, task_id=task_id)
 
 
@@ -291,11 +293,11 @@ async def op_flows_traces_by_trace(
     payload: ObservabilityTraceQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     trace_id = _require_lookup(payload.trace_id, "trace_id")
-    spans = await _tempo_spans(container.tempo_client.get_trace(trace_id))
+    spans = await _tempo_spans(di.tempo_client.get_trace(trace_id))
     return _tree_response(spans, trace_id=trace_id)
 
 
@@ -303,18 +305,18 @@ async def op_flows_traces_handoff_chain(
     payload: ObservabilityTraceQueryPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ObservabilityTraceTreeResponse:
     _ = user
     parent_session_id = _require_lookup(payload.parent_session_id, "parent_session_id")
-    parent_state = await container.workflow_runtime.get_state(parent_session_id)
+    parent_state = await di.workflow_runtime.get_state(parent_session_id)
     if parent_state is None:
         raise_not_found(LookupError("parent session not found"))
     trace_id = parent_state.handoff_trace_id
     if trace_id is None:
         raise_not_found(LookupError("handoff_trace_id not set on parent session"))
-    tempo_spans = await _tempo_spans(container.tempo_client.get_trace(trace_id))
-    db_spans = await container.span_repository.get_trace(trace_id)
+    tempo_spans = await _tempo_spans(di.tempo_client.get_trace(trace_id))
+    db_spans = await Span.list_for_trace(trace_id)
     all_spans: list[JsonObject] = []
     seen: set[str] = set()
     for span in tempo_spans:

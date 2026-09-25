@@ -9,6 +9,7 @@ Integration тесты для API настроек.
 import pytest
 from httpx import AsyncClient
 
+from core.models.identity_models import Company
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
@@ -20,7 +21,7 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container,
+        frontend_di,
         unique_id: str,
     ):
         """Получение профиля компании и снимка AI-провайдеров (раздельные роутеры)."""
@@ -33,7 +34,7 @@ class TestSettingsAPI:
         image_model_id = f"unit/image-settings-{unique_id}"
         embedding_model_id = f"unit/embedding-settings-{unique_id}"
         rerank_model_id = f"unit/rerank-settings-{unique_id}"
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=openrouter_model_id,
                 provider="openrouter",
@@ -45,7 +46,7 @@ class TestSettingsAPI:
                 ),
             )
         )
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=groq_model_id,
                 provider="groq",
@@ -57,7 +58,7 @@ class TestSettingsAPI:
                 ),
             )
         )
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=vision_model_id,
                 provider="openrouter",
@@ -66,7 +67,7 @@ class TestSettingsAPI:
                 output_modalities=("text",),
             )
         )
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=image_model_id,
                 provider="openrouter",
@@ -75,7 +76,7 @@ class TestSettingsAPI:
                 output_modalities=("image",),
             )
         )
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=embedding_model_id,
                 provider="provider_litserve",
@@ -87,7 +88,7 @@ class TestSettingsAPI:
                 metadata_status="verified",
             )
         )
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=rerank_model_id,
                 provider="openrouter",
@@ -222,7 +223,7 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Company default контекстного слоя сохраняется в реальной БД и снимается DELETE."""
         from core.ai.company_settings import CompanyAIProviders
@@ -248,7 +249,7 @@ class TestSettingsAPI:
         assert response.status_code == 200
         assert response.json()["success"] is True
 
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         aip = CompanyAIProviders.from_metadata(company.metadata or {})
         assert aip.llm_context is not None
         assert aip.llm_context.profile == "agent"
@@ -272,7 +273,7 @@ class TestSettingsAPI:
             headers=auth_headers,
         )
         assert cleared.status_code == 200
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         aip = CompanyAIProviders.from_metadata(company.metadata or {})
         assert aip.llm_context is None
 
@@ -304,13 +305,13 @@ class TestSettingsAPI:
         )
 
         assert response.status_code == 400
-        assert "model обязателен" in response.json()["detail"]
+        assert "model is required" in response.json()["detail"]
 
     async def test_ai_provider_embedding_saves_catalog_model_with_dimension(
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container,
+        frontend_di,
     ):
         """Embedding override stores provider, model and storage dimension from the shared catalog."""
         from core.ai.company_settings import CompanyAIProviders
@@ -322,7 +323,7 @@ class TestSettingsAPI:
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
         model_id = "qwen/qwen3-embedding-0.6b"
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=model_id,
                 provider="provider_litserve",
@@ -344,7 +345,7 @@ class TestSettingsAPI:
         )
 
         assert response.status_code == 200
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         aip = CompanyAIProviders.from_metadata(company.metadata or {})
         assert aip.embedding is not None
         assert aip.embedding.provider == "provider_litserve"
@@ -356,14 +357,14 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container,
+        frontend_di,
     ):
         """Embedding models cannot be saved with dimensions that differ from pgvector storage policy."""
         from core.ai.models import AIModelRecord
         from core.ai.providers import AICapability
 
         model_id = "qwen/qwen3-embedding-0.6b"
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=model_id,
                 provider="provider_litserve",
@@ -390,7 +391,7 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container,
+        frontend_di,
     ):
         """Rerank override is a provider/model capability override, not a policy string."""
         from core.ai.company_settings import CompanyAIProviders
@@ -402,7 +403,7 @@ class TestSettingsAPI:
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
         model_id = "unit/rerank-model"
-        await frontend_container.ai_model_catalog_repository.set(
+        await AIModelRecord.set(
             AIModelRecord(
                 model_id=model_id,
                 provider="openrouter",
@@ -421,7 +422,7 @@ class TestSettingsAPI:
         )
 
         assert response.status_code == 200
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         aip = CompanyAIProviders.from_metadata(company.metadata or {})
         assert aip.rerank is not None
         assert aip.rerank.provider == "openrouter"
@@ -466,7 +467,7 @@ class TestSettingsAPI:
     async def test_ai_providers_rejects_user_company_admin_role_when_company_members_stale(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
     ):
         """Roster JWT admin без FGA dual-write → 403 (sole PDP = OpenFGA)."""
         import uuid
@@ -489,8 +490,8 @@ class TestSettingsAPI:
             companies={company_id: ["admin"]},
             active_company_id=company_id,
         )
-        await frontend_container.company_repository.set(company)
-        await frontend_container.user_repository.set(user)
+        await Company.set(company)
+        await User.set(user)
 
         token = get_token_service().create_token(user_id, company_id=company_id)
         headers = {"Authorization": f"Bearer {token}"}
@@ -518,7 +519,7 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Обновление названия компании"""
         from core.utils.tokens import get_token_service
@@ -541,14 +542,14 @@ class TestSettingsAPI:
         assert data["company"]["name"] == new_name
 
         # Проверяем что изменение сохранилось в БД
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         assert company.name == new_name
 
     async def test_update_company_settings_monthly_budget(
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Обновление месячного лимита"""
         from core.utils.tokens import get_token_service
@@ -571,7 +572,7 @@ class TestSettingsAPI:
         assert data["company"]["monthly_budget"] == new_budget
 
         # Проверяем БД
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         assert company.monthly_budget == new_budget
 
     async def test_update_company_settings_negative_budget(
@@ -587,13 +588,13 @@ class TestSettingsAPI:
         )
 
         assert response.status_code == 400
-        assert "отрицательным" in response.json()["detail"].lower()
+        assert "cannot be negative" in response.json()["detail"].lower()
 
     async def test_update_company_settings_metadata(
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Обновление метаданных компании"""
         from core.utils.tokens import get_token_service
@@ -618,14 +619,14 @@ class TestSettingsAPI:
         assert data["success"] is True
 
         # Проверяем БД
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         assert "custom_field" in company.metadata
         assert company.metadata["custom_field"] == "value"
 
     async def test_update_company_settings_as_viewer_forbidden(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Попытка обновить настройки с ролью viewer"""
         import uuid
@@ -640,7 +641,7 @@ class TestSettingsAPI:
             owner_id="owner_user",
             members={"viewer_user": ["viewer"]}
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
 
         user = User(
             user_id="viewer_user",
@@ -648,7 +649,7 @@ class TestSettingsAPI:
             companies={company_id: ["viewer"]},
             active_company_id=company_id
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         token_service = get_token_service()
         token = token_service.create_token("viewer_user", company_id=company_id)
@@ -664,7 +665,7 @@ class TestSettingsAPI:
     async def test_settings_isolation_between_companies(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Проверка изоляции настроек между компаниями"""
         import uuid
@@ -673,50 +674,55 @@ class TestSettingsAPI:
         from core.utils.tokens import get_token_service
 
         # Создаем две компании с разными настройками
-        company1_id = f"company1_{uuid.uuid4().hex[:8]}"
-        company2_id = f"company2_{uuid.uuid4().hex[:8]}"
+        suffix = uuid.uuid4().hex[:8]
+        company1_id = f"company1_{suffix}"
+        company2_id = f"company2_{suffix}"
+        subdomain1 = f"co1-{suffix}"
+        subdomain2 = f"co2-{suffix}"
+        user1_id = f"user1_{suffix}"
+        user2_id = f"user2_{suffix}"
 
         company1 = Company(
             company_id=company1_id,
             name="Company 1",
-            subdomain="company1",
-            owner_id="user1",
-            members={"user1": ["owner"]},
+            subdomain=subdomain1,
+            owner_id=user1_id,
+            members={user1_id: ["owner"]},
             monthly_budget=1000.0,
             metadata={"feature": "value1"}
         )
         company2 = Company(
             company_id=company2_id,
             name="Company 2",
-            subdomain="company2",
-            owner_id="user2",
-            members={"user2": ["owner"]},
+            subdomain=subdomain2,
+            owner_id=user2_id,
+            members={user2_id: ["owner"]},
             monthly_budget=5000.0,
             metadata={"feature": "value2"}
         )
 
-        await frontend_container.company_repository.set(company1)
-        await frontend_container.company_repository.set(company2)
+        await Company.set(company1)
+        await Company.set(company2)
 
         user1 = User(
-            user_id="user1",
+            user_id=user1_id,
             name="User 1",
             companies={company1_id: ["owner"]},
             active_company_id=company1_id
         )
         user2 = User(
-            user_id="user2",
+            user_id=user2_id,
             name="User 2",
             companies={company2_id: ["owner"]},
             active_company_id=company2_id
         )
 
-        await frontend_container.user_repository.set(user1)
-        await frontend_container.user_repository.set(user2)
+        await User.set(user1)
+        await User.set(user2)
 
         token_service = get_token_service()
-        token1 = token_service.create_token("user1", company_id=company1_id)
-        token2 = token_service.create_token("user2", company_id=company2_id)
+        token1 = token_service.create_token(user1_id, company_id=company1_id)
+        token2 = token_service.create_token(user2_id, company_id=company2_id)
 
         # Получаем настройки для каждой компании
         response1 = await frontend_client.get(
@@ -737,8 +743,8 @@ class TestSettingsAPI:
         # Данные должны быть разными
         assert data1["name"] == "Company 1"
         assert data2["name"] == "Company 2"
-        assert data1["subdomain"] == "company1"
-        assert data2["subdomain"] == "company2"
+        assert data1["subdomain"] == subdomain1
+        assert data2["subdomain"] == subdomain2
         assert data1["monthly_budget"] == 1000.0
         assert data2["monthly_budget"] == 5000.0
         assert data1["metadata"]["feature"] == "value1"
@@ -748,7 +754,7 @@ class TestSettingsAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Обновление всех настроек одновременно"""
         from core.utils.tokens import get_token_service
@@ -772,7 +778,7 @@ class TestSettingsAPI:
         assert data["success"] is True
 
         # Проверяем БД
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         assert company.name == "Fully Updated Company"
         assert company.monthly_budget == 3000.0
         assert "updated" in company.metadata

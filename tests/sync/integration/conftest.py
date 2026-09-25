@@ -16,7 +16,6 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from apps.sync.container import SyncContainer, get_sync_container
 from core.config import get_settings, set_settings
 from core.context import clear_context, set_context
 from core.models.context_models import Context
@@ -45,11 +44,6 @@ def op_user2(sync_user2_id: str, company_id: str) -> User:
         active_company_id=company_id,
         companies={company_id: ["member"]},
     )
-
-
-@pytest.fixture()
-def op_container() -> SyncContainer:
-    return get_sync_container()
 
 
 @pytest_asyncio.fixture()
@@ -109,7 +103,6 @@ __all__ = [
     "_temporary_settings",
     "op_user",
     "op_user2",
-    "op_container",
     "op_context",
     "redis_pubsub_listener",
     "s3_disabled_settings",

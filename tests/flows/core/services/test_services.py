@@ -8,8 +8,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.flows.config import ExternalFlowConfig
-from apps.flows.src.container import get_container
-from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
+from apps.flows.src.models import (
+    ExternalAgentStatus,
+    FlowConfig,
+    FlowType,
+    NodeConfig,
+    ToolReference,
+)
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from core.clients.a2a_client import A2AClient
@@ -23,10 +28,9 @@ class TestFlowFactory:
     """Тесты FlowFactory."""
 
     @pytest.mark.asyncio
-    async def test_get_flow_from_db(self, app):
+    async def test_get_flow_from_db(self, app, di):
         """FlowFactory загружает flow из БД."""
-        container = get_container()
-        factory = container.flow_factory
+        factory = di.flow_factory
 
         # Сохраняем flow в БД
         flow_config = FlowConfig(
@@ -41,36 +45,34 @@ class TestFlowFactory:
                 }
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
 
         # Получаем через factory
-        flow = await factory.get_flow("test_factory_flow")
+        flow = await factory.get_flow("test_factory_flow", tool_registry=di.tool_registry)
 
         assert flow is not None
         assert isinstance(flow, Flow)
         assert flow.flow_id == "test_factory_flow"
 
         # Cleanup
-        await container.flow_repository.delete("test_factory_flow")
+        await FlowConfig.delete_by_flow_id("test_factory_flow")
 
     @pytest.mark.asyncio
-    async def test_get_flow_returns_none_for_missing(self, app):
+    async def test_get_flow_returns_none_for_missing(self, app, di):
         """FlowFactory возвращает None для несуществующего flow."""
-        container = get_container()
-        factory = container.flow_factory
+        factory = di.flow_factory
 
-        flow = await factory.get_flow("nonexistent_flow_xyz")
+        flow = await factory.get_flow("nonexistent_flow_xyz", tool_registry=di.tool_registry)
 
         assert flow is None
 
     @pytest.mark.asyncio
-    async def test_flow_factory_resolves_variables(self, app):
+    async def test_flow_factory_resolves_variables(self, app, di):
         """FlowFactory резолвит @var:key в variables."""
-        container = get_container()
-        factory = container.flow_factory
+        factory = di.flow_factory
 
         # Создаём переменную
-        await upsert_static_variable_via_service(container, "factory_var", "resolved!")
+        await upsert_static_variable_via_service(di, "factory_var", "resolved!")
 
         # Agent с @var:key
         flow_config = FlowConfig(
@@ -89,24 +91,23 @@ class TestFlowFactory:
                 "static_var": "static_value"
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
 
         # Получаем flow - variables должны быть резолвнуты
-        flow = await factory.get_flow("test_var_flow")
+        flow = await factory.get_flow("test_var_flow", tool_registry=di.tool_registry)
         assert flow is not None
 
         assert flow.variables["test_var"] == "resolved!"
         assert flow.variables["static_var"] == "static_value"
 
         # Cleanup
-        await container.flow_repository.delete("test_var_flow")
-        await delete_variable_via_service(container, "factory_var")
+        await FlowConfig.delete_by_flow_id("test_var_flow")
+        await delete_variable_via_service(di, "factory_var")
 
     @pytest.mark.asyncio
-    async def test_flow_factory_unresolved_var_is_none(self, app):
+    async def test_flow_factory_unresolved_var_is_none(self, app, di):
         """Нет company variable — в runtime variables попадает None, не строка @var:..."""
-        container = get_container()
-        factory = container.flow_factory
+        factory = di.flow_factory
 
         flow_config = FlowConfig(
             flow_id="test_unresolved_var_flow",
@@ -125,22 +126,23 @@ class TestFlowFactory:
                 "literal": "ok",
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
 
-        flow = await factory.get_flow("test_unresolved_var_flow")
+        flow = await factory.get_flow(
+            "test_unresolved_var_flow", tool_registry=di.tool_registry
+        )
         assert flow is not None
 
         assert flow.variables["only_ref"] is None
         assert flow.variables["composite"] is None
         assert flow.variables["literal"] == "ok"
 
-        await container.flow_repository.delete("test_unresolved_var_flow")
+        await FlowConfig.delete_by_flow_id("test_unresolved_var_flow")
 
     @pytest.mark.asyncio
-    async def test_create_flow_saves_to_db(self, app):
+    async def test_create_flow_saves_to_db(self, app, di):
         """FlowFactory.create_flow сохраняет в БД."""
-        container = get_container()
-        factory = container.flow_factory
+        factory = di.flow_factory
 
         flow_config = FlowConfig(
             flow_id="created_flow",
@@ -155,16 +157,16 @@ class TestFlowFactory:
             },
         )
 
-        flow = await factory.create_flow(flow_config)
+        flow = await factory.create_flow(flow_config, tool_registry=di.tool_registry)
 
         assert flow is not None
 
         # Проверяем что сохранилось в БД
-        loaded = await container.flow_repository.get("created_flow")
+        loaded = await FlowConfig.get_latest("created_flow")
         assert loaded is not None
 
         # Cleanup
-        await container.flow_repository.delete("created_flow")
+        await FlowConfig.delete_by_flow_id("created_flow")
 
 
 class TestFlowsLoader:
@@ -172,11 +174,10 @@ class TestFlowsLoader:
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(120)
-    async def test_load_flows_to_db(self, app):
+    async def test_load_flows_to_db(self, app, di):
         """load_flows_to_db загружает flows и nodes из каталога bundles в БД."""
         from apps.flows.src.services.flows_loader import FlowsLoader
 
-        container = get_container()
         repo_root = Path(__file__).parent.parent.parent.parent.parent
         bundles_dir = repo_root / "apps" / "flows" / "bundles"
         registry_path = repo_root / "apps" / "flows" / "registry.yaml"
@@ -184,11 +185,8 @@ class TestFlowsLoader:
         # Загружаем flows и nodes с явным указанием registry_path
         loader = FlowsLoader(
             bundles_dir=bundles_dir,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=registry_path,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
         loaded_flows, loaded_nodes = await loader.load_all()
 
@@ -197,17 +195,17 @@ class TestFlowsLoader:
 
         # Проверяем что flows доступны в БД
         for flow_id in loaded_flows[:3]:  # Проверяем первые 3
-            flow_config = await container.flow_repository.get(flow_id)
+            flow_config = await FlowConfig.get_latest(flow_id)
             assert flow_config is not None
 
         # Проверяем что nodes загружены (если есть nodes.json)
         if loaded_nodes:
             for node_id in loaded_nodes[:3]:
-                node_config = await container.node_repository.get(node_id)
+                node_config = await NodeConfig.get(NodeConfig.row_id(node_id))
                 assert node_config is not None
 
         if "telegram_demo" in loaded_flows:
-            tg_flow = await container.flow_repository.get("telegram_demo")
+            tg_flow = await FlowConfig.get_latest("telegram_demo")
             assert tg_flow is not None
             assert "tg_react" in tg_flow.triggers
             assert "tg_echo" in tg_flow.triggers
@@ -215,23 +213,22 @@ class TestFlowsLoader:
             assert tg_flow.triggers["tg_echo"].branch_id == "echo_skill"
 
     @pytest.mark.asyncio
-    async def test_load_tools_to_db(self, app):
+    @pytest.mark.timeout(120)
+    async def test_load_tools_to_db(self, app, di):
         """load_tools_to_db загружает tools в БД."""
         from apps.flows.src.services.flows_loader import load_tools_to_db
 
-        container = get_container()
 
         # Загружаем tools
         loaded = await load_tools_to_db(
-            container.tool_repository,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
 
         assert len(loaded) > 0
 
         # Проверяем calculator
         if "calculator" in loaded:
-            tool = await container.tool_repository.get("calculator")
+            tool = await ToolReference.get(ToolReference.row_id("calculator"))
             assert tool is not None
             assert isinstance(tool.code, str) and "async def calculator" in tool.code
             assert tool.parameters_schema is not None
@@ -239,7 +236,7 @@ class TestFlowsLoader:
             assert "properties" in tool.parameters_schema
 
         if "crm_search_entities" in loaded:
-            crm_tool = await container.tool_repository.get("crm_search_entities")
+            crm_tool = await ToolReference.get(ToolReference.row_id("crm_search_entities"))
             assert crm_tool is not None
             assert isinstance(crm_tool.code, str) and "async def crm_search_entities" in crm_tool.code
             assert crm_tool.parameters_schema is not None
@@ -267,11 +264,8 @@ class TestFlowDiscoveryService:
     @pytest.fixture
     async def discovery_service(self, app, mock_a2a_client):
         """FlowDiscoveryService с мок клиентом."""
-        container = get_container()
-        return FlowDiscoveryService(
-            repository=container.flow_repository,
-            a2a_client=mock_a2a_client,
-        )
+        _ = app
+        return FlowDiscoveryService(a2a_client=mock_a2a_client)
 
     @pytest.mark.asyncio
     async def test_register_agent(self, discovery_service, mock_a2a_client, unique_id):
@@ -293,9 +287,8 @@ class TestFlowDiscoveryService:
         mock_a2a_client.get_agent_card.assert_called_once_with(url, {"Authorization": "Bearer token"})
 
     @pytest.mark.asyncio
-    async def test_register_agent_already_exists(self, discovery_service, mock_a2a_client, app, unique_id):
+    async def test_register_agent_already_exists(self, discovery_service, mock_a2a_client, app, unique_id, di):
         """Регистрация уже существующего агента возвращает его."""
-        container = get_container()
         flow_id = f"existing_{unique_id}"
         url = f"http://existing-{unique_id}:8080"
         existing = FlowConfig(
@@ -305,7 +298,7 @@ class TestFlowDiscoveryService:
             name="Existing",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(existing)
+        await FlowConfig.create_version(existing)
 
         same = await discovery_service.register_agent(url=url)
 
@@ -321,9 +314,8 @@ class TestFlowDiscoveryService:
         assert from_card.name == "Test Agent"
 
     @pytest.mark.asyncio
-    async def test_unregister_agent(self, discovery_service, app, unique_id):
+    async def test_unregister_agent(self, discovery_service, app, unique_id, di):
         """Удаление агента."""
-        container = get_container()
         flow_id = f"unregister_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
@@ -332,18 +324,17 @@ class TestFlowDiscoveryService:
             name="To Unregister",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(record)
+        await FlowConfig.create_version(record)
 
         result = await discovery_service.unregister_agent(flow_id)
         assert result is True
 
-        deleted = await container.flow_repository.get(flow_id)
+        deleted = await FlowConfig.get_latest(flow_id)
         assert deleted is None
 
     @pytest.mark.asyncio
-    async def test_get_agent(self, discovery_service, app, unique_id):
+    async def test_get_agent(self, discovery_service, app, unique_id, di):
         """Получение агента по ID."""
-        container = get_container()
         flow_id = f"get_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
@@ -352,7 +343,7 @@ class TestFlowDiscoveryService:
             name="Get Test",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(record)
+        await FlowConfig.create_version(record)
 
         found = await discovery_service.get_flow(flow_id)
 
@@ -360,9 +351,8 @@ class TestFlowDiscoveryService:
         assert found.flow_id == flow_id
 
     @pytest.mark.asyncio
-    async def test_get_agent_by_url(self, discovery_service, app, unique_id):
+    async def test_get_agent_by_url(self, discovery_service, app, unique_id, di):
         """Получение агента по URL."""
-        container = get_container()
         flow_id = f"url_{unique_id}"
         url = f"http://url-{unique_id}:8080"
         record = FlowConfig(
@@ -372,7 +362,7 @@ class TestFlowDiscoveryService:
             name="URL Test",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(record)
+        await FlowConfig.create_version(record)
 
         found = await discovery_service.get_flow_by_url(f"{url}/")
 
@@ -380,9 +370,8 @@ class TestFlowDiscoveryService:
         assert found.flow_id == flow_id
 
     @pytest.mark.asyncio
-    async def test_list_agents_only_active(self, discovery_service, app, unique_id):
+    async def test_list_agents_only_active(self, discovery_service, app, unique_id, di):
         """Список только активных агентов."""
-        container = get_container()
         active_id = f"list_active_{unique_id}"
         inactive_id = f"list_inactive_{unique_id}"
         active = FlowConfig(
@@ -399,8 +388,8 @@ class TestFlowDiscoveryService:
             name="Inactive",
             status=ExternalAgentStatus.INACTIVE,
         )
-        await container.flow_repository.set(active)
-        await container.flow_repository.set(inactive)
+        await FlowConfig.create_version(active)
+        await FlowConfig.create_version(inactive)
 
         external_rows = await discovery_service.list_agents(only_active=True)
         flow_ids = [row.flow_id for row in external_rows]
@@ -409,9 +398,8 @@ class TestFlowDiscoveryService:
         assert inactive_id not in flow_ids
 
     @pytest.mark.asyncio
-    async def test_list_agents_all(self, discovery_service, app, unique_id):
+    async def test_list_agents_all(self, discovery_service, app, unique_id, di):
         """Список всех агентов."""
-        container = get_container()
         active_id = f"all_active_{unique_id}"
         inactive_id = f"all_inactive_{unique_id}"
         active = FlowConfig(
@@ -428,8 +416,8 @@ class TestFlowDiscoveryService:
             name="Inactive",
             status=ExternalAgentStatus.INACTIVE,
         )
-        await container.flow_repository.set(active)
-        await container.flow_repository.set(inactive)
+        await FlowConfig.create_version(active)
+        await FlowConfig.create_version(inactive)
 
         external_rows = await discovery_service.list_agents(only_active=False)
         flow_ids = [row.flow_id for row in external_rows]
@@ -438,9 +426,8 @@ class TestFlowDiscoveryService:
         assert inactive_id in flow_ids
 
     @pytest.mark.asyncio
-    async def test_health_check_agent_success(self, discovery_service, mock_a2a_client, app, unique_id):
+    async def test_health_check_agent_success(self, discovery_service, mock_a2a_client, app, unique_id, di):
         """Health check успешного агента."""
-        container = get_container()
         flow_id = f"health_success_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
@@ -449,22 +436,21 @@ class TestFlowDiscoveryService:
             name="Health Success",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(record)
+        await FlowConfig.create_version(record)
 
         result = await discovery_service.health_check_agent(flow_id)
 
         assert result is True
 
-        updated = await container.flow_repository.get(flow_id)
+        updated = await FlowConfig.get_latest(flow_id)
         assert updated is not None
         assert updated.status == ExternalAgentStatus.ACTIVE
         assert updated.agent_card is not None
         assert updated.agent_card["name"] == "Test Agent"
 
     @pytest.mark.asyncio
-    async def test_health_check_agent_failure(self, discovery_service, mock_a2a_client, app, unique_id):
+    async def test_health_check_agent_failure(self, discovery_service, mock_a2a_client, app, unique_id, di):
         """Health check неудачного агента."""
-        container = get_container()
         flow_id = f"health_fail_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
@@ -473,7 +459,7 @@ class TestFlowDiscoveryService:
             name="Health Fail",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(record)
+        await FlowConfig.create_version(record)
 
         mock_a2a_client.get_agent_card.side_effect = Exception("Connection refused")
 
@@ -481,7 +467,7 @@ class TestFlowDiscoveryService:
 
         assert result is False
 
-        updated = await container.flow_repository.get(flow_id)
+        updated = await FlowConfig.get_latest(flow_id)
         assert updated is not None
         assert updated.status == ExternalAgentStatus.UNHEALTHY
 
@@ -513,18 +499,18 @@ class TestFlowDiscoveryService:
             name="Check All 2",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await discovery_service._repository.set(row_a)
-        await discovery_service._repository.set(row_b)
+        await FlowConfig.create_version(row_a)
+        await FlowConfig.create_version(row_b)
 
-        async def _list_only_test_flows(limit: int = 100):
-            _ = limit
-            persisted_a = await discovery_service._repository.get(ext_id_a)
-            persisted_b = await discovery_service._repository.get(ext_id_b)
+        async def _list_only_test_flows(*, limit: int, offset: int = 0) -> list[FlowConfig]:
+            _ = limit, offset
+            persisted_a = await FlowConfig.get_latest(ext_id_a)
+            persisted_b = await FlowConfig.get_latest(ext_id_b)
             if persisted_a is None or persisted_b is None:
-                raise AssertionError("тестовые external flow не найдены в репозитории")
+                raise AssertionError("тестовые external flow не найдены")
             return [persisted_a, persisted_b]
 
-        monkeypatch.setattr(discovery_service._repository, "list", _list_only_test_flows)
+        monkeypatch.setattr(FlowConfig, "list_current", _list_only_test_flows)
 
         results = await discovery_service.health_check_all()
 

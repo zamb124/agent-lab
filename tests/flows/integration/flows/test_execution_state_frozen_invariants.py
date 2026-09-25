@@ -14,10 +14,11 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventType
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
@@ -46,8 +47,36 @@ USER_FORGE_GUARD_FIELDS: tuple[str, ...] = (
 )
 
 
-def _runtime_container(app: FastAPI) -> FlowRuntimeContainer:
-    return cast(FlowRuntimeContainer, cast(object, app.state.container))
+def _flows_di(app: FastAPI) -> FlowsDi:
+    return cast(FlowsDi, cast(object, app.state.di))
+
+
+def _code_node(app: FastAPI, node_id: str, config: dict[str, object]) -> CodeNode:
+    di = _flows_di(app)
+    return CodeNode(
+        node_id=node_id,
+        config=config,
+        execution=execution_context_for(di.node_constructor.workflow_runtime),
+        redis_client=di.node_constructor.redis_client,
+    )
+
+
+def _llm_node(app: FastAPI, node_id: str, config: dict[str, object]) -> LlmNode:
+    di = _flows_di(app)
+    return LlmNode(
+        node_id=node_id,
+        config=config,
+        execution=execution_context_for(di.node_constructor.workflow_runtime),
+        redis_client=di.node_constructor.redis_client,
+        flow_factory=di.flow_factory,
+        llm_context_memory_store=di.node_constructor.llm_context_memory_store,
+        namespace_service=di.node_constructor.namespace_service,
+        authz_service=di.node_constructor.authz_service,
+        tool_registry=di.tool_registry,
+        workflow_runtime=di.node_constructor.workflow_runtime,
+        text_transform_service=di.node_constructor.text_transform_service,
+        emitter_factory=di.node_constructor.emitter_factory,
+    )
 
 
 def frozen_snapshot(state: ExecutionState) -> dict[str, object]:
@@ -93,7 +122,7 @@ async def _run_single_node_flow(
     state: ExecutionState,
     node: CodeNode | LlmNode,
 ) -> None:
-    container = _runtime_container(app)
+    di = _flows_di(app)
     flow = Flow(
         flow_id=state.session_flow_id,
         name=f"frozen invariant {state.session_flow_id}",
@@ -101,21 +130,21 @@ async def _run_single_node_flow(
         nodes={node.node_id: node},
         edges=[],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
-    _ = await run_flow(container=container, flow=flow, state=state)
+    _ = await run_flow(di=di, flow=flow, state=state)
 
 
-async def _persist_runner_state(app: FastAPI, state: ExecutionState) -> FlowRuntimeContainer:
-    container = _runtime_container(app)
-    _ = await container.workflow_runtime.save_state(
+async def _persist_runner_state(app: FastAPI, state: ExecutionState) -> FlowsDi:
+    di = _flows_di(app)
+    _ = await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.run_started,
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    return container
+    return di
 
 
 async def _consume_runner(
@@ -140,11 +169,7 @@ class TestCodeNodeFrozenFields:
 async def run(args, state):
     return {"task_id": "forged", "safe_marker": 1}
 """
-        node = CodeNode(
-            node_id=f"code_{unique_id}",
-            config={"type": "code", "code": code},
-            container=_runtime_container(app),
-        )
+        node = _code_node(app, f"code_{unique_id}", {"type": "code", "code": code})
         snap.current_nodes = [node.node_id]
         frozen_before = frozen_snapshot(snap)
 
@@ -166,10 +191,10 @@ async def run(args, state):
 async def run(args, state):
     return {"x": "evil"}
 """
-        node = CodeNode(
-            node_id=f"code_{unique_id}",
-            config={"type": "code", "code": code, "output_mapping": {"x": "session_id"}},
-            container=_runtime_container(app),
+        node = _code_node(
+            app,
+            f"code_{unique_id}",
+            {"type": "code", "code": code, "output_mapping": {"x": "session_id"}},
         )
         snap.current_nodes = [node.node_id]
         frozen_before = frozen_snapshot(snap)
@@ -202,9 +227,10 @@ class TestLlmNodeStructuredOutputFrozenFields:
             ]
         )
 
-        node = LlmNode(
-            node_id=f"llm_{unique_id}",
-            config={
+        node = _llm_node(
+            app,
+            f"llm_{unique_id}",
+            {
                 "type": NodeType.LLM_NODE.value,
                 "prompt": "Extract",
                 "structured_output": True,
@@ -219,7 +245,6 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": True,
                 },
             },
-            container=_runtime_container(app),
         )
 
         snap = make_state(unique_id, user_groups=["g_keep"])
@@ -239,9 +264,10 @@ class TestLlmNodeStructuredOutputFrozenFields:
     ) -> None:
         mock_llm_with_queue([{"type": "structured_output", "data": {"task_id": "only_evil"}}])
 
-        node = LlmNode(
-            node_id=f"llm_{unique_id}",
-            config={
+        node = _llm_node(
+            app,
+            f"llm_{unique_id}",
+            {
                 "type": NodeType.LLM_NODE.value,
                 "prompt": "Out",
                 "structured_output": True,
@@ -251,7 +277,6 @@ class TestLlmNodeStructuredOutputFrozenFields:
                     "additionalProperties": False,
                 },
             },
-            container=_runtime_container(app),
         )
 
         snap = make_state(unique_id)
@@ -317,13 +342,13 @@ async def run(args, state):
         )
 
         state = make_state(unique_id, user_groups=["ug1"])
-        container = await _persist_runner_state(app, state)
+        di = await _persist_runner_state(app, state)
         runner = LlmNodeRunner(
             node_config=node_config,
             tools=[t_a, t_b],
             llm=None,
             prompt="Call tools.",
-            container=container,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
         frozen_before = frozen_snapshot(state)
@@ -386,13 +411,13 @@ async def run(args, state):
         )
 
         state = make_state(unique_id)
-        container = await _persist_runner_state(app, state)
+        di = await _persist_runner_state(app, state)
         runner = LlmNodeRunner(
             node_config=node_config,
             tools=[t_ok, t_evil],
             llm=None,
             prompt="Tools.",
-            container=container,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
         frozen_before = frozen_snapshot(state)

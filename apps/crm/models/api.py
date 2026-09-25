@@ -327,25 +327,6 @@ class RelationshipTypeCreate(BaseModel):
     weight_default: float = 1.0
 
 
-class RelationshipTypeResponse(BaseModel):
-    """Response с типом связи"""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-
-    type_id: str
-    company_id: str
-    name: str
-    description: str | None
-    prompt: str | None
-    is_directed: bool
-    inverse_type_id: str | None
-    icon: str | None
-    color: str | None
-    is_system: bool
-    weight_default: float
-    created_at: datetime
-
-
 class RelationshipCreate(BaseModel):
     """Создание связи"""
 
@@ -364,42 +345,6 @@ class RelationshipCreate(BaseModel):
         description="Достоверность связи (например из AI); не участвует в ранжировании поиска сущностей и не входит в стоимость кратчайшего пути.",
     )
     attributes: JsonObject = Field(default_factory=dict)
-
-
-class RelationshipResponse(BaseModel):
-    """Response со связью"""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-
-    relationship_id: str
-    company_id: str
-    namespace: str
-    source_entity_id: str
-    target_entity_id: str
-    relationship_type: str
-    weight: float = Field(
-        description="Сила или стоимость связи; в кратчайшем пути по графу накапливается как расстояние.",
-    )
-    confidence: float = Field(
-        description="Достоверность связи; на длину пути и на поиск сущностей не влияет.",
-    )
-    attributes: JsonObject
-    created_at: datetime
-    updated_at: datetime
-
-
-class SuggestResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-
-    suggest_id: str
-    company_id: str
-    namespace: str
-    suggest_type: str
-    status: str
-    target_entity_ids: list[str]
-    payload: JsonObject
-    created_at: datetime
-    updated_at: datetime
 
 
 class SearchMentionsRequest(BaseModel):
@@ -906,29 +851,6 @@ class NoteMarkdownFormatQueuedResponse(BaseModel):
     status: Literal["queued"] = "queued"
     note_id: str
     task_id: str
-
-
-class TaskResponse(BaseModel):
-    """Ответ с данными задачи из crm_tasks."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
-
-    task_id: str
-    task_type: str
-    status: str
-    stage: str
-    progress_pct: int = 0
-    error_message: str | None = None
-    data: JsonObject = Field(default_factory=dict)
-    taskiq_task_id: str | None = None
-    cancel_requested: bool = False
-    company_id: str
-    namespace: str
-    user_id: str
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-    created_at: datetime
-    updated_at: datetime
 
 
 class StartKnowledgeImportRequest(BaseModel):

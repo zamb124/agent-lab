@@ -2,37 +2,17 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_state import require_current_container
 from core.context import require_active_company
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.user_repository import UserRepository
 from core.identity.flow_employee import (
     is_flow_employee,
     require_flow_employee_flow_id,
 )
+from core.models.identity_models import Company, User
 from core.types import JsonObject
 
 
 class TeamClient:
     """Члены компании и resolve по имени/email."""
-
-    _company_repository: CompanyRepository
-    _user_repository: UserRepository
-
-    def __init__(
-        self,
-        company_repository: CompanyRepository | None = None,
-        user_repository: UserRepository | None = None,
-    ) -> None:
-        container = require_current_container()
-        self._company_repository = (
-            company_repository
-            if company_repository is not None
-            else container.company_repository
-        )
-        self._user_repository = (
-            user_repository if user_repository is not None else container.user_repository
-        )
 
     def _member_brief(
         self,
@@ -55,12 +35,12 @@ class TeamClient:
 
     async def list_members(self) -> list[JsonObject]:
         company_id = require_active_company().company_id
-        stored_company = await self._company_repository.get(company_id)
+        stored_company = await Company.get(company_id)
         if stored_company is None:
             raise ValueError(f"Company {company_id!r} not found")
         rows: list[JsonObject] = []
         for user_id, roles in stored_company.members.items():
-            member_user = await self._user_repository.get(user_id)
+            member_user = await User.get(user_id)
             if member_user is None:
                 continue
             member_email = member_user.emails[0] if member_user.emails else None

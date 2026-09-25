@@ -38,15 +38,15 @@ def _namespace_context(*, user: User, company: Company, namespace: str) -> Itera
 
 
 async def test_documents_client_create_catalog_and_empty(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     namespace = f"docs-client-{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
 
     with _namespace_context(user=user, company=company, namespace=namespace):
         client = DocumentsClient()

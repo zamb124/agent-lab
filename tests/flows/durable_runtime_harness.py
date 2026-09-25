@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.durable_execution import (
     NodeCompletedPayload,
     NodeScheduledPayload,
@@ -40,7 +40,7 @@ def workflow_state(
 
 async def ensure_workflow_started(
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     state: ExecutionState,
     flow_id: str,
     branch_id: str,
@@ -49,10 +49,10 @@ async def ensure_workflow_started(
         raise RuntimeError(
             f"Workflow state session flow {state.session_flow_id!r} does not match {flow_id!r}"
         )
-    position = await container.workflow_runtime.get_active_execution_position(state.session_id)
+    position = await di.workflow_runtime.get_active_execution_position(state.session_id)
     if position is not None:
         return
-    _ = await container.workflow_runtime.record_state_event(
+    _ = await di.workflow_runtime.record_state_event(
         state.session_id,
         state,
         event_type=WorkflowEventType.run_started,
@@ -68,12 +68,12 @@ async def ensure_workflow_started(
 
 async def run_flow(
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     flow: Flow,
     state: ExecutionState,
 ) -> ExecutionState:
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow.flow_id,
         branch_id=state.branch_id,
@@ -83,25 +83,25 @@ async def run_flow(
 
 async def run_node(
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     node: BaseNode,
     state: ExecutionState,
 ) -> ExecutionState:
     node_type = _node_type(node.config)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=state.session_flow_id,
         branch_id=state.branch_id,
     )
     state.current_nodes = [node.node_id]
-    superstep_event = await container.workflow_runtime.record_state_event(
+    superstep_event = await di.workflow_runtime.record_state_event(
         state.session_id,
         state,
         event_type=WorkflowEventType.superstep_started,
         payload=SuperstepStartedPayload(current_nodes=[node.node_id]),
     )
-    scheduled_event = await container.workflow_runtime.record_state_event(
+    scheduled_event = await di.workflow_runtime.record_state_event(
         state.session_id,
         state,
         event_type=WorkflowEventType.node_scheduled,
@@ -120,7 +120,7 @@ async def run_node(
         state.model_dump(mode="python", exclude_none=False)
     )
     result_state = await node.run(state)
-    _ = await container.workflow_runtime.record_state_event(
+    _ = await di.workflow_runtime.record_state_event(
         result_state.session_id,
         result_state,
         event_type=WorkflowEventType.node_write_recorded,
@@ -130,7 +130,7 @@ async def run_node(
             state_delta=build_state_delta(before_state, result_state),
         ),
     )
-    _ = await container.workflow_runtime.record_state_event(
+    _ = await di.workflow_runtime.record_state_event(
         result_state.session_id,
         result_state,
         event_type=WorkflowEventType.node_completed,

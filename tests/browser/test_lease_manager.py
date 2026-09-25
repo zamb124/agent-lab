@@ -161,7 +161,7 @@ async def test_get_page_for_session_multiple_pages_raises() -> None:
         page_ttl_sec=3600,
         warm_idle_sec=0,
     )
-    with pytest.raises(RuntimeError, match="Ожидалась одна страница"):
+    with pytest.raises(RuntimeError, match="Expected one page"):
         await lm.get_page_for_session("sess-dup")
 
 
@@ -169,7 +169,7 @@ async def test_get_page_for_session_multiple_pages_raises() -> None:
 async def test_release_unknown_page_raises() -> None:
     factory = FakeContextFactory()
     lm = PageLeaseManager(factory)  # type: ignore[arg-type]
-    with pytest.raises(RuntimeError, match="не зарегистрирована"):
+    with pytest.raises(RuntimeError, match="not registered"):
         await lm.release_page(object(), warm_idle_sec=0)
 
 

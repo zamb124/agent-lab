@@ -13,9 +13,8 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.frontend.container import FrontendContainer
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -53,14 +52,15 @@ def _html_data_attrs(html_code: str) -> set[str]:
 
 
 async def _seed_embed_company_flow(
-    frontend_container: FrontendContainer,
+    frontend_di,
     *,
     company_id: str,
     user_id: str,
     flow_id: str,
     company_name: str,
     user_name: str,
-) -> tuple[dict[str, str], FlowContainer, User, Company]:
+    di: FlowsDi,
+) -> tuple[dict[str, str], User, Company]:
     roles = ["admin"]
     user = User(
         user_id=user_id,
@@ -69,17 +69,16 @@ async def _seed_embed_company_flow(
         companies={company_id: roles},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     company = Company(
         company_id=company_id,
         name=company_name,
         owner_user_id=user_id,
         members={user_id: roles},
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=roles,
@@ -92,26 +91,25 @@ async def _seed_embed_company_flow(
             channel="test",
         )
     )
-    flows_container = get_container()
     agent = FlowConfig(
         flow_id=flow_id,
         name="Test Agent",
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Test", "next": None}},
     )
-    await flows_container.flow_repository.set(agent)
-    await flows_container.flow_access_service.sync_flow_saved(
+    await FlowConfig.create_version(agent)
+    await di.flow_access_service.sync_flow_saved(
         agent,
         company_id=company_id,
         owner_user_id=user_id,
     )
     clear_context()
     token = get_token_service().create_token(user_id, company_id=company_id, roles=roles)
-    return {"Authorization": f"Bearer {token}"}, flows_container, user, company
+    return {"Authorization": f"Bearer {token}"}, user, company
 
 
 async def _cleanup_embed_flow(
-    flows_container: FlowContainer,
+    di: FlowsDi,
     *,
     user: User,
     company: Company,
@@ -125,23 +123,20 @@ async def _cleanup_embed_flow(
             channel="test",
         )
     )
-    await flows_container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id=company.company_id, branch_ids=[]
     )
-    await flows_container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     clear_context()
 
 
 @pytest_asyncio.fixture
-async def test_agent():
+async def test_agent( di: FlowsDi):
     """
     Создает тестового агента для API тестов.
     Использует текущий контекст из test_context или middleware.
     """
-    from apps.flows.src.container import get_container
     from apps.flows.src.models.flow_config import FlowConfig
-
-    flows_container = get_container()
 
     agent = FlowConfig(
         flow_id="test_agent",
@@ -155,8 +150,8 @@ async def test_agent():
             }
         },
     )
-    await flows_container.flow_repository.set(agent)
-    await flows_container.flow_access_service.sync_flow_saved(
+    await FlowConfig.create_version(agent)
+    await di.flow_access_service.sync_flow_saved(
         agent,
         company_id="system",
         owner_user_id="system",
@@ -165,14 +160,14 @@ async def test_agent():
     yield agent
 
     # Cleanup
-    await flows_container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         "test_agent", company_id="system", branch_ids=[]
     )
-    await flows_container.flow_repository.delete("test_agent")
+    await FlowConfig.delete_by_flow_id("test_agent")
 
 
 @pytest_asyncio.fixture
-async def auth_headers_other_company(frontend_container: FrontendContainer) -> dict[str, str]:
+async def auth_headers_other_company(frontend_di) -> dict[str, str]:
     company_id = f"other_company_{uuid.uuid4().hex[:8]}"
     user_id = f"test_user_other_{uuid.uuid4().hex[:8]}"
     roles = ["admin"]
@@ -183,17 +178,16 @@ async def auth_headers_other_company(frontend_container: FrontendContainer) -> d
         companies={company_id: roles},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     company = Company(
         company_id=company_id,
         name="Other Company",
         owner_user_id=user_id,
         members={user_id: roles},
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=roles,
@@ -203,40 +197,42 @@ async def auth_headers_other_company(frontend_container: FrontendContainer) -> d
 
 
 @pytest_asyncio.fixture
-async def test_auth_with_agent(frontend_container: FrontendContainer):
+async def test_auth_with_agent(frontend_di, di):
     company_id = f"test_company_{uuid.uuid4().hex[:8]}"
     user_id = f"test_user_{uuid.uuid4().hex[:8]}"
     flow_id = "test_agent"
-    headers, flows_container, user, company = await _seed_embed_company_flow(
-        frontend_container,
+    headers, user, company = await _seed_embed_company_flow(
+        frontend_di,
         company_id=company_id,
         user_id=user_id,
         flow_id=flow_id,
         company_name="Test Company",
         user_name="Test User",
+        di=di,
     )
-    yield headers, flows_container, company_id
+    yield headers, di, company_id
     await _cleanup_embed_flow(
-        flows_container, user=user, company=company, flow_id=flow_id
+        di, user=user, company=company, flow_id=flow_id
     )
 
 
 @pytest_asyncio.fixture
-async def test_auth_with_agent_other_company(frontend_container: FrontendContainer):
+async def test_auth_with_agent_other_company(frontend_di, di):
     company_id = f"test_company_other_{uuid.uuid4().hex[:8]}"
     user_id = f"test_user_other_{uuid.uuid4().hex[:8]}"
     flow_id = "test_agent_other"
-    headers, flows_container, user, company = await _seed_embed_company_flow(
-        frontend_container,
+    headers, user, company = await _seed_embed_company_flow(
+        frontend_di,
         company_id=company_id,
         user_id=user_id,
         flow_id=flow_id,
         company_name="Other Test Company",
         user_name="Other Test User",
+        di=di,
     )
-    yield headers, flows_container, company_id
+    yield headers, di, company_id
     await _cleanup_embed_flow(
-        flows_container, user=user, company=company, flow_id=flow_id
+        di, user=user, company=company, flow_id=flow_id
     )
 
 
@@ -244,7 +240,7 @@ async def test_auth_with_agent_other_company(frontend_container: FrontendContain
 async def test_create_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест создания конфигурации виджета"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем конфигурацию
     response = await frontend_client.post(
@@ -339,7 +335,7 @@ async def test_create_embed_config_presentation_page(
 async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения списка конфигураций"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем несколько конфигураций
     embed_ids = []
@@ -384,7 +380,7 @@ async def test_list_embed_configs(frontend_client: AsyncClient, test_auth_with_a
 async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения конкретной конфигурации"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -425,7 +421,7 @@ async def test_get_embed_config(frontend_client: AsyncClient, test_auth_with_age
 async def test_update_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест обновления конфигурации"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -518,7 +514,7 @@ async def test_embed_config_conversation_crud(frontend_client: AsyncClient, test
 async def test_delete_embed_config(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест удаления конфигурации"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -556,7 +552,7 @@ async def test_delete_embed_config(frontend_client: AsyncClient, test_auth_with_
 async def test_get_embed_code(frontend_client: AsyncClient, test_auth_with_agent):
     """Тест получения кода для встраивания"""
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     # Создаем конфигурацию
     create_response = await frontend_client.post(
@@ -748,7 +744,7 @@ async def test_get_embed_code_has_no_browser_direct_fallback_patterns(
 
 @pytest.mark.asyncio
 async def test_issue_embed_session_token(frontend_client: AsyncClient, test_auth_with_agent):
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
 
     create_response = await frontend_client.post(
         "/frontend/api/embed/configs",
@@ -799,8 +795,8 @@ async def test_company_isolation(
     Конфигурации одной компании не должны быть видны другой.
     """
 
-    auth_headers, flows_container, company_id = test_auth_with_agent
-    auth_headers_other, flows_container_other, company_id_other = test_auth_with_agent_other_company
+    auth_headers, di, company_id = test_auth_with_agent
+    auth_headers_other, other_di, company_id_other = test_auth_with_agent_other_company
 
     # Создаем конфигурацию в компании 1
     response1 = await frontend_client.post(
@@ -944,7 +940,9 @@ async def test_issue_embed_session_token_requires_auth(frontend_client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_issue_embed_session_token_with_hum_api_key(frontend_client: AsyncClient, test_auth_with_agent):
+async def test_issue_embed_session_token_with_hum_api_key(
+    frontend_client: AsyncClient, test_auth_with_agent, frontend_di
+):
     auth_headers, _, _ = test_auth_with_agent
     create_response = await frontend_client.post(
         "/frontend/api/embed/configs",
@@ -958,14 +956,10 @@ async def test_issue_embed_session_token_with_hum_api_key(frontend_client: Async
     assert create_response.status_code == 200
     embed_id = create_response.json()["embed_id"]
 
-    from apps.frontend.container import get_frontend_container
-
     token_data = get_token_service().validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
     assert token_data is not None
-    frontend = get_frontend_container()
     await set_test_company_member_roles(
-        frontend.company_repository,
-        frontend.authz_service,
+        frontend_di.authz_service,
         company_id=token_data.company_id,
         user_id=token_data.user_id,
         roles=["admin"],
@@ -1097,7 +1091,7 @@ async def test_get_embed_code_production_urls(
 
 @pytest.mark.asyncio
 async def test_create_embed_config_allowed_origins_normalized(frontend_client: AsyncClient, test_auth_with_agent):
-    auth_headers, flows_container, company_id = test_auth_with_agent
+    auth_headers, di, company_id = test_auth_with_agent
     token_data = get_token_service().validate_token(
         auth_headers["Authorization"].replace("Bearer ", "")
     )
@@ -1126,8 +1120,8 @@ async def test_create_embed_config_allowed_origins_normalized(frontend_client: A
         )
     )
     try:
-        await flows_container.flow_repository.set(flow)
-        await flows_container.flow_access_service.sync_flow_saved(
+        await FlowConfig.create_version(flow)
+        await di.flow_access_service.sync_flow_saved(
             flow,
             company_id=company_id,
             owner_user_id=token_data.user_id,
@@ -1157,6 +1151,6 @@ async def test_create_embed_config_allowed_origins_normalized(frontend_client: A
     await frontend_client.delete(f"/frontend/api/embed/configs/{data['embed_id']}", headers=auth_headers)
 
     await _cleanup_embed_flow(
-        flows_container, user=user, company=company, flow_id=flow_id
+        di, user=user, company=company, flow_id=flow_id
     )
 

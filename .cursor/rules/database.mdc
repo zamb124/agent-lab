@@ -1,163 +1,94 @@
 ---
-description: "БД, репозитории, модели Oxyde, изоляция, одна начальная миграция на базу"
+description: "Базы данных: PlatformModel Oxyde, company scope, имена методов моделей, транзакции, одна миграция 0001 на базу, Redis TTL. Читать при любой работе с таблицами, запросами, миграциями и Redis"
+globs:
+  - "core/models/**"
+  - "core/db/**"
+  - "apps/*/models/**"
+  - "apps/flows/src/models/**"
+  - "migrations/**"
+  - "scripts/db_migrate.py"
+  - "core/clients/redis_client.py"
 alwaysApply: false
 ---
-# База данных и репозитории
 
-Доступ к PostgreSQL — только через репозиторий. Таблица — класс `oxyde.Model`: тот же класс является Pydantic-сущностью. Отдельной строки SQLAlchemy, KV-конверта `key`/`value` и функции, которая перекладывает поля между ними, нет.
+# База данных
 
-Схема базы — один файл `migrations/<db>/0001_initial.py`, снятый с моделей этой базы. Цепочки ревизий нет.
+Таблица и её атомарные запросы — один класс `PlatformModel` (`core/models/platform_model.py`, наследник `oxyde.Model`). Где писать сценарий, а где запрос → `main.mdc` § Куда писать код.
 
-## Схема БД (каждый сервис — своя PostgreSQL-база)
+## Канон
 
-| ENV | База | Модели |
+1. Таблица — класс `PlatformModel` с `Meta.is_table = True`; тот же класс — Pydantic-сущность домена; поля — `oxyde.Field`.
+2. Одна таблица — один файл `models/<entity>.py` у владельца: сервис — `apps/<svc>/models/`, flows — `apps/flows/src/models/`, shared-таблица и домен `core` — `core/<domain>/`. `[без гейта]`
+3. База модели — `__database_alias__` из whitelist `PlatformModelMeta`; таблица в нескольких базах — `__database_aliases__`. `objects` — `BoundQueryManager` с алиасом модели.
+4. Модель без `__global_model__ = True` получает `company_id` активной компании из `get_context()` в каждом запросе; ручной фильтр `company_id` у неё запрещён. Модель с `__global_model__ = True` не фильтруется: выборка одной компании — явный фильтр `company_id` в `@classmethod`. `[без гейта]`
+5. PK CRUD базового класса: `get(entity_id) -> Self | None`, `set(entity) -> bool` (insert или update по первичному ключу), `delete_by_id(entity_id) -> bool`, `list(*, limit, offset=0) -> list[Self]` (`limit >= 1`), `count_all() -> int`, `get_many(entity_ids) -> dict[str, Self]`. Они не переопределяются: другой ключ, фильтр, срок, JSONB-путь или условный `UPDATE` — именованный запрос. `[без гейта]`
+6. Именованный запрос и атомарная запись — `@classmethod` на модели-владельце результата, тело через `cls.objects`, вызов `await Model.method(...)`. Запрос двух таблиц и `execute_raw` (vector, tsvector, фасеты) — `@classmethod` владельца результата; результат валидируется в ту же модель.
+7. Транзакция — `async with atomic(using="<alias>")` (`from oxyde import atomic`); вложенный `atomic` — savepoint. Запись в две базы — два `atomic` по порядку с явной компенсацией первой записи; общей транзакции на две базы нет. `[без гейта]`
+8. Одна сущность — один класс. Отдельный тип — только при другой форме: тело команды, patch, проекция нескольких таблиц, запись с секретом, который не отдаётся наружу. Вложенный документ (граф flow, `attributes`) — JSONB-поле той же модели, а не отдельная таблица или KV-строка.
+9. Первичный ключ — одна колонка `<entity>_id`; составная уникальность — `Meta.unique_together`; индексы — `db_index`, составные и частичные — `Meta.indexes`. `str` без `max_length` — `VARCHAR(255)`, длинный текст — `db_type="TEXT"`, `dict` — `JSONB`, `list[T]` — массив, строковый `Enum` — enum PostgreSQL, `IntEnum` запрещён.
+10. Связь — тип поля; связанный объект загружается только `.join()`/`.prefetch()`; ленивой загрузки нет.
+11. Секретные колонки (`password_encrypted`, токены, `key_hash`, `s3_*`) исключены из JSON-сериализации модели. `[без гейта]`
+12. Процесс подключает свою базу алиасом `default` и нужные алиасы других баз через `init_oxyde_databases` (`core/db/oxyde_runtime.py`); размер пула — `DatabaseConfig.pool_max_connections`, `pool_acquire_timeout_seconds`; закрытие — shutdown `create_service_app`.
+13. У каждой базы свой физический URL; один URL во всех `DATABASE__*_URL` запрещён. Список баз, `models_module` и `database_url_key` — `migrations/services.json`.
+
+### Имена методов
+
+Одно имя — один контракт во всех моделях; один смысл — одно имя. Смысл определяется по телу и вызывающим, а не по глаголу. `[без гейта]`
+
+| Семейство | Возврат | Смысл |
 |---|---|---|
-| `DATABASE__SHARED_URL` | `platform_shared` | `core/db/models/` |
-| `DATABASE__FLOWS_URL` | `platform_agents` | `apps/flows/src/db/models/` |
-| `DATABASE__CRM_URL` | `platform_crm` | `apps/crm/db/models/` |
-| `DATABASE__SYNC_URL` | `platform_sync` | `apps/sync/db/models/` |
-| `DATABASE__RAG_URL` | `platform_rag` | `core/db/models/rag.py` |
-| `DATABASE__OFFICE_URL` | `platform_office` | `apps/office/db/models/` |
-| `DATABASE__WIKI_URL` | `platform_wiki` | `apps/wiki/db/models/` |
-| `DATABASE__WORKTRACKER_URL` | `platform_worktracker` | `core/worktracker/models.py` |
-| `DATABASE__SEARCH_URL` | `platform_search` | `apps/search/db/models/` |
-| `DATABASE__SECRETS_URL` | `platform_secrets` | `core/secrets/models.py` |
-| `DATABASE__TRACING_URL` | `platform_tracing` | `core/db/models/tracing.py` |
-| `DATABASE__REALTIME_URL` | `platform_realtime` | `apps/realtime/db/models/` |
-| `DATABASE__REDIS_URL` | Redis | — |
+| `get`, `set`, `delete_by_id`, `list`, `count_all`, `get_many` | см. Канон, п. 5 | PK CRUD без дополнительного предиката |
+| `by_<key>` | `Self` или `None` | уникальный естественный ключ |
+| `for_<parent>` | `Self` или `None` | единственная строка родителя |
+| `find_<predicate>` | `Self` или `None` | lookup с бизнес-предикатом |
+| `active_for_<scope>`, `alive_<entity>` | `Self` или `None` | активная строка; строка с учётом soft-delete |
+| `require_<scope>` | `Self`; нет строки — `PlatformNotFoundError` | обязательная строка |
+| `list_for_<owner>`, `list_by_<dimension>`, `list_<predicate>` | `list[Self]` | коллекция с явным порядком и границами |
+| `<noun>_page` | `CursorPage` или `OffsetPage` | каноническая страница модели |
+| `count_for_<scope>`, `exists_for_<scope>`, `exists_by_<dimension>` | `int`, `bool` | счёт и существование без загрузки строк |
+| `create` | `Self`; конфликт — ошибка | INSERT-only |
+| `insert_once` | `bool` | вставка при отсутствии, конфликт — no-op |
+| `upsert_by_<key>` | `Self` | merge по естественному или составному ключу |
+| `ensure_<invariant>` | `Self` | создать при отсутствии, существующую строку не менять |
+| `update_<fields>`, `mark_<state>`, `assign_<subject>`, `attach_<subject>`, `replace_<children>`, `start_if_<state>` | по контракту | частичное обновление, переход состояния, связь, полная замена детей, условный переход |
+| `append`, `append_<subject>`, `next_<sequence>`, `create_version`, `latest_for_<scope>` | по контракту | append-only факт, нумерация под блокировкой, новая версия, последняя версия |
+| `delete_by_<scope>`, `soft_delete_<scope>`, `revoke`, `expire` | `int` или `bool`, стабильно в семействе | удаление по фильтру, мягкое удаление, отзыв, истечение |
 
-Один и тот же URL во все `DATABASE__*_URL` нельзя: у каждой базы свой каталог моделей и свой `0001_initial.py`.
+- `by_*` не поднимает not-found; `require_*` не возвращает `None`.
+- Имя не повторяет класс: `Record.get_record`, `Record.list_records` запрещены.
+- Append и версия — никогда `set`/`update`; soft delete и отзыв — никогда `delete`; upsert по естественному ключу — никогда `save`/`set`.
 
-CLI — `scripts/db_migrate.py`. Накат и состав баз — **`migrations.mdc`**.
+### Миграции
 
-## Модель
+1. У базы — каталог `migrations/<db>/` и ровно один `0001_initial.py`, снятый с моделей базы: `uv run python -m scripts.db_migrate makemigrations [--service <db>]`. Таблицы находит `core/db/migrations.py` по `Meta.is_table = True` в `core/` и `apps/`; `models_module` манифеста импортирует `bootstrap_migration_registry` (`core/db/migration_manifest.py`).
+2. Правка схемы: модель → удалить `0001_initial.py` → `makemigrations` → пересоздать базу. Данные старой схемы не переносятся; `0002_*` не существует.
+3. `upgrade` (`make migrate`, init-контейнер `db-migrate` в pod) применяет файл и пишет `oxyde_migrations`; повтор при записанном `0001_initial` ничего не меняет.
+4. Базы создаёт `ensure_postgres_service_databases_async` (`core/db/postgres_service_databases.py`) по `postgres.databases` манифеста; Oxyde базы не создаёт; локально — `migrations/postgres/init.sql`.
+5. База из `postgres.vector_extensions` начинает `upgrade()` с `CREATE EXTENSION IF NOT EXISTS vector`; образ Postgres — `pgvector/pgvector:pg17`. Составной PK, generated `tsvector`, GIN, HNSW и FK вне дифа моделей остаются в том же `upgrade()`.
+6. Новая база — запись в `migrations/services.json`, каталог `migrations/<db>/`, строка `init.sql`, поле `*_url` в `DatabaseConfig` и `conf.json`, алиас в whitelist `PlatformModelMeta`.
 
-```python
-from oxyde import Field, Model
+### Redis
 
-class User(Model):
-    user_id: str = Field(db_pk=True)
-
-    class Meta:
-        is_table = True
-        table_name = "users"
-```
-
-- Базовый класс — `oxyde.Model`. Поля — `oxyde.Field`. `Meta.is_table = True` обязателен у таблицы.
-- `Field` принимает параметры Pydantic (`title`, `description`, `json_schema_extra`, `ge`, `max_length`, `pattern`) и параметры колонки (`db_pk`, `db_index`, `db_unique`, `db_type`, `db_default`, `db_column`, `db_on_delete`). Второй фабрики поля нет.
-- Один класс на сущность. Response с теми же колонками не заводится. Отдельный тип допустим, когда форма другая: тело команды, patch, список без тела, проекция нескольких таблиц, секрет не отдаётся наружу.
-- Первичный ключ — одна колонка (`user_id`, `company_id`, `flow_id`, `entity_id`, …). Составная уникальность — `Meta.unique_together`.
-- `int` на PostgreSQL — `BIGINT`, PK — `BIGSERIAL`. Четырёхбайтовый счётчик — `db_type="INTEGER"`.
-- `str` без `max_length` — `VARCHAR(255)`. Длинный текст — `db_type="TEXT"`.
-- `dict` — `JSONB`. `list[T]` — массив PostgreSQL. Свой тип — `db_type` (`vector(1024)`, `TSVECTOR`).
-- Строковый `Enum` — нативный enum PostgreSQL. `IntEnum` запрещён: Oxyde поднимает `TypeError` на объявлении класса. Хранить целое — аннотация `int`.
-- Индекс на колонке — `db_index=True`. Составной и частичный — `Meta.indexes` (`Index(..., where="...")`). GIN — `method="gin"` или `db_index_method="gin"`.
-- `created_at` / `updated_at` выставляют `pre_save`. Колонка, которую заполняет сама база, — `db_default="CURRENT_TIMESTAMP"`.
-- Вложенный документ (граф flow, `attributes`) — поле этой же модели. Отдельной таблицы и KV-строки под него нет. Если вложенный BaseModel не сериализуется в JSONB, колонка имеет `db_type="JSONB"`, а `pre_save` валидирует значение тем же классом. Модуля перевода между двумя моделями нет.
-- Связь объявляется типом поля. Без `.join()` / `.prefetch()` связанный объект пустой. Ленивой загрузки нет.
-
-### Глобальные модели
-
-Без колонки `company_id`:
-
-- `User`, `UserProvider`, `AuthSession`
-- каталог AI-моделей
-- `GuestRuntime`
-
-`Company` — сама тенант-запись, первичный ключ `company_id`. Остальные модели содержат `company_id: str = Field(db_index=True)`.
-
-## Подключение
-
-Процесс поднимает свою базу как `default`. Shared подключается вторым алиасом, когда репозитории процесса читают shared.
-
-```python
-from oxyde import PoolSettings, db
-
-await db.init(
-    default=settings.database.flows_url,
-    shared=settings.database.shared_url,
-    settings=PoolSettings(max_connections=settings.database.pool_max_connections),
-)
-```
-
-`pool_max_connections` задан в настройках. Молчаливого размера пула в коде нет.
-
-Модели shared читаются менеджером, у которого `using="shared"` зафиксирован. Голого `objects` у них нет: запрос без алиаса в default-базу процесса не уходит. Закрытие — `await db.close()` в shutdown `create_service_app`.
-
-`AsyncSession`, `create_async_engine` и SQLAlchemy в `apps/` и `core/` не используются.
-
-## Репозиторий
-
-Сервис, нода и таск ходят в базу только через репозиторий из контейнера (`@lazy`). Прямой `Model.objects` снаружи репозитория запрещён.
-
-Репозиторий не собирает модель из `dict`, не вызывает `model_dump` ради записи и не держит сессию. Фильтр компании добавляет менеджер `core.db.company_scope`: `company_id` берётся из `get_context()`. Глобальный менеджер фильтр не добавляет. Shared-менеджер дополнительно фиксирует алиас `shared`.
-
-```python
-user = await User.shared.get(user_id=user_id)
-flows = await Flow.company.filter(flow_id=flow_id).all()
-```
-
-Создание — `objects.create` или `save`. Частичное обновление — `save(update_fields=[...])` или `QuerySet.update`. Атомарный счётчик — `F`. Граница транзакции — `async with transaction.atomic()`. Вложенный `atomic` — savepoint.
-
-Операция, которая пишет в свою базу и в shared, — два `atomic()` на двух алиасах, по порядку. Общей транзакции на две базы нет: при падении второй записи репозиторий явно откатывает первую. Скрытого двухфазного коммита нет.
-
-Поиск по `vector` и `tsvector` — `execute_raw` в репозитории владельца (RAG, CRM). Результат валидируется в ту же модель. Второго построителя запросов нет.
-
-## Схема и миграция
-
-Источник правды — классы моделей. У каждой базы каталог `migrations/<db>/` и ровно один файл `0001_initial.py`. Его снимает `oxyde makemigrations --name initial` с конфига этой базы (`MODELS`, `DIALECT = "postgres"`, `MIGRATIONS_DIR`, URL из `DATABASE__*_URL`).
-
-Правка схемы: меняешь модель, удаляешь `0001_initial.py`, генерируешь его заново, удаляешь базу, накатываешь `0001`. Файлов `0002_*` нет. Данные со старой схемы не переносятся.
-
-`create_tables()` / `drop_tables()` в `apps/` и в lifespan сервиса запрещены. Интеграционные тесты и прод накатывают `0001`.
-
-`CREATE EXTENSION IF NOT EXISTS vector` — первая команда `upgrade()` в `0001` баз `platform_shared`, `platform_crm`, `platform_rag`. После повторной генерации `0001` эта строка обязана остаться.
-
-Создание пустых баз (`CREATE DATABASE`) делает `core.db.postgres_service_databases` до `oxyde migrate`. Oxyde базы не создаёт.
-
-## Redis (доменный кэш)
-
-Два URL в конфиге (`configuration.mdc`, `taskiq.mdc`):
-
-| ENV | Назначение |
-|---|---|
-| `DATABASE__REDIS_URL` | Доменный кэш, locks, projection cache, pub/sub UI events |
-| `TASKS__BROKER_URL` | TaskIQ Redis Streams, result backend, `platform_schedules` |
-
-### TTL-only для `DATABASE__REDIS_URL`
-
-Любая запись ключей — только через `core.clients.redis_client.RedisClient`:
-
-- `set(key, value, *, ttl)` — **обязательный** положительный `ttl` (секунды).
-- `set_nx` / `setex` — TTL обязателен по контракту метода.
-- `rpush(key, *values, ttl_seconds=...)` — после RPUSH выставляет EXPIRE.
-- Прямой `redis.from_url` / `Redis.from_url` в `apps/` и `core/` запрещён (allowlist: session lock, invites, TaskIQ broker, WS manager, CRM daily summary, sync presence) — CI `scripts/check_redis_ttl_canon.py`.
-- Async Redis привязан к event loop. `RedisClient` при смене loop (Starlette `TestClient` lifespan, как `events_redis_client`) дропает соединение и reconnect. Нельзя держать raw `redis.asyncio.Redis` на process-singleton через разные loop.
-
-Исключения:
-
-- **Pub/Sub** (`publish` / `subscribe`) — не ключи, TTL не применим.
-- **TaskIQ** (`TASKS__BROKER_URL`) — retention через `stream_maxlen_by_queue`; мониторинг — Grafana dashboard **Redis** + `redis_inventory_tick`.
-
-OAuth `auth_state` живёт в Redis с TTL, не в PostgreSQL.
-
-### Workflow projection cache
-
-Ключ `flows:workflow_projection:{company_id}:{session_id}` — disposable cache поверх Postgres ledger (`session.mdc`). TTL 14 суток (скользящий при append); при terminal status (`completed`/`failed`/`canceled`) ключ удаляется. Источник истины — `workflow_events`, не Redis.
-
-Инвентаризация Redis: idle-задача `redis_inventory_tick` (каждые 15 мин) + Grafana dashboard **Redis** (Platform). Structured logs: `redis.inventory.*` в Loki.
-
-## Межсервисный доступ к данным
-
-Репозиторий приоритетнее `ServiceClient`; прямой `httpx` между сервисами запрещён — канон в **`architecture.mdc`** § «Межсервисный доступ к данным», механика клиентов — **`integrations.mdc`**.
+1. `DATABASE__REDIS_URL` — доменный кэш, locks, projection cache; брокер TaskIQ — `TASKS__BROKER_URL` → `taskiq.mdc`.
+2. Запись ключа — только `RedisClient` (`core/clients/redis_client.py`) с положительным TTL: `set(key, value, *, ttl)`, `set_nx`, `setex`, `rpush(..., ttl_seconds=...)`. Pub/Sub — не ключи.
+3. Redis — кэш, не источник истины: проекция исполнения flow (`flows:workflow_projection:{company_id}:{session_id}`) живёт поверх ledger → `flows_runtime.mdc`.
+4. Async-клиент привязан к event loop: raw `redis.asyncio.Redis` как singleton процесса через разные loop запрещён.
 
 ## Запреты
 
-1. SQLAlchemy, Alembic, `Storage`, `BaseRepository`, префиксы ключей `user:` / `company:` / `flow:`.
-2. Вторая модель с тем же набором колонок.
-3. `Model.objects` вне репозитория.
-4. Больше одного файла миграции на базу.
-5. `create_tables()` в сервисе.
-6. Ручной `company_id` мимо менеджера `company_scope` в прикладном запросе.
-7. Репозиторий не из контейнера.
-8. Дубль модели между `core/` и `apps/<svc>/`. Shared-сущности (`User`, `Company`, файл) живут в `core/` и в `platform_shared`. Сущности сервиса — в его базе.
+1. `*Repository`, `TableRepository`, поле DI для доступа к строке, `db/repositories/`, `*_queries.py`, свободная функция над `objects`, подмена `objects` своим менеджером.
+2. Второй построитель запросов к Postgres и `Storage` вне модели.
+3. Вторая модель с тем же набором колонок; копия модели между `core/` и `apps/<svc>/`.
+4. Больше одного файла миграции на базу; `create_tables()`/`drop_tables()` в `apps/` и lifespan.
+5. Прямой `redis.from_url` / `Redis.from_url` в `apps/` и `core/`.
+
+## Исключения
+
+- Исключение: `redis.from_url` — только точки allowlist `scripts/check_redis_ttl_canon.py` (session lock, invites, брокер TaskIQ, WS manager, CRM daily summary, sync presence).
+- Исключение: `StorageEntry` (таблица `storage`, алиасы `shared` и `tracing`) — KV-конверт платежей, биллинга, устройств и OAuth; новые виды данных в него не добавляются. `[без гейта]`
+
+## Гейты
+
+- `scripts/check_redis_ttl_canon.py` (`make lint`) — TTL у каждой записи, `from_url` только в allowlist.
+- `scripts/check_ratchet_counts.py` (`make lint`) — ratchet `raw_storage_in_services`, `force_global`.
+- `tests/core/db/` — фильтрация по компании и контракты моделей identity.

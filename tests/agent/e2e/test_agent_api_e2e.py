@@ -101,13 +101,13 @@ async def test_e2e_pairing_unauthorized(agent_frontend_http_anon: AsyncClient) -
 @pytest.mark.asyncio
 async def test_e2e_create_pairing_code_rate_limit(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
     user_id = user_id_from_auth_token(auth_token)
     rate_key = f"{PAIRING_RATE_PREFIX}{user_id}"
-    await frontend_container.redis_client.delete(rate_key)
+    await frontend_di.redis_client.delete(rate_key)
     from core.config import get_settings
 
     settings = get_settings().agent
@@ -253,7 +253,7 @@ async def test_e2e_register_allowed_origin_override(
 @pytest.mark.asyncio
 async def test_e2e_pair_register_list_audit(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -275,19 +275,19 @@ async def test_e2e_pair_register_list_audit(
 
     company_id = company_id_from_auth_token(auth_token)
     audit_key = f"{AUDIT_KEY_PREFIX}{company_id}"
-    raw_audit = await frontend_container.redis_client.lrange(audit_key, 0, -1)
+    raw_audit = await frontend_di.redis_client.lrange(audit_key, 0, -1)
     assert len(raw_audit) >= 1
 
 
 @pytest.mark.asyncio
 async def test_e2e_register_incomplete_pairing_data(
     agent_frontend_http_anon: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     pairing_code = "333333"
     key = f"agent_pairing:{pairing_code}"
-    await frontend_container.shared_storage.set(key, json.dumps({"user_id": "only-user"}), force_global=True)
+    await frontend_di.shared_storage.set(key, json.dumps({"user_id": "only-user"}), force_global=True)
     response = await agent_frontend_http_anon.post(
         f"{AGENT_API_PREFIX}/register",
         json={
@@ -300,7 +300,7 @@ async def test_e2e_register_incomplete_pairing_data(
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Неполные данные pairing code"
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -315,7 +315,7 @@ async def test_e2e_revoke_device_not_found(
 @pytest.mark.asyncio
 async def test_e2e_register_expired_pairing_code(
     agent_frontend_http_anon: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -323,7 +323,7 @@ async def test_e2e_register_expired_pairing_code(
     user_id = user_id_from_auth_token(auth_token)
     company_id = company_id_from_auth_token(auth_token)
     await seed_pairing_in_storage(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=user_id,
         company_id=company_id,
@@ -347,7 +347,7 @@ async def test_e2e_register_expired_pairing_code(
 @pytest.mark.asyncio
 async def test_e2e_register_rate_limit_429(
     agent_frontend_http_anon: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from core.config import get_settings
@@ -355,7 +355,7 @@ async def test_e2e_register_rate_limit_429(
     device_id = f"device-rate-{unique_id}"
     client_key = f"127.0.0.1:{device_id}"
     rate_key = f"{REGISTER_RATE_PREFIX}{client_key}"
-    await frontend_container.redis_client.delete(rate_key)
+    await frontend_di.redis_client.delete(rate_key)
     settings = get_settings().agent
     register_payload = {
         "pairing_code": "000000",
@@ -421,7 +421,7 @@ async def test_e2e_revoke_device_wrong_company(
 @pytest.mark.asyncio
 async def test_e2e_update_device_policy_all_fields(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -450,7 +450,7 @@ async def test_e2e_update_device_policy_all_fields(
     assert body["policy"] == policy_payload
 
     device_key = f"{DEVICE_KEY_PREFIX}{device_id}"
-    stored_raw = await frontend_container.shared_storage.get(device_key, force_global=True)
+    stored_raw = await frontend_di.shared_storage.get(device_key, force_global=True)
     assert stored_raw is not None
     stored_policy = json.loads(stored_raw)["policy"]
     assert stored_policy == policy_payload
@@ -482,14 +482,14 @@ async def test_e2e_update_device_policy_not_found(
 @pytest.mark.asyncio
 async def test_e2e_audit_pairing_created(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
 ) -> None:
     response = await agent_frontend_http_client.post(f"{AGENT_API_PREFIX}/pairing")
     assert response.status_code == 200
     company_id = company_id_from_auth_token(auth_token)
     await assert_audit_event_in_redis(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         event_type="agent.pairing_created",
     )
@@ -498,7 +498,7 @@ async def test_e2e_audit_pairing_created(
 @pytest.mark.asyncio
 async def test_e2e_audit_device_revoked(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -511,7 +511,7 @@ async def test_e2e_audit_device_revoked(
     assert revoke_response.status_code == 200, revoke_response.text
     company_id = company_id_from_auth_token(auth_token)
     await assert_audit_event_in_redis(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         event_type="agent.device_revoked",
     )
@@ -520,7 +520,7 @@ async def test_e2e_audit_device_revoked(
 @pytest.mark.asyncio
 async def test_e2e_audit_policy_updated(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -546,7 +546,7 @@ async def test_e2e_audit_policy_updated(
     assert patch_response.status_code == 200
     company_id = company_id_from_auth_token(auth_token)
     await assert_audit_event_in_redis(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         event_type="agent.device_policy_updated",
     )

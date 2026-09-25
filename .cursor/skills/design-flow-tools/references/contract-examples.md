@@ -118,7 +118,7 @@ async def execute_create_crm_note(
 ```
 
 Handler получает ровно одну operation-specific capability. Он не получает
-container, generic CRM service или platform request.
+generic CRM service или platform request.
 
 ## 2. OpenAI strict projection
 

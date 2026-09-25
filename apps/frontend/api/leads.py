@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import LeadCreateBody, LeadCreateResponse, LeadRequestRecord
 from apps.frontend.realtime.leads_operations import (
     LEAD_REQUEST_PAGE_MAX_LIMIT,
@@ -27,7 +27,7 @@ lead_requests_router = APIRouter(prefix="/api/lead-requests", tags=["lead-reques
 
 
 @leads_router.post("", response_model=LeadCreateResponse)
-async def create_lead(body: LeadCreateBody, container: ContainerDep) -> LeadCreateResponse:
+async def create_lead(body: LeadCreateBody, di: Di) -> LeadCreateResponse:
     """Публичная форма лендинга: запись в shared storage компании system без сессии."""
     lead_request_id = str(uuid.uuid4())
     record = LeadRequestRecord(
@@ -42,7 +42,7 @@ async def create_lead(body: LeadCreateBody, container: ContainerDep) -> LeadCrea
         interested_products=body.interested_products,
         created_at=datetime.now(timezone.utc),
     )
-    _ = await container.shared_storage.set(
+    _ = await di.shared_storage.set(
         f"{REQUEST_STORAGE_PREFIX}{lead_request_id}", record.model_dump_json(), force_global=True
     )
     logger.info("landing.lead_saved", lead_request_id=lead_request_id)
@@ -54,10 +54,10 @@ async def create_lead(body: LeadCreateBody, container: ContainerDep) -> LeadCrea
 
 @lead_requests_router.get("", response_model=CursorPage[LeadRequestRecord])
 async def list_lead_requests(
-    container: ContainerDep,
+    di: Di,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=LEAD_REQUEST_PAGE_MAX_LIMIT)] = 50,
 ) -> CursorPage[LeadRequestRecord]:
     return await op_lead_requests_list(
-        LeadRequestsListPayload(cursor=cursor, limit=limit), user=require_context().user, container=container
+        LeadRequestsListPayload(cursor=cursor, limit=limit), user=require_context().user, di=di
     )

@@ -32,8 +32,8 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-modal-search-field.js';
 import '@platform/lib/components/glass-spinner.js';
-import { getNodeTypeMeta, getCategoryToken } from '../../constants/node-icons.js';
-import { getTriggerTypeRowVisual } from '../../constants/trigger-types.js';
+import { getNodeTypeMeta, getCategoryToken } from '../../_helpers/node-icons.js';
+import { getTriggerTypeRowVisual } from '../../_helpers/trigger-types.js';
 import { asArray, asString } from '../../_helpers/flows-resolvers.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 

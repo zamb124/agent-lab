@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from apps.realtime.container import RealtimeContainer
-from apps.realtime.dependencies import ContainerDep
+from apps.realtime.di import Di
 from core.context import reset_context, set_context
 from core.events.contract import EventDelivery, PlatformEvent
 from core.logging import get_log_context
 from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.realtime.command_owners import is_command_event_type, owner_service_for_event_type
 from core.realtime.models import (
     CentrifugoRpcInbound,
@@ -28,7 +28,7 @@ _RPC_METHOD = "platform.event"
 async def centrifugo_inbound(
     inbound: CentrifugoRpcInbound,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> CentrifugoRpcResponse:
     if not inbound.user:
         raise HTTPException(status_code=400, detail="Centrifugo inbound user is required")
@@ -70,7 +70,6 @@ async def centrifugo_inbound(
         }
     )
     actor_context = await _actor_context(
-        container,
         request,
         user_id=inbound.user,
         company_id=event.company_id,
@@ -78,7 +77,7 @@ async def centrifugo_inbound(
     )
     context_token = set_context(actor_context)
     try:
-        stored = await container.bus_service.ingest(event)
+        stored = await di.bus_service.ingest(event)
     finally:
         reset_context(context_token)
     return CentrifugoRpcResponse(
@@ -89,25 +88,21 @@ async def centrifugo_inbound(
 
 
 @router.post("/internal/events", response_model=PlatformEvent)
-async def ingest_platform_event(
-    event: PlatformEvent,
-    container: ContainerDep,
-) -> PlatformEvent:
-    return await container.bus_service.ingest(event)
+async def ingest_platform_event(event: PlatformEvent, di: Di) -> PlatformEvent:
+    return await di.bus_service.ingest(event)
 
 
 async def _actor_context(
-    container: RealtimeContainer,
     request: Request,
     *,
     user_id: str,
     company_id: str,
     namespace: str,
 ) -> Context:
-    user = await container.user_repository.get(user_id)
+    user = await User.get(user_id)
     if user is None:
         raise HTTPException(status_code=401, detail=f"inbound user {user_id} not found")
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise HTTPException(status_code=400, detail=f"company {company_id} not found")
     auth_token = get_token_service().create_token(user_id, company_id=company_id)

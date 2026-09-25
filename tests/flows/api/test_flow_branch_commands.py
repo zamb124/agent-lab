@@ -8,13 +8,13 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import (
     FlowsBranchIdPayload,
     op_flows_branch_create,
     op_flows_branch_remove,
     op_flows_branch_update,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -43,7 +43,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_branch_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -79,7 +79,7 @@ async def test_branch_rest_and_op_share_payload(
                     entry="main",
                 ),
                 user=user,
-                container=container,
+                di=di,
             )
         assert conflict.value.code == "conflict"
         updated = await op_flows_branch_update(
@@ -90,7 +90,7 @@ async def test_branch_rest_and_op_share_payload(
                 entry="main",
             ),
             user=user,
-            container=container,
+            di=di,
         )
         assert updated.branch_id == branch_id
         assert updated.status == "success"
@@ -105,7 +105,7 @@ async def test_branch_rest_and_op_share_payload(
         removed = await op_flows_branch_remove(
             FlowsBranchIdPayload(flow_id=flow_id, branch_id=branch_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert removed.branch_id == branch_id
     missing = await client.get(

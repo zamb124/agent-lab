@@ -12,7 +12,7 @@ from typing import override
 
 from apps.flows.config import get_settings as flows_get_settings
 from apps.flows.src.channels.telegram_api_base import get_telegram_api_base
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import FlowFactoryProtocol
 from apps.flows.src.models import (
     TelegramBotApiBooleanResponse,
     TelegramTriggerConfig,
@@ -21,6 +21,7 @@ from apps.flows.src.models import (
     TriggerStatus,
     TriggerType,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
@@ -63,8 +64,9 @@ class TelegramTriggerHandler(BaseTriggerHandler):
 
     trigger_type: TriggerType = TriggerType.TELEGRAM
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
-        super().__init__(base_url, container=container)
+    def __init__(self, base_url: str, *, flow_factory: FlowFactoryProtocol) -> None:
+        super().__init__(base_url)
+        self.flow_factory: FlowFactoryProtocol = flow_factory
         self._executor: TriggerExecutor = TriggerExecutor()
 
     @override
@@ -251,7 +253,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         2. Валидирует (allowed_users, commands)
         3. Запускает агента
         """
-        flow_config = await self.container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
 
         if not flow_config:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
@@ -437,7 +439,7 @@ class TelegramTriggerHandler(BaseTriggerHandler):
         """Резолвит @var:key через тот же словарь, что у runtime flow (см. FlowFactory)."""
         try:
             return await resolve_at_var_for_flow(
-                self.container.flow_factory,
+                self.flow_factory,
                 flow_id,
                 var_ref,
                 branch_id=branch_id,

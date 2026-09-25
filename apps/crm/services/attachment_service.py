@@ -4,42 +4,30 @@
 Работает для ВСЕХ entities (любого типа).
 """
 
-from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol
 from typing import cast as type_cast
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.file_text_reader import load_text_from_bytes
 from apps.crm.services.note_attachment_description import (
     merge_attachment_extracted_into_description,
 )
+from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 from core.authz.service import AuthzService
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.files.models import FileRecord
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.service import FilesService
 from core.logging import get_logger
+from core.rag import BaseRAGProvider
 from core.types import JsonObject, require_json_object
 
-if TYPE_CHECKING:
-    from apps.crm.db.repositories.entity_repository import EntityRepository
-    from core.files.file_repository import FileRepository
-
 logger = get_logger(__name__)
-
-
-class NoteMarkdownFormatScheduler(Protocol):
-    def __call__(
-        self,
-        *,
-        note_id: str,
-        company_id: str,
-        namespace: str,
-    ) -> Awaitable[bool]: ...
 
 
 class AttachmentService:
@@ -51,20 +39,14 @@ class AttachmentService:
 
     def __init__(
         self,
-        entity_repository: "EntityRepository",
+        rag: BaseRAGProvider,
         authz: AuthzService,
-        file_repository: "FileRepository",
         files_service: FilesService,
-        note_markdown_format_scheduler: NoteMarkdownFormatScheduler,
     ) -> None:
-        self._entity_repo: EntityRepository = entity_repository
+        self._entity_rag: BaseRAGProvider = rag
         self._authz: AuthzService = authz
-        self._file_repo: FileRepository = file_repository
         self._files_service: FilesService = files_service
         self._rag: RagClient = RagClient()
-        self._note_markdown_format_scheduler: NoteMarkdownFormatScheduler = (
-            note_markdown_format_scheduler
-        )
 
     def _get_company_id(self) -> str:
         context = get_context()
@@ -104,7 +86,7 @@ class AttachmentService:
             raise ValueError("No request context")
         company_id = self._get_company_id()
 
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
 
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
@@ -165,7 +147,8 @@ class AttachmentService:
             )
 
         entity.updated_at = datetime.now(UTC)
-        merged = await self._entity_repo.update(entity)
+        merged = await CRMEntity.save_loaded(entity)
+        await index_crm_entity(self._entity_rag, merged, replace=True)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = merged.note_date.isoformat() if merged.note_date is not None else None
             await broadcast_crm_note_event(
@@ -180,7 +163,8 @@ class AttachmentService:
 
         markdown_format_queued = False
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID and attachment_had_extractable_text:
-            markdown_format_queued = await self._note_markdown_format_scheduler(
+            markdown_format_queued = await schedule_note_markdown_format(
+                authz=self._authz,
                 note_id=entity_id,
                 company_id=company_id,
                 namespace=namespace,
@@ -209,13 +193,15 @@ class AttachmentService:
         }
 
     async def _download_file_bytes(self, record: FileRecord) -> bytes:
-        if record.s3_bucket == "" or record.s3_key == "":
-            raise ValueError(f"file {record.file_id} has no s3 location")
-        s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-        try:
-            return await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
-        finally:
-            await s3.close()
+        if record.storage_id == "" or record.s3_key == "":
+            raise ValueError(f"file {record.file_id} has no storage location")
+        if record.company_id is None or record.company_id == "":
+            raise ValueError(f"file {record.file_id} has no company_id")
+        handle = await FileGate().open_record(
+            record,
+            SystemPrincipal(company_id=record.company_id),
+        )
+        return await handle.read_bytes()
 
 
     async def remove_attachment(
@@ -227,7 +213,7 @@ class AttachmentService:
         if context is None:
             raise ValueError("No request context")
 
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
 
         if entity is None or document_id not in entity.attachment_ids:
             raise LookupError(f"Attachment not found: {document_id} for {entity_id}")
@@ -239,7 +225,8 @@ class AttachmentService:
 
         entity.attachment_ids.remove(document_id)
         entity.updated_at = datetime.now(UTC)
-        _ = await self._entity_repo.update(entity)
+        entity = await CRMEntity.save_loaded(entity)
+        await index_crm_entity(self._entity_rag, entity, replace=True)
         if entity.entity_type == NOTE_ROOT_ENTITY_TYPE_ID:
             note_date_iso = entity.note_date.isoformat() if entity.note_date is not None else None
             await broadcast_crm_note_event(
@@ -259,7 +246,7 @@ class AttachmentService:
         entity_id: str,
     ) -> list[JsonObject]:
         """Получает список attachments entity"""
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
 
         if not entity:
             raise ValueError(f"Entity not found: {entity_id}")
@@ -269,7 +256,7 @@ class AttachmentService:
 
         attachments: list[JsonObject] = []
         for doc_id in entity.attachment_ids:
-            file_record = await self._file_repo.get(doc_id)
+            file_record = await FileRecord.get(doc_id)
             if file_record is not None:
                 attachments.append(
                     {
@@ -351,7 +338,7 @@ class AttachmentService:
         entity_id: str,
     ) -> int:
         """Удаляет все attachments entity (для каскадного удаления)"""
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
 
         if not entity or not entity.attachment_ids:
             return 0

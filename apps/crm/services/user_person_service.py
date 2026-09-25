@@ -15,14 +15,13 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_USER_ID_ATTR,
 )
-from apps.crm.db.models import CRMEntity, Relationship
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.models.crm_entity import CRMEntity, entity_namespace, index_crm_entity
+from apps.crm.models.entity_type import EntityType
+from apps.crm.models.relationship import Relationship
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
-from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.rag import BaseRAGProvider
 from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
@@ -35,16 +34,10 @@ class UserPersonService:
 
     def __init__(
         self,
-        entity_repo: EntityRepository,
-        entity_type_repo: EntityTypeRepository,
-        user_repository: UserRepository,
-        relationship_repo: RelationshipRepository,
+        rag: BaseRAGProvider,
         entity_access: CrmEntityAccessService,
     ) -> None:
-        self._entity_repo: EntityRepository = entity_repo
-        self._entity_type_repo: EntityTypeRepository = entity_type_repo
-        self._user_repository: UserRepository = user_repository
-        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._rag: BaseRAGProvider = rag
         self._entity_access: CrmEntityAccessService = entity_access
 
     @staticmethod
@@ -73,7 +66,7 @@ class UserPersonService:
         user_id: str,
         company_id: str,
     ) -> str:
-        user = await self._user_repository.get(user_id)
+        user = await User.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
 
@@ -84,19 +77,21 @@ class UserPersonService:
         )
         existing_id = by_company.get(company_id)
         if existing_id:
-            existing = await self._entity_repo.get(existing_id)
+            existing = await CRMEntity.get(existing_id)
             if existing is not None and existing.company_id == company_id:
                 if existing.entity_type == CONTACT_ENTITY_TYPE:
                     existing.entity_type = MEMBER_ENTITY_TYPE
-                    _ = await self._entity_repo.update(existing)
+                    existing = await CRMEntity.save_loaded(existing)
+                    await index_crm_entity(self._rag, existing, replace=True)
                     logger.info("crm.member.migrated", entity_id=existing_id)
                 await self._sync_person_fields_from_user(existing, user)
                 return existing_id
 
-        member_type = await self._entity_type_repo.get_by_type_id(
-            MEMBER_ENTITY_TYPE,
+        member_type = await EntityType.by_company_namespace_and_type_id(
+            company_id=company_id,
             namespace=USER_PERSON_NAMESPACE,
-        )
+            type_id=MEMBER_ENTITY_TYPE,
+        ).get_or_none()
         if member_type is None:
             raise ValueError("Entity type member not found for the company (CRM init?)")
 
@@ -121,11 +116,14 @@ class UserPersonService:
             company_id=company_id,
             namespace=USER_PERSON_NAMESPACE,
         )
-        _ = await self._entity_repo.create(entity)
+        entity = await CRMEntity.create(entity)
+        await index_crm_entity(self._rag, entity, replace=False)
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            _ = await self._entity_repo.delete(entity.entity_id)
+            removed = await CRMEntity.take_by_id(entity.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
         await self._ensure_member_belongs_to_company(entity.entity_id, company_id)
 
@@ -135,7 +133,7 @@ class UserPersonService:
         merged_attrs["crm"] = crm_block
         user.attributes = merged_attrs
         user.updated_at = datetime.now(UTC)
-        _ = await self._user_repository.set(user)
+        _ = await User.set(user)
 
         logger.info("crm.member.created", entity_id=entity.entity_id, user_id=user_id)
         return entity.entity_id
@@ -146,7 +144,7 @@ class UserPersonService:
         namespace: str,
         voice_entity_id: str,
     ) -> None:
-        user = await self._user_repository.get(user_id)
+        user = await User.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
         crm_block = self._crm_attrs(user)
@@ -160,10 +158,10 @@ class UserPersonService:
         merged["crm"] = crm_block
         user.attributes = merged
         user.updated_at = datetime.now(UTC)
-        _ = await self._user_repository.set(user)
+        _ = await User.set(user)
 
     async def format_user_profile_for_ai(self, user_id: str) -> str:
-        user = await self._user_repository.get(user_id)
+        user = await User.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
         lines: list[str] = []
@@ -185,7 +183,7 @@ class UserPersonService:
         company_id: str,
         namespace: str,
     ) -> str | None:
-        user = await self._user_repository.get(user_id)
+        user = await User.get(user_id)
         if user is None:
             raise ValueError(f"User not found: {user_id}")
         crm_block = self._crm_attrs(user)
@@ -196,14 +194,14 @@ class UserPersonService:
         eid = last_map.get(namespace)
         if not eid:
             return None
-        ent = await self._entity_repo.get(eid)
+        ent = await CRMEntity.get(eid)
         if ent is None or ent.company_id != company_id:
             return None
-        et = await self._entity_type_repo.get_by_type_id(
-            ent.entity_type,
-            namespace=ent.namespace,
+        et = await EntityType.by_company_namespace_and_type_id(
             company_id=company_id,
-        )
+            namespace=ent.namespace,
+            type_id=ent.entity_type,
+        ).get_or_none()
         if et is None or not et.is_voice_target:
             return None
         return eid
@@ -227,21 +225,13 @@ class UserPersonService:
         company_id: str,
     ) -> None:
         """Создаёт связь member->company (belongs_to), если company entity существует."""
-        company_entities = await self._entity_repo.find_by_attribute(
+        company_entities = await CRMEntity.all_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
             company_id=company_id,
         )
-        if not company_entities:
-            return
-        existing = await self._relationship_repo.find_exact(
-            source_id=member_entity_id,
-            target_id=company_entities[0].entity_id,
-            rel_type=BELONGS_TO_RELATIONSHIP_TYPE,
-            namespace=USER_PERSON_NAMESPACE,
-        )
-        if existing:
+        if len(company_entities) == 0:
             return
         rel = Relationship(
             relationship_id=str(uuid.uuid4()),
@@ -251,7 +241,7 @@ class UserPersonService:
             target_entity_id=company_entities[0].entity_id,
             relationship_type=BELONGS_TO_RELATIONSHIP_TYPE,
         )
-        _ = await self._relationship_repo.create(rel)
+        _ = await Relationship.ensure_edge(rel)
 
     async def _sync_person_fields_from_user(self, entity: CRMEntity, user: User) -> None:
         next_name = self._display_name_from_user(user)
@@ -270,4 +260,5 @@ class UserPersonService:
         entity.description = user.bio
         entity.attributes = attrs
         entity.updated_at = datetime.now(UTC)
-        _ = await self._entity_repo.update(entity)
+        entity = await CRMEntity.save_loaded(entity)
+        await index_crm_entity(self._rag, entity, replace=True)

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from apps.crm import events as _crm_events
 from apps.flows.src.models import FlowConfig, TriggerType
+from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from apps.flows.src.services.platform_event_consumer import PlatformEventConsumerService
 from apps.flows.src.triggers.handlers.platform_event import (
     dispatch_platform_event_triggers,
@@ -40,11 +41,11 @@ from tests.flows.conftest import persist_owned_flow
 _ = (_crm_events, _worktracker_events)
 
 
-async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):
+async def _await_completed_state(di, session_id: str, *, timeout_sec: float = 20.0):
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if last_state is not None and last_state.terminal_task_state == "completed":
             return last_state
         await asyncio.sleep(0.1)
@@ -54,22 +55,22 @@ async def _await_completed_state(container, session_id: str, *, timeout_sec: flo
     )
 
 
-async def _reset_platform_event_index(container, event_type: str) -> None:
+async def _reset_platform_event_index(di, event_type: str) -> None:
     """Drop shared Redis index so leftover flows from prior runs cannot fire."""
-    _ = await container.redis_client.delete(platform_event_trigger_index_key(event_type))
+    _ = await di.redis_client.delete(platform_event_trigger_index_key(event_type))
 
 
 @pytest.fixture(autouse=True)
-async def _isolate_platform_event_indexes(container) -> AsyncIterator[None]:
+async def _isolate_platform_event_indexes(di) -> AsyncIterator[None]:
     """
     Index is global per event_type. Prior failed runs leave members for deleted-or-orphaned
     flows that still exist in DB; absolute fired-count asserts then flake.
     """
     for event_type in ("crm/entity/created", WORK_ITEM_COMMENT_CREATED):
-        await _reset_platform_event_index(container, event_type)
+        await _reset_platform_event_index(di, event_type)
     yield
     for event_type in ("crm/entity/created", WORK_ITEM_COMMENT_CREATED):
-        await _reset_platform_event_index(container, event_type)
+        await _reset_platform_event_index(di, event_type)
 
 
 async def _ensure_catalog_in_redis() -> None:
@@ -228,7 +229,7 @@ async def test_new_registered_event_appears_in_catalog_api_with_filter_fields(
 
 @pytest.mark.asyncio
 async def test_create_platform_event_trigger_rejects_bad_filters_with_400(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     """Неизвестный path / bad op / bad enum / wrong type → HTTP 400, триггер не создан."""
     await _ensure_catalog_in_redis()
@@ -239,7 +240,7 @@ async def test_create_platform_event_trigger_rejects_bad_filters_with_400(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     cases: list[tuple[str, dict[str, object]]] = [
         (
@@ -289,16 +290,16 @@ async def test_create_platform_event_trigger_rejects_bad_filters_with_400(
             },
         )
         assert response.status_code == 400, f"{label}: {response.text}"
-        saved = await container.flow_repository.get(flow_id)
+        saved = await FlowConfig.get_latest(flow_id)
         assert saved is not None
         assert f"bad_{label.replace(' ', '_')}" not in saved.triggers
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_create_platform_event_trigger_accepts_catalog_filters(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     """Валидные filters → 200, ACTIVE, член Redis SET индекса."""
     await _ensure_catalog_in_redis()
@@ -310,7 +311,7 @@ async def test_create_platform_event_trigger_accepts_catalog_filters(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -338,20 +339,20 @@ async def test_create_platform_event_trigger_accepts_catalog_filters(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    indexed = await container.redis_client.smembers(
+    indexed = await di.redis_client.smembers(
         platform_event_trigger_index_key("crm/entity/created")
     )
     assert member in indexed
 
-    await container.flow_repository.delete(flow_id)
-    _ = await container.redis_client.srem(
+    await FlowConfig.delete_by_flow_id(flow_id)
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
 
 
 @pytest.mark.asyncio
 async def test_dispatch_eq_ne_contains_and_and_filters(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """dispatch: match → fired; mismatch → 0; eq/ne/contains AND; empty filters → fire."""
     _ = app
@@ -367,7 +368,7 @@ async def test_dispatch_eq_ne_contains_and_and_filters(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     create_match = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -418,7 +419,7 @@ async def test_dispatch_eq_ne_contains_and_and_filters(
         },
     )
     fired_match = await dispatch_platform_event_triggers(
-        container=container, event=matching
+        di=di, event=matching
     )
     assert fired_match == 2
 
@@ -437,7 +438,7 @@ async def test_dispatch_eq_ne_contains_and_and_filters(
         },
     )
     fired_mismatch = await dispatch_platform_event_triggers(
-        container=container, event=mismatch
+        di=di, event=mismatch
     )
     assert fired_mismatch == 1
 
@@ -445,15 +446,15 @@ async def test_dispatch_eq_ne_contains_and_and_filters(
         member = platform_event_trigger_index_member(
             company_id="system", flow_id=flow_id, trigger_id=trigger_id
         )
-        _ = await container.redis_client.srem(
+        _ = await di.redis_client.srem(
             platform_event_trigger_index_key("crm/entity/created"), member
         )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_enum_filter_on_comment_role(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """comment.role enum: operator матчит, user — нет."""
     _ = app
@@ -468,7 +469,7 @@ async def test_dispatch_enum_filter_on_comment_role(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -506,7 +507,7 @@ async def test_dispatch_enum_filter_on_comment_role(
         },
     )
     assert (
-        await dispatch_platform_event_triggers(container=container, event=hit)
+        await dispatch_platform_event_triggers(di=di, event=hit)
     ) == 1
 
     miss_comment = require_json_object(hit.payload, "hit payload")
@@ -520,21 +521,21 @@ async def test_dispatch_enum_filter_on_comment_role(
         },
     )
     assert (
-        await dispatch_platform_event_triggers(container=container, event=miss)
+        await dispatch_platform_event_triggers(di=di, event=miss)
     ) == 0
 
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key(WORK_ITEM_COMMENT_CREATED), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_publish_domain_event_then_dispatch_uses_same_payload_contract(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """Реальный publish_domain_event + тот же payload в dispatch с catalog filter."""
     _ = app
@@ -549,7 +550,7 @@ async def test_publish_domain_event_then_dispatch_uses_same_payload_contract(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -590,21 +591,21 @@ async def test_publish_domain_event_then_dispatch_uses_same_payload_contract(
         company_id="system",
         payload=payload,
     )
-    fired = await dispatch_platform_event_triggers(container=container, event=event)
+    fired = await dispatch_platform_event_triggers(di=di, event=event)
     assert fired == 1
 
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_update_platform_event_trigger_rejects_bad_filters_with_400(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     await _ensure_catalog_in_redis()
     flow_id = f"pe_put_bad_{unique_id}"
@@ -615,7 +616,7 @@ async def test_update_platform_event_trigger_rejects_bad_filters_with_400(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -656,15 +657,15 @@ async def test_update_platform_event_trigger_rejects_bad_filters_with_400(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_update_platform_event_trigger_accepts_valid_filter_change(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     await _ensure_catalog_in_redis()
     flow_id = f"pe_put_ok_{unique_id}"
@@ -675,7 +676,7 @@ async def test_update_platform_event_trigger_accepts_valid_filter_change(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -714,20 +715,20 @@ async def test_update_platform_event_trigger_accepts_valid_filter_change(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    indexed = await container.redis_client.smembers(
+    indexed = await di.redis_client.smembers(
         platform_event_trigger_index_key("crm/entity/created")
     )
     assert member in indexed
 
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_create_rejects_filters_when_catalog_has_empty_filter_fields(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     event_type = f"test/noleaf_{unique_id.replace('-', '_').lower()}/created"
 
@@ -747,7 +748,7 @@ async def test_create_rejects_filters_when_catalog_has_empty_filter_fields(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -765,12 +766,12 @@ async def test_create_rejects_filters_when_catalog_has_empty_filter_fields(
     )
     assert response.status_code == 400, response.text
     assert "no filterable fields" in response.text
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_create_accepts_boolean_integer_number_filters_and_dispatch(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     mock_llm_with_queue(["ok", "ok"])
     event_type = f"test/nums_{unique_id.replace('-', '_').lower()}/changed"
@@ -791,7 +792,7 @@ async def test_create_accepts_boolean_integer_number_filters_and_dispatch(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -819,7 +820,7 @@ async def test_create_accepts_boolean_integer_number_filters_and_dispatch(
         payload={"flag": True, "score": 7, "ratio": 1.25},
     )
     assert (
-        await dispatch_platform_event_triggers(container=container, event=hit)
+        await dispatch_platform_event_triggers(di=di, event=hit)
     ) == 1
 
     miss = PlatformEvent(
@@ -828,21 +829,21 @@ async def test_create_accepts_boolean_integer_number_filters_and_dispatch(
         payload={"flag": True, "score": 7, "ratio": 0.5},
     )
     assert (
-        await dispatch_platform_event_triggers(container=container, event=miss)
+        await dispatch_platform_event_triggers(di=di, event=miss)
     ) == 0
 
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key(event_type), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_create_uses_in_process_catalog_when_redis_entry_missing(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     event_type = f"test/fallback_{unique_id.replace('-', '_').lower()}/happened"
 
@@ -861,7 +862,7 @@ async def test_create_uses_in_process_catalog_when_redis_entry_missing(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -882,15 +883,15 @@ async def test_create_uses_in_process_catalog_when_redis_entry_missing(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key(event_type), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_create_rejects_unknown_event_type_not_in_catalog(
-    app, client, container, unique_id: str
+    app, client, di, unique_id: str
 ) -> None:
     await _ensure_catalog_in_redis()
     flow_id = f"pe_unknown_{unique_id}"
@@ -900,7 +901,7 @@ async def test_create_rejects_unknown_event_type_not_in_catalog(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -917,12 +918,12 @@ async def test_create_rejects_unknown_event_type_not_in_catalog(
         },
     )
     assert response.status_code == 400, response.text
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_persists_completed_state(
-    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
+    app, client, di, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """platform_event_trigger_run_id → session_id → completed + mapping."""
     _ = app
@@ -937,7 +938,7 @@ async def test_dispatch_persists_completed_state(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -973,12 +974,12 @@ async def test_dispatch_persists_completed_state(
         },
         meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
-    fired = await dispatch_platform_event_triggers(container=container, event=event)
+    fired = await dispatch_platform_event_triggers(di=di, event=event)
     assert fired == 1
 
     run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
     session_id = f"{flow_id}:{run_id}"
-    state = await _await_completed_state(container, session_id)
+    state = await _await_completed_state(di, session_id)
     assert state.content == f"Person {unique_id}"
     assert state.triggers[trigger_id].context["entity_id"] == f"person_{unique_id}"
     assert state.response == "PE completed"
@@ -986,15 +987,15 @@ async def test_dispatch_persists_completed_state(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_idempotent_same_run_id(
-    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
+    app, client, di, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """Два dispatch одного event → один session_id (deterministic run_id)."""
     _ = app
@@ -1009,7 +1010,7 @@ async def test_dispatch_idempotent_same_run_id(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -1042,13 +1043,13 @@ async def test_dispatch_idempotent_same_run_id(
         },
         meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
-    assert await dispatch_platform_event_triggers(container=container, event=event) == 1
+    assert await dispatch_platform_event_triggers(di=di, event=event) == 1
     run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
     session_id = f"{flow_id}:{run_id}"
-    state1 = await _await_completed_state(container, session_id)
+    state1 = await _await_completed_state(di, session_id)
 
-    assert await dispatch_platform_event_triggers(container=container, event=event) == 1
-    state2 = await container.workflow_runtime.get_state(session_id)
+    assert await dispatch_platform_event_triggers(di=di, event=event) == 1
+    state2 = await di.workflow_runtime.get_state(session_id)
     assert state2 is not None
     assert state2.session_id == state1.session_id
     assert state2.terminal_task_state == "completed"
@@ -1056,15 +1057,15 @@ async def test_dispatch_idempotent_same_run_id(
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_handle_event_fires_triggers(
-    app, client, container, unique_id: str, mock_llm_with_queue, system_user_id: str
+    app, client, di, unique_id: str, mock_llm_with_queue, system_user_id: str
 ) -> None:
     """PlatformEventConsumerService.handle_event → completed (без XREADGROUP)."""
     _ = app
@@ -1079,7 +1080,7 @@ async def test_handle_event_fires_triggers(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -1113,28 +1114,31 @@ async def test_handle_event_fires_triggers(
         meta=PlatformEventMeta(actor_user_id=system_user_id),
     )
     consumer = PlatformEventConsumerService(
-        container=container,
-        employee_inbox_service=container.employee_inbox_service,
+        redis_client=di.redis_client,
+        workflow_runtime=di.workflow_runtime,
+        authz_service=di.authz_service,
+        hitl_work_item_service=di.node_constructor.hitl_work_item_service,
+        employee_inbox_service=EmployeeInboxService(di.work_item_service),
     )
     await consumer.handle_event(event)
 
     run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
-    state = await _await_completed_state(container, f"{flow_id}:{run_id}")
+    state = await _await_completed_state(di, f"{flow_id}:{run_id}")
     assert state.content == f"Org {unique_id}"
     assert state.response == "From handle_event"
 
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_filter_mismatch_no_state(
-    app, client, container, unique_id: str, mock_llm_with_queue
+    app, client, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """Filter miss → fired==0, state отсутствует."""
     _ = app
@@ -1149,7 +1153,7 @@ async def test_filter_mismatch_no_state(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     created = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -1181,15 +1185,15 @@ async def test_filter_mismatch_no_state(
             "actor_user_id": f"user_{unique_id}",
         },
     )
-    assert await dispatch_platform_event_triggers(container=container, event=event) == 0
+    assert await dispatch_platform_event_triggers(di=di, event=event) == 0
     run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
-    state = await container.workflow_runtime.get_state(f"{flow_id}:{run_id}")
+    state = await di.workflow_runtime.get_state(f"{flow_id}:{run_id}")
     assert state is None
 
     member = platform_event_trigger_index_member(
         company_id="system", flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         platform_event_trigger_index_key("crm/entity/created"), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)

@@ -32,12 +32,13 @@ async def test_unauthenticated_request_rejected(worktracker_app, unique_id: str)
     from httpx import ASGITransport, AsyncClient
 
     transport = ASGITransport(app=worktracker_app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(WORK_ITEMS)
-        assert response.status_code in {401, 403}
+    async with worktracker_app.router.lifespan_context(worktracker_app):
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.get(WORK_ITEMS)
+            assert response.status_code in {401, 403}
 
-        create_resp = await client.post(
-            WORK_ITEMS,
-            json=build_manual_work_item_payload(unique_id),
-        )
-        assert create_resp.status_code in {401, 403}
+            create_resp = await client.post(
+                WORK_ITEMS,
+                json=build_manual_work_item_payload(unique_id),
+            )
+            assert create_resp.status_code in {401, 403}

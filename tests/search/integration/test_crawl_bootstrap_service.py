@@ -5,10 +5,9 @@ from datetime import UTC, datetime
 import pytest
 
 from apps.search.config import SearchCrawlConfig
-from apps.search.container import SearchContainer
 from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
 from apps.search_worker.tasks.task_names import CRAWL_IMPORT_SEED_DOMAINS
-from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
+from core.crawl.models import CrawlDomain, CrawlDomainSeed, CrawlProfileCreateRequest
 from core.logging import clear_log_context, get_log_context
 from core.search.index_models import SearchIndexCreateRequest
 from core.tasks import TaskSpec
@@ -18,10 +17,10 @@ from tests.search.conftest import make_search_index_slug
 pytestmark = pytest.mark.timeout(60, func_only=True)
 
 
-async def _create_empty_profile(search_container: SearchContainer, unique_id: str) -> str:
+async def _create_empty_profile(search_di, unique_id: str) -> str:
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]
-    await search_container.search_index_service.create(
+    await search_di.search_index_service.create(
         SearchIndexCreateRequest(
             search_index_id=search_index_id,
             display_name=f"Bootstrap {unique_id}",
@@ -29,7 +28,7 @@ async def _create_empty_profile(search_container: SearchContainer, unique_id: st
             rag_collection_id=search_index_id,
         )
     )
-    await search_container.crawl_service.create_profile(
+    await search_di.crawl_service.create_profile(
         CrawlProfileCreateRequest(
             crawl_profile_id=crawl_profile_id,
             search_index_id=search_index_id,
@@ -42,24 +41,20 @@ async def _create_empty_profile(search_container: SearchContainer, unique_id: st
 
 @pytest.mark.asyncio
 async def test_bootstrap_skips_seed_when_domains_exist(
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
 ):
     _ = search_system_context
-    crawl_profile_id = await _create_empty_profile(search_container, unique_id)
-    await search_container.crawl_domain_repository.upsert_seed_batch(
+    crawl_profile_id = await _create_empty_profile(search_di, unique_id)
+    await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         [CrawlDomainSeed(domain="example.com", category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
-    before_count = await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id)
+    before_count = await CrawlDomain.count_for_profile(crawl_profile_id)
 
     bootstrap = CrawlBootstrapService(
-        crawl_profile_repository=search_container.crawl_profile_repository,
-        crawl_domain_repository=search_container.crawl_domain_repository,
-        crawl_url_repository=search_container.crawl_url_repository,
-        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=True,
@@ -70,19 +65,19 @@ async def test_bootstrap_skips_seed_when_domains_exist(
 
     assert result.action == "skipped_seed"
     assert result.domain_count == before_count
-    after_count = await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id)
+    after_count = await CrawlDomain.count_for_profile(crawl_profile_id)
     assert after_count == before_count
 
 
 @pytest.mark.asyncio
 async def test_bootstrap_queues_tranco_seed_when_profile_empty(
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
     monkeypatch,
 ):
     _ = search_system_context
-    crawl_profile_id = await _create_empty_profile(search_container, unique_id)
+    crawl_profile_id = await _create_empty_profile(search_di, unique_id)
     queued: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
 
     async def _capture_enqueue(task: TaskSpec | str, *args: object, **kwargs: object) -> None:
@@ -94,10 +89,6 @@ async def test_bootstrap_queues_tranco_seed_when_profile_empty(
     )
 
     bootstrap = CrawlBootstrapService(
-        crawl_profile_repository=search_container.crawl_profile_repository,
-        crawl_domain_repository=search_container.crawl_domain_repository,
-        crawl_url_repository=search_container.crawl_url_repository,
-        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=True,
@@ -119,19 +110,15 @@ async def test_bootstrap_queues_tranco_seed_when_profile_empty(
 
 @pytest.mark.asyncio
 async def test_bootstrap_disabled_does_not_queue_seed(
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
 ):
     _ = search_system_context
-    crawl_profile_id = await _create_empty_profile(search_container, unique_id)
-    assert await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id) == 0
+    crawl_profile_id = await _create_empty_profile(search_di, unique_id)
+    assert await CrawlDomain.count_for_profile(crawl_profile_id) == 0
 
     bootstrap = CrawlBootstrapService(
-        crawl_profile_repository=search_container.crawl_profile_repository,
-        crawl_domain_repository=search_container.crawl_domain_repository,
-        crawl_url_repository=search_container.crawl_url_repository,
-        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=False,
@@ -142,25 +129,21 @@ async def test_bootstrap_disabled_does_not_queue_seed(
 
     assert result.action == "bootstrap_disabled"
     assert result.domain_count == 0
-    assert await search_container.crawl_domain_repository.count_for_profile(crawl_profile_id) == 0
+    assert await CrawlDomain.count_for_profile(crawl_profile_id) == 0
 
 
 @pytest.mark.asyncio
 async def test_bootstrap_enqueue_outside_request_scope(
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
 ):
     _ = search_system_context
-    crawl_profile_id = await _create_empty_profile(search_container, unique_id)
+    crawl_profile_id = await _create_empty_profile(search_di, unique_id)
     clear_log_context()
     assert not get_log_context().get("request_id")
 
     bootstrap = CrawlBootstrapService(
-        crawl_profile_repository=search_container.crawl_profile_repository,
-        crawl_domain_repository=search_container.crawl_domain_repository,
-        crawl_url_repository=search_container.crawl_url_repository,
-        crawl_job_repository=search_container.crawl_job_repository,
         crawl_config=SearchCrawlConfig(
             default_crawl_profile_id=crawl_profile_id,
             bootstrap_tranco_on_empty=True,

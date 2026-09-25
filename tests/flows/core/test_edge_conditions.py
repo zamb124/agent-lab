@@ -11,7 +11,8 @@ from typing import cast, override
 import pytest
 from pydantic import ValidationError
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FlowPrematureCompletionError
@@ -56,23 +57,23 @@ def patch_node(
     node_id: str,
     patch: Mapping[str, JsonValue],
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
 ) -> StatePatchNode:
     config = require_json_object(
         {"type": "test_state_patch", "patch": dict(patch)},
         f"nodes.{node_id}",
     )
-    return StatePatchNode(node_id=node_id, config=config, container=container)
+    return StatePatchNode(node_id=node_id, config=config, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)
 
 
 def make_flow(
     *,
     nodes: Mapping[str, Mapping[str, JsonValue]],
     edges: Sequence[JsonObject],
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
 ) -> Flow:
     runtime_nodes: dict[str, BaseNode] = {
-        node_id: patch_node(node_id, patch, container=container)
+        node_id: patch_node(node_id, patch, di=di)
         for node_id, patch in nodes.items()
     }
     return Flow(
@@ -82,18 +83,18 @@ def make_flow(
         nodes=runtime_nodes,
         edges=edges,
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
 
 
 @pytest.mark.usefixtures("app")
 class TestStrictConditionContract:
-    def test_node_config_requires_explicit_type(self, container: FlowRuntimeContainer) -> None:
+    def test_node_config_requires_explicit_type(self, di: FlowsDi) -> None:
         with pytest.raises(ValueError, match="config.type is required"):
-            _ = StatePatchNode(node_id="bad", config={"patch": {}}, container=container)
+            _ = StatePatchNode(node_id="bad", config={"patch": {}}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)
 
     @pytest.mark.asyncio
-    async def test_string_condition_rejected(self, container: FlowRuntimeContainer) -> None:
+    async def test_string_condition_rejected(self, di: FlowsDi) -> None:
         with pytest.raises(ValidationError):
             _ = await Flow.from_config(
                 {
@@ -108,12 +109,12 @@ class TestStrictConditionContract:
                         {"from_node": "start", "to_node": "order", "condition": "route == 'order'"}
                     ],
                 },
-                container=container,
+                node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
             )
 
     @pytest.mark.asyncio
     async def test_simple_condition_equals_string(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -123,11 +124,11 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "order", "condition": simple_condition("route", "==", "order")}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -136,7 +137,7 @@ class TestStrictConditionContract:
 
     @pytest.mark.asyncio
     async def test_simple_condition_equals_number(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -146,11 +147,11 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "five", "condition": simple_condition("count", "==", 5)}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -159,7 +160,7 @@ class TestStrictConditionContract:
 
     @pytest.mark.asyncio
     async def test_simple_condition_not_equals(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -169,11 +170,11 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "proceed", "condition": simple_condition("status", "!=", "error")}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -182,7 +183,7 @@ class TestStrictConditionContract:
 
     @pytest.mark.asyncio
     async def test_simple_condition_greater_than(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -192,11 +193,11 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "pass", "condition": simple_condition("score", ">", 80)}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -205,7 +206,7 @@ class TestStrictConditionContract:
 
     @pytest.mark.asyncio
     async def test_simple_condition_nested_field(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -215,11 +216,11 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "admin", "condition": simple_condition("user.role", "==", "admin")}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -228,7 +229,7 @@ class TestStrictConditionContract:
 
     @pytest.mark.asyncio
     async def test_simple_condition_false_no_transition(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -238,12 +239,12 @@ class TestStrictConditionContract:
             edges=[
                 {"from_node": "start", "to_node": "order", "condition": simple_condition("route", "==", "order")}
             ],
-            container=container,
+            di=di,
         )
 
         with pytest.raises(FlowPrematureCompletionError) as exc_info:
             _ = await run_flow(
-                container=container,
+                di=di,
                 flow=flow,
                 state=make_state(flow.flow_id, unique_id),
             )
@@ -254,7 +255,7 @@ class TestStrictConditionContract:
 class TestSimpleObjectConditions:
     @pytest.mark.asyncio
     async def test_simple_less_or_equal(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -264,11 +265,11 @@ class TestSimpleObjectConditions:
             edges=[
                 {"from_node": "start", "to_node": "few", "condition": simple_condition("count", "<=", 3)}
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -277,7 +278,7 @@ class TestSimpleObjectConditions:
 
     @pytest.mark.asyncio
     async def test_simple_in_list(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -291,11 +292,11 @@ class TestSimpleObjectConditions:
                     "condition": simple_condition("route", "in", ["support", "billing"]),
                 }
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -307,7 +308,7 @@ class TestSimpleObjectConditions:
 class TestUnconditionalEdges:
     @pytest.mark.asyncio
     async def test_edge_without_condition(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -315,11 +316,11 @@ class TestUnconditionalEdges:
                 "next": {"result": "next_executed"},
             },
             edges=[{"from_node": "start", "to_node": "next"}],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -328,7 +329,7 @@ class TestUnconditionalEdges:
 
     @pytest.mark.asyncio
     async def test_edge_with_null_condition(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -336,11 +337,11 @@ class TestUnconditionalEdges:
                 "next": {"result": "executed"},
             },
             edges=[{"from_node": "start", "to_node": "next", "condition": None}],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -352,7 +353,7 @@ class TestUnconditionalEdges:
 class TestMultipleEdges:
     @pytest.mark.asyncio
     async def test_all_matching_conditions_run_in_parallel(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -364,11 +365,11 @@ class TestMultipleEdges:
                 {"from_node": "start", "to_node": "order", "condition": simple_condition("route", "==", "order")},
                 {"from_node": "start", "to_node": "audit", "condition": simple_condition("route", "!=", "complaint")},
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )
@@ -378,7 +379,7 @@ class TestMultipleEdges:
 
     @pytest.mark.asyncio
     async def test_default_edge_without_condition(
-        self, container: FlowRuntimeContainer, unique_id: str
+        self, di: FlowsDi, unique_id: str
     ) -> None:
         flow = make_flow(
             nodes={
@@ -390,11 +391,11 @@ class TestMultipleEdges:
                 {"from_node": "start", "to_node": "known", "condition": simple_condition("route", "==", "order")},
                 {"from_node": "start", "to_node": "default_handler"},
             ],
-            container=container,
+            di=di,
         )
 
         result = await run_flow(
-            container=container,
+            di=di,
             flow=flow,
             state=make_state(flow.flow_id, unique_id),
         )

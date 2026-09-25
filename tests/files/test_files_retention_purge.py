@@ -15,7 +15,7 @@ import pytest
 
 from core.files.backfill import FileRetentionBackfillService
 from core.files.create_spec import FileCreateSpec
-from core.files.models import FileStatus
+from core.files.models import FileRecord, FileStatus
 from core.files.purge import FilePurgeService
 from core.files.retention import FileRetentionKind, FileRetentionSpec, resolve_retention_ttl_seconds
 from tests.fixtures.s3 import require_s3_configured
@@ -50,83 +50,74 @@ def test_resolve_retention_ttl_custom_seconds():
 
 
 @pytest.mark.asyncio
-async def test_backfill_sets_retention_fields(app, unique_id: str):
+async def test_backfill_sets_retention_fields(app, unique_id: str, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     require_s3_configured()
-    container = get_frontend_container()
-    record = await container.files_service.create(
+    record = await frontend_di.files_service.create(
         _platform_auxiliary_spec(),
         f"backfill-{unique_id}".encode("utf-8"),
         original_name=f"backfill-{unique_id}.txt",
         content_type="text/plain",
     )
-    repo = container.file_repository
     stale = record.model_copy(update={"retention_kind": None, "expires_at": None})
-    _ = await repo.set(stale)
+    _ = await FileRecord.set(stale)
 
-    backfill = FileRetentionBackfillService(repo)
+    backfill = FileRetentionBackfillService()
     for _ in range(300):
         _ = await backfill.backfill_batch(limit=200)
-        loaded = await container.files_service.get(record.file_id)
+        loaded = await frontend_di.files_service.get(record.file_id)
         if loaded.retention_kind:
             break
 
-    loaded = await container.files_service.get(record.file_id)
+    loaded = await frontend_di.files_service.get(record.file_id)
     assert loaded.retention_kind is not None
     assert loaded.retention_kind != ""
 
 
 @pytest.mark.asyncio
-async def test_purge_deletes_expired_file(app, unique_id: str):
+async def test_purge_deletes_expired_file(app, unique_id: str, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     require_s3_configured()
-    container = get_frontend_container()
-    record = await container.files_service.create(
+    record = await frontend_di.files_service.create(
         _platform_auxiliary_spec(),
         f"purge-{unique_id}".encode("utf-8"),
         original_name=f"purge-{unique_id}.txt",
         content_type="text/plain",
     )
     expired_at = datetime.now(UTC) - timedelta(minutes=5)
-    repo = container.file_repository
     expired = record.model_copy(
         update={
             "retention_kind": FileRetentionKind.GENERATED_EPHEMERAL,
             "expires_at": expired_at,
         }
     )
-    _ = await repo.set(expired)
+    _ = await FileRecord.set(expired)
 
-    purge = FilePurgeService(repo)
+    purge = FilePurgeService()
     purged_own = False
     for _ in range(300):
         _ = await purge.purge_expired_batch()
         try:
-            _ = await container.files_service.get(record.file_id)
+            _ = await frontend_di.files_service.get(record.file_id)
         except ValueError:
             purged_own = True
             break
     assert purged_own, f"file {record.file_id} was not purged"
 
     with pytest.raises(ValueError, match="file not found"):
-        await container.files_service.get(record.file_id)
+        await frontend_di.files_service.get(record.file_id)
 
 
 @pytest.mark.asyncio
-async def test_purge_skips_permanent_files(app, unique_id: str):
+async def test_purge_skips_permanent_files(app, unique_id: str, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     require_s3_configured()
-    container = get_frontend_container()
-    record = await container.files_service.create(
+    record = await frontend_di.files_service.create(
         _platform_auxiliary_spec(),
         f"permanent-{unique_id}".encode("utf-8"),
         original_name=f"permanent-{unique_id}.txt",
         content_type="text/plain",
     )
-    repo = container.file_repository
     permanent = record.model_copy(
         update={
             "retention_kind": FileRetentionKind.PERMANENT,
@@ -134,10 +125,10 @@ async def test_purge_skips_permanent_files(app, unique_id: str):
             "status": FileStatus.READY,
         }
     )
-    _ = await repo.set(permanent)
+    _ = await FileRecord.set(permanent)
 
-    purge = FilePurgeService(repo)
+    purge = FilePurgeService()
     _ = await purge.purge_expired_batch()
 
-    loaded = await container.files_service.get(record.file_id)
+    loaded = await frontend_di.files_service.get(record.file_id)
     assert loaded.file_id == record.file_id

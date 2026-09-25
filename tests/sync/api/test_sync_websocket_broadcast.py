@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
+from tests.sync.conftest import require_sync_di
 
 
 @pytest.mark.asyncio
@@ -27,7 +28,7 @@ async def test_two_ws_clients_receive_message_created(
     from tests.sync.api._helpers import seed_namespace_via_repo
 
     namespace = f"ns_{unique_id}_wsb"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=60.0) as http:
         cr = await http.post(
             "/sync/api/v1/channels/",

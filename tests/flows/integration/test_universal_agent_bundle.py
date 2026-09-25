@@ -17,8 +17,8 @@ from collections.abc import Callable
 import pytest
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer, get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
 from core.state import ExecutionState
@@ -50,24 +50,24 @@ def _tool_ids_from_main_node_tools(tools: JsonValue) -> list[str]:
 
 
 async def _require_universal_agent_flow(
-    container: FlowContainer,
+    di: FlowsDi,
     *,
     branch_id: str = "default",
 ) -> Flow:
-    flow = await container.flow_factory.get_flow(FLOW_ID, branch_id=branch_id)
+    flow = await di.flow_factory.get_flow(FLOW_ID, branch_id=branch_id, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
 async def _run_universal_agent_flow(
-    container: FlowContainer,
+    di: FlowsDi,
     state: ExecutionState,
     *,
     branch_id: str = "default",
 ) -> ExecutionState:
-    flow = await _require_universal_agent_flow(container, branch_id=branch_id)
+    flow = await _require_universal_agent_flow(di, branch_id=branch_id)
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -95,9 +95,8 @@ def _required_str(body: JsonObject, key: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_universal_agent_loaded_in_database() -> None:
-    container = get_container()
-    config = await container.flow_repository.get(FLOW_ID)
+async def test_universal_agent_loaded_in_database(di) -> None:
+    config = await FlowConfig.get_latest(FLOW_ID)
     assert config is not None
     assert config.flow_id == FLOW_ID
     assert "code_focus" in config.branches
@@ -105,9 +104,8 @@ async def test_universal_agent_loaded_in_database() -> None:
 
 
 @pytest.mark.asyncio
-async def test_universal_agent_with_rag_skill_merges_rag_tools() -> None:
-    container = get_container()
-    nodes = await container.flow_factory.get_effective_nodes_map(FLOW_ID, "with_rag")
+async def test_universal_agent_with_rag_skill_merges_rag_tools(di) -> None:
+    nodes = await di.flow_factory.get_effective_nodes_map(FLOW_ID, "with_rag")
     main = nodes["main"]
     tool_ids = _tool_ids_from_main_node_tools(main.get("tools"))
     for name in (
@@ -121,9 +119,8 @@ async def test_universal_agent_with_rag_skill_merges_rag_tools() -> None:
 
 
 @pytest.mark.asyncio
-async def test_universal_agent_code_focus_skill_merges_prompt() -> None:
-    container = get_container()
-    nodes = await container.flow_factory.get_effective_nodes_map(FLOW_ID, "code_focus")
+async def test_universal_agent_code_focus_skill_merges_prompt(di) -> None:
+    nodes = await di.flow_factory.get_effective_nodes_map(FLOW_ID, "code_focus")
     prompt = nodes["main"].get("prompt", "")
     assert isinstance(prompt, str)
     assert "песочница кода" in prompt
@@ -133,6 +130,7 @@ async def test_universal_agent_code_focus_skill_merges_prompt() -> None:
 async def test_universal_agent_calculator_tool(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
+    di,
 ) -> None:
     _ = mock_llm_with_queue(
         [
@@ -140,7 +138,6 @@ async def test_universal_agent_calculator_tool(
             "Сумма 19 и 23 равна 42.",
         ]
     )
-    container = get_container()
     context_id = f"ua-calc-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -149,7 +146,7 @@ async def test_universal_agent_calculator_tool(
         session_id=f"{FLOW_ID}:{context_id}",
         content="Сколько будет 19 плюс 23?",
     )
-    result = await _run_universal_agent_flow(container, state)
+    result = await _run_universal_agent_flow(di, state)
     assert result.interrupt is None
     assert "calculator" in result.tool_results
     calc_out = result.tool_results["calculator"]
@@ -161,6 +158,7 @@ async def test_universal_agent_calculator_tool(
 async def test_universal_agent_ask_user_interrupt(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
+    di,
 ) -> None:
     _ = mock_llm_with_queue(
         [
@@ -171,7 +169,6 @@ async def test_universal_agent_ask_user_interrupt(
             },
         ]
     )
-    container = get_container()
     context_id = f"ua-ask-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -180,7 +177,7 @@ async def test_universal_agent_ask_user_interrupt(
         session_id=f"{FLOW_ID}:{context_id}",
         content="Нужна доставка, но адрес неясен",
     )
-    result = await _run_universal_agent_flow(container, state)
+    result = await _run_universal_agent_flow(di, state)
     assert result.interrupt is not None
     assert "город" in result.interrupt.question.lower()
 
@@ -189,6 +186,7 @@ async def test_universal_agent_ask_user_interrupt(
 async def test_universal_agent_code_focus_skill_runs_calculator(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
+    di,
 ) -> None:
     _ = mock_llm_with_queue(
         [
@@ -196,7 +194,6 @@ async def test_universal_agent_code_focus_skill_runs_calculator(
             "Произведение 6 и 7: 42.",
         ]
     )
-    container = get_container()
     context_id = f"ua-cf-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -206,7 +203,7 @@ async def test_universal_agent_code_focus_skill_runs_calculator(
         branch_id="code_focus",
         content="Сколько 6 умножить на 7?",
     )
-    result = await _run_universal_agent_flow(container, state, branch_id="code_focus")
+    result = await _run_universal_agent_flow(di, state, branch_id="code_focus")
     assert result.interrupt is None
     assert "calculator" in result.tool_results
     assert "42" in str(result.tool_results["calculator"])
@@ -217,6 +214,7 @@ async def test_universal_agent_with_rag_create_namespace(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
     auth_headers_system: dict[str, str],
+    di,
 ) -> None:
     ns = f"ua_ns_{unique_id}"
     _ = mock_llm_with_queue(
@@ -229,7 +227,6 @@ async def test_universal_agent_with_rag_create_namespace(
             f"Создан namespace {ns}.",
         ]
     )
-    container = get_container()
     context_id = f"ua-ragc-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -240,7 +237,7 @@ async def test_universal_agent_with_rag_create_namespace(
         content=f"Создай RAG namespace с именем {ns}",
     )
     with service_client_asgi_auth_context(auth_headers_system):
-        result = await _run_universal_agent_flow(container, state, branch_id="with_rag")
+        result = await _run_universal_agent_flow(di, state, branch_id="with_rag")
     assert result.interrupt is None
     out = result.tool_results["rag_create_namespace"]
     body = _tool_result_json_object(out)
@@ -252,6 +249,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
     auth_headers_system: dict[str, str],
+    di,
 ) -> None:
     ns = f"ua_ing_{unique_id}"
     chunk = "Humanitec universal_agent RAG marker zeta-9 for semantic retrieval."
@@ -285,7 +283,6 @@ async def test_universal_agent_with_rag_ingest_and_search(
             "Найден фрагмент в базе знаний.",
         ]
     )
-    container = get_container()
     context_id = f"ua-ragf-{unique_id}"
     state = ExecutionState(
         task_id=f"task-{unique_id}",
@@ -296,7 +293,7 @@ async def test_universal_agent_with_rag_ingest_and_search(
         content="Создай namespace, добавь текст про zeta-9 и найди его поиском.",
     )
     with service_client_asgi_auth_context(auth_headers_system):
-        result = await _run_universal_agent_flow(container, state, branch_id="with_rag")
+        result = await _run_universal_agent_flow(di, state, branch_id="with_rag")
     assert result.interrupt is None
     assert "rag_add_text" in result.tool_results
     add_body = _tool_result_json_object(result.tool_results["rag_add_text"])

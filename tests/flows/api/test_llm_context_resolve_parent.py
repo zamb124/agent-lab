@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.resource import ResourceDefinition, ResourceType
 
 
@@ -60,16 +59,15 @@ async def test_resolve_parent_applies_inline_resource(client, unique_id):
 
 
 @pytest.mark.asyncio
-async def test_resolve_parent_applies_shared_resource(client, unique_id):
+async def test_resolve_parent_applies_shared_resource(client, unique_id, di):
     resource_id = f"llm_ctx_{unique_id}"
-    container = get_container()
     definition = ResourceDefinition(
         resource_id=resource_id,
         type=ResourceType.LLM_CONTEXT,
         name="Ctx",
         config={"memory": "off", "retrieval": {"mode": "off", "top_k": 3}},
     )
-    await container.resource_repository.set(definition)
+    await ResourceDefinition.set(definition)
     try:
         response = await client.post(
             "/flows/api/v1/llm-context/resolve-parent",
@@ -87,7 +85,7 @@ async def test_resolve_parent_applies_shared_resource(client, unique_id):
         assert resolved["retrieval"]["mode"] == "off"
         assert resolved["retrieval"]["top_k"] == 3
     finally:
-        await container.resource_repository.delete(resource_id)
+        await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(resource_id))
 
 
 @pytest.mark.asyncio

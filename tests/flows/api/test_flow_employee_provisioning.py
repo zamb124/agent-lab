@@ -1,6 +1,6 @@
 """Provisioning сотрудника-агента через Flows API (create/update/delete).
 
-Реальный HTTP через `client` (auth system), состояние — через flows `container`.
+Реальный HTTP через `client` (auth system), состояние — через flows `di`.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from core.identity.flow_employee import flow_employee_user_id, is_flow_employee
-from core.models.identity_models import User, UserStatus
+from core.models.identity_models import Company, User, UserStatus
 from core.utils.tokens import get_token_service
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.fixtures.auth import set_test_company_member_roles
@@ -31,7 +31,7 @@ def _create_body(flow_id: str, *, employee: dict | None = None) -> dict:
     return body
 
 
-async def test_create_with_employee_provisions_user(client, container, unique_id, system_user_id):
+async def test_create_with_employee_provisions_user(client, di, unique_id, system_user_id):
     flow_id = f"emp_prov_{unique_id}"
     resp = await client.post(
         "/flows/api/v1/flows/",
@@ -48,26 +48,26 @@ async def test_create_with_employee_provisions_user(client, container, unique_id
     assert resp.json()["employee"]["enabled"] is True
 
     emp_id = flow_employee_user_id(flow_id)
-    user = await container.user_repository.get(emp_id)
+    user = await User.get(emp_id)
     assert user is not None
     assert is_flow_employee(user)
     assert user.status == UserStatus.ACTIVE
     assert "member" in user.companies["system"]
 
-    company = await container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     assert emp_id in company.members
 
     await client.delete(f"/flows/api/v1/flows/{flow_id}")
-    company_after = await container.company_repository.get("system")
+    company_after = await Company.get("system")
     assert company_after is not None
     assert emp_id not in company_after.members
-    user_after = await container.user_repository.get(emp_id)
+    user_after = await User.get(emp_id)
     assert user_after is not None
     assert user_after.status == UserStatus.INACTIVE
 
 
-async def test_update_toggles_employee(client, container, unique_id, system_user_id):
+async def test_update_toggles_employee(client, di, unique_id, system_user_id):
     flow_id = f"emp_toggle_{unique_id}"
     emp_id = flow_employee_user_id(flow_id)
 
@@ -88,7 +88,7 @@ async def test_update_toggles_employee(client, container, unique_id, system_user
         ),
     )
     assert on.status_code == 200
-    user = await container.user_repository.get(emp_id)
+    user = await User.get(emp_id)
     assert user is not None and user.status == UserStatus.ACTIVE
     assert user.avatar_url == "https://example.com/a.png"
     assert set(user.companies["system"]) == {"member", "flow_operator"}
@@ -96,7 +96,7 @@ async def test_update_toggles_employee(client, container, unique_id, system_user
     # выключаем
     off = await client.put(f"/flows/api/v1/flows/{flow_id}", json=_create_body(flow_id))
     assert off.status_code == 200
-    user_off = await container.user_repository.get(emp_id)
+    user_off = await User.get(emp_id)
     assert user_off is not None and user_off.status == UserStatus.INACTIVE
 
     await client.delete(f"/flows/api/v1/flows/{flow_id}")
@@ -129,7 +129,7 @@ async def test_create_employee_enabled_without_curators_422(client, unique_id):
 async def test_employee_not_visible_in_other_company_members(
     client,
     frontend_client,
-    container,
+    di,
     unique_id,
     auth_headers_company2,
 ):
@@ -138,7 +138,7 @@ async def test_employee_not_visible_in_other_company_members(
     flow_id = f"emp_iso_{unique_id}"
     emp_id = flow_employee_user_id(flow_id)
 
-    await container.user_repository.set(
+    await User.set(
         User(
             user_id=owner_id,
             name="Employee Iso Owner",
@@ -146,7 +146,7 @@ async def test_employee_not_visible_in_other_company_members(
             active_company_id=company_id,
         )
     )
-    await container.company_repository.set(
+    await Company.set(
         make_test_company(
             company_id=company_id,
             name=f"Employee iso {unique_id}",
@@ -155,8 +155,7 @@ async def test_employee_not_visible_in_other_company_members(
         )
     )
     await set_test_company_member_roles(
-        container.company_repository,
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=owner_id,
         roles=["owner", "admin"],

@@ -16,7 +16,7 @@ per-company-настройку и deployment-default. Используется �
 3. Deployment-default: ``settings.voice.<kind>``.
 
 Если итоговое значение пустое — ``raise ValueError`` (никаких неявных
-дефолтов). См. ``speech_providers.mdc`` и ``architecture.mdc``.
+дефолтов). См. ``voice.mdc`` и ``architecture.mdc``.
 """
 
 from __future__ import annotations

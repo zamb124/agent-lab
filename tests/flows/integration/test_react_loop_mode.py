@@ -12,7 +12,6 @@ import time
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, ReactConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
@@ -63,7 +62,7 @@ INLINE_ASK_USER = {
 
 async def run_flow_state(flow: Flow | None, state: ExecutionState) -> ExecutionState:
     assert flow is not None
-    return await run_flow(container=flow.container, flow=flow, state=state)
+    return await run_flow(di=flow.di, flow=flow, state=state)
 
 
 def make_flow_state(flow_id: str, content: str, *, branch_id: str = "default") -> ExecutionState:
@@ -81,12 +80,11 @@ class TestReactLoopModeAuto:
     Агент завершается когда LLM возвращает текст без tool_calls.
     """
 
-    async def test_auto_mode_text_response_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_auto_mode_text_response_exits(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме AUTO текстовый ответ сразу завершает агента.
         """
         flow_id = f"test_auto_text_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Mode Agent",
@@ -100,9 +98,9 @@ class TestReactLoopModeAuto:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Привет! Чем могу помочь?"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -113,14 +111,13 @@ class TestReactLoopModeAuto:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Привет! Чем могу помочь?"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_auto_mode_tool_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_auto_mode_tool_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме AUTO: tool_call -> result -> текст = завершение.
         """
         flow_id = f"test_auto_tool_text_{unique_id}"
-        container = get_container()
         calc_code = "\nasync def execute(args: dict, state: dict = None):\n    import ast\n    import operator\n    expr = args.get('expression', '0')\n    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}\n    def _eval(node):\n        if isinstance(node, ast.Expression): return _eval(node.body)\n        if isinstance(node, ast.Constant): return node.value\n        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))\n        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub): return -_eval(node.operand)\n        raise ValueError(f\"Unsupported: {type(node)}\")\n    return str(_eval(ast.parse(expr, mode='eval')))\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -146,14 +143,14 @@ class TestReactLoopModeAuto:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calc", "args": {"expression": "5+3"}},
                 {"type": "text", "content": "Результат: 8"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -164,16 +161,15 @@ class TestReactLoopModeAuto:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "8" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_auto_mode_no_react_config_defaults_to_auto(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Без react конфига используется AUTO режим по умолчанию.
         """
         flow_id = f"test_default_auto_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Default Auto Agent",
@@ -181,9 +177,9 @@ class TestReactLoopModeAuto:
             nodes={"agent": {"type": "llm_node", "prompt": "Просто отвечай.", "tools": []}},
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Ответ по умолчанию"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -193,7 +189,7 @@ class TestReactLoopModeAuto:
         )
         result = await run_flow_state(flow, state)
         assert result["response"] == "Ответ по умолчанию"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestReactLoopModeExplicit:
@@ -202,12 +198,11 @@ class TestReactLoopModeExplicit:
     Агент завершается ТОЛЬКО при вызове exit_tool (finish).
     """
 
-    async def test_explicit_mode_finish_tool_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_finish_tool_exits(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме EXPLICIT вызов finish завершает агента.
         """
         flow_id = f"test_explicit_finish_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Mode Agent",
@@ -222,11 +217,11 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "finish", "args": {"answer": "Готово!"}}]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -237,14 +232,13 @@ class TestReactLoopModeExplicit:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Готово!"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_mode_tool_then_finish_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_tool_then_finish_exits(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме EXPLICIT: tool -> finish = завершение с результатом.
         """
         flow_id = f"test_explicit_tool_finish_{unique_id}"
-        container = get_container()
         calc_code = "\nasync def execute(args: dict, state: dict = None):\n    import ast\n    import operator\n    expr = args.get('expression', '0')\n    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}\n    def _eval(node):\n        if isinstance(node, ast.Expression): return _eval(node.body)\n        if isinstance(node, ast.Constant): return node.value\n        if isinstance(node, ast.BinOp): return ops[type(node.op)](_eval(node.left), _eval(node.right))\n        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub): return -_eval(node.operand)\n        raise ValueError(f\"Unsupported: {type(node)}\")\n    return str(_eval(ast.parse(expr, mode='eval')))\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -272,14 +266,14 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calc", "args": {"expression": "10*5"}},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "10*5 = 50"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -290,16 +284,15 @@ class TestReactLoopModeExplicit:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "50" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_explicit_mode_text_without_finish_continues(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         В режиме EXPLICIT текст без finish НЕ завершает - добавляется reminder.
         """
         flow_id = f"test_explicit_text_continues_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Text Continue Agent",
@@ -314,14 +307,14 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "text", "content": "Просто текст"},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Теперь правильно!"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -332,14 +325,13 @@ class TestReactLoopModeExplicit:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Теперь правильно!"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_mode_auto_adds_finish_tool(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_auto_adds_finish_tool(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме EXPLICIT finish tool добавляется автоматически если его нет.
         """
         flow_id = f"test_explicit_auto_finish_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Auto Finish Agent",
@@ -354,7 +346,7 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -364,7 +356,7 @@ class TestReactLoopModeExplicit:
                 }
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -375,14 +367,13 @@ class TestReactLoopModeExplicit:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "автоматически" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_mode_with_ask_user_interrupt(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_with_ask_user_interrupt(self, app, unique_id, mock_llm_with_queue, di):
         """
         В режиме EXPLICIT ask_user работает корректно - interrupt и resume.
         """
         flow_id = f"test_explicit_ask_user_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Ask User Agent",
@@ -397,11 +388,11 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "ask_user", "args": {"question": "Как тебя зовут?"}}]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -411,16 +402,15 @@ class TestReactLoopModeExplicit:
         )
         result = await run_flow_state(flow, state)
         assert "interrupt" in result or result.get("interrupt") is not None
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_explicit_mode_multiple_tools_before_finish(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         В режиме EXPLICIT агент может вызвать несколько tools перед finish.
         """
         flow_id = f"test_explicit_multi_tools_{unique_id}"
-        container = get_container()
         step1_code = "async def run(args, state): return 'step1_done'"
         step2_code = "async def run(args, state): return 'step2_done'"
         flow_config = FlowConfig(
@@ -451,7 +441,7 @@ class TestReactLoopModeExplicit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "step1", "args": {}},
@@ -459,7 +449,7 @@ class TestReactLoopModeExplicit:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Все шаги выполнены!"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -470,7 +460,7 @@ class TestReactLoopModeExplicit:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "выполнены" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestReactLoopModeStrictAndReminder:
@@ -478,12 +468,11 @@ class TestReactLoopModeStrictAndReminder:
     Тесты для strict режима и кастомного reminder.
     """
 
-    async def test_explicit_strict_true_sends_reminder(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_strict_true_sends_reminder(self, app, unique_id, mock_llm_with_queue, di):
         """
         strict=True (по умолчанию): текст без finish вызывает reminder.
         """
         flow_id = f"test_strict_true_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Strict True Agent",
@@ -498,7 +487,7 @@ class TestReactLoopModeStrictAndReminder:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "text", "content": "Неправильный текстовый ответ"},
@@ -509,7 +498,7 @@ class TestReactLoopModeStrictAndReminder:
                 },
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -520,14 +509,13 @@ class TestReactLoopModeStrictAndReminder:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Правильный ответ через finish"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_strict_false_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_strict_false_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """
         strict=False: текст без finish сразу завершает агента.
         """
         flow_id = f"test_strict_false_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Strict False Agent",
@@ -542,9 +530,9 @@ class TestReactLoopModeStrictAndReminder:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ без finish"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -555,14 +543,13 @@ class TestReactLoopModeStrictAndReminder:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Текстовый ответ без finish"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_custom_reminder_message(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_custom_reminder_message(self, app, unique_id, mock_llm_with_queue, di):
         """
         Кастомный reminder_message используется вместо дефолтного.
         """
         flow_id = f"test_custom_reminder_{unique_id}"
-        container = get_container()
         custom_reminder = "ВНИМАНИЕ! Используй finish для ответа!"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -583,14 +570,14 @@ class TestReactLoopModeStrictAndReminder:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "text", "content": "Текст"},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "OK"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -604,14 +591,13 @@ class TestReactLoopModeStrictAndReminder:
         messages = result.get("messages", [])
         reminder_found = any((custom_reminder in str(msg) for msg in messages))
         assert reminder_found, f"Кастомный reminder не найден в messages: {messages}"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_strict_false_with_tool_still_works(self, app, unique_id, mock_llm_with_queue):
+    async def test_strict_false_with_tool_still_works(self, app, unique_id, mock_llm_with_queue, di):
         """
         strict=False: агент всё равно может использовать tools и finish.
         """
         flow_id = f"test_strict_false_tools_{unique_id}"
-        container = get_container()
         calc_code = "\nasync def run(args, state):\n    import ast, operator\n    expr = args.get('expr', '0')\n    ops = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul}\n    def _e(n):\n        if isinstance(n, ast.Expression): return _e(n.body)\n        if isinstance(n, ast.Constant): return n.value\n        if isinstance(n, ast.BinOp): return ops[type(n.op)](_e(n.left), _e(n.right))\n        raise ValueError(str(type(n)))\n    return str(_e(ast.parse(expr, mode='eval')))\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -635,14 +621,14 @@ class TestReactLoopModeStrictAndReminder:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calc", "args": {"expr": "2*3"}},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "2*3 = 6"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -653,7 +639,7 @@ class TestReactLoopModeStrictAndReminder:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "6" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestReactLoopModeMaxIterations:
@@ -666,12 +652,11 @@ class TestReactLoopModeMaxIterations:
         assert ReactConfig().max_iterations == 25
         assert LlmNodeRunner.MAX_ITERATIONS == 25
 
-    async def test_max_iterations_limit(self, app, unique_id, mock_llm_with_queue):
+    async def test_max_iterations_limit(self, app, unique_id, mock_llm_with_queue, di):
         """
         Агент падает явно при достижении max_iterations без exit tool.
         """
         flow_id = f"test_max_iter_{unique_id}"
-        container = get_container()
         loop_code = "async def run(args, state): return 'loop'"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -695,7 +680,7 @@ class TestReactLoopModeMaxIterations:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "loop_tool", "args": {}},
@@ -708,7 +693,7 @@ class TestReactLoopModeMaxIterations:
                 },
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -725,16 +710,15 @@ class TestReactLoopModeMaxIterations:
         assert err.payload["max_iterations"] == 3
         assert err.payload["loop_mode"] == "explicit"
         assert err.payload["node_id"] == "agent"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_auto_empty_final_response_is_not_max_iterations(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         AUTO: пустой текст без tools — empty final, не budget exhausted.
         """
         flow_id = f"test_empty_final_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Empty Final Agent",
@@ -749,9 +733,9 @@ class TestReactLoopModeMaxIterations:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": ""}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -768,7 +752,7 @@ class TestReactLoopModeMaxIterations:
         assert err.payload["max_iterations"] == 5
         assert err.payload["loop_mode"] == "auto"
         assert err.payload["node_id"] == "agent"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestExampleReactExplicitMode:
@@ -777,28 +761,26 @@ class TestExampleReactExplicitMode:
     Проверяем что пример из agents/example_react работает.
     """
 
-    async def test_example_explicit_loop_loads(self, app):
+    async def test_example_explicit_loop_loads(self, app, di):
         """
         Агент explicit_finish_agent из example_react загружается.
         """
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="explicit_mode", tool_registry=di.tool_registry)
         assert flow is not None
 
     async def test_example_explicit_loop_executes_calculator_and_finish(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Агент вычисляет через calculator и завершается через finish.
         """
-        container = get_container()
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "7+8"}},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "7+8 = 15"}},
             ]
         )
-        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="explicit_mode", tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id="example_react",
             unique_id=f"explicit-calc-{unique_id}",
@@ -810,12 +792,11 @@ class TestExampleReactExplicitMode:
         assert "15" in result["response"]
 
     async def test_example_explicit_loop_asks_user_when_unclear(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Агент использует ask_user для уточнения и interrupt происходит.
         """
-        container = get_container()
         mock_llm_with_queue(
             [
                 {
@@ -825,7 +806,7 @@ class TestExampleReactExplicitMode:
                 }
             ]
         )
-        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="explicit_mode", tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id="example_react",
             unique_id=f"explicit-ask-{unique_id}",
@@ -835,18 +816,17 @@ class TestExampleReactExplicitMode:
         result = await run_flow_state(flow, state)
         assert result.interrupt is not None
 
-    async def test_example_explicit_mode_with_mock(self, app, unique_id, mock_llm_with_queue):
+    async def test_example_explicit_mode_with_mock(self, app, unique_id, mock_llm_with_queue, di):
         """
         Каноническая ветка explicit_mode с предустановленными mock ответами работает.
         """
-        container = get_container()
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "10+5"}},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Результат: 10+5 = 15"}},
             ]
         )
-        flow = await container.flow_factory.get_flow("example_react", branch_id="explicit_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="explicit_mode", tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id="example_react",
             unique_id=f"explicit-mock-{unique_id}",
@@ -857,24 +837,22 @@ class TestExampleReactExplicitMode:
         assert "response" in result
         assert "15" in result["response"]
 
-    async def test_example_relaxed_mode_loads(self, app):
+    async def test_example_relaxed_mode_loads(self, app, di):
         """
         Агент explicit_relaxed_agent из example_react загружается.
         """
-        container = get_container()
-        flow = await container.flow_factory.get_flow(
-            "example_react", branch_id="explicit_relaxed_mode"
+        flow = await di.flow_factory.get_flow(
+            "example_react", branch_id="explicit_relaxed_mode", tool_registry=di.tool_registry
         )
         assert flow is not None
 
-    async def test_example_relaxed_mode_text_exits(self, app, mock_llm_with_queue, unique_id):
+    async def test_example_relaxed_mode_text_exits(self, app, mock_llm_with_queue, unique_id, di):
         """
         В relaxed режиме текстовый ответ принимается.
         """
-        container = get_container()
         mock_llm_with_queue([{"type": "text", "content": "Простой текстовый ответ"}])
-        flow = await container.flow_factory.get_flow(
-            "example_react", branch_id="explicit_relaxed_mode"
+        flow = await di.flow_factory.get_flow(
+            "example_react", branch_id="explicit_relaxed_mode", tool_registry=di.tool_registry
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -893,12 +871,11 @@ class TestReactLoopModeEdgeCases:
     Edge cases и граничные условия.
     """
 
-    async def test_explicit_mode_with_empty_content(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_with_empty_content(self, app, unique_id, mock_llm_with_queue, di):
         """
         Explicit режим корректно обрабатывает пустой content.
         """
         flow_id = f"test_empty_content_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Empty Content Agent",
@@ -913,11 +890,11 @@ class TestReactLoopModeEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "finish", "args": {"answer": "Нет данных"}}]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -927,16 +904,15 @@ class TestReactLoopModeEdgeCases:
         )
         result = await run_flow_state(flow, state)
         assert "response" in result
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_finish_tool_auto_added_in_explicit_mode(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Finish tool автоматически добавляется если его нет в списке tools.
         """
         flow_id = f"test_auto_finish_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Finish Agent",
@@ -951,7 +927,7 @@ class TestReactLoopModeEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -961,21 +937,20 @@ class TestReactLoopModeEdgeCases:
                 }
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = make_flow_state(flow_id, "test")
         result = await run_flow_state(flow, state)
         assert result.response is not None
         assert "автоматически" in result.response
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_multiple_text_responses_with_strict_mode(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         В strict режиме агент получает reminder после каждого текстового ответа.
         """
         flow_id = f"test_multi_text_strict_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Multi Text Strict Agent",
@@ -990,7 +965,7 @@ class TestReactLoopModeEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "text", "content": "Первый текст"},
@@ -998,7 +973,7 @@ class TestReactLoopModeEdgeCases:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Наконец finish!"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -1009,14 +984,13 @@ class TestReactLoopModeEdgeCases:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Наконец finish!"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_explicit_mode_custom_exit_tool(self, app, unique_id, mock_llm_with_queue):
+    async def test_explicit_mode_custom_exit_tool(self, app, unique_id, mock_llm_with_queue, di):
         """
         Можно указать кастомный exit_tool вместо finish.
         """
         flow_id = f"test_custom_exit_{unique_id}"
-        container = get_container()
         complete_code = "\nasync def execute(args: dict, state: dict = None):\n    return args.get('result', 'completed')\n"
         flow_config = FlowConfig(
             flow_id=flow_id,
@@ -1043,11 +1017,11 @@ class TestReactLoopModeEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "complete", "args": {"result": "Задача выполнена"}}]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -1058,16 +1032,15 @@ class TestReactLoopModeEdgeCases:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert "Задача выполнена" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_auto_mode_still_works_with_react_config(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Если react.loop_mode = auto, поведение как без react конфига.
         """
         flow_id = f"test_auto_with_config_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Mode With Config Agent",
@@ -1082,9 +1055,9 @@ class TestReactLoopModeEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ в auto режиме"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -1095,4 +1068,4 @@ class TestReactLoopModeEdgeCases:
         result = await run_flow_state(flow, state)
         assert "response" in result
         assert result["response"] == "Текстовый ответ в auto режиме"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)

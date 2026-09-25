@@ -8,8 +8,8 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import FlowDataflowInspectRequest, op_flows_dataflow_inspect
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import DataflowInspectResult
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -169,7 +169,7 @@ async def test_dataflow_inspect_entry_canvas_realistic_inputs(
 
 async def test_dataflow_inspect_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -198,6 +198,6 @@ async def test_dataflow_inspect_rest_and_op_share_payload(
         op_res = await op_flows_dataflow_inspect(
             payload,
             user=user,
-            container=container,
+            di=di,
         )
     assert op_res.model_dump(mode="json") == http_res.json()

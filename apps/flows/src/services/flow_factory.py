@@ -6,16 +6,18 @@ import copy
 from collections.abc import Mapping
 from typing import overload
 
-from apps.flows.src.container_contracts import (
+from apps.flows.src.contracts import (
     EffectiveFlowConfig,
     FlowNodeRuntimeConfig,
-    FlowRuntimeContainer,
+    RuntimeFlowProtocol,
+    ToolRegistryProtocol,
 )
-from apps.flows.src.db import FlowRepository
 from apps.flows.src.models import BranchConfig, FlowConfig, ResourceMapInput, ResourceReference
 from apps.flows.src.models.enums import MergeMode
 from apps.flows.src.models.flow_config import Edge
 from apps.flows.src.runtime.flow import Flow
+from apps.flows.src.runtime.nodes import NodeConstructor
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from core.compiler import GraphCompiler
 from core.context import require_context
 from core.errors import InvalidGraphError
@@ -33,15 +35,15 @@ class FlowFactory:
 
     def __init__(
         self,
-        flow_repository: FlowRepository,
         variables_service: VariablesService,
         graph_compiler: GraphCompiler,
-        container: FlowRuntimeContainer,
+        node_constructor: NodeConstructor,
+        flow_access_service: FlowAccessService,
     ):
-        self.flow_repository: FlowRepository = flow_repository
         self.variables_service: VariablesService = variables_service
         self.compiler: GraphCompiler = graph_compiler
-        self.container: FlowRuntimeContainer = container
+        self.node_constructor: NodeConstructor = node_constructor
+        self.flow_access_service: FlowAccessService = flow_access_service
 
     @staticmethod
     def _resource_map_to_plain(ref_map: dict[str, ResourceReference] | None) -> ResourceMapInput:
@@ -59,15 +61,17 @@ class FlowFactory:
     ) -> FlowConfig | None:
         """Снимок FlowConfig: конкретная версия или последняя в flows."""
         if config_version:
-            return await self.flow_repository.get_version(flow_id, config_version)
-        return await self.flow_repository.get(flow_id)
+            return await FlowConfig.get_version(flow_id, config_version)
+        return await FlowConfig.get_latest(flow_id)
 
     async def get_flow(
         self,
         flow_id: str,
         branch_id: str = "default",
         config_version: str | None = None,
-    ) -> Flow | None:
+        *,
+        tool_registry: ToolRegistryProtocol,
+    ) -> RuntimeFlowProtocol | None:
         """
         Загружает flow из БД и создаёт Flow.
         Применяет skill overrides если указан branch_id.
@@ -89,7 +93,7 @@ class FlowFactory:
             logger.warning("flows.factory.flow_missing", flow_id=flow_id)
             return None
 
-        return await self._create_flow(config, branch_id)
+        return await self._create_flow(config, branch_id, tool_registry=tool_registry)
 
     async def get_resource_maps(
         self,
@@ -165,7 +169,13 @@ class FlowFactory:
         effective = self.apply_branch(config, branch_id)
         return await self._resolve_variables(effective["variables"])
 
-    async def _create_flow(self, config: FlowConfig, branch_id: str = "default") -> Flow:
+    async def _create_flow(
+        self,
+        config: FlowConfig,
+        branch_id: str = "default",
+        *,
+        tool_registry: ToolRegistryProtocol,
+    ) -> RuntimeFlowProtocol:
         """
         Создаёт Flow из FlowConfig с применением skill.
 
@@ -219,11 +229,26 @@ class FlowFactory:
         config_dict["edges"] = edges
         config_dict["interface"] = config.interface_for_branch(branch_id).model_dump(mode="json")
 
-        return await Flow.from_config(config_dict, container=self.container)
+        return await Flow.from_config(
+            config_dict,
+            node_constructor=self.node_constructor,
+            tool_registry=tool_registry,
+            flow_factory=self,
+        )
 
-    async def create_validation_flow(self, config: JsonObject) -> Flow:
+    async def create_validation_flow(
+        self,
+        config: JsonObject,
+        *,
+        tool_registry: ToolRegistryProtocol,
+    ) -> RuntimeFlowProtocol:
         """Создаёт transient Flow из уже собранного inline config для валидатора."""
-        return await Flow.from_config(config, container=self.container)
+        return await Flow.from_config(
+            config,
+            node_constructor=self.node_constructor,
+            tool_registry=tool_registry,
+            flow_factory=self,
+        )
 
     def apply_branch(self, config: FlowConfig, branch_id: str) -> EffectiveFlowConfig:
         """
@@ -381,7 +406,13 @@ class FlowFactory:
 
         return VarResolver.resolve_for_flow_variable(value, company_variables)
 
-    async def create_flow(self, config: FlowConfig, branch_id: str = "default") -> Flow:
+    async def create_flow(
+        self,
+        config: FlowConfig,
+        branch_id: str = "default",
+        *,
+        tool_registry: ToolRegistryProtocol,
+    ) -> RuntimeFlowProtocol:
         """
         Сохраняет FlowConfig в БД и создаёт Flow.
 
@@ -392,36 +423,36 @@ class FlowFactory:
         Возвращает:
             Flow
         """
-        previous = await self.flow_repository.get(config.flow_id)
-        _ = await self.flow_repository.set(config)
+        previous = await FlowConfig.get_latest(config.flow_id)
+        _ = await FlowConfig.create_version(config)
         ctx = require_context()
         if ctx.active_company is None:
             raise ValueError("active company required for flow authz sync")
         try:
-            await self.container.flow_access_service.sync_flow_saved(
+            await self.flow_access_service.sync_flow_saved(
                 config,
                 company_id=ctx.active_company.company_id,
                 owner_user_id=ctx.user.user_id,
             )
         except Exception:
             if previous is None:
-                _ = await self.flow_repository.delete(config.flow_id)
+                _ = await FlowConfig.delete_by_flow_id(config.flow_id)
             else:
-                _ = await self.flow_repository.set(previous)
+                _ = await FlowConfig.create_version(previous)
             raise
         logger.info("flows.factory.flow_saved", flow_id=config.flow_id)
-        return await self._create_flow(config, branch_id)
+        return await self._create_flow(config, branch_id, tool_registry=tool_registry)
 
     async def delete_flow(self, flow_id: str) -> bool:
         """Удаляет flow из БД"""
         ctx = require_context()
         if ctx.active_company is None:
             raise ValueError("active company required for flow authz sync")
-        config = await self.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
         branch_ids = list(config.branches.keys()) if config is not None else []
-        deleted = await self.flow_repository.delete(flow_id)
+        deleted = await FlowConfig.delete_by_flow_id(flow_id)
         if deleted:
-            await self.container.flow_access_service.sync_flow_deleted(
+            await self.flow_access_service.sync_flow_deleted(
                 flow_id,
                 company_id=ctx.active_company.company_id,
                 branch_ids=branch_ids,
@@ -438,7 +469,7 @@ class FlowFactory:
         Возвращает:
             Dict branch_id -> BranchConfig
         """
-        config = await self.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
         if config is None:
             return {}
 

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.services.employee_inbox_service import EmployeeInboxService
 from core.identity.flow_employee import flow_employee_user_id
 from core.models.identity_models import User
-from core.worktracker.models import FlowSessionLink, SystemActor
+from core.worktracker.models import FlowSessionLink, SystemActor, WorkItem, WorkItemComment
 
 pytestmark = pytest.mark.asyncio
 
@@ -37,13 +38,13 @@ async def _provision_employee_flow(client, flow_id: str, curator_id: str) -> Non
     assert resp.status_code == 200, resp.text
 
 
-async def test_sync_message_enqueues(app, client, container, unique_id, system_user_id):
+async def test_sync_message_enqueues(app, client, di, unique_id, system_user_id):
     _ = app
     flow_id = f"inbox_sync_{unique_id}"
     await _provision_employee_flow(client, flow_id, system_user_id)
     emp_id = flow_employee_user_id(flow_id)
 
-    dispatched = await container.employee_inbox_service.dispatch_sync_message(
+    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -57,7 +58,7 @@ async def test_sync_message_enqueues(app, client, container, unique_id, system_u
 
 
 async def test_work_item_assigned_enqueues_with_write_back(
-    app, client, container, unique_id, system_user_id
+    app, client, di, unique_id, system_user_id
 ):
     """Enqueue + write-back: FlowSessionLink и системный комментарий на задаче."""
     _ = app
@@ -65,13 +66,13 @@ async def test_work_item_assigned_enqueues_with_write_back(
     await _provision_employee_flow(client, flow_id, system_user_id)
     emp_id = flow_employee_user_id(flow_id)
 
-    work_item = await container.work_item_service.create_manual_task(
+    work_item = await di.work_item_service.create_manual_task(
         company_id="system",
         title=f"Inbox task {unique_id}",
         created_by=SystemActor(),
     )
 
-    dispatched = await container.employee_inbox_service.dispatch_work_item_assigned(
+    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_work_item_assigned(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -80,22 +81,20 @@ async def test_work_item_assigned_enqueues_with_write_back(
     )
     assert dispatched is True
 
-    updated = await container.work_item_service.get("system", work_item.work_item_id)
+    updated = await WorkItem.require_in_company("system", work_item.work_item_id)
     session_links = [link for link in updated.links if isinstance(link, FlowSessionLink)]
     assert session_links, "ожидался FlowSessionLink после старта employee-run"
     assert session_links[0].session_id == f"{flow_id}:work_item:{work_item.work_item_id}"
     assert session_links[0].flow_id == flow_id
 
-    comments = await container.work_item_service.list_comments(
-        "system", work_item.work_item_id
-    )
+    comments = await WorkItemComment.list_comments("system", work_item.work_item_id)
     assert any("Агент взял задачу" in comment.text for comment in comments)
 
     await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
 
 async def test_work_item_assigned_enqueues_without_request_context(
-    app, client, container, unique_id, system_user_id
+    app, client, di, unique_id, system_user_id
 ):
     """Consumer-path: нет HTTP Context — inbox сам ставит company перед FlowRepository."""
     from core.context import clear_context, get_context
@@ -105,7 +104,7 @@ async def test_work_item_assigned_enqueues_without_request_context(
     await _provision_employee_flow(client, flow_id, system_user_id)
     emp_id = flow_employee_user_id(flow_id)
 
-    work_item = await container.work_item_service.create_manual_task(
+    work_item = await di.work_item_service.create_manual_task(
         company_id="system",
         title=f"Inbox nocontext {unique_id}",
         created_by=SystemActor(),
@@ -114,7 +113,7 @@ async def test_work_item_assigned_enqueues_without_request_context(
     clear_context()
     assert get_context() is None
 
-    dispatched = await container.employee_inbox_service.dispatch_work_item_assigned(
+    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_work_item_assigned(
         company_id="system",
         employee_user_id=emp_id,
         sender_user_id=system_user_id,
@@ -127,7 +126,7 @@ async def test_work_item_assigned_enqueues_without_request_context(
     await client.delete(f"/flows/api/v1/flows/{flow_id}")
 
 
-async def test_not_flow_employee_ignored(app, container, unique_id, system_user_id):
+async def test_not_flow_employee_ignored(app, di, unique_id, system_user_id):
     """Обычный пользователь, не сотрудник-агент — диспатч игнорируется."""
     _ = app
     plain_id = f"plain_{unique_id}"
@@ -137,9 +136,9 @@ async def test_not_flow_employee_ignored(app, container, unique_id, system_user_
         companies={"system": ["member"]},
         active_company_id="system",
     )
-    await container.user_repository.set(plain)
+    await User.set(plain)
 
-    dispatched = await container.employee_inbox_service.dispatch_sync_message(
+    dispatched = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
         company_id="system",
         employee_user_id=plain_id,
         sender_user_id=system_user_id,
@@ -148,13 +147,13 @@ async def test_not_flow_employee_ignored(app, container, unique_id, system_user_
         text="t",
     )
     assert dispatched is False
-    await container.user_repository.delete(plain_id)
+    await User.delete_by_id(plain_id)
 
 
-async def test_unknown_employee_errors(app, container, unique_id, system_user_id):
+async def test_unknown_employee_errors(app, di, unique_id, system_user_id):
     _ = app
     with pytest.raises(ValueError, match="not found"):
-        _ = await container.employee_inbox_service.dispatch_sync_message(
+        _ = await EmployeeInboxService(di.work_item_service).dispatch_sync_message(
             company_id="system",
             employee_user_id=f"flow_employee_missing_{unique_id}",
             sender_user_id=system_user_id,

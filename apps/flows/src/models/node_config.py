@@ -7,18 +7,30 @@ Zero-Guess Architecture:
 - Input/Output схемы для валидации data flow
 """
 
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal, cast, override
 
-from pydantic import AliasChoices, ConfigDict, Field, RootModel, field_validator, model_validator
+from oxyde import Field as DbField
+from pydantic import (
+    AliasChoices,
+    ConfigDict,
+    Field,
+    RootModel,
+    SerializationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from apps.flows.src.models.execution_limits import (
     get_graph_max_iterations,
     get_node_execution_wall_time_cap_seconds,
 )
 from core.ai.llm_config import LLMCallConfig, validate_fallback_model_configs
+from core.context.context import get_context
 from core.datasources.models import DatasourceOperation
 from core.files.file_ref import FileRef
 from core.guest_runtime.env import (
@@ -29,6 +41,7 @@ from core.guest_runtime.env import (
 from core.guest_runtime.git_url import is_code_agent_commit_sha
 from core.llm_context import LLMContextPatch
 from core.models import StrictBaseModel
+from core.models.platform_model import CompanyScopedModel
 from core.reflection import CriticPolicy
 from core.types import JsonObject, JsonValue
 from core.urn import extract_resource_id
@@ -226,42 +239,29 @@ class NodeInputMapping(RootModel[dict[str, JsonValue]]):
         return value
 
 
-class NodeConfig(StrictBaseModel):
-    """
-    СТРОГАЯ конфигурация ноды.
+class NodeConfig(CompanyScopedModel):
+    """Конфигурация ноды. Таблица ``nodes`` в базе flows."""
 
-    Zero-Guess Architecture:
-    - type: NodeType Enum (не str!)
-    - description: обязательное поле
-    - input_schema, output_schema для валидации data flow
-
-    Поддерживаемые типы:
-    - NodeType.LLM_NODE: LLM агент с ReAct циклом
-    - NodeType.CODE: выполнение кода (Python, JavaScript, Go)
-    - NodeType.FLOW: вложенный flow
-    - NodeType.REMOTE_FLOW: внешний flow по A2A
-    - NodeType.EXTERNAL_API: вызов HTTP API
-    - NodeType.MCP: MCP tool
-    - NodeType.DATASOURCE: живая БД (DatasourceProtocol)
-    - NodeType.HITL_NODE: пауза до оператора очереди
-    - NodeType.REFLECTION: typed critic / test-time compute gate
-    - NodeType.RESOURCE: нода-ресурс на графе (привязка resources; рантайм pass-through)
-    - NodeType.CODE_AGENT: агент из дерева исходников + ферма guest_runtime
-    """
+    __database_alias__: ClassVar[str | None] = "flows"
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        json_schema_extra={"storage_prefix": "node"},
+        extra="forbid",
         populate_by_name=True,
         use_enum_values=False,
     )
 
-    # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
-    node_id: str = Field(
-        ...,
+    class Meta:
+        is_table: bool = True
+        table_name: str = "nodes"
+        unique_together: list[tuple[str, str]] = [("company_id", "node_id")]
+
+    node_id: str = DbField(
         validation_alias=AliasChoices("node_id", "tool_id"),
         description="Уникальный идентификатор ноды",
     )
-    type: NodeType = Field(..., description="Тип ноды - NodeType Enum")
+    type: NodeType = DbField(description="Тип ноды - NodeType Enum")
+    company_id: str = DbField(default="", db_index=True)
+    node_row_id: str = DbField(default="", db_pk=True, db_type="TEXT")
 
     name: str = Field(default="", description="Название ноды")
 
@@ -273,7 +273,7 @@ class NodeConfig(StrictBaseModel):
             raise ValueError(f"node_id: expected string, got {type(v).__name__}")
         return extract_resource_id(v)
 
-    description: str = Field(default="", description="Описание ноды")
+    description: str = DbField(default="", db_type="TEXT", description="Описание ноды")
 
     @field_validator("description", mode="before")
     @classmethod
@@ -306,21 +306,24 @@ class NodeConfig(StrictBaseModel):
     )
 
     # Для llm_node
-    prompt: str | None = Field(default=None, description="Системный промпт")
-    tools: list[FlowToolReference | ToolReference] = Field(
+    prompt: str | None = DbField(default=None, db_type="TEXT", description="Системный промпт")
+    tools: list[FlowToolReference | ToolReference] = DbField(
         default_factory=list,
+        db_type="JSONB",
         description="Список инструментов",
     )
     agent_skills: list[str] = Field(
         default_factory=list,
         description="Attached Agent Skill ids from company catalog (progressive load)",
     )
-    llm: NodeLLMConfig | None = Field(
+    llm: NodeLLMConfig | None = DbField(
         default=None,
+        db_type="JSONB",
         description="LLM настройки ноды (если None - из global config)",
     )
-    llm_context: LLMContextPatch | None = Field(
+    llm_context: LLMContextPatch | None = DbField(
         default=None,
+        db_type="JSONB",
         description=(
             "Патч платформенного контекстного слоя для llm_node. "
             "Для автора обычно достаточно {'profile': 'off'|'compact'|'standard'|'agent'}."
@@ -333,8 +336,9 @@ class NodeConfig(StrictBaseModel):
             "Если None и context resource ровно один, runtime выберет его автоматически."
         ),
     )
-    llm_capability: LLMCapability | None = Field(
+    llm_capability: LLMCapability | None = DbField(
         default=None,
+        db_type="JSONB",
         description=(
             "Декларативная capability ноды для company AI overlay. "
             "Если None — считается llm_chat. Если у компании в metadata.ai_providers "
@@ -342,19 +346,24 @@ class NodeConfig(StrictBaseModel):
             "перед вызовом LLM. См. core/ai/company_settings/resolver.py."
         ),
     )
-    react: ReactConfig | None = Field(
-        default=None, description="Конфигурация ReAct цикла (loop_mode, exit_tool)"
+    react: ReactConfig | None = DbField(
+        default=None,
+        db_type="JSONB",
+        description="Конфигурация ReAct цикла (loop_mode, exit_tool)",
     )
-    messages_filter: Literal["all", "own"] | list[str] = Field(
+    messages_filter: Literal["all", "own"] | list[str] = DbField(
         default="all",
+        db_type="JSONB",
+        db_default="""'"all"'::jsonb""",
         description=(
             "Срез истории для запросов к LLM (полный лог всегда в state.messages): "
             "all — весь лог; own — только сообщения с metadata.node_id равным id этой ноды; "
             "список — только сообщения с metadata.node_id из списка (user и agent по тегу)"
         ),
     )
-    incoming_policy: Literal["any", "all"] = Field(
+    incoming_policy: Literal["any", "all"] = DbField(
         default="any",
+        db_type="TEXT",
         description=(
             "Fan-in: any — нода ставится в очередь при первом сработавшем входе; "
             "all — ждать все входы с contributes_to_join=true на рёбрах"
@@ -394,8 +403,20 @@ class NodeConfig(StrictBaseModel):
             f"messages_filter: expected 'all', 'own' or a list of strings, got {type(v).__name__}"
         )
 
-    input_mapping: NodeInputMapping = Field(
+    @field_serializer("messages_filter")
+    def serialize_messages_filter(
+        self,
+        value: Literal["all", "own"] | list[str],
+        info: SerializationInfo,
+    ) -> str | list[str]:
+        # Oxyde кладёт строку в jsonb только если она сама является JSON.
+        if info.mode == "python" and isinstance(value, str):
+            return json.dumps(value)
+        return value
+
+    input_mapping: NodeInputMapping = DbField(
         default_factory=NodeInputMapping,
+        db_type="JSONB",
         description="Маппинг входов ноды: target -> @state:path, @var:path или JSON-константа",
     )
     save_to_messages: bool = Field(
@@ -416,7 +437,11 @@ class NodeConfig(StrictBaseModel):
     )
 
     # Для code-ноды (inline)
-    code: str | None = Field(default=None, description="Inline code for isolated language runners")
+    code: str | None = DbField(
+        default=None,
+        db_type="TEXT",
+        description="Inline code for isolated language runners",
+    )
     language: str = Field(default="python", description="Язык исполнения code-ноды")
     entrypoint: str | None = Field(default=None, description="Имя entrypoint-функции")
     tool_id: str | None = Field(default=None, description="Ссылка на tool/library id для code-ноды")
@@ -440,23 +465,29 @@ class NodeConfig(StrictBaseModel):
     config: JsonObject | None = Field(default=None, description="Вложенный config блока flow-ноды")
 
     # Для remote_flow / external_api / mcp
-    url: str | None = Field(
+    url: str | None = DbField(
         default=None,
+        db_type="TEXT",
         description="URL remote_flow или external_api",
     )
     catalog_id: str | None = Field(
         default=None,
         description="Корень дерева исходников code_agent в Документах",
     )
-    git_url: str | None = Field(default=None, description="Git URL ingest для code_agent")
+    git_url: str | None = DbField(
+        default=None,
+        db_type="TEXT",
+        description="Git URL ingest для code_agent",
+    )
     source_sha: str | None = Field(default=None, description="Pinned git SHA для code_agent")
 
     @field_validator("git_url", "source_sha", mode="before")
     @classmethod
     def _blank_git_provenance(cls, value: object) -> object:
         return _blank_optional_str(value)
-    invoke_kind: Literal["cli", "a2a"] | None = Field(
+    invoke_kind: Literal["cli", "a2a"] | None = DbField(
         default=None,
+        db_type="TEXT",
         description="Способ запуска code_agent: CLI argv или A2A listen",
     )
     invoke_argv: list[str] = Field(
@@ -490,13 +521,20 @@ class NodeConfig(StrictBaseModel):
         default=None, description="Content-Type запроса external_api"
     )
     response_type: ResponseType | None = Field(default=None, description="Тип ответа external_api")
-    response_schema: ResponseSchema | None = Field(
-        default=None, description="Схема ответа external_api"
+    response_schema: ResponseSchema | None = DbField(
+        default=None,
+        db_type="JSONB",
+        description="Схема ответа external_api",
     )
     timeout: float | None = Field(default=None, description="Таймаут external_api в секундах")
-    body_template: str | None = Field(default=None, description="JSON body template external_api")
-    metadata_template: str | None = Field(
+    body_template: str | None = DbField(
         default=None,
+        db_type="TEXT",
+        description="JSON body template external_api",
+    )
+    metadata_template: str | None = DbField(
+        default=None,
+        db_type="TEXT",
         description=(
             "JSON template для A2A SendMessage params.metadata "
             "(remote_flow и code_agent; @state / @state:path / @var: в строках)"
@@ -525,8 +563,9 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="DatasourceProtocol: introspect / query / execute",
     )
-    sql: str | None = Field(
+    sql: str | None = DbField(
         default=None,
+        db_type="TEXT",
         description="SQL для query/execute (named :params)",
     )
 
@@ -536,13 +575,15 @@ class NodeConfig(StrictBaseModel):
     channel_config: JsonObject | None = Field(default=None, description="Параметры channel handler")
 
     # Декларативные LLM resources ноды
-    resources: dict[str, ResourceReference] = Field(
+    resources: dict[str, ResourceReference] = DbField(
         default_factory=dict,
+        db_type="JSONB",
         description="LLM resources for llm_resource_key/resource islands. Sandbox code uses capabilities instead.",
     )
 
-    files: list[FileRef] = Field(
+    files: list[FileRef] = DbField(
         default_factory=list,
+        db_type="JSONB",
         description=(
             "Закреплённые файлы ноды (как элементы state.files: original_name, url, "
             "content_type, file_size, file_id). При старте новой сессии агрегируются в state.files."
@@ -553,27 +594,31 @@ class NodeConfig(StrictBaseModel):
         default=None,
         description="Slug очереди (WorkQueue), в которую уходит задача оператора",
     )
-    handoff_mode: Literal["single_reply", "takeover"] | None = Field(
+    handoff_mode: Literal["single_reply", "takeover"] | None = DbField(
         default=None,
+        db_type="TEXT",
         description="Режим оператора: single_reply — один ответ; takeover — перехват диалога",
     )
-    handoff_task_title: str | None = Field(
+    handoff_task_title: str | None = DbField(
         default=None,
+        db_type="TEXT",
         description=(
             "Заголовок задачи; @state:path / @var:path (целая строка или токены в тексте); "
             "можно переопределить input_mapping.task_title"
         ),
     )
-    handoff_user_message: str | None = Field(
+    handoff_user_message: str | None = DbField(
         default=None,
+        db_type="TEXT",
         description=(
             "Текст для пользователя (markdown); @state:path / @var:path "
             "(целая строка или токены в тексте); "
             "можно переопределить input_mapping.user_facing_message"
         ),
     )
-    critic_policy: CriticPolicy | None = Field(
+    critic_policy: CriticPolicy | None = DbField(
         default=None,
+        db_type="JSONB",
         description="Typed ReflectionNode policy: target, criteria and gate decision contract.",
     )
 
@@ -598,8 +643,9 @@ class NodeConfig(StrictBaseModel):
             "и не рвать граф; для llm_node ошибка tool попадает ещё в messages как результат вызова"
         ),
     )
-    exception_allow_types: list[ExceptionAbsorbAllowName] = Field(
+    exception_allow_types: list[ExceptionAbsorbAllowName] = DbField(
         default_factory=list,
+        db_type="JSONB",
         description=(
             "Whitelist имён классов исключений (ExceptionAbsorbAllowName). Пустой список при "
             "exception_as_response=True означает любое исключение; иначе только перечисленные типы"
@@ -732,6 +778,41 @@ class NodeConfig(StrictBaseModel):
         if self.llm_context is not None or self.llm_context_resource_key is not None:
             raise ValueError("resource node: llm_context is not allowed")
         return self
+
+    @classmethod
+    def row_id(cls, node_id: str) -> str:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
+            raise ValueError("node_id requires an active company")
+        if node_id == "" or ":" in node_id or ":" in ctx.active_company.company_id:
+            raise ValueError("node_id and company_id must not contain ':'")
+        return f"{ctx.active_company.company_id}:{node_id}"
+
+    @model_validator(mode="after")
+    def bind_company(self) -> NodeConfig:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            return self
+        company_id = ctx.active_company.company_id
+        if company_id == "":
+            raise ValueError("company_id is required")
+        if self.company_id == "":
+            self.company_id = company_id
+        elif self.company_id != company_id:
+            raise ValueError("company_id does not match the active company")
+        expected = type(self).row_id(self.node_id)
+        if self.node_row_id == "":
+            self.node_row_id = expected
+        elif self.node_row_id != expected:
+            raise ValueError("node_row_id does not match company_id and node_id")
+        return self
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        expected = type(self).row_id(self.node_id)
+        if self.company_id == "" or self.node_row_id != expected:
+            raise ValueError("node_row_id does not match the active company")
+        _ = is_create, update_fields
 
 
 class GraphNodeConfig(StrictBaseModel):

@@ -1,8 +1,7 @@
 """
 Alembic env для БД сервиса flows.
 
-Таблицы: flows, flows_versions, nodes, tools, durable workflow ledger,
-evaluation lab, resources.
+Flows больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -17,32 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.flows.src.db.models import (  # noqa: F401
-    A2AArtifactProjections,
-    A2ATaskEventDedup,
-    A2ATaskMessages,
-    A2ATaskProjections,
-    ActivityTasks,
-    AgentSkills,
-    Base,
-    EvaluationCaseRuns,
-    EvaluationCases,
-    EvaluationRunEvents,
-    EvaluationRuns,
-    EvaluationSuites,
-    EvaluationSuiteVersions,
-    ExecutionBranches,
-    Flows,
-    FlowsVersions,
-    FlowUIShareGrants,
-    Nodes,
-    Resources,
-    Tools,
-    ToolTagGroups,
-    WorkflowEvents,
-    WorkflowInstances,
-    WorkflowSnapshots,
-)
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -52,16 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "flows", "flows_versions", "nodes", "tools", "agent_skills", "tool_tag_groups",
-    "workflow_instances", "execution_branches", "workflow_events",
-    "workflow_snapshots", "activity_tasks",
-    "evaluation_suites", "evaluation_cases",
-    "evaluation_suite_versions", "evaluation_runs", "evaluation_case_runs",
-    "evaluation_run_events", "resources",
-    "a2a_task_projections", "a2a_task_messages", "a2a_artifact_projections",
-    "a2a_task_event_dedup", "flow_ui_share_grants",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

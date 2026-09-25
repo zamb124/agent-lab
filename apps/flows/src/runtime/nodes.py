@@ -16,7 +16,6 @@
 - ReflectionNode - typed critic / test-time compute gate
 - ResourceNode - нода-ресурс на графе (identity / pass-through)
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -32,9 +31,15 @@ from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.clients.mcp_client import MCPClient
-from apps.flows.src.container_contracts import FlowRuntimeContainer, RuntimeFlowProtocol
+from apps.flows.src.contracts import (
+    ChannelRegistryProtocol,
+    FlowFactoryProtocol,
+    RuntimeFlowProtocol,
+    ToolRegistryProtocol,
+)
 from apps.flows.src.durable_execution import (
     ChildWorkflowLifecyclePayload,
+    DurableWorkflowRuntime,
     ExecutionStateDelta,
     HandoffResumedPayload,
     RunStartedPayload,
@@ -48,12 +53,15 @@ from apps.flows.src.durable_execution import (
 )
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models import (
+    MCPServerConfig,
     NodeConfig,
     NodeLLMConfig,
     ReactConfig,
     ResourceReference,
     ResourceReferenceInput,
+    ToolReference,
 )
+from apps.flows.src.models.agent_skill import AgentSkill
 from apps.flows.src.models.enums import ChannelType, NodeToolCallType, NodeType
 from apps.flows.src.models.exception_absorb_allow import ExceptionAbsorbAllowName
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
@@ -63,6 +71,10 @@ from apps.flows.src.runtime.agent_skill_runtime import AgentSkillRuntimeHost
 from apps.flows.src.runtime.effective_llm_config import resolve_effective_llm_config_for_node
 from apps.flows.src.runtime.exception_policy import node_exception_policy, should_absorb_exception
 from apps.flows.src.runtime.exceptions import BreakpointInterrupt, FlowInterrupt
+from apps.flows.src.runtime.execution_context import (
+    FlowExecutionContext,
+    execution_context_for,
+)
 from apps.flows.src.runtime.flow_interface_context import current_flow_interface
 from apps.flows.src.runtime.llm_context_memory import resolve_memory_context_source_for_runtime
 from apps.flows.src.runtime.llm_context_rag import resolve_rag_context_source_registry_for_runtime
@@ -72,17 +84,26 @@ from apps.flows.src.runtime.llm_resource_config import (
     resolve_llm_config_with_resource_key,
 )
 from apps.flows.src.runtime.runners import LlmNodeRunner
+from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
+from apps.flows.src.services.datasources.executors import build_datasource_executors
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_ui_cards import card_block_id, show_reflection
-from apps.flows.src.services.hitl_work_item_service import HANDOFF_PREVIEW_MAX_LEN
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
+from apps.flows.src.services.hitl_conversation_service import HitlConversationService
+from apps.flows.src.services.hitl_work_item_service import (
+    HANDOFF_PREVIEW_MAX_LEN,
+    HitlWorkItemService,
+)
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from apps.flows.src.streaming.emitter import Emitter
+from apps.flows.src.streaming.emitter import EmitterFactory
 from apps.flows.src.tools.base import BaseTool
-from apps.flows.src.tools.registry import ToolMaterializeInput
+from apps.flows.src.tools.materialize import ToolMaterializeInput
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from apps.flows.tools.tables.tables import TABLES_TOOLS
 from core.a2a import artifact_from_json_dict, mapping_from_struct, struct_from_mapping
 from core.ai.runtime import create_llm_client_from_call_config
+from core.authz.service import AuthzService
 from core.capabilities import (
     CapabilityExecutionContext,
     CapabilityExecutionTokenClaims,
@@ -91,15 +112,19 @@ from core.capabilities import (
     execution_token_exp,
     issue_execution_token,
 )
+from core.clients.a2a_client import A2AClient
+from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.clients.llm.mock_control import (
     MOCK_MISS,
     MockMiss,
     resolve_entity_node_mock_result,
 )
+from core.clients.redis_client import RedisClient
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
 from core.context import get_context as get_request_context
 from core.datasources.models import DatasourceOperation
+from core.datasources.service import DatasourceExecutors, DatasourceService
 from core.errors import NodeWallClockTimeoutError
 from core.flow_ui.effects import apply_capability_platform_effects
 from core.guest_runtime.env import (
@@ -116,6 +141,9 @@ from core.llm_context import (
     LLMContextSourceRegistry,
 )
 from core.logging import get_log_context, get_logger
+from core.mail.service import MailService
+from core.namespace.service import NamespaceService
+from core.rag.llm_context_memory_store import RAGLLMContextMemoryStore
 from core.reflection import (
     CriticPolicy,
     ReflectionCritiqueResult,
@@ -138,6 +166,7 @@ from core.state.mutation_policy import (
     should_skip_field_on_user_returned_state_copy,
 )
 from core.test_scope import resolve_test_scope
+from core.text_transforms.service import TextTransformService
 from core.tracing.attributes import (
     ATTR_NODE_ID,
     ATTR_REFLECTION_GATE,
@@ -147,6 +176,7 @@ from core.tracing.attributes import (
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 from core.variables import VariableResolver, VarResolver
+from core.variables.service import VariablesService
 from core.worktracker.models import WorkItem, WorkItemState
 
 logger = get_logger(__name__)
@@ -426,7 +456,8 @@ class BaseNode(ABC):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
     ):
         self.node_id: str = node_id
         self.config: JsonObject = dict(config) if config is not None else {}
@@ -438,7 +469,8 @@ class BaseNode(ABC):
                 f"Node '{self.node_id}': config.type must be {self.node_type.value!r}, "
                 + f"got {raw_node_type!r}"
             )
-        self.container: FlowRuntimeContainer = container
+        self.execution: FlowExecutionContext = execution
+        self.redis_client: RedisClient = redis_client
         self.input_mapping: JsonObject | None = _config_mapping(self.config, "input_mapping")
         self.output_mapping: dict[str, str] | None = _config_string_map(self.config, "output_mapping")
         self.save_to_messages: bool = _config_bool(self.config, "save_to_messages", False)
@@ -454,10 +486,18 @@ class BaseNode(ABC):
         node_id: str,
         config: JsonObject,
         *,
-        container: FlowRuntimeContainer,
+        node_constructor: NodeConstructor,
+        tool_registry: ToolRegistryProtocol,
+        flow_factory: FlowFactoryProtocol,
     ) -> "BaseNode":
         """Создает ноду из конфига."""
-        return cls(node_id=node_id, config=config, container=container)
+        return node_constructor.build(
+            cls,
+            node_id,
+            config,
+            tool_registry=tool_registry,
+            flow_factory=flow_factory,
+        )
 
     def _requires_durable_context(self) -> bool:
         return self.node_type in DURABLE_CONTEXT_NODE_TYPES
@@ -465,10 +505,7 @@ class BaseNode(ABC):
     async def _require_durable_context(self, state: ExecutionState) -> None:
         if not self._requires_durable_context():
             return
-        container = self.container
-        position = await container.workflow_runtime.get_active_execution_position(
-            state.session_id
-        )
+        position = await self.execution.active_position(state.session_id)
         if position is None:
             raise RuntimeError(
                 f"Node '{self.node_id}' requires durable workflow instance "
@@ -494,10 +531,7 @@ class BaseNode(ABC):
         activity_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> NodeRunResult:
-        container = self.container
-
-        runtime = container.workflow_runtime
-        execution_position = await runtime.get_active_execution_position(state.session_id)
+        execution_position = await self.execution.active_position(state.session_id)
         if execution_position is None:
             raise RuntimeError(
                 f"Workflow instance is required before scheduling activity for node '{self.node_id}'"
@@ -521,7 +555,7 @@ class BaseNode(ABC):
             if idempotency_key is not None
             else resolved_activity_id
         )
-        completed = await runtime.record_activity_scheduled(
+        completed = await self.execution.activities.schedule(
             session_id=state.session_id,
             activity_id=resolved_activity_id,
             activity_type=activity_type,
@@ -543,7 +577,7 @@ class BaseNode(ABC):
                 f"activity.{activity_type}.result",
             )
 
-        started = await runtime.record_activity_started(activity_id=resolved_activity_id)
+        started = await self.execution.activities.start(resolved_activity_id)
         if not started:
             raise RuntimeError(f"Failed to mark activity as started: {resolved_activity_id!r}")
         before_state = ExecutionState.model_validate(
@@ -552,7 +586,7 @@ class BaseNode(ABC):
         try:
             result = await invoke()
         except Exception as exc:
-            completed_failed = await runtime.record_activity_completed(
+            completed_failed = await self.execution.activities.complete(
                 activity_id=resolved_activity_id,
                 error=str(exc),
             )
@@ -572,7 +606,7 @@ class BaseNode(ABC):
             },
             f"activity.{activity_type}.result_json",
         )
-        completed_ok = await runtime.record_activity_completed(
+        completed_ok = await self.execution.activities.complete(
             activity_id=resolved_activity_id,
             result_json=result_json,
         )
@@ -785,10 +819,10 @@ class BaseNode(ABC):
             if not isinstance(flow_id, str) or not flow_id.strip():
                 return MOCK_MISS
             return await resolve_entity_node_mock_result(
-                self.container.redis_client, state.session_id, "flow", flow_id
+                self.redis_client, state.session_id, "flow", flow_id
             )
         return await resolve_entity_node_mock_result(
-            self.container.redis_client, state.session_id, "node", self.node_id
+            self.redis_client, state.session_id, "node", self.node_id
         )
 
     def _apply_output_mapping(self, state: ExecutionState, result: JsonValue) -> None:
@@ -968,9 +1002,31 @@ class LlmNode(BaseNode):
         config: JsonObject | None = None,
         node_config: NodeConfig | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        flow_factory: FlowFactoryProtocol,
+        llm_context_memory_store: RAGLLMContextMemoryStore,
+        namespace_service: NamespaceService,
+        authz_service: AuthzService,
+        tool_registry: ToolRegistryProtocol,
+        workflow_runtime: DurableWorkflowRuntime,
+        text_transform_service: TextTransformService,
+        emitter_factory: EmitterFactory,
     ):
-        super().__init__(node_id or self.name, config, container=container)
+        super().__init__(
+            node_id or self.name,
+            config,
+            execution=execution,
+            redis_client=redis_client,
+        )
+        self.flow_factory: FlowFactoryProtocol = flow_factory
+        self.llm_context_memory_store: RAGLLMContextMemoryStore = llm_context_memory_store
+        self.namespace_service: NamespaceService = namespace_service
+        self.authz_service: AuthzService = authz_service
+        self.tool_registry: ToolRegistryProtocol = tool_registry
+        self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self.text_transform_service: TextTransformService = text_transform_service
+        self.emitter_factory: EmitterFactory = emitter_factory
         cfg = self.config
 
         self.prompt_template: str = self.prompt or _config_string(cfg, "prompt", "")
@@ -1109,7 +1165,6 @@ class LlmNode(BaseNode):
             state,
             llm_context_policy,
         )
-        container = self.container
         agent_skill_host = await self._ensure_agent_skill_host()
 
         self._runner = LlmNodeRunner(
@@ -1118,7 +1173,12 @@ class LlmNode(BaseNode):
             llm=None,
             prompt=prompt,
             llm_node=self,
-            container=container,
+            workflow_runtime=self.workflow_runtime,
+            memory_store=self.llm_context_memory_store,
+            text_transform_service=self.text_transform_service,
+            emitter_factory=self.emitter_factory,
+            redis_client=self.redis_client,
+            tool_registry=self.tool_registry,
             llm_context_policy=llm_context_policy,
             llm_context_source_registry=llm_context_source_registry,
             agent_skill_host=agent_skill_host,
@@ -1150,7 +1210,7 @@ class LlmNode(BaseNode):
             return None
         if self._agent_skill_host is not None:
             return self._agent_skill_host
-        index = await self.container.agent_skill_service.resolve_index(self.agent_skill_ids)
+        index = await AgentSkill.resolve_index(self.agent_skill_ids)
         self._agent_skill_host = AgentSkillRuntimeHost(
             attached_ids=frozenset(self.agent_skill_ids),
             index_entries=tuple(index),
@@ -1186,7 +1246,7 @@ class LlmNode(BaseNode):
                     return True
         if state is None:
             return False
-        flow_resources, skill_resources = await self.container.flow_factory.get_resource_maps(
+        flow_resources, skill_resources = await self.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
@@ -1251,28 +1311,24 @@ class LlmNode(BaseNode):
             if explicit:
                 raise ValueError("ExecutionState is required when llm_resource_key is set")
             return base
-        container = self.container
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+        flow_resources, skill_resources = await self.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
         )
         node_resources_raw = _config_resource_refs(self.config)
-        repo = container.resource_repository
         if explicit:
             merged_ov = await resolve_llm_config_with_resource_key(
                 llm_config=llm_config,
                 flow_resources=flow_resources or {},
                 skill_resources=skill_resources,
                 node_resources_raw=node_resources_raw,
-                repository=repo,
             )
             return base.model_copy(update={"llm": merged_ov})
         inferred = await infer_unique_llm_resource_key_from_merged_maps(
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
-            repository=repo,
         )
         if inferred is None:
             return base
@@ -1282,7 +1338,6 @@ class LlmNode(BaseNode):
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
-            repository=repo,
         )
         return base.model_copy(update={"llm": merged_ov})
 
@@ -1307,22 +1362,19 @@ class LlmNode(BaseNode):
                 flow_resources={},
                 skill_resources=None,
                 node_resources_raw={},
-                repository=None,
                 node=base.llm_context,
             )
 
-        container = self.container
         if not explicit and not has_node_resources:
             return await resolve_llm_context_policy_for_runtime(
                 llm_context_resource_key=None,
                 flow_resources={},
                 skill_resources=None,
                 node_resources_raw={},
-                repository=None,
                 node=base.llm_context,
             )
 
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+        flow_resources, skill_resources = await self.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
@@ -1332,7 +1384,6 @@ class LlmNode(BaseNode):
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
-            repository=container.resource_repository,
             node=base.llm_context,
         )
 
@@ -1354,16 +1405,14 @@ class LlmNode(BaseNode):
                 raise ValueError("ExecutionState is required for LLM context RAG resources")
             return None
 
-        container = self.container
-
-        flow_resources, skill_resources = await container.flow_factory.get_resource_maps(
+        flow_resources, skill_resources = await self.flow_factory.get_resource_maps(
             state.session_flow_id,
             state.branch_id,
             state.flow_config_version,
         )
         sources: list[LLMContextSource] = []
         memory_source = resolve_memory_context_source_for_runtime(
-            store=container.llm_context_memory_store,
+            store=self.llm_context_memory_store,
             state=state,
             node_id=self.node_id,
         )
@@ -1374,10 +1423,9 @@ class LlmNode(BaseNode):
             flow_resources=flow_resources or {},
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
-            resource_repository=container.resource_repository,
-            rag_repository=container.rag_repository,
-            namespace_service=container.namespace_service,
+            namespace_service=self.namespace_service,
             state=state,
+            authz=self.authz_service,
         )
         if rag_registry is not None:
             sources.extend(rag_registry.sources)
@@ -1451,8 +1499,7 @@ class LlmNode(BaseNode):
         capability-gateway, so resources are not injected into tool namespaces.
         """
         _ = state
-        container = self.container
-        return await container.tool_registry.create_tools(self.tool_refs)
+        return await self.tool_registry.create_tools(self.tool_refs)
 
     async def before_prompt_render(
         self, prompt_template: str, state: ExecutionState, variables: JsonObject
@@ -1505,9 +1552,10 @@ class CodeNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
         cfg = self.config
 
         self.language: str = _config_string(cfg, "language", "python")
@@ -1521,7 +1569,7 @@ class CodeNode(BaseNode):
 
     def _get_runner(self):
         """Возвращает isolated runner для текущего языка."""
-        return self.container.get_code_runner(self.language)
+        return self.execution.code_runners.runner(self.language)
 
     @override
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
@@ -1597,9 +1645,16 @@ class FlowNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        flow_factory: FlowFactoryProtocol,
+        tool_registry: ToolRegistryProtocol,
+        handoff_orchestrator_service: HandoffOrchestratorService,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.flow_factory: FlowFactoryProtocol = flow_factory
+        self.tool_registry: ToolRegistryProtocol = tool_registry
+        self.handoff_orchestrator_service: HandoffOrchestratorService = handoff_orchestrator_service
         cfg = self.config
         r_f = cfg.get("flow_id")
         if isinstance(r_f, str) and r_f.strip():
@@ -1631,20 +1686,17 @@ class FlowNode(BaseNode):
         if not self.flow_id:
             raise ValueError(f"Node '{self.node_id}': flow_id required")
 
-        container = self.container
-        nested_flow = await self._load_nested_flow(container)
+        nested_flow = await self._load_nested_flow()
         existing_link = self._resume_link_from_parent_state(state)
 
         if self.is_handoff and existing_link is not None and existing_link.handoff:
             if existing_link.status == "completed":
                 nested_state, link, _child_started = await self._load_child_workflow_state(
-                    container,
                     state,
                     existing_link,
                 )
                 self._copy_child_result_to_parent(nested_state, state, link)
                 await self._record_child_workflow_event(
-                    container,
                     state.session_id,
                     WorkflowEventType.child_workflow_completed,
                     link,
@@ -1653,14 +1705,12 @@ class FlowNode(BaseNode):
 
         if existing_link is None:
             nested_state, link, _child_started = await self._create_child_workflow_state(
-                container,
                 state,
                 inputs,
                 nested_flow,
             )
         else:
             nested_state, link, _child_started = await self._load_child_workflow_state(
-                container,
                 state,
                 existing_link,
             )
@@ -1670,7 +1720,6 @@ class FlowNode(BaseNode):
             state.child_workflows[self.node_id] = link
 
         await self._record_child_workflow_event(
-            container,
             state.session_id,
             WorkflowEventType.child_workflow_started,
             link,
@@ -1679,7 +1728,6 @@ class FlowNode(BaseNode):
         if link.status == "completed":
             self._copy_child_result_to_parent(nested_state, state, link)
             await self._record_child_workflow_event(
-                container,
                 state.session_id,
                 WorkflowEventType.child_workflow_completed,
                 link,
@@ -1690,7 +1738,6 @@ class FlowNode(BaseNode):
             self._copy_child_result_to_parent(nested_state, state, link)
             self._attach_child_resume_path(state, link)
             await self._record_child_workflow_event(
-                container,
                 state.session_id,
                 WorkflowEventType.child_workflow_suspended,
                 link,
@@ -1703,7 +1750,6 @@ class FlowNode(BaseNode):
             failed_link = link.model_copy(update={"status": "failed"})
             state.child_workflows[self.node_id] = failed_link
             await self._record_child_workflow_event(
-                container,
                 state.session_id,
                 WorkflowEventType.child_workflow_failed,
                 failed_link,
@@ -1718,7 +1764,6 @@ class FlowNode(BaseNode):
         if result.interrupt or result.breakpoint_hit:
             self._attach_child_resume_path(state, next_link)
             await self._record_child_workflow_event(
-                container,
                 state.session_id,
                 WorkflowEventType.child_workflow_suspended,
                 next_link,
@@ -1726,7 +1771,6 @@ class FlowNode(BaseNode):
         else:
             state.interrupt_path = []
             await self._record_child_workflow_event(
-                container,
                 state.session_id,
                 WorkflowEventType.child_workflow_completed,
                 next_link,
@@ -1739,13 +1783,14 @@ class FlowNode(BaseNode):
             raise ValueError(f"Node '{self.node_id}': flow_id required")
         return self.flow_id
 
-    async def _load_nested_flow(
-        self,
-        container: FlowRuntimeContainer,
-    ) -> RuntimeFlowProtocol:
+    async def _load_nested_flow(self) -> RuntimeFlowProtocol:
         flow_id = self._required_flow_id()
         if self._nested_flow is None:
-            self._nested_flow = await container.flow_factory.get_flow(flow_id, self.branch_id)
+            self._nested_flow = await self.flow_factory.get_flow(
+                flow_id,
+                self.branch_id,
+                tool_registry=self.tool_registry,
+            )
         nested_flow = self._nested_flow
         if nested_flow is None:
             raise ValueError(f"Flow node '{self.node_id}': nested flow '{flow_id}' not found")
@@ -1797,10 +1842,9 @@ class FlowNode(BaseNode):
 
     async def _require_child_execution_position(
         self,
-        container: FlowRuntimeContainer,
         child_session_id: str,
     ) -> WorkflowExecutionPosition:
-        position = await container.workflow_runtime.get_active_execution_position(
+        position = await self.execution.active_position(
             child_session_id
         )
         if position is None:
@@ -1812,7 +1856,6 @@ class FlowNode(BaseNode):
 
     async def _child_status_from_durable_state(
         self,
-        container: FlowRuntimeContainer,
         child_state: ExecutionState,
     ) -> ChildWorkflowStatus:
         if child_state.interrupt is not None or child_state.breakpoint_hit is not None:
@@ -1823,7 +1866,7 @@ class FlowNode(BaseNode):
         offset = 0
         limit = 200
         while True:
-            history, total = await container.workflow_runtime.get_state_history(
+            history, total = await self.execution.state_history(
                 child_state.session_id,
                 limit=limit,
                 offset=offset,
@@ -1853,7 +1896,6 @@ class FlowNode(BaseNode):
 
     async def _create_child_workflow_state(
         self,
-        container: FlowRuntimeContainer,
         parent_state: ExecutionState,
         inputs: NodeInputs,
         nested_flow: RuntimeFlowProtocol,
@@ -1864,7 +1906,7 @@ class FlowNode(BaseNode):
         )
         if self.is_handoff:
             child_context_id, child_session_id = (
-                container.handoff_orchestrator_service.build_child_session_ids(
+                self.handoff_orchestrator_service.build_child_session_ids(
                     parent_state.context_id,
                     flow_id,
                 )
@@ -1877,10 +1919,9 @@ class FlowNode(BaseNode):
                 parent_node_schedule_sequence=parent_node_schedule_sequence,
             )
             child_session_id = f"{flow_id}:{child_context_id}"
-        existing_child = await container.workflow_runtime.get_state(child_session_id)
+        existing_child = await self.execution.get_state(child_session_id)
         if existing_child is not None:
             child_position = await self._require_child_execution_position(
-                container,
                 child_session_id,
             )
             link = ChildWorkflowLink(
@@ -1893,7 +1934,6 @@ class FlowNode(BaseNode):
                 parent_execution_branch_id=parent_execution_branch_id,
                 parent_node_schedule_sequence=parent_node_schedule_sequence,
                 status=await self._child_status_from_durable_state(
-                    container,
                     existing_child,
                 ),
                 handoff=self.is_handoff,
@@ -1928,7 +1968,7 @@ class FlowNode(BaseNode):
             if parent_state.handoff_trace_id is not None:
                 child_state.handoff_trace_id = parent_state.handoff_trace_id
 
-        run_started = await container.workflow_runtime.record_state_event(
+        run_started = await self.execution.record_state(
             child_session_id,
             child_state,
             event_type=WorkflowEventType.run_started,
@@ -1961,18 +2001,16 @@ class FlowNode(BaseNode):
 
     async def _load_child_workflow_state(
         self,
-        container: FlowRuntimeContainer,
         parent_state: ExecutionState,
         link: ChildWorkflowLink,
     ) -> tuple[ExecutionState, ChildWorkflowLink, bool]:
-        child_state = await container.workflow_runtime.get_state(link.child_session_id)
+        child_state = await self.execution.get_state(link.child_session_id)
         if child_state is None:
             raise RuntimeError(
                 "Child workflow link points to missing durable session: "
                 + f"{link.child_session_id!r}"
             )
         child_position = await self._require_child_execution_position(
-            container,
             link.child_session_id,
         )
         if child_position.execution_branch_id != link.child_execution_branch_id:
@@ -2049,7 +2087,6 @@ class FlowNode(BaseNode):
 
     async def _record_child_workflow_event(
         self,
-        container: FlowRuntimeContainer,
         parent_session_id: str,
         event_type: WorkflowEventType,
         link: ChildWorkflowLink,
@@ -2057,7 +2094,6 @@ class FlowNode(BaseNode):
         error: str | None = None,
     ) -> None:
         if await self._child_workflow_event_exists(
-            container,
             parent_session_id=parent_session_id,
             event_type=event_type,
             link=link,
@@ -2072,7 +2108,6 @@ class FlowNode(BaseNode):
             )
             return
         child_position = await self._require_child_execution_position(
-            container,
             link.child_session_id,
         )
         if child_position.execution_branch_id != link.child_execution_branch_id:
@@ -2092,7 +2127,7 @@ class FlowNode(BaseNode):
             status=link.status,
             error=error,
         )
-        _ = await container.workflow_runtime.record_lifecycle_event(
+        _ = await self.execution.record_lifecycle(
             parent_session_id,
             event_type=event_type,
             payload=payload,
@@ -2100,7 +2135,6 @@ class FlowNode(BaseNode):
 
     async def _child_workflow_event_exists(
         self,
-        container: FlowRuntimeContainer,
         *,
         parent_session_id: str,
         event_type: WorkflowEventType,
@@ -2109,7 +2143,7 @@ class FlowNode(BaseNode):
         offset = 0
         limit = 200
         while True:
-            history, total = await container.workflow_runtime.get_state_history(
+            history, total = await self.execution.state_history(
                 parent_session_id,
                 limit=limit,
                 offset=offset,
@@ -2142,9 +2176,14 @@ class RemoteFlowNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        a2a_client: A2AClient,
+        emitter_factory: EmitterFactory,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.a2a_client: A2AClient = a2a_client
+        self.emitter_factory: EmitterFactory = emitter_factory
         cfg = self.config
 
         self.url: str | None = _config_optional_string(cfg, "url")
@@ -2190,7 +2229,7 @@ class RemoteFlowNode(BaseNode):
         )
 
         async def invoke() -> NodeRunResult:
-            result = await self.container.a2a_client.send_task(
+            result = await self.a2a_client.send_task(
                 base_url=url,
                 content=content,
                 session_id=state.session_id,
@@ -2203,7 +2242,7 @@ class RemoteFlowNode(BaseNode):
             state["remote_status"] = result.status
             state["remote_artifacts"] = result.artifacts
 
-            emitter = await Emitter.create_ensured(self.container, state)
+            emitter = await self.emitter_factory.create(state)
             for artifact_payload in result.artifacts:
                 remote_artifact = artifact_from_json_dict(artifact_payload)
                 # Parent task may already own the remote's artifact_id (e.g. "response")
@@ -2324,9 +2363,18 @@ class CodeAgentNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        a2a_client: A2AClient,
+        emitter_factory: EmitterFactory,
+        code_agent_source_service: CodeAgentSourceService,
+        guest_runtime_client: GuestRuntimeClient,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.a2a_client: A2AClient = a2a_client
+        self.emitter_factory: EmitterFactory = emitter_factory
+        self.code_agent_source_service: CodeAgentSourceService = code_agent_source_service
+        self.guest_runtime_client: GuestRuntimeClient = guest_runtime_client
         cfg = self.config
         self.catalog_id: str | None = _config_optional_string(cfg, "catalog_id")
         language_raw = _config_optional_string(cfg, "language")
@@ -2458,7 +2506,7 @@ class CodeAgentNode(BaseNode):
                 exp=execution_token_exp(flows_settings.capability_execution_token_ttl_seconds),
             )
             execution_token = issue_execution_token(claims)
-            files = await self.container.code_agent_source_service.list_files(
+            files = await self.code_agent_source_service.list_files(
                 catalog_id=catalog_id
             )
             llm_url = (
@@ -2496,7 +2544,7 @@ class CodeAgentNode(BaseNode):
                 ),
                 _code_agent_metadata_from_inputs(inputs),
             )
-            lease = await self.container.guest_runtime_client.ensure_lease(
+            lease = await self.guest_runtime_client.ensure_lease(
                 GuestEnsureLeaseRequest(
                     flow_id=state.session_flow_id,
                     node_id=self.node_id,
@@ -2528,7 +2576,7 @@ class CodeAgentNode(BaseNode):
                     guest_env=guest_env,
                 )
             )
-            result = await self.container.a2a_client.send_task(
+            result = await self.a2a_client.send_task(
                 base_url=lease.a2a_url,
                 content=content,
                 session_id=state.session_id,
@@ -2539,7 +2587,7 @@ class CodeAgentNode(BaseNode):
             state["code_agent_status"] = result.status
             state["code_agent_artifacts"] = result.artifacts
 
-            emitter = await Emitter.create_ensured(self.container, state)
+            emitter = await self.emitter_factory.create(state)
             effect_envelopes: list[PlatformEffectEnvelope] = []
             interrupt_payload: JsonObject | None = None
             guest_state: JsonObject = {}
@@ -2659,9 +2707,10 @@ class ExternalAPINode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
         self.api_config: JsonObject = self.config
 
     def _build_api_config(self) -> ExternalAPIConfig:
@@ -2759,9 +2808,14 @@ class MCPNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        variables_service: VariablesService,
+        flow_access_service: FlowAccessService,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.variables_service: VariablesService = variables_service
+        self.flow_access_service: FlowAccessService = flow_access_service
         cfg = self.config
 
         self.server_id: str | None = _config_optional_string(cfg, "server_id")
@@ -2779,8 +2833,7 @@ class MCPNode(BaseNode):
         server_id = self.server_id
         tool_name = self.tool_name
 
-        container = self.container
-        server = await container.mcp_server_repository.get(server_id)
+        server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
         if not server:
             raise ValueError(f"MCP server not found: {server_id}")
 
@@ -2788,19 +2841,20 @@ class MCPNode(BaseNode):
         request_server = server.model_copy(update={"headers": request_headers})
 
         tool_id = mcp_tool_reference_id(server_id, tool_name)
-        tool_ref = await container.tool_repository.get(tool_id)
+        tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
         if tool_ref is None:
             logger.info("flows.mcpnode.syncing.missing.toolreference", node_id=self.node_id, tool_id=tool_id)
             try:
                 _tool_ids, _tools = await sync_mcp_server_tools(
-                    container=container,
+                    variables_service=self.variables_service,
+                    flow_access_service=self.flow_access_service,
                     server_config=server,
                 )
             except Exception as exc:
                 raise ValueError(
                     f"MCPNode '{self.node_id}' could not sync ToolReference '{tool_id}': {exc}"
                 ) from exc
-            tool_ref = await container.tool_repository.get(tool_id)
+            tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
             if tool_ref is None:
                 raise ValueError(
                     f"MCPNode '{self.node_id}' requires synced ToolReference '{tool_id}'"
@@ -2873,9 +2927,14 @@ class DatasourceNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        datasource_service: DatasourceService,
+        datasource_executors: DatasourceExecutors,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.datasource_service: DatasourceService = datasource_service
+        self.datasource_executors: DatasourceExecutors = datasource_executors
         cfg = self.config
         self.connector_id: str | None = _config_optional_string(cfg, "connector_id")
         self.datasource_id: str | None = _config_optional_string(cfg, "datasource_id")
@@ -2898,7 +2957,8 @@ class DatasourceNode(BaseNode):
         operation = self.datasource_operation
         sql = self.sql
         params = inputs
-        service = self.container.datasource_service
+        service = self.datasource_service
+        executors = self.datasource_executors
         variables = require_json_object(state.variables, "state.variables")
         input_payload = require_json_object(
             {
@@ -2916,19 +2976,23 @@ class DatasourceNode(BaseNode):
 
         async def invoke() -> NodeRunResult:
             if operation is DatasourceOperation.INTROSPECT:
-                protocol_result = await service.introspect(datasource_id)
+                protocol_result = await service.introspect(datasource_id, executors=executors)
             elif operation is DatasourceOperation.QUERY:
                 if sql is None or not sql.strip():
                     raise ValueError(
                         f"DatasourceNode '{self.node_id}': sql is required for query"
                     )
-                protocol_result = await service.query(datasource_id, sql, params)
+                protocol_result = await service.query(
+                    datasource_id, sql, params, executors=executors
+                )
             elif operation is DatasourceOperation.EXECUTE:
                 if sql is None or not sql.strip():
                     raise ValueError(
                         f"DatasourceNode '{self.node_id}': sql is required for execute"
                     )
-                protocol_result = await service.execute(datasource_id, sql, params)
+                protocol_result = await service.execute(
+                    datasource_id, sql, params, executors=executors
+                )
             else:
                 raise ValueError(
                     f"DatasourceNode '{self.node_id}': unsupported operation {operation}"
@@ -2993,9 +3057,14 @@ class ChannelNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        channel_registry: ChannelRegistryProtocol,
+        mail_service: MailService,
     ):
-        super().__init__(node_id, config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.channel_registry: ChannelRegistryProtocol = channel_registry
+        self.mail_service: MailService = mail_service
         cfg = self.config
 
         channel_value = cfg.get("channel")
@@ -3011,10 +3080,9 @@ class ChannelNode(BaseNode):
     @override
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         """Отправляет сообщение через channel handler."""
-        container = self.container
-        handler = container.channel_registry.get(
+        handler = self.channel_registry.get(
             self.channel,
-            mail_service=container.mail_service,
+            mail_service=self.mail_service,
         )
 
         # Собираем все переменные (flow, компании, системные)
@@ -3090,6 +3158,20 @@ class HitlNode(BaseNode):
 
     node_type: ClassVar[NodeType | None] = NodeType.HITL_NODE
 
+    def __init__(
+        self,
+        node_id: str,
+        config: JsonObject | None = None,
+        *,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
+        hitl_work_item_service: HitlWorkItemService,
+        hitl_conversation_service: HitlConversationService,
+    ) -> None:
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
+        self.hitl_work_item_service: HitlWorkItemService = hitl_work_item_service
+        self.hitl_conversation_service: HitlConversationService = hitl_conversation_service
+
     def _hitl_local_variables(self) -> JsonObject | None:
         raw = self.config.get("local_variables")
         if raw is None:
@@ -3118,8 +3200,7 @@ class HitlNode(BaseNode):
         company_id = ctx.active_company.company_id
         cid_resume = state.hitl_handoff_correlation_id
         if isinstance(cid_resume, str) and cid_resume.strip():
-            container = self.container
-            existing_resume = await container.work_item_service.find_by_completion_correlation(
+            existing_resume = await WorkItem.find_work_item_by_correlation(
                 company_id, cid_resume.strip()
             )
             if existing_resume is None:
@@ -3138,7 +3219,7 @@ class HitlNode(BaseNode):
             state.response = answer
             # Closing reply уже в Redis (operator_reply); completed не должен дублировать текст в UI.
             state.hitl_streamed_closing_text = answer
-            _ = await container.workflow_runtime.record_lifecycle_event(
+            _ = await self.execution.record_lifecycle(
                 state.session_id,
                 event_type=WorkflowEventType.handoff_resumed,
                 payload=HandoffResumedPayload(
@@ -3197,8 +3278,7 @@ class HitlNode(BaseNode):
         )
         mode = HandoffMode(str(raw_mode).strip())
 
-        container = self.container
-        svc = container.hitl_work_item_service
+        svc = self.hitl_work_item_service
         task_title = self._resolve_hitl_text(str(title_raw), state)
         question = self._resolve_hitl_text(str(message_raw), state)
         if not task_title:
@@ -3239,7 +3319,7 @@ class HitlNode(BaseNode):
                 handoff_mode=mode,
                 command=handoff_command,
             )
-            await container.hitl_conversation_service.materialize_triggering_user_content(
+            await self.hitl_conversation_service.materialize_triggering_user_content(
                 company_id=company_id,
                 work_item_id=work_item_id,
                 state=state,
@@ -3308,9 +3388,10 @@ class ReflectionNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        execution: FlowExecutionContext,
+        redis_client: RedisClient,
     ) -> None:
-        super().__init__(node_id=node_id, config=config, container=container)
+        super().__init__(node_id, config, execution=execution, redis_client=redis_client)
         policy_payload = _config_mapping(self.config, "critic_policy")
         if policy_payload is None:
             raise ValueError(f"reflection node {self.node_id}: critic_policy is required")
@@ -3423,8 +3504,7 @@ class ReflectionNode(BaseNode):
             "reflection.activity_input",
         )
         activity_id = self._durable_activity_id(state, "reflection", input_payload)
-        runtime = self.container.workflow_runtime
-        completed = await runtime.record_activity_scheduled(
+        completed = await self.execution.activities.schedule(
             session_id=state.session_id,
             activity_id=activity_id,
             activity_type="reflection",
@@ -3436,7 +3516,7 @@ class ReflectionNode(BaseNode):
         if completed is not None:
             return self._reflection_result_from_completed(completed)
 
-        started = await runtime.record_activity_started(activity_id=activity_id)
+        started = await self.execution.activities.start(activity_id)
         if not started:
             raise RuntimeError(f"Failed to mark reflection activity as started: {activity_id!r}")
 
@@ -3462,7 +3542,7 @@ class ReflectionNode(BaseNode):
                     critique=critique,
                 )
         except Exception as exc:
-            completed_failed = await runtime.record_activity_completed(
+            completed_failed = await self.execution.activities.complete(
                 activity_id=activity_id,
                 error=str(exc),
             )
@@ -3470,7 +3550,7 @@ class ReflectionNode(BaseNode):
                 raise RuntimeError(f"Failed to mark reflection activity as failed: {activity_id!r}") from exc
             raise
 
-        completed_ok = await runtime.record_activity_completed(
+        completed_ok = await self.execution.activities.complete(
             activity_id=activity_id,
             result_json={
                 "result": result.model_dump(mode="json"),
@@ -3585,11 +3665,192 @@ RUNTIME_NODE_CLASSES: Mapping[NodeType, type[BaseNode]] = {
 }
 
 
+class NodeConstructor:
+    """Собирает ноду из конфига по уже известным зависимостям исполнения."""
+
+    def __init__(
+        self,
+        *,
+        workflow_runtime: DurableWorkflowRuntime,
+        redis_client: RedisClient,
+        emitter_factory: EmitterFactory,
+        llm_context_memory_store: RAGLLMContextMemoryStore,
+        namespace_service: NamespaceService,
+        authz_service: AuthzService,
+        text_transform_service: TextTransformService,
+        handoff_orchestrator_service: HandoffOrchestratorService,
+        a2a_client: A2AClient,
+        code_agent_source_service: CodeAgentSourceService,
+        guest_runtime_client: GuestRuntimeClient,
+        variables_service: VariablesService,
+        flow_access_service: FlowAccessService,
+        datasource_service: DatasourceService,
+        channel_registry: ChannelRegistryProtocol,
+        mail_service: MailService,
+        hitl_work_item_service: HitlWorkItemService,
+        hitl_conversation_service: HitlConversationService,
+    ) -> None:
+        self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self.redis_client: RedisClient = redis_client
+        self.emitter_factory: EmitterFactory = emitter_factory
+        self.llm_context_memory_store: RAGLLMContextMemoryStore = llm_context_memory_store
+        self.namespace_service: NamespaceService = namespace_service
+        self.authz_service: AuthzService = authz_service
+        self.text_transform_service: TextTransformService = text_transform_service
+        self.handoff_orchestrator_service: HandoffOrchestratorService = handoff_orchestrator_service
+        self.a2a_client: A2AClient = a2a_client
+        self.code_agent_source_service: CodeAgentSourceService = code_agent_source_service
+        self.guest_runtime_client: GuestRuntimeClient = guest_runtime_client
+        self.variables_service: VariablesService = variables_service
+        self.flow_access_service: FlowAccessService = flow_access_service
+        self.datasource_service: DatasourceService = datasource_service
+        self.channel_registry: ChannelRegistryProtocol = channel_registry
+        self.mail_service: MailService = mail_service
+        self.hitl_work_item_service: HitlWorkItemService = hitl_work_item_service
+        self.hitl_conversation_service: HitlConversationService = hitl_conversation_service
+
+    def build(
+        self,
+        node_cls: type[BaseNode],
+        node_id: str,
+        config: JsonObject,
+        *,
+        tool_registry: ToolRegistryProtocol,
+        flow_factory: FlowFactoryProtocol,
+    ) -> BaseNode:
+        execution = execution_context_for(self.workflow_runtime)
+        redis_client = self.redis_client
+        emitter_factory = self.emitter_factory
+        if issubclass(node_cls, LlmNode):
+            return node_cls(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                flow_factory=flow_factory,
+                llm_context_memory_store=self.llm_context_memory_store,
+                namespace_service=self.namespace_service,
+                authz_service=self.authz_service,
+                tool_registry=tool_registry,
+                workflow_runtime=self.workflow_runtime,
+                text_transform_service=self.text_transform_service,
+                emitter_factory=emitter_factory,
+            )
+        if node_cls is CodeNode:
+            return CodeNode(node_id, config, execution=execution, redis_client=redis_client)
+        if node_cls is FlowNode:
+            return FlowNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                flow_factory=flow_factory,
+                tool_registry=tool_registry,
+                handoff_orchestrator_service=self.handoff_orchestrator_service,
+            )
+        if node_cls is RemoteFlowNode:
+            return RemoteFlowNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                a2a_client=self.a2a_client,
+                emitter_factory=emitter_factory,
+            )
+        if node_cls is CodeAgentNode:
+            return CodeAgentNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                a2a_client=self.a2a_client,
+                emitter_factory=emitter_factory,
+                code_agent_source_service=self.code_agent_source_service,
+                guest_runtime_client=self.guest_runtime_client,
+            )
+        if node_cls is ExternalAPINode:
+            return ExternalAPINode(node_id, config, execution=execution, redis_client=redis_client)
+        if node_cls is MCPNode:
+            return MCPNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                variables_service=self.variables_service,
+                flow_access_service=self.flow_access_service,
+            )
+        if node_cls is DatasourceNode:
+            return DatasourceNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                datasource_service=self.datasource_service,
+                datasource_executors=build_datasource_executors(
+                    workflow_runtime=self.workflow_runtime,
+                    flow_factory=flow_factory,
+                    tool_registry=tool_registry,
+                ),
+            )
+        if node_cls is ChannelNode:
+            return ChannelNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                channel_registry=self.channel_registry,
+                mail_service=self.mail_service,
+            )
+        if node_cls is HitlNode:
+            return HitlNode(
+                node_id,
+                config,
+                execution=execution,
+                redis_client=redis_client,
+                hitl_work_item_service=self.hitl_work_item_service,
+                hitl_conversation_service=self.hitl_conversation_service,
+            )
+        if node_cls is ReflectionNode:
+            return ReflectionNode(node_id, config, execution=execution, redis_client=redis_client)
+        if node_cls is ResourceNode:
+            return ResourceNode(node_id, config, execution=execution, redis_client=redis_client)
+        raise TypeError(f"Unknown node class: {node_cls!r}")
+
+    def materialize(
+        self,
+        node_id: str,
+        node_config: JsonObject,
+        *,
+        tool_registry: ToolRegistryProtocol,
+        flow_factory: FlowFactoryProtocol,
+    ) -> BaseNode:
+        node_type_value = node_config.get("type")
+        if not isinstance(node_type_value, str) or not node_type_value.strip():
+            keys = sorted(node_config.keys())
+            raise ValueError(
+                f"Node '{node_id}': type is required as a non-empty string (fields: {keys})"
+            )
+        try:
+            node_type = NodeType(node_type_value.strip())
+        except ValueError:
+            raise ValueError(f"Unknown node type: {node_type_value}")
+        node_class = RUNTIME_NODE_CLASSES[node_type]
+        return self.build(
+            node_class,
+            node_id,
+            node_config,
+            tool_registry=tool_registry,
+            flow_factory=flow_factory,
+        )
+
+
 async def create_node(
     node_id: str,
     node_config: JsonObject,
     *,
-    container: FlowRuntimeContainer,
+    node_constructor: NodeConstructor,
+    tool_registry: ToolRegistryProtocol,
+    flow_factory: FlowFactoryProtocol,
 ) -> BaseNode:
     """
     Создаёт ноду через NodeRegistry.
@@ -3611,4 +3872,10 @@ async def create_node(
         raise ValueError(f"Unknown node type: {node_type_value}")
 
     node_class = RUNTIME_NODE_CLASSES[node_type]
-    return node_class.from_config(node_id, node_config, container=container)
+    return node_class.from_config(
+        node_id,
+        node_config,
+        node_constructor=node_constructor,
+        tool_registry=tool_registry,
+        flow_factory=flow_factory,
+    )

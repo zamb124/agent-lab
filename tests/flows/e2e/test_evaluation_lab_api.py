@@ -17,9 +17,8 @@ from taskiq import Context as TaskiqContext
 from taskiq.message import TaskiqMessage
 
 import core.tracing.attributes as trace_attr
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.evaluation_operations import raise_evaluation
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.db.evaluation_lab_repository import EvaluationLabRowValue, _int_scalar
 from apps.flows.src.durable_execution import (
     ActivityLifecyclePayload,
     ActivityStatus,
@@ -36,6 +35,7 @@ from apps.flows.src.evaluation.lab_service import (
     LlmUsageAccumulator,
     _llm_usage_tokens,
 )
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.evaluation_lab import (
     EvaluationActiveMonitorCyclesResult,
@@ -119,7 +119,7 @@ from core.models.context_models import Context
 from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.state import ExecutionState
-from core.tracing.models import TraceSpanWrite
+from core.tracing.models import Span
 from core.types import JsonObject
 from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
@@ -541,11 +541,11 @@ def _trace_span(
     company_id: str,
     user_id: str,
     session_id: str,
-) -> TraceSpanWrite:
+) -> Span:
     now = _now()
     task_id = f"task-monitor-{unique_id}"
     context_id = f"ctx-monitor-{unique_id}"
-    return TraceSpanWrite(
+    return Span(
         span_id=span_id,
         trace_id=trace_id,
         parent_span_id=None,
@@ -1151,422 +1151,21 @@ class TestEvaluationLabAPI:
         assert exc_info.value.code == "ws_invalid_payload"
         assert exc_info.value.detail == "raw evaluation validation"
 
-    async def test_repository_missing_paths_and_row_parsers(
+    async def test_missing_suite_is_not_found(
         self,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
-        repo = container.evaluation_lab_repository
-        missing_id = f"missing-eval-{unique_id}"
+        from core.errors.boundary import PlatformNotFoundError
 
-        assert await repo.get_suite(missing_id) is None
-        assert await repo.get_case(missing_id, missing_id) is None
-        assert await repo.delete_case(missing_id, missing_id) is False
-        assert await repo.list_suites(missing_id) == []
-        assert await repo.list_cases(missing_id) == []
-        assert await repo.next_suite_version(missing_id) == 1
-        assert await repo.get_suite_version(missing_id) is None
-        assert await repo.get_run(missing_id) is None
-        assert await repo.list_runs(missing_id, 10) == []
-        assert await repo.list_case_runs(missing_id) == []
-        assert await repo.get_run_with_cases(missing_id) is None
-        assert await repo.next_event_sequence(missing_id) == 1
-        assert await repo.list_events(missing_id) == []
-        assert await repo.get_annotation(missing_id) is None
-        assert await repo.list_annotations(missing_id) == []
-        assert await repo.delete_annotation(missing_id) is False
-
-        now = _now()
-        suite = EvaluationSuite(
-            suite_id=f"suite-{unique_id}",
-            flow_id=f"flow-{unique_id}",
-            name="Repository parser suite",
-            tags=["parser"],
-            created_at=now,
-            updated_at=now,
-        )
-        case = _case(
-            case_id=f"case-{unique_id}",
-            suite_id=suite.suite_id,
-            flow_id=suite.flow_id,
-        )
-
-        created_suite = await repo.create_suite(suite)
-        assert created_suite.suite_id == suite.suite_id
-        updated_suite = await repo.update_suite(
-            suite.model_copy(update={"name": "Repository parser suite updated"})
-        )
-        assert updated_suite.name == "Repository parser suite updated"
-        stored_suite = await repo.get_suite(suite.suite_id)
-        assert stored_suite is not None
-        assert stored_suite.name == "Repository parser suite updated"
-
-        created_case = await repo.create_case(case)
-        assert created_case.case_id == case.case_id
-        updated_case = await repo.update_case(
-            case.model_copy(update={"enabled": False, "sort_order": 9})
-        )
-        assert not updated_case.enabled
-        stored_case = await repo.get_case(suite.suite_id, case.case_id)
-        assert stored_case is not None
-        assert stored_case.sort_order == 9
-
-        suite_version = EvaluationSuiteVersion(
-            suite_version_id=f"suite-version-direct-{unique_id}",
-            suite_id=suite.suite_id,
-            flow_id=suite.flow_id,
-            flow_config_version="test-version",
-            version=1,
-            suite_snapshot=updated_suite,
-            cases_snapshot=[updated_case],
-            created_at=now,
-        )
-        created_version = await repo.create_suite_version(suite_version)
-        assert created_version.suite_version_id == suite_version.suite_version_id
-        assert await repo.next_suite_version(suite.suite_id) == 2
-        stored_version = await repo.get_suite_version(suite_version.suite_version_id)
-        assert stored_version is not None
-        assert stored_version.version == 1
-
-        run = _run(
-            run_id=f"run-direct-{unique_id}",
-            suite_id=suite.suite_id,
-            suite_version_id=suite_version.suite_version_id,
-            flow_id=suite.flow_id,
-        )
-        created_run = await repo.create_run(run)
-        assert created_run.run_id == run.run_id
-        idempotent_run = await repo.update_run(
-            run.model_copy(update={"idempotency_key": f"idempotent-{unique_id}"})
-        )
-        stored_idempotent_run = await repo.get_run_by_idempotency_key(
-            suite_id=suite.suite_id,
-            branch_id="default",
-            idempotency_key=f"idempotent-{unique_id}",
-        )
-        assert stored_idempotent_run is not None
-        assert stored_idempotent_run.run_id == idempotent_run.run_id
-        run_job = EvaluationRunJob(
-            run_job_id=f"run-job-direct-{unique_id}",
-            run_id=run.run_id,
-            taskiq_task_id=f"taskiq-direct-{unique_id}",
-            state=EvaluationRunJobState.PENDING,
-            context_data={"channel": "repository"},
-            trace_context={"trace_id": f"trace-direct-{unique_id}"},
-            created_at=now,
-            updated_at=now,
-        )
-        created_run_job = await repo.create_run_job(run_job)
-        assert created_run_job.run_job_id == run_job.run_job_id
-        stored_run_job = await repo.get_run_job_by_run_id(run.run_id)
-        assert stored_run_job is not None
-        assert stored_run_job.taskiq_task_id == run_job.taskiq_task_id
-        pending_run_jobs = await repo.list_pending_run_jobs(10)
-        assert run.run_id in {item.run_id for item in pending_run_jobs}
-        updated_run_job = await repo.update_run_job(
-            run_job.model_copy(
-                update={
-                    "state": EvaluationRunJobState.ENQUEUED,
-                    "enqueued_at": now,
-                    "updated_at": now,
-                }
-            )
-        )
-        assert updated_run_job.state == EvaluationRunJobState.ENQUEUED
-        with pytest.raises(EvaluationLabValidationError):
-            await container.evaluation_lab_service.execute_run_from_taskiq(
-                run.run_id,
-                EvaluationTaskiqExecutionContext(
-                    task_name=TASK_EXECUTE_EVALUATION_RUN.name,
-                    task_id="wrong-taskiq-id",
-                    evaluation_run_id=run.run_id,
-                ),
-            )
-        updated_run = await repo.update_run(
-            run.model_copy(
-                update={
-                    "state": EvaluationRunState.PASSED,
-                    "passed_case_runs": 1,
-                    "average_score": 10.0,
-                    "started_at": now,
-                    "finished_at": now,
-                }
-            )
-        )
-        assert updated_run.state == EvaluationRunState.PASSED
-        assert await repo.get_run(run.run_id) is not None
-        assert [item.run_id for item in await repo.list_runs(suite.suite_id, 5)] == [
-            run.run_id
-        ]
-
-        case_run = _case_run(
-            case_run_id=f"case-run-direct-{unique_id}",
-            run_id=run.run_id,
-            case_id=case.case_id,
-            suite_id=suite.suite_id,
-            flow_id=suite.flow_id,
-        )
-        created_case_run = await repo.create_case_run(case_run)
-        assert created_case_run.case_run_id == case_run.case_run_id
-        updated_case_run = await repo.update_case_run(
-            case_run.model_copy(update={"state": EvaluationCaseRunState.FAILED, "error": "nope"})
-        )
-        assert updated_case_run.state == EvaluationCaseRunState.FAILED
-        assert [item.case_run_id for item in await repo.list_case_runs(run.run_id)] == [
-            case_run.case_run_id
-        ]
-        stored_run_with_cases = await repo.get_run_with_cases(run.run_id)
-        assert stored_run_with_cases is not None
-        assert stored_run_with_cases.case_runs[0].case_run_id == case_run.case_run_id
-
-        event_model = EvaluationRunEvent(
-            event_id=f"event-direct-{unique_id}",
-            run_id=run.run_id,
-            case_run_id=case_run.case_run_id,
-            sequence=1,
-            event_type=EvaluationEventType.RUN_CREATED,
-            payload={"suite_id": suite.suite_id},
-            created_at=now,
-        )
-        appended_event = await repo.append_event(event_model)
-        assert appended_event.event_id == event_model.event_id
-        assert await repo.next_event_sequence(run.run_id) == 2
-        assert [item.event_id for item in await repo.list_events(run.run_id)] == [
-            event_model.event_id
-        ]
-        events_page = await repo.list_events_after_sequence(
-            run.run_id,
-            after_sequence=0,
-            limit=1,
-        )
-        assert [item.event_id for item in events_page] == [event_model.event_id]
-        assert await repo.list_events_after_sequence(
-            run.run_id,
-            after_sequence=1,
-            limit=1,
-        ) == []
-
-        annotation_model = EvaluationAnnotation(
-            annotation_id=f"annotation-direct-{unique_id}",
-            run_id=run.run_id,
-            case_run_id=case_run.case_run_id,
-            case_id=case.case_id,
-            annotation_type=EvaluationAnnotationType.COMMENT,
-            comment="repository annotation",
-            payload={"flag": True},
-            created_by="reviewer",
-            created_at=now,
-            updated_at=now,
-        )
-        created_annotation = await repo.create_annotation(annotation_model)
-        assert created_annotation.annotation_id == annotation_model.annotation_id
-        stored_annotation = await repo.get_annotation(annotation_model.annotation_id)
-        assert stored_annotation is not None
-        assert stored_annotation.payload == {"flag": True}
-        updated_annotation = await repo.update_annotation(
-            annotation_model.model_copy(
-                update={
-                    "annotation_type": EvaluationAnnotationType.ISSUE,
-                    "comment": "updated",
-                    "payload": {"flag": False},
-                }
-            )
-        )
-        assert updated_annotation.annotation_type == EvaluationAnnotationType.ISSUE
-        assert [item.annotation_id for item in await repo.list_annotations(run.run_id)] == [
-            annotation_model.annotation_id
-        ]
-        assert await repo.delete_annotation(annotation_model.annotation_id)
-        assert await repo.get_annotation(annotation_model.annotation_id) is None
-        assert not await repo.delete_annotation(annotation_model.annotation_id)
-
-        monitor_model = EvaluationMonitor(
-            monitor_id=f"monitor-direct-{unique_id}",
-            suite_id=suite.suite_id,
-            flow_id=suite.flow_id,
-            branch_id="default",
-            name="Repository monitor",
-            state=EvaluationMonitorState.ACTIVE,
-            sampling_rate=1.0,
-            max_traces_per_sample=10,
-            filter=EvaluationMonitorFilter(),
-            created_by="repository",
-            created_at=now,
-            updated_at=now,
-        )
-        created_monitor = await repo.create_monitor(monitor_model)
-        assert created_monitor.monitor_id == monitor_model.monitor_id
-        updated_monitor = await repo.update_monitor(
-            monitor_model.model_copy(
-                update={
-                    "state": EvaluationMonitorState.PAUSED,
-                    "updated_at": now,
-                }
-            )
-        )
-        assert updated_monitor.state == EvaluationMonitorState.PAUSED
-        stored_monitor = await repo.get_monitor(monitor_model.monitor_id)
-        assert stored_monitor is not None
-        assert stored_monitor.monitor_id == monitor_model.monitor_id
-        assert [item.monitor_id for item in await repo.list_monitors(suite.suite_id)] == [
-            monitor_model.monitor_id
-        ]
-        observation_model = EvaluationMonitorObservation(
-            observation_id=f"observation-direct-{unique_id}",
-            monitor_id=monitor_model.monitor_id,
-            suite_id=suite.suite_id,
-            flow_id=suite.flow_id,
-            branch_id="default",
-            trace_id=f"trace-observation-{unique_id}",
-            task_id=f"task-observation-{unique_id}",
-            session_id=f"session-observation-{unique_id}",
-            state=EvaluationMonitorObservationState.SAMPLED,
-            span_count=1,
-            payload={"spans": [], "filter": {}},
-            sampled_at=now,
-        )
-        created_observation = await repo.upsert_monitor_observation(observation_model)
-        assert created_observation.observation_id == observation_model.observation_id
-        stored_observation = await repo.get_monitor_observation(
-            monitor_model.monitor_id,
-            observation_model.trace_id,
-        )
-        assert stored_observation is not None
-        assert stored_observation.trace_id == observation_model.trace_id
-        assert [
-            item.observation_id
-            for item in await repo.list_monitor_observations(monitor_model.monitor_id, 10)
-        ] == [observation_model.observation_id]
-
-        version_row: dict[str, EvaluationLabRowValue] = {
-            "suite_version_id": f"version-{unique_id}",
-            "suite_id": suite.suite_id,
-            "flow_id": suite.flow_id,
-            "flow_config_version": "test-version",
-            "version": 3,
-            "suite_snapshot": json.dumps(suite.model_dump(mode="json")),
-            "cases_snapshot": json.dumps([case.model_dump(mode="json")]),
-            "created_at": now,
-        }
-        parsed_version = repo._suite_version_from_row(version_row)
-        assert parsed_version.version == 3
-        assert parsed_version.cases_snapshot[0].case_id == case.case_id
-
-        version_row_python = dict(version_row)
-        version_row_python["suite_snapshot"] = suite.model_dump(mode="json")
-        version_row_python["cases_snapshot"] = [case.model_dump(mode="json")]
-        parsed_version_python = repo._suite_version_from_row(version_row_python)
-        assert parsed_version_python.suite_snapshot.suite_id == suite.suite_id
-
-        case_run_row = {
-            "case_run_id": f"case-run-{unique_id}",
-            "run_id": f"run-{unique_id}",
-            "case_id": case.case_id,
-            "trial_index": 1,
-            "suite_id": suite.suite_id,
-            "flow_id": suite.flow_id,
-            "branch_id": "default",
-            "state": str(EvaluationCaseRunState.PASSED),
-            "task_id": "task-parser",
-            "context_id": "ctx-parser",
-            "session_id": f"{suite.flow_id}:ctx-parser",
-            "trace_id": "trace-parser",
-            "duration_ms": 25,
-            "input_tokens": 2,
-            "output_tokens": 3,
-            "total_tokens": 5,
-            "billing_quantity": 5,
-            "turns_count": 1,
-            "scores": json.dumps({"quality": 7.5, "gate": True}),
-            "total_score": 8.75,
-            "judge_feedback": "ok",
-            "dialog": json.dumps([{"role": "user", "content": "hello"}]),
-            "error": None,
-            "started_at": now,
-            "finished_at": now,
-            "created_at": now,
-            "updated_at": now,
-        }
-        parsed_case_run = repo._case_run_from_row(case_run_row)
-        assert parsed_case_run.trial_index == 1
-        assert parsed_case_run.total_tokens == 5
-        assert parsed_case_run.scores == {"quality": 7.5, "gate": True}
-        assert parsed_case_run.dialog[0].content == "hello"
-
-        case_run_row_none = dict(case_run_row)
-        case_run_row_none["scores"] = None
-        case_run_row_none["dialog"] = None
-        case_run_row_none["task_id"] = None
-        case_run_row_none["context_id"] = None
-        case_run_row_none["session_id"] = None
-        case_run_row_none["trace_id"] = None
-        case_run_row_none["duration_ms"] = None
-        case_run_row_none["total_score"] = None
-        case_run_row_none["judge_feedback"] = None
-        case_run_row_none["started_at"] = None
-        case_run_row_none["finished_at"] = None
-        parsed_empty_case_run = repo._case_run_from_row(case_run_row_none)
-        assert parsed_empty_case_run.dialog == []
-        assert parsed_empty_case_run.scores is None
-
-        event = repo._event_from_row(
-            {
-                "event_id": f"event-{unique_id}",
-                "run_id": f"run-{unique_id}",
-                "case_run_id": None,
-                "sequence": 1,
-                "event_type": str(EvaluationEventType.RUN_CREATED),
-                "payload": json.dumps({"suite_id": suite.suite_id}),
-                "created_at": now,
-            }
-        )
-        assert event.payload == {"suite_id": suite.suite_id}
-
-        parsed_annotation = repo._annotation_from_row(
-            {
-                "annotation_id": f"annotation-{unique_id}",
-                "run_id": run.run_id,
-                "case_run_id": None,
-                "case_id": None,
-                "annotation_type": str(EvaluationAnnotationType.COMMENT),
-                "comment": "parsed",
-                "payload": json.dumps({"parsed": True}),
-                "created_by": "reviewer",
-                "created_at": now,
-                "updated_at": now,
-            }
-        )
-        assert parsed_annotation.payload == {"parsed": True}
-
-        assert repo._json_list_strings('["alpha"]', "tags") == ["alpha"]
-        assert repo._optional_string({"value": None}, "value") is None
-        assert repo._optional_int({"value": None}, "value") is None
-        assert repo._optional_float({"value": None}, "value") is None
-        assert repo._optional_datetime({"value": None}, "value") is None
-
-        invalid_rows = [
-            (repo._string, {"value": 1}, "value"),
-            (repo._optional_string, {"value": 1}, "value"),
-            (repo._int, {"value": True}, "value"),
-            (repo._optional_int, {"value": True}, "value"),
-            (repo._optional_float, {"value": True}, "value"),
-            (repo._datetime, {"value": "bad"}, "value"),
-            (repo._optional_datetime, {"value": "bad"}, "value"),
-        ]
-        for parser, row, key in invalid_rows:
-            with pytest.raises(ValueError):
-                parser(row, key)
-
-        with pytest.raises(ValueError):
-            repo._json_list_strings([{"not": "a string"}], "tags")
-        with pytest.raises(ValueError):
-            _int_scalar(True, "bad_int")
+        with pytest.raises(PlatformNotFoundError):
+            _ = await di.evaluation_lab_service.get_suite(f"missing-eval-{unique_id}")
 
     async def test_service_deterministic_helpers_and_strict_errors(
         self,
-        container: FlowContainer,
+        di: FlowsDi,
     ) -> None:
-        service: EvaluationLabService = container.evaluation_lab_service
+        service: EvaluationLabService = di.evaluation_lab_service
         state_json: JsonObject = {
             "answer": "42",
             "metrics": {"score": 7, "items": ["alpha", "beta"]},
@@ -1734,14 +1333,14 @@ class TestEvaluationLabAPI:
     async def test_service_trace_node_resolution_and_case_selection(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_helpers_{unique_id}"
         await _create_code_flow(client, flow_id)
-        service: EvaluationLabService = container.evaluation_lab_service
+        service: EvaluationLabService = di.evaluation_lab_service
         try:
-            flow = await container.flow_repository.get(flow_id)
+            flow = await FlowConfig.get_latest(flow_id)
             assert flow is not None
             state = _state(flow_id, unique_id, flow.version)
             await service._start_evaluation_workflow(
@@ -1761,7 +1360,7 @@ class TestEvaluationLabAPI:
                     branch_id="default",
                 )
 
-            runtime = container.workflow_runtime
+            runtime = di.workflow_runtime
             _ = await runtime.record_state_event(
                 state.session_id,
                 state,
@@ -1854,7 +1453,7 @@ class TestEvaluationLabAPI:
                 type=NodeType.LLM_NODE,
                 prompt="Stored judge prompt",
             )
-            _ = await container.node_repository.set(stored_node)
+            _ = await NodeConfig.set(stored_node)
             try:
                 stored_input_node = await service._resolve_input_node(
                     EvaluationInputNode(type="node", node_id=stored_node.node_id),
@@ -1894,7 +1493,7 @@ class TestEvaluationLabAPI:
                     "Do not answer with free-form text."
                 )
             finally:
-                _ = await container.node_repository.delete(stored_node.node_id)
+                _ = await NodeConfig.delete_by_id(stored_node.node_id)
 
             with pytest.raises(EvaluationLabValidationError):
                 await service._resolve_input_node(EvaluationInputNode(type="node"), state)
@@ -1949,7 +1548,7 @@ class TestEvaluationLabAPI:
     async def test_run_executes_flow_records_events_and_compare(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_run_{unique_id}"
@@ -1981,7 +1580,7 @@ class TestEvaluationLabAPI:
             assert "Echo: ping 42" in run_payload.case_runs[0].dialog[1].content
 
             run_id = run_payload.run.run_id
-            stored = await container.evaluation_lab_repository.get_run_with_cases(run_id)
+            stored = await di.evaluation_lab_service.get_run_with_cases(run_id)
             assert stored is not None
             assert stored.run.suite_id == suite_id
             assert stored.case_runs[0].case_id == case.case_id
@@ -2239,7 +1838,7 @@ class TestEvaluationLabAPI:
     async def test_pending_run_jobs_are_durable_and_taskiq_gated(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_jobs_{unique_id}"
@@ -2247,7 +1846,7 @@ class TestEvaluationLabAPI:
         try:
             suite = await _create_suite(client, flow_id, f"Job suite {unique_id}")
             case = await _create_passing_case(client, suite.suite_id, f"Job case {unique_id}")
-            created = await container.evaluation_lab_service.create_run(
+            created = await di.evaluation_lab_service.create_run(
                 EvaluationRunCreateRequest(
                     suite_id=suite.suite_id,
                     branch_id="default",
@@ -2256,7 +1855,7 @@ class TestEvaluationLabAPI:
             )
             context = get_context()
             assert context is not None
-            job = await container.evaluation_lab_service.create_run_job(
+            job = await di.evaluation_lab_service.create_run_job(
                 created.run.run_id,
                 context_data=context.to_dict(),
                 trace_context=None,
@@ -2264,7 +1863,7 @@ class TestEvaluationLabAPI:
             assert job.state == EvaluationRunJobState.PENDING
 
             with pytest.raises(EvaluationLabValidationError):
-                await container.evaluation_lab_service.execute_run_from_taskiq(
+                await di.evaluation_lab_service.execute_run_from_taskiq(
                     created.run.run_id,
                     EvaluationTaskiqExecutionContext(
                         task_name=TASK_EXECUTE_EVALUATION_RUN.name,
@@ -2284,7 +1883,7 @@ class TestEvaluationLabAPI:
             assert created.run.run_id in enqueue_result.enqueued_run_ids
             assert created.run.run_id not in enqueue_result.failed_run_ids
 
-            stored_job = await container.evaluation_lab_service.get_run_job(created.run.run_id)
+            stored_job = await di.evaluation_lab_service.get_run_job(created.run.run_id)
             assert stored_job.state == EvaluationRunJobState.ENQUEUED
             run_payload = await _wait_for_run(client, created.run.run_id)
             assert run_payload.run.state == EvaluationRunState.PASSED
@@ -2295,7 +1894,7 @@ class TestEvaluationLabAPI:
     async def test_worker_task_contracts_use_real_taskiq_contexts(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_worker_{unique_id}"
@@ -2316,7 +1915,8 @@ class TestEvaluationLabAPI:
                     f"missing-run-{unique_id}",
                     invalid_context,
                     context_data=None,
-                )
+                di=di,
+            )
             with pytest.raises(ValueError, match="TaskIQ label evaluation_run_id is required"):
                 await execute_evaluation_run.original_func(
                     f"missing-run-{unique_id}",
@@ -2326,7 +1926,8 @@ class TestEvaluationLabAPI:
                         labels={},
                     ),
                     context_data=context.to_dict(),
-                )
+                di=di,
+            )
             with pytest.raises(
                 ValueError,
                 match="TaskIQ label evaluation_run_id must be a non-empty string",
@@ -2339,7 +1940,8 @@ class TestEvaluationLabAPI:
                         labels={"evaluation_run_id": ""},
                     ),
                     context_data=context.to_dict(),
-                )
+                di=di,
+            )
             with pytest.raises(ValueError, match="Context is required"):
                 await enqueue_pending_evaluation_runs.original_func(
                     _taskiq_context(
@@ -2348,7 +1950,8 @@ class TestEvaluationLabAPI:
                         labels={},
                     ),
                     context_data=None,
-                )
+                di=di,
+            )
             with pytest.raises(ValueError, match="limit must be >= 1"):
                 await enqueue_pending_evaluation_runs.original_func(
                     _taskiq_context(
@@ -2358,16 +1961,17 @@ class TestEvaluationLabAPI:
                     ),
                     context_data=context.to_dict(),
                     limit=0,
-                )
+                di=di,
+            )
 
-            created = await container.evaluation_lab_service.create_run(
+            created = await di.evaluation_lab_service.create_run(
                 EvaluationRunCreateRequest(
                     suite_id=suite.suite_id,
                     branch_id="default",
                     scope=EvaluationRunCasesScope(type="cases", case_ids=[case.case_id]),
                 )
             )
-            job = await container.evaluation_lab_service.create_run_job(
+            job = await di.evaluation_lab_service.create_run_job(
                 created.run.run_id,
                 context_data=context.to_dict(),
                 trace_context={
@@ -2375,7 +1979,7 @@ class TestEvaluationLabAPI:
                     "span_id": f"workerspan{unique_id}",
                 },
             )
-            _ = await container.evaluation_lab_service.mark_run_job_enqueued(
+            _ = await di.evaluation_lab_service.mark_run_job_enqueued(
                 created.run.run_id
             )
             task_context = _taskiq_context(
@@ -2391,19 +1995,20 @@ class TestEvaluationLabAPI:
                     "trace_id": f"workertrace{unique_id}",
                     "span_id": f"workerspan{unique_id}",
                 },
+                di=di,
             )
             payload = EvaluationRunWithCases.model_validate(result)
             assert payload.run.state == EvaluationRunState.PASSED
             assert payload.case_runs[0].state == EvaluationCaseRunState.PASSED
 
-            pending_created = await container.evaluation_lab_service.create_run(
+            pending_created = await di.evaluation_lab_service.create_run(
                 EvaluationRunCreateRequest(
                     suite_id=suite.suite_id,
                     branch_id="default",
                     scope=EvaluationRunCasesScope(type="cases", case_ids=[case.case_id]),
                 )
             )
-            pending_job = await container.evaluation_lab_service.create_run_job(
+            pending_job = await di.evaluation_lab_service.create_run_job(
                 pending_created.run.run_id,
                 context_data=context.to_dict(),
                 trace_context=None,
@@ -2416,13 +2021,14 @@ class TestEvaluationLabAPI:
                 ),
                 context_data=context.to_dict(),
                 limit=100,
+                di=di,
             )
             enqueue_result = EvaluationPendingRunJobsEnqueueResult.model_validate(
                 enqueue_result_payload
             )
             assert pending_created.run.run_id in enqueue_result.enqueued_run_ids
             assert pending_created.run.run_id not in enqueue_result.failed_run_ids
-            stored_pending_job = await container.evaluation_lab_service.get_run_job(
+            stored_pending_job = await di.evaluation_lab_service.get_run_job(
                 pending_created.run.run_id
             )
             assert stored_pending_job.taskiq_task_id == pending_job.taskiq_task_id
@@ -2433,7 +2039,7 @@ class TestEvaluationLabAPI:
     async def test_scheduler_gate_and_monitor_tasks_use_real_taskiq_contexts(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_scheduler_{unique_id}"
@@ -2463,7 +2069,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-scheduler-{unique_id}"
-            await container.span_repository.save_span(
+            await Span.insert_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2498,7 +2104,8 @@ class TestEvaluationLabAPI:
                         labels={},
                     ),
                     context_data=None,
-                )
+                di=di,
+            )
 
             gate_task_payload = await run_evaluation_gate_policy.original_func(
                 gate_policy.gate_policy_id,
@@ -2509,6 +2116,7 @@ class TestEvaluationLabAPI:
                     labels={},
                 ),
                 context_data=context.to_dict(),
+                di=di,
             )
             gate_task_result = EvaluationRunWithCases.model_validate(gate_task_payload)
             gate_run = await _wait_for_run_gate_state(client, gate_task_result.run.run_id)
@@ -2525,7 +2133,8 @@ class TestEvaluationLabAPI:
                         labels={},
                     ),
                     context_data=None,
-                )
+                di=di,
+            )
 
             monitor_task_payload = await run_evaluation_monitor_cycle.original_func(
                 monitor.monitor_id,
@@ -2536,6 +2145,7 @@ class TestEvaluationLabAPI:
                     labels={},
                 ),
                 context_data=context.to_dict(),
+                di=di,
             )
             monitor_task_result = EvaluationMonitorCycleResult.model_validate(
                 monitor_task_payload
@@ -2550,7 +2160,7 @@ class TestEvaluationLabAPI:
     async def test_monitor_sampling_uses_real_tracing_repository(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_monitor_{unique_id}"
@@ -2562,7 +2172,7 @@ class TestEvaluationLabAPI:
             assert context.active_company is not None
             trace_id = f"trace-monitor-{unique_id}"
             session_id = f"{flow_id}:monitor-session-{unique_id}"
-            await container.span_repository.save_span(
+            await Span.insert_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2642,7 +2252,7 @@ class TestEvaluationLabAPI:
     async def test_builtin_evaluator_catalog_and_trace_case_curation(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_builtin_trace_{unique_id}"
@@ -2668,7 +2278,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-builtin-{unique_id}"
-            await container.span_repository.save_span(
+            await Span.insert_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -2739,7 +2349,7 @@ class TestEvaluationLabAPI:
     async def test_monitor_cycle_enqueues_gate_run_and_curates_observation_case(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"eval_lab_monitor_cycle_{unique_id}"
@@ -2764,7 +2374,7 @@ class TestEvaluationLabAPI:
             assert context is not None
             assert context.active_company is not None
             trace_id = f"trace-cycle-{unique_id}"
-            await container.span_repository.save_span(
+            await Span.insert_once(
                 _trace_span(
                     unique_id=unique_id,
                     flow_id=flow_id,
@@ -3103,14 +2713,14 @@ class TestEvaluationLabAPI:
     async def test_run_supports_llm_judge_node_input_and_llm_errors(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
         mock_llm_with_queue: Callable[[list[MockLLMQueuedResponse]], MockLLM],
         mock_llm_redis: Callable[[list[MockLLMQueuedResponse]], Awaitable[None]],
     ) -> None:
         flow_id = f"eval_lab_llm_{unique_id}"
         await _create_code_flow(client, flow_id)
-        service: EvaluationLabService = container.evaluation_lab_service
+        service: EvaluationLabService = di.evaluation_lab_service
         try:
             suite = await _create_suite(client, flow_id, f"LLM judge suite {unique_id}")
             rubric = await _create_rubric(
@@ -3186,7 +2796,7 @@ class TestEvaluationLabAPI:
             assert run_payload.case_runs[0].scores == {"turn_1.check_1.quality": 8.5}
             assert run_payload.case_runs[0].dialog[0].content == "generated judge input"
 
-            flow = await container.flow_repository.get(flow_id)
+            flow = await FlowConfig.get_latest(flow_id)
             assert flow is not None
             state = _state(flow_id, f"{unique_id}-llm", flow.version)
             dialog = [EvaluationDialogMessage(role="assistant", content="ok")]
@@ -3302,7 +2912,7 @@ class TestEvaluationLabAPI:
     async def test_run_llm_judge_uses_flow_judge_node_id_and_node_llm(
         self,
         client: AsyncClient,
-        container: FlowContainer,
+        di: FlowsDi,
         unique_id: str,
         mock_llm_redis: Callable[[list[MockLLMQueuedResponse]], Awaitable[None]],
     ) -> None:
@@ -3310,7 +2920,7 @@ class TestEvaluationLabAPI:
         flow_id = f"eval_lab_flow_judge_{unique_id}"
         await _create_code_flow(client, flow_id)
         try:
-            flow = await container.flow_repository.get(flow_id)
+            flow = await FlowConfig.get_latest(flow_id)
             assert flow is not None
             nodes = dict(flow.nodes or {})
             nodes["eval_judge"] = {
@@ -3412,8 +3022,8 @@ class TestEvaluationLabAPI:
             assert run_payload.case_runs[0].judge_feedback == "flow judge accepted"
             assert run_payload.case_runs[0].dialog[0].content == "ping from tester node"
 
-            service: EvaluationLabService = container.evaluation_lab_service
-            updated_flow = await container.flow_repository.get(flow_id)
+            service: EvaluationLabService = di.evaluation_lab_service
+            updated_flow = await FlowConfig.get_latest(flow_id)
             assert updated_flow is not None
             resolution_state = _state(flow_id, f"{unique_id}-flow-judge", updated_flow.version)
             prompt = await service._judge_prompt(

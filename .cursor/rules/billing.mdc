@@ -1,207 +1,71 @@
 ---
-description: "Биллинг: usage только через span settlement, прайс, pre-flight, OpenRouter→RUB"
+description: "Биллинг и платежи: usage через span settlement, pre-flight, правила списания, прайс, OpenRouter → RUB, админка, Т-Банк. Читать при любой платной операции"
+globs:
+  - "core/billing/**"
+  - "core/payments/**"
+  - "core/clients/payment/**"
+  - "core/clients/llm/billing.py"
+  - "apps/frontend/api/platform_billing.py"
 alwaysApply: false
 ---
-# Биллинг и тарификация
 
-## Принцип: usage только через фоновую джобу
+# Биллинг
 
-Все записи `usage` создаются **исключительно** фоновой span-settlement джобой. Прямые вызовы `record_usage` из сервисов (embedding, STT, recording) **запрещены**.
+Всё, за что платит платформа, оставляет span с `platform.billing.pending_settlement=true`; фоновая джоба превращает его в `UsageRecord` и списывает баланс компании. Атрибуты span → `tracing.mdc`.
 
-Сервис при платной операции:
+## Модель
 
-1. Создаёт `traced_operation` span с `billing_pending_settlement=True` и billing-атрибутами (`billing_usage_type`, `billing_resource_name`, `billing_quantity`).
-2. Джоба **`span_billing_settlement_tick`** подбирает span'ы с `pending_settlement` и пишет `usage`.
+- `UsageRecord` (`usage_id`, `usage_type`, `resource_name`, `quantity`, `cost`, `metadata`); `UsageType` — `core/models/billing_models.py`.
+- `SettlementRulesDocument` (`core/billing/settlement_rules.py`): `application_mode` (`all_matching`/`first_win`), `SettlementRule` (`rule_id`, `match`, `resource_name`, `resource_name_from_span`, `usage_type`, `quantity_from` `const:N`/`attr:<ключ>`, `exclusive_group`, `priority`); хранится per company в `billing:company:{company_id}:settlement_rules_json`.
+- Дефолтный каталог правил и перечень покрытых `operation_name` — `core/billing/default_settlement_rules.py` (LLM, BYOK `llm:byok`, `flows.llm_resource.*`, embedding, rerank, STT/TTS, LiveKit usage, guest runtime).
+- Прайс: `settings.billing.resource_base_prices` → глобальный override `billing:resource_base_prices_json` → per company `billing:company:{company_id}:resource_base_prices_json` (`get_effective_resource_base_prices_for_company`) × множитель тарифа `DEFAULT_TARIFF_PRICES`/`Company.tariff_plan`. Ключ ресурса — `category:resource`; категории — `llm`, `embedding`, `livekit`, `guest`, wildcard `*`.
+- Платёж — `Transaction` (`transaction_id`, `payment_provider`, `external_payment_id`, `payment_url`).
 
-Преимущества: единая точка учёта, нет двойных списаний, сервисы не зависят от billing в runtime.
+## Канон
 
-В `conf.json` для dev — `billing.span_settlement.enabled: true`, чтобы idle-джоба и расписание создавались автоматически. При `enabled: false` старт scheduler-api (`apps/scheduler/main.py`) расписание `span_billing_settlement_tick` **не создаёт** — после смены флага перезапустить scheduler-api (или создать расписание через API/UI).
+1. Платная операция — `traced_operation(..., billing_usage_type=..., billing_resource_name=..., billing_quantity=..., billing_pending_settlement=True)`; `operation_name` обязан совпасть с правилом `default_settlement_rules`, у `resource_name` есть цена.
+2. `record_usage` вызывает только settlement (`core/billing/service.py`); ключ идемпотентности — `billing:settled:{span_id}:{rule_id}`, один `rule_id` на span — один usage.
+3. `span_billing_settlement_tick` (idle, `billing.span_settlement`: `lookback_minutes`, `batch_limit`, `cron`, `fallback_user_id`) читает `list_spans_pending_billing_settlement`, правила компании кэшируются на тик; `settle_pending_span_in_job` списывает по совпавшим правилам, без совпадения — warning без списания; пустые правила — `ValueError`; span без `company_id` — ошибка в лог и пропуск.
+4. Правила компании материализует `load_settlement_rules_document_for_company` (нет ключа — пишет дефолт); старт frontend — `ensure_settlement_rules_materialized_for_all_companies`.
+5. Pre-flight перед платной операцией — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=BALANCE_BLOCK_OPERATION_*, ...)`: `balance <= 0` → `notify_user` + `BillingBalanceBlockedError` (403 `billing_balance_blocked`). Флаги — `billing.balance_enforcement_enabled`, `billing.balance_enforcement_exempt_company_ids` (по умолчанию `system`).
+6. LLM (включая vision и image gen) — только `LLMClient.prepare_billing()` + `record_llm_client_response` (`core/clients/llm/billing.py`); call-site pre-flight и span не пишет; HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`; BYOK (`cost_origin=company`) pre-flight не делает.
+7. Фоновые операции без пользователя (reembed RAG) — `company_may_incur_billable_operation_charge(company_id)` вместо pre-flight с уведомлением.
+8. Voice: pre-flight `BALANCE_BLOCK_OPERATION_SPEECH` при открытии сессии; STT/TTS — `record_stt_usage_span`/`record_tts_usage_span` (`core/billing/speech_usage.py`); TTS считается по тексту после pronunciation pipeline → `voice.mdc`.
+9. OpenRouter: при `provider_reported_cost > 0` `LLMClient` пишет `platform.billing.settlement_quantity_rub` = `round(USD × курс ЦБ)`; правило `llm_openrouter_usd_to_rub` (`first_win`) списывает `billing:rub`; без USD — правило по токенам. Курс — `core/billing/cbr_rate_provider.py` (обновление каждые 5 минут).
+10. Pre-flight не заменяет settlement: usage выполненной операции пишется и при нулевом балансе; баланс может уходить в минус.
+11. Только трейсинг, без `pending_settlement`: старт комнаты и egress LiveKit, `sync.stt.*`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`; категория `tool` в прайсе запрещена (`PUT` — 422).
 
-## Pre-flight: balance > 0 перед billable-операцией
+### Админка
 
-Перед стартом операций с `billing_pending_settlement` — `BillingService.require_balance_for_billable_operation(company_id, user_id, operation_code=..., notification_service=...)`. Обязательны `user_id` (для `notify_user`) и код из `BALANCE_BLOCK_OPERATION_*` (`core/billing/service.py`). При `Company.balance <= 0` — сначала `notify_user` с текстом из `billing.notifications.*` (`core/i18n/translations/*/billing.json`, язык из контекста или RU), затем `BillingBalanceBlockedError` (HTTP 403, `code: billing_balance_blocked` через `create_service_app`).
+- `/frontend/api/platform-billing/*` (цены глобальные и компании, правила компании, `usage-report`, фасеты, `default-settlement-rules`) — только для активной компании `system`; UI `/platform-billing` через фабрики `billing-admin.resource.js`; i18n — `frontend.json` § `platform_billing_page`.
 
-LLM (включая vision и image gen через тот же клиент) — только `LLMClient.prepare_billing()` / `record_llm_client_response` (`core/clients/llm/billing.py`). Call-site (`llm_runner`, `llm_proxy`, `llm_tasks`, evaluation lab, `TextTransformService`, FileReader vision) не вызывает `require_balance` и не пишет `record_llm_response` / pending span. HTTP streaming proxy вызывает `prepare_billing()` до `StreamingResponse`. В pytest pre-flight пропускается (`is_testing()`), запись span остаётся. Free-pool: `company_may_incur_billable_operation_charge` вместо hard pre-flight; платный fallback режется в `_resolve_candidates`. BYOK (`cost_origin=company`) pre-flight не делает. Image gen (`AICapability.IMAGE_GEN`) — тот же `llm.{model}` span, `operation_code=image`.
+### Платежи Т-Банк
 
-Voice WS: pre-flight `BALANCE_BLOCK_OPERATION_SPEECH` при открытии сессии; финальный STT и utterance TTS — `record_stt_usage_span` / `record_tts_usage_span`. HTTP `/transcribe` и `/synthesize` пишут те же spans.
+1. Единственный провайдер — интернет-эквайринг Т-Банка nonPCI (`core/clients/payment/tinkoff_provider.py`); карта вводится только на форме банка, `FinishAuthorize`/`CardData` запрещены.
+2. `POST /frontend/api/billing/topup` → `PaymentService.create_payment` → `Init` (`Amount` в копейках, `PayType=O`, `OrderId` = `{company_id}:{hex12}`); нет `PaymentURL` или `Success=false` — `raise`.
+3. Token — `compute_tinkoff_token` (корневые скаляры без `Token`/`DATA`/`Receipt` + `Password`, сортировка, SHA-256).
+4. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}`; Success/Fail URL — `{subdomain}.{apex Host}/billing?payment=...` по `Context.host`.
+5. Webhook отвечает HTTP 200 телом `OK`, в том числе на неверный Token и неизвестный `OrderId` (без зачисления); не-JSON — не 200; неизвестный провайдер — 404.
+6. Баланс зачисляется только на `Status=CONFIRMED` (webhook или `CheckOrder` в `payment_sync_tick`); `REJECTED`/`AUTH_FAIL`/`DEADLINE_EXPIRED`/`CANCELED` → `failed`; `REFUNDED`/`REVERSED` → `refunded`; редирект браузера — только сигнал UI.
+7. `payment_sync_tick` читает только pending-платежи окна `sync_pending_max_age_hours`, не больше `sync_check_order_limit` за тик.
+8. Чек 54-ФЗ при `receipt_enabled` — `Receipt` в `Init` и `Cancel` (`usn_income_outcome`, НДС `none`, `full_prepayment`, `service`); нет email — `raise`.
+9. TLS банка — `certifi` + PEM НУЦ Минцифры из `core/clients/payment/certs/` с проверкой отпечатка только у Tinkoff-клиента; `verify=False`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` запрещены.
+10. Секреты терминала — `conf.local.json` или Helm (`PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__*`); в API передаётся только `TerminalKey`.
 
-CI `scripts/check_billing_span_canon.py`: `require_balance_for_billable_operation` и `record_llm_response` только в allowlist (`core/clients/llm/billing.py`, embedding, livekit, guest farm, search meta, voice session).
+## Запреты
 
-Флаги: `billing.balance_enforcement_enabled`, `billing.balance_enforcement_exempt_company_ids` (`BillingConfig`); по умолчанию exempt — `system`.
+1. `record_usage`, `record_llm_response`, `require_balance_for_billable_operation` вне allowlist гейта.
+2. Span с `pending_settlement` без правила settlement; разовое списание за факт старта LiveKit.
+3. Оценка стоимости LLM до вызова вместо проверки `balance > 0`.
+4. `monkeypatch` HTTP к банку в тестах платежей.
 
-Pre-flight **не заменяет settlement**: джоба пишет usage без pre-flight; при нуле баланса запись usage по выполненной операции возможна. Оценка по токенам до вызова LLM не делается (фаза 1 — только balance > 0).
+## Исключения
 
-### Фоновые embedding (reembed RAG)
+- Исключение: ЦБ недоступен — `get_current_rate(fallback)` возвращает `billing.usd_to_rub_rate` из `conf.json`. `[без гейта]`
+- Исключение: в pytest pre-flight пропускается (`is_testing()`), запись span остаётся. `[без гейта]`
+- Исключение: архивные платежи `yoomoney` в Storage — `PaymentProviderType` валидирует их при чтении `GET /history`; новые — только `tinkoff`/`grant`. `[без гейта]`
 
-Для тиков перевекторизации stale chunks (`core/rag/reembed_stale_documents.py::execute_reembed_tick`) не используется `require_balance_for_billable_operation` (не спамить владельца уведомлениями из scheduler). Вместо этого — **`BillingService.company_may_incur_embedding_charge(company_id) -> bool`**: те же флаги `balance_enforcement_*` и exempt-список; при выключенном enforcement всегда `True`; компания не найдена в БД — `False`; иначе разрешено только при **`balance > 0`**. Отказ — чанки остаются stale до пополнения или попадания компании в exempt.
+## Гейты
 
-`can_use_resource` остаётся для проверок с учётом стоимости и месячного лимита; в settlement не вызывается.
-
-## OpenRouter и рубли
-
-Дефолтный каталог (`default_settlement_rules_document`) содержит правило **`llm_openrouter_usd_to_rub`** (`first_win`, приоритет выше токенов): `operation_name` `llm.*`, `platform.llm.provider == openrouter`, наличие `platform.billing.settlement_quantity_rub`. Quantity = этот атрибут; ресурс `billing:rub` с базовой ценой `1.0` (1 ₽ за единицу). На span атрибут выставляется в `LLMClient` при `provider_reported_cost > 0` как `round(USD × rate)` (минимум 1 при попадании в запись). Без USD в ответе остаётся правило по токенам (`llm_tracer_tokens`).
-
-Курс — **актуальный от ЦБ РФ** (`core/billing/cbr_rate_provider.py`): при старте сервиса запрашивается `cbr.ru/scripts/XML_daily.asp`, далее обновляется каждые 5 минут (jitter 0–10с). Недоступность ЦБ → fallback `billing.usd_to_rub_rate` из `conf.json`. `get_cbr_usd_to_rub_rate(fallback=settings.billing.usd_to_rub_rate)` возвращает кэш или fallback синхронно без IO.
-
-## Источники цен
-
-1. **Базовые** — `settings.billing.resource_base_prices` (JSON, секция `billing.resource_base_prices`).
-2. **Глобальный override** — shared storage `billing:resource_base_prices_json` (`force_global=True`). Merge — `BillingService.get_effective_resource_base_prices()`.
-3. **Per-company** — `billing:company:{company_id}:resource_base_prices_json`: merge поверх глобального — `get_effective_resource_base_prices_for_company(company_id)`.
-4. **Множители тарифа** — `DEFAULT_TARIFF_PRICES` / `Company.tariff_plan` в `_unit_cost_for_company`.
-
-Ключ ресурса — **`category:resource`**.
-
-## Правила списания (per company)
-
-- Shared storage `billing:company:{company_id}:settlement_rules_json` (`force_global=True`), модель **`SettlementRulesDocument`** (`core/billing/settlement_rules.py`): `application_mode` (`all_matching` | `first_win`), список `SettlementRule` (`rule_id`, `match`, `resource_name`, `usage_type`, `quantity_from`, `exclusive_group`, `priority`).
-- **Инициализация:** `BillingService.load_settlement_rules_document_for_company` — если ключа нет **или** `rules` пуст, в per-company пишется кодовый дефолт из `core/billing/default_settlement_rules.py`. Старт frontend — `ensure_settlement_rules_materialized_for_all_companies`. Джоба зовёт тот же `load_*` по `company_id`. Глобальный `billing:settlement_rules_json` в эту цепочку не входит (только `load_settlement_rules_document()` для чтения без записи в компанию).
-- **`quantity_from`** — `const:N` или `attr:<полный_ключ_attributes>` (например `platform.billing.quantity`).
-- Джоба `BillingService.settle_pending_span_in_job`: при пустом `rules` — legacy `settle_span_charge`; иначе только совпавшие правила (без матча — warning, списания нет).
-
-## Списание и идемпотентность
-
-- `record_usage` — таблица `usage`, баланс компании (баланс может уходить в минус — джоба не блокирует операции); возвращает `usage_id`.
-- **Составной ключ:** `billing:settled:{span_id}:{rule_id}`; legacy-правило `__legacy_span_only__` дополнительно дублирует в `billing:settled_span:{span_id}` (обратная совместимость).
-- Один и тот же `rule_id` для span — один usage; разные `rule_id` — несколько usage на span (если режим допускает).
-
-## Фоновая джоба
-
-- `span_billing_settlement_tick` для каждого span читает `company_id` из колонки. Документ правил `load_settlement_rules_document_for_company(company_id)` кэшируется в памяти на один тик по `company_id` (не Redis GET на каждый span). Span без `company_id` — ошибка в лог, пропуск.
-- Каждый span → `settle_pending_span_in_job`.
-- Выборка: `list_spans_pending_billing_settlement`.
-
-Конфигурация (`billing.span_settlement`): `lookback_minutes: 360` (6ч, защита от простоев), `batch_limit: 500`, `cron: */15 * * * *`, `fallback_user_id` (если span без `user_id`).
-
-## Покрытые операции
-
-Полный перечень `operation_name` для spans с `pending_settlement` — docstring `core/billing/default_settlement_rules.py`. Дефолтные правила матчат по префиксу (`first_win`). `SettlementRule.resource_name_from_span=True` берёт `resource_name` из атрибута `platform.billing.resource_name` span (категория обязана совпадать с категорией правила) — так per-provider цены `stt`/`tts`/`rerank` живут в одном правиле категории.
-
-| `operation_name` | Файл | `usage_type` | `billing_resource_name` | `quantity` |
-|---|---|---|---|---|
-| `llm.{model}` | `core/clients/llm/billing.py` → `record_llm_response` на CLIENT span | `llm_request` | `llm:{model}` | total_tokens |
-| BYOK (`record_llm_response` с `billing_resource_name`) | то же | `llm_request` | `llm:byok` | total_tokens |
-| `flows.llm_resource.*` | `apps/flows/src/runtime/llm_resource_config.py` | `llm_request` | `llm:{model}` или `llm:byok` при BYOK в ресурсе | из attr |
-| `rag.embed.batch` | `core.ai.runtime` / `core.ai.embedding_client` | `embedding_request` | `embedding:{model}` | token_count |
-| `rerank.{model}` | `core/ai/rerank_client.py` | `rerank_request` | `rerank:{model}` или `rerank:byok` (`resource_name_from_span`) | tiktoken-токены |
-| `stt.{provider}` / `tts.{provider}` | `core/billing/speech_usage.py` | `tool_call` | `stt:{provider}` / `tts:{provider}` или `*:byok` (`resource_name_from_span`) | секунды аудио (ceil) / символы |
-| `livekit.room.session_usage` | `core/calls/livekit_usage_spans.py` (завершение SFU-сессии) | `tool_call` | `livekit:room_minute` | поминутно (`platform.billing.quantity`, ceil минут) |
-| `livekit.egress.composite_usage` | то же (стоп записи встречи) | `tool_call` | `livekit:egress_composite_minute` | то же |
-| `guest_runtime.start` | `core/guest_runtime/billing.py` (старт lease) | `agent_execution` | `guest:start` | 1 |
-| `guest_runtime.session_usage` | то же (любой `_stop_lease`: idle reaper, drop, смена digest) | `agent_execution` | `guest:runtime_second` | секунды жизни слота |
-| `guest_runtime.build_usage` | то же (реальная сборка образа) | `agent_execution` | `guest:build_second` | секунды сборки |
-
-Skip READY digest / тот же inprocess digest (сборка не запускалась) — span `guest_runtime.build_usage` **не** пишется.
-
-На том же CLIENT span при потоковом вызове из flows возможны `platform.llm.provider` и `platform.llm.provider_reported_cost`/`provider_upstream_inference_cost` (OpenRouter и др.) — это наблюдаемость; базовое списание идёт от внутреннего прайса и `platform.billing.quantity`, если правила не переведены на `quantity_from` по атрибуту провайдера.
-
-**LiveKit:** `create_room`, `start_*_egress` в `core/calls/livekit_client.py` остаются в трейсинге **без** `billing_pending_settlement` (нет разового списания за факт старта). Списание — только spans `*usage` выше. Правила: `livekit_room_session_minutes`/`livekit_egress_*_minutes` (приоритет 26–28, `quantity_from: attr:platform.billing.quantity`) + запасное `livekit_ops` (префикс `livekit.`, `const:1`). Прайс: `room_minute`, `egress_composite_minute`, `egress_segmented_minute` (плюс возможные legacy `room_create`/`egress_*` для override'ов).
-
-Только трейсинг (без `pending_settlement`): `livekit.room.create`, старт/стоп egress (кроме usage-spans), `sync.stt.*`, `sync.calls.finalize_recording`, `flows.external_api.call`, `flows.mcp.call_tool`, `flows.channel.execute_action`. Категория **`tool`** не используется: `resource_name` `tool:*` в unit cost даёт 0; в `GET` эффективного каталога и при сохранении прайса категория `tool` отбрасывается / запрещена (`422` на `PUT`).
-
-`UsageType` — `core/models/billing_models.py`; в правилах используются строковые значения enum.
-
-## Категории базовых цен
-
-`llm`, `embedding`, `livekit`, `guest`. Wildcard `*` покрывает все ресурсы без явной цены. Инструменты flows в прайс не входят.
-
-## Как добавить биллинг новой операции
-
-1. Обернуть в `traced_operation` с параметрами:
-   - `billing_usage_type` — значение `UsageType` (строка).
-   - `billing_resource_name` — `category:resource`.
-   - `billing_quantity` — количество единиц.
-   - `billing_pending_settlement=True` — обязательно, чтобы джоба подхватила span.
-2. **Не вызывать `record_usage`** напрямую (CI `scripts/check_billing_span_canon.py`: `record_usage` только в `core/billing/service.py`; каждый `traced_operation(..., billing_pending_settlement=True)` с литеральным `operation_name` обязан матчить правило `default_settlement_rules`, иначе деньги теряются молча).
-3. В прайсе должна быть цена `resource_name`.
-4. Множитель категории — в `DEFAULT_TARIFF_PRICES` (`core/models/billing_models.py`).
-
-## Админка (компания `system`)
-
-- Доступ к API только при активной `system` (роль оператора платформы).
-- **`/frontend/api/platform-billing`:** `GET/PUT /prices` (глобальный override каталога), `GET/PUT /settlement-rules/{company_id}`, `GET/PUT /prices/company/{company_id}`, `GET /usage-report`, `GET /company-resolve?q=`, `GET /facets/billing-companies`, `GET /default-settlement-rules`.
-- UI: `/platform-billing`, `billing-admin-page`. Сверху выбирается компания (правила settlement + override прайса); глобальный каталог — отдельная секция.
-- В `core/middleware/auth/route_config.py` нужны **и** `/platform-billing`, **и** `/frontend/platform-billing` (без второго refresh по URL с префиксом `/frontend/` даёт 404).
-- HTTP — только через фабрики (`apps/frontend/ui/events/resources/billing-admin.resource.js`, `createAsyncOp` с `request: ({ httpRequest }) => httpRequest('/frontend/api/...')`). В компонентах admin — `this.useOp('frontend/<op>')`. Прямой `fetch`/`httpRequest`/`BaseService` запрещены.
-
-### Прайс-каталог (глобальный)
-
-`billing:resource_base_prices_json`. `PUT /prices` с категорией `tool` → 422.
-
-### Settlement Rules (per company)
-
-`GET/PUT .../settlement-rules/{company_id}` (404 если компании нет в БД). Карточки: `rule_id`, `enabled`, `priority`, `exclusive_group`, `resource_name`, `usage_type`, `quantity_from`, форма `match` с `attribute_equals`. `resource_name` с префиксом `tool:` в `PUT` → 422. В UI select шаблонов: `llm:*`, `embedding:*`, `livekit:*` и конкретные ключи livekit.
-
-### Прайс компании
-
-Тот же `company_id`, что для правил: override `billing:company:{company_id}:resource_base_prices_json`.
-
-### Usage Report
-
-- Фильтры: `company_id`, `usage_type`, `resource_name`, даты (`platform-date-picker`), `limit`.
-- Автодополнение: компании — `GET /frontend/api/platform-tracing/facets/companies`; тип usage — `GET /api/platform-billing/facets/usage-types` (enum + distinct из `usage`); ресурс — `GET /api/platform-billing/facets/resource-names` (distinct из `usage`).
-- Колонки: Time, Company, Resource, Quantity, Cost, Type. `span_id`/`rule_id` показываются только если хоть одна строка содержит. В ответе строка обогащается `company_name` (как в трейсинге): в UI — название крупно, короткий фрагмент id мелким.
-- Итог: суммарное количество и стоимость. Пагинация — `offset` + `limit` (Назад/Вперёд). Backend: `admin_search_usage_records` поддерживает `resource_name` и `offset`.
-
-### i18n
-
-Все строки UI — `core/i18n/translations/{ru,en}/frontend.json`, секция `platform_billing_page`.
-
-## Контракт атрибутов span
-
-См. `tracing.mdc` (раздел SaaS/биллинг): `platform.billing.resource_name`, `usage_type`, `quantity`, `pending_settlement`.
-
-## TTS billing и Pronunciation Pipeline
-
-Биллинг TTS (`tts:<provider>` за `char_count`) считается на **пост-pipeline** тексте — после применения `TtsTextPipeline.transform` в `PronunciationAwareTTSClient`. Это справедливо: нормализация числа/дат/аббревиатур увеличивает длину (`123` → `сто двадцать три`), и провайдер получает именно этот расширенный текст.
-
-Observability: `traced_operation("voice.tts.pronunciation.transform")` — без биллингового settlement (информационный span). Атрибуты: `tts.provider`, `tts.voice`, `tts.language`, `tts.pronunciation.original_len`, `tts.pronunciation.transformed_len`. Span записывается только если текст изменился (`transformed != original`).
-
-## Пополнение баланса (Т-Банк nonPCI)
-
-Единственный платёжный провайдер — интернет-эквайринг Т-Банка, платёжная форма банка (`core/clients/payment/tinkoff_provider.py`). PCI-данные карты на платформу не приходят.
-
-Протокол:
-
-1. UI `POST /frontend/api/billing/topup` → `PaymentService.create_payment` → `POST {api_url}/Init`.
-2. `Amount` — **копейки**. `PayType=O` (одностадийный). `DATA.OperationInitiatorType=0`.
-3. `OrderId` ≤ 50 символов: `{company_id}:{hex12}` (`new_payment_transaction_id`). `company_id` из id до первого `:`.
-4. Token запроса и HTTP-уведомления: корневые скаляры без `Token`/`DATA`/`Receipt` + `Password` → сортировка ключей → конкатенация значений → SHA-256 hex (`compute_tinkoff_token`). Bool в нотификации — `true`/`false`.
-5. Ответ Init: `PaymentId` + `PaymentURL`. Нет URL / `Success=false` → **raise**.
-6. UI редиректит на `PaymentURL`. Success/Fail URL — `{subdomain}.{apex Host}/billing?payment=...` (`payment_browser_return_url` по `Context.host`, не `PRIMARY_DOMAIN`).
-7. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (стабильный HTTPS, не company-subdomain). Канон продакшена: `https://linnex.io/api/v1/payments/webhook/tinkoff_main` (`SERVER__PLATFORM_PUBLIC_BASE_URL` = `https://{{ .Values.publicBaseHost }}`, не `.Values.domain`). В кабинете Т-Банка: канал HTTP(S) и тот же URL. Локально банк до `*.localhost` не достучится — запасная сверка `payment_sync_tick`.
-8. Webhook: JSON POST, ответ **HTTP 200 тело ровно `OK`**. Неверный Token → 200 `OK` без зачисления.
-9. Зачисление баланса **только** на `Status=CONFIRMED`. `AUTHORIZED` (и прочие pending) баланс не трогают. `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed`.
-10. Неизвестный `OrderId` и неверный Token на webhook → HTTP **200** тело `OK`, без зачисления. Иначе банк ретраит час/сутки/месяц. Не-JSON → не 200. Неизвестный `provider_name` → 404.
-11. Полная отмена: `TinkoffProvider.cancel_payment` → `POST /v2/Cancel` (`TerminalKey`, `PaymentId`, `Token`). Если `receipt_enabled` — тот же объект `Receipt`, что в Init (email обязателен). Нет `Success` / ошибка банка / нет email при чеке → **raise**.
-
-Три URL из `PaymentService.create_payment`:
-
-| URL | Кто ходит | Значение |
-|---|---|---|
-| **NotificationURL** | серверы Т-Банка | `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}` (прод: `https://linnex.io/api/v1/payments/webhook/tinkoff_main`) |
-| **SuccessURL** | браузер покупателя | `{subdomain}.{apex Host}/billing?payment=success&transaction_id=…` (`linnex.io` / `humanitec.ru` / `*.localhost`) |
-| **FailURL** | браузер покупателя | то же с `payment=fail` |
-
-Страница `/billing` читает `payment` + `transaction_id` из `router.search` и показывает toast (`toast_payment_success` / `toast_payment_fail`), затем `replace` на `/billing` без query. Банковский редирект — сигнал для UI, не зачисление.
-
-Банк не подтверждает платёж через SuccessURL. Зачисление: HTTP-уведомление `CONFIRMED` (основной канал) или запасная сверка `CheckOrder` в `payment_sync_tick`. Тик не обходит компании и не читает историю: один SQL `key LIKE 'payment:%' AND value->>'status' = 'pending'`, окно `sync_pending_max_age_hours` (24) и потолок `sync_check_order_limit` (50) CheckOrder за тик. Компании без pending тик не трогает. Старше окна — один CheckOrder; если банк всё ещё не терминальный → `failed`. Тот же `_platform_status`, что webhook: `CONFIRMED` → `success` и зачисление; `REJECTED` / `AUTH_FAIL` / `DEADLINE_EXPIRED` / `CANCELED` → `failed` без баланса; `REFUNDED` / `REVERSED` / … → `refunded` без баланса; `NEW` / `FORM_SHOWED` / `AUTHORIZED` остаются `pending`.
-
-`GET /history` читает ключи `payment:{company_id}:*` (лимит страницы). `payment_sync_tick` историю не сканирует. В Storage лежат архивные `yoomoney` — `PaymentProviderType` обязан их валидировать, иначе список падает на первой старой записи. Новый Init создаёт только `tinkoff` / `grant`.
-
-Чек 54-ФЗ: в Init объект `Receipt`, если `receipt_enabled`. СНО АУСН доходы минус расходы → `taxation=usn_income_outcome`, НДС позиции `none`, `PaymentMethod=full_prepayment`, `PaymentObject=service`, Name «Пополнение баланса». Нет email покупателя при включённом чеке → raise. Живая DEMO-сюита (Тест 7) требует `receipt_enabled=true` и онлайн-кассу на терминале; Init без кассы падает текстом банка. Placeholder `YOUR_TINKOFF_*` в live-тестах → `pytest.skip`.
-
-TLS `securepay.tinkoff.ru` после отзыва GlobalSign подписан НУЦ Минцифры (`Russian Trusted Root CA` + промежуточный `Russian Trusted Sub CA`). `certifi`/Mozilla эти CA не содержат. `TinkoffProvider` проверяет цепочку через `certifi` + официальные PEM в `core/clients/payment/certs/`: `russian_trusted_root_ca.pem` (SHA-256 DER `d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31`) и `russian_trusted_sub_ca.pem` (SHA-256 DER `bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b`), источник `gu-st.ru` / Госуслуги. Нет файла / другой отпечаток → raise. `verify=False` запрещён. Глобальные `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` не используются: extra-CA только у Tinkoff-клиента. Trust Asia на переходный период — из `certifi`. Проверочный хост банка `https://mddc.tbank.ru/` (`tests/core/clients/test_tinkoff_ssl.py`, маркер `network`). Playwright Chromium корень Минцифры не знает и extra server-CA не принимает — контекст формы банка `ignore_https_errors`; зачисление по-прежнему только `GetState`/`CheckOrder`.
-
-DEMO-карты (только терминал с `DEMO` в TerminalKey, боевой `https://securepay.tinkoff.ru/v2`, не `rest-api-test`):
-
-- `4300000000000777` / `12/30` / `111` — успешная оплата на форме банка (Тест 1)
-- `5000000000000009` / `12/30` / `111` — кабинетный Тест 2 (отказ), баланс не зачисляется
-- `4000000000000101` / `12/30` / `111` — кабинетный Тест 7 (чек), Init обязан содержать `Receipt`
-- `5000000000000108` / `12/30` / `111` — Тест 3/8: оплата + `Cancel` с `Receipt`
-
-Живые тесты: `tests/frontend/api/test_payments_tinkoff_live.py`, маркер `network`, timeout 180–240 с, в дефолтный `make test` не входят. Запуск: `uv run pytest tests/frontend/api/test_payments_tinkoff_live.py -m network` или `make test-network`. PCI `FinishAuthorize`/`CardData` запрещены: карта только на форме банка через Playwright. Нет `monkeypatch` HTTP к банку.
-
-Идентификаторы кабинета Merchant_id / Terminal_id / Sbp_merchant_id в API **не** передаются. В Init только **TerminalKey**. DEMO-терминал ходит на боевой `https://securepay.tinkoff.ru/v2`.
-
-Секреты: `conf.json` — плейсхолдеры; реальные `terminal_key`/`password` — `conf.local.json` и Helm `tinkoff-terminal-key` / `tinkoff-terminal-password` → ENV `PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY` / `__PASSWORD`.
+- `scripts/check_billing_span_canon.py` (`make lint`) — `record_usage` только в settlement, pre-flight и `record_llm_response` только в allowlist, каждый литеральный `operation_name` с `pending_settlement` покрыт `default_settlement_rules`.
+- `tests/frontend/api/test_payments_tinkoff_live.py` (маркер `network`, `make test-network`) — DEMO-терминал; `tests/core/clients/test_tinkoff_ssl.py` — цепочка TLS.

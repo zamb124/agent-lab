@@ -8,7 +8,7 @@ import pytest
 from pytest import MonkeyPatch
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.db.models import CRMEntity
+from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.services import crm_note_broadcast as broadcast_mod
 from core.types import JsonObject, JsonValue
 

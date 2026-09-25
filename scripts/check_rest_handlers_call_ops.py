@@ -19,7 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPS_ROOT = REPO_ROOT / "apps"
 COMMAND_WS_SERVICES: tuple[str, ...] = (
-    "sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search", "secrets", "scheduler", "frontend"
+    "sync", "worktracker", "wiki", "rag", "office", "crm", "flows", "search", "secrets", "scheduler", "frontend", "stock"
 )
 HTTP_METHODS: frozenset[str] = frozenset({"get", "post", "put", "patch", "delete", "websocket", "api_route"})
 
@@ -62,8 +62,17 @@ PROTOCOL_HANDLERS: frozenset[str] = frozenset(
         "apps/wiki/api/public.py::get_public_site_page",
         "apps/wiki/api/public.py::get_public_site_page_markdown",
         "apps/wiki/api/public.py::get_public_site_tree",
-        # MCP JSON-RPC поиска
+        # MCP JSON-RPC поиска и Platform MCP LinnexAgent
+        "apps/flows/src/api/v1/platform_mcp.py::platform_mcp_discover",
+        "apps/flows/src/api/v1/platform_mcp.py::platform_mcp_discover_toolkit",
+        "apps/flows/src/api/v1/platform_mcp.py::platform_mcp_message",
+        "apps/flows/src/api/v1/platform_mcp.py::platform_mcp_message_toolkit",
         "apps/search/api/mcp.py::mcp_jsonrpc",
+        # OpenAI-compatible proxy LinnexAgent (не команда)
+        "apps/flows/src/api/v1/agent_llm.py::agent_llm_chat_completions",
+        "apps/flows/src/api/v1/agent_llm.py::agent_llm_images_generations",
+        "apps/flows/src/api/v1/agent_llm.py::agent_llm_models",
+        "apps/flows/src/api/v1/agent_llm.py::agent_llm_onlyoffice_proxy",
         # frontend: LinnexAgent device protocol (без сессии браузера) и tunnel WS
         "apps/frontend/api/agent_devices.py::agent_discover",
         "apps/frontend/api/agent_devices.py::agent_login_page",

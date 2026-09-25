@@ -9,14 +9,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from core.crawl.models import CrawlDomainSeed, SitemapEntry
+from core.crawl.models import (
+    CrawlDomain,
+    CrawlDomainSeed,
+    CrawlJob,
+    CrawlProfile,
+    CrawlUrl,
+    SitemapEntry,
+)
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
-    from apps.search.container import SearchContainer
 
 CRAWL_STRICT_ENRICHMENT_MODEL = "auto"
 
@@ -54,7 +60,7 @@ CRAWL_STRICT_E2E_SITES: tuple[CrawlStrictE2ESite, ...] = (
 
 async def create_search_index_and_profile(
     search_client: AsyncClient,
-    search_container: SearchContainer,
+    search_di,
     *,
     unique_id: str,
     llm_enrichment_enabled: bool = False,
@@ -87,7 +93,7 @@ async def create_search_index_and_profile(
     assert create_profile.status_code == 201
 
     if llm_enrichment_enabled:
-        await search_container.crawl_profile_repository.set_llm_enrichment(
+        await CrawlProfile.set_llm_enrichment(
             crawl_profile_id,
             llm_enrichment_enabled=True,
             enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,
@@ -97,19 +103,19 @@ async def create_search_index_and_profile(
 
 
 async def seed_strict_sites(
-    search_container: SearchContainer,
+    search_di,
     crawl_profile_id: str,
 ) -> None:
     seeds = [
         CrawlDomainSeed(domain=site.domain, category="strict_e2e", domain_rank=index + 1)
         for index, site in enumerate(CRAWL_STRICT_E2E_SITES)
     ]
-    await search_container.crawl_domain_repository.upsert_seed_batch(
+    await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         seeds,
         next_crawl_after=datetime.now(UTC),
     )
-    domain_page = await search_container.crawl_domain_repository.list_page(
+    domain_page = await CrawlDomain.list_page(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -119,11 +125,11 @@ async def seed_strict_sites(
     discovered_at = datetime.now(UTC)
     for site in CRAWL_STRICT_E2E_SITES:
         domain = domain_by_name[site.domain]
-        _ = await search_container.crawl_url_repository.upsert_from_sitemap(
+        _ = await CrawlUrl.upsert_from_sitemap(
             domain.crawl_domain_id,
             [SitemapEntry(url=site.start_url)],
         )
-        await search_container.crawl_domain_repository.mark_discovered(
+        await CrawlDomain.mark_discovered(
             domain.crawl_domain_id,
             discovered_at,
         )
@@ -140,10 +146,10 @@ async def queue_crawl_orchestrator_tick(search_client: AsyncClient, crawl_profil
 
 async def queue_crawl_fetch_for_all_domains(
     search_client: AsyncClient,
-    search_container: SearchContainer,
+    search_di,
     crawl_profile_id: str,
 ) -> None:
-    domain_page = await search_container.crawl_domain_repository.list_page(
+    domain_page = await CrawlDomain.list_page(
         crawl_profile_id=crawl_profile_id,
         status=None,
         limit=50,
@@ -171,7 +177,7 @@ def _indexed_count_from_status_counts(
 
 async def poll_indexed_url_count(
     search_client: AsyncClient,
-    search_container: SearchContainer,
+    search_di,
     *,
     crawl_profile_id: str,
     min_indexed: int,
@@ -182,12 +188,12 @@ async def poll_indexed_url_count(
     last_total = 0
     ticks_sent = 0
     while time.monotonic() < deadline:
-        status_counts = await search_container.crawl_url_repository.count_by_status_for_profile(
+        status_counts = await CrawlUrl.count_by_status_for_profile(
             crawl_profile_id
         )
         last_total = _indexed_count_from_status_counts(status_counts)
         if last_total >= min_indexed:
-            page = await search_container.crawl_url_repository.list_page_for_profile(
+            page = await CrawlUrl.list_page_for_profile(
                 crawl_profile_id=crawl_profile_id,
                 crawl_status="indexed",
                 domain=None,
@@ -212,12 +218,12 @@ async def poll_indexed_url_count(
         if ticks_sent < retry_ticks and time.monotonic() + 30.0 < deadline:
             await queue_crawl_fetch_for_all_domains(
                 search_client,
-                search_container,
+                search_di,
                 crawl_profile_id,
             )
             ticks_sent += 1
         await asyncio.sleep(2.0)
-    status_summary = await search_container.crawl_url_repository.count_by_status_for_profile(
+    status_summary = await CrawlUrl.count_by_status_for_profile(
         crawl_profile_id
     )
     raise AssertionError(
@@ -309,25 +315,25 @@ async def assert_layer1_urls_without_enrichment(indexed_urls: list[dict]) -> Non
 
 
 async def enable_llm_enrichment_layer(
-    search_container: SearchContainer,
+    search_di,
     crawl_profile_id: str,
 ) -> int:
-    await search_container.crawl_profile_repository.set_llm_enrichment(
+    await CrawlProfile.set_llm_enrichment(
         crawl_profile_id,
         llm_enrichment_enabled=True,
         enrichment_model=CRAWL_STRICT_ENRICHMENT_MODEL,
     )
-    missing_count = await search_container.crawl_url_repository.requeue_indexed_missing_enrichment(
+    missing_count = await CrawlUrl.requeue_indexed_missing_enrichment(
         crawl_profile_id
     )
     if missing_count < 1:
         raise AssertionError(f"expected indexed urls missing enrichment, got {missing_count}")
-    backfill_job = await search_container.crawl_job_repository.start(
+    backfill_job = await CrawlJob.start(
         crawl_profile_id,
         "manual",
         schedule_task_id=None,
     )
-    enqueued = await search_container.crawl_orchestrator_service.enqueue_enrichment_backfill(
+    enqueued = await search_di.crawl_orchestrator_service.enqueue_enrichment_backfill(
         crawl_profile_id,
         backfill_job.crawl_job_id,
         limit=missing_count,

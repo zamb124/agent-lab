@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
 
 from apps.flows.src.models import ResourceType
-from apps.flows.src.models.resource import ResourceReference, ResourceReferenceInput
+from apps.flows.src.models.resource import (
+    ResourceDefinition,
+    ResourceReference,
+    ResourceReferenceInput,
+)
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
@@ -22,16 +25,12 @@ from core.llm_context.resolver import (
 )
 from core.types import JsonObject
 
-if TYPE_CHECKING:
-    from apps.flows.src.db import ResourceRepository
-
 
 async def infer_unique_llm_context_resource_key_from_merged_maps(
     *,
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     node_resources_raw: Mapping[str, ResourceReferenceInput],
-    repository: ResourceRepository | None,
 ) -> str | None:
     """
     Выводит context resource только если в объединённой карте flow/skill/node ровно один.
@@ -49,12 +48,12 @@ async def infer_unique_llm_context_resource_key_from_merged_maps(
             if ref.type == ResourceType.LLM_CONTEXT:
                 context_keys.append(key)
             continue
-        if repository is None:
-            raise ValueError("resource_repository is required for shared LLM context resources")
         resource_id = ref.resource_id
         if resource_id is None:
             raise ValueError(f"Resource '{key}': shared reference without resource_id")
-        definition = await repository.get(resource_id)
+        definition = await ResourceDefinition.get(
+            ResourceDefinition.row_id(resource_id)
+        )
         if definition is not None and definition.type == ResourceType.LLM_CONTEXT:
             context_keys.append(key)
     if len(context_keys) != 1:
@@ -68,7 +67,6 @@ async def resolve_llm_context_resource_patch(
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     node_resources_raw: Mapping[str, ResourceReferenceInput],
-    repository: ResourceRepository | None,
 ) -> LLMContextPatch | None:
     """Разрешает patch слоя resource для иерархии platform context."""
     key = str(llm_context_resource_key or "").strip()
@@ -77,7 +75,6 @@ async def resolve_llm_context_resource_patch(
             flow_resources=flow_resources,
             skill_resources=skill_resources,
             node_resources_raw=node_resources_raw,
-            repository=repository,
         )
         if inferred is None:
             return None
@@ -99,12 +96,12 @@ async def resolve_llm_context_resource_patch(
             raise ValueError(f"Resource '{key}': inline LLM context without config")
         return LLMContextPatch.model_validate(ref.config)
 
-    if repository is None:
-        raise ValueError("resource_repository is required for shared LLM context resources")
     resource_id = ref.resource_id
     if resource_id is None:
         raise ValueError(f"Resource '{key}': shared reference without resource_id")
-    definition = await repository.get(resource_id)
+    definition = await ResourceDefinition.get(
+        ResourceDefinition.row_id(resource_id)
+    )
     if definition is None:
         raise ValueError(f"Shared resource '{resource_id}' not found in the database")
     if definition.type != ResourceType.LLM_CONTEXT:
@@ -127,7 +124,6 @@ async def resolve_llm_context_policy_for_runtime(
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     node_resources_raw: Mapping[str, ResourceReferenceInput],
-    repository: ResourceRepository | None,
     node: LLMContextPatch | JsonObject | None = None,
     call: LLMContextPatch | JsonObject | None = None,
     company: LLMContextPatch | JsonObject | None = None,
@@ -139,7 +135,6 @@ async def resolve_llm_context_policy_for_runtime(
         flow_resources=flow_resources,
         skill_resources=skill_resources,
         node_resources_raw=node_resources_raw,
-        repository=repository,
     )
     company_patch = company if company is not None else resolve_company_llm_context_patch()
     return resolve_llm_context_policy(

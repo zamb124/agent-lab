@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
-from apps.office.dependencies import ContainerDep
+from apps.office.di import Di
 from apps.office.realtime.data_table_operations import (
     OfficeDataTableAddColumnPayload,
     OfficeDataTableCreateTablePayload,
@@ -62,20 +62,20 @@ router = APIRouter(tags=["data-tables"])
 @router.post("/data-tables", response_model=FileRecord)
 async def create_data_table(
     body: DataTableCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FileRecord:
-    return await op_data_tables_create(body, user=require_context().user, container=container)
+    return await op_data_tables_create(body, user=require_context().user, di=di)
 
 
 @router.get("/data-tables/{file_id}", response_model=DataTableFileSnapshot)
 async def get_data_table(
     file_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableFileSnapshot:
     return await op_data_tables_get(
         OfficeDataTableFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -83,14 +83,14 @@ async def get_data_table(
 async def promote_data_table(
     file_id: str,
     body: DataTablePromoteRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FileRecord:
     return await op_data_tables_promote(
         OfficeDataTablePromotePayload(
             file_id=file_id, flow_id=body.flow_id, original_name=body.original_name
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -98,12 +98,12 @@ async def promote_data_table(
 async def create_data_table_table(
     file_id: str,
     body: DataTableCreateTableRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     return await op_data_tables_table_create(
         OfficeDataTableCreateTablePayload(file_id=file_id, name=body.name, columns=body.columns),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -115,7 +115,7 @@ async def add_data_table_column(
     file_id: str,
     table_name: str,
     body: DataTableAddColumnRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     return await op_data_tables_column_add(
         OfficeDataTableAddColumnPayload(
@@ -126,7 +126,7 @@ async def add_data_table_column(
             not_null=body.not_null,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -137,7 +137,7 @@ async def add_data_table_column(
 async def list_data_table_rows(
     file_id: str,
     table_name: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = 50,
     cursor: Annotated[str | None, Query()] = None,
     sort_column: Annotated[str | None, Query()] = None,
@@ -161,7 +161,7 @@ async def list_data_table_rows(
             column_q=column_q,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -169,7 +169,7 @@ async def list_data_table_rows(
 async def export_data_table_table(
     file_id: str,
     table_name: str,
-    container: ContainerDep,
+    di: Di,
     source_format: Annotated[Literal["csv", "xlsx"], Query()],
 ) -> FileRecord:
     return await op_data_tables_export(
@@ -177,7 +177,7 @@ async def export_data_table_table(
             file_id=file_id, table_name=table_name, source_format=source_format
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -189,12 +189,12 @@ async def insert_data_table_rows(
     file_id: str,
     table_name: str,
     body: DataTableInsertRowsRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableInsertRowsResponse:
     return await op_data_tables_rows_insert(
         OfficeDataTableInsertRowsPayload(file_id=file_id, table_name=table_name, rows=body.rows),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -207,14 +207,14 @@ async def update_data_table_row(
     table_name: str,
     row_id: int,
     body: DataTableUpdateRowRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableUpdateRowResponse:
     return await op_data_tables_row_update(
         OfficeDataTableUpdateRowPayload(
             file_id=file_id, table_name=table_name, row_id=row_id, values=body.values
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -226,14 +226,14 @@ async def delete_data_table_rows(
     file_id: str,
     table_name: str,
     body: DataTableDeleteRowsRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableDeleteRowsResponse:
     return await op_data_tables_rows_delete(
         OfficeDataTableDeleteRowsPayload(
             file_id=file_id, table_name=table_name, row_ids=body.row_ids
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -241,12 +241,12 @@ async def delete_data_table_rows(
 async def query_data_table(
     file_id: str,
     body: DataTableQueryRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableQueryResult:
     return await op_data_tables_query(
         OfficeDataTableQueryPayload(file_id=file_id, sql=body.sql),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -257,7 +257,7 @@ async def query_data_table(
 async def import_data_table_tabular(
     file_id: str,
     body: DataTableImportRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     return await op_data_tables_import(
         OfficeDataTableImportPayload(
@@ -267,5 +267,5 @@ async def import_data_table_tabular(
             upload_file_id=body.upload_file_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

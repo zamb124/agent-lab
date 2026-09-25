@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.services.flow_ui_cards import show_action_preview, show_action_result
+from apps.flows.src.services.lara_facade import LaraFacade
 from core.context import resolve_namespace_or_raise
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
@@ -11,6 +11,11 @@ from core.types import JsonObject, require_json_object
 
 class LaraClient:
     """In-process client for LaraFacade preview/apply (CRM note, etc.)."""
+
+    _facade: LaraFacade
+
+    def __init__(self, facade: LaraFacade) -> None:
+        self._facade = facade
 
     async def propose_create_note(
         self,
@@ -23,8 +28,7 @@ class LaraClient:
         idempotency_key: str | None = None,
     ) -> JsonObject:
         ns = namespace if namespace and str(namespace).strip() else resolve_namespace_or_raise()
-        facade = require_current_container().lara_facade
-        action = await facade.preview_crm_create_note(
+        action = await self._facade.preview_crm_create_note(
             name=name.strip(),
             description=description,
             note_date=note_date,
@@ -72,8 +76,7 @@ class LaraClient:
         state: ExecutionState,
         idempotency_key: str | None = None,
     ) -> JsonObject:
-        facade = require_current_container().lara_facade
-        action = await facade.apply_crm_create_note(
+        action = await self._facade.apply_crm_create_note(
             pending_action_id=pending_action_id,
             state=state,
             idempotency_key=idempotency_key,

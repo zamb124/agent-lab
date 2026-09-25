@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import ExternalAPINode, create_node
 from apps.flows.src.tools.base import ExternalAPITool
 from core.state import ExecutionState
@@ -150,7 +151,7 @@ class TestExternalAPINode:
     """Тесты ExternalAPINode."""
 
     @pytest.mark.asyncio
-    async def test_create_external_api_node(self, container):
+    async def test_create_external_api_node(self, di):
         """Создание ExternalAPINode."""
         node_config = {
             "type": "external_api",
@@ -159,12 +160,12 @@ class TestExternalAPINode:
             "method": "POST",
             "body_template": '{"message": "@state:message"}',
         }
-        node = await create_node("echo_node", node_config, container=container)
+        node = await create_node("echo_node", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
         assert isinstance(node, ExternalAPINode)
         assert node.node_id == "echo_node"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_with_asgi(self, container, asgi_api_client, monkeypatch, unique_id):
+    async def test_external_api_node_with_asgi(self, di, asgi_api_client, monkeypatch, unique_id):
         """ExternalAPINode с ASGI транспортом."""
         import httpx
 
@@ -185,7 +186,7 @@ class TestExternalAPINode:
                 "method": "POST",
                 "body_template": '{"message": "@state:message"}',
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -194,12 +195,12 @@ class TestExternalAPINode:
             session_id=f"test-agent:test-context-{unique_id}",
             message="Hello",
         )
-        result = await run_node(container=container, node=node, state=state)
+        result = await run_node(di=di, node=node, state=state)
         assert result["api_status"] == "completed"
         assert result["api_response"]["result"] == "Hello from API"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_interrupt(self, container, monkeypatch, unique_id):
+    async def test_external_api_node_interrupt(self, di, monkeypatch, unique_id):
         """ExternalAPINode с interrupt."""
         import httpx
 
@@ -221,7 +222,7 @@ class TestExternalAPINode:
                 "method": "POST",
                 "body_template": "{}",
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -229,12 +230,12 @@ class TestExternalAPINode:
             user_id="test-user",
             session_id=f"test-agent:test-context-{unique_id}",
         )
-        result = await run_node(container=container, node=node, state=state)
+        result = await run_node(di=di, node=node, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Need more info"
 
     @pytest.mark.asyncio
-    async def test_external_api_node_with_var(self, container, monkeypatch, unique_id):
+    async def test_external_api_node_with_var(self, di, monkeypatch, unique_id):
         """ExternalAPINode с @var: переменными."""
         import httpx
 
@@ -253,7 +254,7 @@ class TestExternalAPINode:
                 "method": "POST",
                 "headers": {"Authorization": "@var:auth_token"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -262,7 +263,7 @@ class TestExternalAPINode:
             session_id=f"test-agent:test-context-{unique_id}",
             variables={"auth_token": "Bearer secret123"},
         )
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
         assert captured_headers.get("Authorization") == "Bearer secret123"
 
 
@@ -376,10 +377,9 @@ class TestFlowWithExternalAPI:
     """Тесты Agent с ExternalAPINode."""
 
     @pytest.mark.asyncio
-    async def test_flow_with_external_api_node(self, app, monkeypatch, unique_id):
+    async def test_flow_with_external_api_node(self, app, monkeypatch, unique_id, di):
         """Agent с ExternalAPINode."""
         from apps.flows.src.clients.external_api_client import ExternalAPIClient
-        from apps.flows.src.container import get_container
 
         async def mock_request(self, method, url, **kwargs):
             import httpx
@@ -387,7 +387,6 @@ class TestFlowWithExternalAPI:
             return httpx.Response(200, json={"status": "completed", "data": {"processed": True}})
 
         monkeypatch.setattr(ExternalAPIClient, "_request_with_proxy_fallback", mock_request)
-        container = get_container()
         flow_config = FlowConfig(
             flow_id="external_api_flow",
             name="External API Agent",
@@ -402,8 +401,8 @@ class TestFlowWithExternalAPI:
             },
             edges=[Edge(from_node="api_call", to_node=None)],
         )
-        await container.flow_repository.set(flow_config)
-        flow = await container.flow_factory.get_flow("external_api_flow")
+        await FlowConfig.create_version(flow_config)
+        flow = await di.flow_factory.get_flow("external_api_flow", tool_registry=di.tool_registry)
         context_id = f"test-context-{unique_id}"
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -411,6 +410,6 @@ class TestFlowWithExternalAPI:
             user_id="test-user",
             session_id=f"external_api_flow:{context_id}",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result["api_status"] == "completed"
         assert result["api_response"]["processed"] is True

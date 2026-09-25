@@ -54,7 +54,7 @@ async def test_request_wraps_empty_exception_message_with_type_name() -> None:
         with pytest.raises(ServiceClientError) as raised:
             await client.request("flows", "GET", "/flows/api/v1/flows/missing")
 
-    assert str(raised.value) == "Ошибка запроса к flows: Exception"
+    assert str(raised.value) == "Request error for flows: Exception"
     assert raised.value.__cause__ is not None
 
 
@@ -81,5 +81,5 @@ async def test_request_preserves_http_status_error_body() -> None:
         with pytest.raises(ServiceClientError) as raised:
             await client.request("flows", "GET", "/flows/api/v1/flows/missing")
 
-    assert "HTTP 404 при запросе к flows" in str(raised.value)
+    assert "HTTP 404 while requesting flows" in str(raised.value)
     assert raised.value.status_code == 404

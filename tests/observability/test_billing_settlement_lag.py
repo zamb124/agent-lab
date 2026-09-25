@@ -12,7 +12,7 @@ from apps.idle_worker.tasks.span_billing_settlement_tasks import span_billing_se
 from core.logging.attributes import LOG_BILLING_SETTLEMENT_LAG_MS, LOG_OPERATION_NAME
 from core.models.billing_models import UsageType
 from core.models.identity_models import Company
-from core.tracing.models import TraceSpanWrite
+from core.tracing.models import Span
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 from tests.fixtures.observability_log_capture import (
     require_log_fields,
@@ -26,7 +26,8 @@ pytestmark = pytest.mark.timeout(60)
 
 @pytest.mark.asyncio
 async def test_billing_settlement_lag_emitted_for_pending_span(
-    frontend_container,
+    idle_worker_di,
+    frontend_di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
     system_user_id: str,
@@ -41,14 +42,13 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
 
-    repo = frontend_container.span_repository
     sid = f"span-lag-{unique_id}"
     ended_at = datetime.now(timezone.utc) - timedelta(minutes=2)
     started_at = ended_at - timedelta(seconds=1)
-    await repo.save_span(
-        TraceSpanWrite(
+    await Span.insert_once(
+        Span(
             span_id=sid,
             trace_id=f"trace-lag-{unique_id}",
             parent_span_id=None,
@@ -80,7 +80,7 @@ async def test_billing_settlement_lag_emitted_for_pending_span(
         )
     )
 
-    _ = await span_billing_settlement_tick(company_id=cid)
+    _ = await span_billing_settlement_tick(company_id=cid, di=idle_worker_di)
 
     expected_operation_name = f"bill.lag.{unique_id}"
     rec = await wait_for_caplog_event(

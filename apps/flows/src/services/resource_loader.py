@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import FlowConfig, NodeConfig
+from apps.flows.src.models.tool_reference import ToolReference
+from apps.flows.src.runtime.nodes import NodeConstructor
+from apps.flows.src.services.flow_factory import FlowFactory
 from core.errors import ResourceNotFoundError
 from core.logging import get_logger
 from core.types import parse_json_object
@@ -39,26 +40,20 @@ class ResourceLoader:
 
     node_registry: NodeRegistry
     tool_registry: ToolRegistry
-    flow_repository: FlowRepository
-    node_repository: NodeRepository
-    tool_repository: ToolRepository
-    container: FlowRuntimeContainer
+    node_constructor: NodeConstructor
+    flow_factory: FlowFactory
 
     def __init__(
         self,
         node_registry: NodeRegistry,
         tool_registry: ToolRegistry,
-        flow_repository: FlowRepository,
-        node_repository: NodeRepository,
-        tool_repository: ToolRepository,
-        container: FlowRuntimeContainer,
-    ):
+        node_constructor: NodeConstructor,
+        flow_factory: FlowFactory,
+    ) -> None:
         self.node_registry = node_registry
         self.tool_registry = tool_registry
-        self.flow_repository = flow_repository
-        self.node_repository = node_repository
-        self.tool_repository = tool_repository
-        self.container = container
+        self.node_constructor = node_constructor
+        self.flow_factory = flow_factory
 
     async def load_flow(self, flow_id: str) -> FlowConfig:
         """
@@ -74,7 +69,7 @@ class ResourceLoader:
             ResourceNotFoundError: если flow не найден
         """
         resolved_flow_id = extract_resource_id(flow_id)
-        config = await self.flow_repository.get(resolved_flow_id)
+        config = await FlowConfig.get_latest(resolved_flow_id)
 
         if not config:
             raise ResourceNotFoundError(
@@ -98,7 +93,7 @@ class ResourceLoader:
             ResourceNotFoundError: Если нода не найдена
         """
         resolved_node_id = extract_resource_id(node_id)
-        config = await self.node_repository.get(resolved_node_id)
+        config = await NodeConfig.get(NodeConfig.row_id(resolved_node_id))
 
         if not config:
             raise ResourceNotFoundError(
@@ -124,7 +119,7 @@ class ResourceLoader:
         """
         resolved_tool_id = extract_resource_id(tool_id)
 
-        config = await self.tool_repository.get(resolved_tool_id)
+        config = await ToolReference.get(ToolReference.row_id(resolved_tool_id))
         if not config:
             raise ResourceNotFoundError(
                 resource_type="Tool",
@@ -148,7 +143,9 @@ class ResourceLoader:
         return node_class.from_config(
             config.node_id,
             node_config,
-            container=self.container,
+            node_constructor=self.node_constructor,
+            tool_registry=self.tool_registry,
+            flow_factory=self.flow_factory,
         )
 
 

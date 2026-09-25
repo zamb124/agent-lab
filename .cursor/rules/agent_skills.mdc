@@ -1,97 +1,47 @@
 ---
-description: "Agent Skills: progressive procedure packs for llm_node (agent_skill ≠ branch ≠ AgentToolkit)"
+description: "Agent Skills: procedure packs для llm_node, load_agent_skill, depends_on, seed, Skill Library, каталог Lara. Читать при правке skills, Lara и tools llm_node"
 globs:
-  - "apps/flows/**"
-  - "core/llm_context/**"
+  - "apps/flows/src/models/agent_skill.py"
+  - "apps/flows/src/services/platform_assistant_skills.py"
+  - "apps/flows/bundles/_seed/agent_skills/**"
+  - "apps/flows/bundles/lara/**"
+  - "apps/flows/ui/**/*skill*"
   - "tests/flows/**/*skill*"
 alwaysApply: false
 ---
+
 # Agent Skills
 
-## Сущность
+Agent Skill — запись каталога с progressive disclosure для `llm_node`: *как* решать класс задач (body + lazy load tools и файлов). Tool/MCP — *что* вызвать (`ToolRegistry`), branch/flow — durable orchestration, RAG/resource — факты и конфиг.
 
-**Agent Skill** — DB-first catalog entry с progressive disclosure для `llm_node`.
+## Модель
 
-| Слой | Имя |
-|---|---|
-| Python / DB / API | `agent_skill`, `agent_skill_id` |
-| UI copy | Skill |
-| Import | agentskills.io `SKILL.md` |
+- `AgentSkill` (`apps/flows/src/models/agent_skill.py`, таблица `agent_skills` базы flows, PK `agent_skill_row_id` = `{company_id}:{agent_skill_id}`): body, `tool_refs`, `depends_on`, references и assets (`FileRef`); импорт — формат agentskills.io `SKILL.md`.
+- Привязка — `NodeConfig.agent_skills: list[agent_skill_id]`; UI copy — «Skill», API/DB — `agent_skill_id`/`agent_skills`.
+- Seed платформы — `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` (`apps/flows/src/services/platform_assistant_skills.py`), для существующих компаний — идемпотентный `ensure-seed`.
 
-**Не путать:**
+## Инварианты
 
-| Термин | Смысл |
-|---|---|
-| `agent_skill` | Procedure pack (methodology + optional tools/files) |
-| `branch_id` / `BranchConfig` | Вариант графа flow (legacy имя «skill» запрещено) |
-| `AgentToolkit` | Группы tools/flows для Platform MCP / desktop |
-| `ToolReference` | Capability (что вызвать) |
+1. Tier-1 индекс skills — блок `kind=skill` в `llm_context`; body и references грузятся только meta-tools `load_agent_skill` и `read_agent_skill_reference`, которые runtime добавляет сам при непустом `agent_skills` (в JSON `tools` ноды и в chips их нет).
+2. Load вставляет body и материализует `tool_refs` в активные tools; `tools_schema` пересобирается на каждой ReAct-итерации; несколько load в одном run накапливаются (union); reload идемпотентен.
+3. `depends_on` — любая глубина, циклы допустимы, стоп безопасности на глубине ≥ 64.
+4. Скрипты skill — только через существующие tools и code-runner; FS в процессе нет.
+5. Skill ссылается только на существующие `tool_refs`; без tool контракта body ведёт по UI и не заявляет исполнение.
+6. Lara (`flow_id=lara`) — один ассистент SPA и LinnexAgent; каталог Tier-1 один на все branches; branches отличаются focus prompt и standing tools; standing tool — только `ask_user` (branch `linnex_agent` — плюс `device_tools_list`/`device_tools_call` → `humanitec_agent.mdc`); доменные tools появляются только после load.
+7. Standing UI context Lara — только id и скаляры; тела нод и документов читаются tools после load.
+8. Общие leaves (`document-workspace`, `web-research`, `work-tracking`, `team-directory`, `agent-planning`, …) живут под `platform-workspace` и подключаются через `depends_on`; копия tool pack между service skills запрещена.
 
-## Слои
+## UI
 
-- Skill = *как* решать класс задач (body + lazy load)
-- Tool/MCP = *что* вызвать (`ToolRegistry`)
-- Branch/flow = durable orchestration
-- RAG/resource = факты/конфиг
-
-## Контракт
-
-- Catalog: `AgentSkill` → `AgentSkillRepository` (`agent_skill:{id}`)
-- Attach: `NodeConfig.agent_skills: list[agent_skill_id]`
-- Runtime: Tier-1 index в `llm_context` (`kind=skill`); Tier-2/3 через builtin `load_agent_skill` / `read_agent_skill_reference`
-- При непустом `NodeConfig.agent_skills` runtime **автоматически** добавляет meta-tools (`load_agent_skill`, `read_agent_skill_reference`); они **не** показываются в standing Tools chips
-- Load всегда через `load_agent_skill` (поля activation нет)
-- При load: inject body block + materialize `tool_refs` в active tools runner; `tools_schema` пересобирается на каждой ReAct-итерации
-- Несколько load в одном run — **accumulate** (union body + tools), не replace
-- `depends_on`: произвольная глубина (child от любого уже загруженного parent); циклы допустимы; reload idempotent; engineering safety stop depth ≥ 64
-- Scripts: не in-process FS; только через существующие tools / code-runner
-- Magic tools **не** перечислять в JSON `tools` ноды — runtime добавляет их при непустом `agent_skills`
-
-## UI (flows)
-
-- Route `agent_skills` (`/flows/skills`) — Skill Library master-detail page.
-- Factories: `flows/agent_skills` (CRUD list/get/create/update/remove, `transport: 'ws'`), `flows/agent_skill_import` (preview/persist), `flows/agent_skills_ensure_seed` (idempotent platform seed for existing companies).
-- Modals: `flows.agent_skill_create`, `flows.agent_skill_edit` (shared editor), `flows.agent_skill_import`, `flows.agent_skill_picker`, tool view/edit via `flows.embedded_tool_config`.
-- llm_node editor: секция **Skills** только в режиме Tools (`structured_output=false`); в Structured скрыта (attach в конфиге сохраняется). Magic tools never appear in tools chips.
-- Skill chip click → `flows.agent_skill_edit` (тот же `<flows-agent-skill-editor>`, что Skill Library). X на чипе — detach.
-- Duplicate в editor: create с новым `agent_skill_id` + клон полей; из chip-модалки `onDuplicated` заменяет attach на копию.
-- Skill editor: tool chip → `flows.embedded_tool_config` (Save пишет в `tool_refs`); depends_on chip click → `flows.agent_skill_edit` (X — detach); depends_on add через `flows.agent_skill_picker` (поиск); references/assets — `openFile` → `platform.file_viewer`.
-- Entry points: sidebar Skills, home connect card, llm_node «Manage skills».
-- UI copy: **Skill**; поля API остаются `agent_skill_id` / `agent_skills`.
-- Platform icon для Skill везде один: `AGENT_SKILL_ICON` (`scroll-text`) из `apps/flows/ui/_helpers/agent-skill-map.js` — chips, list, picker, sidebar, llm_node. В ленте Flow UI загрузка skill — чип блока `skill_activity` (`blocks/platform.js`, `data-kind="skill"`, `data-agent-skill-id`), без отдельной иконки.
-- Tool chips в Skill editor используют тот же visual meta, что llm_node (`getToolRefVisualMeta` / language icon).
-- Skill Library page и skill picker при открытии вызывают `ensure-seed`, затем list — backfill каталога без полного company re-init.
-- Flow UI: `load_agent_skill` ставит в очередь state рендер блока `FlowUISkillActivity` (`show_skill_activity` из `apps/flows/src/services/flow_ui_cards.py`, статусы `loading`/`loaded`/`failed`) в `conversation`; runtime публикует его артефактом `ui` на ближайшем `flush_ui`. Видимость — `FlowUIConversationSettings.show_skill_loads`; toast overlay отсутствует. Special UI event branch отсутствует.
-
-## Lara (канон)
-
-- `flow_id: lara` — единый ассистент SPA **и** LinnexAgent desktop.
-- Service roots полного Tier-1 catalog: `console-platform`, `networkle`, `flows-platform`, `sync-platform`, `documents-platform`, `wiki-platform`, `worktracker-platform`, `litserve-platform`.
-- Дополнительные roots: `flows-code` (node helper entry), `docs-knowledge` (docs portal), `platform-workspace` (shared capabilities).
-- Branches `console`, `crm`, `flows`, `sync`, `documents`, `wiki`, `worktracker`, `litserve`, `docs`, node-helper и **`linnex_agent`** (desktop entry) отличаются focus prompt / standing tools. Каждый наследует один Tier-1 catalog; branch не режет skill catalog.
-- Branch **`linnex_agent`**: Platform MCP / LinnexAgent; standing `ask_user` + `device_tools_list` + `device_tools_call` (tunnel → local PC). Канон desktop → **`humanitec_agent.mdc`** (LaraOnly).
-- Standing tools на base и во всех branches: только `ask_user`. Domain/shared tools появляются только после `load_agent_skill`.
-- Standing UI context — только IDs/скаляры (не `*_payload_json`). Flows: тела нод через `flows_get_node` / `flows_list_nodes` / лёгкий `flows_read_context` после load skill.
-- Company knowledge — child `knowledge-rag` под `documents-platform` (и `docs-knowledge`); отдельного Tier-1 `rag-platform` и Lara branch `rag` нет. Decommission сервиса `apps/rag` → Documents — отдельный эпик (backend/API/helm); tool ids `rag_*` остаются до миграции API.
-- Catalog browse/search/read/link + folder/members/ACL/public link + catalog RAG admin — child `documents-catalog` под `documents-platform` (те же platform builtins, что и на любом Flows `llm_node`).
-- `document-workspace` — create/open/mutate + empty/rename/move/copy/trash; `depends_on: docx-templates`.
-- Documents methodology — `documents-platform/references/documents-employee-methodology.md`.
-- Wiki — Tier-1 `wiki-platform`; children `wiki-pages` (tree/markdown/CRUD/revisions/comments), `wiki-access` (members/public link + `team-directory`), `wiki-discovery` (search/backlinks). Methodology — `wiki-platform/references/wiki-employee-methodology.md` (LLM tools `wiki_*` vs eval `await wiki.*`). Builtins `wiki_*` tag `wiki` — thin wrappers over `WikiClient`. Documents builtins `documents_*` — thin wrappers over `DocumentsClient` (eval `await documents.*`).
-- Methodology бывших Lara prompts — в skill bodies + `references/*-lara-methodology.md`.
-- Skill Library CTA → `flow_chat` / `lara`. `platform_assistant` — deprecated alias с теми же roots.
-- Seed: `apps/flows/bundles/_seed/agent_skills/` + `seed_platform_assistant_skills` / `ensure-seed`.
-- Service skill может содержать только существующие operational `tool_refs`; если tool контракта нет, body ведёт по UI и запрещает заявлять об исполнении.
-- Shared tree под `platform-workspace`: `document-workspace` → `docx-templates`, `diagrams-viz`, `web-research`, `work-tracking`, `team-directory`, `agent-planning`, `google-sheets` (`sheets_*`, OAuth `service=sheets`). `web-research` включает batch browser search + page snapshot; `work-tracking` включает list_mine/create/complete + one-time/cron/interval scheduler; `team-directory` — `team_list_members` / `team_resolve_user`; `agent-planning` — `agent_plan_write` / `agent_plan_get` (→ **`agent_plan.mdc`**).
-- `worktracker-platform` children: `work-tracking`, `work-items` (get/update/assign/move/claim/cancel/comments), `work-queues`, `work-boards`, `team-directory`. Methodology — `references/worktracker-employee-methodology.md`.
-- `sync-platform` children: `sync-messaging` (list/send/edit/delete/react/mark message read), `sync-channels` (list/create/update/members/mark read/mute), `sync-threads` (list/get/create + list thread messages), `team-directory`. Methodology — `references/sync-employee-methodology.md`. Calls/Git/presence — UI-only boundary.
-- `networkle` children: `crm-entities` (entity CRUD/merge/types/summaries/activity-tasks), `crm-notes` (list + create/analyze/apply/discard), `crm-graph` (relationships list/delete/types/related/path), `crm-ops` (suggests + knowledge-import status), `work-items`, `document-workspace`, `team-directory`. Methodology — `references/networkle-lara-crm-methodology.md`. AmoCRM/grants/type-admin/graph chrome — UI-only boundary.
-- Service children переиспользуют shared leaves через `depends_on` либо направляют к отдельному Tier-1 root; копировать один tool pack между service skills запрещено.
+- Маршрут `agent_skills` (`/flows/skills`) — Skill Library; фабрики `flows/agent_skills` (`transport: 'ws'`), `flows/agent_skill_import`, `flows/agent_skills_ensure_seed`; модалки `flows.agent_skill_create`/`_edit`/`_import`/`_picker`.
+- Секция Skills в `llm_node` — только в режиме Tools; chip открывает тот же `<flows-agent-skill-editor>`; иконка везде — `AGENT_SKILL_ICON` (`apps/flows/ui/_helpers/agent-skill-map.js`).
+- Загрузка skill в Flow UI — блок `FlowUISkillActivity` (`show_skill_activity`, `apps/flows/src/services/flow_ui_cards.py`) в `conversation` при `show_skill_loads`.
 
 ## Запреты
 
-- Маппить Skill на `BranchConfig`
-- Aliases `skill_id` для этой сущности в API/DB
-- Грузить body всех skills в standing system prompt
-- Дублировать `AgentToolkit`
-- Standing dump всех capability tools на ноду вместо Skills
-- Путать Skills UI с branch «skills» / AgentToolkit / standing Tools picker
+1. Skill как `BranchConfig`; alias `skill_id`; дубль `AgentToolkit`.
+2. Body всех skills в standing system prompt; standing dump всех capability tools на ноду.
+
+## Гейты
+
+- `tests/flows/**/*skill*` — загрузка, накопление, `depends_on`, seed. `[без гейта]` для запрета standing dump.

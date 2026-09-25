@@ -6,12 +6,13 @@ from fastapi import HTTPException, Request
 
 from core.authz.errors import AuthzDenied, AuthzUnavailable
 from core.authz.models import AuthzObject
-from core.container import BaseContainer
+from core.authz.service import AuthzService
 from core.context import reset_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User, UserStatus
+from core.namespace import NamespaceService
 from core.types import JsonObject
 from core.utils.tokens import TokenData
 
@@ -23,8 +24,9 @@ logger = get_logger(__name__)
 class ContextFactory:
     """Единая фабрика для создания Context"""
 
-    def __init__(self, container: BaseContainer) -> None:
-        self.container: BaseContainer = container
+    def __init__(self, *, namespace_service: NamespaceService, authz_service: AuthzService) -> None:
+        self._namespace_service: NamespaceService = namespace_service
+        self._authz: AuthzService = authz_service
 
     async def create(
         self,
@@ -231,17 +233,17 @@ class ContextFactory:
         )
         context_token = set_context(preliminary)
         try:
-            ns = await self.container.namespace_repository.get(raw)
+            ns = await self._namespace_service.get(raw)
         finally:
             reset_context(context_token)
 
         if ns is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"Namespace «{raw} not found",
+                detail=f"Namespace {raw} not found",
             )
         try:
-            await self.container.authz_service.require_can_view(
+            await self._authz.require_can_view(
                 AuthzObject.platform_namespace(company.company_id, ns.name),
                 user_id=user.user_id,
             )
@@ -256,10 +258,9 @@ class ContextFactory:
 
     async def _get_user_companies(self, user: User) -> list[Company]:
         """Получает все компании пользователя"""
-        company_repo = self.container.company_repository
         companies: list[Company] = []
         for company_id in user.companies.keys():
-            company = await company_repo.get(company_id)
+            company = await Company.get(company_id)
             if company is not None:
                 companies.append(company)
         return companies

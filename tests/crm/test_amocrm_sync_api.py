@@ -8,8 +8,7 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CRMTask
+from apps.crm.models.task import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -23,7 +22,6 @@ def _http_json(response: Response) -> dict[str, object]:
 
 
 async def _insert_task(
-    crm_container: CRMContainer,
     task: CRMTask,
     company_id: str,
     namespace: str,
@@ -37,7 +35,7 @@ async def _insert_task(
     )
     set_context(ctx)
     try:
-        _ = await crm_container.task_repository.create(task)
+        _ = await CRMTask.create(task)
     finally:
         clear_context()
 
@@ -85,7 +83,7 @@ async def test_amocrm_custom_fields_sync_returns_202(
 @pytest.mark.asyncio
 async def test_amocrm_sync_active_conflict(
     crm_client: AsyncClient,
-    crm_container: CRMContainer,
+    crm_di,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
@@ -106,7 +104,7 @@ async def test_amocrm_sync_active_conflict(
         created_at=now,
         updated_at=now,
     )
-    await _insert_task(crm_container, running, "system", ns, system_user_id)
+    await _insert_task(running, "system", ns, system_user_id)
 
     resp = await crm_client.post(
         f"/crm/api/v1/namespaces/{ns}/integrations/amocrm/sync",

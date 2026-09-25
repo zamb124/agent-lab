@@ -9,10 +9,7 @@ from core.authz.company_sync import sync_company_member_roles
 from core.authz.service import AuthzService
 from core.clients.service_client import ServiceClient
 from core.config import get_settings
-from core.context import clear_context, set_context
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.subdomain_repository import SubdomainRepository
-from core.db.repositories.user_repository import UserRepository
+from core.context import reset_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -26,9 +23,6 @@ DEMO_OWNER_ROLES = ["owner", "admin"]
 
 async def ensure_demo_company_and_user(
     *,
-    company_repository: CompanyRepository,
-    user_repository: UserRepository,
-    subdomain_repository: SubdomainRepository,
     authz: AuthzService,
 ) -> None:
     """
@@ -51,7 +45,7 @@ async def ensure_demo_company_and_user(
     subdomain = demo.subdomain
     company_name = demo.company_name
 
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         company = Company(
             company_id=company_id,
@@ -75,7 +69,7 @@ async def ensure_demo_company_and_user(
         if updated:
             logger.info("identity.demo.bootstrap", company_id=company_id)
 
-    matched = await user_repository.find_all_by_email_ci(demo.email)
+    matched = await User.find_all_by_email_ci(demo.email)
     if len(matched) > 1:
         raise ValueError(
             f"Multiple users with email {demo.email}: "
@@ -114,9 +108,8 @@ async def ensure_demo_company_and_user(
     merged_member = list(dict.fromkeys([*member_roles, *DEMO_OWNER_ROLES]))
     company.members[user.user_id] = merged_member
 
-    _ = await company_repository.set(company)
-    _ = await subdomain_repository.set_mapping(subdomain, company_id)
-    _ = await user_repository.set(user)
+    _ = await Company.set(company)
+    _ = await User.set(user)
     await sync_company_member_roles(
         authz,
         company_id=company_id,
@@ -152,11 +145,11 @@ async def ensure_demo_company_and_user(
     )
 
     service_client = ServiceClient()
-    _ = set_context(init_context)
+    init_context_token = set_context(init_context)
     try:
         init_response = await service_client.post(
             "flows",
-            "/flows/api/v1/company/init",
+            "/flows/api/v1/internal/company/init",
             json={
                 "company_id": company_id,
                 "company_name": company_name,
@@ -170,4 +163,4 @@ async def ensure_demo_company_and_user(
             raise ValueError("flows company/init response.task_id required")
         logger.info("identity.demo.bootstrap.flows.company.init", company_id=company_id, task_id=task_id)
     finally:
-        clear_context()
+        reset_context(init_context_token)

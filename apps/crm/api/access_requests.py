@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestResponse,
@@ -30,24 +30,24 @@ router = APIRouter(prefix="/access-requests", tags=["Access Requests"])
 @router.post("", response_model=AccessRequestResponse)
 async def request_access(
     data: AccessRequestCreate,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_access_requests_create(
         data,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{access_request_id}", response_model=AccessRequestResponse)
 async def get_access_request(
     access_request_id: str,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_access_requests_item(
         CrmAccessRequestIdPayload(access_request_id=access_request_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -55,7 +55,7 @@ async def get_access_request(
 async def update_access_request(
     access_request_id: str,
     data: AccessRequestUpdate,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_access_requests_update(
         CrmAccessRequestUpdatePayload(
@@ -63,13 +63,13 @@ async def update_access_request(
             status=data.status,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("", response_model=OffsetPage[AccessRequestResponse])
 async def list_pending_requests(
-    container: ContainerDep,
+    di: Di,
     status: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -77,5 +77,5 @@ async def list_pending_requests(
     return await op_access_requests_list(
         CrmAccessRequestListPayload(status=status, limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )

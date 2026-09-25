@@ -4,7 +4,7 @@ import {
     buildGraphWorkspaceSearch,
     graphCanvasViewFromParam,
     clampGraphDepth,
-} from '../../../../apps/crm/ui/utils/graph-view-mode.js';
+} from '../../../../apps/crm/ui/_helpers/graph-view-mode.js';
 
 describe('graph-view-mode', () => {
     it('parseGraphWorkspaceQuery: defaults view to mindmap', () => {

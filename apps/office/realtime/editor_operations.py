@@ -12,7 +12,8 @@ import asyncio
 
 from pydantic import Field
 
-from apps.office.container import OfficeContainer
+from apps.office.db.models import OfficeDocumentBinding
+from apps.office.di import Di
 from apps.office.models.api import (
     OfficeDocumentEditorSessionResponse,
     OfficeDocumentShareResolveResponse,
@@ -63,9 +64,9 @@ def _content_type_base(file_record: FileRecord) -> str:
 
 
 async def _load_company_file(
-    container: OfficeContainer, file_id: str, company_id: str
+    di: Di, file_id: str, company_id: str
 ) -> FileRecord:
-    meta = await container.files_service.get_optional(file_id)
+    meta = await di.files_service.get_optional(file_id)
     if meta is None:
         raise WsCommandError("not_found", "File not found", error_code='not_found')
     if meta.company_id != company_id:
@@ -82,7 +83,7 @@ def _user_display_name(user: User) -> str:
 
 
 async def _sync_open_editor(
-    container: OfficeContainer,
+    di: Di,
     *,
     file_id: str,
     checksum: str | None,
@@ -115,7 +116,7 @@ async def _sync_open_editor(
               )
     if force_code == 0:
         _ = await wait_for_file_change_after_forcesave(
-            container=container,
+            di=di,
             file_id=file_id,
             previous_checksum=checksum,
             previous_file_size=file_size,
@@ -128,17 +129,18 @@ async def op_editor_file_config(
     payload: OfficeEditorConfigPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> OfficeEditorConfigResponse:
     """Конфиг редактора для файла Files API вне каталога Documents (chat/flow вложения)."""
     scope = require_company()
     context = require_context()
-    meta = await _load_company_file(container, payload.file_id, scope.company_id)
+    meta = await _load_company_file(di, payload.file_id, scope.company_id)
     file_category, onlyoffice_document_type = resolve_binding_metadata(
         meta.original_name, _content_type_base(meta)
     )
-    binding = await container.document_binding_repository.get_by_file_and_company(
-        payload.file_id, scope.company_id
+    binding = await OfficeDocumentBinding.binding_for_company(
+        payload.file_id,
+        scope.company_id,
     )
     namespace: str | None = None
     if binding is not None and binding.namespace.strip():
@@ -146,13 +148,13 @@ async def op_editor_file_config(
     elif context.active_namespace.strip():
         namespace = context.active_namespace.strip()
     try:
-        return await container.viewer_service.open_config_for_file(
+        return await di.viewer_service.open_config_for_file(
             public_origin=payload.public_origin,
             file_record=meta,
             company_id=scope.company_id,
             user_id=user.user_id,
             user_name=_user_display_name(user),
-            editor_lang=container.viewer_service.default_editor_lang(context.language),
+            editor_lang=di.viewer_service.default_editor_lang(context.language),
             file_category=file_category,
             onlyoffice_document_type=onlyoffice_document_type,
             namespace=namespace,
@@ -165,21 +167,21 @@ async def op_editor_document_config(
     payload: OfficeEditorConfigPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> OfficeEditorConfigResponse:
-    scope = await namespace_scope(container)
+    scope = await namespace_scope(di)
     context = require_context()
-    row = await load_binding(container, scope, payload.file_id, allow_deleted=True)
-    await require_binding_catalog_access(container, row, scope.user_id)
-    meta = await _load_company_file(container, row.file_id, scope.company_id)
+    row = await load_binding(scope, payload.file_id, allow_deleted=True)
+    await require_binding_catalog_access(di, row, scope.user_id)
+    meta = await _load_company_file(di, row.file_id, scope.company_id)
     try:
-        return await container.viewer_service.open_config_for_binding(
+        return await di.viewer_service.open_config_for_binding(
             public_origin=payload.public_origin,
             binding=row,
             file_record=meta,
             user_id=user.user_id,
             user_name=_user_display_name(user),
-            editor_lang=container.viewer_service.default_editor_lang(context.language),
+            editor_lang=di.viewer_service.default_editor_lang(context.language),
         )
     except ValueError as exc:
         raise_invalid(exc)
@@ -189,21 +191,21 @@ async def op_editor_file_sync(
     payload: OfficeEditorSyncPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> OfficeFileEditorSyncResponse:
     _ = user
     scope = require_company()
-    async with document_mutation_lock(container, payload.file_id):
-        meta = await _load_company_file(container, payload.file_id, scope.company_id)
+    async with document_mutation_lock(di, payload.file_id):
+        meta = await _load_company_file(di, payload.file_id, scope.company_id)
         if supports_onlyoffice_viewer(meta.original_name, _content_type_base(meta)):
             await _sync_open_editor(
-                container,
+                di,
                 file_id=payload.file_id,
                 checksum=meta.checksum,
                 file_size=meta.file_size,
                 sync_options=payload,
             )
-            meta = await _load_company_file(container, payload.file_id, scope.company_id)
+            meta = await _load_company_file(di, payload.file_id, scope.company_id)
     return OfficeFileEditorSyncResponse(
         file_id=meta.file_id, checksum=meta.checksum, file_size=meta.file_size
     )
@@ -213,17 +215,17 @@ async def op_editor_document_sync(
     payload: OfficeEditorSyncPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> OfficeDocumentEditorSessionResponse:
     _ = user
-    scope = await namespace_scope(container)
-    async with document_mutation_lock(container, payload.file_id):
-        row = await load_binding(container, scope, payload.file_id, allow_deleted=True)
-        await require_binding_catalog_access(container, row, scope.user_id)
-        meta = await _load_company_file(container, row.file_id, scope.company_id)
+    scope = await namespace_scope(di)
+    async with document_mutation_lock(di, payload.file_id):
+        row = await load_binding(scope, payload.file_id, allow_deleted=True)
+        await require_binding_catalog_access(di, row, scope.user_id)
+        meta = await _load_company_file(di, row.file_id, scope.company_id)
         if supports_onlyoffice_viewer(meta.original_name, _content_type_base(meta)):
             await _sync_open_editor(
-                container,
+                di,
                 file_id=row.file_id,
                 checksum=meta.checksum,
                 file_size=meta.file_size,
@@ -244,12 +246,12 @@ async def op_document_share_resolve(
     payload: OfficeDocumentShareResolvePayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> OfficeDocumentShareResolveResponse:
     """Метаданные документа по публичному токену ссылки; сам доступ даёт токен, не сессия."""
     _ = user
     try:
-        target = await container.office_access_service.resolve_public_token(payload.token)
+        target = await di.office_access_service.resolve_public_token(payload.token)
     except ValueError as exc:
         raise_not_found(exc)
     if target.kind != "binding" or target.binding is None:

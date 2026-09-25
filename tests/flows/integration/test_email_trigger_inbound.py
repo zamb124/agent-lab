@@ -29,6 +29,7 @@ from core.mail.models import (
     MailProvider,
 )
 from core.mail.service import MailService
+from core.models.identity_models import Company
 from core.types import require_json_object
 from core.utils.tokens import get_token_service
 from tests.core.mail.conftest import seed_mail_company_member
@@ -37,11 +38,11 @@ from tests.fixtures.ai_provider_defaults import company_with_test_ai_provider_de
 from tests.flows.conftest import persist_owned_flow
 
 
-async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):
+async def _await_completed_state(di, session_id: str, *, timeout_sec: float = 20.0):
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if last_state is not None and last_state.terminal_task_state == "completed":
             return last_state
         await asyncio.sleep(0.1)
@@ -51,25 +52,19 @@ async def _await_completed_state(container, session_id: str, *, timeout_sec: flo
     )
 
 
-def _mail_service_with_port(container, port: RecordingMailServerPort) -> MailService:
+def _mail_service_with_port(di, port: RecordingMailServerPort) -> MailService:
     return MailService(
-        connection_repository=container.company_mail_connection_repository,
-        binding_repository=container.mailbox_binding_repository,
-        sync_cursor_repository=container.mailbox_sync_cursor_repository,
-        folder_repository=container.mailbox_folder_repository,
-        message_repository=container.mail_message_repository,
-        authz=container.authz_service,
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        authz=di.authz_service,
+        namespace_service=di.namespace_service,
         mail_config=MailConfig(),
         port_override=port,
+        files_service=di.files_service,
     )
 
 
 async def _seed_company_binding(
     *,
-    container,
+    di,
     mail_service: MailService,
     unique_id: str,
     prefix: str,
@@ -77,13 +72,13 @@ async def _seed_company_binding(
     company_id = f"{prefix}_{unique_id}"
     user_id = f"user_{unique_id}"
     company, user = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
     )
     company = company_with_test_ai_provider_defaults(company)
-    await container.company_repository.set(company)
+    await Company.set(company)
     _ = await mail_service.upsert_connection(
         CompanyMailConnectionUpsertPayload(
             mail_domain=f"{unique_id}.example.com",
@@ -117,13 +112,13 @@ async def _seed_company_binding(
 
 @pytest.mark.asyncio
 async def test_create_email_trigger_indexes_redis(
-    app, container, unique_id: str
+    app, di, unique_id: str
 ) -> None:
     """API create email trigger → SADD flows:email_triggers:{mailbox_binding_id}."""
     port = RecordingMailServerPort(supports_provision=False)
-    mail_service = _mail_service_with_port(container, port)
+    mail_service = _mail_service_with_port(di, port)
     company, user, binding, token = await _seed_company_binding(
-        container=container,
+        di=di,
         mail_service=mail_service,
         unique_id=unique_id,
         prefix="emidx",
@@ -138,7 +133,7 @@ async def test_create_email_trigger_indexes_redis(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
     await persist_owned_flow(
-        container,
+        di,
         agent,
         company_id=company.company_id,
         owner_user_id=user.user_id,
@@ -168,27 +163,27 @@ async def test_create_email_trigger_indexes_redis(
     member = email_trigger_index_member(
         company_id=company.company_id, flow_id=flow_id, trigger_id=trigger_id
     )
-    indexed = await container.redis_client.smembers(
+    indexed = await di.redis_client.smembers(
         email_trigger_index_key(binding.mailbox_binding_id)
     )
     assert member in indexed
 
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         email_trigger_index_key(binding.mailbox_binding_id), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_match_fires_completed_and_dedups(
-    app, container, unique_id: str, mock_llm_with_queue
+    app, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """dispatch → completed; повтор того же uid → fired==0."""
     mock_llm_with_queue(["Email processed"])
     port = RecordingMailServerPort(supports_provision=False)
-    mail_service = _mail_service_with_port(container, port)
+    mail_service = _mail_service_with_port(di, port)
     company, user, binding, token = await _seed_company_binding(
-        container=container,
+        di=di,
         mail_service=mail_service,
         unique_id=unique_id,
         prefix="emfire",
@@ -203,7 +198,7 @@ async def test_dispatch_match_fires_completed_and_dedups(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
     await persist_owned_flow(
-        container,
+        di,
         agent,
         company_id=company.company_id,
         owner_user_id=user.user_id,
@@ -236,7 +231,7 @@ async def test_dispatch_match_fires_completed_and_dedups(
         body_text="body",
     )
     fired = await dispatch_email_triggers_for_messages(
-        container=container,
+        di=di,
         binding=binding,
         messages=[message],
         dedup_ttl_seconds=3600,
@@ -250,12 +245,12 @@ async def test_dispatch_match_fires_completed_and_dedups(
         mail_uid=message.uid,
     )
     session_id = f"{flow_id}:{run_id}"
-    state = await _await_completed_state(container, session_id)
+    state = await _await_completed_state(di, session_id)
     assert state.content == "Hello email trigger"
     assert state.response == "Email processed"
 
     fired_again = await dispatch_email_triggers_for_messages(
-        container=container,
+        di=di,
         binding=binding,
         messages=[message],
         dedup_ttl_seconds=3600,
@@ -265,22 +260,22 @@ async def test_dispatch_match_fires_completed_and_dedups(
     member = email_trigger_index_member(
         company_id=company.company_id, flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         email_trigger_index_key(binding.mailbox_binding_id), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_filter_mismatch_no_state(
-    app, container, unique_id: str, mock_llm_with_queue
+    app, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """allowed_senders filter miss → fired==0, state отсутствует."""
     mock_llm_with_queue(["should not run"])
     port = RecordingMailServerPort(supports_provision=False)
-    mail_service = _mail_service_with_port(container, port)
+    mail_service = _mail_service_with_port(di, port)
     company, user, binding, token = await _seed_company_binding(
-        container=container,
+        di=di,
         mail_service=mail_service,
         unique_id=unique_id,
         prefix="emfilt",
@@ -295,7 +290,7 @@ async def test_dispatch_filter_mismatch_no_state(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
     await persist_owned_flow(
-        container,
+        di,
         agent,
         company_id=company.company_id,
         owner_user_id=user.user_id,
@@ -331,7 +326,7 @@ async def test_dispatch_filter_mismatch_no_state(
         body_text="x",
     )
     fired = await dispatch_email_triggers_for_messages(
-        container=container,
+        di=di,
         binding=binding,
         messages=[message],
         dedup_ttl_seconds=3600,
@@ -343,28 +338,28 @@ async def test_dispatch_filter_mismatch_no_state(
         trigger_id=trigger_id,
         mail_uid=message.uid,
     )
-    state = await container.workflow_runtime.get_state(f"{flow_id}:{run_id}")
+    state = await di.workflow_runtime.get_state(f"{flow_id}:{run_id}")
     assert state is None
 
     member = email_trigger_index_member(
         company_id=company.company_id, flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         email_trigger_index_key(binding.mailbox_binding_id), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_sync_binding_new_mail_dispatches(
-    app, container, unique_id: str, mock_llm_with_queue
+    app, di, unique_id: str, mock_llm_with_queue
 ) -> None:
     """RecordingMailServerPort incremental UID → sync_binding → dispatch → completed."""
     mock_llm_with_queue(["Synced mail ok"])
     port = RecordingMailServerPort(supports_provision=False)
-    mail_service = _mail_service_with_port(container, port)
+    mail_service = _mail_service_with_port(di, port)
     company, user, binding, token = await _seed_company_binding(
-        container=container,
+        di=di,
         mail_service=mail_service,
         unique_id=unique_id,
         prefix="emsync",
@@ -379,7 +374,7 @@ async def test_sync_binding_new_mail_dispatches(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
     )
     await persist_owned_flow(
-        container,
+        di,
         agent,
         company_id=company.company_id,
         owner_user_id=user.user_id,
@@ -431,7 +426,7 @@ async def test_sync_binding_new_mail_dispatches(
     assert len(incremental.new_messages) >= 1
 
     fired = await dispatch_email_triggers_for_messages(
-        container=container,
+        di=di,
         binding=binding,
         messages=incremental.new_messages,
         dedup_ttl_seconds=3600,
@@ -445,14 +440,14 @@ async def test_sync_binding_new_mail_dispatches(
         trigger_id=trigger_id,
         mail_uid=new_msg.uid,
     )
-    state = await _await_completed_state(container, f"{flow_id}:{run_id}")
+    state = await _await_completed_state(di, f"{flow_id}:{run_id}")
     assert state.content == "New after sync"
     assert state.response == "Synced mail ok"
 
     member = email_trigger_index_member(
         company_id=company.company_id, flow_id=flow_id, trigger_id=trigger_id
     )
-    _ = await container.redis_client.srem(
+    _ = await di.redis_client.srem(
         email_trigger_index_key(binding.mailbox_binding_id), member
     )
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)

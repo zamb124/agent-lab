@@ -9,30 +9,31 @@ FlowNode поддерживает input_mapping для передачи конк
 }
 """
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import FlowNode
 from core.state import ExecutionState
 from core.types import JsonObject
 
 
-def flow_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObject) -> FlowNode:
+def flow_node(di: FlowsDi, *, node_id: str, config: JsonObject) -> FlowNode:
     if "type" in config:
         raise ValueError("test flow node config must not override canonical node type")
     return FlowNode(
         node_id=node_id,
         config={"type": NodeType.FLOW.value, **config},
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, tool_registry=di.tool_registry, handoff_orchestrator_service=di.handoff_orchestrator_service,
     )
 
 
 class TestSubflowInputMapping:
     """Тесты input_mapping для FlowNode."""
 
-    def test_resolve_inputs_no_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_resolve_inputs_no_mapping(self, di: FlowsDi, unique_id):
         """Без маппинга inputs пустой."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={"flow_id": "child_flow", "input_mapping": None},
         )
@@ -50,10 +51,10 @@ class TestSubflowInputMapping:
 
         assert inputs == {}
 
-    def test_prepare_state_no_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_prepare_state_no_mapping(self, di: FlowsDi, unique_id):
         """Без маппинга _prepare_state возвращает копию state."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={"flow_id": "child_flow", "input_mapping": None},
         )
@@ -74,10 +75,10 @@ class TestSubflowInputMapping:
         assert result.user_id == "123"
         assert result.variables == {"api_key": "secret"}
 
-    def test_resolve_inputs_with_state_reference(self, container: FlowRuntimeContainer, unique_id):
+    def test_resolve_inputs_with_state_reference(self, di: FlowsDi, unique_id):
         """@state:field берёт значение из state."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -106,10 +107,10 @@ class TestSubflowInputMapping:
         assert inputs["user_name"] == "John"
         assert "extra_field" not in inputs
 
-    def test_resolve_inputs_with_nested_path(self, container: FlowRuntimeContainer, unique_id):
+    def test_resolve_inputs_with_nested_path(self, di: FlowsDi, unique_id):
         """@state:nested.path берёт вложенное значение."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -139,10 +140,10 @@ class TestSubflowInputMapping:
         assert inputs["email"] == "alice@example.com"
         assert inputs["name"] == "Alice"
 
-    def test_resolve_inputs_with_constant(self, container: FlowRuntimeContainer, unique_id):
+    def test_resolve_inputs_with_constant(self, di: FlowsDi, unique_id):
         """Строка без @state: передаётся как константа."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -169,10 +170,10 @@ class TestSubflowInputMapping:
         assert inputs["version"] == "v2"
         assert inputs["content"] == "user question"
 
-    def test_resolve_inputs_missing_field_returns_none(self, container: FlowRuntimeContainer, unique_id):
+    def test_resolve_inputs_missing_field_returns_none(self, di: FlowsDi, unique_id):
         """Отсутствующее поле возвращает None."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -196,12 +197,12 @@ class TestSubflowInputMapping:
 
     def test_resolve_inputs_missing_nested_path_returns_none(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id,
     ):
         """Отсутствующий вложенный путь возвращает None."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -225,12 +226,12 @@ class TestSubflowInputMapping:
 
     def test_resolve_inputs_non_string_value_passed_as_is(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id,
     ):
         """Нестроковые значения передаются как есть."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",
@@ -255,10 +256,10 @@ class TestSubflowInputMapping:
         assert inputs["enabled"] is True
         assert inputs["items"] == ["a", "b", "c"]
 
-    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer, unique_id):
+    def test_prepare_state_applies_inputs(self, di: FlowsDi, unique_id):
         """_prepare_state применяет inputs к state."""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "child_flow",

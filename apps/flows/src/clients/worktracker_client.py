@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from apps.flows.src.container_state import require_current_container
 from core.files.file_ref import FileRef
 from core.variables.models import VariableMap
 from core.worktracker.models import (
@@ -36,13 +35,11 @@ class WorktrackerClient:
 
     _service: WorkItemService
 
-    def __init__(self, service: WorkItemService | None = None) -> None:
-        self._service = (
-            service if service is not None else require_current_container().work_item_service
-        )
+    def __init__(self, service: WorkItemService) -> None:
+        self._service = service
 
     async def get(self, company_id: str, work_item_id: str) -> WorkItem:
-        return await self._service.get(company_id, work_item_id)
+        return await WorkItem.require_in_company(company_id, work_item_id)
 
     async def list(
         self,
@@ -61,7 +58,7 @@ class WorktrackerClient:
         limit: int = 200,
         offset: int = 0,
     ) -> list[WorkItem]:
-        return await self._service.list(
+        return await WorkItem.list_work_items(
             company_id,
             board_id=board_id,
             namespace=namespace,
@@ -224,8 +221,13 @@ class WorktrackerClient:
             files=files,
         )
 
-    async def list_comments(self, company_id: str, work_item_id: str) -> list[WorkItemComment]:
-        return await self._service.list_comments(company_id, work_item_id)
+    async def list_comments(
+        self,
+        *,
+        company_id: str,
+        work_item_id: str,
+    ) -> list[WorkItemComment]:
+        return await WorkItemComment.list_comments(company_id, work_item_id)
 
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
         return await self._service.get_queue_by_slug(company_id, slug)
@@ -306,7 +308,7 @@ class WorktrackerClient:
         return await self._service.list_boards(company_id, namespace=namespace)
 
     async def get_board(self, company_id: str, board_id: str) -> Board:
-        return await self._service.get_board(company_id, board_id)
+        return await Board.get_board(company_id, board_id)
 
     async def create_board(
         self,

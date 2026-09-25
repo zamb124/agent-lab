@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from urllib.parse import quote
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flow_ui_cards import show_action_preview, show_action_result
-from apps.flows.src.services.lara_facade import flow_config_from_flow_api_response
+from apps.flows.src.services.lara_facade import LaraFacade, flow_config_from_flow_api_response
+from apps.flows.src.services.tool_approval import ToolApprovalStore
 from core.clients.service_client import ServiceClient
 from core.context import get_context
 from core.state import ExecutionState
@@ -114,7 +114,18 @@ def flow_summary_payload(flow_data: FlowConfig) -> JsonObject:
 class FlowsClient:
     """REST load of FlowConfig plus LaraActionEngine propose/apply for patches."""
 
-    def __init__(self, service_client: ServiceClient | None = None) -> None:
+    _lara_facade: LaraFacade
+    _tool_approval_store: ToolApprovalStore
+
+    def __init__(
+        self,
+        *,
+        lara_facade: LaraFacade,
+        tool_approval_store: ToolApprovalStore,
+        service_client: ServiceClient | None = None,
+    ) -> None:
+        self._lara_facade = lara_facade
+        self._tool_approval_store = tool_approval_store
         self._http: ServiceClient = (
             service_client if service_client is not None else ServiceClient()
         )
@@ -203,8 +214,7 @@ class FlowsClient:
     ) -> JsonObject:
         patch = parse_json_object(patch_json, "flows_patch_node.patch_json")
         resolved_branch_id = normalize_flows_branch_id(branch_id)
-        facade = require_current_container().lara_facade
-        action = await facade.preview_node_patch(
+        action = await self._lara_facade.preview_node_patch(
             flow_id=flow_id,
             node_id=node_id,
             patch=patch,
@@ -286,7 +296,7 @@ class FlowsClient:
             "node_id": node_id,
             "patch": patch,
         }
-        approval = await require_current_container().tool_approval_store.create_pending(
+        approval = await self._tool_approval_store.create_pending(
             actor_user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             tool_id="flows_patch_node",
@@ -314,8 +324,7 @@ class FlowsClient:
         state: ExecutionState,
         idempotency_key: str | None = None,
     ) -> JsonObject:
-        facade = require_current_container().lara_facade
-        action = await facade.apply_node_patch(
+        action = await self._lara_facade.apply_node_patch(
             pending_action_id=pending_action_id,
             state=state,
             idempotency_key=idempotency_key,
@@ -373,8 +382,7 @@ class FlowsClient:
                 f"Unsupported flow patch fields: {', '.join(unsupported)}. {allowed}"
             )
 
-        facade = require_current_container().lara_facade
-        action = await facade.preview_flow_patch(
+        action = await self._lara_facade.preview_flow_patch(
             flow_id=flow_id,
             patch=patch,
             state=state,
@@ -447,8 +455,7 @@ class FlowsClient:
         state: ExecutionState,
         idempotency_key: str | None = None,
     ) -> JsonObject:
-        facade = require_current_container().lara_facade
-        action = await facade.apply_flow_patch(
+        action = await self._lara_facade.apply_flow_patch(
             pending_action_id=pending_action_id,
             state=state,
             idempotency_key=idempotency_key,

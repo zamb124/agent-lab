@@ -8,11 +8,21 @@ from fastapi import HTTPException
 
 from apps.browser.api import control
 from core.authz.models import AuthzObject
-from core.clients.browser.control_types import ControlPointerClickBody, ControlPointerTextBody
+from core.clients.browser.control_types import (
+    ControlOkResponse,
+    ControlPointerClickBody,
+    ControlPointerClickResponse,
+    ControlPointerTextBody,
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_database_before_tests() -> Iterator[None]:
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_default_test_user_authz() -> Iterator[None]:
     yield
 
 
@@ -21,11 +31,15 @@ class _StubAuthz:
         _ = obj
 
 
-def _container_with_runtime(lease_manager: object) -> SimpleNamespace:
-    return SimpleNamespace(
-        authz_service=_StubAuthz(),
-        browser_runtime=SimpleNamespace(lease_manager=lease_manager),
-    )
+class _StubRuntime:
+    def __init__(self, lease_manager: object) -> None:
+        self.lease_manager = lease_manager
+
+
+class _ControlCall:
+    def __init__(self, lease_manager: object) -> None:
+        self.authz_service = _StubAuthz()
+        self.browser_runtime = _StubRuntime(lease_manager)
 
 
 class _FakeMouse:
@@ -86,7 +100,7 @@ class _HumanTakeoverLeaseManager:
 @pytest.mark.asyncio
 async def test_control_pointer_click_bypasses_navigate_lock() -> None:
     page = _FakePage()
-    container = _container_with_runtime(_FakeLeaseManager(page))
+    di = _ControlCall(_FakeLeaseManager(page))
 
     result = await control.control_pointer_click(
         "sess-1",
@@ -98,17 +112,17 @@ async def test_control_pointer_click_bypasses_navigate_lock() -> None:
             button="left",
             click_count=1,
         ),
-        container,  # pyright: ignore[reportArgumentType]
+        di,  # pyright: ignore[reportArgumentType]
     )
 
-    assert result == {
-        "ok": True,
-        "x": 500.0,
-        "y": 250.0,
-        "viewport_width": 1000.0,
-        "viewport_height": 500.0,
-        "url": "https://example.test/page",
-    }
+    assert result == ControlPointerClickResponse(
+        ok=True,
+        x=500.0,
+        y=250.0,
+        viewport_width=1000.0,
+        viewport_height=500.0,
+        url="https://example.test/page",
+    )
     assert page.mouse.clicks == [
         {
             "x": 500.0,
@@ -122,28 +136,28 @@ async def test_control_pointer_click_bypasses_navigate_lock() -> None:
 @pytest.mark.asyncio
 async def test_control_pointer_text_bypasses_navigate_lock() -> None:
     page = _FakePage()
-    container = _container_with_runtime(_FakeLeaseManager(page))
+    di = _ControlCall(_FakeLeaseManager(page))
 
     result = await control.control_pointer_text(
         "sess-1",
         ControlPointerTextBody(text="captcha-123"),
-        container,  # pyright: ignore[reportArgumentType]
+        di,  # pyright: ignore[reportArgumentType]
     )
 
-    assert result == {"ok": True}
+    assert result == ControlOkResponse(ok=True)
     assert page.keyboard.typed == ["captcha-123"]
 
 
 @pytest.mark.asyncio
 async def test_control_click_times_out_during_human_takeover(monkeypatch: pytest.MonkeyPatch) -> None:
-    container = _container_with_runtime(_HumanTakeoverLeaseManager())
+    di = _ControlCall(_HumanTakeoverLeaseManager())
     monkeypatch.setattr(control, "AGENT_CONTROL_TAKEOVER_WAIT_SEC", 0.0)
 
     with pytest.raises(HTTPException) as exc_info:
         await control.control_click(
             "sess-1",
             control.ControlClickBody(ref="@e1"),
-            container,  # pyright: ignore[reportArgumentType]
+            di,  # pyright: ignore[reportArgumentType]
         )
 
     assert exc_info.value.status_code == 423

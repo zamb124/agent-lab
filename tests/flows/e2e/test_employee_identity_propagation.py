@@ -18,6 +18,7 @@ from core.identity.flow_employee import (
     ensure_flow_employee,
     flow_employee_user_id,
 )
+from core.models.identity_models import Company, User
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,17 +39,17 @@ def _context(ctx):
 async def test_peer_service_sees_employee_identity(
     flows_service,
     crm_service,
-    frontend_container,
+    frontend_di,
     unique_id,
     system_user_id,
 ):
     _ = flows_service, crm_service
     flow_id = f"prop_flow_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
 
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di.authz_service,
         flow_id=flow_id,
         company_id="system",
         name="AI Worker",
@@ -86,5 +87,7 @@ async def test_peer_service_sees_employee_identity(
             assert fetched["entity_id"] == entity_id
             assert fetched["user_id"] == emp_id
     finally:
-        await deactivate_flow_employee(frontend_container, flow_id=flow_id, company_id="system")
-        await frontend_container.user_repository.delete(emp_id)
+        await deactivate_flow_employee(
+            frontend_di.authz_service, flow_id=flow_id, company_id="system"
+        )
+        await User.delete_by_id(emp_id)

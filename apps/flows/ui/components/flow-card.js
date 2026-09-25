@@ -8,7 +8,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-button.js';
 import './branch-item.js';
 import { asString } from '../_helpers/flows-resolvers.js';
-import { resolveFlowCoverGradient } from '../constants/flow-cover-gradients.js';
+import { resolveFlowCoverGradient } from '../_helpers/flow-cover-gradients.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 
 export class FlowCard extends PlatformElement {

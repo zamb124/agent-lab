@@ -6,19 +6,19 @@ import pytest
 
 import core.tracing.attributes as trace_attr
 from core.tracing import get_tracer
+from core.tracing.models import Span
 from core.tracing.provider import set_tracing_enabled
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.tracing.tracer import set_tracing_service_name
 
 
 @pytest.fixture(autouse=True)
-def bind_error_event_tracing(container):
+def bind_error_event_tracing(di):
     set_tracing_service_name("flows")
-    set_span_repository(container.span_repository)
     set_tracing_enabled(True)
 
 
 @pytest.mark.asyncio
-async def test_platform_tracer_persists_exception_event(app, container, unique_id: str):
+async def test_platform_tracer_persists_exception_event(app, di, unique_id: str):
     """Exception внутри span должен быть виден разработчику агента в platform_tracing."""
     _ = app
     operation_name = f"test.error_span.{unique_id}"
@@ -28,7 +28,7 @@ async def test_platform_tracer_persists_exception_event(app, container, unique_i
         async with tracer.platform_operation_span(operation_name):
             raise RuntimeError("agent-visible boom")
 
-    spans, _ = await container.span_repository.list_spans_for_service(
+    spans, _ = await Span.list_spans_for_service(
         service_name="flows",
         operation_name=operation_name,
         limit=10,
@@ -51,7 +51,7 @@ async def test_platform_tracer_persists_exception_event(app, container, unique_i
 
 @pytest.mark.asyncio
 async def test_platform_tracer_does_not_mark_flow_interrupt_as_error(
-    app, container, unique_id: str
+    app, di, unique_id: str
 ):
     """FlowInterrupt — штатная пауза flow, а не ошибка для разработчика агента."""
     from apps.flows.src.runtime.exceptions import FlowInterrupt
@@ -64,7 +64,7 @@ async def test_platform_tracer_does_not_mark_flow_interrupt_as_error(
         async with tracer.platform_operation_span(operation_name):
             raise FlowInterrupt(question="Нужен ввод")
 
-    spans, _ = await container.span_repository.list_spans_for_service(
+    spans, _ = await Span.list_spans_for_service(
         service_name="flows",
         operation_name=operation_name,
         limit=10,

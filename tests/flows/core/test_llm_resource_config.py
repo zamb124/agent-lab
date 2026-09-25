@@ -1,15 +1,22 @@
 """Слияние NodeLLMConfig с LLM-ресурсом по llm_resource_key."""
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 
 from apps.flows.src.models import ResourceType
 from apps.flows.src.models.node_config import NodeLLMConfig
+from apps.flows.src.models.resource import ResourceDefinition
 from apps.flows.src.runtime.llm_resource_config import (
     infer_unique_llm_resource_key_from_merged_maps,
     resolve_llm_config_with_resource_key,
 )
+from core.types import JsonObject
+
+
+async def _shared_resource(resource_id: str, resource_type: ResourceType, config: JsonObject) -> str:
+    _ = await ResourceDefinition.set(
+        ResourceDefinition(resource_id=resource_id, type=resource_type, config=config)
+    )
+    return resource_id
 
 
 @pytest.mark.asyncio
@@ -30,7 +37,6 @@ async def test_resolve_merges_inline_llm_resource() -> None:
         flow_resources=flow_resources,
         skill_resources=None,
         node_resources_raw={},
-        repository=MagicMock(),
     )
     assert merged is not None
     assert merged.llm_resource_key is None
@@ -40,30 +46,21 @@ async def test_resolve_merges_inline_llm_resource() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_shared_resource_from_repository() -> None:
-    repo = AsyncMock()
-    repo.get = AsyncMock(
-        return_value=MagicMock(
-            type=ResourceType.LLM,
-            config={
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "temperature": 0.5,
-            },
-        )
+async def test_resolve_shared_resource_from_catalog(unique_id: str) -> None:
+    resource_id = await _shared_resource(
+        f"llm-{unique_id}",
+        ResourceType.LLM,
+        {"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.5},
     )
-
-    flow_resources = {
-        "shared": {"resource_id": "rid-1"},
-    }
+    flow_resources = {"shared": {"resource_id": resource_id}}
     ov = NodeLLMConfig(llm_resource_key="shared", model="should-not-apply")
     merged = await resolve_llm_config_with_resource_key(
         llm_config=ov,
         flow_resources=flow_resources,
         skill_resources=None,
         node_resources_raw={},
-        repository=repo,
     )
+    assert merged is not None
     assert merged.model == "should-not-apply"
     assert merged.provider == "openai"
     assert merged.temperature == 0.5
@@ -81,7 +78,6 @@ async def test_infer_unique_llm_key_single_inline() -> None:
         flow_resources=flow_resources,
         skill_resources=None,
         node_resources_raw={},
-        repository=MagicMock(),
     )
     assert key == "only"
 
@@ -96,56 +92,40 @@ async def test_infer_unique_llm_key_none_when_multiple() -> None:
         flow_resources=flow_resources,
         skill_resources=None,
         node_resources_raw={},
-        repository=MagicMock(),
     )
     assert key is None
 
 
 @pytest.mark.asyncio
-async def test_infer_unique_llm_key_shared_from_repository() -> None:
-    repo = AsyncMock()
-    repo.get = AsyncMock(
-        return_value=MagicMock(
-            type=ResourceType.LLM,
-            config={"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.5},
-        )
+async def test_infer_unique_llm_key_shared_from_catalog(unique_id: str) -> None:
+    resource_id = await _shared_resource(
+        f"llm-{unique_id}",
+        ResourceType.LLM,
+        {"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.5},
     )
-    flow_resources = {"ref": {"resource_id": "rid-1"}}
     key = await infer_unique_llm_resource_key_from_merged_maps(
-        flow_resources=flow_resources,
+        flow_resources={"ref": {"resource_id": resource_id}},
         skill_resources=None,
         node_resources_raw={},
-        repository=repo,
     )
     assert key == "ref"
 
 
 @pytest.mark.asyncio
-async def test_infer_unique_llm_key_two_shared_one_llm_counts_one() -> None:
-    repo = AsyncMock()
-
-    async def _get(rid: str):
-        if rid == "llm-1":
-            return MagicMock(
-                type=ResourceType.LLM,
-                config={"provider": "openai", "model": "m", "temperature": 0.1},
-            )
-        if rid == "files-1":
-            return MagicMock(
-                type=ResourceType.FILES,
-                config={"bucket": "b", "prefix": "", "region": "us-east-1"},
-            )
-        raise AssertionError(f"unexpected resource_id {rid!r}")
-
-    repo.get = AsyncMock(side_effect=_get)
-    flow_resources = {
-        "f": {"resource_id": "files-1"},
-        "l": {"resource_id": "llm-1"},
-    }
+async def test_infer_unique_llm_key_two_shared_one_llm_counts_one(unique_id: str) -> None:
+    llm_id = await _shared_resource(
+        f"llm-{unique_id}",
+        ResourceType.LLM,
+        {"provider": "openai", "model": "m", "temperature": 0.1},
+    )
+    files_id = await _shared_resource(
+        f"files-{unique_id}",
+        ResourceType.FILES,
+        {"bucket": "b", "prefix": "", "region": "us-east-1"},
+    )
     key = await infer_unique_llm_resource_key_from_merged_maps(
-        flow_resources=flow_resources,
+        flow_resources={"f": {"resource_id": files_id}, "l": {"resource_id": llm_id}},
         skill_resources=None,
         node_resources_raw={},
-        repository=repo,
     )
     assert key == "l"

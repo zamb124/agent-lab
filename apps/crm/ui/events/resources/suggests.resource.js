@@ -2,9 +2,9 @@
  * Suggests — фоновые предложения CRM по выбранному namespace.
  *
  * Backend (`/crm/api/v1/namespaces/{namespace}/suggests`):
- *   GET  /                    → OffsetPage[SuggestResponse]
- *   POST /{suggest_id}/resolve → SuggestResponse
- *   POST /{suggest_id}/dismiss → SuggestResponse
+ *   GET  /                    → OffsetPage[CRMSuggest]
+ *   POST /{suggest_id}/resolve → CRMSuggest
+ *   POST /{suggest_id}/dismiss → CRMSuggest
  */
 
 import { createAsyncOp } from '@platform/lib/events/index.js';

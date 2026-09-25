@@ -2,7 +2,7 @@
 URL PostgreSQL для pytest и дочерних процессов (uvicorn, TaskIQ).
 
 Должны совпадать с `migrations/postgres/init.sql` и `os.environ` в conftest.py:
-отдельная БД на каждое Alembic-дерево, иначе `alembic_version` одной миграции ломает другую.
+отдельная БД на каждый каталог `migrations/<db>/`, иначе `oxyde_migrations` одной базы смешивается с другой.
 
 Сервисы тест-окружения используют нестандартные порты чтобы не конфликтовать с dev:
   postgres  → 54322 (dev: 54321)
@@ -33,6 +33,9 @@ if len(TEST_LIVEKIT_API_SECRET) < 32:
 # Subprocess (TaskIQ worker и т.д.) не наследует os.environ из conftest целиком: те же ключи,
 # что выставляются в tests/conftest.py через setdefault, должны быть в TEST_DATABASE_ENV.
 _TEST_SERVICE_ENV: dict[str, str] = {
+    # Локальные сервисы тест-стека не должны идти через внешний HTTP_PROXY.
+    "NO_PROXY": "localhost,127.0.0.1,::1",
+    "no_proxy": "localhost,127.0.0.1,::1",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
     "SERVER__RAG_SERVICE_URL": "http://localhost:9002",
@@ -53,6 +56,7 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "SERVER__WIKI_SERVICE_URL": "http://localhost:9023",
     "SERVER__GUEST_RUNTIME_SERVICE_URL": "http://localhost:9024",
     "SERVER__REALTIME_SERVICE_URL": "http://localhost:9025",
+    "SERVER__STOCK_SERVICE_URL": "http://localhost:9026",
     "REALTIME__CENTRIFUGO_API_URL": "http://127.0.0.1:19000/api",
     "REALTIME__CENTRIFUGO_API_KEY": "platform-test-centrifugo-http-api-key",
     "CENTRIFUGO_WS_URL": "ws://127.0.0.1:19000/connection/websocket",
@@ -63,17 +67,13 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "DATABASE__SECRETS_URL": f"{_POSTGRES_TEST}/platform_secrets",
     "SECRETS__ENCRYPTION_KEY": "test-secrets-encryption-key-fixed",
     "S3__ENABLED": "true",
-    "S3__DEFAULT_BUCKET": "test-bucket",
-    "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
-    "S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID": "minioadmin",
-    "S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY": "minioadmin",
-    "S3__BUCKETS__TEST-BUCKET__REGION_NAME": "us-east-1",
-    "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
-    "S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL": "http://localhost:19002",
-    "S3__BUCKETS__TEST_BUCKET__ACCESS_KEY_ID": "minioadmin",
-    "S3__BUCKETS__TEST_BUCKET__SECRET_ACCESS_KEY": "minioadmin",
-    "S3__BUCKETS__TEST_BUCKET__REGION_NAME": "us-east-1",
-    "S3__BUCKETS__TEST_BUCKET__PROVIDER": "minio",
+    "S3__ENDPOINT_URL": "http://localhost:19002",
+    "S3__BUCKET_NAME": "test-bucket",
+    "S3__ACCESS_KEY_ID": "minioadmin",
+    "S3__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__REGION_NAME": "us-east-1",
+    "S3__PROVIDER": "minio",
+    "S3__PATH_STYLE": "true",
     "LLM__PROVIDER": "openrouter",
     "LLM__OPENROUTER__API_KEY": "sk-test-key",
     "RAG__ENABLED": "true",
@@ -108,6 +108,7 @@ def load_openfga_test_env_overlay() -> dict[str, str]:
 
 TEST_DATABASE_ENV: dict[str, str] = {
     "SERVER__PLATFORM_PUBLIC_BASE_URL": "http://system.lvh.me:9004",
+    "DATABASE__POOL_MAX_CONNECTIONS": "2",
     "DATABASE__SHARED_URL": f"{_POSTGRES_TEST}/platform_shared",
     "DATABASE__FLOWS_URL": f"{_POSTGRES_TEST}/platform_agents",
     "DATABASE__CRM_URL": f"{_POSTGRES_TEST}/platform_crm",
@@ -119,6 +120,7 @@ TEST_DATABASE_ENV: dict[str, str] = {
     "DATABASE__TRACING_URL": f"{_POSTGRES_TEST}/platform_tracing",
     "DATABASE__WIKI_URL": f"{_POSTGRES_TEST}/platform_wiki",
     "DATABASE__REALTIME_URL": f"{_POSTGRES_TEST}/platform_realtime",
+    "DATABASE__STOCK_URL": f"{_POSTGRES_TEST}/platform_stock",
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
     "AUTH__JWT_SECRET_KEY": TEST_HS256_JWT_SECRET,

@@ -39,13 +39,13 @@ async def test_office_catalog_rag_and_semantic_search(
     auth_headers_system,
     auth_token_system: str,
     rag_service,
-    rag_worker,
+    rag_worker, frontend_di,
 ) -> None:
     catalog_title = f"rag-{unique_id}"
     doc_title = f"SemanticTarget {unique_id}"
     query = "SemanticTarget"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="rag")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="rag", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

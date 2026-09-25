@@ -64,7 +64,7 @@ def test_file_type_binding_pdf():
 
 
 def test_upload_rejects_unknown_mime_without_extension():
-    with pytest.raises(ValueError, match="Неподдерживаемый тип файла"):
+    with pytest.raises(ValueError, match="Unsupported file type"):
         onlyoffice_document_type_for_upload("blob", "application/octet-stream")
 
 

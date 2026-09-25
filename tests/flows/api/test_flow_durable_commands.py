@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.durable_operations import (
     op_flows_durable_branches,
     op_flows_durable_fork,
@@ -17,7 +18,6 @@ from apps.flows.realtime.durable_operations import (
     op_flows_sessions_state,
     op_flows_sessions_state_update,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.durable_execution import (
     SuperstepCommittedPayload,
     UserInputAppliedPayload,
@@ -73,7 +73,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
         reset_context(token)
 
 
-async def _seed_three_step_session(container: FlowContainer, unique_id: str) -> str:
+async def _seed_three_step_session(di: FlowsDi, unique_id: str) -> str:
     session_id = f"durable_cmd_{unique_id}:{uuid.uuid4().hex}"
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",
@@ -83,7 +83,7 @@ async def _seed_three_step_session(container: FlowContainer, unique_id: str) -> 
         content="one",
     )
     state.variables = {"step": 1}
-    runtime = container.workflow_runtime
+    runtime = di.workflow_runtime
     _ = await runtime.save_state(
         session_id,
         state,
@@ -112,13 +112,13 @@ async def _seed_three_step_session(container: FlowContainer, unique_id: str) -> 
 
 async def test_durable_history_and_state_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
     with _system_scope(system_user_id):
-        session_id = await _seed_three_step_session(container, unique_id)
+        session_id = await _seed_three_step_session(di, unique_id)
 
     history_http = await client.get(
         f"/flows/api/v1/tasks/{session_id}/history",
@@ -148,19 +148,19 @@ async def test_durable_history_and_state_rest_match_op(
         history = await op_flows_durable_history(
             DurableHistoryPayload(session_id=session_id, limit=200, offset=0),
             user=user,
-            container=container,
+            di=di,
         )
         assert history.model_dump(mode="json") == history_http.json()
         state = await op_flows_sessions_state(
             DurableSessionStatePayload(session_id=session_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert state.model_dump(mode="json") == state_http.json()
         branches = await op_flows_durable_branches(
             DurableSessionIdPayload(session_id=session_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert branches.model_dump(mode="json") == branches_http.json()
         _ = WorkflowBranchesResponse.model_validate(branches_http.json())
@@ -168,15 +168,15 @@ async def test_durable_history_and_state_rest_match_op(
 
 async def test_durable_fork_and_rewind_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
     with _system_scope(system_user_id):
-        fork_session_id = await _seed_three_step_session(container, f"{unique_id}_fork")
-        rewind_rest_session_id = await _seed_three_step_session(container, f"{unique_id}_rewind_rest")
-        rewind_op_session_id = await _seed_three_step_session(container, f"{unique_id}_rewind_op")
+        fork_session_id = await _seed_three_step_session(di, f"{unique_id}_fork")
+        rewind_rest_session_id = await _seed_three_step_session(di, f"{unique_id}_rewind_rest")
+        rewind_op_session_id = await _seed_three_step_session(di, f"{unique_id}_rewind_op")
 
     fork_http = await client.post(
         f"/flows/api/v1/tasks/{fork_session_id}/fork",
@@ -204,7 +204,7 @@ async def test_durable_fork_and_rewind_rest_match_op(
         fork_op = await op_flows_durable_fork(
             DurableForkPayload(session_id=fork_session_id, sequence=1, activate=False),
             user=user,
-            container=container,
+            di=di,
         )
         assert fork_op.reason == ExecutionBranchReason.fork
         assert fork_op.effect.activates_head is False
@@ -212,21 +212,21 @@ async def test_durable_fork_and_rewind_rest_match_op(
         rewind_op = await op_flows_durable_rewind(
             DurableRewindPayload(session_id=rewind_op_session_id, sequence=2),
             user=user,
-            container=container,
+            di=di,
         )
         assert rewind_op.reason == ExecutionBranchReason.rewind
         assert rewind_op.effect.source_sequence == 2
         state = await op_flows_sessions_state(
             DurableSessionStatePayload(session_id=rewind_op_session_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert state.content == "two"
 
 
 async def test_session_state_missing_is_not_found(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -244,23 +244,23 @@ async def test_session_state_missing_is_not_found(
             _ = await op_flows_sessions_state(
                 DurableSessionStatePayload(session_id=missing_session_id),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "not_found"
 
 
 async def test_session_state_update_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
     with _system_scope(system_user_id):
-        rest_session_id = await _seed_three_step_session(container, f"{unique_id}_put_rest")
-        op_session_id = await _seed_three_step_session(container, f"{unique_id}_put_op")
+        rest_session_id = await _seed_three_step_session(di, f"{unique_id}_put_rest")
+        op_session_id = await _seed_three_step_session(di, f"{unique_id}_put_op")
 
-    rest_state = await container.workflow_runtime.get_state(rest_session_id)
+    rest_state = await di.workflow_runtime.get_state(rest_session_id)
     assert rest_state is not None
     rest_state.content = "patched-rest"
     rest_http = await client.put(
@@ -272,19 +272,19 @@ async def test_session_state_update_rest_match_op(
     assert rest_http.status_code == 200, rest_http.text
     assert rest_http.json()["content"] == "patched-rest"
 
-    op_state = await container.workflow_runtime.get_state(op_session_id)
+    op_state = await di.workflow_runtime.get_state(op_session_id)
     assert op_state is not None
     op_state.content = "patched-op"
     with _system_scope(system_user_id) as user:
         updated = await op_flows_sessions_state_update(
             DurableSessionStateUpdatePayload(session_id=op_session_id, state=op_state),
             user=user,
-            container=container,
+            di=di,
         )
         current = await op_flows_sessions_state(
             DurableSessionStatePayload(session_id=op_session_id),
             user=user,
-            container=container,
+            di=di,
         )
     assert updated.content == "patched-op"
     assert current.model_dump(mode="json") == updated.model_dump(mode="json")

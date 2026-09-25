@@ -2,7 +2,7 @@
  * Tasks — фоновые задачи CRM (knowledge_import, note_analyze, daily_summary,
  * period_summary).
  *
- * В реальном времени: WebSocket ``crm/task/updated`` (payload ``{ task: TaskResponse }``)
+ * В реальном времени: WebSocket ``crm/task/updated`` (payload ``{ task: CRMTask }``)
  * мержится в slice без поллинга.
  *
  * Бэкенд (`/crm/api/v1/tasks`):

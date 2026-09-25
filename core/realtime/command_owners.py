@@ -25,6 +25,7 @@ _OWNER_BY_SCOPE: dict[str, str] = {
     "frontend": "frontend",
     "secrets": "secrets",
     "scheduler": "scheduler",
+    "stock": "stock",
 }
 
 

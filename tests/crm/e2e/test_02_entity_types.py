@@ -82,7 +82,7 @@ class TestEntityTypes:
     ) -> None:
         """Системные типы минимального ядра (note, task) инициализированы"""
         response = await crm_client.get(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             headers=auth_headers_system,
             params={"limit": 1000, "namespace": "default"},
         )
@@ -105,7 +105,7 @@ class TestEntityTypes:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание кастомного подтипа note (шаблон вебинара)"""
-        response = await crm_client.post("/crm/api/v1/entity-types/", json={
+        response = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": f"webinar_{unique_id}",
             "parent_type_id": "note",
             "name": "Вебинар",
@@ -133,7 +133,7 @@ class TestEntityTypes:
         namespace = f"et_list_{unique_id}"
         type_id = f"listed_{unique_id}"
         create_response = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "namespace": namespace,
@@ -144,7 +144,7 @@ class TestEntityTypes:
         assert create_response.status_code == 200, create_response.text
 
         list_response = await crm_client.get(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             headers=auth_headers_system,
             params={"namespace": namespace, "limit": 200},
         )
@@ -159,7 +159,7 @@ class TestEntityTypes:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание entity с кастомным типом"""
-        _ = await crm_client.post("/crm/api/v1/entity-types/", json={
+        _ = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": f"webinar_{unique_id}",
             "parent_type_id": "note",
             "name": "Вебинар",
@@ -167,7 +167,7 @@ class TestEntityTypes:
             "icon": "🎥"
         }, headers=auth_headers_system)
 
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": f"webinar_{unique_id}",
             "name": "Вебинар по AI",
@@ -191,7 +191,7 @@ class TestEntityTypes:
     ) -> None:
         """Иерархия типов: parent → child"""
         type_id = f"workshop_{unique_id}"
-        _ = await crm_client.post("/crm/api/v1/entity-types/", json={
+        _ = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": type_id,
             "parent_type_id": "note",
             "name": "Воркшоп",
@@ -218,7 +218,7 @@ class TestEntityTypes:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Тип с промптом для AI извлечения"""
-        response = await crm_client.post("/crm/api/v1/entity-types/", json={
+        response = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": f"client_meeting_{unique_id}",
             "parent_type_id": "note",
             "name": "Встреча с клиентом",
@@ -240,7 +240,7 @@ class TestEntityTypes:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Получение типа по ID"""
-        create_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": f"custom_type_{unique_id}",
             "parent_type_id": "note",
             "name": "Кастомный тип"
@@ -266,7 +266,7 @@ class TestEntityTypes:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Обновление типа"""
-        create_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": f"editable_type_{unique_id}",
             "parent_type_id": "note",
             "name": "Редактируемый"
@@ -303,7 +303,7 @@ class TestEntityTypes:
         """Флаг якоря контекста на типе: запись и чтение."""
         type_id = f"anchor_flag_{unique_id}"
         create_resp = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Тип якоря",
@@ -586,7 +586,7 @@ class TestEntityTypes:
         }, headers=auth_headers_system)
         assert create_namespace_resp.status_code == 201
 
-        create_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_lead,
             "name": f"Lead {unique_id}",
             "namespace": namespace_name,

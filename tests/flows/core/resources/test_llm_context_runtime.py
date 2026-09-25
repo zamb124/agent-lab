@@ -15,19 +15,14 @@ from core.llm_context import (
     LLMContextProfile,
     LLMContextRetrievalPolicy,
 )
+from core.types import JsonObject
 
 
-class InMemoryResourceRepository:
-    def __init__(self, *definitions: ResourceDefinition) -> None:
-        self._definitions = {
-            definition.resource_id: definition
-            for definition in definitions
-        }
-
-    async def get(self, resource_id: str | None) -> ResourceDefinition | None:
-        if resource_id is None:
-            return None
-        return self._definitions.get(resource_id)
+async def _shared_resource(resource_id: str, resource_type: ResourceType, config: JsonObject) -> str:
+    _ = await ResourceDefinition.set(
+        ResourceDefinition(resource_id=resource_id, type=resource_type, config=config)
+    )
+    return resource_id
 
 
 def _config() -> LLMContextConfig:
@@ -84,7 +79,6 @@ async def test_infers_unique_inline_llm_context_resource() -> None:
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
     )
 
     assert key == "ctx"
@@ -99,51 +93,43 @@ async def test_multiple_context_resources_are_not_inferred() -> None:
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
     )
 
     assert key is None
 
 
 @pytest.mark.asyncio
-async def test_infers_unique_shared_llm_context_resource() -> None:
+async def test_infers_unique_shared_llm_context_resource(unique_id: str) -> None:
+    resource_id = await _shared_resource(
+        f"shared_ctx_{unique_id}", ResourceType.LLM_CONTEXT, {"profile": "agent"}
+    )
     key = await infer_unique_llm_context_resource_key_from_merged_maps(
-        flow_resources={"ctx": {"resource_id": "shared_ctx"}},
+        flow_resources={"ctx": {"resource_id": resource_id}},
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(
-            ResourceDefinition(
-                resource_id="shared_ctx",
-                type=ResourceType.LLM_CONTEXT,
-                config={"profile": "agent"},
-            )
-        ),
     )
 
     assert key == "ctx"
 
 
 @pytest.mark.asyncio
-async def test_resolves_shared_context_resource_with_reference_patch() -> None:
-    repository = InMemoryResourceRepository(
-        ResourceDefinition(
-            resource_id="shared_ctx",
-            type=ResourceType.LLM_CONTEXT,
-            config={"profile": "agent", "retrieval": {"top_k": 24, "rerank": True}},
-        )
+async def test_resolves_shared_context_resource_with_reference_patch(unique_id: str) -> None:
+    resource_id = await _shared_resource(
+        f"shared_ctx_{unique_id}",
+        ResourceType.LLM_CONTEXT,
+        {"profile": "agent", "retrieval": {"top_k": 24, "rerank": True}},
     )
 
     patch = await resolve_llm_context_resource_patch(
         llm_context_resource_key="ctx",
         flow_resources={
             "ctx": {
-                "resource_id": "shared_ctx",
+                "resource_id": resource_id,
                 "config": {"retrieval": {"rerank": False}, "memory": "flow"},
             }
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=repository,
     )
 
     assert patch is not None
@@ -161,7 +147,6 @@ async def test_resolves_inferred_context_resource_patch() -> None:
         flow_resources={"ctx": {"type": "llm_context", "config": {"profile": "agent"}}},
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
     )
 
     assert patch is not None
@@ -175,7 +160,6 @@ async def test_inline_context_resource_allows_empty_patch() -> None:
         flow_resources={"ctx": {"type": "llm_context", "config": {}}},
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
     )
 
     assert patch == LLMContextPatch()
@@ -190,7 +174,6 @@ async def test_runtime_policy_applies_company_resource_node_call_order() -> None
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
         company=LLMContextPatch(profile="compact", memory="company"),
         node=LLMContextPatch(memory="node", retrieval={"top_k": 7}),
         call=LLMContextPatch(cache="off"),
@@ -214,30 +197,27 @@ async def test_explicit_context_resource_key_rejects_wrong_type() -> None:
             },
             skill_resources=None,
             node_resources_raw={},
-            repository=InMemoryResourceRepository(),
         )
 
 
 @pytest.mark.asyncio
-async def test_context_resource_resolution_errors_are_strict() -> None:
+async def test_context_resource_resolution_errors_are_strict(unique_id: str) -> None:
     assert await resolve_llm_context_resource_patch(
         llm_context_resource_key=None,
         flow_resources={},
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
     ) is None
 
-    with pytest.raises(ValueError, match="отсутствует"):
+    with pytest.raises(ValueError, match="is missing"):
         await resolve_llm_context_resource_patch(
             llm_context_resource_key="missing",
             flow_resources={"ctx": {"type": "llm_context", "config": {}}},
             skill_resources=None,
             node_resources_raw={},
-            repository=InMemoryResourceRepository(),
         )
 
-    with pytest.raises(ValueError, match="inline LLM context без config"):
+    with pytest.raises(ValueError, match="inline LLM context without config"):
         await resolve_llm_context_resource_patch(
             llm_context_resource_key="ctx",
             flow_resources={
@@ -249,29 +229,25 @@ async def test_context_resource_resolution_errors_are_strict() -> None:
             },
             skill_resources=None,
             node_resources_raw={},
-            repository=InMemoryResourceRepository(),
         )
 
-    with pytest.raises(ValueError, match="не найден"):
+    with pytest.raises(ValueError, match="not found"):
         await resolve_llm_context_resource_patch(
             llm_context_resource_key="ctx",
-            flow_resources={"ctx": {"resource_id": "missing_ctx"}},
+            flow_resources={"ctx": {"resource_id": f"missing_ctx_{unique_id}"}},
             skill_resources=None,
             node_resources_raw={},
-            repository=InMemoryResourceRepository(),
         )
 
-    with pytest.raises(ValueError, match="не LLM context"):
+    shared_llm_id = await _shared_resource(
+        f"shared_llm_{unique_id}",
+        ResourceType.LLM,
+        {"provider": "openrouter", "model": "m"},
+    )
+    with pytest.raises(ValueError, match="is not LLM context"):
         await resolve_llm_context_resource_patch(
             llm_context_resource_key="ctx",
-            flow_resources={"ctx": {"resource_id": "shared_llm"}},
+            flow_resources={"ctx": {"resource_id": shared_llm_id}},
             skill_resources=None,
             node_resources_raw={},
-            repository=InMemoryResourceRepository(
-                ResourceDefinition(
-                    resource_id="shared_llm",
-                    type=ResourceType.LLM,
-                    config={"provider": "openrouter", "model": "m"},
-                )
-            ),
         )

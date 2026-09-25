@@ -9,7 +9,7 @@ import { html, css, render } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
 import { worktrackerListStyles } from '../styles/worktracker-list.styles.js';
-import { workItemAllowsSilentComplete } from '../utils/work-item-detail-shared.js';
+import { workItemAllowsSilentComplete } from '../_helpers/work-item-detail-shared.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 

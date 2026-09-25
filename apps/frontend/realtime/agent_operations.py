@@ -24,7 +24,7 @@ from apps.agent.service import (
     revoke_device,
     update_device_policy,
 )
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from core.models import StrictBaseModel
 from core.models.identity_models import User
 from core.request_scope import require_company
@@ -53,19 +53,19 @@ class AgentAuditListPayload(StrictBaseModel):
 
 
 async def op_agent_pairing_create(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> PairingCodeResponse:
     _ = payload
     scope = require_company()
-    return await create_pairing_code(container, user_id=user.user_id, company_id=scope.company_id)
+    return await create_pairing_code(di, user_id=user.user_id, company_id=scope.company_id)
 
 
 async def op_agent_devices_list(
-    payload: AgentDevicesListPayload, *, user: User, container: FrontendContainer
+    payload: AgentDevicesListPayload, *, user: User, di: Di
 ) -> AgentDeviceListResponse:
     scope = require_company()
     items = await list_company_devices(
-        container,
+        di,
         company_id=scope.company_id,
         viewer_user_id=user.user_id,
         owner_user_id=user.user_id if payload.mine else None,
@@ -74,22 +74,22 @@ async def op_agent_devices_list(
 
 
 async def op_agent_devices_revoke(
-    payload: AgentDeviceIdPayload, *, user: User, container: FrontendContainer
+    payload: AgentDeviceIdPayload, *, user: User, di: Di
 ) -> AgentDeviceRevoked:
     scope = require_company()
     await revoke_device(
-        container, device_id=payload.device_id, company_id=scope.company_id, actor_user_id=user.user_id
+        di, device_id=payload.device_id, company_id=scope.company_id, actor_user_id=user.user_id
     )
     return AgentDeviceRevoked(device_id=payload.device_id)
 
 
 async def op_agent_devices_policy_update(
-    payload: AgentDevicePolicyUpdatePayload, *, user: User, container: FrontendContainer
+    payload: AgentDevicePolicyUpdatePayload, *, user: User, di: Di
 ) -> AgentDeviceListItem:
     _ = user
     scope = require_company()
     updated_device = await update_device_policy(
-        container, device_id=payload.device_id, company_id=scope.company_id, policy=payload.policy
+        di, device_id=payload.device_id, company_id=scope.company_id, policy=payload.policy
     )
     return AgentDeviceListItem(
         device_id=updated_device.device_id,
@@ -101,14 +101,14 @@ async def op_agent_devices_policy_update(
         paired_at=updated_device.paired_at,
         last_seen_at=updated_device.last_seen_at,
         is_active=updated_device.is_active,
-        is_tunnel_online=await is_device_tunnel_online(container, updated_device.device_id),
+        is_tunnel_online=await is_device_tunnel_online(di, updated_device.device_id),
         policy=updated_device.policy,
     )
 
 
 async def op_agent_audit_list(
-    payload: AgentAuditListPayload, *, user: User, container: FrontendContainer
+    payload: AgentAuditListPayload, *, user: User, di: Di
 ) -> AgentAuditListResponse:
     _ = user
     scope = require_company()
-    return await list_agent_audit_events(container, company_id=scope.company_id, limit=payload.limit)
+    return await list_agent_audit_events(di, company_id=scope.company_id, limit=payload.limit)

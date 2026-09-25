@@ -14,13 +14,10 @@ from typing import TYPE_CHECKING
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.service import AuthzService
 from core.models import StrictBaseModel
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 
 if TYPE_CHECKING:
-    from core.db.repositories.company_repository import CompanyRepository
-    from core.db.repositories.user_repository import UserRepository
     from core.db.storage import Storage
-    from core.models.identity_models import Company
 
 MAP_PREFIX = "integration_ext_author"
 PREPROVISION_ROLE = "viewer"
@@ -48,13 +45,9 @@ class IntegrationExternalAuthorService:
         self,
         *,
         storage: Storage,
-        user_repository: UserRepository,
-        company_repository: CompanyRepository,
         authz: AuthzService,
     ) -> None:
         self._storage: Storage = storage
-        self._user_repository: UserRepository = user_repository
-        self._company_repository: CompanyRepository = company_repository
         self._authz: AuthzService = authz
 
     async def resolve_platform_user_id(
@@ -87,19 +80,19 @@ class IntegrationExternalAuthorService:
             uid = mapping.user_id.strip()
             if uid == "":
                 raise ValueError(f"Corrupt mapping record: {key}")
-            existing = await self._user_repository.get(uid)
+            existing = await User.get(uid)
             if existing is not None:
                 return uid
             _ = await self._storage.delete(key, force_global=True)
 
-        matches = await self._user_repository.find_all_by_email_ci(email_norm)
+        matches = await User.find_all_by_email_ci(email_norm)
         if len(matches) > 1:
             raise ValueError(
                 f"Multiple users with email {email_norm}: "
                 + f"{', '.join(u.user_id for u in matches)}"
             )
 
-        company = await self._company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found: {company_id}")
 
@@ -109,8 +102,8 @@ class IntegrationExternalAuthorService:
                 user=user, company_id=company_id, company=company
             )
             user.updated_at = datetime.now(timezone.utc)
-            _ = await self._user_repository.set(user)
-            _ = await self._company_repository.set(company)
+            _ = await User.set(user)
+            _ = await Company.set(company)
             await sync_company_member_roles(
                 self._authz,
                 company_id=company_id,
@@ -129,8 +122,8 @@ class IntegrationExternalAuthorService:
             )
             mr = company.members.get(user.user_id, [])
             company.members[user.user_id] = _merge_roles(mr, PREPROVISION_ROLE)
-            _ = await self._user_repository.set(user)
-            _ = await self._company_repository.set(company)
+            _ = await User.set(user)
+            _ = await Company.set(company)
             await sync_company_member_roles(
                 self._authz,
                 company_id=company_id,

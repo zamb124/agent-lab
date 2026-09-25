@@ -7,14 +7,14 @@ import math
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
 
 from apps.search.config import SearchIndexProviderConfig
-from apps.search.db.search_index_repository import SearchIndexRepository
 from apps.search.errors import SearchIndexNotFoundError, SearchIndexSearchDisabledError
+from apps.search.services.search_index_service import SearchIndexService
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
+from core.identity.system_bootstrap import build_system_admin_job_context
 from core.rag.models import RAGMetadata, RAGSearchResult
 from core.rag_indexing_schema import SearchChannelsDefaults
 from core.search import (
@@ -147,14 +147,12 @@ class IndexSearchProvider:
     def __init__(
         self,
         config: SearchIndexProviderConfig,
-        search_index_repository: SearchIndexRepository,
+        search_index_service: SearchIndexService,
         rag_client: RagClient,
-        build_system_context: Callable[[str], Awaitable[Context]],
     ) -> None:
         self._config: SearchIndexProviderConfig = config
-        self._search_index_repository: SearchIndexRepository = search_index_repository
+        self._search_index_service: SearchIndexService = search_index_service
         self._rag_client: RagClient = rag_client
-        self._build_system_context: Callable[[str], Awaitable[Context]] = build_system_context
         self._cache: dict[frozenset[str], tuple[float, list[SearchIndexDefinition]]] = {}
 
     async def search(
@@ -199,7 +197,13 @@ class IndexSearchProvider:
 
         retrieve_limit = self._resolve_retrieve_limit(request, definitions)
         trace_id = f"search:index:{uuid.uuid4().hex}"
-        _ = set_context(await self._build_system_context(trace_id))
+        _ = set_context(
+            await build_system_admin_job_context(
+                trace_id=trace_id,
+                session_id=f"search:{trace_id}",
+                channel="search",
+            )
+        )
         try:
             try:
                 per_index_limit = max(1, math.ceil(retrieve_limit / len(definitions)))
@@ -270,7 +274,7 @@ class IndexSearchProvider:
             cached_at, cached = self._cache[cache_key]
             if time.time() - cached_at <= ttl:
                 return cached
-        definitions = await self._search_index_repository.batch_get_search_enabled(
+        definitions = await self._search_index_service.batch_get_search_enabled(
             index_ids,
             company_id="system",
         )

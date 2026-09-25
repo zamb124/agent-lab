@@ -42,7 +42,7 @@ async def test_crawl_multi_site_layer1_parse_and_index_search_strict(
     rag_worker,
     rag_service,
     provider_litserve_service,
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
 ):
@@ -56,16 +56,16 @@ async def test_crawl_multi_site_layer1_parse_and_index_search_strict(
     )
     search_index_id, crawl_profile_id = await create_search_index_and_profile(
         search_client,
-        search_container,
+        search_di,
         unique_id=unique_id,
         llm_enrichment_enabled=False,
     )
-    await seed_strict_sites(search_container, crawl_profile_id)
-    await queue_crawl_fetch_for_all_domains(search_client, search_container, crawl_profile_id)
+    await seed_strict_sites(search_di, crawl_profile_id)
+    await queue_crawl_fetch_for_all_domains(search_client, search_di, crawl_profile_id)
 
     indexed_urls = await poll_indexed_url_count(
         search_client,
-        search_container,
+        search_di,
         crawl_profile_id=crawl_profile_id,
         min_indexed=MIN_INDEXED_URLS,
         timeout_seconds=360.0,
@@ -93,7 +93,7 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
     rag_worker,
     rag_service,
     provider_litserve_service,
-    search_container,
+    search_di,
     search_system_context,
     unique_id,
 ):
@@ -113,16 +113,16 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
 
     search_index_id, crawl_profile_id = await create_search_index_and_profile(
         search_client,
-        search_container,
+        search_di,
         unique_id=unique_id,
         llm_enrichment_enabled=False,
     )
-    await seed_strict_sites(search_container, crawl_profile_id)
+    await seed_strict_sites(search_di, crawl_profile_id)
 
-    await queue_crawl_fetch_for_all_domains(search_client, search_container, crawl_profile_id)
+    await queue_crawl_fetch_for_all_domains(search_client, search_di, crawl_profile_id)
     layer1_urls = await poll_indexed_url_count(
         search_client,
-        search_container,
+        search_di,
         crawl_profile_id=crawl_profile_id,
         min_indexed=MIN_INDEXED_URLS,
         timeout_seconds=360.0,
@@ -140,7 +140,7 @@ async def test_crawl_multi_site_two_layer_parse_search_then_llm_strict(
         )
         assert site.domain in hit["url"]
 
-    requeued = await enable_llm_enrichment_layer(search_container, crawl_profile_id)
+    requeued = await enable_llm_enrichment_layer(search_di, crawl_profile_id)
     assert requeued >= MIN_INDEXED_URLS
 
     enriched_urls = await poll_enriched_urls(

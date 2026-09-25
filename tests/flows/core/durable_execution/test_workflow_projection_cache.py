@@ -10,7 +10,11 @@ from apps.flows.src.durable_execution.manager import (
     _WORKFLOW_PROJECTION_CACHE_TTL_SECONDS,
     DurableWorkflowRuntime,
 )
-from apps.flows.src.durable_execution.models import WorkflowStatus
+from apps.flows.src.durable_execution.models import (
+    WorkflowInstance,
+    WorkflowProjectionMismatchError,
+    WorkflowStatus,
+)
 from core.state import ExecutionState
 
 
@@ -40,7 +44,7 @@ def _minimal_state() -> ExecutionState:
 @pytest.mark.asyncio
 async def test_projection_cache_sets_ttl_on_running() -> None:
     redis = _RecordingRedis()
-    runtime = DurableWorkflowRuntime(repository=AsyncMock(), redis_client=redis)  # type: ignore[arg-type]
+    runtime = DurableWorkflowRuntime(redis_client=redis)  # type: ignore[arg-type]
     state = _minimal_state()
     state_json = DurableWorkflowRuntime._dump_state(state)
 
@@ -68,7 +72,7 @@ async def test_projection_cache_sets_ttl_on_running() -> None:
 @pytest.mark.asyncio
 async def test_projection_cache_deleted_on_terminal() -> None:
     redis = _RecordingRedis()
-    runtime = DurableWorkflowRuntime(repository=AsyncMock(), redis_client=redis)  # type: ignore[arg-type]
+    runtime = DurableWorkflowRuntime(redis_client=redis)  # type: ignore[arg-type]
     state = _minimal_state()
     state_json = DurableWorkflowRuntime._dump_state(state)
 
@@ -91,10 +95,11 @@ async def test_projection_cache_deleted_on_terminal() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_state_returns_rehydrated_state_on_projection_mismatch() -> None:
+async def test_get_state_returns_rehydrated_state_on_projection_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Read-path: mismatch при кешировании не роняет get_state — state из ledger отдаётся."""
     from apps.flows.src.durable_execution.hashing import hash_state_json
-    from apps.flows.src.durable_execution.repository import WorkflowProjectionMismatchError
 
     state = _minimal_state()
     state_json = DurableWorkflowRuntime._dump_state(state)
@@ -108,9 +113,14 @@ async def test_get_state_returns_rehydrated_state_on_projection_mismatch() -> No
     instance.active_execution_branch_id = "branch-1"
     instance.status = WorkflowStatus.running.value
 
-    repository = AsyncMock()
-    repository.get_instance = AsyncMock(return_value=instance)
-    repository.load_state_at_head = AsyncMock(return_value=(state, instance))
+    async def _get_instance(**_kwargs: object) -> MagicMock:
+        return instance
+
+    async def _load_state_at_head(**_kwargs: object) -> tuple[ExecutionState, MagicMock]:
+        return state, instance
+
+    monkeypatch.setattr(WorkflowInstance, "get_instance", _get_instance)
+    monkeypatch.setattr(WorkflowInstance, "load_state_at_head", _load_state_at_head)
 
     redis = _RecordingRedis()
 
@@ -119,7 +129,7 @@ async def test_get_state_returns_rehydrated_state_on_projection_mismatch() -> No
 
     redis.get = _redis_get  # type: ignore[method-assign]
 
-    runtime = DurableWorkflowRuntime(repository=repository, redis_client=redis)  # type: ignore[arg-type]
+    runtime = DurableWorkflowRuntime(redis_client=redis)  # type: ignore[arg-type]
     runtime._company_id = lambda: "company-1"  # type: ignore[method-assign]
     runtime._get_cached_head = AsyncMock(return_value=None)  # type: ignore[method-assign]
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
 from core.state import ExecutionState
@@ -16,12 +15,8 @@ class HitlClient:
 
     _service: HitlWorkItemService
 
-    def __init__(self, service: HitlWorkItemService | None = None) -> None:
-        self._service = (
-            service
-            if service is not None
-            else require_current_container().hitl_work_item_service
-        )
+    def __init__(self, service: HitlWorkItemService) -> None:
+        self._service = service
 
     async def register_handoff(
         self,

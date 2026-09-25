@@ -36,11 +36,11 @@ async def test_office_public_link_preview(
     unique_id: str,
     office_client_http,
     auth_headers_system,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     doc_title = f"Public {unique_id}"
 
-    namespace = await sync_e2e_seed_namespace(unique_id, suffix="public")
+    namespace = await sync_e2e_seed_namespace(frontend_di, unique_id, suffix="public")
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

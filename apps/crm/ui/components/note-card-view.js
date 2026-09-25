@@ -41,7 +41,7 @@
 import { html, css, nothing, render } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { selectCrmSidebarOrDefaultNamespace } from '../utils/crm-namespace-select.js';
+import { selectCrmSidebarOrDefaultNamespace } from '../_helpers/crm-namespace-select.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -53,8 +53,8 @@ import './entity-hover-preview.js';
 import './crm-related-neighbor-rows.js';
 import './crm-mini-graph.js';
 import { relatedEntityCardSharedStyles } from '../styles/related-entity-card.styles.js';
-import { extractNeighborEdges } from '../utils/neighbor-edges.js';
-import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
+import { extractNeighborEdges } from '../_helpers/neighbor-edges.js';
+import { searchScorePercent, relationshipConfidencePercent } from '../_helpers/search-score-percent.js';
 import {
     buildSummaryEntityLookupFromRelated,
     entityDisplayIconName,
@@ -62,8 +62,8 @@ import {
     fallbackEntityGlyph,
     resolveSummaryChipEntity,
     summaryChipUnresolvedIconName,
-} from '../utils/related-entity-presenter.js';
-import { NOTE_ROOT_ENTITY_TYPE_ID } from '../constants/entity-type-ids.js';
+} from '../_helpers/related-entity-presenter.js';
+import { NOTE_ROOT_ENTITY_TYPE_ID } from '../_helpers/entity-type-ids.js';
 import { formatFileSize } from '@platform/lib/utils/format-file-size.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { escapeHtml as _escapeHtmlCanon } from '@platform/lib/utils/escape-html.js';

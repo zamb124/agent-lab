@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Never
 
-from core.container.base import BaseContainer
 from core.context import require_active_company
+from core.di.platform import PlatformDi
 from core.integrations.company_credentials import (
     CompanyIntegrationConfigError,
     CompanyIntegrationPermissionError,
@@ -15,13 +15,14 @@ from core.integrations.company_credentials import (
 )
 from core.integrations.models import (
     CredentialInfo,
+    IntegrationCredential,
     IntegrationCredentialRefPayload,
     IntegrationDeletedResponse,
     IntegrationProvider,
 )
 from core.models.identity_models import User
 from core.pagination import ListResponse
-from core.websocket import EmptyPayload, WsCommandError
+from core.websocket import EmptyPayload, Operation, WsCommandError
 
 
 def raise_integration(exc: Exception) -> Never:
@@ -50,11 +51,11 @@ async def op_integrations_credentials_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> ListResponse[CredentialInfo]:
-    _ = payload
+    _ = payload, di
     company_id = require_active_company().company_id
-    credentials = await container.integration_credential_repository.list_by_user(
+    credentials = await IntegrationCredential.list_by_user(
         company_id=company_id,
         user_id=user.user_id,
     )
@@ -74,11 +75,12 @@ async def op_integrations_credentials_remove(
     payload: IntegrationCredentialRefPayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> IntegrationDeletedResponse:
+    _ = di
     company_id = require_active_company().company_id
     provider, service = _require_ref(payload)
-    deleted = await container.integration_credential_repository.delete_by_user_provider_service(
+    deleted = await IntegrationCredential.delete_by_user_provider_service(
         company_id=company_id,
         user_id=user.user_id,
         provider=provider,
@@ -93,12 +95,12 @@ async def op_integrations_workspace_company_get(
     payload: EmptyPayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
     _ = payload, user
     company_id = require_active_company().company_id
     return (
-        await container.company_integration_credential_service.get_google_workspace_company_public(
+        await di.company_integration_credential_service.get_google_workspace_company_public(
             company_id
         )
     )
@@ -108,12 +110,12 @@ async def op_integrations_workspace_company_put(
     payload: GoogleWorkspaceCompanyCredentialPut,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> GoogleWorkspaceCompanyCredentialPublic:
     _ = user
     company_id = require_active_company().company_id
     try:
-        return await container.company_integration_credential_service.upsert_google_workspace_service_account(
+        return await di.company_integration_credential_service.upsert_google_workspace_service_account(
             company_id,
             payload,
         )
@@ -129,12 +131,12 @@ async def op_integrations_workspace_company_delete(
     payload: EmptyPayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> IntegrationDeletedResponse:
     _ = payload, user
     company_id = require_active_company().company_id
     try:
-        deleted = await container.company_integration_credential_service.delete_google_workspace_service_account(
+        deleted = await di.company_integration_credential_service.delete_google_workspace_service_account(
             company_id,
         )
     except (
@@ -146,3 +148,20 @@ async def op_integrations_workspace_company_delete(
     if not deleted:
         raise WsCommandError("not_found", "Company credential not found", error_code='not_found')
     return IntegrationDeletedResponse(deleted=True)
+
+
+INTEGRATIONS_CREDENTIALS_LIST_OPERATION: Operation[EmptyPayload, PlatformDi] = Operation(
+    payload_model=EmptyPayload, fn=op_integrations_credentials_list
+)
+INTEGRATIONS_CREDENTIALS_REMOVE_OPERATION: Operation[IntegrationCredentialRefPayload, PlatformDi] = Operation(
+    payload_model=IntegrationCredentialRefPayload, fn=op_integrations_credentials_remove
+)
+INTEGRATIONS_WORKSPACE_COMPANY_GET_OPERATION: Operation[EmptyPayload, PlatformDi] = Operation(
+    payload_model=EmptyPayload, fn=op_integrations_workspace_company_get
+)
+INTEGRATIONS_WORKSPACE_COMPANY_PUT_OPERATION: Operation[GoogleWorkspaceCompanyCredentialPut, PlatformDi] = Operation(
+    payload_model=GoogleWorkspaceCompanyCredentialPut, fn=op_integrations_workspace_company_put
+)
+INTEGRATIONS_WORKSPACE_COMPANY_DELETE_OPERATION: Operation[EmptyPayload, PlatformDi] = Operation(
+    payload_model=EmptyPayload, fn=op_integrations_workspace_company_delete
+)

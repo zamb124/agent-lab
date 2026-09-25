@@ -14,7 +14,7 @@ from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.docs.assistant import (
     DOCS_ASSISTANT_BRANCH_ID,
     DOCS_ASSISTANT_EMBED_ID,
@@ -23,9 +23,8 @@ from core.docs.assistant import (
 )
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
-from core.models.embed_models import EmbedStatus
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.utils.tokens import get_token_service
 
@@ -80,7 +79,7 @@ def _referer_path_allowed(referer: str) -> bool:
 async def issue_public_docs_assistant_session(
     body: PublicDocsAssistantSessionRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> PublicDocsAssistantSessionResponse:
     embed_id = body.embed_id.strip()
     if embed_id != DOCS_ASSISTANT_EMBED_ID:
@@ -100,20 +99,13 @@ async def issue_public_docs_assistant_session(
         raise HTTPException(status_code=403, detail="origin is required for a public documentation session")
 
     await enforce_public_session_issue_rate_limit(
-        redis_client=container.redis_client,
+        redis_client=di.redis_client,
         request=request,
         scope="public_docs_assistant",
     )
 
-    mapping = await container.embed_mapping_repository.get(embed_id)
-    if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Widget not found")
-
-    config = await container.embed_config_repository.get_for_company_identifier(
-        SYSTEM_COMPANY_SUBDOMAIN,
-        embed_id,
-    )
-    if config is None:
+    config = await EmbedConfig.get(embed_id)
+    if config is None or config.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Widget is disabled")
@@ -124,7 +116,7 @@ async def issue_public_docs_assistant_session(
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
     _ = await ensure_persisted_runtime_user(
-        container,
+        di.authz_service,
         user_id=guest_id,
         company_id=SYSTEM_COMPANY_ID,
         name="Documentation Guest",

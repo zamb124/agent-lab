@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import delete, update
 
-from apps.flows.src.container import get_container
-from apps.flows.src.db.models import WorkflowEvents, WorkflowInstances, WorkflowSnapshots
+from apps.flows.src.durable_execution.models import (
+    WorkflowEvent,
+    WorkflowInstance,
+    WorkflowSnapshot,
+)
 from apps.flows.src.durable_execution import (
     UserInputAppliedPayload,
     WorkflowEventType,
@@ -70,8 +72,8 @@ def create_test_state(
     return state
 
 
-async def save_test_state(state: ExecutionState) -> None:
-    await get_container().workflow_runtime.save_state(
+async def save_test_state(state: ExecutionState, di) -> None:
+    await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
@@ -84,20 +86,23 @@ async def save_test_state(state: ExecutionState) -> None:
     )
 
 
-async def set_instance_time(session_id: str, updated_at: datetime) -> None:
-    container = get_container()
-    async with container.storage.get_session() as session:
-        await session.execute(
-            update(WorkflowInstances)
-            .where(WorkflowInstances.session_id == session_id)
-            .values(created_at=updated_at, updated_at=updated_at)
-        )
-        await session.commit()
+async def set_instance_time(session_id: str, updated_at: datetime, di) -> None:
+    _ = di
+    company_id = require_active_company().company_id
+    _ = await WorkflowInstance.objects.filter(
+        company_id=company_id,
+        session_id=session_id,
+    ).update(
+        returning=False,
+        using="flows",
+        created_at=updated_at,
+        updated_at=updated_at,
+    )
 
 
 class TestSessionsAPI:
     @pytest.mark.asyncio
-    async def test_list_sessions(self, client, app, unique_id):
+    async def test_list_sessions(self, client, app, unique_id, di):
         _ = app
         flow_id = f"flow_{unique_id}"
         user_id = f"user_{unique_id}"
@@ -109,8 +114,8 @@ class TestSessionsAPI:
                 user_id,
                 first_message="Test message",
                 message_count=5,
-            )
-        )
+            ),
+        di=di)
 
         response = await client.get("/flows/api/v1/sessions/", params={"limit": 200})
 
@@ -120,14 +125,14 @@ class TestSessionsAPI:
         assert session_id in [s["session_id"] for s in data["items"]]
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_user_filter(self, client, app, unique_id):
+    async def test_list_sessions_with_user_filter(self, client, app, unique_id, di):
         _ = app
         target_user = f"target_user_{unique_id}"
         session1_id = f"flow1_{unique_id}:context1_{unique_id}"
         session2_id = f"flow2_{unique_id}:context2_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, target_user))
-        await save_test_state(create_test_state(session2_id, f"other_user_{unique_id}"))
+        await save_test_state(create_test_state(session1_id, target_user), di=di)
+        await save_test_state(create_test_state(session2_id, f"other_user_{unique_id}"), di=di)
 
         response = await client.get(f"/flows/api/v1/sessions/?user_id={target_user}")
 
@@ -138,15 +143,15 @@ class TestSessionsAPI:
         assert data["items"][0]["session_id"] == session1_id
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_flow_filter(self, client, app, unique_id):
+    async def test_list_sessions_with_flow_filter(self, client, app, unique_id, di):
         _ = app
         target_flow = f"target_flow_{unique_id}"
         other_flow = f"other_flow_{unique_id}"
         session1_id = f"{target_flow}:context1_{unique_id}"
         session2_id = f"{other_flow}:context2_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, f"user1_{unique_id}"))
-        await save_test_state(create_test_state(session2_id, f"user2_{unique_id}"))
+        await save_test_state(create_test_state(session1_id, f"user1_{unique_id}"), di=di)
+        await save_test_state(create_test_state(session2_id, f"user2_{unique_id}"), di=di)
 
         response = await client.get(f"/flows/api/v1/sessions/?flow_id={target_flow}")
 
@@ -156,7 +161,7 @@ class TestSessionsAPI:
         assert data["items"][0]["flow_id"] == target_flow
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_branch_filter(self, client, app, unique_id):
+    async def test_list_sessions_with_branch_filter(self, client, app, unique_id, di):
         _ = app
         flow_id = f"flow_branch_{unique_id}"
         session1_id = f"{flow_id}:context1_{unique_id}"
@@ -165,11 +170,11 @@ class TestSessionsAPI:
         branch_b = f"branch-b-{unique_id}"
 
         await save_test_state(
-            create_test_state(session1_id, f"user1_{unique_id}", branch_id=branch_a)
-        )
+            create_test_state(session1_id, f"user1_{unique_id}", branch_id=branch_a),
+        di=di)
         await save_test_state(
-            create_test_state(session2_id, f"user2_{unique_id}", branch_id=branch_b)
-        )
+            create_test_state(session2_id, f"user2_{unique_id}", branch_id=branch_b),
+        di=di)
 
         response = await client.get("/flows/api/v1/sessions/", params={"branch_id": branch_a})
 
@@ -179,7 +184,7 @@ class TestSessionsAPI:
         assert data["items"][0]["session_id"] == session1_id
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_date_range(self, client, app, unique_id):
+    async def test_list_sessions_with_date_range(self, client, app, unique_id, di):
         _ = app
         base_user = f"date_test_user_{unique_id}"
         now = datetime.now(timezone.utc)
@@ -190,13 +195,13 @@ class TestSessionsAPI:
         session_in_range_id = f"flow2_{unique_id}:context_in_range_{unique_id}"
         session_new_id = f"flow3_{unique_id}:context_new_{unique_id}"
 
-        await save_test_state(create_test_state(session_old_id, base_user))
-        await save_test_state(create_test_state(session_in_range_id, base_user))
-        await save_test_state(create_test_state(session_new_id, base_user))
+        await save_test_state(create_test_state(session_old_id, base_user), di=di)
+        await save_test_state(create_test_state(session_in_range_id, base_user), di=di)
+        await save_test_state(create_test_state(session_new_id, base_user), di=di)
 
-        await set_instance_time(session_old_id, now - timedelta(days=3))
-        await set_instance_time(session_in_range_id, date_from + timedelta(hours=12))
-        await set_instance_time(session_new_id, now)
+        await set_instance_time(session_old_id, now - timedelta(days=3), di=di)
+        await set_instance_time(session_in_range_id, date_from + timedelta(hours=12), di=di)
+        await set_instance_time(session_new_id, now, di=di)
 
         response = await client.get(
             "/flows/api/v1/sessions/",
@@ -213,15 +218,15 @@ class TestSessionsAPI:
         assert data["items"][0]["session_id"] == session_in_range_id
 
     @pytest.mark.asyncio
-    async def test_list_sessions_with_combined_filters(self, client, app, unique_id):
+    async def test_list_sessions_with_combined_filters(self, client, app, unique_id, di):
         _ = app
         target_user = f"target_user_{unique_id}"
         target_flow = f"target_flow_{unique_id}"
         session1_id = f"{target_flow}:context1_{unique_id}"
         session2_id = f"other_flow_{unique_id}:context2_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, target_user))
-        await save_test_state(create_test_state(session2_id, target_user))
+        await save_test_state(create_test_state(session1_id, target_user), di=di)
+        await save_test_state(create_test_state(session2_id, target_user), di=di)
 
         response = await client.get(
             "/flows/api/v1/sessions/",
@@ -234,15 +239,15 @@ class TestSessionsAPI:
         assert data["items"][0]["session_id"] == session1_id
 
     @pytest.mark.asyncio
-    async def test_list_sessions_pagination(self, client, app, unique_id):
+    async def test_list_sessions_pagination(self, client, app, unique_id, di):
         _ = app
         base_user = f"user_{unique_id}"
         flow_id = f"flow_{unique_id}"
 
         for i in range(5):
             await save_test_state(
-                create_test_state(f"{flow_id}:context_{i}_{unique_id}", base_user)
-            )
+                create_test_state(f"{flow_id}:context_{i}_{unique_id}", base_user),
+            di=di)
 
         response1 = await client.get(
             "/flows/api/v1/sessions/",
@@ -266,33 +271,30 @@ class TestSessionsAPI:
 
     @pytest.mark.asyncio
     async def test_list_sessions_skips_projection_hash_mismatch(
-        self, client, app, unique_id
-    ):
+        self, client, app, unique_id,
+    di):
         _ = app
         user_id = f"user_{unique_id}"
         flow_id = f"flow_{unique_id}"
         good_id = f"{flow_id}:good_{unique_id}"
         bad_id = f"{flow_id}:bad_{unique_id}"
         await save_test_state(
-            create_test_state(good_id, user_id, first_message="ok", message_count=2)
-        )
+            create_test_state(good_id, user_id, first_message="ok", message_count=2),
+        di=di)
         await save_test_state(
-            create_test_state(bad_id, user_id, first_message="bad", message_count=2)
-        )
+            create_test_state(bad_id, user_id, first_message="bad", message_count=2),
+        di=di)
 
-        container = get_container()
         company_id = require_active_company().company_id
-        async with container.storage.get_session() as session:
-            _ = await session.execute(
-                delete(WorkflowSnapshots).where(WorkflowSnapshots.session_id == bad_id)
-            )
-            _ = await session.execute(
-                update(WorkflowEvents)
-                .where(WorkflowEvents.session_id == bad_id)
-                .values(next_state_hash="0" * 64)
-            )
-            await session.commit()
-        _ = await container.redis_client.delete(
+        _ = await WorkflowSnapshot.objects.filter(
+            company_id=company_id,
+            session_id=bad_id,
+        ).delete()
+        _ = await WorkflowEvent.objects.filter(
+            company_id=company_id,
+            session_id=bad_id,
+        ).update(returning=False, using="flows", next_state_hash="0" * 64)
+        _ = await di.a2a_task_projection_service.redis_client.delete(
             f"flows:workflow_projection:{company_id}:{bad_id}"
         )
 
@@ -320,7 +322,7 @@ class TestSessionsAPI:
         assert data["items"] == []
 
     @pytest.mark.asyncio
-    async def test_list_sessions_response_structure(self, client, app, unique_id):
+    async def test_list_sessions_response_structure(self, client, app, unique_id, di):
         _ = app
         flow_id = f"flow_{unique_id}"
         user_id = f"user_{unique_id}"
@@ -332,8 +334,8 @@ class TestSessionsAPI:
                 user_id,
                 first_message="Hello world",
                 message_count=10,
-            )
-        )
+            ),
+        di=di)
 
         response = await client.get(f"/flows/api/v1/sessions/?user_id={user_id}")
 
@@ -365,12 +367,12 @@ class TestSessionsAPI:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_delete_session(self, client, app, unique_id):
+    async def test_delete_session(self, client, app, unique_id, di):
         _ = app
         flow_id = f"flow_{unique_id}"
         user_id = f"user_{unique_id}"
         session_id = f"{flow_id}:context_{unique_id}"
-        await save_test_state(create_test_state(session_id, user_id))
+        await save_test_state(create_test_state(session_id, user_id), di=di)
 
         removed = await client.delete(f"/flows/api/v1/sessions/{session_id}")
         assert removed.status_code == 200

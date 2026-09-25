@@ -1,381 +1,119 @@
 ---
-description: "Тестирование: фикстуры, MockLLM, изоляция, параллельный запуск, Sync/UI/E2E"
+description: "Тестирование — реальная инфраструктура, единственный мок MockLLM, фикстуры, параллельный прогон, стек make test-up, стиль теста, слои UI-тестов. Читать при написании или правке тестов"
+globs:
+  - "tests/**"
+  - "mk/test.mk"
+  - "docker-compose-test.yaml"
+  - "pytest.ini"
+  - "scripts/test_stack.py"
 alwaysApply: false
 ---
+
 # Тестирование
 
-**Зона:** фикстуры/клиенты, команды запуска, timeout/cleanup, Sync/UI/E2E-инфра, MockLLM, структура `tests/`.
+Тесты — `tests/`; процессы стека — `make test-up` (`scripts/test_stack.py`, `docker-compose-test.yaml`); лимиты pytest — `pytest.ini`; прогоны — `mk/test.mk`. Lint до тестов → `main.mdc` § Lint gate. Команды, профили, ёмкость стека, таймауты пакетов и триаж — скил `backend-engineer` (`.cursor/skills/backend-engineer/references/testing.md`); сценарные UI-инструкции — скил `documentator`.
 
-**Не дублируется здесь** (один источник — `testing_invariants.mdc`): инварианты контрактов, уровень теста «от потребителя», стиль ассертов, контракт vs реализация, DI/`patch`, проверка записи в БД и согласованность с ответом API, изоляция по `company_id`/`namespace_id`, чтение состояния через ORM/репозитории вместо сырого SQL, чеклист стиля.
+## Канон
 
-## Главные принципы
+1. **Реальная инфраструктура.** Тест работает на PostgreSQL, Redis, MinIO, TaskIQ, OpenFGA, Centrifugo и HTTP-сервисах стека. Внутренние компоненты (runtime flows, фабрики, реестры, каналы, S3-клиент, модели Oxyde, сервисы, `op_*`) — реальные экземпляры из DI процесса. Гейт: ratchet `tests_monkeypatch_internal`.
+2. **Единственный мок — `MockLLM`** (`core/clients/llm/mock.py`) → § MockLLM и задачи. Гейты: ratchet `tests_asyncmock`, `scripts/check_agent_test_no_monkeypatch.py`.
+3. **Внешний API — эмулятор.** Внешний сервис заменяет локальный сервер того же протокола, адрес которого задают settings: Google Workspace — `tests/fixtures/google_api_emulator/` через `google_workspace.api_bases`; OpenAI-compatible провайдер — локальный HTTP-сервер теста; MCP — `tests/fixtures/mcp_modes_stub.py`; A2A — контейнер `test-a2a-agent`; речь — провайдер `mock` (`VOICE__STT__PROVIDER`). Патч клиента, тула или резолвера запрещён. `[без гейта]`
+4. **`unique_id` в каждом идентификаторе.** Фикстура `unique_id` (`tests/conftest.py`) входит в каждый id, ключ Redis, namespace, канал, flow, файл и порт теста; `session_id = {flow_id}:{context_id}`. Литералы вида `"test-1"` в идентификаторах запрещены. `[без гейта]`
+5. **Свои границы данных.** У теста свои `company_id` и `auth_headers_*`, RAG `namespace_id`, CRM-сущности; общие «дефолтные» записи не используются, одиночный и параллельный прогон дают одинаковый результат. `[без гейта]`
+6. **Процессы — только стек.** Granian-сервисы и TaskIQ-воркеры поднимает только `make test-up` (`scripts/test_stack.py up`); pytest процессы не стартует и не убивает. Фикстуры `<svc>_service` и `<svc>_worker` проверяют readiness (`require_http_service` в `tests/fixtures/services.py`, `require_taskiq_worker` в `tests/fixtures/workers.py`) и падают `pytest.fail` с подсказкой `make test-up`. `[без гейта]`
+7. **Миграции — только стек.** Схему и сид компании `system` накатывает `make test-up` (`scripts/test_migrate.py`); `setup_database_before_tests` (`tests/conftest.py`) только сверяет `0001_initial` в `oxyde_migrations` каждой базы → `database.mdc`. `[без гейта]`
+8. **DI как в production.** Фикстура `<svc>_di` (flows — `di`) отдаёт `require_di(app, <Svc>Di)` приложения с запущенным lifespan: `ServiceProcesses.app` (`tests/fixtures/service_processes.py`) держит lifespan до конца сессии, фикстура пакета входит в `app.router.lifespan_context(app)` сама; CLI-сборка — `open_di` → `architecture.mdc` § Service Kit DI. Settings задаются до входа в lifespan; компонент подменяет только recipe подкласса `<Svc>Di` в `tests/`. `[без гейта]`
+9. **Тест — инвариант.** Тест закрепляет свойство, которое переживает рефакторинг (поля API ↔ источники данных, изоляция, коды ошибок), и поведение, видимое потребителю; приватные имена и порядок внутренних вызовов не проверяются. Смена формы ответа без правки теста падает; при смене контракта фикстуры и ассерты переписываются под новый контракт, glue и alias ради зелёных тестов запрещены → `main.mdc` § Запреты. `[без гейта]`
+10. **Уровень — от потребителя.** Сила сигнала: HTTP/ASGI-клиент (маршрут, JSON, статус, ошибка) → компонент `<svc>_di` → чистая функция с переиспользуемым контрактом. Изменение домена покрывают сценарии «запрос → ответ» и «задача воркера → эффект в БД или очереди»; команда — тождество WS ≡ REST → `architecture.mdc` § Новая команда. `[без гейта]`
+11. **Запись — ответ и состояние.** После записи (в том числе воркером) тест проверяет ответ и состояние: повторный GET/list того же контракта и/или строки через методы модели Oxyde; сырой SQL — только для агрегата или индекса без метода модели, с пояснением в кейсе. Сценарий A2A или Flow UI сверяет streaming frames, blocking `Task`, `GetTask` после rehydrate и durable projection: порядок Artifacts, Parts и metadata совпадают, snapshot и patches артефакта `state` дают state `GetTask`. `[без гейта]`
+12. **Ассерты и имена.** Ассерт сравнивает структуру целиком или явный фрагмент, статус и тело — рядом; truthy-проверка (`assert body.get("x")`) запрещена; порядок без контракта — `sorted(..., key=...)` или множества. Имя — `test_<сценарий>_<ожидание>` или `test_<действие>_when_<условие>_then_<результат>`, не `test_*_works`; кейс — в docstring; Arrange → Act → Assert; длинная подготовка — в фикстурах и хелперах `tests/`. `[без гейта]`
+13. **Таймаут — потолок зависания.** Глобальный лимит — `pytest.ini` (`timeout=5`, `timeout_method=thread`, `timeout_func_only=true`); лимиты пакетов ставит только `pytest_collection_modifyitems` (`tests/conftest.py`, `tests/ui/e2e/conftest.py`, `tests/realtime/conftest.py`); зависший xdist-воркер снимает `tests/hang_guard.py`, весь прогон — `scripts/pytest_with_timeout.py`. `[без гейта]`
+14. **Skip — только внешнее окружение.** `pytest.skip` и `pytest.mark.skip` — только при отсутствии окружения вне стека (сеть, системная библиотека, ключ провайдера) с причиной в сообщении; недоступный стек — `pytest.fail`. Гейт: ratchet `tests_skip_markers`.
+15. **Property-based — дополнительный слой.** Hypothesis-тесты (`test_*_fuzz.py`, `deadline=None`) и JS `*.fuzz.spec.js` дополняют детерминированные кейсы и не заменяют их. `[без гейта]`
 
-1. **Никаких моков** — единственный обязательный мок это `MockLLM`. Реальные PostgreSQL, Redis, MinIO, TaskIQ.
-2. **Только готовые фикстуры** — запрещено создавать свои клиенты, сервисы, worker'ы.
-3. **Изоляция через `unique_id`** — обязательна в каждом тесте для всех ID (`task_id`, `context_id`, `user_id`, `session_id`, …).
-4. **Реальные компоненты** — `FlowFactory`, `ToolRegistry`, `S3Client`, `DurableWorkflowRepository`/`DurableWorkflowRuntime`, репозитории не мокаются.
-5. **RAG эмбеддинги:** по умолчанию `PgVectorProvider` идёт через реальный `core.ai.runtime` embedding path. `PGVECTOR_TEST_MOCK_EMBEDDINGS=true` — deterministic `core.ai.embedding_client` route без внешнего API (имя не под префиксом `RAG__`, иначе ломается разбор `rag.embedding` в Pydantic); прокинуть в subprocess `rag_worker` через `**TEST_DATABASE_ENV` (`tests/fixtures/test_database_env.py`).
+### Фикстуры
 
-Запрещено мокать: `DurableWorkflowRepository`, `DurableWorkflowRuntime`, `FlowFactory`, `ToolRegistry`, `BaseChannel`, `S3Client`, любые внутренние компоненты.
+Имена ниже канонические; фикстура того же смысла под другим именем запрещена. `[без гейта]`
 
-## Статические gate перед тестами
-
-Lint gate — **`main.mdc`** § «Lint gate»: `make lint` (или минимум `uv run ruff check .` + `uv run basedpyright --level warning --warnings apps core` + `uv run python analyze_imports.py` → `Total local imports: 0`). `make test` сам гоняет python-часть линтеров в `test-static`; warning basedpyright = fail.
-
-После узкой правки — целевой `pytest`. После рефакторинга архитектуры/DI/runtime/тест-инфры — `make test`. Если просили coverage или менялись тестовые gate/оркестрация — `make test-cov`.
-
-## Архитектурные запреты
-
-### Глобальное состояние — только через фикстуры и `monkeypatch`
-
-- `os.environ[...] = ...` в теле теста запрещено. Только `monkeypatch.setenv` (автооткат).
-- Прямой сброс singleton (`_settings_instance = None`, `_default_rag_provider = None`) запрещён. Допустимо в `conftest.py` (module-level setup до импорта приложения) или через `monkeypatch.setattr`.
-- Присвоение модульных переменных — только через `monkeypatch.setattr`.
-- `unittest.mock.patch` / `@patch` не использовать — только `monkeypatch`. При исключении в `with patch(...)` патч может не откатиться.
-
-### Параллельная безопасность (pytest-xdist)
-
-**WORKERS:** дефолт `10` (`WORKERS ?= 10` в `mk/test.mk`). Override: `make test WORKERS=5` или `WORKERS=auto` (auto → baseline 10). `make test-up` передаёт `WORKERS` в `scripts/test_stack.py` — стек масштабируется пропорционально baseline.
-
-Запуск с `-n N` (`_PYTEST_XDIST` в `mk/test.mk`). **Все тесты параллельны: `xdist_group`, lock'и и любая сериализация тестов запрещены.** Flaky от shared state чинится архитектурно: уникальные идентификаторы, single-owner для глобальных singleton-ключей, eventual-convergence контракты для глобальных batch-операций (см. «Parallel-safe контракты» ниже). Каждый gw — отдельный процесс. БД, Redis, MinIO — общие; HTTP-сервисы и TaskIQ-воркеры — **один общий стек** (`make test-up` → `scripts/test_stack.py up`).
-
-- Захардкоженные идентификаторы (`task_id="my-task"`, `flow_id="test_flow"`) запрещены — все ID содержат `unique_id`.
-- Захардкоженные порты, временные файлы, Redis-ключи без `unique_id`/scope запрещены.
-- **MockLLM** маршрутизируется по `test_scope` (`mock_llm:responses:<scope>`), а не по gw/lane. Scope прокидывается через `X-Test-Scope` (HTTP), TaskIQ labels и autouse `platform_test_scope`. UI E2E (`make test-ui`, `-n5`) — per-worker `test_e2e_gwN` (`tests/ui/e2e_worker.py`: Playwright `extra_http_headers` + `bind_ui_e2e_worker_scope`). Desktop/agent E2E (`-n0`) — статический `test_e2e_static` (`TEST_SCOPE_DEFAULT` в стеке + `bind_static_e2e_scope`). Event-driven CRM summary (`crm_rebuild_daily_summary` / `crm_rebuild_period_summary`) и note markdown format (`note_markdown_format`) наследуют `{parent}:crm_summary` / `{parent}:note_markdown` — иначе side-effect A2A снимает FIFO note-analyze (`assert 0 >= 1` / `queue exhausted`).
-- `time.sleep` для ожидания асинхронного результата запрещён — только `asyncio.wait_for`/`asyncio.sleep` с поллингом или `await` с таймаутом.
-- **FileLock / SessionServerManager / SessionWorkerManager в фикстурах запрещены.** Единственный владелец процессов — `make test-up`. pytest только проверяет readiness (`require_http_service`, `require_taskiq_worker`).
-
-### Идемпотентность фикстур
-
-- Session-фикстуры при xdist выполняются **по разу на gw-worker** (не глобально).
-- Миграции и сид `system`-компании — в `make test-up` (`scripts/test_migrate.py`), не в pytest. `setup_database_before_tests` — быстрый assert «head == current», без локов.
-- Teardown session-фикстур не убивает granian/taskiq процессы стека.
-
-### Чистота тестового тела
-
-- `try/except` в теле теста запрещён. Тест должен падать при ошибке. Исключение — `pytest.raises`.
-- `except: pass` в теле теста запрещено. Проглоченные ошибки только в teardown фикстур.
-- Создание своих `AsyncClient`, `httpx.Client`, сессий БД запрещено — только готовые фикстуры.
-- `get_container()` в теле теста запрещён — только фикстура `container`.
-- Cleanup данных — в teardown фикстуры, не в теле теста.
-
-### Изоляция данных
-
-Тест не должен мутировать чужие данные без `unique_id`-изоляции. Каждая сущность в БД/Redis с `unique_id` в идентификаторе.
-
-**Demo company variables (`company_id=system`):** не перезаписывать seed-ключи (`base_url`, `api_endpoint`, …) без teardown. E2E на demo seed — `ensure_demo_company_variables_seeded` (autouse в `test_variables_scenarios_e2e.py`); мутации variables — только уникальные ключи (`base_url_e2e_{unique_id}`), не канонические demo keys.
-
-## Timeout и cleanup
-
-Жёсткий лимит — `pytest-timeout` (`timeout`, `timeout_method`, `timeout_func_only` в `pytest.ini`). **`timeout_method=thread`**: dump стека + `os._exit(1)` — убивает зависший xdist-воркер. `signal`/`SIGALRM` не прерывает зависший asyncio await: один gw держит всю сессию до wall-clock `pytest_with_timeout`. Глобально 5 с с `timeout_func_only=true` (только фаза call). `@pytest.mark.real_taskiq` без своего `@pytest.mark.timeout` — **180 с, func_only=False** (setup+body: `crm_client` под `-n10` и shared Postgres иначе ERROR на setup >5s). Override — `@pytest.mark.timeout(300)`; отключить — `@pytest.mark.timeout(0)` или `PYTEST_TIMEOUT=0` / `pytest -o timeout=0`. Встроенный `faulthandler_timeout` отключён (только печатает стеки, не останавливает).
-
-**Hang-guard (`tests/hang_guard.py`):** master SIGKILL gw, у которого heartbeat setup/call/teardown старше timeout+15с (setup/teardown — пол не ниже 60с под readiness retry 30с). Фаза `idle` (воркер ждёт следующую пачку, пока сосед гоняет 180с) не убивается. Дамп: `/tmp/pytest-hung-worker.txt`. xdist `--max-worker-restart=2` поднимает убитый gw. Wall-clock обёртка `scripts/pytest_with_timeout.py` убивает **process group** (`start_new_session` + `killpg`), не только `uv` — иначе xdist-дети переживают timeout родителя.
-
-**CRM e2e timeout (120 с):** `_is_crm_e2e_test()` ставит `@pytest.mark.timeout(120, func_only=False)` для `tests/crm/e2e/**`. Хук **перекрывает** более короткий маркер и `func_only=True` (module `pytestmark = timeout(20)` иначе FAILED call / ERROR setup под `-n10`). Явный timeout ≥120 с с `func_only=False` не трогается; `real_taskiq` hang-guard — 180 с (ветка раньше). Это потолок зависания, не бюджет тела: `_analyze_note` poll = **90 с**. A2A note-analyze — `analysis_a2a_timeout_seconds` (90 с) как бюджет GetTask poll; `send_task` не держит granian (returnImmediately). Не поднимать poll/timeout вместо причины (очередь `flows_worker`, лишний AgentCard, FGA). HTTP `GET /flows/` не должен `batch_check` весь company catalog: окна `page_viewable_flow_ids` + OpenFGA BatchCheck chunk **50** (`OPENFGA_MAX_CHECKS_PER_BATCH_CHECK`); полный catalog Check под `-n10` HOL'ит store и note-analyze остаётся `running` до poll 90 с. `crm_worker` baseline **16**. Knowledge-import e2e не применяет seed `sales` (десятки типов + FGA); минимальный шаблон + `note`/`meeting`/`task`. Daily/period summary — очередь **`crm_summary`**. Side-effect daily summary не делит MockLLM FIFO с analyze (`{scope}:crm_summary`). `CompanyInitService.initialize_company` в pytest — insert-only (`reseed=False`). Lifespan N granian — `pg_advisory_lock` на `NullPool` lock-engine + UniqueViolation `company_mapping` = успех (иначе ASGI startup падает; lock из рабочего pool при TESTING `pool_size=1` deadlock). MockLLM stream не режет ответ по 2–5 символов с `sleep(0.005)`: каждый чанк — durable emit, под `-n10` CRM analyze `llm_node` держит ~80 с и note-analyze остаётся `running` до poll 90 с. `A2AClient.send_task` не запрашивает AgentCard; CRM analyze — structured JSON, не Flow UI. HTTP e2e `SendMessage` для длинного графа (llm_node + tools/Office) — `returnImmediately` + `GetTask` poll **60 с** (`a2a_wait_task_completed` в `tests/flows/_a2a_v1.py`); blocking `SendMessage` держит flows granian и под `-n10` даёт `httpx.ReadTimeout`. Фикстуры `flows_client_http` / `office_client_http` / `worktracker_client_http` — timeout **60 с** (очередь granian, не бюджет тела графа). Не поднимать httpx timeout вместо enqueue.
-
-xdist `-x` печатает traceback только после drain. Первый fail — `/tmp/pytest-first-fail.txt` (`pytest_runtest_makereport` в `tests/conftest.py`).
-
-**BaseTool.run в unit:** `run()` всегда зовёт OpenFGA gate (`check_tool_permission`). `tests/flows/unit/**` без autouse FGA — фикстура `bind_flow_tool_authz_context` (как `tests/flows/core/tools/conftest.py`). Иначе `RuntimeError: tool authz gate is not bound` или deny без `require_active_company`. `WorktrackerClient.list_queues(company_id, *, user_id=)` — `user_id` обязателен (list = SQL ∩ FGA). LLM-context e2e: `ExecutionState.user_id` = JWT user из `auth_headers_system` (уже в OpenFGA); синтетический `user-{context_id}` / `test-user-{unique_id}` без tuples даёт deny (`child_agent` → MockLLM зовёт `ask_user` на родителе → `Tool not found`). In-process interrupt e2e — `user_id="test-user"` + `sync_company_member_roles` (не подменять `test_context` через `bind_flow_tool_authz_context`) и явный `llm.provider=mock`. Check всегда OpenFGA, SQL roster не PDP.
-
-**Shared `company:system` FGA:** тест не вызывает `remove_company_member` по чужим user_id roster'а. `ensure_system_user_bindings` итерирует SQL `company.members` и unbind leftover без членства — SQL roster не сужать до одного user_id (иначе leftover-unbind снимет ящики остальных членов `system` под xdist). Добавление члена — `put_member_roles` / `set_test_company_member_roles`, не `company.members[id]=...; company_repository.set(company)` (lost-update под `-n10`). Иначе secrets/files `can_view company:system` даёт ложный 403 (note-analyze A2A). Cross-service `GET /team/members` и embed-config e2e — выделенная компания + `set_test_company_member_roles` (+ `sync_flow_saved` для flow); SQL roster/JWT без tuples → 403.
-
-**Sandbox runtime timeout (180 с):** `_is_sandbox_runtime_test()` в `tests/conftest.py` автоматически ставит `@pytest.mark.timeout(180, func_only=True)` для `tests/capabilities/**`, `tests/flows/integration/**`, `tests/flows/e2e/**` и точечных code-runner префиксов (`_CODE_RUNNER_TEST_PREFIXES`: `tests/flows/api/test_code_api.py`, `test_node_execute.py`, …). Эти пакеты autouse-зависят от HTTP `sandbox_services` (capability_gateway + code_runner_* на 9016–9020); глобальные 5 с дают ложные timeout, а не сигнал о зависании runner. Явный `@pytest.mark.timeout` на таком тесте перекрывает 180 с — tighter budget на `/code/execute` / LSP под `-n10` запрещён. httpx `timeout=` на `POST /flows/api/v1/code/execute` и `POST /flows/api/v1/code/lsp/session` — тоже **180 с** (изоляция code-node CRM ~33 с; `timeout=60` на живом `:9001` под `-n10` даёт ReadTimeout при очереди granian).
-
-**Redis / bus `realtime`:** user WS — Centrifugo `:19000` (prod image `centrifugo/centrifugo:v6.9.3`). Bus Granian `:9025`. HMAC SESSION JWT = `TEST_HS256_JWT_SECRET` = `CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY`. Тесты `tests/realtime/**` — `no_test_doubles` + `no_service_client_patch`: hop pytest → HTTP `:9025` → Centrifugo, без ASGI-патча `ServiceClient`. Per-pod tail `platform:events` снят. `pytest_collection_modifyitems` в `tests/realtime/conftest.py` маркирует **только** `item.nodeid.startswith("tests/realtime/")`: хук видит весь suite, без фильтра `no_test_doubles` ломает тесты с `mock_llm_with_queue`.
-
-**Runtime vs тесты:** `make app` запускает сервисы через alias-модуль `apps.app_runtime_targets`, чтобы сигнатуры процессов не совпадали с тестовыми (`apps.<service>.main:app`, `apps.<worker>.worker:worker_app`). В test cleanup запрещены широкие паттерны `taskiq.*worker`; только точные сигнатуры (`taskiq.*apps.sync_worker.worker:worker_app`).
-
-**`PytestCollectionWarning`** (`cannot collect test class ... because it has a __init__`): доменные классы с префиксом `Test*` (`TestRunner`, `TestCaseConfig`) — `__test__ = False` (для Pydantic: `__test__: ClassVar[bool] = False`).
-
-## Изоляция: `unique_id` обязателен
-
-Формат `session_id`: `{flow_id}:{context_id}`. Все `session_id`, `context_id`, `task_id`, `user_id` содержат `unique_id`. Хардкод `task_id="subflow-code-test-1"` без `unique_id` → `A2A Task identity belongs to another scope` на leftover projection в shared test DB.
-
-```python
-@pytest.mark.asyncio
-async def test_example(app, mock_llm_with_queue, unique_id):
-    context_id = f"test-{unique_id}"
-    state = ExecutionState.create(
-        task_id=f"task-{unique_id}",
-        context_id=context_id,
-        user_id=f"user-{unique_id}",
-        session_id=f"example_react:{context_id}",
-        content="Test",
-    )
-    flow = await get_container().flow_factory.get_flow("example_react")
-    result = await flow.run(state)
-```
-
-## Таблица фикстур
-
-| Фикстура | Scope | Назначение |
-|---|---|---|
-| `unique_id` | function | **ОБЯЗАТЕЛЕН** в каждом тесте |
-| `app` | session | FastAPI приложение `apps.flows` с lifespan |
-| `flows_client` / `rag_client` / `crm_client` / `frontend_client` / `voice_client` | function | ASGI клиенты для unit-тестов API соответствующего сервиса |
-| `voice_app` | function | ASGI приложение voice с mock-провайдерами (`VOICE__{STT,TTS,VAD}__PROVIDER=mock`) |
-| `flows_client_http` / `office_client_http` / `worktracker_client_http` | function | HTTP клиенты для E2E (см. `tests/fixtures/clients.py`) |
-| `flows_service` / `rag_service` / `crm_service` / `frontend_service` / `worktracker_service` | session | Readiness-проверки готового стека (`tests/fixtures/services.py`, порты 9001–9022); процессы стартует `make test-up` |
-| `all_services` | session | Все сервисы + dict URL |
-| `mock_llm` / `mock_llm_with_queue` | function | MockLLM с default_response / фабрика очереди ответов |
-| `mock_llm_redis` | function | Очередь ответов MockLLM в Redis `mock_llm:responses:<test_scope>` (scope из `platform_test_scope`) |
-| `platform_test_scope` | function autouse | Уникальный `test_<hex>` в лог-контексте и HTTP-клиентах (`X-Test-Scope`) |
-| `state` / `state_with_content` / `make_test_state` | function | ExecutionState (пустой / с content / фабрика) |
-| `taskiq_worker` / `rag_worker` / `taskiq_scheduler` | session | Readiness TaskIQ (`require_taskiq_worker`); subprocess только у `taskiq_scheduler` |
-| `crm_semantic_rag_stack` | function | `rag_service` + `rag_worker` (семантика CRM) |
-| `inline_tools` | function | Словарь inline tools |
-| `auth_headers_system` / `_system_user2` / `_company2` / `_company2_user2` | function | Заголовки для cross-company тестов |
-| `local_mcp_http_url` | session | Stub MCP HTTP сервер (JSON-RPC) |
-| `test_context` | function autouse | Устанавливает тестовый Context |
-| `reset_mock_llm` | function autouse | Сброс MockLLM после теста |
-| `sync_tools` | function autouse | Патчит `enqueue` на in-process; Redis Pub/Sub не патчится; отключается `@pytest.mark.real_taskiq` |
-
-## Выбор клиента
-
-Unit (один сервис, без межсервисных вызовов) → ASGI (`*_client`). E2E (межсервисные вызовы или WS) → HTTP (`flows_client_http`, `office_client_http`, `worktracker_client_http`). Уровень теста «от потребителя» и согласование — `testing_invariants.mdc`.
-
-## MockLLM
-
-Очередь ответов (unit):
-
-```python
-def test_with_queue(mock_llm_with_queue, unique_id):
-    mock_llm_with_queue([
-        "Первый ответ",
-        {"type": "tool_call", "tool": "calculator", "args": {"x": 1}},
-        "Финальный ответ",
-    ])
-```
-
-`MockLLM.stream` повторяет контракт `LLMClient.stream`: после статуса с `metadata.tool_calls` идёт второй `TaskStatusUpdateEvent` (часто только с `usage`). Иначе тесты не воспроизводят поведение провайдера в `LlmNodeRunner`.
-
-**LlmNode, который реально исполняется:** без company capability override обязательны явные `llm.provider` + `llm.model`. Для MockLLM — `{"provider": "mock", "model": "mock-gpt-4"}`. Скрытый fallback на `settings.llm.default_model` runtime запрещает (`effective_llm_config._validate_explicit_primary`). Эталон: `tests/flows/core/tools/test_google_docs_emulator_llm.py`.
-
-Очередь в реальном Redis (worker / межпроцесс):
-
-```python
-@pytest.mark.real_taskiq
-async def test_integration(mock_llm_redis, flows_client, unique_id):
-    await mock_llm_redis([{"type": "text", "content": "Ответ"}])
-```
-
-`@pytest.mark.real_taskiq` отключает `sync_tools` — tools идут через реальный worker и Redis pub/sub. Очередь mock привязана к `test_scope` теста, параллельный прогон без lane.
-
-**Полный E2E flows** (webhook → `process_flow_task` → LLM из `mock_llm:responses:<scope>` → channel HTTP): маркер `real_taskiq` **не** использовать. Оставляем `sync_tools`: `enqueue(TASK_PROCESS_FLOW, ...)` выполняется in-process, очередь mock читается из Redis; `TESTING=true` должен идти через `core.ai.runtime` mock route и `configure_mock_llm_redis(container.redis_client)`.
-
-**RAG index-file + vision** (`tests/rag/test_index_file_extract_e2e.py`): `@pytest.mark.real_taskiq` + `mock_llm_redis` + `rag_worker`. Worker читает FIFO только после `init_worker_testing_mock_llm` на старте (`apps/rag_worker/worker.py`). После смены reader/split/worker код стека нужно перезапустить (`make test-up` или рестарт `rag_worker`).
-
-`flows_worker` стека — **`-w 8`** baseline (`scripts/test_stack.py`, `scale_stack_workers(8)`). Не сериализовать в 1 consumer: OCC ledger per-session, очередь из одного worker даёт HOL note-analyze под `-n10`.
-
-## Sync / Browser / Office / FileWriter / Audio
-
-- **Sync** (`tests/sync/`): только реальные фикстуры — PostgreSQL, Redis, TaskIQ worker (для `messages.transcribe_*` и `sync_finalize_recording_task`). Запрещено подменять `op_*` из `apps/sync/realtime/operations.py`, репозитории или WS через `monkeypatch`/`unittest.mock`. Единственное явное исключение — `@patch("core.push.service.webpush")` в `tests/core/push/test_push_service.py` и `tests/core/push/test_delivery_offline.py` (Web Push требует device tokens и VAPID-ключей, физически невозможно в CI). `sync_db_clean` — no-op (БД между тестами не очищается; полагаемся на уникальные id).
-- **Browser Runtime** (`tests/browser/`): unit без Playwright/CDP — `BROWSER_RUNTIME_SKIP_DB=1` отключает session-фикстуры БД и Redis-listener. Интеграция (`@pytest.mark.integration`, `BROWSER__CDP_URL`) и soak (`@pytest.mark.slow`) — полноценный стек, без `BROWSER_RUNTIME_SKIP_DB`. E2E против Lightpanda — `BROWSER__E2E_LIGHTPANDA=1`, `BROWSER__E2E_LIGHTPANDA_CDP_URL` или `BROWSER__CDP_URL`.
-- **Office** (`tests/office/`): BFF с реальной `platform_office` и MinIO; healthcheck к Document Server (`@pytest.mark.integration`). В `docker-compose-test.yaml` сервис `onlyoffice-documentserver` на порте хоста 18088. Локальный `make test-up`: `OFFICE__CALLBACK_PUBLIC_BASE_URL=http://host.docker.internal:9008` (DS в Docker достучится до office granian). Фикстуры `office_app`, `office_client`. См. `office.mdc`.
-- **Worktracker** (`tests/worktracker/`): строгие интеграционные тесты WorkItem без моков (кроме MockLLM в cross-flows HITL). БД `platform_worktracker` (PostgreSQL 54322), Redis `63792`. Фикстуры: `tests/worktracker/conftest.py` — `worktracker_client` (ASGI), `worktracker_service` / `worktracker_repository`, `worktracker_client_http` (порт 9021), `platform_events_listener`. `patch_service_clients_asgi` знает сервис `worktracker`. Структура: `api/` (REST `/worktracker/api/v1/*`), `integration/` (service, repository, realtime, hooks, HITL cross-flows), `unit/` (модели, helpers), `e2e/` (HTTP smoke). Изоляция — `unique_id`. См. `worktracker.mdc`.
-- **FileWriter** (`tests/core/files/test_file_writer_network.py`): реальные HTTP GET к `picsum.photos`, маркеры `integration` и `network`, `@pytest.mark.timeout(180, func_only=True)`. Исключить из дефолтного прогона: `pytest -m "not integration and not network"` или отдельно `make test-network`. Каталог `tests/core/files/file_writer_output/` очищается в `pytest_sessionstart` (`tests/core/files/conftest.py`); в `.gitignore`.
-
-- **Google Workspace emulator (CI default)**: `tests/fixtures/google_api_emulator/` — локальный ASGI (Sheets/Docs/Drive/token). Клиенты ходят туда через `google_workspace.api_bases` (settings override в фикстуре; клиенты/тулы/резолвер не monkeypatch). Сьюты: `tests/core/clients/test_google_workspace_emulator_clients.py`, `tests/core/integrations/test_google_workspace_emulator_auth.py`, `tests/flows/core/tools/test_google_*_emulator*.py`. Без env Google.
-- **Google Workspace live** (`-m network`): `test_google_sheets_client_live.py`, `test_google_sheets_integration.py`, `test_google_docs_integration.py`. Мок только `MockLLM`. Auth (один из путей):
-  1. **User OAuth** — Connect в чате (Docs/Sheets → Authorize) или [OAuth Playground](https://developers.google.com/oauthplayground) со scopes documents+spreadsheets+drive.file; токен в `GOOGLE_ACCESS_TOKEN` или `google_workspace.live_test.access_token` (`conf.local.json`). Нужны реальные `auth.providers.google.client_id`/`client_secret`.
-  2. **Company / Workspace SA** — `google_service_account.json` + Workspace-email в `GOOGLE_IMPERSONATE_EMAIL` + Domain-wide delegation в Admin Console на `client_id` SA. `@gmail.com` не подходит. Sheets/Docs API на GCP-проекте SA — ENABLED.
-  Запуск: `GOOGLE_ACCESS_TOKEN=ya29... make test-network` или `GOOGLE_IMPERSONATE_EMAIL=user@domain make test-network`.
-- **FileReader corpus** (`tests/core/files/`): полный vendored корпус Unstructured `example-docs/` (233 reader-файла) в `tests/core/files/example-docs/`; manifest — `corpus/overrides.yaml` + `manifest_generated.py`. Sync: `make sync-example-docs`; regenerate: `uv run python scripts/generate_corpus_manifest.py`. Файлы >5 MB — Git LFS. E2E capability + `read_file` tool — `test_files_read_e2e_corpus.py` на всём `POSITIVE`; HEIC — runtime skip без libheif. CI: `scripts/check_corpus_manifest_complete.py`. Сверка с GitHub tree (`test_corpus_local_matches_github_tree`, `test_example_docs_github_tree_reachable`) — `@pytest.mark.network` (`make test-network`); phase 1 `not network` не ходит в `api.github.com`.
-- **LLM scoring fixtures** (`tests/core/ai/fixtures/scoring/`): committed catalog snapshots per free-pool provider + `pool_ranking.json`; ranking invariants — `expectations.yaml`. Score = AA intelligence или catalog heuristic, overlay только из БД. Offline replay: `tests/core/ai/test_platform_model_scoring_fixtures.py` (входит в `make test-static`). Refresh с реальными ключами: `uv run python scripts/generate_llm_scoring_fixtures.py`; drift check: `--check`. Live catalog+AA+scoring+chat smoke: `tests/core/ai/test_platform_model_scoring_live.py` (`make test-network`).
-- **LLM scoring fail-closed**: `refresh`/`rescore` с пустым `records` — `RuntimeError` до Redis write, ключ не становится `models:[]`. Пустой или отсутствующий free-pool на вызове не обрывает authored `fallback_models`: expand `humanitec_llm` auto / missing pinned возвращает `[]`, raise только если итоговая цепочка пуста. Битый Redis JSON — `ValueError`, не маскируется BYOK. Файлы: `tests/core/ai/test_platform_model_scoring.py`, `tests/core/ai/test_ai_request_requirements.py`, `tests/core/clients/test_platform_catalog_fail_closed.py`, `tests/core/clients/test_platform_free_pool_refresh.py`, `tests/core/clients/test_platform_free_models.py`, `tests/core/clients/test_humanitec_llms_expand.py`, `tests/core/clients/test_llm_candidate_fallback_integration.py`, `tests/frontend/api/test_llm_model_scores_api.py`. Refresh/expand не класть под autouse-заглушки `tests/core/ai/conftest.py`. Единственный мок — `MockLLM`; HTTP провайдера — локальный OpenAI-compatible сервер, не patch `LLMClient`.
-- **Тестовый WAV:** `minimal_wav_silence` в `tests/fixtures/audio_bytes.py` — валидный PCM без ffmpeg-транскода; используется в sync (голос/STT) и CRM e2e voice. Не дублировать.
-
-## E2E UI
-
-- **Инфраструктура:** `make test-ui` = `test-up` + `pytest tests/ui/e2e -n$(UI_E2E_WORKERS) --dist=loadfile` (`UI_E2E_WORKERS?=5`, `--timeout=15`). Дефолт бюджета тела теста — **15 с** (`tests/ui/e2e/conftest.py`); итог = `max(scenario.timeout_seconds, @pytest.mark.timeout)` в диапазоне 15..360. Браузер: `uv run playwright install chromium`. Документация: `make doc` / `make test-ui-doc`. Источники: `doc-sources.md`.
-- **Изоляция xdist:** каждый worker — своя компания `ui_e2e_gwN` (subdomain `ui-gwN`), MockLLM scope `test_e2e_gwN`, 1 Chromium session. **Запрещено** раздувать shared `system.members` из UI session fixtures и assert'ить глобальный roster `system`. Данные сценария — `unique_id` namespaces/channels/flows. Канон: `tests/ui/e2e_worker.py`.
-- **Реестр SPA:** `tests/ui/apps.py` (`AppUI`, порты 9001–9005); обёртка `tests/ui/harness.py` (Host → worker subdomain при `UI_E2E_USE_LVH_ME=1`).
-- **Персоны:** четыре сессионных пользователя на worker-компаниях (имена фикстур `auth_token_system*` / `ui_page_system*` сохранены). Страницы: `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `page` / `ui_page_anonymous`. Метаданные для assert: `ui_user_*` (`UiTestUser` из `tests/ui/personas.py`).
-- **Click highlight:** `install_click_highlight_on_context` в `tests/ui/conftest.py` рисует зелёную рамку (`outline`) вокруг цели каждого клика — видно на скриншотах `scenario.step` (`tests/ui/click_highlight.py`).
-- **UI perf (always-on):** каждый прогон `tests/ui/e2e` пишет подробный отчёт. Collector в `tests/ui/perf/` вешается на browser context без правок тестов: HTTP (method/path/status/duration), navigation Timing, long tasks. Артефакты: `artifacts/ui-perf/<worker>/<nodeid>.json` + `artifacts/ui-perf/SUMMARY.md` (slowest tests, API paths, long tasks, 4xx/5xx). `make test-ui` / `make test-ui-chat` чистят каталог перед прогоном. Бюджетов/fail на регрессии в v1 нет.
-- **Sync UI:** `tests/ui/e2e/test_sync_*.py`; хелперы `tests/ui/e2e/sync_e2e_helpers.py` (локаторы сайдбара без коллизии с шапкой чата, опционально вызовы Sync REST с cookie `auth_token`). Теги — `sync.mdc` («Тестирование»).
-- **Только Playwright Sync:** `uv run pytest tests/ui/e2e/test_sync_*.py -m e2e` — фикстура `sync_ui` подключает реальный HTTP `sync_service` (порт из `tests/ui/apps.py`) и `sync_worker` для TaskIQ.
-
-### Сценарии и документация
-
-Фикстура `scenario` (`tests/ui/scenario_doc.py`). Маркер `@pytest.mark.scenario(service="sync"|"flows"|...)`; **`tag`** обязан быть в [`docs/scenarios/taxonomy.yaml`](../docs/scenarios/taxonomy.yaml) (по умолчанию `general`). Путь в репозитории: `docs/scenarios/<service>/<tag>/<slug>/`. В опубликованной документации **все теги схлопываются**: URL `/documentation/scenarios/<service>/<slug>/`; группировка по тегам — на hub-странице сервиса. **`doc_slug`** — из маркера (kebab-case, уникален внутри `service`) или `nodeid` pytest.
-
-**Качество:** `scripts/check_scenario_docs_quality.py` (в `make doc`) — минимум 2 секции `## Шаг`, минимум 1 PNG, валидный `tag` в taxonomy, обязательный `README.en.md` без кириллицы в title/step headings, AST-проверка `title_en`/`description_en` на маркере и `label_en` на каждом `scenario.step` (`details_en` — если есть `details=`). PNG лежат рядом с README, без `screenshots/`, и называются `<doc_slug>--<номер>-<понятное-имя>.png`.
-
-**Стиль шага:** одно действие = один шаг; перед скриншотом — зачем и что видно на экране. Для каждого документируемого шага задавать короткий смысловой `screenshot_name`; движок автоматически добавляет префикс `doc_slug` и номер.
-
-**Локализация:** у `@pytest.mark.scenario` обязательны `title_en` и `description_en`; у каждого `scenario.step(..., page)` — `label_en` (при `details=` — также `details_en`). E2E пишет `README.en.md` рядом с `README.md`; без E2E-прогона — `uv run python scripts/regenerate_scenario_readme_en.py`. Сборка: `make doc` / `make test-ui-doc`. Документация: `/documentation/` (RU), `/documentation/en/` (EN); ссылки из SPA — locale-aware (`documentation-url.js`). Краткий гайд: [`tests/ui/README.md`](../tests/ui/README.md), [`doc-sources.md`](../doc-sources.md).
-
-Отключить генерацию: `UI_SCENARIO_DOCS=0`.
-
-### Компонентные UI-тесты (Lit)
-
-| | |
+| Фикстура | Смысл |
 |---|---|
-| Раннер | `@web/test-runner` + `@web/test-runner-playwright` (Chromium), `web-test-runner.config.mjs` |
-| Файлы | `tests/ui_components/**/*.test.js`, хелперы — `tests/ui_components/helpers/` (`setupPlatformServices`, `teardownPlatformServices`, реэкспорт `fixture`/`html`/`expect` из `@open-wc/testing`) |
-| Импорты | Как в приложении: `lit` через node-resolve, префиксы `@platform/lib/`, `@platform/services/`, `@capacitor/*` (vendor) — через import map в конфиге |
-| Запуск | `npm ci`, затем `npm run test:ui-components` или `make test-ui-components`. В `make test` **не входит** — нужны Node.js и `package.json`. |
-| Изоляция | Между тестами — `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()` (`@platform/lib/events/...`). Не использовать в прод-коде. |
-| PWA (HTTP) | `tests/core/test_pwa_routes.py`: отдача `/manifest.json`, `/sw.js`, `/offline.html`, опционально `/.well-known/assetlinks.json` и `/.well-known/apple-app-site-association`. При `TESTING=true` маршруты PWA по умолчанию не регистрируются. |
+| `unique_id` | суффикс изоляции (function) |
+| `platform_test_scope` | autouse: scope `test_<hex>` → лог-контекст, `X-Test-Scope`, label TaskIQ `test_scope` (`core/test_scope.py`) |
+| `<svc>_client` / `<svc>_client_http` | ASGI-клиент одного сервиса без межсервисных вызовов / HTTP к стеку для межсервисных вызовов, WS и воркеров (`tests/fixtures/clients.py`) |
+| `<svc>_service` / `<svc>_worker` | readiness стека; `sandbox_services`, `all_services` — наборы URL |
+| `<svc>_di` | DI процесса; flows — `di` |
+| `service_processes` | session: приложения сервисов с lifespan и DI воркеров внутри процесса тестов (`tests/fixtures/service_processes.py`) |
+| `auth_token_*` / `auth_headers_*` | персоны `system`, `system_user2`, `company2`, `company2_user2` (`tests/fixtures/auth.py`) |
+| `mock_llm`, `mock_llm_with_queue`, `mock_llm_redis`, `mock_llm_capture` | § MockLLM и задачи |
+| `test_context`, `reset_mock_llm`, `sync_tools` | autouse: `Context` компании `system`; сброс `MockLLM`; `enqueue` in-process |
+| `platform_events_listener` | единственный листенер шины `platform:events` (`tests/fixtures/platform_events.py`) |
+| `minimal_wav_silence` | единственный тестовый WAV (`tests/fixtures/audio_bytes.py`) |
 
-**Граница:** `tests/ui_components` — изолированные Lit-компоненты (WTR); `tests/ui/e2e` — E2E с бэкендом; `tests/ui` — только движок (conftest, `AppUI`, реестр).
+- Клиенты, сервисы, воркеры и сессии БД тест получает из фикстур `tests/fixtures/*` и `conftest.py` пакета; cleanup данных — в teardown фикстуры. Session-фикстура исполняется на каждом xdist-воркере отдельно; её teardown не трогает процессы стека. `[без гейта]`
+- Маркер `no_test_doubles` отключает autouse-двойники, `enforce_no_test_doubles` (`tests/conftest.py`) роняет тест, запросивший `monkeypatch`, `mock_context` или `mock_llm*`; `no_service_client_patch` оставляет `ServiceClient` на реальном HTTP. `tests/realtime/**` получает оба маркера: hop pytest → HTTP `:9025` → Centrifugo `:19000`. `[без гейта]`
+- Листенер шины читает стрим с последней записи на момент открытия (пустой стрим — с `0-0`): `XREAD $` теряет publish на пустом стриме и запрещён. `[без гейта]`
+- Хук `pytest_collection_modifyitems` в `conftest.py` пакета фильтрует `item.nodeid` префиксом пакета: хук получает весь suite. `[без гейта]`
 
-**Регрессия архитектуры UI:** после правок в `apps/*/ui/index.html`, import map, базовых классах (`PlatformElement`, `PlatformModal`, `*App`) или массовой замене импортов — `npm run test:ui-components`; при затронутых shell или маршрутах SPA — `pytest tests/ui/`. Быстрый статический контроль — `make check-ui-canon`.
+### MockLLM и задачи
 
-## Тестовый стек (supervisor)
+- `mock_llm_with_queue([...])` — очередь ответов в процессе теста (текст или `{"type": "tool_call", ...}`); `mock_llm_redis([...])` — очередь `mock_llm:responses:<test_scope>` для granian и воркеров; `mock_llm_capture` — журнал вызовов `mock_llm:capture:<test_scope>`. `MockLLM` любого процесса снимает ответы только из очереди своего scope (`resolve_test_scope`, `core/test_scope.py`). `[без гейта]`
+- Фоновая side-effect задача (CRM daily/period summary, note markdown format) получает scope `{parent}:{kind}` (`side_effect_test_scope`, `core/test_scope.py`) и не снимает FIFO породившего теста. `[без гейта]`
+- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`, desktop и agent) — статический `test_e2e_static` через `TEST_SCOPE_DEFAULT`. `[без гейта]`
+- `sync_tools` исполняет `enqueue` in-process: задача получает DI своего процесса по аннотации `di` (`ServiceProcesses.di`, `tests/fixtures/service_processes.py`), как `task_di` воркера; Redis Pub/Sub реальный. `@pytest.mark.real_taskiq` отключает `sync_tools`: задача идёт через воркер стека, ответы — только `mock_llm_redis`. `[без гейта]`
+- Исполняемый `llm_node` задаёт `llm.provider="mock"` и `llm.model="mock-gpt-4"` явно: скрытый fallback на модель по умолчанию runtime отвергает (`_validate_explicit_primary`, `apps/flows/src/runtime/effective_llm_config.py`). `[без гейта]`
+- `MockLLM` повторяет контракт `LLMClient.stream` (`core/clients/llm/client.py`): чанки, `tool_calls`, `usage`; расхождение с провайдером чинится в `MockLLM`, а не в тесте. `[без гейта]`
 
-Единственный владелец granian + TaskIQ процессов — **`make test-up`**:
+### Параллельный прогон
 
-1. `scripts/test_process_preflight_cleanup` — зачистка stale процессов
-2. `scripts/ensure_test_compose_images.py` — GHCR auth (`docker login`) + pull-or-build. `docker manifest inspect` ретраит transport (IPv6 `socket is not connected` к `pkg-containers.githubusercontent.com`). Network после login **не** маскируется под «нет образа / Build Base Image»; unauthorized → re-login; `manifest unknown` → raise.
-3. `docker-compose-test.yaml` — Postgres, Redis, redis-realtime, Centrifugo (`:19000`), MinIO, …
-4. `scripts/db_test_reset` — TRUNCATE + Redis FLUSHDB; при неубиваемых backend'ах Postgres (`BgworkerShutdown`, `pg_terminate_backend` не снимает lock'и) — один `docker restart agentlab_postgres_test` и повтор drain
-5. `scripts/test_migrate` — Alembic upgrade + сид `system`-компании
-6. `scripts/test_stack.py up` — все HTTP-сервисы (9001–9025) и TaskIQ-воркеры; манифест `/tmp/platform_test_stack.json` (поля `pytest_workers_requested`, `stack_scale_factor`, `stack_capacity`). Readiness floor **180 с** (`STACK_READINESS_TIMEOUT_SEC`): процессы стартуют одновременно, импорт под десятками granian+TaskIQ workers занимает ~2 мин; 90–120 с ложно падают на поздних `worktracker` / `capability_gateway` / `idle_worker`. `provider_litserve` — 240 с.
+Прогон идёт под xdist (`_PYTEST_XDIST` в `mk/test.mk`): каждый gw — отдельный процесс, БД, Redis, MinIO и стек общие. `xdist_group`, `FileLock`, локи и любая сериализация тестов запрещены; shared state чинится архитектурно. `[без гейта]`
 
-**Масштабирование стека:** baseline калиброван под `WORKERS=10`. `stack_scale_factor = WORKERS / 10` (min 1.0). Масштабируются: `flows` granian, `crm` granian, `secrets` granian, `search`, `capability_gateway`, `code_runner_python` / `node` / `go` / `csharp` (+ `CODE_RUNNER_*_WORKERS`), `sync_worker`, `crm_worker`, `crm_summary_worker`, `flows_worker`. OCC durable ledger — per `session_id`; параллельные consumer'ы не делят head разных A2A-задач. Команда: `make test WORKERS=12` поднимает согласованный стек (`WORKERS=$(WORKERS) test_stack up`).
+- Глобальный storage-ключ платформы пишет ровно один тест (`billing:resource_base_prices_json` — `test_platform_billing_put_prices_roundtrip`, `tests/frontend/api/test_platform_billing_api.py`); остальные сценарии — чистые функции или изолированный экземпляр сервиса. `[без гейта]`
+- Глобальную batch-операцию (reembed, orphan-cleanup, backfill, purge) тест проверяет на своих строках и через сходимость за ограниченное число вызовов; ассерт глобальных счётчиков и глобальная чистка таблиц из фикстур запрещены. `[без гейта]`
+- Членство в компании меняют только `set_test_company_member_roles` (`tests/fixtures/auth.py`) и `sync_company_member_roles` (`core/authz/company_sync.py`); прямая запись `company.members` и удаление чужих членов `system` запрещены; сравнение множеств членов — на выделенной компании теста → `authorization.mdc`. `[без гейта]`
+- Namespace тест создаёт только через `NamespaceService` (`core/namespace/service.py`): запись в обход сервиса не пишет tuples OpenFGA → `namespace.mdc`. `[без гейта]`
+- Seed-данные компании `system` (переменные, шаблоны, roster) тест не перезаписывает и не ассертит целиком; мутирует только свои ключи с `unique_id`. `[без гейта]`
+- `BaseTool.run` (`apps/flows/src/tools/base.py`) вне HTTP-контекста исполняется под authz-контекстом фикстуры `bind_flow_tool_authz_context` (`tests/flows/_tool_authz_context.py`); обход authz-гейта тулов запрещён. `[без гейта]`
+- Процессы зачищаются только по точным сигнатурам и портам стека (`scripts/test_process_preflight_cleanup.py`); широкие шаблоны (`taskiq.*worker`) запрещены. `[без гейта]`
+- Релизный артефакт и брендирование LinnexAgent (`apps/agent/desktop/scripts/apply_branding.sh`) выполняет только `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest; фикстура `agent_local_release_artifact` (`tests/agent/fixtures/local_releases.py`) артефакт только проверяет, pytest `apply_branding.sh` не вызывает. `[без гейта]`
 
-**Ёмкость sandbox (baseline `WORKERS=10`):** `flows` granian `workers=14` (CRM note-analyze A2A на live `:9001` делит процесс с параллельными A2A e2e), `crm` granian `workers=8` (10 pytest gw бьют `/crm/api`; 1 worker — HOL GET /tasks и knowledge-import), `secrets` `workers=4` (A2A analyze → `require_can_view(company)` на resolve), `search` `workers=2`, `capability_gateway` `workers=6`, `code_runner_python`/`node`/`go`/`csharp` granian `workers=12` + `CODE_RUNNER_*_WORKERS=12` (1 granian на go/csharp — unbounded `dotnet`/`go build` под `-n10` даёт ReadTimeout 60 с на `calls_tools_written_in_every_language`; compile slot ≥2, не держит слот на nested `tools.call`), `flows_worker` TaskIQ `workers=8` (параллельные process_flow_task; 1 consumer сериализует A2A и note-analyze остаётся running до poll 90 с), `search_worker` TaskIQ `workers=2`, `sync_worker` `workers=2`, `crm_worker` `workers=16` (notes_only import не стоит в HOL за analyze, который ждёт A2A на flows), `crm_summary_worker` `workers=2` (daily/period rebuild не на очереди `crm`). При `WORKERS=15` — `ceil(baseline * 15/10)` для масштабируемых сервисов. Иначе при полном прогоне — `ServiceClientError`/`ReadTimeout` к `code_runner_python`, `NodeWallClockTimeoutError` в public_search и `TaskiqResultTimeoutError` на параллельных tool/flow тестах. User WS — Centrifugo (`:19000`); presence — HTTP API bus `realtime` (`:9025`).
+### UI-тесты
 
-**TaskIQ wait в тестах:** `tests/flows/integration/test_taskiq_integration.py` ждёт результат worker'а до 60 с (`_TASKIQ_WAIT_RESULT_TIMEOUT_SECONDS`), не 10 с — под нагрузкой `-n5` очередь flows_worker + code_runner иначе даёт ложный timeout.
+| Слой | Файлы | Раннер |
+|---|---|---|
+| Unit фундамента UI | `tests/frontend_core/unit/**/*.spec.js` | Vitest, `vitest.config.mjs` |
+| Компонентный браузерный | `tests/frontend_core/browser/**/*.spec.js`, `tests/ui/design-system/components/**/contract.spec.js`, `tests/ui/design-system/flows/**/*.spec.js` | Web Test Runner + Playwright Chromium, `web-test-runner.config.mjs` |
+| Документационный UI Kit | `tests/ui/design-system/components/**/playwright.spec.py`, маркер `ui_component` | pytest + Playwright |
+| E2E | `tests/ui/e2e/**` | pytest + Playwright, `--dist=loadfile` |
 
-### Parallel-safe контракты (вместо xdist_group)
+- Unit и компонентный слой работают без бэкенда; E2E — против стека `make test-up`; `tests/ui/*.py` — только движок: `conftest.py`, реестр `SERVICE_UI_REGISTRY` (`tests/ui/apps.py`), `AppUI` (`tests/ui/harness.py`), персоны, scope воркера. `[без гейта]`
+- Компонентный тест сбрасывает bus и реестры фабрик `resetPlatformState()` (`tests/frontend_core/browser/helpers/reset.js`); import map WTR повторяет приложение (`lit`, `@platform/lib/`, `@capacitor/*`) → `ui_factories.mdc`. `[без гейта]`
+- E2E-воркер xdist получает свою компанию `ui_e2e_gwN` (subdomain `ui-gwN`), scope `test_e2e_gwN` и одну сессию Chromium (`tests/ui/e2e_worker.py`); UI-фикстуры не добавляют членов в `system`. Персоны — `ui_page_system`, `ui_page_system_member`, `ui_page_company2`, `ui_page_company2_member`, `ui_page_anonymous`; метаданные — `ui_user_*` (`UiTestUser`, `tests/ui/personas.py`). `[без гейта]`
+- Бюджет тела E2E — 15 с (`tests/ui/e2e/conftest.py`); длиннее — `scenario(timeout_seconds=N)` или `@pytest.mark.timeout(N)` до 360 с. `[без гейта]`
+- Share Flow UI проверяется новым браузером после подтверждения сервера, а не локальным store или DOM. Parity редактора: canvas и production route рендерят один `FlowUIDocument` одним `<platform-flow-ui>`, assert идёт по `data-block-id` каждого блока; скриншот без assert модели не доказывает parity. `[без гейта]`
+- `@pytest.mark.scenario` — исходник пользовательской инструкции `docs/scenarios/<service>/<tag>/<slug>/`: `tag` из `docs/scenarios/taxonomy.yaml`, `title_en` и `description_en` на маркере, `label_en` (при `details` — `details_en`) на каждом `scenario.step`, PNG рядом с README. Процедура — скил `documentator`. Гейт: `scripts/check_scenario_docs_quality.py`.
 
-`xdist_group` и любые lock'и в тестах **запрещены**. Каждый источник shared state имеет архитектурный parallel-safe паттерн:
+## Запреты
 
-- **code_runner IPC:** executor'ы python/node раздают запросы через очередь свободных worker'ов (`_acquire_worker`/`_release_worker`, `asyncio.Queue`), а не round-robin — длинный запрос не блокирует остальные (head-of-line blocking). Ёмкость масштабируется `WORKERS` (см. «Масштабирование стека»).
-- **Глобальный singleton-ключ (single-owner):** платформенный глобальный storage-ключ пишет ровно ОДИН тест на всю платформу; остальные сценарии покрываются unit-тестами чистых функций или изолированными сервисами. Примеры: `billing:resource_base_prices_json` — только `test_platform_billing_put_prices_roundtrip` (merge-семантика — unit `_merge_resource_base_price_override`; политики — изолированный `BillingService(shared_storage=None)`); `billing:settlement_rules_json` — только `test_load_settlement_rules_for_company_ignores_legacy_global_json`.
-- **Глобальные batch-операции (eventual convergence):** reembed/orphan-cleanup (`vector_documents`), files backfill/purge — глобальные batch'и: параллельный воркер может обработать наши строки раньше нас. Тест ассертит только СВОИ строки (уникальный suffix/id) и сходимость за ограниченное число batch-вызовов; глобальные счётчики (`deleted >= N`, `reembedded >= 1`) не ассертятся. Глобальные чистки таблиц из фикстур (`file_db_clean`-стиль `DELETE ... LIKE 'file:%'`) запрещены.
-- **Per-client квоты:** ключ квоты производен от `request.client.host` — тест получает уникальный client IP через `ASGITransport(app, client=(ip, port))` (`test_public_search_session.py`), свой redis-ключ на тест.
-- **Состав команды/членов компании:** не ассертить полный состав `system` (session-фикстуры других gw добавляют участников). Сравнение множеств — только на выделенной компании теста (`test_team_members_consistent_across_services`).
-- **Flow/tool FGA object key:** `flow:{company_id}/{flow_id}` / `tool:{company_id}/{tool_id}` / `flow_branch:{company}/{flow}/{branch}`. Init двух компаний с одним slug (`example_react`) не шарит глобальный `flow:example_react`: `write_and_delete` одной компании не стирает tuples другой. `list_viewable_*` разбирает ключ через `parse_namespace_key` (битый/голый id → `AuthzConfigError`, не silent skip). Check всегда OpenFGA, не SQL roster.
-- **Platform namespace:** тесты создают namespace только через `NamespaceService` (`get_or_create` / `create` / `ensure_*`). Прямой `namespace_repository.set` без FGA tuples даёт 403 на secrets/RAG Check.
-- **Миграции:** только `make test-up` (`scripts/test_migrate.py`). Никакой pytest-фикстуре нельзя гонять Alembic (в т.ч. `tests/sync/conftest.py::sync_database` — verify-only через `setup_database_before_tests`).
+1. `unittest.mock` (`patch`, `MagicMock`, `AsyncMock`) и фейковые классы внутренних компонентов. Гейты: ratchet `tests_asyncmock`, `scripts/check_agent_test_no_monkeypatch.py`.
+2. `monkeypatch.setattr` по модулям `core.` и `apps.` сверх baseline. Гейт: ratchet `tests_monkeypatch_internal`.
+3. `SessionServerManager`, `SessionWorkerManager` и старт процессов стека в фикстурах. `[без гейта]`
+4. В теле теста: `try/except` и `except: pass` (ожидаемая ошибка — `pytest.raises`); свой `AsyncClient`, `httpx.Client`, сессия БД или процесс; чтение `app.state.di`; `os.environ[...] = ...` (только `monkeypatch.setenv`) и присвоение атрибута модуля (только `monkeypatch.setattr`); ожидание через `time.sleep` (только `asyncio.wait_for` или поллинг `asyncio.sleep`). `[без гейта]`
+5. Прямой сброс singleton (`_settings_instance = None`) и мутация готового DI. `[без гейта]`
+6. Повышение таймаута, poll или httpx `timeout` вместо устранения причины (очередь воркера, лишний запрос, Check OpenFGA); `@pytest.mark.timeout` короче лимита пакета sandbox (`_is_sandbox_runtime_test`, `tests/conftest.py`). `[без гейта]`
 
-**LinnexAgent artifact (read-only в pytest):** единственный writer — `AGENT_ARTIFACT_MODE=release make agent-ensure` до pytest (`mk/test.mk`). Fixture `agent_local_release_artifact` только verify через `resolve_local_release_artifact_path()`; **запрещён** `apply_branding` из pytest. `apply_branding.sh` держит mkdir-lock `apps/agent/desktop/.branding.lock.d`.
+## Исключения
 
-**Timeout-политика по пакетам (`pytest_collection_modifyitems`):** `real_taskiq` — 180 c func_only=False; `tests/sync/db/**` — 60 c; RAG global maintenance — 120 c func_only=False; `tests/crm/e2e/**` — 120 c **func_only=False** (setup `crm_client` + note-analyze через `crm_worker`; 60 с — ложный timeout под `-n10`); notification WS e2e — 120 c; sandbox runtime — 180 c; `tests/files/**` и idle `file_retention_purge` — 60 c (chunked MinIO + FGA company Check; глобальные 5 с — ложный timeout под `-n10`); `tests/flows/api/test_a2a.py` без своего маркера — 60 c (3 MockLLM SendMessage ~10 с в изоляции; глобальные 5 с — ложный timeout); Google Workspace emulator auth — 30 c (ASGI + emulator HTTP ~7 с).
+- Исключение: `patch("core.push.service.webpush")` — только `tests/core/push/test_push_service.py` и `tests/core/push/test_delivery_offline.py`: Web Push требует device token и VAPID-ключей провайдера. `[без гейта]`
+- Исключение: autouse `patch_service_clients_asgi` (`tests/fixtures/clients.py`) направляет `ServiceClient` в ASGI-приложения процесса теста, `_inject_test_scope_header` (`tests/conftest.py`) добавляет `X-Test-Scope` в запросы `httpx`, `sync_tools` исполняет `enqueue` in-process; production-путь — маркеры `no_service_client_patch`, `no_test_doubles`, `real_taskiq`. `[без гейта]`
+- Исключение: `taskiq_scheduler` (`tests/fixtures/workers.py`) — subprocess на сессию: scheduler не входит в стек. `[без гейта]`
 
-**Permissions / OpenFGA:** sole PDP — `AuthzService` only (`*AccessService` = orchestration). Channel matrix — `tests/flows/core/auth/test_channel_permissions.py`; tool — `tests/flows/core/tools/test_function_tool_permissions.py`. Флаг `permissions_enabled` и `PermissionChecker`/`ToolPermissionChecker` удалены; tool gate — `ToolAuthzGate`. Test membership mutations → `sync_company_member_roles` / `set_test_company_member_roles` / `set_company_member_roles`.
+## Гейты
 
-**Шина `platform:events` в тестах:** `platform_events_listener` читает с id последней записи, на пустом стриме с `0-0`. `XREAD $` запрещён (теряет publish на пустом стриме после FLUSHDB).
-
-**DB pool в тестах:** `core/db/sqlalchemy_pool` — prod `5+10`, `pool_timeout=30`; `TESTING=true` и pytest-xdist — QueuePool `1+2`, `pool_timeout=60` (overflow для вложенных `session()` в одном call-stack). Pytest-воркер живёт всю сессию и делает тысячи checkout — QueuePool. `NullPool` в pytest под `-n10` открывает TCP на каждый `session()` и забивает listen backlog Postgres (`OSError`/`ETIMEDOUT 127.0.0.1:54322`, HTTP `ConnectTimeout` к granian). NullPool оставляем миграциям и CRM advisory-lock engine. QueuePool ждёт свободное соединение до `pool_timeout`, затем `TimeoutError`; `TooManyConnectionsError` — лимит Postgres. Test Postgres: `max_connections=800`, `shm_size: 1g`, named volume `postgres-test-data` (`docker-compose-test.yaml`) — `--force-recreate` ради `max_connections`/`auto_explain` не стирает PGDATA. Стек WORKERS=10 держит ~285 idle; QueuePool pytest `-n10` × ~10 engine × 3 ≈ 300; бюджет < 800. Раньше 450 не хватало (`create catalog` / RAG upload 500). Дефолт Docker `/dev/shm` 64M под `-n10` даёт `DiskFullError`. Канон для `core/db/database.py` и `apps/*/db/base.py`.
-
-**A2A GetTask poll:** пока задача в `TASK_STATE_WORKING` / `TASK_STATE_SUBMITTED`, `result` может быть `null` — poll-циклы пропускают такие ответы. Helpers: `tests/flows/_a2a_v1.py`. Conformance (без MockLLM/monkeypatch): `tests/flows/a2a_conformance/`. Fixtures pin: `make check-a2a-fixtures` (диск, `test-static`); сверка с official remote — `make check-a2a-fixtures-remote`. Канон → **`a2a.mdc`**.
-
-**Tracing `_wait_spans`:** не возвращать при первом span — для graph-path тестов ждать `required_operation_substrings` (classifier + branch processor) до 30 с.
-
-Команды: `make test-up`, `make test-down`, `uv run python -m scripts.test_stack status`.
-
-pytest **не** стартует и **не** убивает сервисы. Фикстуры `*_service` / `*_worker` — `GET /health` или consumer в Redis stream; при недоступности — `pytest.fail("… выполните make test-up")`. `require_http_service` ретраит 30 с (стек уже up; 5 с ложно падает на одном gw под stampede старта xdist). HTTP-URL фикстур (`sandbox_services`, `all_services`) — `http://127.0.0.1:<port>`: granian в `test_stack` слушает только IPv4, `localhost` на macOS резолвится в `::1`.
-
-**Agent HTTP (phase 1, не network):** `agent_frontend_http_client*` коннектятся на `127.0.0.1:9004` с `Host: {subdomain}.lvh.me:9004`. Публичный origin (`agent_base_url`, `AGENT_TEST_PUBLIC_ORIGIN`) остаётся `*.lvh.me` для Host/company и desktop E2E; phase 1 не резолвит `lvh.me` через публичный DNS.
-
-## Worker фикстуры
-
-`taskiq_worker`, `rag_worker`, `search_worker`, `sync_worker`, `crm_worker` — только readiness (`tests/fixtures/workers.py`).
-
-Исключение: `taskiq_scheduler` — subprocess на время сессии (scheduler не входит в стек).
-
-## Структура `tests/`
-
-```
-tests/
-├── conftest.py             # Импортирует все из fixtures/
-├── fixtures/{auth,clients,services,workers,playwright,mcp_http_stub}.py
-├── flows/{unit,integration,api,streaming}; core/llm_nodes/
-├── crm/, rag/, sync/, frontend/, core/, ui/, ui_components/, browser/, office/, worktracker/
-```
-
-## Команды
-
-```bash
-make test-up              # docker + reset + migrate + test_stack up
-make test-down            # test_stack down + compose stop
-make test                 # полный прогон (фазы unit + retry + agent E2E) + DB/workers profile после phase 1
-make test WORKERS=8       # 8 pytest-воркеров + масштабированный test_stack
-DB_PROFILE=0 make test    # без pg_stat reset/collect/report
-PYTEST_WORKERS_PROFILE=0 make test  # без отчёта параллелизма
-TEST_COVERAGE=0 make test # без сбора coverage и финального отчёта
-make test-profile         # asyncio FileLock/event loop (/tmp/platform_test_runtime_profile_merged.json)
-make test-network         # только @pytest.mark.network (реальный интернет)
-uv run pytest tests/ -n 5 -m "not integration and not network and not agent_build_release" --ignore=tests/agent/e2e
-```
-
-**DB profile (default-on, `DB_PROFILE ?= 1` в `mk/test.mk`):** server-side Postgres на test `:54322` (10 БД). После `test-up` — `pg_stat_statements_reset()`; после phase 1 pytest — collect + terminal summary (KPI, top queries, delta vs previous run) + `reports/db_test_profile/latest/report.html`. Opt-out: `DB_PROFILE=0 make test`. `pg_stat_statements` в collect фильтруется по `dbid` текущей БД (не cluster-wide). Phase 2 retry / integration в stats phase 1 не входят. Пороги: `DB_PROFILE_SLOW_MS`, `DB_PROFILE_SLOW_TOTAL_MS`, `DB_PROFILE_TOP_N`, `DB_PROFILE_TERMINAL_TOP_N`. Terminal уважает `NO_COLOR=1`. Смена `max_connections`/`auto_explain` — `docker-compose -f docker-compose-test.yaml up -d --force-recreate postgres-test` (PGDATA в `postgres-test-data`, не стирается). Порог планов в compose: 100ms; локально можно `-c auto_explain.log_min_duration=50ms` в override. Wipe данных — только явный `down -v`.
-
-**Pytest workers profile (default-on, `PYTEST_WORKERS_PROFILE ?= 1` в `mk/test.mk`):** после phase 1 pytest — collect + terminal summary (KPI, issues, recommendations, delta vs previous run) + `reports/pytest_workers_profile/latest/report.html`. Общий `PROFILE_RUN_ID` связывает DB profile и workers profile одним прогоном. Opt-out: `PYTEST_WORKERS_PROFILE=0 make test`. Issues: `stack_undersized`, `phase1_failed`, `likely_parallelism_failure`, `xdist_bottleneck`, `worker_restart_risk`. Источники: `WORKERS`, `.pytest_cache/.../lastfailed`, `/tmp/platform_test_stack.json`, junit phase 1 (`--junitxml=reports/pytest_workers_profile/<run_id>/junit.xml`). Phase 2 retry / integration не входят в snapshot.
-
-**Test coverage report (default-on, `TEST_COVERAGE ?= 1` в `mk/test.mk`):** после **всех** фаз `make test` (включая phase 4) — объединённый terminal summary + `reports/coverage/latest/report.html`. Python: `apps` + `core` из pytest phase 1/2/4 (`--cov` / `--cov-append`, `COVERAGE_FILE=reports/coverage/<run_id>/.coverage`). JS: Vitest unit (`test-frontend-core-unit`) → `reports/coverage/<run_id>/js/` (lcov + html). Opt-out: `TEST_COVERAGE=0 make test` (Vitest — `test:core-unit:fast` без coverage). Scope **не** включает integration/network маркеры (они вне phase 1/2). Отчёт печатается даже при exit 1 тестов. Delta vs previous run в terminal/HTML. Ручной прогон с coverage: `make test-cov` / `make test-cov-all`.
-
-Фаза 1 `make test` **исключает** `tests/agent/e2e` (статический `test_e2e_static` scope + `-n0` только в фазе 4) и `@pytest.mark.agent_build_release`.
-
-## Внешние зависимости и миграции
-
-- Миграции и сид `system`-компании — **`make test-up`** (`scripts/test_migrate.py`). Фикстура `setup_database_before_tests` только assert «head == current»; при расхождении — `pytest.fail` с подсказкой `make test-up`.
-- **CRM E2E (`tests/crm/e2e`):** `DATABASE__CRM_URL` из `tests/fixtures/test_database_env.py` (PostgreSQL 54322, БД `platform_crm`). После новых миграций — `uv run python -m scripts.db_migrate upgrade --service crm`.
-- `test_a2a_sample` — URL тестового A2A sample; `docker-compose-test.yaml` сервис `test-a2a-agent` на порте хоста **18052**.
-- `tests/fixtures/services.py` задаёт `PUSH__ENABLED` и VAPID-ключи для E2E push-тестов.
-- Реальные вызовы LLM API в `test_llm_providers.py` пропускаются (`skip`) при 401/403 в CI.
-
-## Property-based / fuzz (flows dataflow и core-сканеры)
-
-Hypothesis — дополнительный слой поверх детерминированных unit-тестов. Не заменяет контрактные кейсы.
-
-**Файлы:** `tests/**/test_*_fuzz.py`, `tests/frontend_core/unit/**/*.fuzz.spec.js`.
-
-**Инварианты (обязательные):**
-- Функция не падает на произвольном входе в пределах генератора.
-- `scan_prompt_template` — system refs и loop-bound vars никогда не в `required_roots`.
-- `scan_code_contract` — пустой код → пустой контракт; списки sorted unique.
-- `inspect_flow_dataflow` — всегда `DataflowInspectResult`; каждая нода имеет `canvas`, `issues`, `input_mapping`.
-- Canvas helpers (`flows-dataflow-canvas.js`) — `hasControlPath` согласован с BFS; `buildDataWires` без дублей.
-
-**Настройки CI:** `@settings(max_examples=200, deadline=None)`; `@seed(...)` на воспроизводимые регрессии.
-
-**Запуск:**
-```bash
-uv run pytest -q tests/core/variables/test_template_scan_fuzz.py tests/core/code_contract/test_scanner_fuzz.py tests/flows/unit/test_flow_dataflow_inspector_fuzz.py
-make test-frontend-core-unit  # включает *.fuzz.spec.js
-```
-
-**Pure helpers:** dataflow-логика канвы живёт в `apps/flows/ui/_helpers/flows-dataflow-canvas.js` — тестируется Vitest без DOM.
-
-**Фикстуры:** `tests/flows/fixtures/dataflow_graphs.py`, `tests/frontend_core/helpers/flows-dataflow-fixtures.js`.
-
-## Чеклист перед коммитом
-
-- [ ] `make lint` зелёный (ruff, `basedpyright --level warning --warnings apps core`, architecture gates, `analyze_imports.py` → `Total local imports: 0`, `make lint-ts`)
-- [ ] `uv run pytest tests/` или целевой набор зелёный
-- [ ] Стиль/инварианты, `unique_id` во всех ключах — см. `testing_invariants.mdc`
-- [ ] Нет своих фикстур для сервисов/клиентов/воркеров
-- [ ] Нет моков внутренних компонентов (кроме MockLLM)
-- [ ] Интеграция с worker — `@pytest.mark.real_taskiq` + `mock_llm_redis` + уникальный `test_scope`
-- [ ] Перед pytest: `make test-up` (стек готов)
-
-## Flow UI / A2A compatibility matrix
-
-Обязательные suites проверяют consumer-visible parity, а не private reducer names:
-
-- all `text|raw|url|data`, mixed Parts, arbitrary Artifact names/metadata для blocking stream/Get/List/Subscribe/restart/outbound remote client (`tests/flows/a2a_conformance/`);
-- append/replace/lastChunk/order/idempotency/stable artifact IDs (`ArtifactAccumulator` ↔ `protocol/a2a-task-accumulator.js`);
-- conformance-фикстуры `tests/fixtures/flow_ui/*.json` (`ui_artifacts`, `state_patch`, `ui_action_message`, `templating`, `html_sandbox`, `schema`) — одни и те же для pytest (`tests/core/flow_ui/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`) и vitest (`tests/frontend_core/unit/flow-ui/conformance.spec.js`); примеры страницы `docs/api/flows/flow-ui-protocol.md` равны фикстурам (`test_flow_ui_protocol_docs.py`);
-- ingress `ui-action`: валидация `fields` по документу, запись в state, `ui_action`/`content`, `file_upload` → `FileRef`, отказ второго `ui-action`/смешения с `text` (`test_flow_ui_action.py`);
-- `emit_state` snapshot → patch без пустых diff, `ui` события в порядке очереди, share redaction по `redacted_paths` (`tests/flows/api/test_flow_ui_shares.py`);
-- interface/schema/templates/assist endpoints (`tests/flows/api/test_flow_interface.py`, `test_flow_ui_assist.py`);
-- `html`-блок: sandbox `allow-scripts`, CSP, `window.flowUi` bridge, `data-bind`/`data-show` (`tests/frontend_core/browser/flow-ui/html-block.spec.js`);
-- universal renderer на SPA/editor/embed/landing/Lara/HITL: reopen/share, HITL, embed autoload/stream (`tests/ui/e2e/test_flow_ui_*`, `test_hitl_*`, `test_embed_*`), keyboard/a11y, RU/EN, theme/brand profiles.
-
-Editor/runtime WYSIWYG suite запускает один production bundle в deterministic Chromium: сравнивает render-context fingerprints, semantic placements, DOM/a11y tree, geometry с zero-pixel tolerance и screenshot fixtures для canonical matrix page/panel/drawer/embed × desktop/tablet/mobile × light/dark × RU/EN × brands. Editor overlays не входят в production screenshot/DOM.
-
-## Agent handoff (flows)
-
-- Матрица: `tests/flows/integration/test_handoff_e2e.py`, `tests/flows/api/test_handoff_a2a.py`, `test_handoff_a2a_multi.py`.
-- Только **MockLLM**; без monkeypatch orchestrator/settings (depth — через `assert_handoff_depth_allowed` или default config).
-- **`sync_tools`:** `handoff_orchestrator_service` в patch list (`tests/conftest.py`).
-- **MockLLM queue:** после `handback_to_parent` на child — текстовый ответ в очереди, иначе child перехватит parent `handoff_to_flow`.
-- A2A multi-cycle: предпочтительно 2 HTTP-сообщения (start + reply chain при sync_tools).
-
-Подробно — **`handoff.mdc`**.
+- `scripts/check_ratchet_counts.py` (`make lint`) — `tests_monkeypatch_internal`, `tests_asyncmock`, `tests_skip_markers` в `tests/` не растут относительно `scripts/ratchet_baseline.json`.
+- `scripts/check_agent_test_no_monkeypatch.py` (`make lint`, `make test-static`) — нет `monkeypatch`, `patch`, `MagicMock`, `AsyncMock` в `tests/agent/e2e` и `tests/agent/desktop_e2e`.
+- `make test-static` (`mk/test.mk`) — первый шаг `make test`: `_lint-py`, `scripts/pin_a2a_official_fixtures.py --check`, agent-гейты, `tests/core/ai/test_platform_model_scoring_fixtures.py`; warning basedpyright — fail.
+- `scripts/check_scenario_docs_quality.py` (`make doc`) — шаги и PNG инструкции, `tag` из taxonomy, `README.en.md`, `title_en`, `description_en`, `label_en` на маркерах.
+- `enforce_no_test_doubles` (`tests/conftest.py`) — тест `no_test_doubles` падает при запросе фикстур-двойников.
+- `setup_database_before_tests` (`tests/conftest.py`) — `pytest.fail` с подсказкой `make test-up`, если `0001_initial` не применена.
+- `tests/core/di/test_service_kit.py`, `tests/core/di/test_service_kit_boundary.py` — DI процесса, override recipe подкласса, boundary FastAPI/TaskIQ/WS.
+- `tests/test_hang_guard.py`, `tests/test_pytest_with_timeout.py` — hang-guard не трогает `idle`-воркер, wall-clock обёртка убивает process group.

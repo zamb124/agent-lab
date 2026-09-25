@@ -8,11 +8,11 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.hitl_operations import (
     op_flows_hitl_conversation_get,
     op_flows_hitl_conversation_send,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.hitl_conversation import (
     HitlConversationWorkItemPayload,
     OperatorMessageRequest,
@@ -49,14 +49,14 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_hitl_conversation_get_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     unique_id: str,
     system_user_id: str,
 ) -> None:
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     http = await client.get(f"{HITL_API}/{parked.work_item_id}/conversation")
     assert http.status_code == 200, http.text
@@ -64,21 +64,21 @@ async def test_hitl_conversation_get_rest_match_op(
         op_result = await op_flows_hitl_conversation_get(
             HitlConversationWorkItemPayload(work_item_id=parked.work_item_id),
             user=user,
-            container=container,
+            di=di,
         )
     assert http.json() == op_result.model_dump(mode="json")
 
 
 async def test_hitl_conversation_send_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     unique_id: str,
     system_user_id: str,
 ) -> None:
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     text = f"оператор {unique_id}"
     key = f"cmd-{unique_id}"
@@ -95,14 +95,14 @@ async def test_hitl_conversation_send_rest_match_op(
                 idempotency_key=key,
             ),
             user=user,
-            container=container,
+            di=di,
         )
     assert http.json() == op_result.model_dump(mode="json")
 
 
 async def test_hitl_conversation_get_missing_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
@@ -115,23 +115,23 @@ async def test_hitl_conversation_get_missing_rest_match_op(
             await op_flows_hitl_conversation_get(
                 HitlConversationWorkItemPayload(work_item_id=missing_id),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "not_found"
 
 
 async def test_hitl_conversation_send_forbidden_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     unique_id: str,
     system_user_id: str,
     auth_headers_system_user2: dict[str, str],
     system_user2_id: str,
 ) -> None:
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     http = await client.post(
         f"{HITL_API}/{parked.work_item_id}/conversation/messages",
@@ -149,6 +149,6 @@ async def test_hitl_conversation_send_forbidden_rest_match_op(
                     idempotency_key=f"k-{unique_id}",
                 ),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "forbidden"

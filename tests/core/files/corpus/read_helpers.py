@@ -146,7 +146,7 @@ def read_args_for(entry: CorpusFile, **overrides: object) -> ReadFileArgs:
 
 
 async def store_corpus_bytes_in_files_service(
-    container: object,
+    di,
     *,
     relative_path: str,
     original_name: str | None = None,
@@ -168,7 +168,7 @@ async def store_corpus_bytes_in_files_service(
             "retention": default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
         }
     )
-    files_service = container.files_service  # type: ignore[attr-defined]
+    files_service = di.files_service  # type: ignore[attr-defined]
     record = await files_service.create(
         spec,
         raw,
@@ -179,7 +179,7 @@ async def store_corpus_bytes_in_files_service(
 
 
 async def store_corpus_in_files_service(
-    container: object,
+    di,
     entry: CorpusFile,
     *,
     unique_id: str,
@@ -195,7 +195,7 @@ async def store_corpus_in_files_service(
             "retention": default_retention_for_source(FileSourceKind.PLATFORM_AUXILIARY),
         }
     )
-    files_service = container.files_service  # type: ignore[attr-defined]
+    files_service = di.files_service  # type: ignore[attr-defined]
     record = await files_service.create(
         spec,
         raw,

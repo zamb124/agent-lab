@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from apps.worktracker.container import WorktrackerContainer
+from apps.worktracker.di import Di
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.context import require_active_company
@@ -142,11 +142,11 @@ def _actor(user: User) -> UserActor:
 
 
 async def _with_policy(
-    container: WorktrackerContainer,
+    di: Di,
     item: WorkItem,
     user: User,
 ) -> WorkItem:
-    authorized = await container.work_item_service.operator_authorized(item, user.user_id)
+    authorized = await di.work_item_service.operator_authorized(item, user.user_id)
     policy = build_interaction_policy(item, operator_authorized=authorized)
     return item.model_copy(update={"interaction_policy": policy})
 
@@ -155,12 +155,11 @@ async def op_work_items_list(
     payload: WorkItemsListPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> OffsetPage[WorkItem]:
-    _ = user
+    _ = user, di
     company_id = _company_id()
-    service = container.work_item_service
-    items = await service.list(
+    items = await WorkItem.list_work_items(
         company_id,
         board_id=payload.board_id,
         namespace=payload.namespace,
@@ -175,7 +174,7 @@ async def op_work_items_list(
         limit=payload.limit,
         offset=payload.offset,
     )
-    total = await service.count(
+    total = await WorkItem.count_work_items(
         company_id,
         board_id=payload.board_id,
         namespace=payload.namespace,
@@ -197,34 +196,34 @@ async def op_work_items_mine_summary(
     payload: WorkItemsMineSummaryPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItemMineSummary:
     _ = payload
-    return await container.work_item_service.mine_summary(_company_id(), user.user_id)
+    return await di.work_item_service.mine_summary(_company_id(), user.user_id)
 
 
 async def op_work_items_get(
     payload: WorkItemIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     try:
-        item = await container.work_item_service.get(_company_id(), payload.work_item_id)
+        item = await WorkItem.require_in_company(_company_id(), payload.work_item_id)
     except ValueError as exc:
         raise_not_found(exc)
-    return await _with_policy(container, item, user)
+    return await _with_policy(di, item, user)
 
 
 async def op_work_items_create(
     payload: WorkItemCreateRequest,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     actor = _actor(user)
     if payload.assignment is not None:
-        return await container.work_item_service.create(
+        return await di.work_item_service.create(
             company_id=_company_id(),
             title=payload.title,
             created_by=actor,
@@ -242,7 +241,7 @@ async def op_work_items_create(
             variables=payload.variables,
             attachments=payload.attachments,
         )
-    return await container.work_item_service.create_manual_task(
+    return await di.work_item_service.create_manual_task(
         company_id=_company_id(),
         title=payload.title,
         created_by=actor,
@@ -265,11 +264,11 @@ async def op_work_items_update(
     payload: WorkItemUpdatePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     _ = user
     try:
-        return await container.work_item_service.update(
+        return await di.work_item_service.update(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             title=payload.title,
@@ -289,11 +288,11 @@ async def op_work_items_assign(
     payload: WorkItemAssignPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     _ = user
     try:
-        return await container.work_item_service.reassign(
+        return await di.work_item_service.reassign(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             assignment=payload.assignment,
@@ -306,11 +305,11 @@ async def op_work_items_move(
     payload: WorkItemMovePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     _ = user
     try:
-        return await container.work_item_service.move(
+        return await di.work_item_service.move(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             board_column_id=payload.board_column_id,
@@ -324,10 +323,10 @@ async def op_work_items_claim(
     payload: WorkItemIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     try:
-        item = await container.work_item_service.claim(
+        item = await di.work_item_service.claim(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             user_id=user.user_id,
@@ -336,17 +335,17 @@ async def op_work_items_claim(
         raise_forbidden(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    return await _with_policy(container, item, user)
+    return await _with_policy(di, item, user)
 
 
 async def op_work_items_comment(
     payload: WorkItemCommentPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItemComment:
     try:
-        return await container.work_item_service.add_comment(
+        return await di.work_item_service.add_comment(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             author=_actor(user),
@@ -362,12 +361,10 @@ async def op_work_items_comments_list(
     payload: WorkItemIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItemCommentsList:
-    _ = user
-    items = await container.work_item_service.list_comments(
-        _company_id(), payload.work_item_id
-    )
+    _ = user, di
+    items = await WorkItemComment.list_comments(_company_id(), payload.work_item_id)
     return WorkItemCommentsList(items=items)
 
 
@@ -375,7 +372,7 @@ async def op_work_items_complete(
     payload: WorkItemCompletePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     resolution = WorkItemResolution(
         text=payload.resolution_text,
@@ -383,7 +380,7 @@ async def op_work_items_complete(
         resolved_by=_actor(user),
     )
     try:
-        completion = await container.work_item_service.complete(
+        completion = await di.work_item_service.complete(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
             resolution=resolution,
@@ -391,33 +388,33 @@ async def op_work_items_complete(
         )
     except ValueError as exc:
         raise_invalid(exc)
-    return await _with_policy(container, completion.work_item, user)
+    return await _with_policy(di, completion.work_item, user)
 
 
 async def op_work_items_cancel(
     payload: WorkItemIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkItem:
     try:
-        completion = await container.work_item_service.cancel(
+        completion = await di.work_item_service.cancel(
             company_id=_company_id(),
             work_item_id=payload.work_item_id,
         )
     except ValueError as exc:
         raise_invalid(exc)
-    return await _with_policy(container, completion.work_item, user)
+    return await _with_policy(di, completion.work_item, user)
 
 
 async def op_boards_list(
     payload: BoardsListPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> OffsetPage[Board]:
     _ = user
-    items = await container.work_item_service.list_boards(
+    items = await di.work_item_service.list_boards(
         _company_id(), namespace=payload.namespace
     )
     total = len(items)
@@ -431,11 +428,11 @@ async def op_boards_get(
     payload: BoardIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> Board:
-    _ = user
+    _ = user, di
     try:
-        return await container.work_item_service.get_board(_company_id(), payload.board_id)
+        return await Board.get_board(_company_id(), payload.board_id)
     except ValueError as exc:
         raise_not_found(exc)
 
@@ -444,10 +441,10 @@ async def op_boards_create(
     payload: BoardCreateRequest,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> Board:
     _ = user
-    return await container.work_item_service.create_board(
+    return await di.work_item_service.create_board(
         company_id=_company_id(),
         name=payload.name,
         columns=payload.columns,
@@ -460,11 +457,11 @@ async def op_boards_update(
     payload: BoardUpdatePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> Board:
     _ = user
     try:
-        return await container.work_item_service.update_board(
+        return await di.work_item_service.update_board(
             company_id=_company_id(),
             board_id=payload.board_id,
             name=payload.name,
@@ -478,9 +475,9 @@ async def op_work_queues_list(
     payload: WorkQueuesListPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> OffsetPage[WorkQueue]:
-    items = await container.work_item_service.list_queues(
+    items = await di.work_item_service.list_queues(
         _company_id(), user_id=user.user_id
     )
     total = len(items)
@@ -494,10 +491,10 @@ async def op_work_queues_create(
     payload: WorkQueueCreateRequest,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkQueue:
     try:
-        return await container.work_item_service.create_queue(
+        return await di.work_item_service.create_queue(
             company_id=_company_id(),
             name=payload.name,
             slug=payload.slug,
@@ -512,10 +509,10 @@ async def op_work_queues_update(
     payload: WorkQueueUpdatePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkQueue:
     try:
-        return await container.work_item_service.update_queue(
+        return await di.work_item_service.update_queue(
             company_id=_company_id(),
             work_queue_id=payload.work_queue_id,
             name=payload.name,
@@ -532,10 +529,10 @@ async def op_work_queues_delete(
     payload: WorkQueueIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> None:
     try:
-        await container.work_item_service.delete_queue(
+        await di.work_item_service.delete_queue(
             company_id=_company_id(),
             work_queue_id=payload.work_queue_id,
             actor_user_id=user.user_id,
@@ -550,15 +547,15 @@ async def op_work_queues_members_list(
     payload: WorkQueueIdPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkQueueMembersList:
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.work_queue(payload.work_queue_id), user_id=user.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    items = await container.work_item_service.list_queue_members(payload.work_queue_id)
+    items = await di.work_item_service.list_queue_members(payload.work_queue_id)
     return WorkQueueMembersList(items=items)
 
 
@@ -566,10 +563,10 @@ async def op_work_queues_member_add(
     payload: WorkQueueMemberAddPayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> WorkQueueMember:
     try:
-        return await container.work_item_service.add_queue_member(
+        return await di.work_item_service.add_queue_member(
             company_id=_company_id(),
             work_queue_id=payload.work_queue_id,
             member=payload.member,
@@ -586,10 +583,10 @@ async def op_work_queues_member_remove(
     payload: WorkQueueMemberRemovePayload,
     *,
     user: User,
-    container: WorktrackerContainer,
+    di: Di,
 ) -> None:
     try:
-        removed = await container.work_item_service.remove_queue_member(
+        removed = await di.work_item_service.remove_queue_member(
             work_queue_id=payload.work_queue_id,
             member=payload.member,
             actor_user_id=user.user_id,

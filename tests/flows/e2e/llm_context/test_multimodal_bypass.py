@@ -5,7 +5,8 @@ import pytest
 from a2a.types import Message, Part
 from a2a.types.a2a_pb2 import ROLE_USER
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.a2a_messages import build_assistant_message, build_user_message
 from core.a2a import struct_from_mapping
 from tests.flows.e2e.llm_context.harness import (
@@ -46,7 +47,7 @@ def _multimodal_user_message(
 
 async def test_multimodal_history_is_not_trimmed_by_context_layer(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -58,7 +59,7 @@ async def test_multimodal_history_is_not_trimmed_by_context_layer(
     context_id = f"context-multimodal-{unique_id}"
     task_id = f"task-{context_id}"
     stale_marker = f"OLD_MULTIMODAL_{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="Describe the attached image.",
@@ -72,7 +73,7 @@ async def test_multimodal_history_is_not_trimmed_by_context_layer(
     )
     try:
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_MULTIMODAL_{unique_id}",
             response="saw image",
@@ -109,7 +110,7 @@ async def test_multimodal_history_is_not_trimmed_by_context_layer(
         )
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

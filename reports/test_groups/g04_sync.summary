@@ -1,0 +1,4 @@
+GROUP g04_sync rc=0
+............................................................................................................................................................................................................................................................{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-25T01:21:08.543641Z", "message": "files.cairosvg.libcairo.svg"}
+
+============================= 252 passed in 43.30s =============================

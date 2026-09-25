@@ -12,13 +12,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import (
     EmailTriggerConfig,
     TriggerConfig,
     TriggerStatus,
     TriggerType,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.triggers.email_filter import (
     email_message_matches_filter,
     email_trigger_index_key,
@@ -32,10 +32,15 @@ from apps.flows.src.triggers.handlers.base import (
     TriggerRegistrationError,
     TriggerValidationError,
 )
-from core.context import Context, User, clear_context, get_context, set_context
+from core.clients.redis_client import RedisClient
+from core.context import clear_context, get_context, set_context
+from core.db.storage import Storage
 from core.logging import get_logger
 from core.mail.exceptions import MailConnectionNotFoundError
 from core.mail.models import InboundMailMessage, MailboxBinding, MailConnectionStatus
+from core.mail.service import MailService
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -64,8 +69,10 @@ class EmailTriggerHandler(BaseTriggerHandler):
 
     trigger_type: TriggerType = TriggerType.EMAIL
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
-        super().__init__(base_url, container=container)
+    def __init__(self, base_url: str, *, redis_client: RedisClient, mail_service: MailService) -> None:
+        super().__init__(base_url)
+        self.redis_client: RedisClient = redis_client
+        self.mail_service: MailService = mail_service
         self._executor: TriggerExecutor = TriggerExecutor()
 
     @override
@@ -105,7 +112,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
             trigger_id=trigger.trigger_id,
         )
         try:
-            connection = await self.container.mail_service.require_connection_for_binding(binding)
+            connection = await self.mail_service.require_connection_for_binding(binding)
         except MailConnectionNotFoundError as exc:
             raise TriggerRegistrationError(
                 trigger_type="email",
@@ -126,7 +133,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
             flow_id=flow_id,
             trigger_id=trigger.trigger_id,
         )
-        _ = await self.container.redis_client.sadd(
+        _ = await self.redis_client.sadd(
             email_trigger_index_key(binding.mailbox_binding_id),
             member,
         )
@@ -168,7 +175,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
             flow_id=flow_id,
             trigger_id=trigger.trigger_id,
         )
-        _ = await self.container.redis_client.srem(
+        _ = await self.redis_client.srem(
             email_trigger_index_key(raw_binding_id.strip()),
             member,
         )
@@ -180,7 +187,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
         trigger_id: str,
         payload: JsonObject,
     ) -> JsonObject:
-        flow_config = await self.container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
         if flow_config is None:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
         trigger = flow_config.triggers.get(trigger_id)
@@ -206,7 +213,7 @@ class EmailTriggerHandler(BaseTriggerHandler):
         flow_id: str,
         trigger_id: str,
     ) -> MailboxBinding:
-        bindings = await self.container.mail_service.list_my_bindings(company_id)
+        bindings = await self.mail_service.list_my_bindings(company_id)
         for binding in bindings:
             if binding.mailbox_binding_id == mailbox_binding_id:
                 if binding.user_id != user_id:
@@ -227,7 +234,8 @@ class EmailTriggerHandler(BaseTriggerHandler):
 
 async def dispatch_email_triggers_for_messages(
     *,
-    container: FlowRuntimeContainer,
+    redis_client: RedisClient,
+    shared_storage: Storage,
     binding: MailboxBinding,
     messages: list[InboundMailMessage],
     dedup_ttl_seconds: int,
@@ -244,18 +252,18 @@ async def dispatch_email_triggers_for_messages(
     if len(messages) == 0:
         return 0
 
-    members = await container.redis_client.smembers(
+    members = await redis_client.smembers(
         email_trigger_index_key(binding.mailbox_binding_id)
     )
     if not members:
         return 0
 
-    company = await container.company_repository.get(binding.company_id)
+    company = await Company.get(binding.company_id)
     if company is None:
         logger.error("flows.email.trigger.dispatch.company.found", company_id=binding.company_id)
         return 0
 
-    user = await container.user_repository.get(binding.user_id)
+    user = await User.get(binding.user_id)
     trigger_user = user if user is not None else User(
         user_id=binding.user_id,
         name=f"Mail:{binding.email_address}",
@@ -282,7 +290,7 @@ async def dispatch_email_triggers_for_messages(
             if company_id != binding.company_id:
                 continue
 
-            flow_config = await container.flow_repository.get(flow_id)
+            flow_config = await FlowConfig.get_latest(flow_id)
             if flow_config is None:
                 logger.warning("flows.email.trigger.dispatch.flow.found", flow_id=flow_id)
                 continue
@@ -311,7 +319,7 @@ async def dispatch_email_triggers_for_messages(
                     f"flows:email_trigger_fired:{binding.company_id}:"
                     f"{binding.mailbox_binding_id}:{flow_id}:{trigger_id}:{message.uid}"
                 )
-                existing = await container.shared_storage.get(
+                existing = await shared_storage.get(
                     key=dedup_key,
                     force_global=True,
                 )
@@ -341,7 +349,7 @@ async def dispatch_email_triggers_for_messages(
                     task_id=run_id,
                     context_id=run_id,
                 )
-                _ = await container.shared_storage.set(
+                _ = await shared_storage.set(
                     key=dedup_key,
                     value=json.dumps(
                         {"fired_at": datetime.now(timezone.utc).isoformat()}

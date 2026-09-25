@@ -2,8 +2,6 @@
 
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
-
 from apps.crm_worker.tasks.task_names import (
     CRM_RECONCILE_DAILY_SUMMARY,
     CRM_REEMBED_STALE_DOCUMENTS,
@@ -30,17 +28,19 @@ from apps.rag_worker.tasks.task_names import (
 )
 from apps.scheduler.api.v1 import api_v1_router
 from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
-from apps.scheduler.container import SchedulerContainer, get_scheduler_container
 from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
-from apps.scheduler.realtime.command_router import register_scheduler_ws_commands
+from apps.scheduler.di import SchedulerDi
+from apps.scheduler.realtime.command_router import SCHEDULER_OPERATIONS
 from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.app import create_service_app
 from core.config.testing import is_testing
+from core.di import recipe
 from core.identity.system_bootstrap import (
     ensure_system_company_exists,
 )
 from core.logging import get_logger
 from core.mail.task_names import MAIL_IDLE_SUPERVISOR, MAIL_SYNC_TICK
+from core.scheduler import SchedulerService
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -85,7 +85,7 @@ def _is_redis_interval_snapshot_current(
 
 async def _reconcile_idle_interval_payload(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     task: PlatformScheduledTask,
     task_name: str,
     interval_seconds: int,
@@ -95,7 +95,7 @@ async def _reconcile_idle_interval_payload(
     expected_payload = _canonical_system_payload(task.schedule_task_id, payload)
     recreate_schedule = False
     if task.status == ScheduledTaskStatus.PENDING:
-        snapshot = await container.scheduler_service.get_redis_snapshot(
+        snapshot = await scheduler_service.get_redis_snapshot(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -108,7 +108,7 @@ async def _reconcile_idle_interval_payload(
     if task.payload == expected_payload and not recreate_schedule:
         return task
 
-    repaired = await container.scheduler_service.reconcile_payload(
+    repaired = await scheduler_service.reconcile_payload(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_task_id=task.schedule_task_id,
         payload=payload,
@@ -140,7 +140,7 @@ def _is_redis_cron_snapshot_current(
 
 async def _reconcile_cron_payload(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     task: PlatformScheduledTask,
     task_name: str,
     cron: str,
@@ -149,7 +149,7 @@ async def _reconcile_cron_payload(
     expected_payload = _canonical_system_payload(task.schedule_task_id, {})
     recreate_schedule = False
     if task.status == ScheduledTaskStatus.PENDING:
-        snapshot = await container.scheduler_service.get_redis_snapshot(
+        snapshot = await scheduler_service.get_redis_snapshot(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -166,7 +166,7 @@ async def _reconcile_cron_payload(
     ):
         return task
 
-    repaired = await container.scheduler_service.reconcile_cron(
+    repaired = await scheduler_service.reconcile_cron(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_task_id=task.schedule_task_id,
         cron=cron,
@@ -185,7 +185,7 @@ async def _reconcile_cron_payload(
 
 async def _ensure_calendar_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -195,7 +195,7 @@ async def _ensure_calendar_schedule(
     if not config_enabled:
         logger.info("scheduler.disabled.config", log_label=log_label)
         return
-    tasks = await container.scheduler_service.list(
+    tasks = await scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
             task_name=task_name,
@@ -208,7 +208,7 @@ async def _ensure_calendar_schedule(
     if len(pending_tasks) > 0:
         logger.info("scheduler.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
         task = await _reconcile_cron_payload(
-            container=container,
+            scheduler_service=scheduler_service,
             task=pending_tasks[0],
             task_name=task_name,
             cron=cron,
@@ -217,7 +217,7 @@ async def _ensure_calendar_schedule(
     else:
         paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
         if len(paused_tasks) > 0:
-            resumed = await container.scheduler_service.resume(
+            resumed = await scheduler_service.resume(
                 company_id=SYSTEM_SCHEDULER_COMPANY_ID,
                 schedule_task_id=paused_tasks[0].schedule_task_id,
             )
@@ -228,7 +228,7 @@ async def _ensure_calendar_schedule(
                 schedule_id=resumed.schedule_id,
             )
             task = await _reconcile_cron_payload(
-                container=container,
+                scheduler_service=scheduler_service,
                 task=resumed,
                 task_name=task_name,
                 cron=cron,
@@ -244,7 +244,7 @@ async def _ensure_calendar_schedule(
                 timezone="UTC",
                 payload={},
             )
-            task = await container.scheduler_service.create(
+            task = await scheduler_service.create(
                 company_id=SYSTEM_SCHEDULER_COMPANY_ID,
                 user_id=None,
                 request=request,
@@ -256,7 +256,7 @@ async def _ensure_calendar_schedule(
                 schedule_id=task.schedule_id,
             )
     if run_now_on_start:
-        _ = await container.scheduler_service.run_now(
+        _ = await scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -265,7 +265,7 @@ async def _ensure_calendar_schedule(
 
 async def _ensure_idle_interval_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     config_enabled: bool,
     task_name: str,
     interval_seconds: int,
@@ -276,7 +276,7 @@ async def _ensure_idle_interval_schedule(
     if not config_enabled:
         logger.info("scheduler.disabled.config", log_label=log_label)
         return
-    tasks = await container.scheduler_service.list(
+    tasks = await scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
             task_name=task_name,
@@ -308,7 +308,7 @@ async def _ensure_idle_interval_schedule(
     else:
         paused_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PAUSED]
         if paused_tasks:
-            task = await container.scheduler_service.resume(
+            task = await scheduler_service.resume(
                 company_id=SYSTEM_SCHEDULER_COMPANY_ID,
                 schedule_task_id=paused_tasks[0].schedule_task_id,
             )
@@ -329,7 +329,7 @@ async def _ensure_idle_interval_schedule(
                 payload=dict(payload),
                 run_at=datetime.now(timezone.utc),
             )
-            task = await container.scheduler_service.create(
+            task = await scheduler_service.create(
                 company_id=SYSTEM_SCHEDULER_COMPANY_ID,
                 user_id=None,
                 request=request,
@@ -341,7 +341,7 @@ async def _ensure_idle_interval_schedule(
                 schedule_id=task.schedule_id,
             )
     task = await _reconcile_idle_interval_payload(
-        container=container,
+        scheduler_service=scheduler_service,
         task=task,
         task_name=task_name,
         interval_seconds=interval_seconds,
@@ -349,7 +349,7 @@ async def _ensure_idle_interval_schedule(
         log_label=log_label,
     )
     if run_now_on_start:
-        _ = await container.scheduler_service.run_now(
+        _ = await scheduler_service.run_now(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -358,7 +358,7 @@ async def _ensure_idle_interval_schedule(
 
 async def _ensure_rag_ttl_cleanup_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -367,7 +367,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
     if not config_enabled:
         logger.info("scheduler.disabled.config", log_label=log_label)
         return
-    tasks = await container.scheduler_service.list(
+    tasks = await scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
             task_name=task_name,
@@ -381,7 +381,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
-        resumed = await container.scheduler_service.resume(
+        resumed = await scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
@@ -401,7 +401,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
         timezone="UTC",
         payload={},
     )
-    created = await container.scheduler_service.create(
+    created = await scheduler_service.create(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         user_id=None,
         request=request,
@@ -416,7 +416,7 @@ async def _ensure_rag_ttl_cleanup_schedule(
 
 async def _ensure_crm_cron_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     config_enabled: bool,
     task_name: str,
     cron: str,
@@ -425,7 +425,7 @@ async def _ensure_crm_cron_schedule(
     if not config_enabled:
         logger.info("scheduler.disabled.config", log_label=log_label)
         return
-    tasks = await container.scheduler_service.list(
+    tasks = await scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
             task_name=task_name,
@@ -439,7 +439,7 @@ async def _ensure_crm_cron_schedule(
         return
     paused_tasks = [task for task in tasks if task.status == ScheduledTaskStatus.PAUSED]
     if len(paused_tasks) > 0:
-        resumed = await container.scheduler_service.resume(
+        resumed = await scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
@@ -459,7 +459,7 @@ async def _ensure_crm_cron_schedule(
         timezone="UTC",
         payload={},
     )
-    created = await container.scheduler_service.create(
+    created = await scheduler_service.create(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         user_id=None,
         request=request,
@@ -472,24 +472,22 @@ async def _ensure_crm_cron_schedule(
     )
 
 
-async def on_startup(app: FastAPI, container: SchedulerContainer, settings: SchedulerSettings) -> None:
-    _ = app
-    register_scheduler_ws_commands()
+async def ensure_platform_schedules(
+    scheduler_service: SchedulerService, settings: SchedulerSettings
+) -> None:
     if not is_testing():
         _ = await ensure_system_company_exists(
-            company_repository=container.company_repository,
-            subdomain_repository=container.subdomain_repository,
         )
     config = settings.calendar_sync
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=config.enabled,
         task_name=TASK_CALENDAR_SYNC_TICK.name,
         cron=config.cron,
         log_label="Calendar sync",
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=config.sync_meeting_reminder_enabled,
         task_name=TASK_CALENDAR_SYNC_MEETING_REMINDER_TICK.name,
         cron=config.sync_meeting_reminder_cron,
@@ -497,7 +495,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     mail_sync_cfg = settings.mail_sync
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=mail_sync_cfg.enabled,
         task_name=MAIL_SYNC_TICK.name,
         cron=mail_sync_cfg.cron,
@@ -505,7 +503,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         run_now_on_start=True,
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=mail_sync_cfg.enabled and mail_sync_cfg.idle_enabled,
         task_name=MAIL_IDLE_SUPERVISOR.name,
         cron=mail_sync_cfg.cron,
@@ -514,7 +512,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     billing_cfg = settings.billing.span_settlement
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=billing_cfg.enabled,
         task_name=TASK_SPAN_BILLING_SETTLEMENT_TICK.name,
         cron=billing_cfg.cron,
@@ -522,14 +520,14 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     payment_cfg = settings.payment_providers
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=payment_cfg.sync_enabled,
         task_name=TASK_PAYMENT_SYNC_TICK.name,
         cron=payment_cfg.sync_cron,
         log_label="Payment sync",
     )
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=not is_testing(),
         task_name=TASK_SYNC_LLM_MODELS.name,
         interval_seconds=3600,
@@ -538,7 +536,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         run_now_on_start=True,
     )
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=(not is_testing()) and settings.llm.platform_free_pool.enabled,
         task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=settings.llm.platform_free_pool.refresh_interval_seconds,
@@ -547,21 +545,21 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         run_now_on_start=True,
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=settings.files.retention.purge_enabled,
         task_name=TASK_FILE_RETENTION_PURGE_TICK.name,
         cron=settings.files.retention.purge_cron,
         log_label="File retention purge",
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=not is_testing(),
         task_name=TASK_FILE_RETENTION_BACKFILL_TICK.name,
         cron=settings.files.retention.purge_cron,
         log_label="File retention backfill",
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=not is_testing(),
         task_name=TASK_PLATFORM_SCHEDULES_GC_TICK.name,
         cron="0 4 * * *",
@@ -569,7 +567,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     if not is_testing():
         await _ensure_idle_interval_schedule(
-            container=container,
+            scheduler_service=scheduler_service,
             config_enabled=True,
             task_name=TASK_REDIS_INVENTORY_TICK.name,
             interval_seconds=settings.database.redis_inventory_interval_seconds,
@@ -578,7 +576,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
             run_now_on_start=True,
         )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=settings.mcp_catalog.enabled and not is_testing(),
         task_name=TASK_MCP_CATALOG_CRAWL.name,
         cron=settings.mcp_catalog.crawl_cron,
@@ -586,7 +584,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         run_now_on_start=settings.mcp_catalog.crawl_run_on_start,
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=settings.mcp_catalog.enabled
         and settings.mcp_catalog.auto_provision != "disabled"
         and not is_testing(),
@@ -595,7 +593,7 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
         log_label="MCP catalog resync tools",
     )
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=not is_testing(),
         task_name=TASK_TOOL_TAG_GROUPS_DESCRIBE_TICK.name,
         cron=TOOL_TAG_GROUPS_DESCRIBE_CRON,
@@ -603,63 +601,56 @@ async def on_startup(app: FastAPI, container: SchedulerContainer, settings: Sche
     )
     cfg = settings.rag.ttl
     await _ensure_rag_ttl_cleanup_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=cfg.cleanup_enabled,
         task_name=RAG_CLEANUP_EXPIRED_DOCUMENTS_TICK.name,
         cron=cfg.cleanup_cron,
         log_label="RAG TTL cleanup",
     )
     await _ensure_rag_ttl_cleanup_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=cfg.reembed_enabled,
         task_name=RAG_REEMBED_STALE_DOCUMENTS_TICK.name,
         cron=cfg.reembed_cron,
         log_label="RAG reembed stale",
     )
     await _ensure_rag_ttl_cleanup_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=cfg.orphan_cleanup_enabled,
         task_name=RAG_CLEANUP_ORPHAN_COMPANY_CHUNKS_TICK.name,
         cron=cfg.orphan_cleanup_cron,
         log_label="RAG orphan company chunks cleanup",
     )
     await _ensure_crm_cron_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=cfg.reembed_enabled,
         task_name=CRM_REEMBED_STALE_DOCUMENTS.name,
         cron=cfg.reembed_cron,
         log_label="CRM reembed stale",
     )
     await _ensure_crm_cron_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         config_enabled=True,
         task_name=CRM_RECONCILE_DAILY_SUMMARY.name,
         cron=CRM_RECONCILE_DAILY_SUMMARY_CRON,
         log_label="CRM daily summary reconcile",
     )
     if not is_testing():
-        await ensure_search_crawl_schedules(container=container)
-
-
-async def on_shutdown(app: FastAPI, container: SchedulerContainer) -> None:
-    _ = app
-    _ = container
-    return None
+        await ensure_search_crawl_schedules(scheduler_service=scheduler_service)
 
 
 app = create_service_app(
-    service_name="scheduler",
-    settings_class=SchedulerSettings,
-    get_container=get_scheduler_container,
+    "scheduler",
+    SchedulerSettings,
+    SchedulerDi,
+    database="shared_url",
+    operations=SCHEDULER_OPERATIONS,
+    lifecycle=(recipe(ensure_platform_schedules),),
     routers=[api_v1_router],
-    on_startup=on_startup,
-    on_shutdown=on_shutdown,
     cors_origins=["*"],
     title="Platform Scheduler",
     description="Единый cron/control-plane для всех сервисов",
-    version="1.0.0",
     api_version="v1",
-    include_crud_routers=False,
     documentation_gateway_prefix="scheduler",
 )
 

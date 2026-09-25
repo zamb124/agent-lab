@@ -11,14 +11,10 @@ import pytest_asyncio
 from sqlalchemy import select, update
 
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
-from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
-from apps.flows.src.db.models import ActivityAttempts
 from apps.flows.src.durable_execution import (
     ActivityLifecyclePayload,
     ActivityStatus,
     ChildWorkflowLifecyclePayload,
-    DurableWorkflowRepository,
     DurableWorkflowRuntime,
     NodeFailedPayload,
     NodeScheduledPayload,
@@ -37,8 +33,13 @@ from apps.flows.src.durable_execution import (
     workflow_event_payload_json,
 )
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, FlowNode, NodeInputs, NodeRunResult
+from apps.flows.src.services.handoff_context_service import HandoffContextService
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
+from apps.flows.src.streaming.emitter import EmitterFactory
+from apps.flows.src.tools.base import BaseTool
 from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.db.storage import Storage
@@ -103,10 +104,16 @@ class _CountingStateWriteNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer,
+        workflow_runtime: DurableWorkflowRuntime,
+        redis_client: RedisClient,
         calls: list[str],
     ) -> None:
-        super().__init__(node_id, config, container=container)  # pyright: ignore[reportArgumentType]
+        super().__init__(
+            node_id,
+            config,
+            execution=execution_context_for(workflow_runtime),
+            redis_client=redis_client,
+        )
         self.calls = calls
 
     @override
@@ -155,9 +162,15 @@ class _DurableCountingActivityNode(BaseNode):
         node_id: str,
         config: JsonObject | None = None,
         *,
-        container: FlowRuntimeContainer | None = None,
+        workflow_runtime: DurableWorkflowRuntime,
+        redis_client: RedisClient,
     ) -> None:
-        super().__init__(node_id, config, container=container)  # pyright: ignore[reportArgumentType]
+        super().__init__(
+            node_id,
+            config,
+            execution=execution_context_for(workflow_runtime),
+            redis_client=redis_client,
+        )
         self.side_effect_runs: int = 0
 
     @override
@@ -241,8 +254,10 @@ class DurableChildFlowFactory:
         flow_id: str,
         branch_id: str = "default",
         config_version: str | None = None,
+        *,
+        tool_registry: object | None = None,
     ) -> Flow | None:
-        _ = branch_id, config_version
+        _ = branch_id, config_version, tool_registry
         if self._flow is None:
             return None
         if self._flow.flow_id != flow_id:
@@ -361,8 +376,37 @@ def _json_object_list(value: object, label: str) -> list[JsonObject]:
     ]
 
 
-def _runtime_container(value: object) -> FlowRuntimeContainer:
-    return cast(FlowRuntimeContainer, value)
+class _ClosedToolRegistry:
+    def get(self, name: str) -> BaseTool | None:
+        raise RuntimeError(name)
+
+    def register_builtin_tools(self) -> None:
+        raise RuntimeError("unused")
+
+    async def materialize(self, tool_ref: object) -> BaseTool:
+        raise RuntimeError("unused")
+
+    async def create_tool(self, tool_ref: object) -> BaseTool:
+        raise RuntimeError("unused")
+
+    async def create_tools(self, tool_refs: object) -> list[BaseTool]:
+        raise RuntimeError("unused")
+
+
+_CLOSED_TOOLS = _ClosedToolRegistry()
+
+
+def _handoff(
+    runtime: DurableWorkflowRuntime,
+    redis_client: RedisClient,
+    projection: A2ATaskProjectionService,
+) -> HandoffOrchestratorService:
+    return HandoffOrchestratorService(
+        workflow_runtime=runtime,
+        redis_client=redis_client,
+        handoff_context_service=HandoffContextService(),
+        a2a_task_projection_service=projection,
+    )
 
 
 def _clone_state(state: ExecutionState) -> ExecutionState:
@@ -574,18 +618,18 @@ async def test_parallel_superstep_retry_preserves_successful_pending_writes(
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    container = _runtime_container(_flow_harness(durable_stack=durable_stack))
+    harness = (_flow_harness(durable_stack=durable_stack))
     flow = Flow(
         flow_id=flow_id,
         name="parallel retry",
         entry="ok",
         nodes={
-            "ok": _StateWriteNode("ok", {"type": "function"}, container=container),
-            "bad": _FailingNode("bad", {"type": "function"}, container=container),
+            "ok": _StateWriteNode("ok", {"type": "function"}, execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client),
+            "bad": _FailingNode("bad", {"type": "function"}, execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client),
         },
         edges=[],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -647,9 +691,9 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    container = _runtime_container(_flow_harness(durable_stack=durable_stack))
-    loop_node = _DurableCountingActivityNode("loop", {"type": "function"}, container=container)
-    done_node = _StateWriteNode("done", {"type": "function"}, container=container)
+    harness = (_flow_harness(durable_stack=durable_stack))
+    loop_node = _DurableCountingActivityNode("loop", {"type": "function"}, workflow_runtime=harness.workflow_runtime, redis_client=harness.redis_client)
+    done_node = _StateWriteNode("done", {"type": "function"}, execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client)
     flow = Flow(
         flow_id=flow_id,
         name="durable loop activity ids",
@@ -681,7 +725,7 @@ async def test_node_activity_id_uses_durable_schedule_sequence_for_loop_visits(
             },
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
 
     result = await flow.run(state)
@@ -727,10 +771,12 @@ async def test_durable_activity_requires_attached_node_branch_context(
         payload=RunStartedPayload(),
         snapshot=True,
     )
+    harness = _flow_harness(durable_stack=durable_stack)
     node = _DurableCountingActivityNode(
         "unscoped",
         {"type": "function"},
-        container=_runtime_container(_flow_harness(durable_stack=durable_stack)),
+        workflow_runtime=harness.workflow_runtime,
+        redis_client=harness.redis_client,
     )
 
     with pytest.raises(RuntimeError, match="requires execution_branch_id"):
@@ -799,7 +845,7 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
     )
     runner = _FalseCodeConditionRunner()
     a2a_task_repository = A2ATaskRepository(storage=durable_stack.storage)
-    container = _runtime_container(
+    harness = (
         DurableCodeConditionHarness(
             workflow_runtime=runtime,
             redis_client=durable_stack.redis_client,
@@ -816,8 +862,8 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
         name="durable code edge condition",
         entry="start",
         nodes={
-            "start": _StateWriteNode("start", {"type": "function"}, container=container),
-            "done": _StateWriteNode("done", {"type": "function"}, container=container),
+            "start": _StateWriteNode("start", {"type": "function"}, execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client),
+            "done": _StateWriteNode("done", {"type": "function"}, execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client),
         },
         edges=[
             {
@@ -832,7 +878,7 @@ async def test_code_edge_condition_replays_from_activity_journal_for_same_edge_s
             },
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
 
     with pytest.raises(FlowPrematureCompletionError):
@@ -1404,7 +1450,7 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
     child_flow_id = f"durable_child_{uuid.uuid4().hex}"
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
-    container = _runtime_container(
+    harness = (
         _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_flow = Flow(
@@ -1415,13 +1461,13 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
             "child_write": _StateWriteNode(
                 "child_write",
                 {"type": "function"},
-                container=container,
+                execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client,
             )
         },
         edges=[],
         config={"version": "child-v1"},
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
     factory.set_flow(child_flow)
     parent_flow = Flow(
@@ -1436,12 +1482,12 @@ async def test_flow_node_records_child_workflow_as_separate_durable_history(
                     "flow_id": child_flow_id,
                     "branch_id": "default",
                 },
-                container=container,
+                execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client, flow_factory=harness.flow_factory, tool_registry=_CLOSED_TOOLS, handoff_orchestrator_service=_handoff(harness.workflow_runtime, harness.redis_client, harness.a2a_task_projection_service),
             )
         },
         edges=[],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",
@@ -1514,7 +1560,7 @@ async def test_flow_node_replay_reuses_completed_child_workflow_history(
     child_flow_id = f"durable_child_replay_{uuid.uuid4().hex}"
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
-    container = _runtime_container(
+    harness = (
         _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_calls: list[str] = []
@@ -1526,14 +1572,14 @@ async def test_flow_node_replay_reuses_completed_child_workflow_history(
             "child_count": _CountingStateWriteNode(
                 "child_count",
                 {"type": "function"},
-                container=container,
+                workflow_runtime=harness.workflow_runtime, redis_client=harness.redis_client,
                 calls=child_calls,
             )
         },
         edges=[],
         config={"version": "child-v1"},
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
     factory.set_flow(child_flow)
     flow_node = FlowNode(
@@ -1543,7 +1589,7 @@ async def test_flow_node_replay_reuses_completed_child_workflow_history(
             "flow_id": child_flow_id,
             "branch_id": "default",
         },
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client, flow_factory=harness.flow_factory, tool_registry=_CLOSED_TOOLS, handoff_orchestrator_service=_handoff(harness.workflow_runtime, harness.redis_client, harness.a2a_task_projection_service),
     )
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",
@@ -1632,7 +1678,7 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
     child_flow_id = f"durable_child_resume_{uuid.uuid4().hex}"
     session_id = _session_id(parent_flow_id)
     factory = DurableChildFlowFactory()
-    container = _runtime_container(
+    harness = (
         _child_workflow_harness(durable_stack=durable_stack, factory=factory)
     )
     child_flow = Flow(
@@ -1643,13 +1689,13 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
             "ask": _ChildInterruptUntilAnswerNode(
                 "ask",
                 {"type": "function"},
-                container=container,
+                execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client,
             )
         },
         edges=[],
         config={"version": "child-v1"},
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
     factory.set_flow(child_flow)
     parent_flow = Flow(
@@ -1664,12 +1710,12 @@ async def test_flow_node_resume_uses_same_child_workflow_session_after_interrupt
                     "flow_id": child_flow_id,
                     "branch_id": "default",
                 },
-                container=container,
+                execution=execution_context_for(harness.workflow_runtime), redis_client=harness.redis_client, flow_factory=harness.flow_factory, tool_registry=_CLOSED_TOOLS, handoff_orchestrator_service=_handoff(harness.workflow_runtime, harness.redis_client, harness.a2a_task_projection_service),
             )
         },
         edges=[],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(harness.workflow_runtime), emitter_factory=EmitterFactory(harness.a2a_task_projection_service),
     )
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",

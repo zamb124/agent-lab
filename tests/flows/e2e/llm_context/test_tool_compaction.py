@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.a2a_messages import (
     build_assistant_message,
     build_tool_result_message,
@@ -23,7 +24,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_context_layer_compacts_huge_tool_result_in_prompt(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -35,7 +36,7 @@ async def test_context_layer_compacts_huge_tool_result_in_prompt(
     context_id = f"context-tool-compact-{unique_id}"
     task_id = f"task-{context_id}"
     huge_payload = "HUGE_TOOL_PAYLOAD_" + ("result-chunk " * 400)
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="Answer after the tool result.",
@@ -51,7 +52,7 @@ async def test_context_layer_compacts_huge_tool_result_in_prompt(
     )
     try:
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_TOOL_COMPACT_{unique_id}",
             response="compacted ok",
@@ -94,7 +95,7 @@ async def test_context_layer_compacts_huge_tool_result_in_prompt(
         assert f"QUERY_TOOL_COMPACT_{unique_id}" in prompt
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

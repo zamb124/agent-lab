@@ -485,7 +485,7 @@ async def test_embed_session_token_allows_tasks_cancel(
     flows_client: AsyncClient,
     frontend_client: AsyncClient,
     embed_test_auth,
-    container,
+    di,
     unique_id,
 ):
     auth_headers, flow_id, _, _ = embed_test_auth
@@ -518,7 +518,7 @@ async def test_embed_session_token_allows_tasks_cancel(
         assert cancel_payload["error"]["code"] == -32001
         assert cancel_payload["error"]["message"] == "TaskNotFoundError"
     finally:
-        await container.redis_client.delete(f"cancel:{task_id}")
+        await di.redis_client.delete(f"cancel:{task_id}")
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 
@@ -527,14 +527,14 @@ async def test_embed_session_token_allows_tasks_cancel(
 async def test_embed_session_token_rejects_company_mismatch(
     flows_client: AsyncClient,
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     embed_test_auth,
     unique_id,
 ):
     auth_headers, flow_id, company_id, _ = embed_test_auth
     embed_id = await _create_embed(frontend_client, auth_headers, flow_id)
     other_company_id = f"other_embed_company_{unique_id}"
-    await frontend_container.company_repository.set(
+    await Company.set(
         Company(
             company_id=other_company_id,
             name="Other Embed Company",
@@ -581,7 +581,7 @@ async def test_embed_session_token_rejects_company_mismatch(
         assert "not allowed for this company" in deny_payload["error"]["message"]
         assert company_id != other_company_id
     finally:
-        await frontend_container.company_repository.delete(other_company_id)
+        await Company.delete_by_id(other_company_id)
         await frontend_client.delete(
             f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers
         )
@@ -681,7 +681,7 @@ async def test_embed_session_token_requires_origin_when_origins_limited(
         json={"expires_in_seconds": 300},
     )
     assert response.status_code == 400
-    assert "origin обязателен" in response.json()["detail"]
+    assert "origin is required" in response.json()["detail"]
 
     await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
 

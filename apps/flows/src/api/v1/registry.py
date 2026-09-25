@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter
 
+from apps.flows.di import Di
 from apps.flows.realtime.registry_operations import (
     op_flows_registry_models_list,
     op_flows_registry_providers_list,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.registry_contracts import (
     RegistryCatalogPayload,
     RegistryProviderOption,
@@ -20,24 +20,24 @@ router = APIRouter(prefix="/registry", tags=["registry"])
 
 @router.get("/providers/values", response_model=ListResponse[str | RegistryProviderOption])
 async def get_providers_values(
-    container: ContainerDep,
+    di: Di,
     capability: str | None = None,
 ) -> ListResponse[str | RegistryProviderOption]:
     return await op_flows_registry_providers_list(
         RegistryCatalogPayload(capability=capability),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/models/values", response_model=ListResponse[str | JsonObject])
 async def get_models_values(
-    container: ContainerDep,
+    di: Di,
     provider: str | None = None,
     capability: str | None = None,
 ) -> ListResponse[str | JsonObject]:
     return await op_flows_registry_models_list(
         RegistryCatalogPayload(provider=provider, capability=capability),
         user=require_context().user,
-        container=container,
+        di=di,
     )

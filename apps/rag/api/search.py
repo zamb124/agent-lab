@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.rag.di import Di
 from apps.rag.models import GlobalSearchResponse, SearchResponse
 from apps.rag.realtime.operations import (
     RagGlobalSearchPayload,
@@ -19,15 +20,13 @@ from core.rag.models import RAGGlobalSearchRequest, RAGNamespaceSearchRequest, R
 from core.types import parse_json_object
 from core.websocket import EmptyPayload
 
-from ..dependencies import ContainerDep
-
 router = APIRouter(tags=["search"])
 
 
 @router.get("/search-defaults", response_model=RAGSearchOptions)
-async def get_search_defaults(container: ContainerDep) -> RAGSearchOptions:
+async def get_search_defaults(di: Di) -> RAGSearchOptions:
     return await op_search_defaults(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
@@ -35,7 +34,7 @@ async def get_search_defaults(container: ContainerDep) -> RAGSearchOptions:
 async def search_in_namespace(
     namespace_id: str,
     request: RAGNamespaceSearchRequest,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> SearchResponse:
     body = parse_json_object(request.model_dump_json(), "RAGNamespaceSearchRequest")
@@ -44,14 +43,14 @@ async def search_in_namespace(
     return await op_search_namespace(
         RagNamespaceSearchPayload.model_validate(body),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/search", response_model=GlobalSearchResponse)
 async def global_search(
     request: RAGGlobalSearchRequest,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> GlobalSearchResponse:
     body = parse_json_object(request.model_dump_json(), "RAGGlobalSearchRequest")
@@ -59,5 +58,5 @@ async def global_search(
     return await op_search_global(
         RagGlobalSearchPayload.model_validate(body),
         user=require_context().user,
-        container=container,
+        di=di,
     )

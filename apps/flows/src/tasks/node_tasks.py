@@ -6,8 +6,7 @@ TaskIQ task для выполнения нод.
 
 from __future__ import annotations
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import Di
 from apps.flows.src.durable_execution import (
     NodeCompletedPayload,
     NodeScheduledPayload,
@@ -32,6 +31,8 @@ async def execute_node(
     node_id: str,
     node_config: JsonObject,
     state_dict: JsonObject,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Выполняет ноду в воркере.
@@ -44,12 +45,13 @@ async def execute_node(
     Возвращает:
         Сериализованный ExecutionState
     """
-    container = get_container()
     state = ExecutionState.model_validate(state_dict)
     node = await create_node(
         node_id,
         node_config,
-        container=as_flow_runtime_container(container),
+        node_constructor=di.node_constructor,
+        tool_registry=di.tool_registry,
+        flow_factory=di.flow_factory,
     )
 
     raw_node_type = node_config.get("type")
@@ -57,7 +59,7 @@ async def execute_node(
         raise ValueError("execute_node.node_config.type must be a non-empty string")
     node_type = raw_node_type.strip()
 
-    runtime = container.workflow_runtime
+    runtime = di.workflow_runtime
     position = await runtime.get_active_execution_position(state.session_id)
     if position is None:
         _ = await runtime.record_state_event(

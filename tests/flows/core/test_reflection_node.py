@@ -1,4 +1,4 @@
-"""Durable ReflectionNode tests: real container + MockLLM only."""
+"""Durable ReflectionNode tests: real di + MockLLM only."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.nodes import ReflectionNode, create_node
 from core.clients.llm.mock import MockLLM
 from core.flow_ui.document import FlowUIReflection
@@ -29,14 +29,14 @@ MockLLMCapture = Callable[[], Awaitable[list[JsonObject]]]
 
 
 async def _reflection_node(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     *,
     config: JsonObject | None = None,
 ) -> ReflectionNode:
     node = await create_node(
         "critic",
         config or reflection_node_config(),
-        container=container,
+        node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
     )
     assert isinstance(node, ReflectionNode)
     return node
@@ -44,7 +44,7 @@ async def _reflection_node(
 
 @pytest.mark.asyncio
 async def test_reflection_blocks_and_records_typed_result(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
@@ -56,14 +56,14 @@ async def test_reflection_blocks_and_records_typed_result(
         issues=[critique_issue()],
     )
     mock_llm_with_queue([mock_critique_queue_item(critique)])
-    node = await _reflection_node(container)
+    node = await _reflection_node(di)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
         response="Run destructive migration on production without approval.",
     )
 
-    out = await run_node(container=container, node=node, state=state)
+    out = await run_node(di=di, node=node, state=state)
 
     assert out.response == "Run destructive migration on production without approval."
     assert out.validation is not None
@@ -87,20 +87,20 @@ async def test_reflection_blocks_and_records_typed_result(
 
 @pytest.mark.asyncio
 async def test_reflection_approves_clean_critique(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
     flow_id = f"refl-ok-{unique_id}"
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    node = await _reflection_node(container)
+    node = await _reflection_node(di)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
         response="Safe staged migration plan.",
     )
 
-    out = await run_node(container=container, node=node, state=state)
+    out = await run_node(di=di, node=node, state=state)
 
     assert out.validation is not None
     assert out.validation["approved"] is True
@@ -119,7 +119,7 @@ async def test_reflection_approves_clean_critique(
     ],
 )
 async def test_reflection_resolves_targets(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
     target_kind: ReflectionTargetKind,
@@ -130,12 +130,12 @@ async def test_reflection_resolves_targets(
     policy = reflection_policy(target_kind=target_kind, state_path=state_path)
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
     node = await _reflection_node(
-        container,
+        di,
         config=reflection_node_config(policy=policy),
     )
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, **extra_state)
 
-    out = await run_node(container=container, node=node, state=state)
+    out = await run_node(di=di, node=node, state=state)
 
     assert out.validation is not None
     assert out.validation["approved"] is True
@@ -148,39 +148,39 @@ async def test_reflection_resolves_targets(
     [None, "", "   "],
 )
 async def test_reflection_rejects_empty_response_target(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
     response: str | None,
 ) -> None:
     flow_id = f"refl-empty-{unique_id}"
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    node = await _reflection_node(container)
+    node = await _reflection_node(di)
     if response is None:
         state = workflow_state(flow_id=flow_id, unique_id=unique_id)
     else:
         state = workflow_state(flow_id=flow_id, unique_id=unique_id, response=response)
 
     with pytest.raises(ValueError, match="empty"):
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
 
 
 @pytest.mark.asyncio
 async def test_reflection_activity_replays_without_second_llm_call(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
     mock_llm_capture: MockLLMCapture,
 ) -> None:
     flow_id = f"refl-replay-{unique_id}"
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    node = await _reflection_node(container)
+    node = await _reflection_node(di)
     first_state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
         response="Use staged migration.",
     )
-    first = await run_node(container=container, node=node, state=first_state)
+    first = await run_node(di=di, node=node, state=first_state)
     record = first.reflection_history[0]
 
     replay_state = workflow_state(
@@ -197,7 +197,7 @@ async def test_reflection_activity_replays_without_second_llm_call(
         }
     )
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=replay_state,
         flow_id=flow_id,
         branch_id=replay_state.branch_id,
@@ -217,12 +217,12 @@ async def test_reflection_activity_replays_without_second_llm_call(
 
 @pytest.mark.asyncio
 async def test_reflection_requires_durable_workflow_context(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    node = await _reflection_node(container)
+    node = await _reflection_node(di)
     state = workflow_state(
         flow_id=f"refl-nodurable-{unique_id}",
         unique_id=unique_id,
@@ -235,7 +235,7 @@ async def test_reflection_requires_durable_workflow_context(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("severity", ["error", "critical"])
 async def test_reflection_blocks_on_configured_severity(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
     severity: CriticSeverity,
@@ -247,11 +247,11 @@ async def test_reflection_blocks_on_configured_severity(
     )
     mock_llm_with_queue([mock_critique_queue_item(critique)])
     node = await _reflection_node(
-        container,
+        di,
         config=reflection_node_config(policy=policy),
     )
     out = await run_node(
-        container=container,
+        di=di,
         node=node,
         state=workflow_state(
             flow_id=flow_id,

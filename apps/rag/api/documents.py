@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.rag.di import Di
 from apps.rag.models import (
     DocumentStatusesBatchRequest,
     DocumentStatusesBatchResponse,
@@ -28,15 +29,13 @@ from apps.rag.realtime.operations import (
     op_documents_statuses,
 )
 from core.context import require_context
+from core.db.models.rag import DocumentProcessingStatus
 from core.pagination import OffsetPage
 from core.rag.models import (
-    DocumentProcessingStatus,
     RAGDocument,
     RAGDocumentContent,
     RAGIngestTextResponse,
 )
-
-from ..dependencies import ContainerDep
 
 router = APIRouter(tags=["documents"])
 
@@ -45,7 +44,7 @@ router = APIRouter(tags=["documents"])
 async def ingest_text(
     namespace_id: str,
     request: IngestTextRequest,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> RAGIngestTextResponse:
     return await op_documents_ingest_text(
@@ -58,14 +57,14 @@ async def ingest_text(
             provider=provider,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/namespaces/{namespace_id}/documents", response_model=OffsetPage[RAGDocument])
 async def list_documents(
     namespace_id: str,
-    container: ContainerDep,
+    di: Di,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     provider: Annotated[str | None, Query()] = None,
@@ -75,7 +74,7 @@ async def list_documents(
             namespace_id=namespace_id, offset=offset, limit=limit, provider=provider
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -87,7 +86,7 @@ async def list_documents(
 async def index_existing_file(
     namespace_id: str,
     request: IndexFileRequest,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> IndexFileResponse:
     return await op_documents_index_file(
@@ -99,7 +98,7 @@ async def index_existing_file(
             provider=provider,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -107,7 +106,7 @@ async def index_existing_file(
 async def delete_document(
     namespace_id: str,
     document_id: str,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> RagDocumentDeleteResult:
     return await op_documents_remove(
@@ -115,7 +114,7 @@ async def delete_document(
             namespace_id=namespace_id, document_id=document_id, provider=provider
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -123,7 +122,7 @@ async def delete_document(
 async def delete_document_index(
     namespace_id: str,
     document_id: str,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> RagDocumentDeleteResult:
     return await op_documents_index_remove(
@@ -131,7 +130,7 @@ async def delete_document_index(
             namespace_id=namespace_id, document_id=document_id, provider=provider
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -142,7 +141,7 @@ async def delete_document_index(
 async def get_document_content(
     namespace_id: str,
     document_id: str,
-    container: ContainerDep,
+    di: Di,
     provider: Annotated[str | None, Query()] = None,
 ) -> RAGDocumentContent:
     return await op_documents_content(
@@ -150,27 +149,27 @@ async def get_document_content(
             namespace_id=namespace_id, document_id=document_id, provider=provider
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents/{document_id}/status")
 async def get_document_status(
     document_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> DocumentProcessingStatus:
     return await op_documents_status(
         RagDocumentStatusPayload(document_id=document_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/documents/statuses", response_model=DocumentStatusesBatchResponse)
 async def get_documents_statuses_batch(
     body: DocumentStatusesBatchRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DocumentStatusesBatchResponse:
     return await op_documents_statuses(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )

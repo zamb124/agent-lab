@@ -34,12 +34,12 @@ async def test_office_mobile_documents_workflow(
     office_ui: AppUI,
     ui_page_system: Page,
     unique_id: str,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     doc_title = f"Mobile {unique_id}"
 
     await ui_page_system.set_viewport_size({"width": 390, "height": 844})
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="mob")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="mob", di=frontend_di)
     bottom_nav = ui_page_system.locator("platform-bottom-nav")
     await expect(bottom_nav).to_be_visible(timeout=30_000)
     await scenario.step(

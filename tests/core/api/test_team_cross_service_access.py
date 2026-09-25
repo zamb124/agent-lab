@@ -17,7 +17,6 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from apps.frontend.container import FrontendContainer
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.auth import set_test_company_member_roles
@@ -44,10 +43,8 @@ async def flows_team_client(flows_client: AsyncClient) -> AsyncClient:
 
 
 @pytest_asyncio.fixture
-async def crm_team_client():
-    from apps.crm.main import app
-
-    async for client in _asgi_client(app):
+async def crm_team_client(service_processes):
+    async for client in _asgi_client(await service_processes.app("crm")):
         yield client
 
 
@@ -69,7 +66,7 @@ async def office_team_client(office_client: AsyncClient) -> AsyncClient:
 
 
 async def _seed_team_company(
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
     *,
     extra_member: bool = False,
@@ -77,7 +74,7 @@ async def _seed_team_company(
     company_id = f"team_xsvc_{unique_id}"
     owner_id = f"team_owner_{unique_id}"
     member_id = f"team_member_{unique_id}"
-    await frontend_container.user_repository.set(
+    await User.set(
         User(
             user_id=owner_id,
             name="Team Owner",
@@ -85,7 +82,7 @@ async def _seed_team_company(
             active_company_id=company_id,
         )
     )
-    await frontend_container.company_repository.set(
+    await Company.set(
         Company(
             company_id=company_id,
             name=f"Team cross-service {unique_id}",
@@ -94,15 +91,14 @@ async def _seed_team_company(
         )
     )
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=owner_id,
         roles=["owner", "admin"],
     )
     expected = {owner_id}
     if extra_member:
-        await frontend_container.user_repository.set(
+        await User.set(
             User(
                 user_id=member_id,
                 name="Team Member",
@@ -111,8 +107,7 @@ async def _seed_team_company(
             )
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=member_id,
             roles=["member"],
@@ -146,14 +141,14 @@ def _team_clients(
 async def test_team_members_endpoint_available_in_all_services(
     unique_id: str,
     frontend_client: AsyncClient,
-    frontend_container: FrontendContainer,
+    frontend_di,
     flows_team_client: AsyncClient,
     crm_team_client: AsyncClient,
     rag_team_client: AsyncClient,
     sync_team_client: AsyncClient,
     office_team_client: AsyncClient,
 ) -> None:
-    headers, _expected = await _seed_team_company(frontend_container, unique_id)
+    headers, _expected = await _seed_team_company(frontend_di, unique_id)
     clients = _team_clients(
         frontend_client,
         flows_team_client,
@@ -179,7 +174,7 @@ async def test_team_members_endpoint_available_in_all_services(
 async def test_team_members_consistent_across_services(
     unique_id: str,
     frontend_client: AsyncClient,
-    frontend_container: FrontendContainer,
+    frontend_di,
     flows_team_client: AsyncClient,
     crm_team_client: AsyncClient,
     rag_team_client: AsyncClient,
@@ -193,7 +188,7 @@ async def test_team_members_consistent_across_services(
     между запросами к разным сервисам, и сравнение множеств флейкает.
     """
     headers, expected = await _seed_team_company(
-        frontend_container, unique_id, extra_member=True
+        frontend_di, unique_id, extra_member=True
     )
     clients = _team_clients(
         frontend_client,
@@ -218,9 +213,9 @@ async def test_team_members_consistent_across_services(
 async def test_team_members_response_schema(
     unique_id: str,
     frontend_client: AsyncClient,
-    frontend_container: FrontendContainer,
+    frontend_di,
 ) -> None:
-    headers, _expected = await _seed_team_company(frontend_container, unique_id)
+    headers, _expected = await _seed_team_company(frontend_di, unique_id)
     response = await frontend_client.get(
         "/frontend/api/team/members",
         headers=headers,

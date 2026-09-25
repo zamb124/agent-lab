@@ -35,15 +35,15 @@ from core.clients.llm import setup_mock_responses
 from core.logging import get_logger
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
-from core.tracing.models import TraceSpanRecord
+from core.tracing.models import Span
 from core.tracing.provider import set_tracing_enabled
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.tracing.tracer import set_tracing_service_name
 
 logger = get_logger(__name__)
 
 
 async def _wait_spans(
-    container: Any,
+    di: Any,
     task_id: str | None,
     flow_id: str,
     *,
@@ -51,16 +51,16 @@ async def _wait_spans(
     timeout: float = 8.0,
     interval: float = 0.05,
     required_operation_substrings: tuple[str, ...] = (),
-) -> list[TraceSpanRecord]:
+) -> list[Span]:
     """Ожидание появления spans в БД вместо фиксированной паузы."""
     deadline = time.monotonic() + timeout
-    last: list[TraceSpanRecord] = []
+    last: list[Span] = []
     while time.monotonic() < deadline:
-        spans: list[TraceSpanRecord] = []
+        spans: list[Span] = []
         if task_id:
-            spans = await container.span_repository.get_spans_by_task(task_id)
+            spans = await Span.list_by_task_id(task_id)
         if not spans:
-            raw = await container.span_repository.get_spans_by_flow(flow_id, limit=20)
+            raw = await Span.list_by_flow_id(flow_id, limit=20)
             if filter_agent_id:
                 spans = [s for s in raw if s.flow_id == filter_agent_id][:10]
             else:
@@ -81,11 +81,11 @@ async def _wait_spans(
 
 
 @pytest.fixture(autouse=True)
-def enable_tracing_for_test(container):
+def enable_tracing_for_test(di):
     """
     Включает трейсинг для каждого теста.
     autouse=True - применяется автоматически.
-    Зависит от container чтобы app уже был инициализирован.
+    Зависит от di чтобы app уже был инициализирован.
     """
     # Включаем трейсинг принудительно
     config = TracingConfig(
@@ -96,7 +96,7 @@ def enable_tracing_for_test(container):
     )
     setup_tracing(config)
     set_tracing_service_name("platform-test")
-    set_span_repository(container.span_repository)
+    _ = di
     set_tracing_enabled(True)
 
     yield
@@ -119,7 +119,7 @@ class TestLlmNodeTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -173,7 +173,7 @@ class TestLlmNodeTracing:
         task_id = task_result.get("id")
 
         spans = await _wait_spans(
-            container, task_id, "example_react", filter_agent_id="example_react"
+            di, task_id, "example_react", filter_agent_id="example_react"
         )
 
         span_names = [s.operation_name for s in spans]
@@ -227,7 +227,7 @@ class TestLlmNodeTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -273,7 +273,7 @@ class TestLlmNodeTracing:
         assert status.get("state") == "TASK_STATE_INPUT_REQUIRED", \
             f"Ожидаем TASK_STATE_INPUT_REQUIRED, получили: {status}"
 
-        spans = await _wait_spans(container, task_id, "example_react")
+        spans = await _wait_spans(di, task_id, "example_react")
 
         span_names = [s.operation_name for s in spans]
 
@@ -296,7 +296,7 @@ class TestLlmNodeTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -341,7 +341,7 @@ class TestLlmNodeTracing:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_react")
+        spans = await _wait_spans(di, task_id, "example_react")
 
         span_names = [s.operation_name for s in spans]
 
@@ -377,7 +377,7 @@ class TestGraphFlowTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -413,7 +413,7 @@ class TestGraphFlowTracing:
         task_id = result.get("result", {}).get("id")
 
         spans = await _wait_spans(
-            container,
+            di,
             task_id,
             "example_graph",
             timeout=30.0,
@@ -457,7 +457,7 @@ class TestGraphFlowTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -491,7 +491,7 @@ class TestGraphFlowTracing:
         task_id = result.get("result", {}).get("id")
 
         spans = await _wait_spans(
-            container,
+            di,
             task_id,
             "example_graph",
             timeout=30.0,
@@ -526,7 +526,7 @@ class TestGraphFlowTracing:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -560,7 +560,7 @@ class TestGraphFlowTracing:
         task_id = result.get("result", {}).get("id")
 
         spans = await _wait_spans(
-            container,
+            di,
             task_id,
             "example_graph",
             timeout=30.0,
@@ -607,7 +607,7 @@ class TestSpanAttributes:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -636,7 +636,7 @@ class TestSpanAttributes:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_react")
+        spans = await _wait_spans(di, task_id, "example_react")
 
         assert len(spans) > 0, \
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
@@ -671,7 +671,7 @@ class TestSpanHierarchy:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -710,7 +710,7 @@ class TestSpanHierarchy:
         result = response.json()
         task_id = result.get("result", {}).get("id")
 
-        spans = await _wait_spans(container, task_id, "example_react")
+        spans = await _wait_spans(di, task_id, "example_react")
 
         assert len(spans) > 0, \
             f"КРИТИЧЕСКАЯ ОШИБКА: spans не записались! task_id={task_id}"
@@ -754,7 +754,7 @@ class TestTracingAPI:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -815,7 +815,7 @@ class TestTracingAPI:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """
@@ -867,7 +867,7 @@ class TestTracingAPI:
         self,
         client,
         app,
-        container,
+        di,
         unique_id: str,
     ):
         """

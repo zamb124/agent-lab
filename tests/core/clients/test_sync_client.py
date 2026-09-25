@@ -47,17 +47,16 @@ def _employee_context(*, user: User, company: Company) -> Iterator[None]:
 async def test_sync_client_list_channels_send_and_list_messages(
     flows_service: object,
     sync_service: object,
-    frontend_container: object,
+    frontend_di: object,
     auth_token_system: str,
     unique_id: str,
 ) -> None:
     _ = flows_service, sync_service
     flow_id = f"syncclient_{unique_id}"
-    company_repo = getattr(frontend_container, "company_repository")
-    company = cast(Company | None, await company_repo.get("system"))
+    company = cast(Company | None, await Company.get("system"))
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,  # type: ignore[arg-type]
+        frontend_di.authz_service,
         flow_id=flow_id,
         company_id="system",
         name="Sync Client Worker",
@@ -67,7 +66,7 @@ async def test_sync_client_list_channels_send_and_list_messages(
     emp_id = flow_employee_user_id(flow_id)
     assert emp_id == employee.user_id
     namespace = f"ns_{unique_id}_sc"
-    _ = await seed_namespace_via_repo("system", namespace)
+    _ = await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
 
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:
@@ -122,12 +121,12 @@ async def test_sync_client_send_non_member_denied(
     flows_service: object,
     sync_service: object,
     auth_token_system: str,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     _ = flows_service, sync_service
     emp_id = f"flow_employee_denied_sc_{unique_id}"
     namespace = f"ns_{unique_id}_scdn"
-    _ = await seed_namespace_via_repo("system", namespace)
+    _ = await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
 
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:

@@ -19,6 +19,7 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.sync.realtime.command_router import SYNC_OPERATIONS
+from core.di.platform import PlatformDi
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
 from tests.files.chunked_upload_helpers import (
@@ -120,6 +121,7 @@ class LiveCtx:
     unique_id: str
     suffix: str
     system_user2_id: str
+    di: PlatformDi
     marker: str | None = None
 
 
@@ -175,7 +177,7 @@ def _text_body(text: str) -> JsonObject:
 
 
 async def _namespace(ctx: LiveCtx) -> str:
-    return await seed_namespace_via_repo(_COMPANY_ID, f"ns_{ctx.unique_id}_{ctx.suffix}")
+    return await seed_namespace_via_repo(ctx.di, _COMPANY_ID, f"ns_{ctx.unique_id}_{ctx.suffix}")
 
 
 async def _create_topic(
@@ -616,7 +618,7 @@ def _op(
 
 
 async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
-    ctx.marker = await _namespace(ctx)
+    ctx.marker = await seed_namespace_via_repo(ctx.di, _COMPANY_ID, f"0ns_{ctx.unique_id}_{ctx.suffix}")
     return {"limit": 200, "offset": 0}
 
 
@@ -1006,6 +1008,7 @@ async def test_sync_op_ws_rest_identical(
     auth_token_system: str,
     system_user2_id: str,
     unique_id: str,
+    frontend_di,
 ) -> None:
     _ = sync_service, sync_worker, realtime_service
     headers = {**auth_headers_system, "Accept-Language": "ru"}
@@ -1017,6 +1020,7 @@ async def test_sync_op_ws_rest_identical(
         unique_id=unique_id,
         suffix="ws",
         system_user2_id=system_user2_id,
+        di=frontend_di,
     )
     ws_payload = await case.setup(ws_ctx)
     ws_event = await _ws_command(
@@ -1045,6 +1049,7 @@ async def test_sync_op_ws_rest_identical(
             unique_id=unique_id,
             suffix="rest",
             system_user2_id=system_user2_id,
+        di=frontend_di,
         )
         rest_payload = await case.setup(rest_ctx)
         rest_marker = rest_ctx.marker

@@ -11,10 +11,6 @@ from datetime import UTC, date, datetime
 from typing import cast
 
 from apps.crm.constants_graph import BELONGS_TO_RELATIONSHIP_TYPE
-from apps.crm.db.models import CRMEntity, Relationship
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
 from apps.crm.integrations.amocrm.mapping import (
     AMO_PROVIDER_ID,
     AMO_USERS_ENTITY_TYPE_ID,
@@ -22,16 +18,21 @@ from apps.crm.integrations.amocrm.mapping import (
 )
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.entity_type import EntityType
+from apps.crm.models.relationship import Relationship
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from apps.crm.services.entity_service import EntityService
-from apps.crm.services.task_service import ActiveTaskExistsError, TaskService
+from apps.crm.services.note_markdown_format_schedule import ActiveTaskExistsError
+from apps.crm.services.task_service import TaskService
 from core.context import get_context
 from core.http.client import get_httpx_client
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
 from core.namespace import NamespaceService
+from core.rag import BaseRAGProvider
 from core.types import JsonObject
 
 AMO_RPS_DELAY_SEC = 0.15
@@ -61,9 +62,7 @@ class AmoCRMIntegrationService:
     def __init__(
         self,
         oauth_service: OAuthService,
-        entity_repository: EntityRepository,
-        entity_type_repository: EntityTypeRepository,
-        relationship_repository: RelationshipRepository,
+        rag: BaseRAGProvider,
         entity_service: EntityService,
         namespace_service: NamespaceService,
         task_service: TaskService,
@@ -71,9 +70,7 @@ class AmoCRMIntegrationService:
         entity_access: CrmEntityAccessService,
     ) -> None:
         self._oauth: OAuthService = oauth_service
-        self._entity_repo: EntityRepository = entity_repository
-        self._entity_type_repo: EntityTypeRepository = entity_type_repository
-        self._relationship_repo: RelationshipRepository = relationship_repository
+        self._rag: BaseRAGProvider = rag
         self._entity_service: EntityService = entity_service
         self._namespace_service: NamespaceService = namespace_service
         self._task_service: TaskService = task_service
@@ -217,7 +214,7 @@ class AmoCRMIntegrationService:
         entity_type: str,
         amo_record_id: str,
     ) -> str | None:
-        rows = await self._entity_repo.find_by_external_ref(
+        rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
             company_id=company_id,
             namespace=namespace,
             entity_type=entity_type,
@@ -239,14 +236,6 @@ class AmoCRMIntegrationService:
     ) -> bool:
         if source_entity_id == target_entity_id:
             return False
-        existing = await self._relationship_repo.find_exact(
-            source_entity_id,
-            target_entity_id,
-            relationship_type,
-            namespace=namespace,
-        )
-        if existing is not None:
-            return False
         rel = Relationship(
             relationship_id=uuid.uuid4().hex,
             company_id=company_id,
@@ -258,8 +247,8 @@ class AmoCRMIntegrationService:
             confidence=1.0,
             attributes={},
         )
-        _ = await self._relationship_repo.create(rel)
-        return True
+        saved = await Relationship.ensure_edge(rel)
+        return saved.relationship_id == rel.relationship_id
 
     @staticmethod
     def _amo_note_plain_text(raw: JsonObject) -> str | None:
@@ -393,7 +382,7 @@ class AmoCRMIntegrationService:
         if cb is not None:
             patch_attrs["amo_created_by"] = cb
         ent, created = await upsert_canonical_by_external_ref(
-            entity_repo=self._entity_repo,
+            rag=self._rag,
             entity_access=self._entity_access,
             namespace=namespace,
             company_id=company_id,
@@ -570,7 +559,7 @@ class AmoCRMIntegrationService:
                     attrs["amo_created_by"] = tcb
 
                 task_ent, _ = await upsert_canonical_by_external_ref(
-                    entity_repo=self._entity_repo,
+                    rag=self._rag,
                     entity_access=self._entity_access,
                     namespace=namespace,
                     company_id=company_id,
@@ -603,7 +592,7 @@ class AmoCRMIntegrationService:
                         )
                         if created_as:
                             stats["relationships"] = stats.get("relationships", 0) + 1
-                        member_ent = await self._entity_repo.get(member_eid)
+                        member_ent = await CRMEntity.get(member_eid)
                         if member_ent is not None:
                             raw_platform_uid = (member_ent.attributes or {}).get(
                                 "platform_user_id"
@@ -758,7 +747,7 @@ class AmoCRMIntegrationService:
             if lcb is not None:
                 attrs["amo_created_by"] = lcb
             lead_ent, _ = await upsert_canonical_by_external_ref(
-                entity_repo=self._entity_repo,
+                rag=self._rag,
                 entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
@@ -843,7 +832,7 @@ class AmoCRMIntegrationService:
             if ccb is not None:
                 attrs["amo_created_by"] = ccb
             contact_ent, _ = await upsert_canonical_by_external_ref(
-                entity_repo=self._entity_repo,
+                rag=self._rag,
                 entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
@@ -906,7 +895,7 @@ class AmoCRMIntegrationService:
             if ocb is not None:
                 org_attrs["amo_created_by"] = ocb
             org_ent, _ = await upsert_canonical_by_external_ref(
-                entity_repo=self._entity_repo,
+                rag=self._rag,
                 entity_access=self._entity_access,
                 namespace=ns,
                 company_id=cid,
@@ -1015,7 +1004,7 @@ class AmoCRMIntegrationService:
             if raw.get("is_active") is not None:
                 attrs["is_active"] = bool(raw.get("is_active"))
             _, _ = await upsert_canonical_by_external_ref(
-                entity_repo=self._entity_repo,
+                rag=self._rag,
                 entity_access=self._entity_access,
                 namespace=namespace_name,
                 company_id=company_id,
@@ -1097,11 +1086,11 @@ class AmoCRMIntegrationService:
             embedded = _as_json_object(data.get("_embedded"))
             fields_raw = embedded.get("custom_fields") if embedded is not None else None
             fields = cast(list[object], fields_raw) if isinstance(fields_raw, list) else []
-            et = await self._entity_type_repo.get_by_type_id(
-                type_id,
-                namespace=namespace_name,
+            et = await EntityType.by_company_namespace_and_type_id(
                 company_id=company_id,
-            )
+                namespace=namespace_name,
+                type_id=type_id,
+            ).get_or_none()
             if et is None:
                 updated[type_id] = 0
                 continue
@@ -1132,11 +1121,11 @@ class AmoCRMIntegrationService:
                 }
                 n_add += 1
             if n_add:
-                _ = await self._entity_type_repo.update_metadata(
+                await EntityType.update_fields(
                     type_id,
                     namespace=namespace_name,
                     company_id=company_id,
-                    optional_fields=opt,
+                    patch={"optional_fields": opt},
                 )
             updated[type_id] = n_add
 

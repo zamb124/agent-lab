@@ -36,13 +36,13 @@ async def test_office_views_and_trash(
     office_ui: AppUI,
     ui_page_system: Page,
     unique_id: str,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     doc_title = f"Trash {unique_id}"
     catalog_title = f"views-{unique_id}"
 
     namespace = await office_e2e_open_with_namespace(
-        office_ui, ui_page_system, unique_id, suffix="view"
+        office_ui, ui_page_system, unique_id, suffix="view", di=frontend_di
     )
     catalog_id = await office_api_create_catalog(
         office_ui.origin,

@@ -8,20 +8,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.context import get_context, require_active_company
 from core.integrations.mcp import mcp_tool_reference_id
 from core.logging import get_logger
-
-if TYPE_CHECKING:
-    from apps.flows.src.container_contracts import FlowRuntimeContainer
+from core.variables.service import VariablesService
 
 logger = get_logger(__name__)
 
@@ -31,13 +29,13 @@ def _mcp_headers_need_variables(server_config: MCPServerConfig) -> bool:
 
 
 async def resolve_mcp_client_variables(
-    container: FlowRuntimeContainer,
+    variables_service: VariablesService,
     server_config: MCPServerConfig,
 ) -> dict[str, str]:
     """Переменные для MCPClient: @var: headers и platform context propagation."""
     variables: dict[str, str] = {}
     if _mcp_headers_need_variables(server_config):
-        resolved_map = await container.variables_service.get_company_variables_map()
+        resolved_map = await variables_service.get_company_variables_map()
         variables = {
             key: value if isinstance(value, str) else str(value)
             for key, value in resolved_map.items()
@@ -56,7 +54,8 @@ async def resolve_mcp_client_variables(
 
 async def sync_mcp_server_tools(
     *,
-    container: FlowRuntimeContainer,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
     server_config: MCPServerConfig,
 ) -> tuple[list[str], list[MCPDiscoveredTool]]:
     """
@@ -67,7 +66,7 @@ async def sync_mcp_server_tools(
 
     Возвращает (tool_ids, список инструментов с MCP) для HTTP-ответа и логов.
     """
-    variables = await resolve_mcp_client_variables(container, server_config)
+    variables = await resolve_mcp_client_variables(variables_service, server_config)
     client = MCPClient(server_config, variables=variables)
     _ = await client.initialize()
     tools = await client.list_tools()
@@ -96,8 +95,8 @@ async def sync_mcp_server_tools(
             mcp_execution=t.execution,
             tags=["mcp", f"mcp:{server_id}"],
         )
-        _ = await container.tool_repository.set(tool_ref)
-        await container.flow_access_service.sync_tool_saved(
+        _ = await ToolReference.set(tool_ref)
+        await flow_access_service.sync_tool_saved(
             tool_id,
             company_id=company.company_id,
             permission=tool_ref.permission,
@@ -106,43 +105,52 @@ async def sync_mcp_server_tools(
     for old_tool_id in previous_cached:
         if old_tool_id not in tool_ids:
             require_not_builtin_tool_id(old_tool_id, source="mcp cached_tools")
-            _ = await container.tool_repository.delete(old_tool_id)
-            await container.flow_access_service.sync_tool_deleted(
+            _ = await ToolReference.delete_by_id(ToolReference.row_id(old_tool_id))
+            await flow_access_service.sync_tool_deleted(
                 old_tool_id, company_id=company.company_id
             )
 
     server_config.cached_tools = tool_ids
     server_config.last_sync_at = datetime.now(tz=timezone.utc)
-    _ = await container.mcp_server_repository.set(server_config)
+    _ = await MCPServerConfig.set(server_config)
 
     logger.info("flows.mcp.server.synced.server_id.tools", server_id=server_id, tools=len(tool_ids))
     return tool_ids, tools
 
 
-async def ensure_default_mcp_servers_for_company(
-    *,
-    container: FlowRuntimeContainer,
-) -> list[MCPServerConfig]:
+async def ensure_default_mcp_servers_for_company() -> list[MCPServerConfig]:
     """
-    Upsert'ит дефолтные MCP серверы компании в mcp_server_repository.
+    Upsert'ит дефолтные MCP серверы компании.
     """
     servers = build_default_mcp_servers()
     for s in servers:
-        _ = await container.mcp_server_repository.set(s)
+        _ = await MCPServerConfig.set(s)
     return servers
 
 
-async def sync_auto_mcp_servers_for_company(*, container: FlowRuntimeContainer) -> dict[str, int]:
+async def sync_auto_mcp_servers_for_company(
+    *,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
+) -> dict[str, int]:
     """
     Синхронизирует tools для всех активных MCP серверов компании.
     """
-    servers = await container.mcp_server_repository.list_active()
+    servers = [
+        server
+        for server in await MCPServerConfig.list(limit=1000)
+        if server.is_active
+    ]
     synced = 0
     tools_total = 0
     failed = 0
     for srv in servers:
         try:
-            tool_ids, _ = await sync_mcp_server_tools(container=container, server_config=srv)
+            tool_ids, _ = await sync_mcp_server_tools(
+                variables_service=variables_service,
+                flow_access_service=flow_access_service,
+                server_config=srv,
+            )
         except Exception as exc:
             failed += 1
             logger.warning(

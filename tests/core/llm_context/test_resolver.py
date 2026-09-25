@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.ai.company_settings import METADATA_KEY, CompanyAIProviders, LLMContextPatch
-from core.context import Company, Context, User, clear_context, set_context
+from core.context import clear_context, set_context
 from core.llm_context import (
     LLMContextBudget,
     LLMContextConfig,
@@ -19,6 +19,8 @@ from core.llm_context.resolver import (
     resolve_company_llm_context_patch,
     resolve_llm_context_policy,
 )
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.types import JsonObject
 
 

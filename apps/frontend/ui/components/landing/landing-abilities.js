@@ -10,7 +10,7 @@ import {
     landSyncAbilityUrl,
     landDocumentsHeroUrl,
     landDocumentsShot2Url,
-} from '../../utils/land-product-images.js';
+} from '../../_helpers/land-product-images.js';
 
 export class LandingAbilities extends PlatformElement {
     static i18nNamespace = 'landing';

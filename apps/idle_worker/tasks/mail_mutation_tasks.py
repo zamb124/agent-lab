@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
@@ -40,13 +40,12 @@ T = TypeVar("T")
 
 
 async def _load_binding(
-    container: IdleWorkerContainer,
     *,
     company_id: str,
     mailbox_binding_id: str,
 ) -> MailboxBinding:
-    binding = await container.mailbox_binding_repository.get(
-        mailbox_binding_id, company_id
+    binding = await MailboxBinding.find_in_company(
+        company_id, mailbox_binding_id
     )
     if binding is None:
         raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
@@ -57,19 +56,18 @@ async def _with_mail_binding_context(
     *,
     company_id: str,
     mailbox_binding_id: str,
-    op: Callable[[IdleWorkerContainer, MailboxBinding], Awaitable[T]],
+    op: Callable[[Di, MailboxBinding], Awaitable[T]],
+    di: Di,
 ) -> T:
-    container = get_container()
     binding = await _load_binding(
-        container,
         company_id=company_id,
         mailbox_binding_id=mailbox_binding_id,
     )
     previous = await enter_mail_binding_context(
-        container, binding, channel="mail_mutation"
+        di.authz_service, binding, channel="mail_mutation"
     )
     try:
-        return await op(container, binding)
+        return await op(di, binding)
     finally:
         leave_mail_binding_context(previous)
 
@@ -80,16 +78,16 @@ async def _notify_users_for_binding(
     company_id: str,
     event_type: str,
     payload: JsonObject,
+    di: Di,
 ) -> None:
-    container = get_container()
-    bindings = await container.mailbox_binding_repository.list_by_company(company_id)
+    bindings = await MailboxBinding.list_by_company(company_id)
     binding = next(
         (item for item in bindings if item.mailbox_binding_id == mailbox_binding_id),
         None,
     )
     if binding is None:
         return
-    user_ids = await mailbox_recipient_user_ids(container, binding)
+    user_ids = await mailbox_recipient_user_ids(di.authz_service, binding)
     if not user_ids:
         return
     await publish_event_to_users(
@@ -107,10 +105,11 @@ async def mail_mark_seen_task(
     mailbox_binding_id: str,
     folder: str,
     uid: str,
+    di: Di,
 ) -> None:
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+    async def _op(di: Di, binding: MailboxBinding) -> None:
         _ = binding
-        _ = await container.mail_service.mark_message_seen(
+        _ = await di.mail_service.mark_message_seen(
             MailMessageFlagPayload(
                 mailbox_binding_id=mailbox_binding_id,
                 folder=folder,
@@ -120,6 +119,7 @@ async def mail_mark_seen_task(
         )
 
     await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=mailbox_binding_id,
         op=_op,
@@ -139,10 +139,11 @@ async def mail_mark_unseen_task(
     mailbox_binding_id: str,
     folder: str,
     uid: str,
+    di: Di,
 ) -> None:
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+    async def _op(di: Di, binding: MailboxBinding) -> None:
         _ = binding
-        _ = await container.mail_service.mark_message_unseen(
+        _ = await di.mail_service.mark_message_unseen(
             MailMessageFlagPayload(
                 mailbox_binding_id=mailbox_binding_id,
                 folder=folder,
@@ -152,6 +153,7 @@ async def mail_mark_unseen_task(
         )
 
     await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=mailbox_binding_id,
         op=_op,
@@ -169,24 +171,27 @@ async def mail_send_task(
     *,
     company_id: str,
     payload: JsonObject,
+    di: Di,
 ) -> None:
     send_payload = MailSendPayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+    async def _op(di: Di, binding: MailboxBinding):
         _ = binding
-        return await container.mail_service.send_message(
+        return await di.mail_service.send_message(
             send_payload,
             company_id=company_id,
         )
 
     try:
         result = await _with_mail_binding_context(
+            di=di,
             company_id=company_id,
             mailbox_binding_id=send_payload.mailbox_binding_id,
             op=_op,
         )
     except Exception as exc:
         await _notify_users_for_binding(
+            di=di,
             mailbox_binding_id=send_payload.mailbox_binding_id,
             company_id=company_id,
             event_type="mail/message/send_failed",
@@ -197,6 +202,7 @@ async def mail_send_task(
         )
         raise
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=send_payload.mailbox_binding_id,
         company_id=company_id,
         event_type="mail/message/send_succeeded",
@@ -215,21 +221,23 @@ async def mail_send_task(
 
 
 @platform_task(MAIL_MOVE)
-async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
+async def mail_move_task(*, company_id: str, payload: JsonObject, di: Di) -> None:
     move_payload = MailMessageMovePayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+    async def _op(di: Di, binding: MailboxBinding):
         _ = binding
-        return await container.mail_service.move_message(
+        return await di.mail_service.move_message(
             move_payload, company_id=company_id
         )
 
     result = await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=move_payload.mailbox_binding_id,
         op=_op,
     )
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=move_payload.mailbox_binding_id,
         company_id=company_id,
         event_type="mail/message/moved",
@@ -238,21 +246,23 @@ async def mail_move_task(*, company_id: str, payload: JsonObject) -> None:
 
 
 @platform_task(MAIL_TRASH)
-async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
+async def mail_trash_task(*, company_id: str, payload: JsonObject, di: Di) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+    async def _op(di: Di, binding: MailboxBinding):
         _ = binding
-        return await container.mail_service.trash_message(
+        return await di.mail_service.trash_message(
             flag_payload, company_id=company_id
         )
 
     result = await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         op=_op,
     )
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         company_id=company_id,
         event_type="mail/message/moved",
@@ -261,21 +271,23 @@ async def mail_trash_task(*, company_id: str, payload: JsonObject) -> None:
 
 
 @platform_task(MAIL_ARCHIVE)
-async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
+async def mail_archive_task(*, company_id: str, payload: JsonObject, di: Di) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+    async def _op(di: Di, binding: MailboxBinding):
         _ = binding
-        return await container.mail_service.archive_message(
+        return await di.mail_service.archive_message(
             flag_payload, company_id=company_id
         )
 
     result = await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         op=_op,
     )
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         company_id=company_id,
         event_type="mail/message/moved",
@@ -284,21 +296,23 @@ async def mail_archive_task(*, company_id: str, payload: JsonObject) -> None:
 
 
 @platform_task(MAIL_DELETE)
-async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
+async def mail_delete_task(*, company_id: str, payload: JsonObject, di: Di) -> None:
     flag_payload = MailMessageFlagPayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding) -> None:
+    async def _op(di: Di, binding: MailboxBinding) -> None:
         _ = binding
-        _ = await container.mail_service.delete_message(
+        _ = await di.mail_service.delete_message(
             flag_payload, company_id=company_id
         )
 
     await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         op=_op,
     )
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=flag_payload.mailbox_binding_id,
         company_id=company_id,
         event_type="mail/message/removed",
@@ -311,21 +325,23 @@ async def mail_delete_task(*, company_id: str, payload: JsonObject) -> None:
 
 
 @platform_task(MAIL_STAR)
-async def mail_star_task(*, company_id: str, payload: JsonObject) -> None:
+async def mail_star_task(*, company_id: str, payload: JsonObject, di: Di) -> None:
     star_payload = MailMessageStarPayload.model_validate(payload)
 
-    async def _op(container: IdleWorkerContainer, binding: MailboxBinding):
+    async def _op(di: Di, binding: MailboxBinding):
         _ = binding
-        return await container.mail_service.star_message(
+        return await di.mail_service.star_message(
             star_payload, company_id=company_id
         )
 
     result = await _with_mail_binding_context(
+        di=di,
         company_id=company_id,
         mailbox_binding_id=star_payload.mailbox_binding_id,
         op=_op,
     )
     await _notify_users_for_binding(
+        di=di,
         mailbox_binding_id=star_payload.mailbox_binding_id,
         company_id=company_id,
         event_type=MAIL_MESSAGE_UPSERTED,

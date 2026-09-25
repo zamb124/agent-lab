@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from apps.sync.container import SyncContainer, get_sync_container
+from apps.sync.di import SyncDi
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallsAcceptPayload,
@@ -103,19 +103,15 @@ from apps.sync.realtime.operations import (
     op_threads_item,
     op_threads_list,
 )
-from core.logging import get_logger
 from core.namespace.operations import (
     NamespacesListPayload,
     NamespaceSyncSettingsUpdatePayload,
     op_namespaces_list,
     op_namespaces_sync_settings_update,
 )
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-
-SYNC_OPERATIONS: dict[str, RegisteredOperation[SyncContainer]] = {
+SYNC_OPERATIONS: dict[str, RegisteredOperation[SyncDi]] = {
     # каналы
     "sync/channels/list_requested": Operation(
         payload_model=ChannelsListPayload,
@@ -314,10 +310,3 @@ SYNC_OPERATIONS: dict[str, RegisteredOperation[SyncContainer]] = {
         payload_model=NamespaceSyncSettingsUpdatePayload, fn=op_namespaces_sync_settings_update
     ),
 }
-
-
-
-def register_sync_ws_commands() -> None:
-    """Зарегистрировать все sync command-handler'ы. Вызывать на on_startup."""
-    register_service_operations(SYNC_OPERATIONS, get_sync_container)
-    logger.info("sync.ws.command.handlers", SYNC_OPERATIONS_count=len(SYNC_OPERATIONS))

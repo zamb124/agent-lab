@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
 from tests.flows._a2a_v1 import A2A_HEADERS
 
 
@@ -1117,9 +1118,8 @@ class TestA2ABranches:
         assert resp.status_code == 403
 
     @pytest.fixture
-    async def mutable_flow_id(self, container, unique_id):
+    async def mutable_flow_id(self, di, unique_id):
         """Уникальный flow для тестов, мутирующих branches (изоляция от xdist)."""
-        from apps.flows.src.models import FlowConfig
         from core.context import require_context
 
         fid = f"branch_test_{unique_id}"
@@ -1130,20 +1130,20 @@ class TestA2ABranches:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(fc)
+        await FlowConfig.create_version(fc)
         ctx = require_context()
         if ctx.active_company is None:
             raise AssertionError("active company required for flow authz sync")
-        await container.flow_access_service.sync_flow_saved(
+        await di.flow_access_service.sync_flow_saved(
             fc,
             company_id=ctx.active_company.company_id,
             owner_user_id=ctx.user.user_id,
         )
         yield fid
-        await container.flow_access_service.sync_flow_deleted(
+        await di.flow_access_service.sync_flow_deleted(
             fid, company_id=ctx.active_company.company_id, branch_ids=[]
         )
-        await container.flow_repository.delete(fid)
+        await FlowConfig.delete_by_flow_id(fid)
 
     @pytest.mark.asyncio
     async def test_create_branch_with_edges(self, client, mutable_flow_id, unique_id):

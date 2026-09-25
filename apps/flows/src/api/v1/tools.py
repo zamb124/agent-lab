@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.tool_operations import (
     op_flows_tools_contract,
     op_flows_tools_create,
@@ -14,7 +15,6 @@ from apps.flows.realtime.tool_operations import (
     op_flows_tools_remove,
     op_flows_tools_tag_groups,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.tool_contracts import ToolDefinition
 from apps.flows.src.models.tool_reference import (
     PickerCategory,
@@ -36,20 +36,20 @@ router = APIRouter(tags=["tools"])
 
 @router.get("/", response_model=OffsetPage[ToolResponse])
 async def list_tools(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=2000, description="Максимум tools")] = 500,
     offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
 ) -> OffsetPage[ToolResponse]:
     return await op_flows_tools_list(
         ToolsListPayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/all", response_model=OffsetPage[ToolResponse])
 async def list_all_tools_and_flows(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[
         int,
         Query(ge=1, le=20, description="Максимум tools+flows на страницу"),
@@ -69,61 +69,61 @@ async def list_all_tools_and_flows(
             q=q,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/tag-groups", response_model=OffsetPage[ToolTagGroup])
 async def list_tool_tag_groups(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=200)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[ToolTagGroup]:
     return await op_flows_tools_tag_groups(
         ToolsTagGroupsPayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/preview", response_model=ToolPreviewResponse)
 async def preview_tool(
-    request: ToolPreviewRequest, container: ContainerDep
+    request: ToolPreviewRequest, di: Di
 ) -> ToolPreviewResponse:
     return await op_flows_tools_preview(
-        request, user=require_context().user, container=container
+        request, user=require_context().user, di=di
     )
 
 
 @router.get("/{tool_id}/contract", response_model=ToolDefinition)
-async def get_tool_contract(tool_id: str, container: ContainerDep) -> ToolDefinition:
+async def get_tool_contract(tool_id: str, di: Di) -> ToolDefinition:
     return await op_flows_tools_contract(
         ToolsToolIdPayload(tool_id=tool_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{tool_id}", response_model=ToolResponse)
-async def get_tool(tool_id: str, container: ContainerDep) -> ToolResponse:
+async def get_tool(tool_id: str, di: Di) -> ToolResponse:
     return await op_flows_tools_item(
         ToolsToolIdPayload(tool_id=tool_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/", response_model=ToolResponse)
-async def create_tool(request: ToolCreateRequest, container: ContainerDep) -> ToolResponse:
+async def create_tool(request: ToolCreateRequest, di: Di) -> ToolResponse:
     return await op_flows_tools_create(
-        request, user=require_context().user, container=container
+        request, user=require_context().user, di=di
     )
 
 
 @router.delete("/{tool_id}", response_model=ToolDeletedResponse)
-async def delete_tool(tool_id: str, container: ContainerDep) -> ToolDeletedResponse:
+async def delete_tool(tool_id: str, di: Di) -> ToolDeletedResponse:
     return await op_flows_tools_remove(
         ToolsToolIdPayload(tool_id=tool_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

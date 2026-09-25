@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
 from uuid import uuid4
@@ -17,7 +18,7 @@ from core.datasources.authz.tuples import (
     datasource_owner_tuple,
     datasource_platform_link,
 )
-from core.datasources.catalog import PLATFORM_CONNECTOR_IDS
+from core.datasources.catalog import PLATFORM_CONNECTOR_IDS, platform_connector
 from core.datasources.drivers import platform_driver
 from core.datasources.drivers.sql_endpoint import require_sql_endpoint
 from core.datasources.models import (
@@ -32,10 +33,6 @@ from core.datasources.models import (
     DatasourceQueryResult,
     DatasourceSchemaSnapshot,
     DatasourceTestResult,
-)
-from core.datasources.repository import (
-    DatasourceConnectionRepository,
-    DatasourceConnectorRepository,
 )
 from core.datasources.sql_policy import assert_operation_allowed
 from core.secrets.crypto import decrypt_secret, encrypt_secret
@@ -61,26 +58,41 @@ class DatasourceRemoteExecutor(Protocol):
     ): ...
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DatasourceExecutors:
+    """Исполнители коннекторов вне платформы; их собирает владелец runtime, который вызывает datasource."""
+
+    mcp: DatasourceRemoteExecutor
+    flow: DatasourceRemoteExecutor
+
+    def for_kind(self, kind: DatasourceExecutorKind) -> DatasourceRemoteExecutor:
+        if kind == DatasourceExecutorKind.MCP:
+            return self.mcp
+        if kind == DatasourceExecutorKind.FLOW:
+            return self.flow
+        raise ValueError(f"no remote executor for {kind}")
+
+
 class DatasourceService:
-    def __init__(
-        self,
-        *,
-        connections: DatasourceConnectionRepository,
-        connectors: DatasourceConnectorRepository,
-        authz: AuthzService,
-        mcp_executor: DatasourceRemoteExecutor | None = None,
-        flow_executor: DatasourceRemoteExecutor | None = None,
-    ) -> None:
-        self._connections: DatasourceConnectionRepository = connections
-        self._connectors: DatasourceConnectorRepository = connectors
+    def __init__(self, *, authz: AuthzService) -> None:
         self._authz: AuthzService = authz
-        self._mcp_executor: DatasourceRemoteExecutor | None = mcp_executor
-        self._flow_executor: DatasourceRemoteExecutor | None = flow_executor
+
+
+    async def _get_connector(self, company_id: str, connector_id: str) -> DatasourceConnectorSpec | None:
+        if connector_id in PLATFORM_CONNECTOR_IDS:
+            return platform_connector(connector_id)
+        return await DatasourceConnectorSpec.by_connector_id(company_id, connector_id)
+
+    async def _list_connectors_for_company(self, company_id: str) -> list[DatasourceConnectorSpec]:
+        stamped = await DatasourceConnectorSpec.list_stamped_for_company(company_id)
+        platform_specs = [platform_connector(item) for item in sorted(PLATFORM_CONNECTOR_IDS)]
+        return platform_specs + stamped
+
 
     async def list_connectors(self) -> list[DatasourceConnectorSpec]:
         company_id = _company_id()
         await self._authz.require_can_view(AuthzObject.company(company_id))
-        return await self._connectors.list_for_company(company_id)
+        return await self._list_connectors_for_company(company_id)
 
     async def upsert_connector(
         self, payload: DatasourceConnectorUpsert
@@ -90,7 +102,9 @@ class DatasourceService:
         if payload.executor == DatasourceExecutorKind.PLATFORM:
             raise ValueError("company stamp cannot use executor=platform")
         spec = DatasourceConnectorSpec.model_validate(payload.model_dump(mode="python"))
-        return await self._connectors.upsert(
+        if spec.connector_id in PLATFORM_CONNECTOR_IDS:
+            raise ValueError(f"connector_id {spec.connector_id!r} is reserved for platform drivers")
+        return await DatasourceConnectorSpec.upsert_by_connector_id(
             company_id, spec, owner_user_id=_user_id()
         )
 
@@ -98,7 +112,7 @@ class DatasourceService:
         company_id = _company_id()
         user_id = _user_id()
         await self._authz.require_can_view(AuthzObject.company(company_id))
-        candidates = await self._connections.list_by_company(company_id)
+        candidates = await DatasourceConnection.list_by_company(company_id)
         if not candidates:
             return []
         allowed = await self._authz.batch_check(
@@ -161,7 +175,7 @@ class DatasourceService:
             updated_at=now,
         )
         _assert_create_shape(spec, connection, payload.password)
-        stored = await self._connections.insert(connection)
+        stored = await DatasourceConnection.insert(connection)
         try:
             await self._authz.write(
                 [
@@ -174,7 +188,9 @@ class DatasourceService:
                 ]
             )
         except Exception:
-            await self._connections.delete(datasource_id)
+            deleted = await DatasourceConnection.delete_by_id(datasource_id)
+            if not deleted:
+                raise ValueError(f"datasource not found: {datasource_id}")
             raise
         return stored
 
@@ -232,7 +248,7 @@ class DatasourceService:
             }
         )
         _assert_stored_shape(spec, patched)
-        return await self._connections.update(patched)
+        return await DatasourceConnection.update_connection(patched)
 
     async def delete_connection(self, datasource_id: str) -> None:
         current = await self._require_connection(datasource_id)
@@ -244,38 +260,51 @@ class DatasourceService:
         if deletes:
             await self._authz.delete(deletes)
         try:
-            await self._connections.delete(current.datasource_id)
+            deleted = await DatasourceConnection.delete_by_id(datasource_id)
+            if not deleted:
+                raise ValueError(f"datasource not found: {datasource_id}")
         except Exception:
             if deletes:
                 await self._authz.write(deletes)
             raise
 
-    async def test(self, datasource_id: str) -> DatasourceTestResult:
+    async def test(
+        self, datasource_id: str, *, executors: DatasourceExecutors
+    ) -> DatasourceTestResult:
         result = await self._dispatch(
             datasource_id,
             DatasourceOperation.INTROSPECT,
             sql=None,
             params={},
             as_test=True,
+            executors=executors,
         )
         if not isinstance(result, DatasourceTestResult):
             raise ValueError("datasource test must return DatasourceTestResult")
         return result
 
-    async def introspect(self, datasource_id: str) -> DatasourceSchemaSnapshot:
+    async def introspect(
+        self, datasource_id: str, *, executors: DatasourceExecutors
+    ) -> DatasourceSchemaSnapshot:
         result = await self._dispatch(
             datasource_id,
             DatasourceOperation.INTROSPECT,
             sql=None,
             params={},
             as_test=False,
+            executors=executors,
         )
         if not isinstance(result, DatasourceSchemaSnapshot):
             raise ValueError("introspect must return DatasourceSchemaSnapshot")
         return result
 
     async def query(
-        self, datasource_id: str, sql: str, params: JsonObject
+        self,
+        datasource_id: str,
+        sql: str,
+        params: JsonObject,
+        *,
+        executors: DatasourceExecutors,
     ) -> DatasourceQueryResult:
         result = await self._dispatch(
             datasource_id,
@@ -283,13 +312,19 @@ class DatasourceService:
             sql=sql,
             params=params,
             as_test=False,
+            executors=executors,
         )
         if not isinstance(result, DatasourceQueryResult):
             raise ValueError("query must return DatasourceQueryResult")
         return result
 
     async def execute(
-        self, datasource_id: str, sql: str, params: JsonObject
+        self,
+        datasource_id: str,
+        sql: str,
+        params: JsonObject,
+        *,
+        executors: DatasourceExecutors,
     ) -> DatasourceExecuteResult:
         result = await self._dispatch(
             datasource_id,
@@ -297,6 +332,7 @@ class DatasourceService:
             sql=sql,
             params=params,
             as_test=False,
+            executors=executors,
         )
         if not isinstance(result, DatasourceExecuteResult):
             raise ValueError("execute must return DatasourceExecuteResult")
@@ -310,6 +346,7 @@ class DatasourceService:
         sql: str | None,
         params: JsonObject,
         as_test: bool,
+        executors: DatasourceExecutors,
     ) -> (
         DatasourceSchemaSnapshot
         | DatasourceQueryResult
@@ -357,7 +394,7 @@ class DatasourceService:
                     return await driver.execute(
                         connection, password, sql=sql, params=params
                     )
-        executor = self._executor_for(spec.executor)
+        executor = executors.for_kind(spec.executor)
         run_operation = DatasourceOperation.INTROSPECT if as_test else operation
         return await executor.run(
             spec=spec,
@@ -369,19 +406,8 @@ class DatasourceService:
             as_test=as_test,
         )
 
-    def _executor_for(self, kind: DatasourceExecutorKind) -> DatasourceRemoteExecutor:
-        if kind == DatasourceExecutorKind.MCP:
-            if self._mcp_executor is None:
-                raise ValueError("mcp datasource executor is not registered")
-            return self._mcp_executor
-        if kind == DatasourceExecutorKind.FLOW:
-            if self._flow_executor is None:
-                raise ValueError("flow datasource executor is not registered")
-            return self._flow_executor
-        raise ValueError(f"no remote executor for {kind}")
-
     async def _require_connection(self, datasource_id: str) -> DatasourceConnection:
-        connection = await self._connections.get(datasource_id)
+        connection = await DatasourceConnection.get(datasource_id)
         if connection is None:
             raise AuthzDenied(f"datasource not visible: {datasource_id}")
         if connection.company_id != _company_id():
@@ -391,7 +417,7 @@ class DatasourceService:
     async def _require_spec(
         self, company_id: str, connector_id: str
     ) -> DatasourceConnectorSpec:
-        spec = await self._connectors.get(company_id, connector_id)
+        spec = await self._get_connector(company_id, connector_id)
         if spec is None:
             raise ValueError(f"unknown connector_id: {connector_id}")
         return spec

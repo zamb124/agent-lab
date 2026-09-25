@@ -22,9 +22,22 @@ async def test_resource_crud_llm(client, unique_id: str) -> None:
     assert created.json()["resource_id"] == resource_id
     assert created.json()["name"] == "Test LLM"
 
-    listed = await client.get("/flows/api/v1/resources")
-    assert listed.status_code == 200, listed.text
-    assert any(item["resource_id"] == resource_id for item in listed.json()["items"])
+    found = False
+    offset = 0
+    while True:
+        listed = await client.get(
+            "/flows/api/v1/resources",
+            params={"limit": 1000, "offset": offset},
+        )
+        assert listed.status_code == 200, listed.text
+        items = listed.json()["items"]
+        if any(item["resource_id"] == resource_id for item in items):
+            found = True
+            break
+        if len(items) < 1000:
+            break
+        offset += 1000
+    assert found
 
     fetched = await client.get(f"/flows/api/v1/resources/{resource_id}")
     assert fetched.status_code == 200, fetched.text

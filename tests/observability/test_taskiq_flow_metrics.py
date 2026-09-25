@@ -32,10 +32,8 @@ pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(180, func_only=False)
 
 
 @pytest.fixture(autouse=True)
-def _use_worker(taskiq_worker, container):
-    container.use_worker = True
-    yield
-    container.use_worker = False
+def _requires_taskiq_worker(taskiq_worker):
+    _ = taskiq_worker
 
 
 @pytest.mark.asyncio
@@ -90,13 +88,13 @@ async def test_task_queue_wait_ms_emitted_by_logging_middleware(
 @pytest.mark.asyncio
 async def test_flow_terminal_via_process_flow_task_in_worker_context(
     app,
-    container,
+    di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
     system_member_context,
 ) -> None:
     flow_id = f"flow-worker-terminal-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         FlowConfig.model_validate(
             {
                 "flow_id": flow_id,
@@ -116,7 +114,7 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
     )
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="hi")
     task_id = state.task_id
-    await record_flow_task_enqueued(container.redis_client, task_id=task_id, flow_id=flow_id)
+    await record_flow_task_enqueued(di.redis_client, task_id=task_id, flow_id=flow_id)
 
     setup_mock_responses(response_queue=["hello from worker"])
     ctx = system_member_context.model_copy(update={"session_id": state.session_id})
@@ -130,9 +128,10 @@ async def test_flow_terminal_via_process_flow_task_in_worker_context(
         task_id=task_id,
         context_id=state.context_id,
         context_data=ctx.to_dict(),
+        di=di,
     )
     await maybe_record_flow_terminal(
-        container.redis_client,
+        di.redis_client,
         task_id=task_id,
         flow_id=flow_id,
         terminal_state="completed",

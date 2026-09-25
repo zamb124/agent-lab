@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.durable_execution.manager import create_initial_state
+from apps.flows.src.contracts import FlowFactoryProtocol, ToolRegistryProtocol
+from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime, create_initial_state
 from core.context import require_context
 from core.datasources.models import (
     DatasourceConnection,
@@ -20,8 +20,15 @@ from core.types import JsonObject, require_json_object
 
 
 class DatasourceFlowExecutor:
-    def __init__(self, container: FlowRuntimeContainer) -> None:
-        self._container: FlowRuntimeContainer = container
+    def __init__(
+        self,
+        workflow_runtime: DurableWorkflowRuntime,
+        flow_factory: FlowFactoryProtocol,
+        tool_registry: ToolRegistryProtocol,
+    ) -> None:
+        self._workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self._flow_factory: FlowFactoryProtocol = flow_factory
+        self._tool_registry: ToolRegistryProtocol = tool_registry
 
     async def run(
         self,
@@ -61,8 +68,12 @@ class DatasourceFlowExecutor:
         state["datasource_as_test"] = as_test
         if sql is not None:
             state["sql"] = sql
-        _ = await self._container.workflow_runtime.save_state(session_id, state)
-        flow = await self._container.flow_factory.get_flow(flow_id, branch_id)
+        _ = await self._workflow_runtime.save_state(session_id, state)
+        flow = await self._flow_factory.get_flow(
+            flow_id,
+            branch_id,
+            tool_registry=self._tool_registry,
+        )
         if flow is None:
             raise ValueError(f"flow datasource flow not found: {flow_id}")
         finished = await flow.run(state)

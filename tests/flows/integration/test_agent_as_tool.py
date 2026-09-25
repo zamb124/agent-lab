@@ -10,6 +10,7 @@
 
 import pytest
 
+from apps.flows.src.models import ToolReference
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.tools.base import BaseTool
@@ -157,13 +158,18 @@ class TestFlowWithSubagentInterrupt:
             ]
         )
         config = FlowConfig.model_validate(main_agent_config)
-        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        flow = await Flow.from_config(
+            config.model_dump(mode="json"),
+            node_constructor=app.state.di.node_constructor,
+            tool_registry=app.state.di.tool_registry,
+            flow_factory=app.state.di.flow_factory,
+        )
         state = workflow_state(
             flow_id=config.flow_id,
             unique_id=f"subagent-interrupt-{unique_id}",
             content="Помогите с моим заказом",
         )
-        result = await run_flow(container=app.state.container, flow=flow, state=state)
+        result = await run_flow(di=app.state.di, flow=flow, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Какой у вас номер заказа?"
 
@@ -191,13 +197,18 @@ class TestFlowWithSubagentInterrupt:
             ]
         )
         config = FlowConfig.model_validate(main_agent_config)
-        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        flow = await Flow.from_config(
+            config.model_dump(mode="json"),
+            node_constructor=app.state.di.node_constructor,
+            tool_registry=app.state.di.tool_registry,
+            flow_factory=app.state.di.flow_factory,
+        )
         state = workflow_state(
             flow_id=config.flow_id,
             unique_id=f"subagent-resume-{unique_id}",
             content="Где мой заказ?",
         )
-        result = await run_flow(container=app.state.container, flow=flow, state=state)
+        result = await run_flow(di=app.state.di, flow=flow, state=state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Номер заказа?"
 
@@ -285,18 +296,23 @@ class TestSubagentMessagesIntegrity:
             ]
         )
         config = FlowConfig.model_validate(main_flow_with_subagent)
-        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        flow = await Flow.from_config(
+            config.model_dump(mode="json"),
+            node_constructor=app.state.di.node_constructor,
+            tool_registry=app.state.di.tool_registry,
+            flow_factory=app.state.di.flow_factory,
+        )
         state = workflow_state(
             flow_id=config.flow_id,
             unique_id=f"subagent-full-resume-{unique_id}",
             content="Начни сбор",
         )
-        result1 = await run_flow(container=app.state.container, flow=flow, state=state)
+        result1 = await run_flow(di=app.state.di, flow=flow, state=state)
         assert result1.interrupt is not None
         assert len(result1.interrupt_path) > 0
         result1.content = "test@test.com"
         result1.interrupt = None
-        result2 = await run_flow(container=app.state.container, flow=flow, state=result1)
+        result2 = await run_flow(di=app.state.di, flow=flow, state=result1)
         assert result2.interrupt is None, (
             f"Agent должен завершиться без interrupt, получен: {result2.interrupt}"
         )
@@ -309,7 +325,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_creates_inline_tool(self, app):
         """ToolRegistry создаёт CodeTool из inline конфига."""
-        container = app.state.container
+        di = app.state.di
         tool_config = {
             "tool_id": "test_simple_adder",
             "title": "Simple Adder",
@@ -321,7 +337,7 @@ class TestToolRegistryInline:
                 "required": ["expression"],
             },
         }
-        tool = await container.tool_registry.create_tool(tool_config)
+        tool = await di.tool_registry.create_tool(tool_config)
         assert tool is not None
         assert isinstance(tool, CodeTool)
         assert tool.name == "test_simple_adder"
@@ -329,7 +345,7 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_creates_node_as_tool(self, app):
         """ToolRegistry создаёт NodeAsToolWrapper из inline llm_node конфига."""
-        container = app.state.container
+        di = app.state.di
         tool_config = {
             "tool_id": "helper_agent",
             "type": "llm_node",
@@ -339,7 +355,7 @@ class TestToolRegistryInline:
             "parameters_schema": QUERY_PARAMETERS_SCHEMA,
             "llm": {"model": "mock-gpt-4"},
         }
-        tool = await container.tool_registry.create_tool(tool_config)
+        tool = await di.tool_registry.create_tool(tool_config)
         assert tool is not None
         assert isinstance(tool, NodeAsToolWrapper)
         assert tool.name == "helper_agent"
@@ -347,28 +363,28 @@ class TestToolRegistryInline:
     @pytest.mark.asyncio
     async def test_tool_registry_raises_on_missing_code(self, app):
         """ToolRegistry выбрасывает ошибку если нет code."""
-        container = app.state.container
+        di = app.state.di
         tool_config = {"tool_id": "no_code_tool", "description": "Tool без кода"}
         with pytest.raises(ValueError, match="code"):
-            await container.tool_registry.create_tool(tool_config)
+            await di.tool_registry.create_tool(tool_config)
 
     @pytest.mark.asyncio
     async def test_tool_registry_rejects_string_refs(self, app):
         """ToolRegistry выбрасывает ошибку для строковых tool_id."""
-        container = app.state.container
+        di = app.state.di
         with pytest.raises(ValueError, match="passed as string"):
-            await container.tool_registry.create_tool("calculator")
+            await di.tool_registry.create_tool("calculator")
         with pytest.raises(ValueError, match="passed as string"):
-            await container.tool_registry.create_tool("ask_user")
+            await di.tool_registry.create_tool("ask_user")
 
     @pytest.mark.asyncio
     async def test_builtin_tools_in_repository(self, app):
         """Встроенные tools загружены в БД с inline code."""
-        container = app.state.container
-        calculator = await container.tool_repository.get("calculator")
+        _ = app
+        calculator = await ToolReference.get("calculator")
         assert calculator is not None, "calculator не найден в БД"
         assert calculator.code is not None, "calculator должен иметь code"
-        ask_user = await container.tool_repository.get("ask_user")
+        ask_user = await ToolReference.get("ask_user")
         assert ask_user is not None, "ask_user не найден в БД"
         assert ask_user.code is not None, "ask_user должен иметь code"
 
@@ -430,7 +446,12 @@ class TestFilesPassingToSubnode:
             ]
         )
         config = FlowConfig.model_validate(agent_with_file_tool)
-        flow = await Flow.from_config(config.model_dump(mode="json"), container=app.state.container)
+        flow = await Flow.from_config(
+            config.model_dump(mode="json"),
+            node_constructor=app.state.di.node_constructor,
+            tool_registry=app.state.di.tool_registry,
+            flow_factory=app.state.di.flow_factory,
+        )
         state = workflow_state(
             flow_id=config.flow_id,
             unique_id=f"subagent-files-{unique_id}",
@@ -444,6 +465,6 @@ class TestFilesPassingToSubnode:
                 }
             ],
         )
-        result = await run_flow(container=app.state.container, flow=flow, state=state)
+        result = await run_flow(di=app.state.di, flow=flow, state=state)
         assert result.response, f"Должен быть ответ, state: {result}"
         assert result.interrupt is None, "Не должно быть interrupt"

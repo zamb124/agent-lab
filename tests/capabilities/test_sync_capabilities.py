@@ -7,7 +7,6 @@ from contextlib import contextmanager
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from apps.capability_gateway.services.sync_capabilities import SYNC_CLIENT_METHOD_NAMES
 from core.capabilities import (
     CapabilityCallRequest,
@@ -74,9 +73,8 @@ def _execution_context(*, namespace: str) -> CapabilityExecutionContext:
     )
 
 
-async def test_sync_capabilities_cover_every_client_method() -> None:
-    container = get_capability_gateway_container()
-    manifest = await container.capability_registry.manifest()
+async def test_sync_capabilities_cover_every_client_method(capability_gateway_di) -> None:
+    manifest = await capability_gateway_di.capability_registry.manifest()
     names = {item.name for item in manifest.capabilities}
     expected = {f"sync.{method}" for method in SYNC_CLIENT_METHOD_NAMES}
     assert expected <= names
@@ -89,18 +87,17 @@ async def test_sync_capabilities_cover_every_client_method() -> None:
 
 
 async def test_sync_capability_create_channel_send_and_list_messages(
-    frontend_container,
+    frontend_di,
     unique_id: str,
-) -> None:
-    company = await frontend_container.company_repository.get("system")
+capability_gateway_di) -> None:
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     namespace = f"sync-cap-{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
 
-    container = get_capability_gateway_container()
-    registry = container.capability_registry
+    registry = capability_gateway_di.capability_registry
     context = _execution_context(namespace=namespace)
     text = f"hello from capability {unique_id}"
 
@@ -155,11 +152,11 @@ async def test_python_code_node_sync_create_send_and_list(
     sync_service,
     flows_client_http,
     auth_headers_system,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     _ = sync_service
     namespace = f"sync-code-{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     channel_name = f"code_ch_{unique_id}"
     text = f"hello from code node {unique_id}"
     code = (

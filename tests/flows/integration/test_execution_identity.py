@@ -13,7 +13,7 @@ from apps.flows.src.models.flow_config import FlowConfig, FlowEmployeeConfig
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import ensure_flow_employee, flow_employee_user_id
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.ai_provider_defaults import make_test_company
 
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture
-async def initiator_and_company(container, unique_id):
+async def initiator_and_company(di, unique_id):
     company_id = f"exec_co_{unique_id}"
     initiator_id = f"initiator_{unique_id}"
     company = make_test_company(
@@ -30,14 +30,14 @@ async def initiator_and_company(container, unique_id):
         owner_user_id=initiator_id,
         members={initiator_id: ["owner", "admin"]},
     )
-    await container.company_repository.set(company)
+    await Company.set(company)
     initiator = User(
         user_id=initiator_id,
         name="Initiator",
         companies={company_id: ["owner", "admin"]},
         active_company_id=company_id,
     )
-    await container.user_repository.set(initiator)
+    await User.set(initiator)
     ctx = build_job_context(
         company=company,
         user=initiator,
@@ -47,8 +47,8 @@ async def initiator_and_company(container, unique_id):
         channel="test",
     )
     yield ctx, company, company_id, initiator_id
-    await container.user_repository.delete(initiator_id)
-    await container.company_repository.delete(company_id)
+    await User.delete_by_id(initiator_id)
+    await Company.delete_by_id(company_id)
 
 
 def _flow(flow_id: str, *, enabled: bool, curator: str = "c1") -> FlowConfig:
@@ -65,22 +65,22 @@ def _flow(flow_id: str, *, enabled: bool, curator: str = "c1") -> FlowConfig:
     )
 
 
-async def test_regular_flow_returns_initiator(container, initiator_and_company, unique_id):
+async def test_regular_flow_returns_initiator(di, initiator_and_company, unique_id):
     ctx, _company, _company_id, initiator_id = initiator_and_company
     flow = _flow(f"regular_{unique_id}", enabled=False)
 
-    resolved = await resolve_execution_context(container, flow_config=flow, initiator_context=ctx)
+    resolved = await resolve_execution_context(di, flow_config=flow, initiator_context=ctx)
 
     assert resolved.is_employee is False
     assert resolved.initiator_user_id == initiator_id
     assert resolved.context.user.user_id == initiator_id
 
 
-async def test_employee_flow_switches_identity(container, initiator_and_company, unique_id):
+async def test_employee_flow_switches_identity(di, initiator_and_company, unique_id):
     ctx, _company, company_id, initiator_id = initiator_and_company
     flow_id = f"emp_exec_{unique_id}"
     await ensure_flow_employee(
-        container,
+        di,
         flow_id=flow_id,
         company_id=company_id,
         name="AI Worker",
@@ -89,7 +89,7 @@ async def test_employee_flow_switches_identity(container, initiator_and_company,
     )
     flow = _flow(flow_id, enabled=True, curator=initiator_id)
 
-    resolved = await resolve_execution_context(container, flow_config=flow, initiator_context=ctx)
+    resolved = await resolve_execution_context(di, flow_config=flow, initiator_context=ctx)
 
     assert resolved.is_employee is True
     assert resolved.initiator_user_id == initiator_id
@@ -109,14 +109,14 @@ async def test_employee_flow_switches_identity(container, initiator_and_company,
     assert resolved.context.language == ctx.language
 
 
-async def test_employee_not_provisioned_raises(container, initiator_and_company, unique_id):
+async def test_employee_not_provisioned_raises(di, initiator_and_company, unique_id):
     ctx, _company, _company_id, _initiator_id = initiator_and_company
     flow = _flow(f"missing_emp_{unique_id}", enabled=True)
     with pytest.raises(ValueError):
-        await resolve_execution_context(container, flow_config=flow, initiator_context=ctx)
+        await resolve_execution_context(di, flow_config=flow, initiator_context=ctx)
 
 
-async def test_employee_user_not_employee_raises(container, initiator_and_company, unique_id):
+async def test_employee_user_not_employee_raises(di, initiator_and_company, unique_id):
     ctx, _company, company_id, _initiator_id = initiator_and_company
     flow_id = f"fake_emp_{unique_id}"
     # создаём обычного user с id сотрудника, но без employee-атрибутов
@@ -126,30 +126,30 @@ async def test_employee_user_not_employee_raises(container, initiator_and_compan
         companies={company_id: ["member"]},
         active_company_id=company_id,
     )
-    await container.user_repository.set(fake)
+    await User.set(fake)
     flow = _flow(flow_id, enabled=True)
     with pytest.raises(ValueError):
-        await resolve_execution_context(container, flow_config=flow, initiator_context=ctx)
-    await container.user_repository.delete(fake.user_id)
+        await resolve_execution_context(di, flow_config=flow, initiator_context=ctx)
+    await User.delete_by_id(fake.user_id)
 
 
-async def test_employee_requires_active_company(container, initiator_and_company, unique_id):
+async def test_employee_requires_active_company(di, initiator_and_company, unique_id):
     ctx, _company, _company_id, _initiator_id = initiator_and_company
     flow = _flow(f"no_co_{unique_id}", enabled=True)
     ctx_no_company = ctx.model_copy(update={"active_company": None})
     with pytest.raises(ValueError, match="active company"):
         await resolve_execution_context(
-            container,
+            di,
             flow_config=flow,
             initiator_context=ctx_no_company,
         )
 
 
-async def test_employee_not_member_raises(container, initiator_and_company, unique_id):
+async def test_employee_not_member_raises(di, initiator_and_company, unique_id):
     ctx, _company, company_id, initiator_id = initiator_and_company
     flow_id = f"nonmember_emp_{unique_id}"
     await ensure_flow_employee(
-        container,
+        di,
         flow_id=flow_id,
         company_id=company_id,
         name="AI Worker",
@@ -157,11 +157,11 @@ async def test_employee_not_member_raises(container, initiator_and_company, uniq
         curator_user_ids=[initiator_id],
     )
     # снимаем членство сотрудника в компании
-    emp = await container.user_repository.get(flow_employee_user_id(flow_id))
+    emp = await User.get(flow_employee_user_id(flow_id))
     assert emp is not None
     emp.companies.pop(company_id, None)
-    await container.user_repository.set(emp)
+    await User.set(emp)
 
     flow = _flow(flow_id, enabled=True)
     with pytest.raises(ValueError):
-        await resolve_execution_context(container, flow_config=flow, initiator_context=ctx)
+        await resolve_execution_context(di, flow_config=flow, initiator_context=ctx)

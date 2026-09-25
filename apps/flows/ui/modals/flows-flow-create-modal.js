@@ -28,7 +28,7 @@ import { getBlankCodeNodeConfig } from '../_helpers/code-node-defaults.js';
 import {
     resolveFlowCoverGradient,
     resolveFlowPresetGradient,
-} from '../constants/flow-cover-gradients.js';
+} from '../_helpers/flow-cover-gradients.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
 

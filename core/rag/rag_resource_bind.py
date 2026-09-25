@@ -1,7 +1,7 @@
 """
 Параметры привязки RAG namespace к клиенту (поиск, индексация).
 
-Используются ``RAGRepository`` и ``core.rag.rag_resource.RAGResource``.
+Используются ``BaseRAGProvider`` и ``core.rag.rag_resource.RAGResource``.
 """
 
 from __future__ import annotations

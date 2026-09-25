@@ -8,9 +8,8 @@ import time
 from fastapi import HTTPException, Request
 
 from core.config import settings
-from core.container import BaseContainer
 from core.logging import get_logger
-from core.models.identity_models import Company
+from core.models.identity_models import Company, User
 from core.utils.domain import extract_company_subdomain, extract_subdomain
 from core.utils.tokens import TokenData
 
@@ -69,8 +68,7 @@ class _TtlCache[K, V]:
 class CompanyResolver:
     """Определяет компанию из запроса"""
 
-    def __init__(self, container: BaseContainer) -> None:
-        self.container: BaseContainer = container
+    def __init__(self) -> None:
         self._subdomain_to_company_id_cache: _TtlCache[str, str | None] = _TtlCache(
             ttl_seconds=_COMPANY_RESOLVER_CACHE_TTL_SECONDS
         )
@@ -97,7 +95,10 @@ class CompanyResolver:
         cached = self._subdomain_to_company_id_cache.get(subdomain)
         if cached is not None:
             return cached or None
-        company_id = await self.container.subdomain_repository.get_company_id(subdomain)
+        company = await Company.by_subdomain(subdomain)
+        company_id = None if company is None else company.company_id
+        if company is not None:
+            self._company_cache.set(company.company_id, company)
         self._subdomain_to_company_id_cache.set(subdomain, company_id or "")
         return company_id
 
@@ -105,7 +106,7 @@ class CompanyResolver:
         cached = self._company_cache.get(company_id)
         if cached is not None:
             return cached
-        company = await self.container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         self._company_cache.set(company_id, company)
         return company
 
@@ -113,7 +114,7 @@ class CompanyResolver:
         cached = self._user_membership_cache.get((user_id, company_id))
         if cached is not None:
             return cached
-        user = await self.container.user_repository.get(user_id)
+        user = await User.get(user_id)
         has = bool(user and company_id in user.companies)
         self._user_membership_cache.set((user_id, company_id), has)
         return has
@@ -263,7 +264,7 @@ class CompanyResolver:
                     token_data.user_id, override_company_id
                 ):
                     user_exists = bool(
-                        await self.container.user_repository.get(token_data.user_id)
+                        await User.get(token_data.user_id)
                     )
                     if not user_exists:
                         logger.warning("auth.company.user_not_found", user_id=token_data.user_id)

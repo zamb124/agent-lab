@@ -2,7 +2,7 @@
  * Страница продукта CRM — NetWorkle
  */
 import { ProductLandingPage } from '../../components/product-landing/product-landing-page.js';
-import { landNetworkleAbilityUrl } from '../../utils/land-product-images.js';
+import { landNetworkleAbilityUrl } from '../../_helpers/land-product-images.js';
 
 export class ProductCrmPage extends ProductLandingPage {
     static productKey = 'crm';

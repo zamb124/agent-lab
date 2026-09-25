@@ -14,6 +14,7 @@ from core.identity.flow_employee import (
     ensure_flow_employee,
     flow_employee_user_id,
 )
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.auth import set_test_company_member_roles
 
@@ -22,41 +23,41 @@ pytestmark = pytest.mark.asyncio
 
 @pytest_asyncio.fixture(autouse=True)
 async def _ensure_system_team_members(
-    frontend_container, system_user_id, system_user2_id
+    frontend_di, system_user_id, system_user2_id
 ) -> None:
     """Под -n10 другие тесты могут перезаписать company.members — восстанавливаем session users."""
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     if company is None:
         raise RuntimeError("system company отсутствует в тестовой БД")
     if system_user_id not in company.members:
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id="system",
             user_id=system_user_id,
             roles=["owner", "admin"],
         )
     if system_user2_id not in company.members:
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id="system",
             user_id=system_user2_id,
             roles=["member"],
         )
 
 
-async def _cleanup_employee(frontend_container, flow_id: str) -> None:
-    await deactivate_flow_employee(frontend_container, flow_id=flow_id, company_id="system")
-    await frontend_container.user_repository.delete(flow_employee_user_id(flow_id))
+async def _cleanup_employee(frontend_di, flow_id: str) -> None:
+    await deactivate_flow_employee(
+        frontend_di.authz_service, flow_id=flow_id, company_id="system"
+    )
+    await User.delete_by_id(flow_employee_user_id(flow_id))
 
 
 @pytest_asyncio.fixture
-async def employee_with_curator(frontend_container, unique_id, system_user2_id):
+async def employee_with_curator(frontend_di, unique_id, system_user2_id):
     """Сотрудник-агент system с куратором = system_user2 (member, не admin)."""
     flow_id = f"team_emp_{unique_id}"
     await ensure_flow_employee(
-        frontend_container,
+        frontend_di.authz_service,
         flow_id=flow_id,
         company_id="system",
         name="AI Worker",
@@ -64,7 +65,7 @@ async def employee_with_curator(frontend_container, unique_id, system_user2_id):
         curator_user_ids=[system_user2_id],
     )
     yield flow_id, flow_employee_user_id(flow_id)
-    await _cleanup_employee(frontend_container, flow_id)
+    await _cleanup_employee(frontend_di, flow_id)
 
 
 async def test_members_badge_fields(
@@ -113,12 +114,12 @@ async def test_act_as_by_curator(
 
 
 async def test_act_as_non_curator_member_403(
-    frontend_client, frontend_container, unique_id, auth_headers_system_user2, system_user_id
+    frontend_client, frontend_di, unique_id, auth_headers_system_user2, system_user_id
 ):
     # куратор = admin (system_user_id), вызывает member (system_user2) → не куратор, не admin
     flow_id = f"team_emp_b_{unique_id}"
     await ensure_flow_employee(
-        frontend_container,
+        frontend_di.authz_service,
         flow_id=flow_id,
         company_id="system",
         name="AI Worker B",
@@ -133,7 +134,7 @@ async def test_act_as_non_curator_member_403(
         )
         assert resp.status_code == 403, resp.text
     finally:
-        await _cleanup_employee(frontend_container, flow_id)
+        await _cleanup_employee(frontend_di, flow_id)
 
 
 async def test_act_as_human_target_403(
@@ -191,13 +192,13 @@ async def test_act_as_cross_company_403(
 
 
 async def test_act_as_employee_without_roles_409(
-    frontend_client, frontend_container, employee_with_curator, auth_headers_system
+    frontend_client, frontend_di, employee_with_curator, auth_headers_system
 ):
     _flow_id, emp_id = employee_with_curator
-    employee = await frontend_container.user_repository.get(emp_id)
+    employee = await User.get(emp_id)
     assert employee is not None
     employee.companies["system"] = []
-    await frontend_container.user_repository.set(employee)
+    await User.set(employee)
 
     resp = await frontend_client.post(
         f"/frontend/api/team/employees/{emp_id}/act-as",

@@ -20,9 +20,9 @@ from core.scheduler.models import (
     PlatformScheduleType,
     ScheduledTaskStatus,
 )
-from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.source import get_schedule_source
 from core.tasks.log_labels import build_log_labels
+from core.tasks.registry import get_task_spec
 from core.types import JsonObject
 
 BrokerForQueue: TypeAlias = Callable[[str], AsyncBroker]
@@ -33,11 +33,9 @@ class SchedulerService:
 
     def __init__(
         self,
-        repository: SchedulerTaskRepository,
         redis_url: str,
         broker_for_queue: BrokerForQueue,
     ) -> None:
-        self._repository: SchedulerTaskRepository = repository
         self._redis_url: str = redis_url
         self._broker_for_queue: BrokerForQueue = broker_for_queue
 
@@ -171,7 +169,7 @@ class SchedulerService:
         )
         task.next_run_at = self._calculate_next_run_at(task, base_time_utc=now)
         task.schedule_id = await self._create_schedule(task)
-        return await self._repository.save(task)
+        return await PlatformScheduledTask.upsert_by_schedule_task_id(task)
 
     async def reconcile_payload(
         self,
@@ -207,7 +205,7 @@ class SchedulerService:
         if task.status == ScheduledTaskStatus.PENDING:
             task.schedule_id = await self._create_schedule(task)
             task.next_run_at = self._calculate_next_run_at(task)
-        return await self._repository.save(task)
+        return await PlatformScheduledTask.upsert_by_schedule_task_id(task)
 
     async def reconcile_cron(
         self,
@@ -240,15 +238,19 @@ class SchedulerService:
 
         task.cron = cron
         task.payload = canonical_payload
+        if not task.queue_name:
+            task.queue_name = get_task_spec(task.task_name).queue
         task.updated_at = datetime.now(timezone.utc)
         task.error_message = None
         if task.status == ScheduledTaskStatus.PENDING:
             task.schedule_id = await self._create_schedule(task)
             task.next_run_at = self._calculate_next_run_at(task)
-        return await self._repository.save(task)
+        return await PlatformScheduledTask.upsert_by_schedule_task_id(task)
 
     async def get(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
-        task = await self._repository.get(company_id=company_id, schedule_task_id=schedule_task_id)
+        task = await PlatformScheduledTask.find_in_company(
+            company_id=company_id, schedule_task_id=schedule_task_id
+        )
         if task is None:
             raise ValueError(f"schedule task not found: {schedule_task_id}")
         return self._enrich_next_run_at(task)
@@ -301,11 +303,10 @@ class SchedulerService:
         )
 
     async def list(self, company_id: str, filters: PlatformScheduleFilter) -> list[PlatformScheduledTask]:
-        tasks = await self._repository.list(company_id=company_id, filters=filters)
+        tasks = await PlatformScheduledTask.list_for_company(
+            company_id=company_id, filters=filters
+        )
         return [self._enrich_next_run_at(task) for task in tasks]
-
-    async def count(self, company_id: str, filters: PlatformScheduleFilter) -> int:
-        return await self._repository.count(company_id=company_id, filters=filters)
 
     async def pause(self, company_id: str, schedule_task_id: str) -> PlatformScheduledTask:
         task = await self.get(company_id, schedule_task_id)
@@ -316,7 +317,7 @@ class SchedulerService:
         source = get_schedule_source(self._redis_url)
         await source.startup()
         _ = await source.delete_schedule(task.schedule_id)
-        _ = await self._repository.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PAUSED,
@@ -330,7 +331,7 @@ class SchedulerService:
             raise ValueError(f"task status must be paused, got {self._status_value(task.status)}")
         schedule_id = await self._create_schedule(task)
         next_run_at = self._calculate_next_run_at(task)
-        _ = await self._repository.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.PENDING,
@@ -348,7 +349,7 @@ class SchedulerService:
             source = get_schedule_source(self._redis_url)
             await source.startup()
             _ = await source.delete_schedule(task.schedule_id)
-        _ = await self._repository.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.CANCELLED,
@@ -375,7 +376,7 @@ class SchedulerService:
         next_run_at = task.next_run_at
         if task.schedule_type in (PlatformScheduleType.CRON, PlatformScheduleType.INTERVAL):
             next_run_at = self._calculate_next_run_at(task)
-        _ = await self._repository.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=task.status,
@@ -386,7 +387,7 @@ class SchedulerService:
         return await self.get(company_id, schedule_task_id)
 
     async def mark_failed(self, company_id: str, schedule_task_id: str, error_message: str) -> None:
-        _ = await self._repository.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,

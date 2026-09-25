@@ -10,6 +10,7 @@ from core.config.models import MailConfig, MailLivePersonalConfig
 from core.context import set_context
 from core.mail.exceptions import MailError, MailTransportError
 from core.mail.models import (
+    INBOX_FOLDER,
     CompanyMailConnectionUpsertPayload,
     MailAttachment,
     MailboxBinding,
@@ -33,7 +34,6 @@ from core.mail.models import (
     PersonalMailboxHealthcheckPayload,
 )
 from core.mail.ports import MailServerPort
-from core.mail.repositories import INBOX_FOLDER
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User

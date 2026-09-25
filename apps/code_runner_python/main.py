@@ -1,7 +1,5 @@
 """FastAPI entrypoint code-runner-python."""
 
-from fastapi import FastAPI
-
 from apps.code_runner_python.api.v1.analyze import router as analyze_router
 from apps.code_runner_python.api.v1.execute import router as execute_router
 from apps.code_runner_python.api.v1.lsp import router as lsp_router
@@ -10,24 +8,14 @@ from apps.code_runner_python.config import (
     CodeRunnerPythonSettings,
     get_code_runner_python_settings,
 )
-from apps.code_runner_python.container import (
-    CodeRunnerPythonContainer,
-    get_code_runner_python_container,
-)
+from apps.code_runner_python.di import CodeRunnerPythonDi
 from core.app import create_service_app
 
-
-async def on_shutdown(_app: FastAPI, container: CodeRunnerPythonContainer) -> None:
-    if "_cached_executor" in container.__dict__:
-        await container.executor.aclose()
-    if "_cached_lsp_manager" in container.__dict__:
-        await container.lsp_manager.aclose()
-
-
 app = create_service_app(
-    service_name="code_runner_python",
-    settings_class=CodeRunnerPythonSettings,
-    get_container=get_code_runner_python_container,
+    "code_runner_python",
+    CodeRunnerPythonSettings,
+    CodeRunnerPythonDi,
+    database="shared_url",
     routers=[execute_router, validate_router, analyze_router, lsp_router],
     cors_origins=["*"],
     title="Platform Python Code Runner",
@@ -35,14 +23,12 @@ app = create_service_app(
     version="1.0.0",
     api_version="v1",
     include_auth_middleware=False,
-    include_crud_routers=False,
     include_tracing_lifecycle=True,
     include_platform_lifecycle=False,
     include_platform_routers=False,
     mount_repo_documentation=False,
     include_platform_pwa=False,
     documentation_gateway_prefix="code-runner-python",
-    on_shutdown=on_shutdown,
 )
 
 

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import Di
 from apps.flows.src.services.mcp_branding_seed import seed_mcp_branding_from_bundle
 from apps.flows.src.services.mcp_catalog_crawler import MCPCatalogCrawlStats, crawl_mcp_registry
 from apps.flows.src.services.mcp_catalog_provisioner import (
@@ -18,9 +17,10 @@ from apps.flows.src.tasks.task_names import (
     TASK_MCP_CATALOG_RESYNC_TOOLS,
 )
 from core.config import get_settings
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
 from core.identity.system_bootstrap import build_system_admin_job_context
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.tasks import platform_task
@@ -74,6 +74,8 @@ async def _company_context(*, company: Company, trace_suffix: str) -> Context:
 async def mcp_catalog_crawl_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> MCPCatalogCrawlTaskResult:
     _ = company_id
     settings = get_settings()
@@ -87,21 +89,21 @@ async def mcp_catalog_crawl_task(
             "provision_companies": 0,
         }
 
-    container = get_container()
     scheduler_context = await build_system_admin_job_context(
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
         trace_id=f"scheduler:{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
         session_id=f"{TASK_MCP_CATALOG_CRAWL.name}:{schedule_task_id}",
     )
     _ = set_context(scheduler_context)
     try:
-        runtime = as_flow_runtime_container(container)
         crawl_stats: MCPCatalogCrawlStats | None = None
         try:
-            crawl_stats = await crawl_mcp_registry(container=runtime)
+            crawl_stats = await crawl_mcp_registry()
             if settings.mcp_branding.seed_after_crawl:
-                branding_stats = await seed_mcp_branding_from_bundle(runtime, force=False)
+                branding_stats = await seed_mcp_branding_from_bundle(
+                    files_service=di.files_service,
+                    mcp_branding_service=di.mcp_branding_service,
+                    force=False,
+                )
                 logger.info(
                     "flows.mcp.branding.seed.crawl.targets",
                     targets=branding_stats.targets,
@@ -122,6 +124,7 @@ async def mcp_catalog_crawl_task(
         if settings.mcp_catalog.auto_provision != "disabled":
             provision_result = await mcp_catalog_provision_companies_task(
                 schedule_task_id=schedule_task_id,
+                di=di,
             )
         if crawl_stats is None:
             return {
@@ -148,6 +151,8 @@ async def mcp_catalog_crawl_task(
 async def mcp_catalog_provision_companies_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> MCPCatalogProvisionCompaniesTaskResult:
     settings = get_settings()
     if settings.mcp_catalog.auto_provision == "disabled":
@@ -161,9 +166,7 @@ async def mcp_catalog_provision_companies_task(
             "sync_failed": 0,
         }
 
-    container = get_container()
-    runtime = as_flow_runtime_container(container)
-    companies = await container.company_repository.list(limit=10_000)
+    companies = await Company.list(limit=10_000)
     if company_id is not None:
         companies = [company for company in companies if company.company_id == company_id]
         if not companies:
@@ -185,7 +188,10 @@ async def mcp_catalog_provision_companies_task(
         )
         _ = set_context(company_context)
         try:
-            stats = await provision_mcp_catalog_for_company(container=runtime)
+            stats = await provision_mcp_catalog_for_company(
+                variables_service=di.variables_service,
+                flow_access_service=di.flow_access_service,
+            )
         finally:
             clear_context()
         totals["added"] += stats.added
@@ -203,14 +209,14 @@ async def mcp_catalog_provision_companies_task(
 async def mcp_catalog_resync_tools_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> MCPCatalogResyncToolsTaskResult:
     settings = get_settings()
     if settings.mcp_catalog.auto_provision == "disabled":
         return {"companies": 0, "sync_ok": 0, "sync_failed": 0}
 
-    container = get_container()
-    runtime = as_flow_runtime_container(container)
-    companies = await container.company_repository.list(limit=10_000)
+    companies = await Company.list(limit=10_000)
     if company_id is not None:
         companies = [company for company in companies if company.company_id == company_id]
 
@@ -223,7 +229,10 @@ async def mcp_catalog_resync_tools_task(
         )
         _ = set_context(company_context)
         try:
-            sync_ok, sync_failed = await resync_catalog_tools_for_company(container=runtime)
+            sync_ok, sync_failed = await resync_catalog_tools_for_company(
+                variables_service=di.variables_service,
+                flow_access_service=di.flow_access_service,
+            )
         finally:
             clear_context()
         sync_ok_total += sync_ok

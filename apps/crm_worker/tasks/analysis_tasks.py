@@ -12,12 +12,12 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 
 import core.tracing.attributes as trace_attributes
-from apps.crm.container import get_crm_container
-from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError
 from apps.crm.taskiq_analyze_errors import format_validation_for_taskiq
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_PROCESS_NOTE
 from core.logging import get_logger
@@ -31,7 +31,6 @@ logger = get_logger(__name__)
 
 async def _notify_analyze_stage(
     user_id: str,
-    repo: TaskRepository,
     company_id: str,
     *,
     task_id: str,
@@ -60,7 +59,6 @@ async def _notify_analyze_stage(
     )
     await publish_crm_task_snapshot_for_user(
         user_id=user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -78,12 +76,12 @@ async def process_note_task(
     interface_language: str,
     config_payload: JsonObject,
     mode: str,
+    *,
+    di: Di,
 ) -> JsonObject:
     """mode: 'analyze' | 'apply' | 'process'."""
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
-    container = get_crm_container()
-    repo = container.task_repository
-    pipeline = container.note_processing_service
+    pipeline = di.note_processing_service
 
     try:
         config = NoteProcessingConfig.model_validate(config_payload)
@@ -91,13 +89,12 @@ async def process_note_task(
         raise ValueError(format_validation_for_taskiq(exc)) from exc
 
     async def _progress(stage: str, pct: int, msg: str = "") -> None:
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id, company_id,
             status="running", stage=stage, progress_pct=pct,
         )
         await _notify_analyze_stage(
             user_id,
-            repo,
             company_id,
             task_id=task_id,
             namespace=namespace,
@@ -108,16 +105,15 @@ async def process_note_task(
         )
 
     async def _check_cancel() -> bool:
-        task_row = await repo.get_for_worker(task_id, company_id)
+        task_row = await CRMTask.by_company_and_task_id(company_id, task_id)
         if task_row is not None and task_row.cancel_requested:
-            await repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id, company_id,
                 status="cancelled", stage="cancelled", progress_pct=100,
                 completed_at=datetime.now(timezone.utc),
             )
             await _notify_analyze_stage(
                 user_id,
-                repo,
                 company_id,
                 task_id=task_id,
                 namespace=namespace,
@@ -133,7 +129,7 @@ async def process_note_task(
         return {"status": "cancelled", "task_id": task_id}
 
     try:
-        await container.entity_service.clear_note_analysis_error(note_id)
+        await di.entity_service.clear_note_analysis_error(note_id)
         async with traced_operation(
             f"crm.worker.note_{mode}",
             event_type="crm.worker",
@@ -188,7 +184,7 @@ async def process_note_task(
             for did, name, etype, msg in exc.failures
         ]
         err_msg = str(exc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="failed",
@@ -197,14 +193,13 @@ async def process_note_task(
             error_message=err_msg,
             completed_at=datetime.now(timezone.utc),
         )
-        await container.entity_service.record_note_analysis_failure(
+        await di.entity_service.record_note_analysis_failure(
             note_id,
             err_msg,
             apply_failures=failures_payload,
         )
         await _notify_analyze_stage(
             user_id,
-            repo,
             company_id,
             task_id=task_id,
             namespace=namespace,
@@ -216,16 +211,15 @@ async def process_note_task(
         raise ValueError(err_msg) from exc
     except ValidationError as exc:
         err_msg = format_validation_for_taskiq(exc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id, company_id,
             status="failed", stage="failed", progress_pct=100,
             error_message=err_msg,
             completed_at=datetime.now(timezone.utc),
         )
-        await container.entity_service.record_note_analysis_failure(note_id, err_msg)
+        await di.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
-            repo,
             company_id,
             task_id=task_id,
             namespace=namespace,
@@ -238,16 +232,15 @@ async def process_note_task(
     except Exception as exc:
         err_msg = str(exc)
         logger.exception("crm.note_analyze", task_id=task_id, note_id=note_id)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id, company_id,
             status="failed", stage="failed", progress_pct=100,
             error_message=err_msg,
             completed_at=datetime.now(timezone.utc),
         )
-        await container.entity_service.record_note_analysis_failure(note_id, err_msg)
+        await di.entity_service.record_note_analysis_failure(note_id, err_msg)
         await _notify_analyze_stage(
             user_id,
-            repo,
             company_id,
             task_id=task_id,
             namespace=namespace,
@@ -258,7 +251,7 @@ async def process_note_task(
         )
         raise
 
-    await repo.patch_progress(
+    await CRMTask.patch_progress(
         task_id, company_id,
         status="completed", stage="completed", progress_pct=100,
         completed_at=datetime.now(timezone.utc),
@@ -269,7 +262,6 @@ async def process_note_task(
     )
     await _notify_analyze_stage(
         user_id,
-        repo,
         company_id,
         task_id=task_id,
         namespace=namespace,

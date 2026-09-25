@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import pytest
@@ -89,38 +89,6 @@ class _JsonGetServer:
                 pass
 
 
-class _MemoryCatalog:
-    def __init__(self, records: Sequence[AIModelRecord]) -> None:
-        self.records = list(records)
-
-    async def list_by_provider_capability(
-        self,
-        provider: str,
-        capability: AICapability,
-    ) -> list[AIModelRecord]:
-        return [
-            row
-            for row in self.records
-            if row.provider == provider and capability in row.capabilities
-        ]
-
-    async def set(self, record: AIModelRecord) -> AIModelRecord:
-        self.records.append(record)
-        return record
-
-
-class _OverlayProvider:
-    def __init__(self, overlays: Mapping[tuple[str, str], PlatformModelScoreOverlay]) -> None:
-        self._overlays = overlays
-
-    async def list_overlays(
-        self,
-        capability: AICapability,
-    ) -> Mapping[tuple[str, str], PlatformModelScoreOverlay]:
-        _ = capability
-        return self._overlays
-
-
 def _free_record(*, unique_id: str) -> PlatformFreeModelRecord:
     return PlatformFreeModelRecord(
         provider="groq",
@@ -177,11 +145,10 @@ async def test_refresh_empty_records_keeps_existing_redis(
     snapshot = serialize_platform_free_models([_free_record(unique_id=unique_id)])
     wrote = await redis_client.set(platform_free_cache_key, snapshot, ttl=120)
     assert wrote is True
-    with pytest.raises(RuntimeError, match="пустой records"):
+    with pytest.raises(RuntimeError, match="empty records"):
         await refresh_platform_free_models_cache(
             redis_client,
             _settings_without_free_pool_keys(),
-            _MemoryCatalog([]),  # pyright: ignore[reportArgumentType]
         )
     stored = await redis_client.get(platform_free_cache_key)
     assert stored == snapshot
@@ -224,7 +191,6 @@ async def test_refresh_aa_http_500_does_not_change_redis(
             await refresh_platform_free_models_cache(
                 redis_client,
                 settings,
-                _MemoryCatalog([]),  # pyright: ignore[reportArgumentType]
             )
         stored = await redis_client.get(platform_free_cache_key)
         assert stored == snapshot
@@ -243,7 +209,7 @@ def test_rescore_pool_record_without_catalog_raises() -> None:
         output_modalities=("text",),
         free_reason="account_free_tier",
     )
-    with pytest.raises(ValueError, match="отсутствует в каталоге"):
+    with pytest.raises(ValueError, match="is missing from the catalog"):
         compute_platform_free_record_scores(
             [record],
             catalog_records=[],
@@ -267,6 +233,8 @@ async def test_rescore_empty_records_does_not_write_redis(
         input_modalities=("text",),
         output_modalities=("text",),
     )
+    _ = await AIModelRecord.set(groq_model)
+    existing = await AIModelRecord.list_by_provider_capability("groq", AICapability.LLM_CHAT)
     live = get_settings()
     settings = live.model_copy(
         update={
@@ -280,24 +248,27 @@ async def test_rescore_empty_records_does_not_write_redis(
             )
         }
     )
-    overlays = _OverlayProvider(
-        {
-            ("groq", groq_model.model_id): PlatformModelScoreOverlay(
-                enabled=False,
-                editorial_prior=0.0,
-                note=None,
-            )
-        }
-    )
-    with pytest.raises(RuntimeError, match="пустой records"):
-        await rescore_cached_platform_free_models(
-            redis_client,
-            settings,
-            _MemoryCatalog([groq_model]),  # pyright: ignore[reportArgumentType]
-            model_score_provider=overlays,
+    overlays = {
+        (row.provider, row.model_id): PlatformModelScoreOverlay(
+            enabled=False,
+            editorial_prior=0.0,
+            note=None,
         )
-    stored = await redis_client.get(platform_free_cache_key)
-    assert stored == snapshot
+        for row in existing
+    }
+    try:
+        with pytest.raises(RuntimeError, match="empty records"):
+            await rescore_cached_platform_free_models(
+                redis_client,
+                settings,
+                overlays=overlays,
+            )
+        stored = await redis_client.get(platform_free_cache_key)
+        assert stored == snapshot
+    finally:
+        stored_row = await AIModelRecord.get_provider_model("groq", groq_model.model_id)
+        if stored_row is not None:
+            _ = await stored_row.delete()
 
 
 @pytest.mark.asyncio
@@ -320,6 +291,8 @@ async def test_fetch_skips_unconfigured_provider_and_keeps_configured(
         is_free=True,
         free_reason="zero_price_catalog",
     )
+    _ = await AIModelRecord.set(groq_model)
+    _ = await AIModelRecord.set(openrouter_model)
     live = get_settings()
     settings = live.model_copy(
         update={
@@ -333,8 +306,16 @@ async def test_fetch_skips_unconfigured_provider_and_keeps_configured(
             )
         }
     )
-    records = await fetch_platform_free_model_records(
-        settings,
-        _MemoryCatalog([groq_model, openrouter_model]),  # pyright: ignore[reportArgumentType]
-    )
-    assert [(row.provider, row.id) for row in records] == [("groq", groq_model.model_id)]
+    try:
+        records = await fetch_platform_free_model_records(settings)
+        ids = [(row.provider, row.id) for row in records]
+        assert ("groq", groq_model.model_id) in ids
+        assert ("openrouter", openrouter_model.model_id) not in ids
+    finally:
+        for provider, model_id in (
+            ("groq", groq_model.model_id),
+            ("openrouter", openrouter_model.model_id),
+        ):
+            stored_row = await AIModelRecord.get_provider_model(provider, model_id)
+            if stored_row is not None:
+                _ = await stored_row.delete()

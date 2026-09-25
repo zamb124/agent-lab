@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.wiki.dependencies import ContainerDep
+from apps.wiki.di import Di
 from apps.wiki.models.api import WikiPageResponse
 from apps.wiki.models.domain import WikiRevision, WikiRevisionSummary
 from apps.wiki.realtime.operations import (
@@ -24,32 +24,32 @@ router = APIRouter(tags=["wiki-revisions"])
 
 @router.get("/pages/{wiki_page_id}/revisions", response_model=ListResponse[WikiRevisionSummary])
 async def list_revisions(
-    container: ContainerDep,
+    di: Di,
     wiki_page_id: str,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> ListResponse[WikiRevisionSummary]:
     return await op_pages_revisions_list(
         WikiRevisionsListPayload(wiki_page_id=wiki_page_id, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/revisions/{wiki_revision_id}", response_model=WikiRevision)
-async def get_revision(container: ContainerDep, wiki_revision_id: str) -> WikiRevision:
+async def get_revision(di: Di, wiki_revision_id: str) -> WikiRevision:
     return await op_revisions_get(
         WikiRevisionIdPayload(wiki_revision_id=wiki_revision_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/revisions/{wiki_revision_id}/restore", response_model=WikiPageResponse)
 async def restore_revision(
-    container: ContainerDep, wiki_revision_id: str
+    di: Di, wiki_revision_id: str
 ) -> WikiPageResponse:
     return await op_revisions_restore(
         WikiRevisionIdPayload(wiki_revision_id=wiki_revision_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

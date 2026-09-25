@@ -200,7 +200,7 @@ class TestLokiClientQueryByTraceId:
             mock_client.get.return_value = mock_resp
 
             client = LokiClient(base_url="http://loki:3100")
-            with pytest.raises(LokiClientError, match="query_range вернул 500"):
+            with pytest.raises(LokiClientError, match="query_range returned 500"):
                 await client.query_by_trace_id("t1")
 
     @pytest.mark.asyncio
@@ -217,18 +217,21 @@ class TestLokiClientQueryByTraceId:
 
         with patch("core.clients.loki_client.httpx.AsyncClient", return_value=mock_cm):
             client = LokiClient(base_url="http://loki:3100")
-            with pytest.raises(LokiClientError, match="сеть или таймаут"):
+            with pytest.raises(LokiClientError, match="network or timeout"):
                 await client.query_by_trace_id("t1")
 
     @pytest.mark.asyncio
     async def test_empty_trace_id_raises(self):
         client = LokiClient(base_url="http://loki:3100")
-        with pytest.raises(ValueError, match="trace_id обязателен"):
+        with pytest.raises(ValueError, match="trace_id is required"):
             await client.query_by_trace_id("")
 
-    def test_constructor_empty_url_raises(self):
-        with pytest.raises(ValueError, match="base_url обязателен"):
-            LokiClient(base_url="")
+    @pytest.mark.asyncio
+    async def test_unconfigured_query_raises(self):
+        client = LokiClient(base_url="")
+        assert client.is_configured is False
+        with pytest.raises(LokiClientError, match="not configured"):
+            await client.query_by_trace_id("t1")
 
 
 class TestLokiClientQueryBySessionId:
@@ -253,7 +256,7 @@ class TestLokiClientQueryBySessionId:
     @pytest.mark.asyncio
     async def test_empty_session_id_raises(self):
         client = LokiClient(base_url="http://loki:3100")
-        with pytest.raises(ValueError, match="session_id обязателен"):
+        with pytest.raises(ValueError, match="session_id is required"):
             await client.query_by_session_id("")
 
 
@@ -261,7 +264,7 @@ class TestLokiClientQueryByRequestId:
     @pytest.mark.asyncio
     async def test_empty_request_id_raises(self):
         client = LokiClient(base_url="http://loki:3100")
-        with pytest.raises(ValueError, match="request_id обязателен"):
+        with pytest.raises(ValueError, match="request_id is required"):
             await client.query_by_request_id("")
 
 
@@ -269,7 +272,7 @@ class TestLokiClientQueryBySpanId:
     @pytest.mark.asyncio
     async def test_empty_span_id_raises(self):
         client = LokiClient(base_url="http://loki:3100")
-        with pytest.raises(ValueError, match="span_id обязателен"):
+        with pytest.raises(ValueError, match="span_id is required"):
             await client.query_by_span_id("")
 
 
@@ -277,7 +280,7 @@ class TestLokiClientQueryByUserId:
     @pytest.mark.asyncio
     async def test_empty_user_id_raises(self):
         client = LokiClient(base_url="http://loki:3100")
-        with pytest.raises(ValueError, match="user_id обязателен"):
+        with pytest.raises(ValueError, match="user_id is required"):
             await client.query_by_user_id("")
 
 

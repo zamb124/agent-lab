@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from apps.sync.dependencies import ContainerDep
+from apps.sync.di import Di
 from apps.sync.realtime.operations import (
     FilesUploadCompletedPayload,
     op_files_upload_completed,
@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.post("/upload-completed", response_model=FileRef)
 async def upload_completed(
-    container: ContainerDep, body: FilesUploadCompletedPayload
+    di: Di, body: FilesUploadCompletedPayload
 ) -> FileRef:
     user = require_context().user
-    return await op_files_upload_completed(body, user=user, container=container)
+    return await op_files_upload_completed(body, user=user, di=di)

@@ -13,11 +13,12 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
-from apps.flows.src.models.flow_config import FlowType
-from apps.frontend.container import FrontendContainer
+from apps.flows.src.models.flow_config import FlowConfig, FlowType
+from apps.frontend.di import Di
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.config import get_settings
+from core.context import require_active_company
 from core.errors.boundary import PlatformNotFoundError
 from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
 from core.logging import get_logger
@@ -25,7 +26,6 @@ from core.models import StrictBaseModel
 from core.models.embed_models import (
     DEFAULT_EMBED_INPUT_PLACEHOLDER,
     EmbedConfig,
-    EmbedMapping,
     EmbedPosition,
     EmbedPresentation,
     EmbedStatus,
@@ -41,10 +41,10 @@ logger = get_logger(__name__)
 EMBED_CODE_SESSION_TOKEN_TTL_SECONDS = 300
 
 
-async def _require_edit_embed_flow(container: FrontendContainer, flow_id: str) -> CompanyScope:
-    scope = await require_company_viewer(container.authz_service)
+async def _require_edit_embed_flow(di: Di, flow_id: str) -> CompanyScope:
+    scope = await require_company_viewer(di.authz_service)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.flow(flow_id, company_id=scope.company_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
@@ -52,8 +52,9 @@ async def _require_edit_embed_flow(container: FrontendContainer, flow_id: str) -
     return scope
 
 
-async def _require_visible_config(container: FrontendContainer, embed_id: str) -> EmbedConfig:
-    config = await container.embed_config_repository.get(embed_id)
+async def _require_visible_config(embed_id: str) -> EmbedConfig:
+    company_id = require_active_company().company_id
+    config = await EmbedConfig.embed_for_company(embed_id, company_id)
     if not config or config.preview_share_link:
         raise PlatformNotFoundError("Configuration not found", error_code='not_found')
     return config
@@ -265,10 +266,10 @@ def _normalize_interface_locale(value: str) -> str:
 
 
 async def op_embed_configs_create(
-    request_data: CreateEmbedConfigRequest, *, user: User, container: FrontendContainer
+    request_data: CreateEmbedConfigRequest, *, user: User, di: Di
 ) -> EmbedConfig:
     """Создаёт EmbedConfig компании и глобальный маппинг embed_id -> company_id."""
-    flow = await container.flows_flow_repository.get(request_data.flow_id)
+    flow = await FlowConfig.get_latest(request_data.flow_id)
     if flow is None:
         raise PlatformNotFoundError(
             (
@@ -277,7 +278,7 @@ async def op_embed_configs_create(
             ),
             error_code="not_found",
         )
-    scope = await _require_edit_embed_flow(container, request_data.flow_id)
+    scope = await _require_edit_embed_flow(di, request_data.flow_id)
     company_id = scope.company_id
 
     branch_id = request_data.branch_id
@@ -317,6 +318,7 @@ async def op_embed_configs_create(
 
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=company_id,
         name=request_data.name,
         flow_id=request_data.flow_id,
         branch_id=branch_id,
@@ -344,18 +346,17 @@ async def op_embed_configs_create(
         created_by=user.user_id,
     )
 
-    _ = await container.embed_config_repository.set(config)
-    _ = await container.embed_mapping_repository.set(EmbedMapping(embed_id=embed_id, company_id=company_id))
+    _ = await EmbedConfig.set(config)
     logger.info("embed_configs.created", embed_id=embed_id, company_id=company_id)
     return config
 
 
 async def op_embed_configs_update(
-    request_data: EmbedConfigUpdatePayload, *, user: User, container: FrontendContainer
+    request_data: EmbedConfigUpdatePayload, *, user: User, di: Di
 ) -> EmbedConfig:
     _ = user
-    config = await _require_visible_config(container, request_data.embed_id)
-    scope = await _require_edit_embed_flow(container, config.flow_id)
+    config = await _require_visible_config(request_data.embed_id)
+    scope = await _require_edit_embed_flow(di, config.flow_id)
     company_id = scope.company_id
 
     fields = request_data.model_fields_set - {"embed_id"}
@@ -367,7 +368,7 @@ async def op_embed_configs_update(
         if request_data.flow_id is None:
             raise_invalid(ValueError("flow_id cannot be null"))
         try:
-            await container.authz_service.require_can_edit(
+            await di.authz_service.require_can_edit(
                 AuthzObject.flow(request_data.flow_id, company_id=company_id), user_id=scope.user_id
             )
         except AuthzDenied as exc:
@@ -463,50 +464,53 @@ async def op_embed_configs_update(
     )
 
     config.updated_at = datetime.now(timezone.utc)
-    _ = await container.embed_config_repository.set(config)
+    _ = await EmbedConfig.set(config)
     logger.info("embed_configs.updated", embed_id=request_data.embed_id)
     return config
 
 
 async def op_embed_configs_list(
-    payload: EmbedConfigsListPayload, *, user: User, container: FrontendContainer
+    payload: EmbedConfigsListPayload, *, user: User, di: Di
 ) -> OffsetPage[EmbedConfig]:
     """Конфигурации активной компании без preview-share ссылок."""
     _ = user
-    _ = await require_company_viewer(container.authz_service)
-    configs = await container.embed_config_repository.list(limit=payload.limit, offset=payload.offset)
+    scope = await require_company_viewer(di.authz_service)
+    configs = await EmbedConfig.list_for_company(
+        scope.company_id,
+        limit=payload.limit,
+        offset=payload.offset,
+    )
     items = [config for config in configs if not config.preview_share_link]
     return OffsetPage[EmbedConfig](items=items, total=len(items), limit=payload.limit, offset=payload.offset)
 
 
 async def op_embed_configs_item(
-    payload: EmbedIdPayload, *, user: User, container: FrontendContainer
+    payload: EmbedIdPayload, *, user: User, di: Di
 ) -> EmbedConfig:
     _ = user
-    _ = await require_company_viewer(container.authz_service)
-    return await _require_visible_config(container, payload.embed_id)
+    _ = await require_company_viewer(di.authz_service)
+    return await _require_visible_config(payload.embed_id)
 
 
 async def op_embed_configs_remove(
-    payload: EmbedIdPayload, *, user: User, container: FrontendContainer
+    payload: EmbedIdPayload, *, user: User, di: Di
 ) -> EmbedConfigDeleted:
-    """Удаляет конфигурацию компании и глобальный маппинг embed_id -> company_id."""
+    """Удаляет конфигурацию виджета активной компании."""
     _ = user
-    config = await _require_visible_config(container, payload.embed_id)
-    _ = await _require_edit_embed_flow(container, config.flow_id)
-    _ = await container.embed_config_repository.delete(payload.embed_id)
-    _ = await container.embed_mapping_repository.delete_by_embed_id(payload.embed_id)
+    config = await _require_visible_config(payload.embed_id)
+    _ = await _require_edit_embed_flow(di, config.flow_id)
+    _ = await EmbedConfig.delete_by_id(payload.embed_id)
     logger.info("embed_configs.removed", embed_id=payload.embed_id)
     return EmbedConfigDeleted()
 
 
 async def op_embed_configs_code(
-    payload: EmbedCodePayload, *, user: User, container: FrontendContainer
+    payload: EmbedCodePayload, *, user: User, di: Di
 ) -> EmbedCodeResponse:
     """Готовый `<script>` для сайта клиента и примеры выдачи embed-session токена."""
     _ = user
-    scope = await require_company_viewer(container.authz_service)
-    config = await _require_visible_config(container, payload.embed_id)
+    scope = await require_company_viewer(di.authz_service)
+    config = await _require_visible_config(payload.embed_id)
     settings = get_settings()
     origin = payload.public_origin.strip().rstrip("/")
     scheme, _separator, host_value = origin.partition("://")

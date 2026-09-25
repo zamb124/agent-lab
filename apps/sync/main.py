@@ -8,17 +8,17 @@ Sync Service - FastAPI приложение для инженерного чат
 import importlib
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from apps.sync.api import get_api_router
 from apps.sync.config import SyncSettings
-from apps.sync.container import SyncContainer, get_sync_container
-from apps.sync.dependencies import ContainerDep
-from apps.sync.realtime.command_router import register_sync_ws_commands
+from apps.sync.di import SyncDi
+from apps.sync.realtime.command_router import SYNC_OPERATIONS
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
 from core.config import get_settings
+from core.di import recipe
 from core.logging import get_logger
 
 # side-effect: register platform event catalog types
@@ -27,36 +27,29 @@ _ = importlib.import_module("apps.sync.events")
 logger = get_logger(__name__)
 
 
-async def on_startup(app: FastAPI, container: SyncContainer, settings: SyncSettings) -> None:
-    """Регистрация WS command-handler'ов (`op_*`) для bus `realtime`.
-
-    User WS — Centrifugo `/realtime`. Вход команд — `PlatformEvent` через bus
-    → `POST /sync/api/internal/realtime/command`. REST-зеркало без изменений.
-    """
-    _ = app, container, settings
-    register_sync_ws_commands()
+async def log_sync_startup() -> None:
     logger.info("sync.service.command.router.op_")
 
 
 app = create_service_app(
-    service_name="sync",
-    settings_class=SyncSettings,
-    get_container=get_sync_container,
+    "sync",
+    SyncSettings,
+    SyncDi,
+    database="sync_url",
+    operations=SYNC_OPERATIONS,
+    lifecycle=(recipe(log_sync_startup),),
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
-    routers=[
-        get_api_router(),
-    ],
-    on_startup=on_startup,
+    routers=[get_api_router()],
     title="Sync Service",
     description="Инженерный чат с Git-интеграцией",
     api_version="v1",
-    include_crud_routers=False,
 )
 
+
 @app.get("/sync/join/{token}")
-async def serve_call_join(container: ContainerDep, token: str) -> FileResponse:
+async def serve_call_join(token: str) -> FileResponse:
     """Публичная страница входа в звонок по ссылке (без auth). SPA: sync-app, маршрут call_join."""
-    _ = container, token
+    _ = token
     ui_index = Path(__file__).parent / "ui" / "index.html"
     if not ui_index.exists():
         raise HTTPException(status_code=404, detail="Sync UI not found")

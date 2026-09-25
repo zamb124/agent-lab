@@ -9,14 +9,18 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import delete
+from oxyde import execute_raw
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CRMEntity
-from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.models.api import EntityResponse, SemanticTextIndexStatus
-from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.services.entity_response_enrichment import (
+    build_entity_responses_with_semantic_index,
+    semantic_text_index_status_by_entity,
+)
 from core.db.models import VectorDocument
+from core.rag import BaseRAGProvider
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.rag.providers.pgvector_provider import PgVectorProvider
 
 DocumentSemanticKey = tuple[str, str, str]
@@ -53,31 +57,53 @@ def _chunk_pk(namespace: str, document_id: str, chunk_index: int) -> str:
     ).hex
 
 
-def _pgvector_provider(repo: EntityRepository) -> PgVectorProvider:
-    provider = repo._rag.provider  # pyright: ignore[reportPrivateUsage]
-    if not isinstance(provider, PgVectorProvider):
+def _pgvector_provider(rag: BaseRAGProvider) -> PgVectorProvider:
+    if not isinstance(rag, PgVectorProvider):
         raise AssertionError("expected PgVectorProvider")
-    return provider
+    return rag
 
 
 async def _delete_vector_documents_in_namespace(
     provider: PgVectorProvider,
     namespace_id: str,
 ) -> None:
-    async with provider._session_factory() as session:  # pyright: ignore[reportPrivateUsage]
-        _ = await session.execute(
-            delete(VectorDocument).where(VectorDocument.namespace_id == namespace_id)
-        )
-        await session.commit()
+    _ = provider
+    _ = await VectorDocument.objects.filter(namespace_id=namespace_id).delete(using="rag")
 
 
 async def _insert_vector_documents(
     provider: PgVectorProvider,
     rows: list[VectorDocument],
 ) -> None:
-    async with provider._session_factory() as session:  # pyright: ignore[reportPrivateUsage]
-        session.add_all(rows)
-        await session.commit()
+    _ = provider
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        _ = await execute_raw(
+            """
+            INSERT INTO vector_documents (
+                id, namespace_id, company_id, document_id, document_name, content,
+                embedding, embedding_model, chunk_index, total_chunks, metadata,
+                created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7::vector, $8, $9, $10, $11::jsonb, $12, $12
+            )
+            """,
+            [
+                row.id,
+                row.namespace_id,
+                row.company_id,
+                row.document_id,
+                row.document_name,
+                row.content,
+                None if row.embedding is None else "[" + ",".join(str(item) for item in row.embedding) + "]",
+                row.embedding_model,
+                row.chunk_index,
+                row.total_chunks,
+                "{}",
+                now,
+            ],
+            using="rag",
+        )
 
 
 @pytest.fixture
@@ -92,13 +118,13 @@ def sem_idx_company(unique_id: str) -> str:
 
 @pytest.mark.asyncio
 async def test_batch_semantic_text_index_status_three_states(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     sem_idx_namespace: str,
     sem_idx_company: str,
 ) -> None:
-    repo = crm_container.entity_repository
-    provider = _pgvector_provider(repo)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider = _pgvector_provider(rag)
 
     ns = sem_idx_namespace
     cid = sem_idx_company
@@ -122,7 +148,9 @@ async def test_batch_semantic_text_index_status_three_states(
             embedding_model=None,
             chunk_index=0,
             total_chunks=1,
-            metadata_={},
+            metadata={},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         ready_row = VectorDocument(
             id=_chunk_pk(ns, doc_ready, 0),
@@ -135,7 +163,9 @@ async def test_batch_semantic_text_index_status_three_states(
             embedding_model="qwen/qwen3-embedding-0.6b",
             chunk_index=0,
             total_chunks=1,
-            metadata_={},
+            metadata={},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         await _insert_vector_documents(provider, [pending_row, ready_row])
 
@@ -144,7 +174,7 @@ async def test_batch_semantic_text_index_status_three_states(
             _bare_entity(doc_pending, cid, ns),
             _bare_entity(doc_ready, cid, ns),
         ]
-        stats = await repo.batch_semantic_text_index_status(entities)
+        stats = await semantic_text_index_status_by_entity(rag, entities)
         assert stats[doc_absent] == "absent"
         assert stats[doc_pending] == "pending_embedding"
         assert stats[doc_ready] == "ready"
@@ -154,13 +184,13 @@ async def test_batch_semantic_text_index_status_three_states(
 
 @pytest.mark.asyncio
 async def test_build_entity_responses_single_batch_provider_call(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     sem_idx_namespace: str,
     sem_idx_company: str,
 ) -> None:
-    repo = crm_container.entity_repository
-    provider = _pgvector_provider(repo)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider = _pgvector_provider(rag)
     ns = sem_idx_namespace
     cid = sem_idx_company
 
@@ -179,7 +209,7 @@ async def test_build_entity_responses_single_batch_provider_call(
 
     try:
         responses: list[EntityResponse] = await build_entity_responses_with_semantic_index(
-            repo, entities
+            rag, entities
         )
         assert len(responses) == 4
         assert calls == [4]
@@ -191,14 +221,14 @@ async def test_build_entity_responses_single_batch_provider_call(
 
 @pytest.mark.asyncio
 async def test_pgvector_provider_pending_with_mixed_chunks(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     sem_idx_namespace: str,
     sem_idx_company: str,
 ) -> None:
     """Если один chunk без embedding и один с embedding — статус pending_embedding."""
-    repo = crm_container.entity_repository
-    provider = _pgvector_provider(repo)
+    rag = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
+    provider = _pgvector_provider(rag)
     ns = sem_idx_namespace
     cid = sem_idx_company
     doc_id = f"{unique_id}_mixed"
@@ -219,7 +249,9 @@ async def test_pgvector_provider_pending_with_mixed_chunks(
                 embedding_model=None,
                 chunk_index=0,
                 total_chunks=2,
-                metadata_={},
+                metadata={},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             ),
             VectorDocument(
                 id=_chunk_pk(ns, doc_id, 1),
@@ -232,13 +264,16 @@ async def test_pgvector_provider_pending_with_mixed_chunks(
                 embedding_model="qwen/qwen3-embedding-0.6b",
                 chunk_index=1,
                 total_chunks=2,
-                metadata_={},
+                metadata={},
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             ),
         ]
         await _insert_vector_documents(provider, rows)
 
-        stats = await repo.batch_semantic_text_index_status(
-            [_bare_entity(doc_id, cid, ns)]
+        stats = await semantic_text_index_status_by_entity(
+            rag,
+            [_bare_entity(doc_id, cid, ns)],
         )
         assert stats[doc_id] == "pending_embedding"
     finally:

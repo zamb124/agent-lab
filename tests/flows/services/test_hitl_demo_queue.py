@@ -16,12 +16,12 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_ensure_example_hitl_queue_is_idempotent_when_called_twice(
-    container, unique_id: str
+    di, unique_id: str
 ) -> None:
     company_id = f"hitl_demo_{unique_id}"
     owner_id = f"owner_{unique_id}"
     extra_id = f"admin_{unique_id}"
-    svc = container.work_item_service
+    svc = di.work_item_service
 
     await ensure_example_hitl_queue(
         svc, company_id, member_user_ids=[owner_id, extra_id]
@@ -38,12 +38,12 @@ async def test_ensure_example_hitl_queue_is_idempotent_when_called_twice(
 
 
 async def test_ensure_example_hitl_queue_survives_parallel_creates(
-    container, unique_id: str
+    di, unique_id: str
 ) -> None:
     company_id = f"hitl_demo_p_{unique_id}"
     owner_id = f"owner_{unique_id}"
     extra_id = f"admin_{unique_id}"
-    svc = container.work_item_service
+    svc = di.work_item_service
 
     await asyncio.gather(
         ensure_example_hitl_queue(

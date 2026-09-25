@@ -3,16 +3,18 @@ Tasks для индексации документов через pgvector.
 """
 
 import core.tracing.attributes as trace_attributes
-from apps.rag.container import get_rag_container
 from apps.rag.events import publish_rag_document_status_updated
+from apps.rag_worker.di import Di
 from apps.rag_worker.tasks.task_names import (
     RAG_DELETE_DOCUMENT,
     RAG_INDEX_DOCUMENT_S3,
 )
 from core.config import get_settings
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
+from core.db.models.rag import DocumentProcessingStatus
 from core.logging import get_logger
-from core.models.identity_models import User
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.rag.factory import get_rag_provider
 from core.rag.indexable import (
     effective_rag_file_category,
@@ -50,8 +52,7 @@ async def _embedding_context_for_rag_worker(
     if not ns:
         raise ValueError("namespace_id is required for the embeddings context in RAG worker")
 
-    container = get_rag_container()
-    company = await container.company_repository.get(cid)
+    company = await Company.get(cid)
     if company is None:
         raise ValueError(f"RAG worker: company {cid!r} not found")
     return Context(
@@ -70,6 +71,8 @@ async def index_rag_document_s3_task(
     document_name: str,
     metadata: RAGMetadata,
     provider: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Одна TaskIQ-задача: индексация S3-файла с конфигом ``rag.document_indexing`` (settings).
@@ -82,9 +85,6 @@ async def index_rag_document_s3_task(
     meta_company = metadata.get("company_id")
     if not meta_company or str(meta_company).strip() != str(company_id).strip():
         raise ValueError("metadata.company_id must match the task company_id argument.")
-
-    container = get_rag_container()
-    status_repo = container.document_status_repository
 
     trace_company_id = metadata.get("company_id")
     trace_user_id = metadata.get("uploaded_by_user_id")
@@ -118,7 +118,7 @@ async def index_rag_document_s3_task(
             settings = get_settings()
             binding = UploadProfileBinding(config=settings.rag.document_indexing)
 
-            await status_repo.try_mark_processing(document_id)
+            await DocumentProcessingStatus.try_mark_processing(document_id)
             await publish_rag_document_status_updated(
                 company_id=str(trace_company_id).strip(),
                 document_id=document_id,
@@ -143,7 +143,7 @@ async def index_rag_document_s3_task(
                     document_name=document_name,
                     file_category=resolved_category,
                 )
-                _ = await status_repo.record_indexing_done(document_id, 0)
+                _ = await DocumentProcessingStatus.record_indexing_done(document_id, 0)
                 await publish_rag_document_status_updated(
                     company_id=str(trace_company_id).strip(),
                     document_id=document_id,
@@ -163,7 +163,7 @@ async def index_rag_document_s3_task(
             rag_provider = (
                 get_rag_provider(provider, settings=settings)
                 if provider is not None
-                else container.rag_provider
+                else di.rag_provider
             )
             meta = ensure_ttl_seconds_in_metadata(
                 dict(metadata),
@@ -179,7 +179,7 @@ async def index_rag_document_s3_task(
                     upload_profile=binding,
                 )
             except Exception as e:
-                await status_repo.record_indexing_failed(document_id, str(e))
+                await DocumentProcessingStatus.record_indexing_failed(document_id, str(e))
                 await publish_rag_document_status_updated(
                     company_id=str(trace_company_id).strip(),
                     document_id=document_id,
@@ -195,7 +195,7 @@ async def index_rag_document_s3_task(
                 raise ValueError("RAG document metadata.total_chunks must be an integer")
             chunks = raw_chunks
             runtime = document.metadata.get("indexing_runtime")
-            _ = await status_repo.record_indexing_done(
+            _ = await DocumentProcessingStatus.record_indexing_done(
                 document_id,
                 chunks,
                 indexing_runtime=(
@@ -231,6 +231,8 @@ async def delete_document_task(
     document_id: str,
     company_id: str,
     user_id: str,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Удаление документа из vector_documents.
@@ -243,7 +245,6 @@ async def delete_document_task(
         Результат удаления
     """
     logger.info("rag.worker.document_delete_started", document_id=document_id, namespace_id=namespace_id)
-    container = get_rag_container()
 
     if company_id.strip() == "" or user_id.strip() == "":
         raise ValueError("company_id and user_id are required for rag.worker.index.delete.")
@@ -260,7 +261,7 @@ async def delete_document_task(
             "platform.rag.namespace_id": namespace_id,
         },
     ):
-        provider = container.rag_provider
+        provider = di.rag_provider
         success = await provider.delete_document(namespace_id, document_id)
 
         if success:

@@ -11,8 +11,8 @@ from apps.crm.authz.tuples import (
     crm_namespace_company_link,
     crm_namespace_company_viewer_tuple,
 )
-from apps.crm.db.models import CRMEntity
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.entity_type import EntityType
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.service import AuthzService
@@ -33,12 +33,7 @@ _GRANT_RELATIONS: tuple[AuthzRelation, ...] = (
 class CrmEntityAccessService:
     """CRM entity ACL: FGA checks, tuple sync, public field projection."""
 
-    def __init__(
-        self,
-        entity_type_repo: EntityTypeRepository,
-        authz: AuthzService,
-    ) -> None:
-        self._entity_type_repo: EntityTypeRepository = entity_type_repo
+    def __init__(self, authz: AuthzService) -> None:
         self._authz: AuthzService = authz
 
     async def sync_entity_created(self, entity: CRMEntity) -> None:
@@ -182,16 +177,16 @@ class CrmEntityAccessService:
         return await self._filter_public_fields(entity)
 
     async def _filter_public_fields(self, entity: CRMEntity) -> JsonObject:
-        entity_type = await self._entity_type_repo.get_by_type_id(
-            entity.entity_type,
-            namespace=entity.namespace,
+        entity_type = await EntityType.by_company_namespace_and_type_id(
             company_id=entity.company_id,
-        )
+            namespace=entity.namespace,
+            type_id=entity.entity_type,
+        ).get_or_none()
         result: JsonObject = {
             "entity_id": entity.entity_id,
             "entity_type": entity.entity_type,
         }
-        if entity_type and entity_type.public_fields:
+        if entity_type is not None and len(entity_type.public_fields) > 0:
             for field_path in entity_type.public_fields:
                 value = self._get_nested_value(entity, field_path)
                 if value is not None:

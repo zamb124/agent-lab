@@ -10,6 +10,7 @@ import httpx
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
 
+from core.di.platform import PlatformDi
 from tests.ui.e2e.ui_e2e_pwa import ui_e2e_dismiss_pwa_install_banner
 from tests.ui.e2e_worker import ui_e2e_company_id
 
@@ -20,6 +21,7 @@ def _namespace_name(unique_id: str, suffix: str) -> str:
 
 
 async def sync_e2e_seed_namespace(
+    di: PlatformDi,
     unique_id: str,
     *,
     suffix: str = "ui",
@@ -30,7 +32,7 @@ async def sync_e2e_seed_namespace(
 
     resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
     namespace = _namespace_name(unique_id, suffix)
-    return await seed_namespace_via_repo(resolved_company_id, namespace)
+    return await seed_namespace_via_repo(di, resolved_company_id, namespace)
 
 
 async def sync_e2e_activate_namespace_for_next_load(

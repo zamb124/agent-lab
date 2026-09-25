@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.observability_operations import (
     op_flows_logs_by_request,
     op_flows_logs_by_session,
@@ -12,7 +13,6 @@ from apps.flows.realtime.observability_operations import (
     op_flows_logs_by_trace,
     op_flows_logs_by_user,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.observability_api import (
     ObservabilityLogsQueryPayload,
     ObservabilityLogsResponse,
@@ -28,7 +28,7 @@ _DEFAULT_LIMIT = 200
 @router.get("/by-trace/{trace_id}", response_model=ObservabilityLogsResponse)
 async def get_logs_by_trace_id(
     trace_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
     time_from: Annotated[datetime | None, Query()] = None,
     time_to: Annotated[datetime | None, Query()] = None,
@@ -41,14 +41,14 @@ async def get_logs_by_trace_id(
             time_to=time_to,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/by-session/{session_id}", response_model=ObservabilityLogsResponse)
 async def get_logs_by_session_id(
     session_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
     time_from: Annotated[datetime | None, Query()] = None,
     time_to: Annotated[datetime | None, Query()] = None,
@@ -61,14 +61,14 @@ async def get_logs_by_session_id(
             time_to=time_to,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/by-request/{request_id}", response_model=ObservabilityLogsResponse)
 async def get_logs_by_request_id(
     request_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
     time_from: Annotated[datetime | None, Query()] = None,
     time_to: Annotated[datetime | None, Query()] = None,
@@ -81,14 +81,14 @@ async def get_logs_by_request_id(
             time_to=time_to,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/by-span/{span_id}", response_model=ObservabilityLogsResponse)
 async def get_logs_by_span_id(
     span_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
     time_from: Annotated[datetime | None, Query()] = None,
     time_to: Annotated[datetime | None, Query()] = None,
@@ -101,14 +101,14 @@ async def get_logs_by_span_id(
             time_to=time_to,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/by-user/{user_id}", response_model=ObservabilityLogsResponse)
 async def get_logs_by_user_id(
     user_id: str,
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=_MAX_LIMIT)] = _DEFAULT_LIMIT,
     time_from: Annotated[datetime | None, Query()] = None,
     time_to: Annotated[datetime | None, Query()] = None,
@@ -121,5 +121,5 @@ async def get_logs_by_user_id(
             time_to=time_to,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

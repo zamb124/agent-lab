@@ -1,211 +1,86 @@
 ---
-description: "Почта: MailConnection (company|personal), MailboxBinding, mail_sync_tick, platform.mail UI, iMIP"
+description: "Почта и календарь — подключения, ящики company и personal, local-first синхронизация IMAP, отправка, iMIP, CalDAV и авто-привязка календаря к ящику. Читать при правке core/mail и core/calendar"
+globs:
+  - "core/mail/**"
+  - "core/calendar/**"
+  - "core/api/mail.py"
+  - "core/api/calendar.py"
+  - "core/models/calendar_models.py"
+  - "apps/idle_worker/tasks/mail_*.py"
 alwaysApply: false
 ---
-# Почта (core/mail)
 
-## Инвариант
+# Почта и календарь
 
-Единый runtime для корпоративных и личных ящиков:
+Пакеты `core/mail/` (`MailService` в `core/mail/service.py`) и `core/calendar/` (`CalendarService` в `core/calendar/service.py`); HTTP — core-роутеры `core/api/mail.py` (`/{segment}/api/mail`, монтирует `create_service_app`) и `core/api/calendar.py`; фоновые задачи — очередь `idle` (`core/mail/task_names.py`, реализации в `apps/idle_worker/tasks/`). Таблицы — `platform_shared`. Один runtime для корпоративных и личных ящиков. Не владеет: OAuth и токенами → `integrations.mdc`; правами → `authorization.mdc`; индексом писем → `rag.mdc`; вложениями → `files.mdc`.
 
-1. **MailConnection** (таблица `company_mail_connections`) — endpoint IMAP/SMTP: hosts, `provider`, `status`, `scope ∈ {company, personal}`.
-2. **MailboxBinding** — всегда FK на connection (`company_mail_connection_id` NOT NULL) + email + password; `kind=user|role`.
-3. Runtime (sync/send/folders/IDLE/mutations) резолвит **только** `binding.company_mail_connection_id` → connection → `build_mail_server_port` + `binding_secret`. Не `get_by_company` в runtime.
-4. У одного `user_id` может быть **много** user-bindings (company + personal); ровно один `is_default=true`.
-5. `company_id=system` — company-scoped connection из `settings.mail.system` (auto-seed), PUT connection запрещён (только reconcile).
-6. API отдаёт те же `CompanyMailConnection` и `MailboxBinding`. `password_encrypted`, `IspmanagerProvisionConfig.authinfo_password_encrypted` и `MailAttachment.content` — `Field(exclude=True)`. `has_password` и `has_ispmanager_auth` — computed. Хосты IMAP/SMTP на binding для UI заполняет `MailService.public_binding` из connection. `CalendarIntegration.credentials` тоже `exclude=True`.
-6. **Local-first:** UI/HTTP read только `mail_messages` / `mailbox_folders`. IMAP — sync, ensure, mutation confirm, IDLE wake.
+## Модель
 
-| Scope | Кто создаёт | Unique | Provision |
-|---|---|---|---|
-| `company` | admin (`PUT /connection`) | один на `company_id` (partial unique) | ISPmanager / generic на `mail_domain` |
-| `personal` | любой user (`POST /bindings/personal`) | 1:1 connection↔binding, `owner_user_id` | нет; произвольный email + app password |
+- `CompanyMailConnection` (`core/mail/models.py`), таблица `company_mail_connections`, PK `company_mail_connection_id`: `scope` ∈ `company` | `personal`, `owner_user_id` (обязателен у `personal`, запрещён у `company`), `mail_domain`, `provider` ∈ `ispmanager` | `generic_imap_smtp`, хосты и порты IMAP/SMTP, `use_ssl`, `supports_provision`, `status`, `ispmanager` (JSONB). Подключение `company` одно на компанию (частичный уникальный индекс); `company.subdomain` сайта ≠ `mail_domain`.
+- `MailboxBinding` (`core/mail/models.py`), таблица `mailbox_bindings`, PK `mailbox_binding_id`, уникальность `(company_id, email_address)`: `company_mail_connection_id` (обязателен), `user_id` (`null` у `role`), `kind` ∈ `user` | `role`, `email_address`, `local_part`, `sync_enabled`, `is_default`, `calendar_color`, `calendar_autolink_status`, `calendar_autolink_detail`, `password_encrypted`. Поля подключения (`connection_scope`, IMAP/SMTP) в таблицу не пишутся — их заполняет `MailService.public_binding`.
+- Локальная копия ящика: `StoredMailboxFolder` (`mailbox_folders`, ключ `{mailbox_binding_id}:{folder_name}`, `sort_index`), `StoredMailMessage` (`mail_messages`, PK `mail_message_id`, уникальность `(mailbox_binding_id, folder, uid)`, флаги, `rag_index_status` ∈ `ready` | `pending` | `failed` | `skipped`), `MailboxSyncCursor` (`mailbox_sync_cursors`, ключ `{mailbox_binding_id}:{folder}`).
+- ACL ящика — OpenFGA `mailbox_binding` (`owner`, `member`, `manager`) плюс `company#can_admin`; таблицы участников нет; tuple-helpers — `core/mail/authz/tuples.py`.
+- `CalendarEvent` (`core/models/calendar_models.py`), таблица `calendar_events`, PK `event_id`, уникальность `(company_id, source, source_id)`: `source` (`CalendarEventSource`) — происхождение события, не провайдер; `namespace`, `kind`, `start_at`, `end_at`, `attendees`, `external_refs`, `mailbox_binding_id`.
+- `CalendarIntegration` (`core/models/calendar_models.py`), id `integration_id` — проекция `IntegrationCredential` (`core/integrations/models.py`): `provider` (`CalendarProvider`), `mailbox_binding_id` (`null` — интеграция пользователя без ящика), `settings.caldav_base_url`, `settings.default_calendar_id`; `credentials` в JSON не отдаются.
+- `CalendarAutolinkStatus` (`linked` | `unsupported` | `needs_oauth` | `needs_password` | `failed` | `disabled`) — итог авто-привязки календаря на `MailboxBinding.calendar_autolink_status`.
+- Конфиг — секции `mail` (`MailConfig`: `system`, `local_dev`, `live_test`), `mail_sync` (`MailSyncConfig`), `calendar_sync` (`CalendarSyncConfig`) в `core/config/models.py`.
 
-Web `company.subdomain` ≠ `mail_domain`. Crypto (S/MIME/PGP) — вне scope. OAuth/XOAUTH2 — вне v1 (только password login).
+## Инварианты
 
-## Authorization
+### Почта
 
-Sole PDP — OpenFGA `mailbox_binding` (`owner` / `member` / `manager`) + `company#can_admin` через `MailService` / `AuthzService`. Owner reassign dual-write fail-closed. Wire ACL для binding не использует `view`/`edit`. `GET /bindings/me` возвращает `can_admin` (server-driven). Calendar invitees — identity roster (`company.members`), не PDP. Канон → **`authorization.mdc`**.
+- Runtime (sync, send, папки, IDLE, мутации) резолвит подключение только по `binding.company_mail_connection_id` → `build_mail_server_port` (`core/mail/factory.py`) и секрет ящика; `CompanyMailConnection.for_company` в runtime не используется. `[без гейта]`
+- У пользователя много user-ящиков (company и personal), `is_default` ровно у одного.
+- Вход в IMAP и SMTP — только по паролю ящика (у внешнего провайдера — пароль приложения). `[без гейта]`
+- `company`-scope создаёт админ; `personal` создаёт любой пользователь для себя: подключение 1:1 с ящиком, без provision, логин проверяется healthcheck до сохранения, сразу после — обновление папок и постановка sync. `[без гейта]`
+- Local-first: UI и HTTP читают только `mailbox_folders` и `mail_messages`; IMAP — синхронизация, ensure папок, подтверждение мутации и пробуждение IDLE. Пустой кэш папок и пустая папка без `last_synced_at` отвечают `needs_sync=true`; обновление папок из IMAP сохраняет известные `sort_index`.
+- Мутации (seen, move, trash, archive, delete, star, drafts) — оптимистично в локальной копии, затем задача `idle` и push; отправка — `prepare_send_local`, затем SMTP и APPEND в задаче; Message-Id — по домену подключения ящика (`allocate_outbound_message_id`). `[без гейта]`
+- Индекс письма в RAG не блокирует сохранение: upsert ставит `rag_index_status=pending` и задачу `mail_rag_index`; технический namespace ящика — `mail-{mailbox_binding_id}`. `[без гейта]`
+- Задача ящика входит в контекст через `enter_mail_binding_context` (`apps/idle_worker/tasks/mail_job_context.py`); получатели push — `binding.user_id` и прямые FGA `owner`/`member`/`manager` (`mailbox_recipient_user_ids`); актор role-ящика — первый существующий получатель компании, иначе FGA `can_admin`; нет актора — `raise`. `[без гейта]`
+- Пароли ящиков и `authinfo_password` ISPmanager хранятся зашифрованными (`encrypt_secret`, `core/ai/company_settings/`); `password_encrypted`, `authinfo_password_encrypted` и содержимое вложений в JSON не отдаются, наружу — computed `has_password`, `has_ispmanager_auth`. `[без гейта]`
+- `company_id=system`: подключение и role-ящики — из `mail.system` через `reconcile_system` на старте `frontend`; PUT подключения запрещён. `ensure_system_user_bindings` даёт ящик каждому члену `system`, включая `flow_employee_*`; user-ящик не-члена снимается, `personal` не трогается. `[без гейта]`
+- Ящик компании пользователь получает лениво (`MailService.get_or_create_user_binding`), flow-сотрудник — при provisioning; deactivate сотрудника снимает только company-ящики (`unbind_company_user_mailboxes`) → `flow_employee.mdc § Интеграции`.
+- `mail.local_dev` живёт только в `conf.local.json`: логин IMAP/SMTP берёт пароль из `mailbox_passwords`; при `mutate_remote_passwords=false` смена паролей на ISP запрещена, `reconcile_system` не делает provision и отдаёт недостающие ящики как `*_missing_password`.
+- Тело письма рендерит только `<platform-mail-html-body>`: документный HTML — sandbox iframe без скриптов, внешние картинки выключены до явного разрешения. `[без гейта]`
 
-## Слои
+### Календарь
 
-| Модуль | Роль |
-|---|---|
-| `core/mail/models.py` | Pydantic-контракты, `MailConnectionScope`, personal payloads |
-| `core/mail/ports.py` | `MailServerPort` Protocol |
-| `core/mail/providers/*` | ISPmanager provision + generic IMAP/SMTP |
-| `core/mail/transport/*` | aioimaplib / aiosmtplib + IDLE session |
-| `core/mail/imip.py` | iMIP REQUEST ICS ↔ `CalendarEventUpsertPayload` |
-| `core/mail/repositories.py` | shared DB CRUD + members + cursor page/search |
-| `core/mail/service.py` | connect/bind/`sync_binding`/mutations/search |
-| `core/api/mail.py` | HTTP (`/{svc}/api/mail/...`) |
-| `platform-mail-modal` | кроссервисный UI (`modalKind=platform.mail`) |
+- IMAP и SMTP несут только письма; события календаря идут отдельным каналом: CalDAV (`CalDavClient`, `core/calendar/service.py`) для `CALDAV_PROVIDERS`, Google — своим API в тот же `CalendarEvent`. Sync и отключение интеграции — по `integration_id`, не по `provider`. `[без гейта]`
+- Один токен без ящика и один на ящик для `(company_id, user_id, provider, service)` держит `IntegrationCredential.upsert_by_credential_id`; ящики одного провайдера не перезаписывают друг друга. `[без гейта]`
+- Эндпоинт CalDAV ящика определяет `resolve_caldav_target` (`core/calendar/caldav_discovery.py`): доменные пресеты, пресеты IMAP-хоста, затем проба RFC 6764 `/.well-known/caldav`; Gmail — `needs_oauth`.
+- Авто-привязка: `connect_personal_mailbox` пробует всегда, company-ящик — один раз при `calendar_autolink_status=disabled`; итог пишется в `calendar_autolink_status`; сбой календаря не откатывает привязку почты; 401 CalDAV на почтовом пароле — `needs_password` без интеграции.
+- Мост почта → календарь — `MailCalendarBridge` (`core/mail/ports.py`, реализация `CalendarService`); `unbind_mailbox` снимает календарные credentials ящика.
+- iMIP REQUEST входящего письма → `CalendarService.upsert_imip_event` с `source_id=imip:{uid}` и `mailbox_binding_id` письма. `[без гейта]`
 
-Пароли ящиков и ISPmanager `authinfo_password` — Fernet; в API не отдаются.
+## Контракты
 
-## Auth
+- HTTP почты — `core/api/mail.py` на каждом сервисе с `create_service_app`; календаря — `core/api/calendar.py`.
+- Push (`core/mail/events.py`): `mail/message/upserted`, `moved`, `removed`, `send_succeeded`, `send_failed`; `calendar/event/created` (`core/calendar/events.py`).
+- Задачи — `core/mail/task_names.py` (очередь `idle`): `mail_sync_tick` и `mail_idle_supervisor` по расписанию, `mail_sync_binding`, мутации, `mail_send`, `mail_rag_index`; календарь — `calendar_sync_tick` (`apps/idle_worker/tasks/calendar_sync_tasks.py`).
+- UI — модалка core UI Kit `platform.mail` (`core/frontend/static/lib/components/platform-mail-modal.js`) и `platform-calendar-modal`.
 
-| Операция | Кто |
-|---|---|
-| `GET /connection` (company scope), `GET /bindings/me`, messages list/search/get/send/triage, `POST /sync`, `PUT .../default` | доступ: owner user-binding **или** role member **или** admin |
-| `POST /bindings/personal`, `POST /bindings/personal/healthcheck` | любой auth user → self |
-| `PATCH /bindings/{id}` calendar_color | owner своего user-binding или admin |
-| `PATCH /bindings/{id}` password/hosts (personal) | owner personal **или** admin |
-| `PATCH /bindings/{id}` password/sync/user_id (company) | admin |
-| `DELETE /bindings/{id}` | admin; для personal — также owner |
-| `PUT /connection`, `GET /bindings`, `POST /bindings`, members ACL, company healthcheck | FGA `company#can_admin` |
-| `POST /system/reconcile` | `company_id=system` + admin |
+## Интеграции
 
-`GET /bindings/me` = bindings компании с FGA `can_view` на `mailbox_binding` (`batch_check`).
+- Права — `MailService` через `AuthzService`: owner reassign и участники role-ящика пишут tuples fail-closed; `GET /bindings/me` — ящики с FGA `can_view` и серверный `can_admin`; backfill — `python -m core.mail.authz` → `authorization.mdc § Канон`.
+- Платформенная встреча календаря (`source=platform`, `kind=meeting`) создаёт ссылку и канал Sync через `ServiceClient` → `sync.mdc § Инварианты`; уведомления о событиях внешних календарей шлёт `calendar_sync_tick` через `notify_user`.
+- Срок CRM-задачи в календаре — `due_date` парного `WorkItem(crm_activity)` из REST worktracker → `worktracker.mdc § Модель`.
+- Прод-креды: секция `mail` и ENV `MAIL__*` → `configuration.mdc § Канон`.
 
-## Background sync (local-first)
+## Запреты
 
-| Слой | Что |
-|---|---|
-| Task | `mail_sync_tick` + `mail_sync_binding` + `mail_rag_index` + `mail_idle_supervisor` (`apps/idle_worker/tasks/`) |
-| Schedule | cron `mail_sync` (default `*/1`); IDLE supervisor на том же cron при `idle_enabled` |
-| Context | перед sync/mutations/rag-index — `enter_mail_binding_context` + `build_job_context` (JWT): `MailService._active_user_id` и RAG/files/office. Recipients (notify/push) = `binding.user_id` + прямые FGA `owner`/`member`/`manager` (не `list_users(can_view)`). Role job-actor: первый существующий recipient в компании, иначе `authz.list_users(mailbox_binding, can_admin, user_filters=[USER])` (TTU `admin from company`); нет actor → `raise` |
-| Fairness | `list_sync_candidates` JOIN по `company_mail_connection_id` + `status=active` — company и personal в одном tick |
-| Folders cache | `mailbox_folders` + `sort_index`; `GET /folders` DB-only `ORDER BY sort_index, folder_name`; **пустой кэш → `needs_sync=true`**; UI → `POST /sync` (IMAP LIST sync) → reload folders; IMAP refresh **сохраняет** известные `sort_index`, новые — в хвост; bootstrap — роль (inbox→sent→drafts→trash→archive→junk→other) затем имя |
-| Messages | `mail_messages` + flags; list/search/thread/get — local; `needs_sync` на list = пустая папка **без** `last_synced_at` (не «пустой inbox навсегда») |
-| Sync fidelity | UIDVALIDITY wipe, forward catch-up, history backfill, UID reconcile, flag refresh |
-| Sync-now | `POST /sync` → `refresh_folders_from_imap` + enqueue `mail_sync_binding` |
-| RAG index | Persist **без** sync ingest: upsert → `rag_index_status=pending|skipped` → enqueue `mail_rag_index`; status ∈ `{ready,pending,failed,skipped}`; UI молния на `failed` → `POST /messages/rag-index` retry; push `mail/message/upserted` |
-| Mutations | trash/move/archive/delete/star/drafts/seen — optimistic local + TaskIQ + push |
-| Role ACL | OpenFGA `mailbox_binding` (`member`=view, `manager`=edit/admin); RAG technical `mail-{mailbox_binding_id}` |
-| Notify + live UI | `mail/message/upserted\|moved\|removed\|send_*` |
-| Send | Message-Id domain из **binding → connection** (`allocate_outbound_message_id`); `prepare_send_local` → enqueue SMTP+APPEND → sync |
-| Personal connect | healthcheck → save connection/binding → **сразу** `refresh_folders_from_imap` → enqueue sync |
+- `CompanyMailConnection.for_company` в runtime ящика вместо `binding.company_mail_connection_id`. `[без гейта]`
+- Второй `company`-scope подключения у компании и PUT подключения `system`. `[без гейта]`
+- Чтение писем и папок в UI и HTTP напрямую из IMAP в обход локальной копии. `[без гейта]`
+- События календаря через IMAP и SMTP. `[без гейта]`
+- Пароли и ключи ящиков в JSON-ответах и в git. `[без гейта]`
+- Голый `id` и `mailbox_id` вместо `mailbox_binding_id`; `provider` вместо `source` у `CalendarEvent`. `[без гейта]`
 
-Конфиг: `MailSyncConfig` (`backfill_batch_size`, `reconcile_every_n_syncs`, `idle_*`, …). Personal ns — **`namespace.mdc`**.
+## Гейты
 
-## Transport (`MailServerPort`)
-
-list/fetch/send + `uid_store_flags`, `uid_move`, `uid_expunge`, `append_message`, `uid_search`, `fetch_flags_for_uids`, `open_idle_session`, `healthcheck_with_credentials`.
-
-Wire folder = exact IMAP name; роли только SPECIAL-USE. Ensure: sent/drafts/trash/archive.
-
-## Schema extras
-
-- `company_mail_connections`: `scope`, `owner_user_id`; partial unique `(company_id) WHERE scope=company`
-- `mailbox_folders`: `sort_index` (UI DnD order); wire `folder_name` = exact IMAP name
-- `mail_messages`: `flagged`, `answered`, `draft`; `user_id` nullable (role)
-- `mailbox_sync_cursors`: `backfill_completed`, `oldest_uid`, `last_reconcile_at`
-- `mailbox_binding` ACL: OpenFGA relations `owner` / `member` / `manager` (таблицы `mailbox_binding_members` нет)
-- `mailbox_bindings`: `calendar_autolink_status` (default `disabled`), `calendar_autolink_detail`
-- `integration_credentials`: `mailbox_binding_id` + два partial unique index (см. «Один календарь на ящик»)
-
-## Provision
-
-- **System**: `reconcile_system` / `ensure_system_*` — company connection + role boxes; `ensure_system_user_bindings` итерирует всех `company.members` (включая `flow_employee_*`) без prefix-skip. User-binding, чей `user_id` не в `company.members`, — `unbind_mailbox(acting_as_admin=True)` (personal `scope` не трогать). `list_sync_candidates` не фильтрует employee. Тесты `system.members` не сужают roster до одного user_id: leftover-unbind иначе снимет чужие ящики под xdist. Добавление/снятие члена `system` — `CompanyRepository.put_member_roles` / `discard_member`, не `get`+`set` всей Company.
-- **Local-dev inventory** (`mail.local_dev.enabled` и `mutate_remote_passwords=false`): `mailbox_passwords` — единственный локальный реестр ящиков. `ensure_system_*` **не** вызывает ISP `ensure_mailbox` / `set_mailbox_password`; новый binding только если email уже в карте. Член/role без ключа в карте → `MailReconcileResult.*_missing_password`, startup **не** падает. Прод (`local_dev.enabled=false`) по-прежнему provision=true и может менять пароли на ISP.
-- **Prod K8s**: `mail.system.enabled` + hosts/user в `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`; `authinfo_password` — GitHub Secret `MAIL__SYSTEM__ISPMANAGER__AUTHINFO_PASSWORD` → `platform-secrets` → ENV. Frontend lifespan вызывает `reconcile_system` при `enabled=true`.
-- **Lazy company**: `MailService.get_or_create_user_binding(user_id)`. Живой flow-сотрудник — тот же path из `flow_employee_provisioning` (не `core/identity/flow_employee.py`: цикл `BaseContainer → MailService → flow_employee`). На `company_id=system` mailbox даёт `ensure_system_user_bindings` при reconcile, не get_or_create из provisioning. `deactivate` / delete flow — `unbind_company_user_mailboxes` (company-scope; personal не трогать).
-- **Personal**: `MailService.connect_personal_mailbox` — personal connection + binding, `provision=false`, healthcheck login до save.
-- `bind_mailbox` на существующий email: тот же owner/role → idempotent; иначе admin reassign.
-- `ispmanager` `ensure_mailbox` — create-if-missing.
-- `delete_mailbox` — `assert_mailbox_delete_allowed`. Unbind personal удаляет personal connection.
-
-## UI
-
-`openModal('platform.mail')`. State: `state.mail` + `createMailEffect`.
-
-Rail (`<platform-mail-calendar-rail>`): user + role bindings (role mark); Mail↔Calendar switcher.
-
-Reading:
-- list/thread local; Refresh → `SYNC_REQUESTED`; empty → `needs_sync` + auto sync (троттл 15s на ящик);
-- folder rail DnD → `FOLDERS_REORDER_REQUESTED` → `PUT /folders/order` (persist `sort_index`); labels: role i18n или decode IMAP modified UTF-7 (wire name не трогать);
-- `POST /messages/thread` — local read + **все** unread в текущей папке треда → seen (не только якорь uid); IMAP `mark_seen` enqueue на каждый `marked_seen_uids`;
-- search → `POST /messages/search`; load more → cursor;
-- triage: star / archive / trash / delete forever; shortcuts E / # / S;
-- `rag_index_status`: pending = пульс-молния; failed = молния → `MESSAGE_RAG_INDEX_REQUESTED`;
-- drafts folder open → compose; compose autosave draft.
-- **Тело письма:** только `<platform-mail-html-body>`. Документный HTML (`isMailDocumentHtml`: doctype/`<html>`/`<body>`, Outlook/VML, layout `<table>`) → sandboxed iframe (`srcdoc`, DOMPurify, CSP `script-src 'none'`, sandbox без `allow-scripts` кроме WebKit srcdoc) + chat-row `has-html` (ширина пана). Фрагмент compose/Gmail (`<p>`, `<div dir>`) при непустом `body_text` → plaintext bubble (`pre-wrap` + autolink), не iframe и не stretch. HTML-only фрагмент без text → iframe без `has-html`. Markdown-chat запрещён. Remote `http(s)` картинки выкл. до «Показать изображения» на экземпляр. `cid:` → `data:` URL по `content_id` + `file_id`. Inline CID не дублировать в скрепках. `body_text` и `body_html` независимы: MIME не копирует HTML в plaintext; snippet/RAG — `html_to_visible_text` если нет `text/plain`. `.chat-bubble-row.mine` — `align-self: flex-end`.
-
-Settings:
-- **Мои ящики**: цвет, default; personal **Edit** (раскрываемая карточка: hosts/ports/ssl/password + Check login + Save); форма «Подключить свой ящик» (presets Gmail/Yandex/Mail.ru/Custom + healthcheck); personal unbind;
-- **Ящики компании** (admin): assign/reassign user; create user|role; role members add/remove;
-- **Почтовый сервер** (admin): company connection + healthcheck.
-
-Compose: `<platform-markdown-editor variant="compose">`; outbound attachments local base64.
-
-Inbound attachments: `<platform-file-attachments>` по `file_id`.
-
-`MailboxBinding.calendar_color` — ключ палитры. `CalendarEvent.mailbox_binding_id` — ленточка календаря.
-
-Deep-link: `notify/mail/mail_new_message_received` → `OPEN_FROM_NOTIFICATION`.
-
-## HTTP (зеркало UI)
-
-| Path | Назначение |
-|---|---|
-| `POST /bindings/personal`, `/bindings/personal/healthcheck` | self-service personal |
-| `POST /bindings/{id}/healthcheck` | personal owner/admin: stored password + optional host overrides |
-| `PATCH /bindings/{id}` | color; personal hosts/password; company admin password/sync |
-| `GET /folders`, `POST /folders/ensure`, `PUT /folders/order` | folder cache + DnD order |
-| `POST /messages/list`, `/messages/search`, `/messages/thread` | local read |
-| `POST /sync` | sync-now |
-| `POST /messages/mark_seen\|mark_unseen\|trash\|archive\|delete\|star\|move\|drafts\|send` | mutations |
-| `POST /messages/rag-index` | enqueue/retry async RAG index |
-| `GET/POST/DELETE /bindings/{id}/members` | role ACL |
-| `POST /bindings/{id}/calendar/autolink`, `DELETE /bindings/{id}/calendar` | календарь ящика (см. ниже) |
-
-## Календарь: разделение с почтой
-
-IMAP/SMTP — только письма. События календаря идут отдельным каналом:
-
-- **CalDAV** (единый протокол для парольных провайдеров) — `core/calendar/service.py::CalDavClient`. Один клиент, разные `base_url`. `discover_default_calendar_id` (RFC 4791 PROPFIND: current-user-principal → calendar-home-set → первая VEVENT-коллекция) поднимает `default_calendar_id`, если он не задан.
-- Providers календаря — `CalendarProvider {google, yandex, mailru, caldav}`; CalDAV-семейство = `CALDAV_PROVIDERS`. Единый sync — `_sync_caldav_inbound/_sync_caldav_outbound`; Google — своим API, но мапится в тот же `CalendarEvent`. `CalendarEventSource` и `IntegrationProvider` расширены `mailru`/`caldav`.
-- Фоновый `calendar_sync_tick` итерирует google+yandex+mailru+caldav; source по `calendar_source_for_provider`; `run_sync`/`disconnect_integration` — по `integration_id`, не по `provider`.
-
-### Один календарь на ящик
-
-`integration_credentials.mailbox_binding_id` + два partial unique index: `(company_id,user_id,provider,service) WHERE mailbox_binding_id IS NULL` (OAuth уровня пользователя) и `(…,mailbox_binding_id) WHERE NOT NULL` (по ящику). У одного пользователя может быть несколько ящиков одного провайдера — интеграции не перезаписывают друг друга. `_sync_caldav_inbound` проставляет `mailbox_binding_id` в `CalendarEvent`, поэтому ленточка `MailboxBinding.calendar_color` работает и для CalDAV-событий.
-
-### Определение эндпоинта — `core/calendar/caldav_discovery.py`
-
-`resolve_caldav_target(mail_domain, imap_host)` → `CaldavAutolinkResolution` (`kind ∈ {caldav, needs_oauth, unsupported}`), порядок:
-
-1. `CALDAV_DOMAIN_PRESETS` — домены провайдера (`mail.ru`/`inbox.ru`/`list.ru`/`bk.ru`/`internet.ru` → `calendar.mail.ru`; `yandex.*`/`ya.ru`/`narod.ru` → `caldav.yandex.ru`); `gmail.com`/`googlemail.com` → `needs_oauth` (парольного CalDAV нет).
-2. `CALDAV_IMAP_HOST_PRESETS` — адрес на своём домене, ящик у известного провайдера.
-3. RFC 6764 проба `GET https://<mail_domain>/.well-known/caldav` (`follow_redirects`); `caldav_probe_decision` считает эндпоинтом `2xx/3xx/401`; `base_url` — origin конечного адреса. Так подхватываются корпоративные домены.
-
-Флаги — `CalendarSyncConfig`: `autolink_enabled`, `autolink_well_known_probe_enabled`, `autolink_probe_timeout_seconds`.
-
-### Auto-link и статус на ящике
-
-- Триггеры: `connect_personal_mailbox` (всегда, пароль свежий), `bind_mailbox` и лениво `get_or_create_user_binding` для корпоративных ящиков — там `_autolink_company_mailbox_calendar` пробует **один раз** (`calendar_autolink_status == disabled`), пароль из `_binding_secret`.
-- Мост — `MailCalendarBridge` (`core/mail/ports.py`, реализация `CalendarService`, wiring `BaseContainer.mail_service(calendar_bridge=...)`): `ensure_caldav_integration_from_mailbox` → `CalendarAutolinkOutcome`, `delete_calendar_integrations_for_mailbox`, `upsert_imip_event`.
-- Итог пишется в `MailboxBinding.calendar_autolink_status` (`CalendarAutolinkStatus`: `linked|unsupported|needs_oauth|needs_password|failed|disabled`) + `calendar_autolink_detail`. Сбой календаря не откатывает bind почты, но виден в API/UI, а не только в логе.
-- **Mail.ru**: пароль внешнего приложения выдаётся отдельно для календаря — почтовый пароль CalDAV отклоняет (401 на `/principals/`). Такой ответ даёт `needs_password`, интеграция не создаётся, пользователь вводит календарный пароль через «Настроить». Discovery идёт по RFC 6764: `CalDavClient._discovery_roots()` пробует `{origin}/.well-known/caldav` (у Mail.ru 301 → `/principals/`), затем `base_url`; PROPFIND с `follow_redirects=True`. 401/403 не перебирает корни — это доступ, а не адрес.
-- `unbind_mailbox` снимает календарные credentials ящика (иначе висячая строка).
-- Ручное управление: `POST /bindings/{id}/calendar/autolink` (повтор по сохранённому паролю) и `DELETE /bindings/{id}/calendar`; доступ — owner user-binding или admin.
-- UI: в «Мои ящики» строка статуса + «Подключить/Переподключить календарь», «Настроить» (переход на поверхность календаря), «Отключить календарь». В `platform-calendar-modal` интеграции подписаны email ящика, `caldav_base_url` и `default_calendar_id` переопределяются на конкретной интеграции.
-
-## iMIP
-
-iMIP REQUEST во входящей почте → `CalendarService.upsert_imip_event` (дедуп по `source_id=imip:{uid}`) с `mailbox_binding_id` письма. Точка входа — `_ingest_imip_invites` в `_persist_synced_messages` (best-effort, через `MailCalendarBridge`).
-
-## Conf и креды
-
-Секция `mail` / ENV `MAIL__*` / GitHub Secrets `MAIL_ISPMANAGER_*` — см. `tests/core/mail/README.md`.  
-Hosts: hostname панели (`sm36.hosting.reg.ru`), не `mail.linnex.io` если A-запись на IP платформы.  
-Исходящий SMTP часто режет **VPN** — live send гонять без VPN или с VPS.
-
-### Local-dev против shared ISP
-
-`mail.local_dev` (только `conf.local.json`, gitignored):
-
-- `enabled=true` + `mailbox_passwords: { "user@domain": "…" }` — IMAP/SMTP логин берёт plaintext из конфига (прод-пароли можно один раз выгрузить в conf.local).
-- `mutate_remote_passwords=false` (дефолт) — **запрет** `set_mailbox_password` / `email.edit(passwd)`: локальный `bind`/`reconcile` не меняет пароли на ISP и не роняет прод.
-- `reconcile_system` в этом режиме не provision'ит ISP: биндит только email из `mailbox_passwords`; остальные члены/role — `*_missing_password` в результате, без `MailConfigError`. Явный HTTP `bind_mailbox` существующего ящика без пароля в карте по-прежнему `raise`.
-- `reconcile_system` дополнительно пишет эти пароли в локальные `mailbox_bindings.password_encrypted`.
-
-Прод K8s: `local_dev.enabled` остаётся `false` в overlay.
-
-## Тесты
-
-- Offline: `tests/core/mail` + `RecordingMailServerPort` (`--ignore=live`); personal — `test_mail_personal.py`; календарь ящика — `test_mail_calendar_autolink.py`, discovery — `tests/core/calendar/test_caldav_discovery.py`.
-- Live CalDAV: `tests/core/calendar/live` (`-m network`). Почтовый пароль — `mail.local_dev.mailbox_passwords`, календарный — `mail.live_test.personal.calendar_app_password_a`; без него проверяется только статус `needs_password`.
-- Live: `tests/core/mail/live` + `@pytest.mark.network`; только `plt-*`; `mail_quota_sweeper` удаляет созданные ящики в конце.
-- CI opt-in: `.github/workflows/mail-live.yml`.
+- `tests/core/mail/test_mail_multi_mailbox.py` — много ящиков у пользователя, ровно один `is_default`, `GET /bindings/me`.
+- `tests/core/mail/test_mail_local_first.py` — кэш папок, чтение списка и треда из базы.
+- `tests/core/mail/test_mail_local_dev.py` — пароли из `mail.local_dev`, без смены паролей на ISP.
+- `tests/core/mail/test_mail_employee_mailbox.py` — ящик flow-сотрудника и снятие при deactivate.
+- `tests/core/mail/test_mail_calendar_autolink.py` — статус авто-привязки и снятие интеграции при unbind.
+- `tests/core/calendar/test_caldav_discovery.py` — пресеты доменов, IMAP-хоста и well-known проба.
+- `scripts/check_authz_dual_write.py`, `scripts/check_authz_backfill_completeness.py` (`make lint`) — dual-write и backfill `mailbox_binding`.

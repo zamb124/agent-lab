@@ -7,8 +7,6 @@ import asyncio
 import sys
 from typing import cast
 
-from sqlalchemy import text
-
 from apps.office.authz.tuples import (
     office_catalog_company_link,
     office_catalog_owner_tuple,
@@ -16,8 +14,13 @@ from apps.office.authz.tuples import (
     office_document_catalog_link,
     office_document_owner_tuple,
 )
-from apps.office.container import get_office_container
+from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
+from apps.office.di import OfficeDi
+from core.authz.service import AuthzService
 from core.config import get_settings
+from core.di import open_di
+from core.di.kit import ProcessIdentity
+from core.files.urls import resolve_files_route_segment
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -32,35 +35,40 @@ async def backfill_office_authz(*, limit: int | None = None) -> tuple[int, int]:
     if not settings.openfga.enabled:
         raise RuntimeError("openfga.enabled must be true for Office authz backfill")
 
-    container = get_office_container()
-    authz = container.authz_service
-    db = container.office_db
+    async with open_di(
+        OfficeDi,
+        settings=settings,
+        identity=ProcessIdentity(
+            service_name="office",
+            files_route_segment=resolve_files_route_segment("office"),
+        ),
+        database="office_url",
+    ) as di:
+        authz = di.authz_service
+        catalogs_written, documents_written = await _write_office_authz_edges(
+            authz, limit=limit
+        )
 
+    logger.info(
+        "office.authz.backfill.complete.catalog_tuples",
+        catalog_tuples=catalogs_written,
+        documents=documents_written,
+    )
+    return catalogs_written, documents_written
+
+
+async def _write_office_authz_edges(authz: AuthzService, *, limit: int | None) -> tuple[int, int]:
     catalogs_written = 0
     documents_written = 0
 
-    async with db.session() as session:
-        catalog_sql = (
-            "SELECT catalog_id, parent_catalog_id, owner_user_id, company_id "
-            "FROM office_document_catalogs ORDER BY created_at ASC"
-        )
-        if limit is not None:
-            catalog_sql += f" LIMIT {int(limit)}"
-        catalog_rows = list((await session.execute(text(catalog_sql))).mappings().all())
-
-        binding_sql = (
-            "SELECT file_id, catalog_id, created_by_user_id "
-            "FROM office_document_bindings ORDER BY created_at ASC"
-        )
-        if limit is not None:
-            binding_sql += f" LIMIT {int(limit)}"
-        bindings = list((await session.execute(text(binding_sql))).mappings().all())
+    catalog_rows = await OfficeDocumentCatalog.list_by_created_at(limit=limit)
+    binding_rows = await OfficeDocumentBinding.list_by_created_at(limit=limit)
 
     for row in catalog_rows:
-        catalog_id = cast(str, row["catalog_id"])
-        owner_user_id = cast(str, row["owner_user_id"])
-        company_id = cast(str, row["company_id"])
-        parent_catalog_id = cast(str | None, row["parent_catalog_id"])
+        catalog_id = row.catalog_id
+        owner_user_id = row.owner_user_id
+        company_id = row.company_id
+        parent_catalog_id = row.parent_catalog_id
         writes = [
             office_catalog_owner_tuple(catalog_id, owner_user_id),
             office_catalog_company_link(catalog_id, company_id),
@@ -70,22 +78,15 @@ async def backfill_office_authz(*, limit: int | None = None) -> tuple[int, int]:
         await authz.write(writes)
         catalogs_written += len(writes)
 
-    for binding in bindings:
+    for binding in binding_rows:
         await authz.write(
             [
-                office_document_owner_tuple(
-                    cast(str, binding["file_id"]),
-                    cast(str, binding["created_by_user_id"]),
-                ),
-                office_document_catalog_link(
-                    cast(str, binding["file_id"]),
-                    cast(str, binding["catalog_id"]),
-                ),
+                office_document_owner_tuple(binding.file_id, binding.created_by_user_id),
+                office_document_catalog_link(binding.file_id, binding.catalog_id),
             ]
         )
         documents_written += 1
 
-    logger.info("office.authz.backfill.complete.catalog_tuples", catalog_tuples=catalogs_written, documents=documents_written)
     return catalogs_written, documents_written
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from apps.flows.tools.device.device_tools import _require_device_id, device_tools_list
@@ -32,15 +34,9 @@ def test_require_device_id_reads_variables() -> None:
 
 @pytest.mark.asyncio
 async def test_device_tools_list_propagates_tunnel_error(
-    container, unique_id: str, monkeypatch: pytest.MonkeyPatch
+    unique_id: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from apps.flows.src.clients.device_client import DeviceClient
-    from apps.flows.src.container_contracts import as_flow_runtime_container
-    from apps.flows.src.container_state import (
-        get_current_container,
-        reset_current_container,
-        set_current_container,
-    )
 
     async def _offline_tools_list(self: DeviceClient, *_args: object, **_kwargs: object) -> object:
         raise ValueError(f"Device tunnel offline: offline-device-{unique_id}")
@@ -55,13 +51,6 @@ async def test_device_tools_list_propagates_tunnel_error(
         session_id=f"lara:{context_id}",
     )
     state.variables = {"device_id": f"offline-device-{unique_id}"}
-    previous = get_current_container()
-    set_current_container(as_flow_runtime_container(container))
-    try:
-        with pytest.raises(ValueError, match="offline"):
-            _ = await device_tools_list.run({}, state)
-    finally:
-        if previous is not None:
-            set_current_container(previous)
-        else:
-            reset_current_container()
+    bound = device_tools_list.with_dependencies([DeviceClient(MagicMock())])
+    with pytest.raises(ValueError, match="offline"):
+        _ = await bound.run({}, state)

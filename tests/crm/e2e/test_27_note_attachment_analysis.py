@@ -28,7 +28,6 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.crm.config import get_crm_settings
-from apps.crm.container import CRMContainer
 from tests.crm.e2e._json_helpers import json_object, object_dict, object_list, object_str
 from tests.crm.e2e.attachment_upload_helpers import upload_and_attach_crm_file
 
@@ -150,7 +149,7 @@ def _analyze_llm_response(*, note_name: str, person_name: str) -> str:
 class TestResolveNoteText:
     """Прямые тесты NoteProcessingService.resolve_note_text без LLM.
 
-    Используем crm_container для обращения к сервису напрямую.
+    Используем crm_worker_di: NoteProcessingService живёт в процессе crm_worker.
     Никакого real_taskiq не нужно — LLM не вызывается при маленьких файлах
     и при отключённой суммаризации.
 
@@ -162,14 +161,14 @@ class TestResolveNoteText:
     async def test_description_without_attachments(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """Заметка без вложений: resolve_note_text возвращает только description."""
         description = f"Текст заметки {unique_id} без файлов."
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Тест описания {unique_id}",
@@ -182,7 +181,7 @@ class TestResolveNoteText:
         assert note_resp.status_code in (200, 201), note_resp.text
         note_id = object_str(_http_json(note_resp).get("entity_id"), field="entity_id")
 
-        text = await crm_container.note_processing_service.resolve_note_text(
+        text = await crm_worker_di.note_processing_service.resolve_note_text(
             note_id,
             include_attachments=True,
             attachment_chars_limit=40_000,
@@ -194,7 +193,7 @@ class TestResolveNoteText:
     async def test_small_attachment_included_verbatim(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
@@ -202,7 +201,7 @@ class TestResolveNoteText:
         description = f"Описание встречи {unique_id}."
         note_name = f"Малый файл {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -229,7 +228,7 @@ class TestResolveNoteText:
         assert upload.status_code == 200, upload.text
 
         # attachment_chars_limit=1_000_000 → суммаризация не вызывается никогда
-        text = await crm_container.note_processing_service.resolve_note_text(
+        text = await crm_worker_di.note_processing_service.resolve_note_text(
             note_id,
             include_attachments=True,
             attachment_chars_limit=1_000_000,
@@ -243,14 +242,14 @@ class TestResolveNoteText:
     async def test_multiple_small_attachments_all_included(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """Несколько малых вложений: тексты всех файлов присутствуют в результате."""
         note_name = f"Несколько файлов {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -277,7 +276,7 @@ class TestResolveNoteText:
             )
             assert upload.status_code == 200, upload.text
 
-        text = await crm_container.note_processing_service.resolve_note_text(
+        text = await crm_worker_di.note_processing_service.resolve_note_text(
             note_id,
             include_attachments=True,
             attachment_chars_limit=1_000_000,
@@ -290,7 +289,7 @@ class TestResolveNoteText:
     async def test_include_attachments_false_skips_files(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
@@ -299,7 +298,7 @@ class TestResolveNoteText:
         description = f"Только описание {unique_id}."
         note_name = f"Флаг attachments {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -324,7 +323,7 @@ class TestResolveNoteText:
         )
         assert upload.status_code == 200, upload.text
 
-        text = await crm_container.note_processing_service.resolve_note_text(
+        text = await crm_worker_di.note_processing_service.resolve_note_text(
             note_id,
             include_attachments=False,
             attachment_chars_limit=1_000_000,
@@ -356,7 +355,7 @@ class TestAnalyzeWithAttachments:
         """
         note_name = f"Малый файл E2E {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -406,7 +405,7 @@ class TestAnalyzeWithAttachments:
         """
         note_name = f"Большой файл E2E {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -471,7 +470,7 @@ class TestAnalyzeWithAttachments:
         """
         note_name = f"Настраиваемый лимит {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -529,7 +528,7 @@ class TestAnalyzeWithAttachments:
         """
         note_name = f"Без вложений в анализе {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -583,7 +582,7 @@ class TestAttachmentGuarantee:
         """Пустой файл отклоняется на chunked upload."""
         note_name = f"Пустой файл {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -612,14 +611,14 @@ class TestAttachmentGuarantee:
     async def test_whitespace_only_attachment_raises(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """Файл только из пробелов → тоже не допускается в анализ."""
         note_name = f"Пробельный файл {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -644,8 +643,8 @@ class TestAttachmentGuarantee:
         )
         assert upload.status_code == 200, upload.text
 
-        with pytest.raises(ValueError, match="не содержит извлекаемого текста"):
-            _ = await crm_container.note_processing_service.resolve_note_text(
+        with pytest.raises(ValueError, match="has no extractable text"):
+            _ = await crm_worker_di.note_processing_service.resolve_note_text(
                 note_id,
                 include_attachments=True,
                 attachment_chars_limit=1_000_000,
@@ -655,14 +654,14 @@ class TestAttachmentGuarantee:
     async def test_valid_file_passes_resolve_note_text(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_worker_di,
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
         """Непустой файл проходит resolve_note_text; пустой отклоняется на chunked upload."""
         note_name = f"Смешанные файлы {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -700,7 +699,7 @@ class TestAttachmentGuarantee:
                 content_type="text/plain",
             )
 
-        text = await crm_container.note_processing_service.resolve_note_text(
+        text = await crm_worker_di.note_processing_service.resolve_note_text(
             note_id,
             include_attachments=True,
             attachment_chars_limit=1_000_000,
@@ -723,7 +722,7 @@ class TestAnalyzeBlockedByEmptyAttachment:
 
         note_name = f"HTTP пустой файл {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,

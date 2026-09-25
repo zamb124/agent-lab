@@ -11,10 +11,11 @@ import pytest_asyncio
 from core.context import set_context
 from core.logging import get_logger
 from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
 from core.tracing.provider import set_tracing_enabled
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.tracing.tracer import set_tracing_service_name
 from core.utils.tokens import get_token_service
 
 OBSERVABILITY_LOGGERS: tuple[str, ...] = (
@@ -76,15 +77,15 @@ def observability_caplog(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureF
 
 
 @pytest_asyncio.fixture
-async def system_member_context(container, auth_token_system: str, mock_context: Context) -> Context:
+async def system_member_context(di, auth_token_system: str, mock_context: Context) -> Context:
     """Context с пользователем, который реально состоит в компании system."""
     token = get_token_service().validate_token(auth_token_system)
     if token is None:
         raise RuntimeError("auth_token_system невалиден")
-    user = await container.user_repository.get(token.user_id)
+    user = await User.get(token.user_id)
     if user is None:
         raise RuntimeError(f"пользователь {token.user_id} не найден")
-    company = await container.company_repository.get("system")
+    company = await Company.get("system")
     if company is None:
         raise RuntimeError("компания system не найдена")
     ctx = mock_context.model_copy(
@@ -99,7 +100,7 @@ async def system_member_context(container, auth_token_system: str, mock_context:
 
 
 @pytest.fixture(autouse=True)
-def enable_observability_tracing(container) -> Generator[None, None, None]:
+def enable_observability_tracing(di) -> Generator[None, None, None]:
     config = TracingConfig(
         enabled=True,
         postgres_enabled=True,
@@ -108,6 +109,5 @@ def enable_observability_tracing(container) -> Generator[None, None, None]:
     )
     setup_tracing(config)
     set_tracing_service_name("platform-test")
-    set_span_repository(container.span_repository)
     set_tracing_enabled(True)
     yield

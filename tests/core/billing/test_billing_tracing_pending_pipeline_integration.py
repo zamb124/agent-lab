@@ -18,17 +18,16 @@ from core.billing.settlement_rules import (
     SettlementRulesDocument,
 )
 from core.billing.span_billing_settlement import SpanBillingSettlement
-from core.models.billing_models import UsageType
-from core.tracing.models import TraceSpanWrite
+from core.models.billing_models import UsageRecord, UsageType
+from core.tracing.models import Span
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_list_spans_pending_billing_limit_invalid(frontend_container) -> None:
-    repo = frontend_container.span_repository
+async def test_list_spans_pending_billing_limit_invalid(frontend_di) -> None:
     now = datetime.now(timezone.utc)
     with pytest.raises(ValueError, match="limit"):
-        await repo.list_spans_pending_billing_settlement(
+        await Span.list_spans_pending_billing_settlement(
             from_time=now - timedelta(hours=1),
             to_time=now,
             limit=0,
@@ -36,12 +35,11 @@ async def test_list_spans_pending_billing_limit_invalid(frontend_container) -> N
 
 
 @pytest.mark.asyncio
-async def test_list_spans_pending_billing_naive_datetime_raises(frontend_container) -> None:
-    repo = frontend_container.span_repository
+async def test_list_spans_pending_billing_naive_datetime_raises(frontend_di) -> None:
     now = datetime.now(timezone.utc)
     naive = datetime.now()
     with pytest.raises(ValueError, match="timezone"):
-        await repo.list_spans_pending_billing_settlement(
+        await Span.list_spans_pending_billing_settlement(
             from_time=naive,
             to_time=now,
             limit=10,
@@ -50,7 +48,7 @@ async def test_list_spans_pending_billing_naive_datetime_raises(frontend_contain
 
 @pytest.mark.asyncio
 async def test_save_pending_span_list_then_rule_settle_creates_usage(
-    frontend_container, unique_id: str, system_user_id: str
+    frontend_di, unique_id: str, system_user_id: str
 ) -> None:
     from core.models.identity_models import Company
 
@@ -64,14 +62,13 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
 
-    repo = frontend_container.span_repository
     sid = f"pend_{unique_id}"
     tid = f"tr_{unique_id}"
     t0 = datetime.now(timezone.utc)
-    await repo.save_span(
-        TraceSpanWrite(
+    await Span.insert_once(
+        Span(
             span_id=sid,
             trace_id=tid,
             parent_span_id=None,
@@ -105,7 +102,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
 
     from_time = t0 - timedelta(seconds=30)
     to_time = t0 + timedelta(seconds=30)
-    pending = await repo.list_spans_pending_billing_settlement(
+    pending = await Span.list_spans_pending_billing_settlement(
         from_time=from_time,
         to_time=to_time,
         limit=50,
@@ -116,8 +113,8 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
     span = ours[0]
     assert span.attributes[trace_attr.ATTR_BILLING_RESOURCE_NAME] == "llm:*"
 
-    settlement = SpanBillingSettlement(frontend_container.shared_storage)
-    billing = frontend_container.billing_service
+    settlement = SpanBillingSettlement(frontend_di.shared_storage)
+    billing = frontend_di.billing_service
     rules_doc = SettlementRulesDocument(
         rules=[
             SettlementRule(
@@ -144,7 +141,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
     )
     assert n2 == 0
 
-    recs = (await frontend_container.usage_repository.admin_search_usage_records(
+    recs = (await UsageRecord.admin_search_usage_records(
         company_id=cid, limit=20
     )).items
     matched = [r for r in recs if r.metadata.get("span_id") == sid]
@@ -154,7 +151,7 @@ async def test_save_pending_span_list_then_rule_settle_creates_usage(
 
 @pytest.mark.asyncio
 async def test_pending_span_rules_engine_quantity_from_attr(
-    frontend_container, unique_id: str, system_user_id: str
+    frontend_di, unique_id: str, system_user_id: str
 ) -> None:
     from core.models.identity_models import Company
 
@@ -168,22 +165,21 @@ async def test_pending_span_rules_engine_quantity_from_attr(
         monthly_budget=0.0,
         current_month_spent=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
 
     key = f"billing:company:{cid}:resource_base_prices_json"
-    await frontend_container.shared_storage.set(
+    await frontend_di.shared_storage.set(
         key,
         '{"llm": {"*": 0.5}}',
         force_global=True,
     )
 
-    repo = frontend_container.span_repository
     sid = f"qr_{unique_id}"
     tid = f"trr_{unique_id}"
     t0 = datetime.now(timezone.utc)
     tok_key = "platform.llm.input_tokens"
-    await repo.save_span(
-        TraceSpanWrite(
+    await Span.insert_once(
+        Span(
             span_id=sid,
             trace_id=tid,
             parent_span_id=None,
@@ -216,7 +212,7 @@ async def test_pending_span_rules_engine_quantity_from_attr(
 
     from_time = t0 - timedelta(seconds=30)
     to_time = t0 + timedelta(seconds=30)
-    pending = await repo.list_spans_pending_billing_settlement(
+    pending = await Span.list_spans_pending_billing_settlement(
         from_time=from_time,
         to_time=to_time,
         limit=50,
@@ -237,8 +233,8 @@ async def test_pending_span_rules_engine_quantity_from_attr(
             ),
         ],
     )
-    settlement = SpanBillingSettlement(frontend_container.shared_storage)
-    billing = frontend_container.billing_service
+    settlement = SpanBillingSettlement(frontend_di.shared_storage)
+    billing = frontend_di.billing_service
     n = await billing.settle_pending_span_in_job(
         span=span,
         settlement=settlement,
@@ -246,11 +242,11 @@ async def test_pending_span_rules_engine_quantity_from_attr(
     )
     assert n == 1
 
-    recs = (await frontend_container.usage_repository.admin_search_usage_records(
+    recs = (await UsageRecord.admin_search_usage_records(
         company_id=cid, limit=20
     )).items
     matched = [r for r in recs if r.metadata.get("rule_id") == f"tok_rule_{unique_id}"]
     assert len(matched) == 1
     assert matched[0].quantity == 100
 
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)

@@ -6,7 +6,7 @@ import base64
 from typing import Literal
 
 from apps.crm.authz.tuples import crm_grant_tuple
-from apps.crm.db.repositories.entity_repository import EntityRepository
+from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.models.grant_models import (
     AccessGrantResponse,
     GrantResourceType,
@@ -129,10 +129,8 @@ class AccessGrantService:
 
     def __init__(
         self,
-        entity_repo: EntityRepository,
         authz: AuthzService,
     ) -> None:
-        self._entity_repo: EntityRepository = entity_repo
         self._authz: AuthzService = authz
 
     async def _require_entity_share(self, entity_id: str, user_id: str) -> None:
@@ -154,7 +152,7 @@ class AccessGrantService:
     async def grant_entity_public(
         self, entity_id: str, created_by: str
     ) -> AccessGrantResponse:
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError("Entity not found")
         await self._require_entity_share(entity_id, created_by)
@@ -183,7 +181,7 @@ class AccessGrantService:
         role: str,
         created_by: str,
     ) -> AccessGrantResponse:
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError("Entity not found")
         await self._require_entity_share(entity_id, created_by)
@@ -217,7 +215,7 @@ class AccessGrantService:
         role: str,
         created_by: str,
     ) -> AccessGrantResponse:
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise ValueError("Entity not found")
         await self._require_entity_share(entity_id, created_by)
@@ -343,7 +341,7 @@ class AccessGrantService:
             obj = AuthzObject.crm_entity(resource_id)
             company_id = resource_company_id
             if company_id is None:
-                entity = await self._entity_repo.get(resource_id)
+                entity = await CRMEntity.get(resource_id)
                 if entity is None:
                     raise ValueError("Entity not found")
                 company_id = entity.company_id
@@ -387,7 +385,7 @@ class AccessGrantService:
         if obj.object_type is AuthzObjectType.CRM_NAMESPACE:
             company_id, _namespace = parse_namespace_key(obj.object_key)
         elif obj.object_type is AuthzObjectType.CRM_ENTITY:
-            entity = await self._entity_repo.get(obj.object_key)
+            entity = await CRMEntity.get(obj.object_key)
             if entity is not None:
                 company_id = entity.company_id
         return _response_from_tuple(

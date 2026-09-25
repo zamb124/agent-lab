@@ -23,7 +23,7 @@ WORK_ITEMS = "/worktracker/api/v1/work-items"
 
 
 async def _wait_hitl_resumed(
-    container,
+    di,
     session_id: str,
     *,
     needle: str,
@@ -32,7 +32,7 @@ async def _wait_hitl_resumed(
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if (
             last_state is not None
             and last_state.interrupt is None
@@ -48,21 +48,21 @@ async def _wait_hitl_resumed(
 
 
 async def _park_real_hitl_flow(
-    container,
+    di,
     unique_id: str,
     *,
     mode: HandoffMode,
     owner_user_id: str,
 ):
     queue_slug = f"hitl-q-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system",
         name=f"HITL {unique_id}",
         slug=queue_slug,
         creator=UserActor(user_id=owner_user_id),
     )
     flow_id = f"hitl_resume_{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         FlowConfig.model_validate(
             hitl_flow_create_payload(
                 flow_id=flow_id, queue_slug=queue_slug, mode=mode
@@ -78,16 +78,16 @@ async def _park_real_hitl_flow(
         content="need operator",
         user_id=current.user.user_id,
     )
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     token = set_context(current.model_copy(update={"channel": "a2a"}))
     try:
-        parked = await run_flow(container=container, flow=flow, state=state)
+        parked = await run_flow(di=di, flow=flow, state=state)
     finally:
         reset_context(token)
     assert parked.interrupt is not None
     assert isinstance(parked.interrupt.body, OperatorTaskInterrupt)
     assert parked.interrupt.correlation_id is not None
-    item = await container.work_item_service.find_by_completion_correlation(
+    item = await di.work_item_service.find_by_completion_correlation(
         "system", str(parked.interrupt.correlation_id)
     )
     assert item is not None
@@ -95,7 +95,7 @@ async def _park_real_hitl_flow(
 
 
 async def _wait_hitl_interrupt_cleared(
-    container,
+    di,
     session_id: str,
     *,
     timeout_sec: float = 60.0,
@@ -103,7 +103,7 @@ async def _wait_hitl_interrupt_cleared(
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if last_state is not None and last_state.interrupt is None:
             return last_state
         await asyncio.sleep(0.2)
@@ -116,16 +116,16 @@ async def _wait_hitl_interrupt_cleared(
 
 async def test_single_reply_complete_resumes_via_platform_events(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     worktracker_client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked, item = await _park_real_hitl_flow(
-        container,
+        di,
         unique_id,
         mode=HandoffMode.SINGLE_REPLY,
         owner_user_id=system_user_id,
@@ -137,23 +137,23 @@ async def test_single_reply_complete_resumes_via_platform_events(
     )
     assert done.status_code == 200, done.text
     assert done.json()["state"] == "done"
-    resumed = await _wait_hitl_resumed(container, parked.session_id, needle=reply)
+    resumed = await _wait_hitl_resumed(di, parked.session_id, needle=reply)
     assert resumed.interrupt is None
     assert resumed.response == reply
 
 
 async def test_takeover_complete_empty_resumes_via_platform_events(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     worktracker_client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked, item = await _park_real_hitl_flow(
-        container,
+        di,
         unique_id,
         mode=HandoffMode.TAKEOVER,
         owner_user_id=system_user_id,
@@ -164,5 +164,5 @@ async def test_takeover_complete_empty_resumes_via_platform_events(
     )
     assert done.status_code == 200, done.text
     assert done.json()["state"] == "done"
-    resumed = await _wait_hitl_interrupt_cleared(container, parked.session_id)
+    resumed = await _wait_hitl_interrupt_cleared(di, parked.session_id)
     assert resumed.interrupt is None

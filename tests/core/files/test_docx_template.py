@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from docx import Document
 
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.docx_template import (
     DocxTemplateContextError,
     DocxTemplateInvalidError,
@@ -194,10 +195,9 @@ async def test_fill_accepts_file_record(monkeypatch: pytest.MonkeyPatch) -> None
     )
     record = FileRecord(
         file_id="rec1",
-        provider="p",
         original_name="tpl.docx",
         s3_key="k",
-        s3_bucket="b",
+        storage_id=PLATFORM_STORAGE_ID,
         content_type=(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ),

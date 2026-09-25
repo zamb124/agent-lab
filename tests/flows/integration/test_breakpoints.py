@@ -19,7 +19,6 @@ import time
 import pytest
 import pytest_asyncio
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
@@ -44,25 +43,23 @@ def make_breakpoint_state(
 
 
 async def run_breakpoint_flow(flow: Flow, state: ExecutionState) -> ExecutionState:
-    return await run_flow(container=flow.container, flow=flow, state=state)
+    return await run_flow(di=flow.di, flow=flow, state=state)
 
 
 class TestBreakpointsReactAgent:
     """Тесты breakpoints для example_react ReAct агента."""
 
     @pytest_asyncio.fixture
-    async def flow_config(self, app) -> FlowConfig:
+    async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_react из БД."""
-        container = get_container()
-        config = await container.flow_repository.get("example_react")
+        config = await FlowConfig.get_latest("example_react")
         assert config is not None, "Agent example_react не найден в БД"
         return config
 
     @pytest_asyncio.fixture
-    async def flow(self, app) -> Flow:
+    async def flow(self, app, di) -> Flow:
         """Создаёт Agent из example_react."""
-        container = get_container()
-        return await container.flow_factory.get_flow("example_react")
+        return await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
     @pytest.mark.asyncio
     async def test_breakpoint_stops_at_entry_node(self, flow, mock_llm_with_queue):
@@ -214,18 +211,16 @@ class TestBreakpointsGraphAgent:
     """Тесты breakpoints для example_graph графового flow."""
 
     @pytest_asyncio.fixture
-    async def flow_config(self, app) -> FlowConfig:
+    async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_graph из БД."""
-        container = get_container()
-        config = await container.flow_repository.get("example_graph")
+        config = await FlowConfig.get_latest("example_graph")
         assert config is not None, "Agent example_graph не найден в БД"
         return config
 
     @pytest_asyncio.fixture
-    async def flow(self, app) -> Flow:
+    async def flow(self, app, di) -> Flow:
         """Создаёт Agent из example_graph."""
-        container = get_container()
-        return await container.flow_factory.get_flow("example_graph")
+        return await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
     @pytest.mark.asyncio
     async def test_breakpoint_on_classifier_function_node(self, flow, mock_llm_with_queue):
@@ -377,10 +372,9 @@ class TestBreakpointsStateManagement:
     """Тесты управления state для breakpoints."""
 
     @pytest_asyncio.fixture
-    async def flow(self, app) -> Flow:
+    async def flow(self, app, di) -> Flow:
         """Создаёт Agent из example_react."""
-        container = get_container()
-        return await container.flow_factory.get_flow("example_react")
+        return await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
     @pytest.mark.asyncio
     async def test_breakpoint_state_snapshot_is_immutable(self, flow, mock_llm_with_queue):
@@ -446,7 +440,7 @@ class TestBreakpointsAPIIntegration:
         pass
 
     @pytest_asyncio.fixture
-    async def setup_breakpoint_flow(self, app, container, unique_id, mock_context):
+    async def setup_breakpoint_flow(self, app, di, unique_id, mock_context):
         """Создает простой flow для тестов breakpoints."""
         from apps.flows.src.models import FlowConfig
         from core.context import set_context
@@ -472,12 +466,12 @@ class TestBreakpointsAPIIntegration:
                 {"from_node": "step2", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_breakpoint_via_taskiq_stops_execution(
-        self, app, container, setup_breakpoint_flow, unique_id, mock_context
+        self, app, di, setup_breakpoint_flow, unique_id, mock_context
     ):
         """
         Breakpoint через TaskIQ останавливает выполнение.
@@ -544,7 +538,7 @@ class TestBreakpointsAPIIntegration:
 
     @pytest.mark.asyncio
     async def test_continue_after_breakpoint_via_taskiq(
-        self, app, container, setup_breakpoint_flow, unique_id, mock_context
+        self, app, di, setup_breakpoint_flow, unique_id, mock_context
     ):
         """
         После breakpoint можно продолжить выполнение через TaskIQ.
@@ -613,7 +607,7 @@ class TestBreakpointsAPIIntegration:
 
     @pytest.mark.asyncio
     async def test_no_breakpoint_completes_normally(
-        self, app, container, setup_breakpoint_flow, unique_id, mock_context
+        self, app, di, setup_breakpoint_flow, unique_id, mock_context
     ):
         """
         Без breakpoints агент выполняется до конца.

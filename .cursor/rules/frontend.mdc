@@ -1,358 +1,107 @@
 ---
-description: "Frontend canon: PlatformElement / App / Modal / Page, helpers базы, i18n, zero-import, zero-fallback"
+description: "Frontend-канон SPA: базы и helpers PlatformElement, zero-import, структура ui, i18n, утилиты, дизайн, PWA, Lara и сервис frontend. Читать при правке любого UI"
+globs:
+  - "apps/*/ui/**"
+  - "core/frontend/static/lib/**"
+  - "core/frontend/pwa/**"
+  - "core/i18n/translations/**"
+  - "apps/frontend/**"
 alwaysApply: false
 ---
-# Frontend — общий канон
 
-Не плодить parallel DTO/state shapes рядом с каноническим resource/API контрактом. Fail-closed `_normalize*Payload` в factories — валидация границы (throw), не translation между дублями моделей.
+# Frontend
 
-Весь UI — на событиях через единый `EventBus`. Доменное состояние — в фабриках (`createAsyncOp`/`createResourceCollection`/`createCursorList`/`createFacets`/`createForm`/`createSlice`). Pages, modals и components получают доступ к фабрикам **только** через helpers базы по строковому имени. Никаких сервисов, store, features, Zustand, BaseStore, ad-hoc HTTP-клиентов и фолбеков. Lookup по типу ноды (Play / test-run) — не фабрика: см. `ui_factories.mdc`.
+UI каждого сервиса — Lit 3 SPA на core-базе `core/frontend/static/lib/**`: нативные ES-модули через import map, без бандлера и без Zustand/Redux/MobX. Состояние и контракт UI-события → `ui_factories.mdc`; core UI Kit, модалки, mobile shell → `ui_components.mdc`; поля форм → `ui_fields.mdc`; `PlatformEvent` и шина → `events.mdc`; интерфейс flow → `flow_ui.mdc`.
 
-**ZERO-IMPORT**, **ZERO-FALLBACK**, **ZERO-GUESS** — отклонений нет.
+## Инварианты
 
-См. также: `ui_factories.mdc` (контракт фабрик и событий), `ui_components.mdc` (core UI Kit).
+1. **Базы.** Компонент наследует `PlatformElement` (`core/frontend/static/lib/platform-element/index.js`); корень SPA — `PlatformApp` (`core/frontend/static/lib/base/PlatformApp.js`), маршрут — `PlatformPage` (`core/frontend/static/lib/base/PlatformPage.js`), модалка — `PlatformModal`/`PlatformFormModal` → `ui_components.mdc` § Модалки. `extends LitElement`, `extends HTMLElement` и своя база запрещены: `LitElement` наследует только `PlatformElement`.
+2. **Helpers.** API компонента — методы `PlatformElement`; перечень и контракт — `core/frontend/static/lib/platform-element/index.js`, helper бросает `Error` на отсутствующем аргументе, неизвестном имени или типе. UI-команда (toast, модалка, sheet, sidebar, навигация, clipboard, locale, тема, компания, OAuth, открытие файла) — только helper: прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)` в `apps/<svc>/ui/{pages,modals,components}/**` запрещён; `CoreEvents` там — только для подписки `useEvent`.
+3. **Без сервисов и store.** Геттеров `this.services`, `this.auth`, `this.notify`, `this.theme`, `this.i18n`, `this.companies`, `this.team`, `this.calendarApi`, `this.filesApi`, `this.fileTypes` нет; `ServiceRegistry`, `BaseStore`, `BaseService`, `AppEvents` запрещены. Состояние читается `this.select(...)`, не `this.bus.getState()`; `dispatch` — fire-and-forget, исход команды ждёт контроллер фабрики → `ui_factories.mdc` § Контроллеры.
+4. **Zero-import.** `pages/`, `modals/`, `components/` импортируют `lit`, модули `@platform/lib/**` и локальные модули своего сервиса; core — только через `@platform/lib/...`, не `/static/core/lib`. Запрещены `@platform/lib/base/use-resource.js` и контроллеры, модули фабрик (`../events/resources/*.resource.js`), `@platform/lib/utils/i18n-namespace.js`, `new <X>Controller`, `fetch`, `axios`, `httpRequest`: фабрика берётся по имени → `ui_factories.mdc` § Контроллеры.
+5. **Zero-fallback.** Дефолт значения — только `initialSlice` фабрики; `||`/`??`-подстановки при чтении запрещены → `ui_factories.mdc` § Запрет фолбеков.
+6. **Композиция.** `this.emit(name, detail)` — DOM-событие parent←child внутри одной композиции (`change`, `close`); межкомпонентный и межприложенческий обмен — только bus. `new CustomEvent` в `apps/**` запрещён.
+7. **События.** Форма, имена и реестр типов → `ui_factories.mdc` § Контракт события и § Имена.
+8. **Изоляция UI.** `apps/<a>/ui/**` не импортирует `apps/<b>/ui/**`: общее переезжает в `core/frontend/static/lib/`. `[без гейта]`
+9. **ACL в UI.** Права — только ответ backend OpenFGA: admin-контролы — по `state.auth.user.canAdmin` из `GET /auth/me`; проверка ролей по JWT и `user.companies` запрещена → `authorization.mdc`. `[без гейта]`
+10. **Пользователь на экране.** `user_id` показывают только `<platform-user-chip>` и модалка `platform.user_info`; сырой `user_id` в разметке запрещён → `ui_components.mdc` § Пользователь. `[без гейта]`
+11. **Интерфейс flow.** Интерфейс flow в SPA — только `<platform-flow-ui>`: хост передаёт `getRequestHeaders`/`getExtraMetadataVariables`, не делает `fetch` к flows, не разбирает A2A-кадры, не рендерит блоки и не исполняет имя действия из артефакта → `flow_ui.mdc` § Frontend runtime. `[без гейта]`
 
-## Authorization (UI)
+### Структура `apps/<svc>/ui/`
 
-ACL в UI — только backend OpenFGA через API. Share/link wire = `viewer` \| `editor`; CRM grants могут `admin`/`owner`; mail binding = `owner`/`member`/`manager`; company roster roles = identity directory only. Admin mutate gate — `state.auth.user.canAdmin` из `GET /auth/me` (FGA), не JWT `roles` / `companies[].includes`. Канон → **`authorization.mdc`**.
-
-## Стек
-
-Lit 3, ES modules через import map, нативные web components. Бандлера **нет** — браузер грузит модули напрямую. Никакого Zustand/Redux/MobX.
-
-Code editor code_node (`flows-code-editor`) — vendored CodeMirror (`codemirror-bundle.js`) + `@codemirror/lsp-client`. Intelligence — language server, не JSON-каталог имён. Bootstrap LSP — фабрика `flows/code_lsp_session`; JSON-RPC — WS, не `fetch` из page. Markdown `/code/documentation` не кормит editor.
-
-## PWA и обновление статики
-
-`/static/core/**`, `/static/frontend/**` и сервисные UI-static (`/flows/static/**`, `/crm/ui/static/**`, `/sync/ui/static/**`, `/rag/ui/static/**`, `/documents/ui/static/**`) — mutable ES modules/CSS по стабильным URL. Service Worker **никогда** не отдаёт их cache-first/stale-while-revalidate: только network-first с Cache Storage как offline fallback.
-
-Источник версии релиза — `SERVER__DEPLOYMENT_VERSION` в `/health` / `/<svc>/health`. Клиент хранит последнюю увиденную версию в `localStorage` ключе `platform:core:deployment_version`; SW хранит свою metadata-копию в Cache Storage. При mismatch обязательно удалить `humanitec-*` content caches, обновить SW и перезагрузить окно. In-memory `state.pwa.deploymentVersion` — только отображение, не источник истины для сравнения между запусками.
-
-`/sw.js` всегда отдаётся с `Cache-Control: no-cache, no-store, must-revalidate` и `Service-Worker-Allowed: /`. Любое изменение стратегии кэширования SW должно bump-ать `CACHE_SCHEMA_VERSION`, чтобы старые content caches были удалены на activate.
-
-## Поток
-
-State `frozen`; изменения — только reducer фабрики; источник правды — event log + reducer. Диаграмма потока `dispatch → reducer → state → Lit` / `effect → события`, шесть фабрик и транспорт — **`ui_factories.mdc`**; контракт события и шина `platform:events` — **`events.mdc`**.
-
-## Базовые классы (единственно допустимые)
-
-| Класс | Файл | Назначение |
-|---|---|---|
-| `PlatformElement` | `@platform/lib/platform-element/index.js` | Любой Lit-компонент платформы |
-| `PlatformApp` | `@platform/lib/base/PlatformApp.js` | Корневой `<svc>-app`, регистрирует фабрики |
-| `PlatformPage` | `@platform/lib/base/PlatformPage.js` | Страницы-маршруты |
-| `PlatformModal` | `@platform/lib/components/glass-modal.js` | Модалка с тёмным backdrop |
-| `PlatformFormModal` | там же | Модалка с формой (dirty-tracking, `closeAfterSave`) |
-
-Запрещены: `LitElement`, `HTMLElement`, своя база.
-
-## API компонента — только helpers базы
-
-| Метод | Что делает |
-|---|---|
-| `this.dispatch(type, payload?, meta?)` | отправить событие в bus |
-| `this.useEvent(type, handler)` | подписка на отдельный тип |
-| `this.select(selector, opts?)` | реактивная подписка на срез state |
-| `this.t(key, vars?, namespace?)` | перевод; ns: явный → `static i18nNamespace` → `defaultI18nNamespace` PlatformApp; иначе `throw` |
-| `this.useResource(name, opts?)` / `useOp(name)` / `useForm(name)` / `useCursorList(name, opts?)` / `useFacets(name)` / `useSlice(name)` | контроллеры поверх фабрик |
-| `this.toast(i18n_key, {type?, vars?, duration?})` | `UI_TOAST_SHOW` |
-| `this.openModal(kindOrClass, props?)` / `closeModal(kind?)` | `UI_MODAL_OPEN`/`_CLOSE` |
-| `this.openBottomSheet(kind, props?)` / `closeBottomSheet(target?)` | `UI_BOTTOM_SHEET_OPEN_REQUESTED`/`_CLOSE_REQUESTED` |
-| `this.openSidebar()` / `closeSidebar()` | `UI_SIDEBAR_OPEN_REQUESTED`/`_CLOSE_` (desktop only, no-op на мобиле) |
-| `this.getCurrentRouteKey()` | `state.router.routeKey` |
-| `this.navigate(routeKey, params?)` | `ROUTER_NAVIGATE_REQUESTED` |
-| `this.copyToClipboard(text, {success_i18n_key, error_i18n_key})` | `UI_CLIPBOARD_COPY_REQUESTED` |
-| `this.setLocale(locale)` | `I18N_LOCALE_REQUESTED` |
-| `this.setTheme(name)` | `THEME_SET_REQUESTED` |
-| `this.switchCompany(companyId)` | `AUTH_COMPANY_SWITCH_REQUESTED` |
-| `this.startOAuth(provider, {returnPath?, plan?})` | `auth/oauth/start_requested` |
-| `this.emit(name, detail?)` | DOM-событие parent←child через slot/composed (только composition внутри одного компонента) |
-
-Каждый метод бросает `Error` при отсутствии обязательных аргументов или неизвестном `name`/`kind`/типе toast. Никаких неявных дефолтов.
-
-**Запрещено в pages/modals/components:** `this.services`, `this.auth`, `this.notify`, `this.icon`, `this.theme`, `this.i18n`, `this.companies`, `this.calendarApi`, `this.filesApi`, `this.fileTypes`, `this.team`. Этих геттеров не существует.
-
-## Имена событий
-
-`<scope>/<entity>/<verb>` — lowercase, snake_case, ≥3 сегмента (контракт — **`events.mdc`**; WS-команды `_requested` и `commandType` — **`ui_factories.mdc`**).
-
-Core scope (`@platform/lib/events/contract.js`): `auth`, `theme`, `i18n`, `router`, `network`, `ui`, `notify`, `pwa`, `storage`, `http`, `ws`. Дополнительно `@platform/lib/events/index.js`: `CoreAuthEvents`, `ICON_EVENTS`, `FILES_EVENTS`, `COMPANIES_EVENTS`, `TEAM_EVENTS`, `CALENDAR_EVENTS`, `NOTIFICATIONS_EVENTS`, `FILE_TYPES_EVENTS`, `PWA_EVENTS`, `I18N_NAMESPACE_SET_REQUESTED`.
-
-`useOp().run()` из `updated()` / `render()` без проверки `busy` / `error` / `lastResult` запрещён: `REQUESTED` меняет slice → Lit снова зовёт `updated()` → шторм HTTP (прод: `site-bundle`). Гейт — `shouldFetchPublicSiteBundle` либо эквивалент. Старт запроса — `connectedCallback` / явное действие, не каждый update.
-
-**Публичные страницы frontend (лендинг, продукты, legal, login/join и т.д.):** на `<html>` выставляется `data-platform-theme-lock="dark"`. `theme.effect.js` всегда красит DOM (`data-theme`, `meta theme-color`) в тёмную тему, не трогая вывод `THEME_CHANGED` и `localStorage` (`platform_theme`) — там остаётся выбор для консоли. Склейка lock + `syncPlatformThemeDom` в `apps/frontend/ui/app/frontend-app.js`; ранний lock без мигания — inline script в `apps/frontend/ui/index.html` (пути должны совпадать с `PUBLIC_ROUTE_KEYS`).
-
-**Auth на публичных страницах (silent probe):** `FrontendApp.shouldRequestUserLoadOnConnect()` возвращает `false` для публичных путей (`/`, `/search`, `/products/*`, `/agent`, `/policy`, `/terms`, `/support`, `/blog`, `/about`, `/roadmap`), чтобы лендинг рендерился мгновенно без ожидания `/api/auth/me`. В `PlatformApp.connectedCallback()` при этом диспатчится `AUTH_ASSUMED_ANONYMOUS` (статус → `unauthenticated`, мгновенный рендер анонимом) **и** фоновая проба `CoreAuthEvents.USER_SILENT_PROBE_REQUESTED` → `GET /api/auth/me`: валидная сессия → `AUTH_USER_LOADED` (апгрейд до `authenticated`, залогиненный видит «Dashboard» в шапке), 401/сбой → `AUTH_ASSUMED_ANONYMOUS`. Отличие от `USER_LOAD_REQUESTED`: 401 не даёт `AUTH_UNAUTHORIZED` (`lost_session`) — аноним остаётся анонимом без «потери сессии». Часть `/me` (построение user-объекта) — общая через `fetchCurrentUser` в `core/frontend/static/lib/events/effects/auth.effect.js`. Решение «публичная ли страница» — по `PUBLIC_ROUTE_KEYS` в `apps/frontend/ui/app/frontend-app.js`; `rendersUnauthenticated()` ⇒ `true` для frontend, поэтому `unauthenticated` не триггерит редирект на login.
-
-Сервисные имена — порождаются фабриками в `apps/<svc>/ui/events/resources/*.resource.js` по контракту `'<svc>/<entity>'`. Литералы прямо в коде запрещены — `factory.events.X` или helper-методы контроллера.
-
-## Структура `apps/<svc>/ui/`
-
-```
-apps/<svc>/ui/
-  index.js                   # bootstrap
-  app/<svc>-app.js           # extends PlatformApp; static factories, defaultI18nNamespace
-  events/resources/          # все фабрики: '<svc>/<entity>'
-  components/                # presentational PlatformElement
-  pages/                     # PlatformPage; ZERO IMPORT (lit + база + локальные стили)
-  modals/                    # PlatformModal / PlatformFormModal
-  styles/<svc>.css
+```text
+index.html          import map, tokens.css, reset.css, platform-boot-spinner.css
+index.js            bootstrap: <svc>-app, страницы, модалки
+app/<svc>-app.js    PlatformApp: static factories, defaultI18nNamespace, platformAssistant, маршруты
+events/resources/   фабрики '<svc>/<entity>' → ui_factories.mdc
+events/types.js     константы push-типов сервиса
+events/<svc>-*.effect.js  bridge-effect → ui_factories.mdc § Реестр и PlatformApp
+pages/ modals/ components/ styles/
+_helpers/           чистые функции сервиса, резолверы источника отображения (<svc>-id-resolvers.js)
 ```
 
-**Запрещены** в `apps/<svc>/ui/`:
-
-- папки `services/`, `store/`, `features/`;
-- файлы `*.service.js`, `*.store.js`, `*.controller.js` (контроллеры — только через helpers);
-- `events/effects/` или `events/reducers/` — вся логика домена в фабриках;
-- `events/<svc>-events.js`, `events/selectors.js` — события и селекторы выводятся фабрикой;
-- `events/contract.js` (свой) — реестр core-типов один на платформу.
-
-## Zero-import canon в pages/modals/components
-
-Импортировать **только**:
-
-- `lit` (`html`, `css`, `nothing`, …);
-- базу `@platform/lib/base/...` (`PlatformPage`, `PlatformModal`, …);
-- core UI Kit `@platform/lib/components/...` (`<glass-card>`, `<platform-icon>`, `<page-header>`, …);
-- локальные стили этого же сервиса (`../components/...`, `../styles/...`).
-
-**Запрещено:**
-
-- `from '@platform/lib/events/contract.js'` для `dispatch UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*` — только helpers;
-- `from '@platform/lib/utils/i18n-namespace.js'` (`I18nNs.X`) — пиши `static i18nNamespace = '<ns>';` строкой или опирайся на `defaultI18nNamespace`;
-- `from '@platform/lib/base/use-resource.js'` (контроллеры) — только `this.useResource(...)`/`this.useOp(...)`/…;
-- `from '../events/resources/*.resource.js'` — фабрики достаются по имени;
-- `new ResourceController/OpController/FormController/CursorListController/FacetsController` — конструкторы запрещены;
-- `httpRequest` / `fetch` / `axios` — HTTP только в `request` функции фабрики;
-- `||`, `??` фолбеки в чтении (`x || []`, `obj.field || 'def'`) — дефолты только в `initialSlice` фабрики.
-
-## CI-проверяемые запреты
-
-- `extends LitElement` / `extends HTMLElement`.
-- `new CustomEvent(...)` в `apps/<svc>/ui/**` — допустимо только в `core/frontend/static/lib/components/**` для composition. В сервисе — `this.dispatch(...)` или `this.emit(...)` (slot).
-- `this.services.*`, `ServiceRegistry`, `BaseStore`, `BaseService`, `AppEvents`, Zustand — нигде.
-- `fetch(`, `axios`, `httpRequest` в pages/modals/components.
-- `setState`, прямое присваивание полей state.
-- Папки `services/`/`store/`/`features/`, файлы `*.service.js`/`*.store.js`, `events/effects/`/`events/reducers/`.
-- `||`-фолбеки `|| []`, `|| {}`, `|| 'default'`, `?? '—'`, `?? null` в `apps/<svc>/ui/{pages,modals,components,events/resources}/**`.
-- `dispatch(CoreEvents.<UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*>)` в pages/modals/components — только через helpers.
-- Имя события не `<scope>/<entity>/<verb>` — fail.
-- Имя фабрики не `<svc>/<entity>` (ровно 2 сегмента) — fail.
-
-CI: `make check-ui-canon` (`scripts/check_ui_canon.sh`), `make check-events-canon` (`+ scripts/check_ui_factories.py`).
-
-## Mobile shell 2026 canon
-
-Единый мобильный шелл для всех сервисов: радикальная досягаемость (radical reachability), без гамбургера, без скрытой левой панели.
-
-### Архитектура
-
-| Компонент | Назначение | Видимость |
-|---|---|---|
-| `<platform-bottom-nav>` | Плавающая капсула первичной навигации (Liquid Glass), 4–5 табов | `≤767px` only |
-| `<platform-bottom-sheet>` | База для нижних экранов (snap `half`/`full`, swipe-down-to-close, scrim) | `≤767px`, отдельные могут и десктоп |
-| `<platform-bottom-sheet-stack>` | Единственное место в DOM, куда монтируются sheets | везде |
-| `<platform-top-bar>` | Опциональный sticky top-bar с back/title/actions | `≤767px`, opt-in через `static topBarEnabled = true` |
-| `<platform-service-switcher-sheet>` (`kind: 'platform.service_switcher'`) | Универсальный sheet профиля: сервисы, console-links, theme, notifications, logout | `≤767px` |
-| `<platform-sidebar>` / сервисный sidebar | Десктопная навигация | `≥768px`. На `≤767px` принудительно `display: none` |
-
-### Декларативная конфигурация в `PlatformApp`-наследнике
-
-```js
-const BOTTOM_NAV_ITEMS = [
-    { key: 'list',    routeKey: '<route>', icon: 'icon-name', labelKey: 'bottom_nav.<key>' },
-    { key: 'sheet',   sheet: '<scope>.<kind>', icon: 'user',  labelKey: 'bottom_nav.<key>' },
-];
-
-export class FooApp extends PlatformApp {
-    static bottomNavItems = BOTTOM_NAV_ITEMS;
-    static bottomNavHideOnRoutes = ['fullscreen_editor'];
-    // По умолчанию `<platform-top-bar>` выключен; включается явно:
-    // static topBarEnabled = true;
-    // static topBarHideOnRoutes = ['public_landing'];
-}
-```
-
-Каждый route в `createRouterEffect({ routes })` обязан иметь `titleKey: 'routes.<key>'` (это подпись в `<platform-top-bar>` и breadcrumbs).
-
-### Bottom sheets
-
-Sheet наследует `PlatformBottomSheet`, имеет `static bottomSheetKind = '<scope>.<entity>'`, регистрируется `registerBottomSheetKind`, открывается `this.openBottomSheet(kind, props?)`; рендерит только `<platform-bottom-sheet-stack>` из `PlatformApp.render()`. Регистрация, опции (`snap`/`dismissible`/`heading`), `platform.service_switcher`, `<platform-bottom-nav>`, `<platform-top-bar>` — **`ui_components.mdc`**.
-
-### Запреты mobile shell
-
-- Гамбургер-меню в любой шапке (`page-header.menu-btn`, `<svc>-mobile-app-header`, кастомный `.menu-btn` в чате) — **запрещён**. Удалять при касании к компоненту.
-- Открытие сайдбара на мобиле (`this.openSidebar()` под `≤767px`) — no-op. Не использовать как мобильный шелл.
-- Создание новых `*-mobile-app-header` компонентов — запрещено. Если нужен top-bar — `static topBarEnabled = true` + `<platform-top-bar>`.
-- Локальные `position: fixed; bottom: 0` навигации в сервисных компонентах — запрещены. Только `<platform-bottom-nav>`.
-- Дублирование `<platform-bottom-nav>` / `<platform-bottom-sheet-stack>` / `<platform-top-bar>` в сервисных приложениях — запрещено. Их рендерит только `PlatformApp.render()`.
-
-### Безопасные зоны и токены
-
-Все размеры/радиусы/z-index — через токены `tokens.css`:
-`--platform-bottom-nav-height/-inset/-radius/-z-index/-tap-target`, `--platform-top-bar-height/-z-index`,
-`--platform-bottom-sheet-radius/-z-index/-scrim`, `--app-content-bottom-padding-mobile`.
-
-Нижний контент-padding автоматически: `<platform-island safe-bottom>` либо страница ставит `padding-bottom: var(--app-content-bottom-padding-mobile)`.
-
-### Typography canon
-
-Единственный источник шрифтов платформы:
-
-| Слой | Файл | Назначение |
-|---|---|---|
-| Manifest | `core/frontend/static/assets/fonts/platform-typography.json` | family, пути woff2, stacks |
-| @font-face | `core/frontend/static/assets/fonts/platform-fonts.css` | self-hosted Inter + JetBrains Mono |
-| Tokens | `core/frontend/static/assets/css/tokens.css` | `@import` fonts + `--font-sans` / `--font-mono` / `--font-feature-sans` |
-
-**Смена шрифта:** обновить manifest + woff2 в `core/frontend/static/assets/fonts/<family>/` + `@font-face` в `platform-fonts.css`; stacks синхронизируются через manifest (CI: `scripts/check_platform_typography.py`).
-
-**Запреты:**
-
-- Локальные `@font-face` / `<link>` на шрифты в `apps/*/ui/index.html` — только `tokens.css` + `reset.css`.
-- Hardcoded `font-family: 'Fira Sans'`, `'Onest'`, `'SF Pro Display'`, `'Geist'` в `apps/**` и `core/frontend/static/lib/**` — только `var(--font-sans)` / `var(--font-mono)`.
-- Fallback-стеки `var(--font-sans, …)` / `var(--font-mono, …)` — только голый `var(--font-sans)` / `var(--font-mono)`.
-- Legacy tokens `--font-main`, `--font-condensed`, bundle `fira-sans*` — удалены, CI fail.
-- `PlatformElement` baseStyles: `:host { font-family: var(--font-sans) }` + `button { font: inherit }` / `input/textarea/select { font: inherit; color: inherit }` — shadow reset (document `reset.css` в closed shadow не действует). **Не** ставить `color: inherit` на `:host button` — специфичность (0,1,1) перебивает `.btn-primary` / `.cta-btn` и в light theme даёт тёмный `--text-primary` на violet CTA.
-- Текст на solid primary/accent fill — только `--platform-btn-primary-text` / `--platform-btn-accent-text` / `--text-on-accent` (alias) или `<platform-button>`. `--text-inverse` — контраст к ambient surface, не on-accent.
-- Отдельные condensed/display font-family — `--text-display-*`, `--tracking-tight`, `--font-semibold`.
-- CI: `scripts/check_platform_typography.py` (п.33 `check_ui_canon.sh`), unit: `platform-typography.spec.js`.
+Запрещены каталоги `services/`, `store/`, `stores/`, `features/`, `events/effects/`, `events/reducers/` и файлы `*.service.js`, `*.store.js`, `*.controller.js`, `events/selectors.js`, свой `events/contract.js`: события, reducer, effect и селекторы порождает фабрика.
 
 ### i18n
 
-Каждый сервис обязан содержать в своём bundle (`core/i18n/translations/{ru,en}/<ns>.json`) парные ключи:
+- Пользовательский текст — только `this.t(key, vars?, namespace?)`; захардкоженный текст, в том числе кириллица в литералах, запрещён. `[без гейта]`
+- Namespace — `static i18nNamespace = '<ns>'` строкой или `PlatformApp.defaultI18nNamespace`; `I18nNs` в `pages/`, `modals/` запрещён; без namespace `t()` бросает.
+- Ключ добавляется в `core/i18n/translations/ru/<ns>.json` и `en/<ns>.json` в том же изменении; паритет ru≡en для не-toast ключа `[без гейта]`. Динамический ключ (`t('a.' + status)`) запрещён: конечный статус — отдельный ключ и ветка кода. `[без гейта]`
+- Бандл сервиса содержит `routes.<routeKey>` (подпись top-bar и breadcrumbs) и `bottom_nav.<itemKey>`; общие ключи — `platform.json`, `common.json`, ошибки границы — `platform:errors.*` → `architecture.mdc` § Ошибки границы. `[без гейта]`
+- Локаль форматтера — `this.select((s) => s.i18n.locale)`; литерал `'ru-RU'`/`'en-US'` в `Intl.*` и `toLocale*` запрещён.
 
-```json
-{
-  "routes": { "<routeKey>": "<подпись для top-bar и breadcrumbs>" },
-  "bottom_nav": { "<itemKey>": "<подпись таба>" }
-}
-```
+### Утилиты
 
-Платформенные ключи bottom-sheet — `core/i18n/translations/{ru,en}/platform.json` (`mobile_nav.*`, `service_switcher.*`, `top_bar.*`, `bottom_sheet.*`).
+- Общая функция — только `core/frontend/static/lib/utils/`: `format-file-size.js`, `format-duration.js`, `format-platform-number.js`, `format-platform-date.js`, `escape-html.js`, `markdown.js` (`markdownToHtml` — единственный markdown→HTML, vendored `marked`), `hash-string.js`, `validators.js`, `storage-keys.js`, `floating-position.js`, `platform-namespace-header.js`, `platform-file-upload.js`. Локальная копия в `apps/**` (свой `escapeHtml`, `EMAIL_RE`, hash×31, цикл размера файла, прямой `marked`) запрещена.
+- Ключ localStorage — только `platformStorageKey(scope, key)` (`platform:<scope>:<key>`); свободный префикс запрещён. `[без гейта]`
+- Байты файла — только `platform/file_create` (`createPlatformFileCreateOp`, `core/frontend/static/lib/events/factories/platform-file-create.js`) → chunked `uploadPlatformFile`; свой `FormData`-upload запрещён → `files.mdc`.
+- Команды и push идут только через user-сокет `core/frontend/static/lib/events/effects/ws.effect.js` (vendored `centrifuge-js`); отдельный `WebSocket` — только долгая сессия со своим протоколом (voice, LSP) → `architecture.mdc` § Транспорт. `[без гейта]`
 
-## Modal canon
+### Дизайн
 
-Все модалки наследуют `PlatformModal`/`PlatformFormModal`, имеют `static modalKind = '<scope>.<entity>'`, регистрируются через `registerModalKind`; открытие/закрытие — `this.openModal(kind, props)` / `this.closeModal()`; рендер — только `<platform-modal-stack>`. Регистрация, стек, z-index, `closeAfterSave`, запреты — **`ui_components.mdc`** § «Modal canon».
+- В компонентах — только токены `core/frontend/static/assets/css/tokens.css` и core-компоненты; локальные hex, rgb и rgba, свои `box-shadow`, `backdrop-filter`, `border-radius` shared-примитивов запрещены; повтор визуального примитива — токен `--<svc>-<domain>-<role>` в `tokens.css` или core-компонент; тема — `[data-theme="dark|light"]`. `[без гейта]`
+- Анимация — motion-слой → `ui_components.mdc` § Motion; `transition: all` запрещён.
+- Шрифты — manifest `core/frontend/static/assets/fonts/platform-typography.json`, `platform-fonts.css` и `tokens.css`: в CSS только `var(--font-sans)` и `var(--font-mono)` без fallback-стека; свои `@font-face`, `<link>` на шрифты, литералы `font-family` и прочие font-токены запрещены.
+- Текст на solid primary/accent — `--platform-btn-primary-text`, `--platform-btn-accent-text`, `--text-on-accent` или `<platform-button>`; `--text-inverse` — контраст к фону поверхности. `[без гейта]`
+- Спиннер — `<platform-spinner>`, свой `@keyframes spin` запрещён; boot-экран `index.html` — `platform-boot-spinner.css` без текста.
+- Публичные страницы (`/`, `/products/*`, legal) — та же DS: `--marketing-*`, `core/frontend/static/lib/styles/shared/marketing-section.styles.js`, `<platform-button>`, `ProductLandingPage`; отдельный набор токенов (`--landing-*`) и локальные brand hex запрещены. `[без гейта]`
+- Рабочий экран начинается с workflow (список, редактор, фильтры, панель действий); hero и декоративные секции — только на публичных страницах. `[без гейта]`
 
-## Field canon (поля форм)
+### PWA
 
-Любое поле формы — `<platform-field>`; сырые `<input>`/`<textarea>`/`<select>` в `apps/<svc>/ui/{pages,modals,components}/**` — только whitelist `type` (`file|hidden|range|color|checkbox|radio|search`) или `data-canon="composer|mention|inline-edit|search-as-you-type|combobox"`; классы `form-input` / `field-pill-input` на сырой разметке не освобождают. Локальные `.form-*` / `.field-pill*` CSS в `apps/**` и импорт удалённых `glass-input`/`glass-textarea` запрещены. CI: `make check-field-canon` (`scripts/check_field_canon.sh`), `scripts/check_ui_canon.sh` п.17/18. Полный контракт типов, API, whitelist core-виджетов и запреты — **`data-types.mdc`**.
+- `/static/core/**`, `/static/frontend/**` и UI-static сервисов — mutable ES-модули по стабильным URL: Service Worker `core/frontend/pwa/sw.js` отдаёт их только network-first, Cache Storage — offline fallback; cache-first и stale-while-revalidate запрещены. `[без гейта]`
+- Версия релиза — `server.deployment_version` (`SERVER__DEPLOYMENT_VERSION`) в `/health`; клиент хранит её под `platformStorageKey('core', 'deployment_version')` и при расхождении удаляет кэши `humanitec-*`, обновляет SW и перезагружает окно; `state.pwa.deploymentVersion` — только показ. `[без гейта]`
+- `/sw.js` отдаётся с `Cache-Control: no-cache, no-store, must-revalidate` и `Service-Worker-Allowed: /`; смена стратегии кэша поднимает `CACHE_SCHEMA_VERSION`. `[без гейта]`
 
-## Utility canon (форматтеры / escape / hash / validators)
+### Lara
 
-Любая «общая» утильная функция живёт в `core/frontend/static/lib/utils/`. Локальные копии в `apps/<svc>/ui/**` запрещены.
+- Каждый `PlatformApp` задаёт `static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }` (`launcherPosition` — `bottom-right` или `bottom-left`, только стартовый угол); `PlatformApp.render()` монтирует ровно один `<flow-ui-drawer>` Lara (`flow_id=lara`).
+- Branch задаёт фокус точки входа, каталог Agent Skills одинаков во всех SPA; контекст — `getPlatformAssistantContextVariables(routeKey, params)`: компактные канонические id без секретов и коллекций, тело графа Lara читает тулами → `agent_skills.mdc`. `[без гейта]`
+- Открытие из UI — только `openPlatformLaraAssistant()` (`core/frontend/static/lib/flow-ui/shell/preferences.js`, событие `platform-lara-open`); сервисные toggle-события запрещены. `[без гейта]`
+- Геометрия, drag, resize и persist — только `<flow-ui-drawer>` (`core/frontend/static/lib/flow-ui/shell/drawer-geometry.js`); сервис их не копирует. Публичный и гостевой маршрут скрывает Lara через `shouldRenderPlatformAssistant(routeKey, params)`. `[без гейта]`
 
-### Канонические модули
+### Сервис frontend
 
-| Модуль | Что внутри |
-|---|---|
-| `@platform/lib/utils/format-file-size.js` | `formatFileSize(bytes, { precision? })` |
-| `@platform/lib/utils/format-duration.js` | `formatDurationSeconds(sec, { withHours? })`, `formatDurationMs(ms, { withHours? })` |
-| `@platform/lib/utils/format-platform-number.js` | `formatPlatformNumber(value, locale, options?)`, `formatPlatformCurrencyRub(amount, locale, options?)` |
-| `@platform/lib/utils/format-platform-date.js` | `formatPlatformDate(input, locale, options?)`, `formatPlatformDateTime(input, locale)`, `formatPlatformTime(input, locale)` |
-| `@platform/lib/utils/escape-html.js` | `escapeHtml(value)` |
-| `@platform/lib/utils/markdown.js` | `markdownToHtml(markdown)` — единственный markdown → HTML рендерер (vendored `marked` ESM `assets/js/marked/`, сборка `npm run build:marked`); сырой HTML экранируется, ссылки/картинки только `http(s)`/`mailto`, результат идёт в `unsafeHTML` без отдельного sanitizer |
-| `@platform/lib/events/effects/ws.effect.js` | user WS — vendored `centrifuge-js` (`assets/js/centrifuge/`, сборка `npm run build:centrifuge`); кадр = `PlatformEvent`; `getToken` = cookie `auth_token` |
-| `@platform/lib/utils/hash-string.js` | `hashString31(seed)`, `hueFromString(seed)`, `initialsFromName(name)`, `indexFromSeed(seed, modulo)` |
-| `@platform/lib/utils/validators.js` | `EMAIL_RE`, `isValidEmail(value)`, `digitsOnly(value)`, `isValidPhone(value)`, `PHONE_DIGITS_MIN` |
-| `@platform/lib/utils/storage-keys.js` | `platformStorageKey(scope, key)` — единый префикс `platform:<scope>:<key>` |
-| `@platform/lib/utils/platform-namespace-header.js` | `platformNamespaceHeader(ctx, explicit?)` — заголовок `X-Platform-Namespace` для сервисов с жёсткой привязкой к пространству (Documents, Wiki) |
-| `@platform/lib/utils/floating-position.js` | `computeFloatingPosition(...)`, `resolveAnchorRect(anchor)`, `readViewportSize()` — расчёт положения плавающего слоя |
-| `@platform/lib/utils/platform-file-upload.js` | `uploadPlatformFile`, `resolvePlatformFileRefs`, `isPlatformFileRef`, `fetchPlatformFilesUploadConfig` — только chunked |
-| `@platform/lib/events/factories/platform-file-create.js` | `platform/file_create` → `uploadPlatformFile` |
+- Консоль компании (`apps/frontend`, порт 8002) — обычный владелец команд: `FRONTEND_OPERATIONS` (`apps/frontend/realtime/command_router.py`), `op_*` — `apps/frontend/realtime/*_operations.py`; фабрики `apps/frontend/ui/events/resources/*` — на `transport: 'ws'`, анонимные публичные и pre-session — по `COMMAND_WS_HTTP_ALLOWLIST` → `architecture.mdc` § REST-зеркало.
+- Консоль — не BFF: данные peer-доменов читает только моделями и сервисами владельцев → `architecture.mdc` § Межсервисный доступ; SQL в `apps/frontend/services` нет. Счётчики дашборда — одна команда `frontend/dashboard/stats_requested`, не запросы UI в каждый сервис. `[без гейта]`
+- Участники компании — общий `op_team_members_list` (`core/identity/team_operations.py`): `frontend/team/list_requested`, `office/company_members/list_requested`, `GET /{svc}/api/team/members`.
+- `frontend_startup` (`apps/frontend/main.py`) гарантирует компанию `system` и её admin — `ensure_system_admin_membership` (`core/identity/system_bootstrap.py`); другие процессы читают `load_system_admin_membership` без записи в FGA. `[без гейта]`
+- Публичные маршруты — `PUBLIC_ROUTE_KEYS` (`apps/frontend/ui/app/frontend-app.js`): рендер анонимом без ожидания `/api/auth/me` (`AUTH_ASSUMED_ANONYMOUS` и фоновая `CoreAuthEvents.USER_SILENT_PROBE_REQUESTED`, 401 пробы не даёт `AUTH_UNAUTHORIZED`); тема — `data-platform-theme-lock="dark"`, выбор темы консоли не меняется. `[без гейта]`
+- Демо-агенты лендинга — анонимные `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`): только embed компании `system` с `landing_visible` и непустым `landing_card_image_url`; лимит ходов гостя — `EmbedConfig.guest_max_user_messages`. `[без гейта]`
+- Заявка лендинга — `LeadRequestRecord`: `lead_request_id`, `contact_name`, `email`, `phone`, `organization_name`, `job_title`, `headcount_range`, `interested_products`, `comment`, `created_at`; название организации — `organization_name`, не `company`. Анонимный `POST /frontend/api/leads` пишет запись в shared storage компании `system`; список — `frontend/lead_requests/list_requested` (`require_system_admin`, `CursorPage`). `[без гейта]`
+- Cookie consent (152-ФЗ): `<cookie-consent-banner>` на всех `PUBLIC_ROUTE_KEYS`, opt-in с равнозначными «Принять все» и «Только необходимые», настройки категорий, отзыв из футера; согласие — `/consent/cookies`, политика — `/cookies`, не внутри оферты и `/policy`. Выбор — slice `frontend/cookie_consent` (`platformStorageKey('frontend', 'cookie_consent')`); журнал — `frontend/cookie_consent_record` → `POST /frontend/api/public/cookie-consent` → append-only `CookieConsentRecord` (таблица `cookie_consents`, `ip_hash` SHA-256 вместо IP, админки нет). `[без гейта]`
+- Версия текста согласия — `COOKIE_CONSENT_TEXT_VERSION` в `PublicSiteBundle.cookie_consent_text_version`, смена показывает баннер снова; аналитика (Яндекс.Метрика, GA) подключается только при `analytics_allowed` и совпавшей версии (`canInjectPublicAnalytics`), отзыв после загрузки скриптов — `reload`; необходимые cookie — без переключателя; маркетинговых пикселей нет. `[без гейта]`
 
-### Локаль для форматтеров
+## Исключения
 
-`formatPlatform*` принимают `locale` аргументом. Компонент берёт активную локаль через  `this.select((s) => s.i18n.locale).value`. Хардкод `'ru-RU'` / `'en-US'` в `Intl.*` / `toLocaleString` запрещён.
+- Исключение: hex и rgba — только файлы из allowlist п.23 `scripts/check_ui_canon.sh` (холст графа и обложки flows) → `flows.mdc`.
 
-### Запреты в `apps/<svc>/ui/**`
+## Гейты
 
-- Локальный `function escapeHtml`, `const escapeHtml = ...`.
-- Свой markdown-рендер (`marked` напрямую, `globalThis.marked`, `<script src=".../marked*.js">`, построчный markdown→HTML) — только `markdownToHtml`.
-- Локальный `EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/`, `_digitsOnly`, ad-hoc email regex.
-- Локальный hash-цикл `h = (h * 31 + s.charCodeAt(i))`.
-- Локальный `formatFileSize` / `_formatBytes` / `_formatFileSize` цикл (свой). Допустима тонкая обёртка-метод компонента, делегирующая в core `formatFileSize`.
-- `Intl.NumberFormat('ru-RU', ...)`, `Intl.DateTimeFormat('ru-RU', ...)`, `toLocaleDateString('ru-RU', ...)`, `toLocaleString('ru-RU', ...)`.
-- Свободный префикс ключа localStorage (`<brand>.*`, `<svc>:*`, `sync.chat.*`) — только `platformStorageKey('<scope>', '<key>')`.
-- Свой FormData/`UploadFile` upload байтов минуя `uploadPlatformFile` / `platform/file_create` — запрещён.
-
-CI: `scripts/check_ui_canon.sh` п.19 — детекторы `'ru-RU'`, `EMAIL_RE`/`_digitsOnly`, `escapeHtml`, hash×31, `marked` вне `utils/markdown.js`.
-
-## i18n
-
-- Каждый компонент с переводами имеет `static i18nNamespace = '<ns>';` ИЛИ `PlatformApp.defaultI18nNamespace = '<ns>';` (строкой). `I18nNs.X` в pages/modals/components не использовать.
-- Каждый новый ключ — парно в `core/i18n/translations/{ru,en}/<ns>.json`. **Захардкоженный пользовательский текст вместо ключей i18n запрещён.**
-- Toast/error ключи фабрики — обязательны.
-
-### Скрипты
-
-| Скрипт | Что делает |
-|---|---|
-| `make check-i18n` | парность `ru`/`en` ключей в JSON |
-| `make check-i18n-keys` (`scripts/check_i18n_keys.py`) | cross-check: каждый `t('key', ...)` в `apps/*/ui/**/*.js` и `core/frontend/static/lib/**/*.js` резолвится в `core/i18n/translations/{ru,en}/<ns>.json`. Резолв ns: явный 3-й аргумент → `static i18nNamespace` → `defaultI18nNamespace` PlatformApp → дефолт по пути файла. Динамические ключи (`t(\`prefix.${var}\`)`, конкатенации) пропускаются. Цель CI: `--mode missing --strict` = exit 0. |
-| `scripts/report_ui_i18n_gaps.py` | сканер кириллицы в литералах `apps/<svc>/ui/**/*.js`. Цель: 0 совпадений после выноса в `this.t(...)`. Не заменяет `make check-i18n`. |
-
-Ключи под сегментами `list`/`items`/`options`/`values` не считаются unused (типично индексируются циклом по массиву).
-
-## Backend → UI
-
-«Кнопка из бэка» = `PlatformEvent` с `delivery` на шине → Centrifugo → кадр диспатчится в bus как обычное событие. Доменная коллекция реагирует **только** в `extraReducer` / `extraEffect` своей фабрики (**`ui_factories.mdc`** § «Push-события в фабрике»); page-level `useEvent(push) → reload` запрещён. `useEvent` в компоненте — для UI-реакций без состояния (открыть модалку, toast). Публикация — **`events.mdc`** § «Backend → UI».
-
-### Flow UI действия
-
-- `<platform-flow-ui>` рендерит только блоки грамматики `FlowUIDocument`; `button.action`, `action` input-блока (commit значения / Enter), `data_table.row_action` (payload + `row`), `send` из `html` — один `ui-action` Message во flow через `FlowUIClient` (`submitAction`); `suggested_prompts` и composer `conversation` — `text` Part (`sendText`). Локальные `tabs`/`navigate`/фокус flow не запускают.
-- Побочные эффекты хоста у блоков фиксированы грамматикой: `link` — переход по `url` (`target=_blank`), `browser_preview` — `openBrowserPreview`, `file_list` — ссылка на файл; `html`-блок общается только с sandbox-мостом `window.flowUi` (`send` → тот же `ui-action`, `openUrl` → новая вкладка). Произвольное имя действия из артефакта хостом не исполняется — его интерпретирует flow.
-- Хост передаёт `getRequestHeaders` (auth) и `getExtraMetadataVariables` (переменные хода, например `namespace`); pages/components не делают `fetch` к flows и не диспатчат raw CoreEvents.
-- Preview/applied results — блоки `action_preview`/`action_result` в `conversation` (артефакт `ui`), не special `ui_event` branch.
-
-### Lara в PlatformApp
-
-- Каждый authenticated сервисный SPA задаёт `static platformAssistant = { serviceId, branchId, showLauncher, launcherPosition? }`. `launcherPosition`: `'bottom-right'` (дефолт) | `'bottom-left'` — только стартовый угол, пока пользователь не двигал кластер. `PlatformApp.render()` монтирует ровно один `<flow-ui-drawer>` (`flow-id="lara"`) с production drawer render context. Сервисы не копируют drag/resize.
-- Branch задаёт только фокус точки входа; полный Agent Skill catalog одинаков во всех сервисах. Service context передаётся через `getPlatformAssistantContextVariables(routeKey, params)` как компактные canonical IDs без секретов и полных коллекций. Flows editor — только IDs (`flow_id`/`node_id`/…); тела graph Lara достаёт tools (`flows_get_node` / `flows_list_nodes`), не standing `*_payload_json`.
-- Открытие из UI — только `openPlatformLaraAssistant()`; единое событие `platform-lara-open`. Сервисные toggle event names запрещены.
-- Геометрия ассистента живёт в embed-host `<flow-ui-drawer>` + [`drawer-geometry.js`](../../core/frontend/static/lib/flow-ui/shell/drawer-geometry.js). Кластер = launcher + panel. Кружок pointer/touch двигает весь кластер (порог 6px: клик без движения = toggle open/close). Панель открывается относительно якоря (предпочтение сверху, align по половине экрана, flip, clamp в viewport). Drag за пустую зону chrome `.topbar` и `section--chat-header` — composed `flow-ui-drawer-move-start`. SE-ручка меняет ширину и высоту. Persist: Lara `platformStorageKey('core', 'assistant.drawer.<branchId>')`; внешний embed `writeFlowUIPreferences('drawer:<embedId>', { geometry })`. Fullscreen (`expanded`) и mobile (`max-width: 520px`) — жесты выключены, persist не пишется.
-- Public/guest routes скрывают global Lara через `shouldRenderPlatformAssistant(routeKey, params)`. Docs guest assistant и embed flows остаются отдельными render contexts того же `<platform-flow-ui>`.
-
-## Marketing / product pages (часть core Design System)
-
-Публичные продуктовые посадочные (`/products/*`) и будущая миграция главного лендинга — **не отдельная DS**. Канон:
-
-- Токены: `core/frontend/static/assets/css/tokens.css` — `--marketing-*`, `--accent`, `--glass-*`, `--text-*`, `--space-*`.
-- Shared layouts: `core/frontend/static/lib/styles/shared/marketing-section.styles.js`.
-- CTA: `<platform-button variant="primary">` (текст = `--platform-btn-primary-text`, не `--text-inverse`); карточки: `.glass-medium.glass-interactive`.
-- Страницы продуктов: `ProductLandingPage` + декларативный config в `apps/frontend/ui/pages/products/*`.
-- `apps/frontend/ui/styles/landing.css` — **deprecated alias layer** для legacy landing-секций главной `/`; новый код не добавляет `--landing-*` и локальные brand hex.
-- Gap в визуале marketing → PR в `core/frontend/` (токен или shared style), не inline CSS в `apps/frontend`.
-
-## Публичный каталог лендинга (BFF frontend)
-
-Анонимные HTTP-эндпоинты `GET /frontend/api/public/landing-agents` и `POST /frontend/api/public/landing-agents/session` (`apps/frontend/api/public_landing_agents.py`). В выдачу — только виджеты компании **`system`** с `landing_visible` и непустым `landing_card_image_url`. UI: маршрут `digital-workers` (`/demo/digital-workers`), страница `apps/frontend/ui/pages/landing-digital-workers-page.js`, фабрики `frontend/landing_agents_load` и `frontend/landing_demo_session` в `landing-demo.resource.js`; demo монтирует `<platform-flow-ui surface="drawer">` с embed-safe guest render context и JWT из POST session. Лимит Submit-turns гостя — `EmbedConfig.guest_max_user_messages` (A2A `SendMessage`/`SendStreamingMessage` при непустом `contextId`).
-
-## Cookie consent (152-ФЗ)
-
-Публичный баннер на всех `PUBLIC_ROUTE_KEYS` (`<cookie-consent-banner>` в `frontend-app.js`). Opt-in: равнозначные кнопки «Принять все» / «Только необходимые», настройки категорий, отзыв через «Настройки cookie» в футере. Согласие — отдельный документ `/consent/cookies` (`kind=cookie_consent`); политика cookie — `/cookies` (`kind=cookies`). Не внутри оферты и не внутри `/policy`.
-
-- Slice `frontend/cookie_consent` + persist `platformStorageKey('frontend', 'cookie_consent')` (`STORAGE_*`). Журнал — `createAsyncOp` `frontend/cookie_consent_record`, REST-зеркало `POST /frontend/api/public/cookie-consent` (и `/api/public/cookie-consent`).
-- Версия текста — `COOKIE_CONSENT_TEXT_VERSION` на бэкенде, в `PublicSiteBundle.cookie_consent_text_version`. Смена версии снова показывает баннер.
-- Яндекс.Метрика (включая Вебвизор) и Google Analytics инжектятся только после `analytics_allowed` и совпадения версии (`canInjectPublicAnalytics`). Запрещено вызывать `_maybeBootstrapPublicAnalytics` / вешать YM/GA на landing до согласия. Отзыв после уже загруженных скриптов — `reload`.
-- Необходимые cookie (сессия, локаль, тема, сохранённый выбор) без opt-in и без выключателя. Маркетинговых пикселей нет.
-- Журнал `cookie_consents` (shared): append-only, `ip_hash` SHA-256, не сырой IP. Админки журнала нет.
-
-## Universal Flow UI
-
-`<platform-flow-ui>` (`core/frontend/static/lib/flow-ui/`) — единственный A2A interface runtime. Один `FlowUIClient` (A2A JSON-RPC + SSE, `a2a-task-accumulator.js`), один `FlowUIStore` (документ, проекция state, локальные `edits`, лента) и один реестр блоков обслуживают page/panel/drawer/embed/shared/editor. Host не интерпретирует A2A frames и не рендерит блоки сам.
-
-Canvas редактора — тот же `<platform-flow-ui editing selected-block-id .sampleState>` без iframe: блоки рендерятся production-реестром, а панели редактора (`flows-interface-add-panel`, `flows-interface-properties-panel`, `flows-interface-pages-tabs`, `flows-interface-toolbar`) живут снаружи и меняют документ через `interface-editor-domain.js`. Полный канон → **`flow_ui.mdc`**.
-
-## Тесты
-
-Reducers/effects/контроллеры фабрик и сброс реестров между тестами — **`ui_factories.mdc`** § «Тестирование». Компонентные тесты Lit (WTR), E2E Playwright и UIKDS — **`testing.mdc`** § «E2E UI», **`ui_components.mdc`** § «UI Kit Documentation System».
-
-## DevTools
-
-`?platform_devtools=1` — пишет каждое событие в console и кладёт `window.__platformDevtools__ = { trail(), state(), dispatch(), clear() }`.
-
-## Отклонения
-
-Любое отклонение от канона = **сначала** правка `frontend.mdc`/`ui_factories.mdc`/`ui_components.mdc`, потом код. CI отлавливает большинство нарушений автоматически (`make check-events-canon`).
+- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.1 базы и `static platformAssistant`; п.2–4, 6, 11 импорты, запрещённые имена и геттеры; п.5 `new CustomEvent`; п.7 `fetch`; п.8, 13 каталоги, zero-import pages/modals и прямой dispatch `UI_TOAST_SHOW`, `UI_MODAL_*`, `UI_CLIPBOARD_COPY_REQUESTED`, `ROUTER_NAVIGATE_REQUESTED`; п.14 `bus.getState`, `await (this.dispatch(...))`, `this.i18n`, `super.showModal`; п.19 утилиты и `'ru-RU'`; п.0 `transition: all`; п.33 типографика; п.34 спиннер; п.35 boot-экран; п.23–32 — стили flows UI → `flows.mdc`.
+- `scripts/check_core_frontend_canon.py` (`make check-core-frontend-canon`) — зоны `core/frontend/static/lib/**`: `LitElement` только у `PlatformElement`, helpers бросают `Error`, `fetch` только в `events/http.js`, `events/effects/` и `utils/style-cache.js`.
+- `scripts/check_platform_typography.py` (п.33) и `tests/frontend_core/unit/canon/platform-typography.spec.js` — manifest шрифтов, `tokens.css`, запрет литералов font-family и fallback-стеков.
+- `scripts/check_i18n.sh` (`make check-i18n`) — JSON бандлов парсится, у `ru/<ns>.json` есть `en/<ns>.json`; `scripts/check_i18n_keys.py` (`make check-i18n-keys`) — каждый `t('key')` резолвится в бандле; `scripts/report_ui_i18n_gaps.py --app <svc>` — отчёт о кириллице в литералах, не гейт.
+- `scripts/check_files_canon.py`, `scripts/check_files_ui_canon.sh` — upload UI только через `platform/file_create`.
+- `tests/realtime/test_frontend_commands.py` — тождество WS≡REST команд консоли.
+- Сборка: `make lint-ts` = `check-events-canon` + `scripts/check_ui_kit_docs.py` + `check-field-canon` + `check-logging`; `make ui` = `lint-ts` + `test-frontend-core`.

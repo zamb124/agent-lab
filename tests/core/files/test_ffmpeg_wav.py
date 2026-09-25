@@ -21,7 +21,7 @@ def test_transcode_wav_stays_riff() -> None:
 
 def test_transcode_webm_garbage_raises() -> None:
     garbage = b"\x1a\x45\xdf\xa3" + b"not-a-webm-payload"
-    with pytest.raises(ValueError, match="Не удалось нормализовать аудио"):
+    with pytest.raises(ValueError, match="Failed to normalize audio"):
         transcode_audio_bytes_to_wav_pcm16_mono(
             audio_bytes=garbage,
             file_name="speech.webm",
@@ -30,7 +30,7 @@ def test_transcode_webm_garbage_raises() -> None:
 
 
 def test_transcode_empty_raises() -> None:
-    with pytest.raises(ValueError, match="пустой"):
+    with pytest.raises(ValueError, match="audio_bytes is empty"):
         transcode_audio_bytes_to_wav_pcm16_mono(
             audio_bytes=b"",
             file_name="voice.wav",

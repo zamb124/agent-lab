@@ -104,7 +104,7 @@ async def test_access_request_notification_flow(
     crm_service,
 ) -> None:
     entity_resp = await crm_client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json={
             "entity_type": "note",
             "name": f"Private note {unique_id}",

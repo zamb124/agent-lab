@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from tests.flows.e2e.llm_context.harness import (
     call_text,
     cleanup_flow_context,
@@ -24,7 +25,7 @@ pytestmark = pytest.mark.asyncio
 async def test_context_profile_controls_retrieval_and_window(
     app,
     rag_app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -39,7 +40,7 @@ async def test_context_profile_controls_retrieval_and_window(
     collection_id = f"collection-{profile}-{unique_id}"
     rag_marker = f"RAG_PROFILE_{profile}_{unique_id}"
     context_id = f"context-{profile}-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt=f"PROFILE_{profile}_{unique_id}",
@@ -53,14 +54,14 @@ async def test_context_profile_controls_retrieval_and_window(
     )
     try:
         await index_rag_document(
-            container=container,
+            di=di,
             namespace=namespace,
             collection_id=collection_id,
             marker=rag_marker,
         )
         query = f"QUERY_PROFILE_{profile}_{unique_id}"
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=query,
             response=f"RESPONSE_PROFILE_{profile}",
@@ -81,7 +82,7 @@ async def test_context_profile_controls_retrieval_and_window(
             assert f"OLD_CONTEXT_{profile}_{unique_id}" not in prompt
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[namespace],
             auth_headers_system=auth_headers_system,

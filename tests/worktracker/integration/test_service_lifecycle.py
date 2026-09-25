@@ -11,6 +11,7 @@ from core.worktracker.models import (
     SystemActor,
     UserActor,
     UsersAssignment,
+    WorkItem,
     WorkItemResolution,
     WorkItemState,
 )
@@ -36,16 +37,16 @@ async def test_update_each_field_independently(worktracker_service, unique_id: s
     assert updated.labels == ["x"]
 
 
-async def test_delete_work_item(worktracker_service, worktracker_repository, unique_id: str) -> None:
+async def test_delete_in_company(worktracker_service, unique_id: str) -> None:
     item = await worktracker_service.create(
         company_id="system",
         title=f"del-{unique_id}",
         created_by=SystemActor(),
     )
-    deleted = await worktracker_service.delete(company_id="system", work_item_id=item.work_item_id)
+    deleted = await WorkItem.delete_in_company("system", item.work_item_id)
     assert deleted is True
     with pytest.raises(ValueError):
-        await worktracker_service.get("system", item.work_item_id)
+        await WorkItem.require_in_company("system", item.work_item_id)
 
 
 async def test_reassign_terminal_forbidden(worktracker_service, unique_id: str) -> None:

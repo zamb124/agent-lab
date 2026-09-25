@@ -212,7 +212,7 @@ pytest -v -s --log-cli-level=DEBUG
 
 **Решение**:
 ```bash
-# Проверить что container доступен
+# Проверить, что фикстура auth поднимает пользователя
 pytest tests/frontend/api/ -v -k "auth" --setup-show
 ```
 

@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.graph import InfluenceGraphResponse, RelatedEntitiesResponse
 from apps.crm.realtime.operations import (
     CrmEntitiesInfluenceGraphPayload,
@@ -23,17 +23,17 @@ router = APIRouter(prefix="/entities", tags=["Graph"])
 @router.post("/overview-graph", response_model=InfluenceGraphResponse)
 async def get_overview_graph(
     payload: CrmOverviewGraphPayload,
-    container: ContainerDep,
+    di: Di,
 ) -> InfluenceGraphResponse:
     return await op_entities_overview_graph(
-        payload, user=require_context().user, container=container
+        payload, user=require_context().user, di=di
     )
 
 
 @router.get("/{entity_id}/influence-graph", response_model=InfluenceGraphResponse)
 async def get_influence_graph(
     entity_id: str,
-    container: ContainerDep,
+    di: Di,
     max_depth: Annotated[int, Query(ge=1, le=5)] = 3,
     relationship_types: Annotated[list[str] | None, Query()] = None,
     created_at_from: Annotated[datetime | None, Query()] = None,
@@ -52,14 +52,14 @@ async def get_influence_graph(
             include_all_namespaces=include_all_namespaces,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{entity_id}/related", response_model=RelatedEntitiesResponse)
 async def get_related_entities(
     entity_id: str,
-    container: ContainerDep,
+    di: Di,
     direction: Annotated[Literal["incoming", "outgoing", "both"], Query()] = "both",
     relationship_type: Annotated[str | None, Query()] = None,
     created_at_from: Annotated[datetime | None, Query()] = None,
@@ -78,5 +78,5 @@ async def get_related_entities(
             include_all_namespaces=include_all_namespaces,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

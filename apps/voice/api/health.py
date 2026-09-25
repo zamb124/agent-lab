@@ -3,7 +3,7 @@
 Возвращает быстрый snapshot deployment-default провайдеров речи. Реальные
 клиенты создаются per-session через ``voice_resolver``, поэтому
 «готовность» в смысле HTTP-стартапа сводится к наличию валидной
-конфигурации в ``settings.voice`` — контейнер считает её зарезолвленной,
+конфигурации в ``settings.voice`` — процесс считает её зарезолвленной,
 если ``.settings`` успешно построился.
 """
 
@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di
 from apps.voice.models import VoiceProvidersHealth
 
 health_router = APIRouter(prefix="/health", tags=["voice"])
@@ -22,8 +22,8 @@ health_router = APIRouter(prefix="/health", tags=["voice"])
     summary="Deployment-default STT/TTS/VAD провайдеры",
     response_model=VoiceProvidersHealth,
 )
-async def health_providers(container: ContainerDep) -> VoiceProvidersHealth:
-    settings = container.settings
+async def health_providers(di: Di) -> VoiceProvidersHealth:
+    settings = di.session_providers.settings
     return VoiceProvidersHealth(
         status="ready",
         vad="ready",

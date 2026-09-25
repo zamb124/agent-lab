@@ -14,7 +14,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.src.contracts import FlowFactoryProtocol
 from apps.flows.src.models import (
     TelegramBotApiBooleanResponse,
     TelegramGetUpdatesResponse,
@@ -22,6 +22,7 @@ from apps.flows.src.models import (
     TelegramUpdate,
     TriggerType,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.triggers.config_var_resolve import resolve_at_var_for_flow
 from apps.flows.src.triggers.handlers.base import TriggerRegistrationError
 from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
@@ -170,7 +171,8 @@ class TelegramDevPolling:
     Периодически сканирует агентов и запускает/останавливает polling боты.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, flow_factory: FlowFactoryProtocol) -> None:
+        self._flow_factory: FlowFactoryProtocol = flow_factory
         self.bots: dict[str, TelegramPollingBot] = {}
         self.bot_tasks: dict[str, asyncio.Task[None]] = {}
         self.running: bool = False
@@ -179,16 +181,13 @@ class TelegramDevPolling:
 
     async def _resolve_company_for_subdomain(
         self,
-        container: FlowContainer,
         subdomain: str,
     ) -> Company:
-        company_id = await container.subdomain_repository.get_company_id(subdomain)
-        if company_id:
-            company = await container.company_repository.get(company_id)
-            if company is not None:
-                return company
+        company = await Company.by_subdomain(subdomain)
+        if company is not None:
+            return company
 
-        company = await container.company_repository.get(subdomain)
+        company = await Company.get(subdomain)
         if company is not None:
             return company
 
@@ -197,13 +196,12 @@ class TelegramDevPolling:
     async def _get_telegram_triggers(self) -> list[TelegramPollingTrigger]:
         """Собирает все Telegram триггеры из агентов всех компаний."""
         triggers: list[TelegramPollingTrigger] = []
-        container = get_container()
 
-        subdomains = await container.flow_repository.list_company_identifiers()
+        subdomains = await FlowConfig.list_company_identifiers()
         logger.info("flows.dev_polling.scan_started", subdomains=subdomains)
 
         for subdomain in subdomains:
-            company = await self._resolve_company_for_subdomain(container, subdomain)
+            company = await self._resolve_company_for_subdomain(subdomain)
             dev_user = User(
                 user_id="system",
                 name="System",
@@ -219,7 +217,7 @@ class TelegramDevPolling:
             )
             _ = set_context(context)
             try:
-                all_flows = await container.flow_repository.list(limit=10_000)
+                all_flows = await FlowConfig.list_current(limit=10_000)
                 logger.info("flows.dev_polling.flows_found", subdomain=subdomain, count=len(all_flows))
 
                 for flow_cfg in all_flows:
@@ -247,7 +245,7 @@ class TelegramDevPolling:
                         bot_token_ref = raw_bot_token.strip()
                         if bot_token_ref.startswith("@var:"):
                             bot_token_ref = await resolve_at_var_for_flow(
-                                container.flow_factory,
+                                self._flow_factory,
                                 flow_cfg.flow_id,
                                 bot_token_ref,
                                 branch_id=trigger.branch_id,
@@ -300,8 +298,7 @@ class TelegramDevPolling:
         path = f"/{svc}/api/v1/triggers/telegram/{flow_id}/{trigger_id}"
         url = f"{base}{path}"
 
-        container = get_container()
-        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
         if unscoped is None:
             raise RuntimeError(f"Dev polling flow not found for unscoped flow_id={flow_id!r}")
 
@@ -420,14 +417,14 @@ class TelegramDevPolling:
 _dev_polling: TelegramDevPolling | None = None
 
 
-def get_dev_polling() -> TelegramDevPolling:
+def get_dev_polling(flow_factory: FlowFactoryProtocol) -> TelegramDevPolling:
     global _dev_polling
     if _dev_polling is None:
-        _dev_polling = TelegramDevPolling()
+        _dev_polling = TelegramDevPolling(flow_factory)
     return _dev_polling
 
 
-async def start_dev_polling() -> None:
+async def start_dev_polling(flow_factory: FlowFactoryProtocol) -> None:
     """Запускает dev polling если в dev окружении."""
     settings = get_settings()
 
@@ -435,7 +432,7 @@ async def start_dev_polling() -> None:
         logger.info("flows.development.mode.skipping.telegram.dev")
         return
 
-    polling = get_dev_polling()
+    polling = get_dev_polling(flow_factory)
     _ = polling.start()
     logger.info("flows.telegram.dev.polling.task.started")
 

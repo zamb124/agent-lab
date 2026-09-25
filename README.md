@@ -131,11 +131,11 @@ agent-lab/
 1. **Database-First** — flows, tools, resources и company settings в БД; сборка через фабрики из репозиториев.
 2. **Durable graph execution** — исполнение flows через append-only `workflow_events` и reducer; `ExecutionState` — projection, не mutable overwrite.
 3. **core.ai** — единый слой provider/capability catalog, resolver и runtime для LLM, embeddings, rerank, image gen.
-4. **Микросервисы + DI** — `ContainerDep` в HTTP; доступ к данным peer-домена через репозиторий, не дублирующий REST.
+4. **Микросервисы + DI** — процесс описывает компоненты классом `<Process>Di`; boundary читает их параметром `di`. Доступ к данным peer-домена — модель владельца, не дублирующий REST.
 5. **Frontend EventBus** — Lit 3, фабрики (`createAsyncOp`, `createResourceCollection`, …), REST-зеркало WS-команд.
 6. **Zero-Guess** — нет фолбеков; недоступная инфраструктура → fail fast на старте.
 
-Детали: [.cursor/rules/architecture.mdc](.cursor/rules/architecture.mdc), [.cursor/rules/flows_logic.mdc](.cursor/rules/flows_logic.mdc), [.cursor/rules/ai_models.mdc](.cursor/rules/ai_models.mdc), [.cursor/rules/frontend.mdc](.cursor/rules/frontend.mdc).
+Детали: [.cursor/rules/architecture.mdc](.cursor/rules/architecture.mdc), [.cursor/rules/flows_runtime.mdc](.cursor/rules/flows_runtime.mdc), [.cursor/rules/ai_models.mdc](.cursor/rules/ai_models.mdc), [.cursor/rules/frontend.mdc](.cursor/rules/frontend.mdc).
 
 ## Разработка
 
@@ -150,7 +150,7 @@ agent-lab/
 | `make agent` | LinnexAgent desktop — сборка и GitHub Release |
 | `make doc` | Zensical RU+EN build |
 
-Миграции: `make migrate-new m="описание" s=shared` (домены: `shared`, `flows`, `crm`, `rag`, `sync`, `office`, `worktracker`, `secrets`, `search`, `tracing`). См. [.cursor/rules/migrations.mdc](.cursor/rules/migrations.mdc).
+Миграции: `make migrate-new m="описание" s=shared` (`s` — имя базы из `migrations/services.json`). См. [.cursor/rules/database.mdc](.cursor/rules/database.mdc).
 
 ## Технологический стек
 

@@ -8,7 +8,6 @@ from urllib.parse import quote
 from pydantic import Field
 
 from apps.wiki.base_model import WikiBaseModel
-from apps.wiki.container import WikiContainer
 from apps.wiki.content.markdown_file import markdown_file_name, split_markdown_file
 from apps.wiki.content.markdown_parser import (
     WikiMarkdownError,
@@ -17,6 +16,7 @@ from apps.wiki.content.markdown_parser import (
 )
 from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.content.schema import WikiSchemaError
+from apps.wiki.di import Di
 from apps.wiki.models.api import (
     WikiCommentCreateRequest,
     WikiCommentResolveRequest,
@@ -143,10 +143,10 @@ class WikiMarkdownFileResult(StrictBaseModel):
     file_name: str
 
 
-async def _scope(container: WikiContainer) -> NamespaceScope:
-    scope = await require_namespace(container.namespace_service)
+async def _scope(di: Di) -> NamespaceScope:
+    scope = await require_namespace(di.namespace_service)
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.platform_namespace(scope.company_id, scope.namespace),
             user_id=scope.user_id,
         )
@@ -172,11 +172,11 @@ async def op_pages_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiTreeResponse:
     _ = payload, user
-    scope = await _scope(container)
-    items = await container.wiki_service.list_tree(scope.company_id, scope.namespace, scope.user_id)
+    scope = await _scope(di)
+    items = await di.wiki_service.list_tree(scope.company_id, scope.namespace, scope.user_id)
     return WikiTreeResponse(namespace=scope.namespace, items=items)
 
 
@@ -184,11 +184,11 @@ async def op_pages_deleted_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiTreeResponse:
     _ = payload, user
-    scope = await _scope(container)
-    items = await container.wiki_service.list_deleted(scope.company_id, scope.namespace)
+    scope = await _scope(di)
+    items = await di.wiki_service.list_deleted(scope.company_id, scope.namespace)
     return WikiTreeResponse(namespace=scope.namespace, items=items)
 
 
@@ -196,13 +196,13 @@ async def op_pages_create(
     payload: WikiPageCreateRequest,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
         content = _resolve_content(payload.content, payload.markdown)
-        page = await container.wiki_service.create_page(
+        page = await di.wiki_service.create_page(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -219,38 +219,38 @@ async def op_pages_create(
         raise WsCommandError("forbidden", "No permission to create a page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_get(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.require_viewable_page(
+        page = await di.wiki_service.require_viewable_page(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
         raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_markdown(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiMarkdownResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.require_viewable_page(
+        page = await di.wiki_service.require_viewable_page(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
@@ -268,12 +268,12 @@ async def op_pages_markdown_file(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiMarkdownFileResult:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.require_viewable_page(
+        page = await di.wiki_service.require_viewable_page(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
@@ -281,7 +281,7 @@ async def op_pages_markdown_file(
     except PlatformAccessDeniedError as exc:
         raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
     return WikiMarkdownFileResult(
-        body=container.wiki_service.export_markdown_file(page),
+        body=di.wiki_service.export_markdown_file(page),
         file_name=markdown_file_name(page.title, page.wiki_page_id),
     )
 
@@ -290,10 +290,10 @@ async def op_pages_markdown_parse(
     payload: WikiMarkdownParseRequest,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiMarkdownParseResponse:
     _ = user
-    _ = await _scope(container)
+    _ = await _scope(di)
     parts = split_markdown_file(payload.markdown)
     try:
         parsed = parse_markdown(parts.body)
@@ -308,12 +308,12 @@ async def op_pages_markdown_create(
     payload: WikiMarkdownImportRequest,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiMarkdownImportResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page, notices = await container.wiki_service.import_markdown(
+        page, notices = await di.wiki_service.import_markdown(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -334,12 +334,12 @@ async def op_pages_markdown_import(
     payload: WikiMarkdownImportPagePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiMarkdownImportResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page, notices = await container.wiki_service.import_markdown(
+        page, notices = await di.wiki_service.import_markdown(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -360,15 +360,15 @@ async def op_pages_content_update(
     payload: WikiPageContentUpdatePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
         content = _resolve_content(payload.content, payload.markdown)
         if content is None:
             raise ValueError("Page content was not provided")
-        page = await container.wiki_service.update_page_content(
+        page = await di.wiki_service.update_page_content(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -385,19 +385,19 @@ async def op_pages_content_update(
         raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_properties_update(
     payload: WikiPagePropertiesUpdatePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.update_page_properties(
+        page = await di.wiki_service.update_page_properties(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -413,19 +413,19 @@ async def op_pages_properties_update(
         raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
         raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_move(
     payload: WikiPageMovePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.move_page(
+        page = await di.wiki_service.move_page(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -439,22 +439,22 @@ async def op_pages_move(
         raise WsCommandError("forbidden", "No permission to move", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_move_namespace(
     payload: WikiPageMoveNamespacePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
-    target = await container.namespace_service.get(payload.target_namespace)
+    scope = await _scope(di)
+    target = await di.namespace_service.get(payload.target_namespace)
     if target is None or target.company_id != scope.company_id:
         raise WsCommandError("ws_invalid_payload", "Target workspace is unavailable", error_code='ws_invalid_payload')
     try:
-        page = await container.wiki_service.move_page_to_namespace(
+        page = await di.wiki_service.move_page_to_namespace(
             company_id=scope.company_id,
             namespace=scope.namespace,
             target_namespace=target.name,
@@ -468,19 +468,19 @@ async def op_pages_move_namespace(
         raise WsCommandError("forbidden", "No permission to transfer the page", error_code='forbidden') from exc
     except ValueError as exc:
         raise_invalid(exc)
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_remove(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> None:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        _ = await container.wiki_service.delete_page(
+        _ = await di.wiki_service.delete_page(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
@@ -493,36 +493,36 @@ async def op_pages_restore(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.restore_page(
+        page = await di.wiki_service.restore_page(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_children_list(
     payload: WikiChildrenPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> ListResponse[WikiPageSummary]:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        _ = await container.wiki_service.require_viewable_page(
+        _ = await di.wiki_service.require_viewable_page(
             scope.company_id, scope.namespace, payload.wiki_page_id, scope.user_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
         raise WsCommandError("forbidden", "No access to page", error_code='forbidden') from exc
-    tree = await container.wiki_service.list_tree(scope.company_id, scope.namespace, scope.user_id)
+    tree = await di.wiki_service.list_tree(scope.company_id, scope.namespace, scope.user_id)
     children = [item for item in tree if item.parent_page_id == payload.wiki_page_id]
     if payload.include_self:
         children = [item for item in tree if item.wiki_page_id == payload.wiki_page_id] + children
@@ -533,12 +533,12 @@ async def op_pages_access(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageAccess:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.get_access(
+        return await di.wiki_service.get_access(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
@@ -551,12 +551,12 @@ async def op_pages_company_visible(
     payload: WikiCompanyVisiblePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageAccess:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.set_company_visible(
+        return await di.wiki_service.set_company_visible(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -575,12 +575,12 @@ async def op_pages_member_add(
     payload: WikiMemberUpsertPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageAccess:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.set_member(
+        return await di.wiki_service.set_member(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -600,12 +600,12 @@ async def op_pages_member_remove(
     payload: WikiMemberRemovePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageAccess:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.remove_member(
+        return await di.wiki_service.remove_member(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -622,12 +622,12 @@ async def op_pages_public_link(
     payload: WikiPublicLinkPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPublicLinkResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        raw_token = await container.wiki_service.rotate_public_link(
+        raw_token = await di.wiki_service.rotate_public_link(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -653,12 +653,12 @@ async def op_pages_revisions_list(
     payload: WikiRevisionsListPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> ListResponse[WikiRevisionSummary]:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        items = await container.wiki_service.list_revisions(
+        items = await di.wiki_service.list_revisions(
             scope.company_id,
             scope.namespace,
             scope.user_id,
@@ -676,12 +676,12 @@ async def op_revisions_get(
     payload: WikiRevisionIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiRevision:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.get_revision(
+        return await di.wiki_service.get_revision(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except PlatformNotFoundError as exc:
@@ -694,31 +694,31 @@ async def op_revisions_restore(
     payload: WikiRevisionIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiPageResponse:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        page = await container.wiki_service.restore_revision(
+        page = await di.wiki_service.restore_revision(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_revision_id
         )
     except PlatformNotFoundError as exc:
         raise_not_found(exc)
     except PlatformAccessDeniedError as exc:
         raise WsCommandError("forbidden", "No permission to edit page", error_code='forbidden') from exc
-    return await container.wiki_service.page_response(page, user_id=scope.user_id)
+    return await di.wiki_service.page_response(page, user_id=scope.user_id)
 
 
 async def op_pages_comments_list(
     payload: WikiPageIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> ListResponse[WikiComment]:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        items = await container.wiki_service.list_comments(
+        items = await di.wiki_service.list_comments(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_page_id
         )
     except PlatformNotFoundError as exc:
@@ -732,12 +732,12 @@ async def op_pages_comment_create(
     payload: WikiCommentCreatePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiComment:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.create_comment(
+        return await di.wiki_service.create_comment(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -756,12 +756,12 @@ async def op_comments_resolve(
     payload: WikiCommentResolvePayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> WikiComment:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        return await container.wiki_service.resolve_comment(
+        return await di.wiki_service.resolve_comment(
             scope.company_id,
             scope.namespace,
             scope.user_id,
@@ -776,12 +776,12 @@ async def op_comments_remove(
     payload: WikiCommentIdPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> None:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     try:
-        await container.wiki_service.delete_comment(
+        await di.wiki_service.delete_comment(
             scope.company_id, scope.namespace, scope.user_id, payload.wiki_comment_id
         )
     except PlatformNotFoundError as exc:
@@ -792,10 +792,10 @@ async def op_search_run(
     payload: WikiSearchRequest,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> ListResponse[WikiSearchHit]:
     _ = user
-    scope = await _scope(container)
+    scope = await _scope(di)
     updated_after = (
         datetime.now(timezone.utc) - timedelta(days=payload.updated_after_days)
         if payload.updated_after_days is not None
@@ -804,7 +804,7 @@ async def op_search_run(
     items: list[WikiSearchHit] = []
     seen: set[str] = set()
     if payload.mode in ("auto", "semantic"):
-        semantic_hits = await container.wiki_service.semantic_search(
+        semantic_hits = await di.wiki_service.semantic_search(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -819,7 +819,7 @@ async def op_search_run(
             seen.add(hit.wiki_page_id)
             items.append(hit)
     if payload.mode in ("auto", "lexical") and len(items) < payload.limit:
-        lexical_hits = await container.wiki_service.search_pages(
+        lexical_hits = await di.wiki_service.search_pages(
             company_id=scope.company_id,
             namespace=scope.namespace,
             user_id=scope.user_id,
@@ -839,11 +839,11 @@ async def op_backlinks_list(
     payload: WikiBacklinksPayload,
     *,
     user: User,
-    container: WikiContainer,
+    di: Di,
 ) -> ListResponse[WikiBacklink]:
     _ = user
     company = require_company()
-    items = await container.wiki_service.list_backlinks(
+    items = await di.wiki_service.list_backlinks(
         company_id=company.company_id,
         user_id=company.user_id,
         target_kind=payload.target_kind,

@@ -15,8 +15,8 @@ from core.mail.models import (
     MailMessageRagIndexPayload,
     MailProvider,
     MailRagIndexStatus,
+    StoredMailMessage,
 )
-from core.mail.repositories import MailMessageRepository
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from tests.core.mail.fakes import RecordingMailServerPort
@@ -28,7 +28,6 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 async def test_persist_sets_pending_and_enqueues_rag_index(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     monkeypatch: pytest.MonkeyPatch,
     unique_id: str,
@@ -82,7 +81,7 @@ async def test_persist_sets_pending_and_enqueues_rag_index(
         ),
     ]
     _ = await mail_service.sync_user_inbox(binding, max_new_messages=20)
-    stored = await mail_message_repository.get_by_uid(
+    stored = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=31
     )
     assert stored is not None
@@ -97,7 +96,6 @@ async def test_persist_sets_pending_and_enqueues_rag_index(
 async def test_index_mail_message_ready_and_failed(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     monkeypatch: pytest.MonkeyPatch,
     unique_id: str,
@@ -185,7 +183,7 @@ async def test_index_mail_message_ready_and_failed(
             uid="42",
             company_id=company_id,
         )
-    failed = await mail_message_repository.get_by_uid(
+    failed = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=42
     )
     assert failed is not None

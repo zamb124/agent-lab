@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from apps.crm.container import get_crm_container
 from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
-from core.context import Context, set_context
+from core.context import set_context
+from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.utils.tokens import TokenType, get_token_service
 
 # user_id из set_crm_context без реального пользователя — не искать в user_repository
@@ -32,8 +33,7 @@ async def set_crm_context(
         normalized_namespace = s
     resolved_user_id = user_id or "crm-worker"
     lang = Language(interface_language) if interface_language is not None else Language.RU
-    container = get_crm_container()
-    company_row = await container.company_repository.get(company_id)
+    company_row = await Company.get(company_id)
     if company_row is None:
         raise ValueError(f"Company not found for CRM worker context: {company_id}")
     context = Context(
@@ -48,19 +48,23 @@ async def set_crm_context(
     _ = set_context(context)
 
 
-async def build_auth_token_for_company(company_id: str, user_id: str | None) -> str:
-    container = get_crm_container()
+async def build_auth_token_for_company(
+    company_id: str,
+    user_id: str | None,
+    *,
+    authz: AuthzService,
+) -> str:
     resolved_user_id = user_id
     if resolved_user_id in _WORKER_PLACEHOLDER_USER_IDS:
         resolved_user_id = None
     if not resolved_user_id:
-        company = await container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found for daily summary rebuild: {company_id}")
         if company.owner_user_id and company.owner_user_id.strip():
             resolved_user_id = company.owner_user_id.strip()
         else:
-            subjects = await container.authz_service.list_users(
+            subjects = await authz.list_users(
                 AuthzObject.company(company_id),
                 AuthzRelation.CAN_ADMIN,
             )
@@ -75,7 +79,7 @@ async def build_auth_token_for_company(company_id: str, user_id: str | None) -> 
                 raise ValueError(f"No company CAN_ADMIN for daily summary: {company_id}")
             resolved_user_id = admin_ids[0]
 
-    user = await container.user_repository.get(resolved_user_id)
+    user = await User.get(resolved_user_id)
     if user is None:
         raise ValueError(f"User not found for daily summary auth token: {resolved_user_id}")
 

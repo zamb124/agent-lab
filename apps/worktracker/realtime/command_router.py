@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.worktracker.container import WorktrackerContainer, get_worktracker_container
+from apps.worktracker.di import WorktrackerDi
 from apps.worktracker.realtime.operations import (
     BoardIdPayload,
     BoardsListPayload,
@@ -44,17 +44,14 @@ from apps.worktracker.realtime.operations import (
     op_work_queues_members_list,
     op_work_queues_update,
 )
-from core.logging import get_logger
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import Operation, RegisteredOperation
 from core.worktracker.requests import (
     BoardCreateRequest,
     WorkItemCreateRequest,
     WorkQueueCreateRequest,
 )
 
-logger = get_logger(__name__)
-
-WORKTRACKER_OPERATIONS: dict[str, RegisteredOperation[WorktrackerContainer]] = {
+WORKTRACKER_OPERATIONS: dict[str, RegisteredOperation[WorktrackerDi]] = {
     "worktracker/work_items/list_requested": Operation(
         payload_model=WorkItemsListPayload, fn=op_work_items_list
     ),
@@ -125,8 +122,3 @@ WORKTRACKER_OPERATIONS: dict[str, RegisteredOperation[WorktrackerContainer]] = {
         payload_model=WorkQueueMemberRemovePayload, fn=op_work_queues_member_remove
     ),
 }
-
-
-def register_worktracker_ws_commands() -> None:
-    register_service_operations(WORKTRACKER_OPERATIONS, get_worktracker_container)
-    logger.info("worktracker.ws.command.handlers", WORKTRACKER_OPERATIONS_count=len(WORKTRACKER_OPERATIONS))

@@ -9,7 +9,7 @@
 
 HTTP: `wiki_client` (владелец в `system`), `wiki_client_member` (второй
 пользователь той же компании), `wiki_client_company2` (чужая компания).
-Домен: `wiki_container`, `wiki_repository`, `wiki_service`.
+Домен: `wiki_di`, `wiki_service`.
 """
 
 from __future__ import annotations
@@ -21,8 +21,11 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from apps.wiki.container import get_wiki_container, reset_wiki_container
+from apps.wiki.di import WikiDi
 from apps.wiki.models.domain import WikiPage
+from apps.wiki.services.rag_index import WikiRagIndexService
+from apps.wiki.services.wiki_service import WikiService
+from core.di import require_di
 from core.namespace.service import NamespaceService
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.fixtures.platform_events import (
@@ -31,6 +34,7 @@ from tests.fixtures.platform_events import (
 from tests.fixtures.platform_events import (
     platform_events_listener as open_platform_events_stream,
 )
+from tests.fixtures.service_processes import ServiceProcesses
 
 API_PREFIX = "/wiki/api/v1"
 PAGES_URL = f"{API_PREFIX}/pages"
@@ -38,52 +42,44 @@ PAGES_URL = f"{API_PREFIX}/pages"
 NAMESPACE_HEADER = "X-Platform-Namespace"
 
 
-@pytest.fixture
-def wiki_container(setup_database_before_tests):
-    _ = setup_database_before_tests
-    reset_wiki_container()
-    container = get_wiki_container()
-    container.bind_files_route_segment("wiki")
-    yield container
-    reset_wiki_container()
+@pytest_asyncio.fixture
+async def wiki_di(wiki_app) -> WikiDi:
+    """Тот же ``WikiDi``, что собрал lifespan ``wiki_app``."""
+    return require_di(wiki_app, WikiDi)
 
 
 @pytest.fixture
-def wiki_repository(wiki_container):
-    return wiki_container.wiki_repository
+def wiki_service(request: pytest.FixtureRequest) -> WikiService:
+    opened = request.getfixturevalue("wiki_di")
+    if not isinstance(opened, WikiDi):
+        raise TypeError("wiki DI is not open")
+    return opened.wiki_service
 
 
 @pytest.fixture
-def wiki_service(wiki_container):
-    return wiki_container.wiki_service
-
-
-@pytest.fixture
-def wiki_rag_index(wiki_container):
-    return wiki_container.wiki_rag_index_service
+def wiki_rag_index(wiki_service: WikiService) -> WikiRagIndexService:
+    return wiki_service._rag
 
 
 @pytest_asyncio.fixture
-async def wiki_app(rag_service):
-    """ASGI-приложение сервиса.
+async def wiki_app(rag_service, service_processes: ServiceProcesses):
+    """ASGI-приложение сервиса с lifespan (``service_processes``).
 
     RAG обязателен: каждое сохранение страницы пишет её в индекс.
     """
     _ = rag_service
-    from apps.wiki.main import app
-
-    return app
+    return await service_processes.app("wiki")
 
 
 @pytest_asyncio.fixture
-async def wiki_namespace(wiki_container, unique_id: str) -> str:
+async def wiki_namespace(wiki_di, unique_id: str) -> str:
     """Отдельное пространство на тест — граница изоляции данных."""
     from core.context import clear_context, set_context
     from core.models.context_models import Context
     from core.models.identity_models import User
     from tests.fixtures.ai_provider_defaults import make_test_company
 
-    service: NamespaceService = wiki_container.namespace_service
+    service: NamespaceService = wiki_di.namespace_service
     name = f"wiki-test-{unique_id}"
     set_context(
         Context(
@@ -103,14 +99,14 @@ async def wiki_namespace(wiki_container, unique_id: str) -> str:
 
 
 @pytest_asyncio.fixture
-async def wiki_other_namespace(wiki_container, unique_id: str) -> str:
+async def wiki_other_namespace(wiki_di, unique_id: str) -> str:
     """Второе пространство той же компании — для проверок изоляции."""
     from core.context import clear_context, set_context
     from core.models.context_models import Context
     from core.models.identity_models import User
     from tests.fixtures.ai_provider_defaults import make_test_company
 
-    service: NamespaceService = wiki_container.namespace_service
+    service: NamespaceService = wiki_di.namespace_service
     name = f"wiki-other-{unique_id}"
     set_context(
         Context(
@@ -138,15 +134,17 @@ def _client(app: object, headers: dict[str, str], namespace: str) -> AsyncClient
 
 
 @pytest_asyncio.fixture
-async def wiki_client(wiki_app, auth_headers_system, wiki_namespace) -> AsyncIterator[AsyncClient]:
+async def wiki_client(wiki_app, wiki_di, auth_headers_system, wiki_namespace) -> AsyncIterator[AsyncClient]:
+    _ = wiki_di
     async with _client(wiki_app, auth_headers_system, wiki_namespace) as client:
         yield client
 
 
 @pytest_asyncio.fixture
 async def wiki_client_member(
-    wiki_app, auth_headers_system_user2, wiki_namespace
+    wiki_app, wiki_di, auth_headers_system_user2, wiki_namespace
 ) -> AsyncIterator[AsyncClient]:
+    _ = wiki_di
     """Второй пользователь той же компании: видит общие страницы, но не ограниченные."""
     async with _client(wiki_app, auth_headers_system_user2, wiki_namespace) as client:
         yield client
@@ -154,8 +152,9 @@ async def wiki_client_member(
 
 @pytest_asyncio.fixture
 async def wiki_client_company2(
-    wiki_app, auth_headers_company2, wiki_namespace
+    wiki_app, wiki_di, auth_headers_company2, wiki_namespace
 ) -> AsyncIterator[AsyncClient]:
+    _ = wiki_di
     """Пользователь другой компании: пространство ему не принадлежит."""
     async with _client(wiki_app, auth_headers_company2, wiki_namespace) as client:
         yield client
@@ -163,15 +162,17 @@ async def wiki_client_company2(
 
 @pytest_asyncio.fixture
 async def wiki_client_other_namespace(
-    wiki_app, auth_headers_system, wiki_other_namespace
+    wiki_app, wiki_di, auth_headers_system, wiki_other_namespace
 ) -> AsyncIterator[AsyncClient]:
+    _ = wiki_di
     """Тот же пользователь, другое пространство."""
     async with _client(wiki_app, auth_headers_system, wiki_other_namespace) as client:
         yield client
 
 
 @pytest_asyncio.fixture
-async def wiki_client_anonymous(wiki_app) -> AsyncIterator[AsyncClient]:
+async def wiki_client_anonymous(wiki_app, wiki_di) -> AsyncIterator[AsyncClient]:
+    _ = wiki_di
     """Без сессии — только публичные ссылки."""
     async with AsyncClient(
         transport=ASGITransport(app=wiki_app), base_url="http://testserver"

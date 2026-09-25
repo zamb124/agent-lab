@@ -6,7 +6,7 @@
  */
 
 import { html, css } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
 import '../components/crm-graph-workspace.js';
 
 export class CRMGraphPage extends CRMNamespacePage {

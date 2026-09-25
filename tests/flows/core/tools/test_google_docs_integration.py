@@ -22,7 +22,6 @@ from typing import Any
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
@@ -140,9 +139,9 @@ async def _run_single_tool_flow(
     tool_call_name: str,
     tool_call_args: dict[str, Any],
     mock_llm_with_queue: Any,
+    di,
 ) -> tuple[dict[str, Any], ExecutionState]:
     flow_id = f"gdocs_{flow_suffix}_{unique_id}"
-    container = get_container()
 
     flow_config = FlowConfig(
         flow_id=flow_id,
@@ -158,7 +157,7 @@ async def _run_single_tool_flow(
         },
         edges=[],
     )
-    await container.flow_repository.set(flow_config)
+    await FlowConfig.create_version(flow_config)
 
     mock_llm_with_queue(
         [
@@ -167,17 +166,17 @@ async def _run_single_tool_flow(
         ]
     )
 
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     state = _make_state(unique_id, flow_id)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
     )
     final_state = await flow.run(state)
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     return final_state, final_state
 
 
@@ -196,7 +195,7 @@ def test_all_gdocs_tools_are_registered_in_suite() -> None:
 
 @pytest.mark.asyncio
 async def test_create_document_via_llm_node(
-    app: object, unique_id: str, mock_llm_with_queue: Any
+    app: object, unique_id: str, mock_llm_with_queue: Any, di
 ) -> None:
     _ = app
     result, state = await _run_single_tool_flow(
@@ -206,6 +205,7 @@ async def test_create_document_via_llm_node(
         tool_call_name="gdocs_create_document",
         tool_call_args={"title": f"Agent Create {unique_id}"},
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -218,6 +218,7 @@ async def test_read_document_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Read Target {unique_id}")
@@ -231,6 +232,7 @@ async def test_read_document_via_llm_node(
         tool_call_name="gdocs_read_document",
         tool_call_args={"document_id": doc_id},
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     assert "Контент для чтения" in str(_tool_payloads_from_state(state)[0]["text"])
@@ -242,6 +244,7 @@ async def test_append_text_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Append Target {unique_id}")
@@ -257,6 +260,7 @@ async def test_append_text_via_llm_node(
             "text": "Добавленный текст из агента.\n",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     text = await gdocs_client.read_as_text(doc_id)
@@ -269,6 +273,7 @@ async def test_insert_text_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Insert Target {unique_id}")
@@ -286,6 +291,7 @@ async def test_insert_text_via_llm_node(
             "index": 1,
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     text = await gdocs_client.read_as_text(doc_id)
@@ -299,6 +305,7 @@ async def test_find_replace_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"FR Target {unique_id}")
@@ -316,6 +323,7 @@ async def test_find_replace_via_llm_node(
             "replace": "Новая",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     assert "occurrences_changed" in _tool_payloads_from_state(state)[0]
@@ -330,6 +338,7 @@ async def test_delete_range_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Del Target {unique_id}")
@@ -347,6 +356,7 @@ async def test_delete_range_via_llm_node(
             "end_index": 4,
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     text = await gdocs_client.read_as_text(doc_id)
@@ -359,6 +369,7 @@ async def test_share_anyone_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Share Target {unique_id}")
@@ -375,6 +386,7 @@ async def test_share_anyone_via_llm_node(
             "role": "reader",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id

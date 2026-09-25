@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.crm.container import CRMContainer, get_crm_container
+from apps.crm.di import CrmDi
 from apps.crm.models.access_request_models import AccessRequestCreate
 from apps.crm.models.api import (
     ActivityTaskCreateRequest,
@@ -159,12 +159,9 @@ from apps.crm.realtime.operations import (
     op_templates_update,
 )
 from apps.crm.services.entity_export import CrmEntitiesExportPayload
-from core.logging import get_logger
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
+CRM_OPERATIONS: dict[str, RegisteredOperation[CrmDi]] = {
     "crm/company/init_requested": Operation(
         payload_model=CrmCompanyInitPayload, fn=op_crm_company_init
     ),
@@ -431,8 +428,3 @@ CRM_OPERATIONS: dict[str, RegisteredOperation[CRMContainer]] = {
         fn=op_namespace_integrations_custom_fields_sync,
     ),
 }
-
-
-def register_crm_ws_commands() -> None:
-    register_service_operations(CRM_OPERATIONS, get_crm_container)
-    logger.info("crm.ws.command.handlers", CRM_OPERATIONS_count=len(CRM_OPERATIONS))

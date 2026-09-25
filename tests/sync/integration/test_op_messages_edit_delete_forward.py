@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
+from apps.sync.models.message import SyncMessage
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
@@ -40,9 +40,9 @@ from tests.sync.integration._helpers import seed_test_namespace
 
 
 async def _setup_two_channels(
-    op_user: User, op_container: SyncContainer, unique_id: str
+    op_user: User, sync_di, unique_id: str
 ) -> tuple[str, str]:
-    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="edf")
+    namespace = await seed_test_namespace(op_user, sync_di, unique_id, suffix="edf")
     ch1 = await op_channels_create(
         ChannelCreate(
             type=ChannelType.TOPIC,
@@ -51,7 +51,7 @@ async def _setup_two_channels(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     ch2 = await op_channels_create(
         ChannelCreate(
@@ -61,13 +61,13 @@ async def _setup_two_channels(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return ch1.channel_id, ch2.channel_id
 
 
 async def _send_text(
-    op_user: User, op_container: SyncContainer, channel_id: str, text: str
+    op_user: User, sync_di, channel_id: str, text: str
 ) -> str:
     msg = await op_messages_send(
         MessagesSendPayload(
@@ -83,13 +83,13 @@ async def _send_text(
             ),
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return msg.message_id
 
 
 async def _insert_guest_text(
-    op_container: SyncContainer,
+    sync_di,
     *,
     company_id: str,
     channel_id: str,
@@ -97,7 +97,7 @@ async def _insert_guest_text(
     guest_sender_id: str,
     thread_id: str | None = None,
 ) -> None:
-    _ = await op_container.message_repository.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=uuid4().hex,
         company_id=company_id,
         channel_id=channel_id,
@@ -119,12 +119,12 @@ async def _insert_guest_text(
 @pytest.mark.asyncio
 async def test_op_messages_edit_by_author(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
-    msg_id = await _send_text(op_user, op_container, ch_id, "before")
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
+    msg_id = await _send_text(op_user, sync_di, ch_id, "before")
     edited = await op_messages_edit(
         MessagesEditPayload(
             channel_id=ch_id,
@@ -140,7 +140,7 @@ async def test_op_messages_edit_by_author(
             ),
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert edited.contents[0].data.body == "after"
 
@@ -148,16 +148,16 @@ async def test_op_messages_edit_by_author(
 @pytest.mark.asyncio
 async def test_op_messages_delete_by_owner(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
-    msg_id = await _send_text(op_user, op_container, ch_id, "to_delete")
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
+    msg_id = await _send_text(op_user, sync_di, ch_id, "to_delete")
     result = await op_messages_delete(
         MessagesDeletePayload(channel_id=ch_id, message_id=msg_id),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert result.message_id == msg_id
     assert result.channel_id == ch_id
@@ -166,12 +166,12 @@ async def test_op_messages_delete_by_owner(
 @pytest.mark.asyncio
 async def test_op_messages_forward_to_other_channel(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    ch_from, ch_to = await _setup_two_channels(op_user, op_container, unique_id)
-    msg_id = await _send_text(op_user, op_container, ch_from, f"forwarded {unique_id}")
+    ch_from, ch_to = await _setup_two_channels(op_user, sync_di, unique_id)
+    msg_id = await _send_text(op_user, sync_di, ch_from, f"forwarded {unique_id}")
     fwd = await op_messages_forward(
         MessagesForwardPayload(
             from_channel_id=ch_from,
@@ -180,7 +180,7 @@ async def test_op_messages_forward_to_other_channel(
             thread_id=None,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert fwd.contents[0].data.body == f"forwarded {unique_id}"
     assert fwd.forwarded_from is not None
@@ -190,17 +190,17 @@ async def test_op_messages_forward_to_other_channel(
 @pytest.mark.asyncio
 async def test_op_messages_list_returns_chronological(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
-    await _send_text(op_user, op_container, ch_id, "m1")
-    await _send_text(op_user, op_container, ch_id, "m2")
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
+    await _send_text(op_user, sync_di, ch_id, "m1")
+    await _send_text(op_user, sync_di, ch_id, "m2")
     result = await op_messages_list(
         MessagesListPayload(channel_id=ch_id, limit=10),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     bodies = [m.contents[0].data.body for m in result.items]
     assert bodies == ["m1", "m2"]
@@ -209,15 +209,15 @@ async def test_op_messages_list_returns_chronological(
 @pytest.mark.asyncio
 async def test_op_messages_list_guest_sender_uses_name_from_id(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     company_id = op_user.active_company_id
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
     guest_sender_id = f"guest:aabbccdd:{unique_id}"
     await _insert_guest_text(
-        op_container,
+        sync_di,
         company_id=company_id,
         channel_id=ch_id,
         text="from guest",
@@ -226,7 +226,7 @@ async def test_op_messages_list_guest_sender_uses_name_from_id(
     result = await op_messages_list(
         MessagesListPayload(channel_id=ch_id, limit=10),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     guest_items = [m for m in result.items if m.sender.user_id == guest_sender_id]
     assert len(guest_items) == 1
@@ -237,21 +237,21 @@ async def test_op_messages_list_guest_sender_uses_name_from_id(
 @pytest.mark.asyncio
 async def test_op_messages_list_thread_guest_sender_uses_name_from_id(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     company_id = op_user.active_company_id
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
-    root_id = await _send_text(op_user, op_container, ch_id, "root")
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
+    root_id = await _send_text(op_user, sync_di, ch_id, "root")
     thread = await op_threads_create(
         ThreadsCreatePayload(body=ThreadCreate(root_message_id=root_id)),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     guest_sender_id = f"guest:deadbeef:{unique_id}"
     await _insert_guest_text(
-        op_container,
+        sync_di,
         company_id=company_id,
         channel_id=ch_id,
         text="thread guest",
@@ -263,7 +263,7 @@ async def test_op_messages_list_thread_guest_sender_uses_name_from_id(
             channel_id=ch_id, thread_id=thread.thread_id, limit=20, offset=0
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     guest_items = [m for m in result.items if m.sender.user_id == guest_sender_id]
     assert len(guest_items) == 1
@@ -274,11 +274,11 @@ async def test_op_messages_list_thread_guest_sender_uses_name_from_id(
 @pytest.mark.asyncio
 async def test_op_messages_edit_not_found_raises(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    ch_id, _ = await _setup_two_channels(op_user, op_container, unique_id)
+    ch_id, _ = await _setup_two_channels(op_user, sync_di, unique_id)
     with pytest.raises(WsCommandError) as exc_info:
         await op_messages_edit(
             MessagesEditPayload(
@@ -295,6 +295,6 @@ async def test_op_messages_edit_not_found_raises(
                 ),
             ),
             user=op_user,
-            container=op_container,
+            di=sync_di,
         )
     assert exc_info.value.code in ("not_found", "forbidden")

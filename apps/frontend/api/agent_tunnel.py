@@ -18,7 +18,7 @@ from apps.agent.tunnel_bus import (
     unregister_tunnel_connection,
 )
 from apps.agent.tunnel_registry import handle_device_mcp_message
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.logging import get_logger
 from core.types import JsonObject, parse_json_object
 from core.utils.tokens import TokenService
@@ -49,14 +49,14 @@ def _device_id_from_token(token: str) -> tuple[str, str | None]:
 @router.websocket("/tunnel")
 async def agent_tunnel_websocket(
     websocket: WebSocket,
-    container: ContainerDep,
+    di: Di,
     token: Annotated[str, Query(description="Device JWT")],
 ) -> None:
     await websocket.accept()
 
     try:
         device_id, device_jti = _device_id_from_token(token)
-        device = await get_device_record(container, device_id)
+        device = await get_device_record(di, device_id)
     except HTTPException as exc:
         await websocket.close(code=4401, reason=str(exc.detail))
         return
@@ -65,7 +65,7 @@ async def agent_tunnel_websocket(
         await websocket.close(code=4403, reason="Устройство деактивировано")
         return
 
-    if await is_device_token_denied(container, device_id, device_jti=device_jti):
+    if await is_device_token_denied(di, device_id, device_jti=device_jti):
         await websocket.close(code=4401, reason="Device token revoked")
         return
 
@@ -83,36 +83,36 @@ async def agent_tunnel_websocket(
         "policy": device.policy.model_dump(),
     }
     await websocket.send_text(json.dumps(policy_frame))
-    await mark_device_tunnel_online(container, device_id=device_id)
+    await mark_device_tunnel_online(di, device_id=device_id)
     logger.info("agent.tunnel.connected", device_id=device_id, company_id=device.company_id)
 
     try:
         while True:
             raw_message = await websocket.receive_text()
-            device = await get_device_record(container, device_id)
+            device = await get_device_record(di, device_id)
             if not device.is_active:
                 await websocket.close(code=4403, reason="Устройство деактивировано")
                 break
-            if await is_device_token_denied(container, device_id, device_jti=device_jti):
+            if await is_device_token_denied(di, device_id, device_jti=device_jti):
                 await websocket.close(code=4401, reason="Device token revoked")
                 break
 
             message_payload = parse_json_object(raw_message, "agent.tunnel.message")
             message_type = message_payload.get("type")
             if message_type == "ping":
-                await mark_device_tunnel_online(container, device_id=device_id)
+                await mark_device_tunnel_online(di, device_id=device_id)
                 pong: JsonObject = {"type": "pong", "device_id": device_id}
                 await websocket.send_text(json.dumps(pong))
                 continue
 
             mcp_reply = handle_device_mcp_message(device_id, message_payload)
             if mcp_reply is not None:
-                await mark_device_tunnel_online(container, device_id=device_id)
+                await mark_device_tunnel_online(di, device_id=device_id)
                 await websocket.send_text(json.dumps(mcp_reply))
                 continue
 
             if message_type == "mcp_response":
-                await mark_device_tunnel_online(container, device_id=device_id)
+                await mark_device_tunnel_online(di, device_id=device_id)
                 continue
 
             await websocket.send_text(
@@ -128,4 +128,4 @@ async def agent_tunnel_websocket(
         logger.info("agent.tunnel.disconnected", device_id=device_id)
     finally:
         unregister_tunnel_connection(device_id)
-        await mark_device_tunnel_offline(container, device_id=device_id)
+        await mark_device_tunnel_offline(di, device_id=device_id)

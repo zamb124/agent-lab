@@ -8,11 +8,11 @@ from contextlib import contextmanager
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.company_operations import (
     CompanyInitPayload,
     op_flows_company_init,
 )
-from apps.flows.src.container import FlowContainer
 from core.context import reset_context, set_context
 from core.internal_context_headers import build_internal_context_headers
 from core.models.context_models import Context
@@ -52,7 +52,7 @@ def _scheduled_without_task_id(payload: dict[str, object]) -> dict[str, object]:
 
 async def test_company_init_public_http_equals_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     auth_token_company2: str,
     auth_headers_company2: dict[str, str],
 ) -> None:
@@ -71,7 +71,7 @@ async def test_company_init_public_http_equals_op(
         op_result = await op_flows_company_init(
             CompanyInitPayload.model_validate(body),
             user=user,
-            container=container,
+            di=di,
         )
     assert _scheduled_without_task_id(http_payload) == _scheduled_without_task_id(
         op_result.model_dump(mode="json")
@@ -80,7 +80,7 @@ async def test_company_init_public_http_equals_op(
 
 async def test_company_init_public_rejects_system(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
 ) -> None:
     http_response = await client.post(
@@ -98,7 +98,7 @@ async def test_company_init_public_rejects_system(
                 subdomain="system",
             ),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_result.status == "scheduled"
     assert op_result.task_id
@@ -106,7 +106,7 @@ async def test_company_init_public_rejects_system(
 
 async def test_company_init_internal_system_http_equals_op(
     app: object,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
 ) -> None:
     headers = build_internal_context_headers(company_id="system", user_id=system_user_id)
@@ -126,7 +126,7 @@ async def test_company_init_internal_system_http_equals_op(
         op_result = await op_flows_company_init(
             CompanyInitPayload.model_validate(body),
             user=user,
-            container=container,
+            di=di,
         )
     assert _scheduled_without_task_id(http_payload) == _scheduled_without_task_id(
         op_result.model_dump(mode="json")
@@ -135,7 +135,7 @@ async def test_company_init_internal_system_http_equals_op(
 
 async def test_company_init_company_mismatch_is_forbidden(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     auth_token_company2: str,
     auth_headers_company2: dict[str, str],
     unique_id: str,
@@ -156,6 +156,6 @@ async def test_company_init_company_mismatch_is_forbidden(
             await op_flows_company_init(
                 CompanyInitPayload.model_validate(body),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "forbidden"

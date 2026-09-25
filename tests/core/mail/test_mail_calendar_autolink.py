@@ -10,15 +10,9 @@ from core.config import get_settings
 from core.config.models import MailConfig
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.mail.models import (
+    MailboxBinding,
     MailboxBindingKind,
     PersonalMailboxConnectPayload,
-)
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxFolderRepository,
-    MailboxSyncCursorRepository,
-    MailMessageRepository,
 )
 from core.mail.service import MailService
 from core.models import CalendarAutolinkStatus
@@ -28,43 +22,28 @@ from tests.core.mail.fakes import RecordingMailServerPort
 
 @pytest.fixture()
 def mail_service_with_calendar(
-    mail_connection_repository: CompanyMailConnectionRepository,
-    mailbox_binding_repository: MailboxBindingRepository,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
-    mailbox_folder_repository: MailboxFolderRepository,
-    mail_message_repository: MailMessageRepository,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
 ) -> MailService:
     """MailService с настоящим CalendarService как мостом mail -> calendar."""
     return MailService(
-        connection_repository=mail_connection_repository,
-        binding_repository=mailbox_binding_repository,
-        sync_cursor_repository=mailbox_sync_cursor_repository,
-        folder_repository=mailbox_folder_repository,
-        message_repository=mail_message_repository,
-        authz=container.authz_service,
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        authz=di.authz_service,
+        namespace_service=di.namespace_service,
         mail_config=MailConfig(),
         port_override=recording_mail_port,
-        calendar_bridge=container.calendar_service,
+        calendar_bridge=di.calendar_service,
     )
 
 
-async def _calendar_credentials(container, company_id: str, user_id: str):
-    credentials = await container.integration_credential_repository.list_by_user(
-        company_id=company_id,
-        user_id=user_id,
-    )
+async def _calendar_credentials(company_id: str, user_id: str) -> list[IntegrationCredential]:
+    credentials = await IntegrationCredential.list_by_user(company_id, user_id)
     return [item for item in credentials if item.service == "calendar"]
 
 
 @pytest.mark.asyncio
 async def test_autolink_marks_unsupported_domain_without_creating_integration(
     mail_service_with_calendar: MailService,
-    container,
+    di,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -75,7 +54,7 @@ async def test_autolink_marks_unsupported_domain_without_creating_integration(
     company_id = f"mailcalu_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -98,7 +77,7 @@ async def test_autolink_marks_unsupported_domain_without_creating_integration(
     assert binding.calendar_autolink_status == CalendarAutolinkStatus.UNSUPPORTED
     assert binding.calendar_autolink_detail is not None
     assert "corp.example" in binding.calendar_autolink_detail
-    assert await _calendar_credentials(container, company_id, user_id) == []
+    assert await _calendar_credentials(company_id, user_id) == []
 
     public = await mail_service_with_calendar.public_binding(binding)
     assert public.calendar_autolink_status == CalendarAutolinkStatus.UNSUPPORTED
@@ -107,14 +86,14 @@ async def test_autolink_marks_unsupported_domain_without_creating_integration(
 @pytest.mark.asyncio
 async def test_autolink_marks_gmail_as_oauth_only(
     mail_service_with_calendar: MailService,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     """Gmail: парольного CalDAV нет, статус needs_oauth без сетевых проб."""
     company_id = f"mailcalg_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -134,20 +113,20 @@ async def test_autolink_marks_gmail_as_oauth_only(
     )
 
     assert binding.calendar_autolink_status == CalendarAutolinkStatus.NEEDS_OAUTH
-    assert await _calendar_credentials(container, company_id, user_id) == []
+    assert await _calendar_credentials(company_id, user_id) == []
 
 
 @pytest.mark.asyncio
 async def test_unbind_removes_mailbox_calendar_integration(
     mail_service_with_calendar: MailService,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     """Отвязка ящика снимает его календарную интеграцию, не оставляя висячих credentials."""
     company_id = f"mailcald_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -166,7 +145,7 @@ async def test_unbind_removes_mailbox_calendar_integration(
     )
 
     now = datetime.now(timezone.utc)
-    await container.integration_credential_repository.upsert(
+    await IntegrationCredential.upsert_by_credential_id(
         IntegrationCredential(
             credential_id=f"cred_{unique_id}",
             company_id=company_id,
@@ -183,28 +162,27 @@ async def test_unbind_removes_mailbox_calendar_integration(
             updated_at=now,
         )
     )
-    assert len(await _calendar_credentials(container, company_id, user_id)) == 1
+    assert len(await _calendar_credentials(company_id, user_id)) == 1
 
     await mail_service_with_calendar.unbind_mailbox(
         binding.mailbox_binding_id,
         company_id=company_id,
     )
 
-    assert await _calendar_credentials(container, company_id, user_id) == []
+    assert await _calendar_credentials(company_id, user_id) == []
 
 
 @pytest.mark.asyncio
 async def test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status(
     mail_service_with_calendar: MailService,
-    mailbox_binding_repository: MailboxBindingRepository,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     """Отключение календаря из настроек: ящик остаётся, статус становится disabled."""
     company_id = f"mailcalx_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -224,7 +202,7 @@ async def test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status(
     assert binding.calendar_autolink_status == CalendarAutolinkStatus.NEEDS_OAUTH
 
     now = datetime.now(timezone.utc)
-    await container.integration_credential_repository.upsert(
+    await IntegrationCredential.upsert_by_credential_id(
         IntegrationCredential(
             credential_id=f"cred_{unique_id}",
             company_id=company_id,
@@ -252,7 +230,7 @@ async def test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status(
 
     assert updated.calendar_autolink_status == CalendarAutolinkStatus.DISABLED
     assert updated.calendar_autolink_detail == "disconnected by user"
-    assert await _calendar_credentials(container, company_id, user_id) == []
-    stored = await mailbox_binding_repository.get(binding.mailbox_binding_id, company_id)
+    assert await _calendar_credentials(company_id, user_id) == []
+    stored = await MailboxBinding.find_in_company(company_id, binding.mailbox_binding_id)
     assert stored is not None
     assert stored.calendar_autolink_status == CalendarAutolinkStatus.DISABLED

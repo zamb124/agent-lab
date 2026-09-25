@@ -9,6 +9,8 @@ Integration тесты для API биллинга.
 import pytest
 from httpx import AsyncClient
 
+from core.models.identity_models import Company
+
 
 @pytest.mark.asyncio
 class TestBillingAPI:
@@ -18,7 +20,7 @@ class TestBillingAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Получение информации о подписке"""
         response = await frontend_client.get(
@@ -51,7 +53,7 @@ class TestBillingAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Получение статистики использования"""
         import uuid
@@ -64,12 +66,13 @@ class TestBillingAPI:
         company_id = token_data.company_id
         user_id = token_data.user_id
 
-        # Устанавливаем контекст для usage_repository
+        # Контекст компании нужен фильтрам usage.
         from core.context import clear_context, set_context
         from core.models.context_models import Context, Language
+        from core.models.identity_models import User
 
-        company = await frontend_container.company_repository.get(company_id)
-        user = await frontend_container.user_repository.get(user_id)
+        company = await Company.get(company_id)
+        user = await User.get(user_id)
 
         context = Context(
             user=user,
@@ -102,8 +105,8 @@ class TestBillingAPI:
             quantity=2
         )
 
-        await frontend_container.usage_repository.set(usage1)
-        await frontend_container.usage_repository.set(usage2)
+        await UsageRecord.set(usage1)
+        await UsageRecord.set(usage2)
 
         # Очищаем контекст
         clear_context()
@@ -163,7 +166,7 @@ class TestBillingAPI:
     async def test_create_topup_as_viewer_forbidden(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Попытка пополнить баланс с ролью viewer"""
         import uuid
@@ -178,7 +181,7 @@ class TestBillingAPI:
             owner_id="owner_user",
             members={"viewer_user": ["viewer"]}
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
 
         user = User(
             user_id="viewer_user",
@@ -186,7 +189,7 @@ class TestBillingAPI:
             companies={company_id: ["viewer"]},
             active_company_id=company_id
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         token_service = get_token_service()
         token = token_service.create_token("viewer_user", company_id=company_id)
@@ -206,7 +209,7 @@ class TestBillingAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Смена тарифного плана"""
         from core.utils.tokens import get_token_service
@@ -218,13 +221,12 @@ class TestBillingAPI:
         user_id = token_data.user_id
 
         # Убеждаемся что пользователь owner
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         if user_id not in company.members or "owner" not in company.members[user_id]:
             company.owner_user_id = user_id
-            await frontend_container.company_repository.set(company)
+            await Company.set(company)
             await set_test_company_member_roles(
-                frontend_container.company_repository,
-                frontend_container.authz_service,
+                frontend_di.authz_service,
                 company_id=company_id,
                 user_id=user_id,
                 roles=["owner"],
@@ -243,14 +245,14 @@ class TestBillingAPI:
         assert data["plan"] == "premium"
 
         # Проверяем что план действительно изменился в БД
-        updated_company = await frontend_container.company_repository.get(company_id)
+        updated_company = await Company.get(company_id)
         assert updated_company.tariff_plan.value == "premium"
 
     async def test_change_plan_invalid_plan(
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Попытка сменить на недопустимый тариф"""
         from core.utils.tokens import get_token_service
@@ -262,12 +264,11 @@ class TestBillingAPI:
         user_id = token_data.user_id
 
         # Убеждаемся что owner
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         company.owner_user_id = user_id
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=user_id,
             roles=["owner"],
@@ -280,12 +281,12 @@ class TestBillingAPI:
         )
 
         assert response.status_code == 400
-        assert "Недопустимый тариф" in response.json()["detail"]
+        assert "invalid tariff" in response.json()["detail"]
 
     async def test_change_plan_only_owner(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Только owner может менять тариф"""
         import uuid
@@ -301,17 +302,15 @@ class TestBillingAPI:
             owner_user_id="owner_user",
             members={"admin_user": ["admin"]},
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id="owner_user",
             roles=["owner"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id="admin_user",
             roles=["admin"],
@@ -323,7 +322,7 @@ class TestBillingAPI:
             companies={company_id: ["admin"]},
             active_company_id=company_id
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         token_service = get_token_service()
         token = token_service.create_token("admin_user", company_id=company_id)
@@ -342,7 +341,7 @@ class TestBillingAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Попытка сменить на текущий тариф"""
         from core.models.billing_models import TariffPlan
@@ -354,13 +353,12 @@ class TestBillingAPI:
         company_id = token_data.company_id
         user_id = token_data.user_id
 
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         company.owner_user_id = user_id
         company.tariff_plan = TariffPlan.FREE
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=user_id,
             roles=["owner"],
@@ -373,7 +371,7 @@ class TestBillingAPI:
         )
 
         assert response.status_code == 400
-        assert "уже использует" in response.json()["detail"].lower()
+        assert "already uses this tariff" in response.json()["detail"].lower()
 
     async def test_get_payment_history(
         self,
@@ -394,7 +392,7 @@ class TestBillingAPI:
     async def test_billing_isolation_between_companies(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Проверка изоляции биллинга между компаниями"""
         import uuid
@@ -426,8 +424,8 @@ class TestBillingAPI:
             monthly_budget=10000.0
         )
 
-        await frontend_container.company_repository.set(company1)
-        await frontend_container.company_repository.set(company2)
+        await Company.set(company1)
+        await Company.set(company2)
 
         user1 = User(
             user_id="user1",
@@ -442,8 +440,8 @@ class TestBillingAPI:
             active_company_id=company2_id
         )
 
-        await frontend_container.user_repository.set(user1)
-        await frontend_container.user_repository.set(user2)
+        await User.set(user1)
+        await User.set(user2)
 
         token_service = get_token_service()
         token1 = token_service.create_token("user1", company_id=company1_id)

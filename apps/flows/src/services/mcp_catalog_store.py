@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource
 from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
+from apps.flows.src.models.tool_reference import ToolReference
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_catalog_provisioner import catalog_entry_to_server_config
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_catalog_entries_for_display
@@ -12,6 +13,7 @@ from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.context import require_active_company
 from core.logging import get_logger
+from core.variables.service import VariablesService
 
 logger = get_logger(__name__)
 
@@ -52,12 +54,11 @@ def catalog_entry_is_search_visible(entry: MCPCatalogEntry, search: str) -> bool
 
 async def list_store_catalog_entries(
     *,
-    container: FlowRuntimeContainer,
     search: str,
     limit: int,
     offset: int,
 ) -> tuple[list[MCPCatalogStoreEntry], int]:
-    all_entries = await container.mcp_catalog_repository.list(limit=20_000)
+    all_entries = await MCPCatalogEntry.list(limit=20_000)
     store_entries = sort_mcp_catalog_entries_for_display(
         [
             entry
@@ -68,7 +69,7 @@ async def list_store_catalog_entries(
     total = len(store_entries)
     page = store_entries[offset : offset + limit]
 
-    existing_servers = await container.mcp_server_repository.list(limit=5000)
+    existing_servers = await MCPServerConfig.list(limit=5000)
     installed_catalog_ids = {
         server.catalog_id
         for server in existing_servers
@@ -86,17 +87,18 @@ async def list_store_catalog_entries(
 
 async def install_catalog_entry_for_company(
     *,
-    container: FlowRuntimeContainer,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
     catalog_id: str,
 ) -> MCPServerConfig:
-    entry = await container.mcp_catalog_repository.get(catalog_id)
+    entry = await MCPCatalogEntry.get(catalog_id)
     if entry is None:
         raise ValueError(f"Catalog entry {catalog_id!r} not found")
     if not catalog_entry_is_store_installable(entry):
         raise ValueError(f"Catalog entry {catalog_id!r} is not available in MCP Store")
 
     server_id = server_id_from_catalog_id(catalog_id)
-    existing = await container.mcp_server_repository.get(server_id)
+    existing = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     if existing is not None:
         if (
             existing.source == MCPServerSource.CATALOG
@@ -109,23 +111,27 @@ async def install_catalog_entry_for_company(
         entry,
         catalog_auto_provisioned=False,
     )
-    _ = await container.mcp_server_repository.set(server)
-    _ = await sync_mcp_server_tools(container=container, server_config=server)
+    _ = await MCPServerConfig.set(server)
+    _ = await sync_mcp_server_tools(
+        variables_service=variables_service,
+        flow_access_service=flow_access_service,
+        server_config=server,
+    )
     logger.info("flows.mcp.store.install.catalog_id.server_id", catalog_id=catalog_id, server_id=server_id)
     return server
 
 
 async def uninstall_catalog_entry_from_company(
     *,
-    container: FlowRuntimeContainer,
+    flow_access_service: FlowAccessService,
     catalog_id: str,
 ) -> None:
-    entry = await container.mcp_catalog_repository.get(catalog_id)
+    entry = await MCPCatalogEntry.get(catalog_id)
     if entry is None:
         raise ValueError(f"Catalog entry {catalog_id!r} not found")
 
     server_id = server_id_from_catalog_id(catalog_id)
-    server = await container.mcp_server_repository.get(server_id)
+    server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     if server is None:
         raise ValueError(f"MCP server {server_id!r} is not installed")
     if server.source != MCPServerSource.CATALOG:
@@ -135,9 +141,9 @@ async def uninstall_catalog_entry_from_company(
 
     for tool_id in server.cached_tools:
         require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
-        _ = await container.tool_repository.delete(tool_id)
-        await container.flow_access_service.sync_tool_deleted(
+        _ = await ToolReference.delete_by_id(ToolReference.row_id(tool_id))
+        await flow_access_service.sync_tool_deleted(
             tool_id, company_id=require_active_company().company_id
         )
-    _ = await container.mcp_server_repository.delete(server_id)
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server_id))
     logger.info("flows.mcp.store.uninstall.catalog_id.server_id", catalog_id=catalog_id, server_id=server_id)

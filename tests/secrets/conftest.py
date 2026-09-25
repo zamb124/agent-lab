@@ -2,37 +2,36 @@
 Secrets-специфичные фикстуры.
 
 HTTP: secrets_client — в tests/fixtures/clients.py.
-Service/repository: secrets_container, secrets_repository, secrets_service.
+DI: secrets_di — тот же ``SecretsDi``, что собирает lifespan приложения.
 """
 
 from __future__ import annotations
 
-import pytest
+from collections.abc import AsyncIterator
+
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+
+from apps.secrets.di import SecretsDi
+from core.di import require_di
 
 API_PREFIX = "/secrets/api/v1"
 
 
-@pytest.fixture
-def secrets_container():
-    from apps.secrets.container import get_secrets_container
-
-    return get_secrets_container()
-
-
-@pytest.fixture
-def secrets_repository(secrets_container):
-    return secrets_container.secrets_repository
-
-
-@pytest.fixture
-def secrets_service(secrets_container):
-    return secrets_container.secrets_service
+@pytest_asyncio.fixture
+async def secrets_di(secrets_app: FastAPI, setup_database_before_tests: None) -> AsyncIterator[SecretsDi]:
+    _ = setup_database_before_tests
+    async with secrets_app.router.lifespan_context(secrets_app):
+        yield require_di(secrets_app, SecretsDi)
 
 
 @pytest_asyncio.fixture
-async def secrets_client_company2(secrets_app, setup_database_before_tests, auth_headers_company2):
+async def secrets_client_company2(
+    secrets_app: FastAPI,
+    setup_database_before_tests: None,
+    auth_headers_company2: dict[str, str],
+) -> AsyncIterator[AsyncClient]:
     _ = setup_database_before_tests
     transport = ASGITransport(app=secrets_app)
     async with secrets_app.router.lifespan_context(secrets_app):

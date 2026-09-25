@@ -18,7 +18,7 @@ _PYTEST_IGNORE_UI := --ignore=tests/ui
 _PYTEST_IGNORE_AGENT_DESKTOP := --ignore=tests/agent/desktop_e2e
 _PYTEST_IGNORE_AGENT_E2E := --ignore=tests/agent/e2e
 
-# Все тесты параллельны: xdist_group/сериализация запрещены (testing.mdc, «Parallel-safe контракты»).
+# Все тесты параллельны: xdist_group/сериализация запрещены (testing.mdc § Параллельный прогон).
 _PYTEST_XDIST := -n $(WORKERS) --max-worker-restart=$(PYTEST_MAX_WORKER_RESTART)
 
 # Coverage (default-on): TEST_COVERAGE=0 make test
@@ -58,7 +58,7 @@ test-up: runtime-bootstrap
 	@sleep 7
 	@echo "Сброс тестовой БД (TRUNCATE managed таблиц + Redis FLUSHDB)..."
 	@uv run python -m scripts.db_test_reset
-	@echo "Применение Alembic-миграций всех сервисных деревьев (+ CREATE DATABASE openfga)..."
+	@echo "Накат 0001_initial всех сервисных баз (+ CREATE DATABASE openfga)..."
 	@uv run python -m scripts.test_migrate
 	@echo "Старт OpenFGA (после создания БД openfga)..."
 	@docker-compose -f docker-compose-test.yaml --env-file $(DOCKER_COMPOSE_ENV_FILE) rm -f -s openfga-migrate-test openfga-test >/dev/null 2>&1 || true

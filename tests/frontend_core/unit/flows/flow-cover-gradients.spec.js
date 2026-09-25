@@ -4,7 +4,7 @@ import {
     FLOW_PRESET_GRADIENT_BY_ID,
     resolveFlowCoverGradient,
     resolveFlowPresetGradient,
-} from '../../../../apps/flows/ui/constants/flow-cover-gradients.js';
+} from '../../../../apps/flows/ui/_helpers/flow-cover-gradients.js';
 
 describe('flow-cover-gradients', () => {
     it('resolveFlowCoverGradient returns token var from palette', () => {

@@ -252,7 +252,7 @@ describe('platformWs.request: round-trip', () => {
             payload: { error_code: 'invalid', error_detail: 'bad' },
             meta: { causation_id: sent.event_id },
         });
-        await expect(promise).rejects.toMatchObject({ name: 'WsTransportError', code: 'invalid', message: 'bad' });
+        await expect(promise).rejects.toMatchObject({ name: 'WsTransportError', code: 'invalid', message: 'invalid' });
     });
 
     it('таймаут без terminal → reject ws_timeout, не *_failed', async () => {

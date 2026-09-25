@@ -1,448 +1,113 @@
 ---
-description: "Flows: архитектура сервиса, ноды, триггеры, ресурсы и единый Flow UI поверх A2A"
+description: "Сервис flows: layout apps/flows/src, FlowConfig и ветки, ноды, ресурсы, триггеры, маппинги, LLM-конфиг нод, bundles, Evaluation Lab, гостевой preview, UI редактора. Читать при любой правке apps/flows"
+globs:
+  - "apps/flows/**"
+  - "apps/flows_worker/**"
 alwaysApply: false
 ---
-# Flows — сервис
 
-## Принципы
+# Flows
 
-1. **DB-First** — конфигурация в БД (`flows`/`flows_versions`), код только исполняет.
-2. **Stream-First** — все события через Redis Pub/Sub (см. `streaming.mdc`).
-3. **Zero-Guess** — нет fallback значений, ошибка = exception.
-4. **Access** — sole PDP `AuthzService`: `authz.require_can_view|edit(AuthzObject.flow|tool|flow_branch)`; list = company index ∩ `page_viewable_flow_ids`; `permission: []` = company-visible; platform admin — TTU `admin from platform`, не Python bypass. Полный канон object keys, list/picker, share, backfill — **`authorization.mdc`** § «Flows».
+Flows (`apps/flows`, порт 8001, база `platform_agents`) — владелец агентов, автоматизаций и их интерфейсов. Исполнение графа → `flows_runtime.mdc`; A2A и доставка → `a2a.mdc`; интерфейс → `flow_ui.mdc`; tools → `tools.mdc`; пользовательский код → `eval.mdc`.
 
-## Flow UI: A2A SSE (платформенный инвариант)
+## Модель
 
-Каждый пользовательский интерфейс flow — `FlowUIDocument`; чат является редактируемым default template, а не отдельным runtime. Единственный транспорт для UI, CLI, SDK и embed — A2A 1.0 JSON-RPC/SSE. Полный канон → **`flow_ui.mdc`**.
+- `FlowConfig` — таблица `flows`: версии flow, текущая — строка с `is_current`; `create_version` пишет новую версию, `get_latest` читает текущую. Конфигурация flow живёт в БД; код только исполняет (`FlowFactory`).
+- `BranchConfig` — вариант графа внутри `flow_id` (`FlowConfig.branches`, ключ `branch_id`); не skill и не сценарий.
+- `NodeConfig` — таблица `nodes` (каталог нод компании); `GraphNodeConfig` — экземпляр ноды в графе flow. Тип — `node_type` из `NodeType` (`apps/flows/src/models/enums.py`); другие строки (`tool`, `function`) типом ноды не являются.
+- `ResourceDefinition` — таблица `resources`; тип — `ResourceType` (`apps/flows/src/models/resource.py`); конфиг — `ResourceConfigUnion` через `parse_typed_resource_config`.
+- Триггеры — `FlowConfig.triggers` (`apps/flows/src/models/trigger_config.py`); интерфейс — `FlowConfig.interface`/`BranchConfig.interface` → `flow_ui.mdc`; сотрудник — `FlowConfig.employee` → `flow_employee.mdc`; речь — `FlowConfig.speech`/`BranchConfig.speech` (`apps/flows/src/models/flow_speech_settings.py`, без секретов провайдеров).
+- Ребро — только `from_node`/`to_node`; поля `from`/`to` запрещены везде, кроме чужих протоколов (Telegram payload).
 
-- Запрос: `POST /flows/api/v1/{flow_id}` body `{jsonrpc:"2.0", id, method:"SendStreamingMessage", params:{message, metadata?}}`, header `A2A-Version: 1.0`, `Accept: text/event-stream`. Источник — `_handle_streaming` в `apps/flows/src/api/a2a.py`. Канон wire → **`a2a.mdc`**.
-- Cancel: `POST /flows/api/v1/{flow_id}` body `{method:"CancelTask", params:{id: task_id}}`.
-- Ответ: `text/event-stream`, кадры `data: {jsonrpc, id, result: {statusUpdate|artifactUpdate|task|message}}\n\n`. Terminal/interrupted wire states: `TASK_STATE_COMPLETED` / `FAILED` / `CANCELED` / `REJECTED` / `INPUT_REQUIRED` / `AUTH_REQUIRED` (поля `final` нет).
-- Control plane `GET /flows/api/v1/{flow_id}/interface?branch_id=` и `GET /flows/api/v1/embed/{embed_id}/interface` отдают `FlowInterfaceResponse` (`core/flow_ui/interface.py`): design-time `document: FlowUIDocument` ветки, `viewer`, `look`, `capabilities`, `flow_identity` (`image_url` — проекция блока `agent_identity`; не `store_card_image_url`). Значения state и артефакты в этом ответе запрещены — только A2A.
+### Именование
 
-Клиент — единый `<platform-flow-ui>` на `FlowUIClient` + `FlowUIStore` (`core/frontend/static/lib/flow-ui/runtime/`). Артефакты Task различаются по `artifactId`/`mediaType`: `state` (`application/json` snapshot, затем `application/json-patch+json`) — проекция state по путям документа, `ui` (`application/vnd.platform.ui+json`) — render/navigate агента, текстовые артефакты (`response`, `reasoning`, `operator_reply`, …) — лента по `name`; неизвестные Parts игнорируются без ошибки. SPA/editor/embed/Lara/landing/HITL не создают собственные reducers или transport.
+- Платформенная сущность — flow (`flow_id`, `FlowConfig`); `agent` — только термины A2A-спеки на границе (agent card, `ROLE_AGENT`); документация кода для пользователя — ракурс `flow`, источник — `CapabilityManifest`.
+- LLM-нода — `llm_node` (`LlmNode`); ресурсы уровня flow — `ResourceResolver.resolve_for_node(flow_resources=...)`, не `agent_*`.
+- Handoff между flows (`HandoffInterrupt`, `handoff_to_flow`/`handback_to_parent`) → `handoff.mdc`; режим оператора `handoff_mode` → `worktracker.mdc`; `flow_preview_handoff` — гостевой preview выше.
+- Устоявшиеся имена: `remote_flow`, `FlowInterrupt`, `Role.agent`, camelCase полей A2A-спеки.
 
-Значения input-блоков живут локально до действия: клик (`button.action`, `action` input-блока, `row_action`, `html`→`send`) отправляет один `data` Part `application/vnd.platform.ui-action+json` `{action, source, fields, payload}` — новый Task в текущем `context_id`; сервер валидирует `fields` по документу и пишет их в state как обычные поля. Reload/reopen/share получают document через `GET .../interface`, а state — через `GetTask` последнего Task (`state` artifact) до первого render.
+## Инварианты
 
-### Test Run: визуализация графа
+### Layout
 
-Канвас редактора **не** читает Flow UI accumulator. Единственный store run-визуализации — `flows/editor` slice: `runningNodeIds` / `completedNodeIds` / `erroredNodes` / `runningEdgeIndices` / `completedEdgeIndices` / `failedEdgeIndices` / `nodeRunResults` / `runSession` / `runTrace` / `startWireRunState` / `endWireRunStateByNodeId`.
+Исключение из `main.mdc` § Стандарт сервиса: код сервиса — в `apps/flows/src/**`, DI — `FlowsDi` в `apps/flows/di.py`, воркер — `apps/flows_worker/` с `di_class=FlowsDi`, builtin tools — `apps/flows/tools/<tag>/`, bundles — `apps/flows/bundles/`. В `apps/flows/src/` существуют только пакеты: `a2a`, `agent` (LinnexAgent: device auth, LLM proxy), `api`, `channels`, `durable_execution`, `evaluation`, `files`, `models` (все таблицы flows), `observability`, `registry`, `resources`, `runners`, `runtime`, `services`, `state`, `streaming`, `tasks`, `tools` (базовые классы tools), `triggers` и модуль `events.py`. Клиенты — `core/clients/`, DB-примитивы — `core/db/`, middleware — `core/middleware/`. `[без гейта]`
 
-Workspace `run` рендерит тот же canvas-host, что `logic`, и ставит `executionPanelOpen=true`. Полноэкранный `<platform-flow-ui display="page">` вместо канвы в редакторе запрещён: иначе нет орбит, pills и START/END.
+### Ноды
 
-Хост [`apps/flows/ui/components/editor/flows-execution-panel.js`](../../apps/flows/ui/components/editor/flows-execution-panel.js) (`<platform-flow-ui profile="editor_test">`) — тонкий реле:
+1. `llm_node` — LLM + tools (ReAct); элемент `tools[]` — `tool_id` или dict с `type` из `NodeType`, исполнение через `ToolRegistry.materialize`; tools одного шага выполняются параллельно; `react_role` — `standard`/`reason`/`exit`.
+2. `remote_flow` — A2A 1.0 к внешнему endpoint: только URL + Skill ID (`branch_id` → `metadata.branch`) + `metadata_template`; без `flow_id` реестра и `guest_runtime_id`. `code_agent` — дерево исходников в Документах + контейнер фермы → `guest_runtime.mdc`. `flow` — вложенный flow (`flow_id` + `branch_id`).
+3. `datasource` — живая БД, `connector_id` обязателен → `datasources.mdc`. `hitl_node` — задача оператору → `worktracker.mdc`. `reflection` — typed critic gate без side effects. `resource` — pass-through ресурса на графе.
+4. `reflection`: алгоритм блока один — `evaluate_reflection_gate`, затем first-match `select_reflection_exit` → `state.validation.exit_id` (`core/reflection.py`); у ноды N out-портов из `critic_policy.exits` (`Edge.from_port = exit_id`); `FlowValidator` требует ребро на каждый exit и `guaranteed` target во `incoming_state`.
+5. `files` на ноде — элементы формы `state.files` (`original_name`, `url` обязательны); `collect_flow_node_files` (`apps/flows/src/state/node_files.py`) собирает их в `state.files` только при создании `ExecutionState`, на resume — нет.
 
-1. `flow-ui-submit-start` → `flows/run/flow_started` `{ context_id }` (сброс орбит/pills/trace, `agentExecutionRunning=true`, `runSession`).
-2. `flow-ui-a2a-frame` → [`mapEditorA2aFrame`](../../apps/flows/ui/_helpers/flows-editor-a2a-run.js) (`mapA2aResultToChatRuntimeEvents` на `frame.result`) → один `flows/run/a2a_mapped` `{ context_id, runEvents, traceEntries, terminal, nextTaskId, taskPrimed }`. Reducer последовательно применяет те же ветки, что и прямые `flows/run/node_started` / `node_completed` / `node_failed` / `edge_executed` / `edge_error`. Если кадр пришёл без предшествующего submit (HITL/reconnect) и есть `node_started` — сначала `flow_started`.
-3. `mapped.terminal` (внутри `a2a_mapped`) или `flow-ui-submit-end` → `flows/run/flow_done` (`agentExecutionRunning=false`; error pills / `runTrace` остаются до следующего `flow_started` или `flows/run/session_cleared`).
-4. Collapse панели **не** размонтирует `<platform-flow-ui>`: body `hidden`, SSE продолжает писать в slice.
+### Маппинги и переменные
 
-Виртуальные START/END — канвас-хром, не ноды runtime. `startWireRunState`: `running` на `node_started` entry, `completed`/`failed` на complete/fail entry. `endWireRunStateByNodeId[nodeId]`: `completed`/`failed` на complete/fail sink (нет исходящих рёбер). Реальные рёбра — только `edge_executed` / incoming-complete. Канвас читает `data-run-state` так же, как у обычных `.edge`.
+1. `input_mapping`: `@state:field`, `@const:value`; `output_mapping`: `result: field`.
+2. Свободная строка (заголовок HITL, HTTP-заголовок, URL) — `MappingResolver.resolve_interpolated_string`; JSON-ячейка — `resolve_json_template_*` (целый ref сохраняет тип, смешанный `@state:` в ячейке запрещён); промпт LLM — `{brace}` через `VariableResolver.render_template`.
+3. `@var:` → `configuration.mdc` § Секреты и переменные; в конфиге триггера и `POST .../triggers/verify` — тот же словарь эффективных variables пары `flow_id` + `branch_id` (`apps/flows/src/triggers/config_var_resolve.py::resolve_at_var_for_flow`).
+4. Системные переменные `flow_variables_from_request_context` (`apps/flows/src/channels/request_context_variables.py`: `user_id`, `user_name`, `user_email`, `company_id`, `active_namespace`, `user_language`, …) накладываются последними и перекрывают одноимённые ключи запроса; JWT в шаблоны не попадает.
 
-Канон data Part `node_start` / `node_complete` / `node_error` / `edge_executed` → **`streaming.mdc`**.
+### Ресурсы
 
-Test Run pills: один pill на ноду = **последний** прогон (`pickLatestNodeRunResult`); `×N` если `nodeRunResults[nodeId].length > 1`. Клик по pill раскрывает индекс полей (чип типа + семантическое превью, до 8 строк). Maximize / клик по строке / `×N` открывают модалку `flows.node_run_result` (`size='full'`): история всех `run_index`, master-detail всего `diff`, типизированный viewer. Payload `node_complete.diff` полный; лимит 8 — только display на канве.
+1. Слои: `FlowConfig.resources` → `BranchConfig.resources` → `NodeConfig.resources`; склейка по ключу — `merge_flow_skill_node_resource_maps` (`apps/flows/src/resources/merge.py`), порядок как в `ResourceResolver.resolve_for_node`.
+2. Ссылка на shared-ресурс — `{"resource_id": ..., "config": <patch>}`; patch LLM — `LLMResourcePatch` (`extra=forbid`), остальные — shallow merge и строгий `parse_typed_resource_config`. Inline — полный `config` типа; два inline одного ключа с разными типами — ошибка валидации.
+3. `llm_resource_key` и `llm_context_resource_key`: пустой ключ при ровно одном ресурсе нужного типа в merge — он выбирается (`infer_unique_llm_resource_key_from_merged_maps`); ноль или больше одного — без выбора; явный ключ на отсутствующий или чужого типа ресурс — ошибка.
+4. `rag` — bind к platform `Namespace` (`Namespace.name` = RAG `namespace_id`); runtime (`resolve_rag_resource_binds_for_runtime`) создаёт namespace через `NamespaceService.get_or_create` и проверяет `permission` через `AuthzService`. `data_table` — `file_id` SQLite DataTable; строки не копируются в `ExecutionState`, доступ — tools `tables_*`.
 
-## WS / REST / command
+### LLM нод
 
-Каталог flow (`list`/`get`/`create`/`update`/`remove`) плюс store-bundles, validate, reload-from-bundle, versions (`list`/`item`/`rollback`), ветки (`create`/`update`/`remove`), preview-share, voice-session-query, nodes bulk_delete, PATCH metadata, dataflow/inspect, GET metadata (`node-types` / `resource-types` / `exception-absorb-allow-names` / `execution-limits`), каталог tools (`list`/`get`/`create`/`remove`/`all`/`tag-groups`/`preview`/`contract`), session-auth триггеры (`list`/`get`/`create`/`update`/`remove`/`verify`/`reregister`/`test`) плюс `GET platform-events/catalog`, code editor (`documentation` / `templates` / `editor-state` / `source` / `flow-functions` / `tool-source` / `parse-signature` / `validate` / `execute`), datasources (`list`/`get`/`create`/`update`/`remove`/`test`/`introspect`/`query`/`execute` плюс `connectors` list/upsert), Flow UI editor (`schema` / `templates` / `assist`), DataTable create, parent LLM context (`resolve-parent`), preview-рендер промпта (`prompts/render`), LLM catalog (`registry/providers/values`, `registry/models/values`), shared resources (`list`/`get`/`create`/`update`/`remove`), каталог сессий (`list`/`remove`), Agent Skills (`list`/`get`/`create`/`update`/`remove`/`import`/`ensure-seed`), Agent Toolkits manage (`list`/`get`/`create`/`update`/`remove`), MCP servers (`list`/`get`/`create`/`update`/`remove`/`sync`/`test`/`reset_catalog_defaults`) плюс MCP branding (`list`/`slug-suggest`/`upsert`/`remove`) и catalog Store (`list`/`install`/`uninstall`), каталог NodeConfig (`list`/`get`/`create`/`update`/`remove`), durable history/time-travel (`history`/`branches`/`state-at`/`fork`/`rewind`/`manual-patch`/`retry-from-failure`) плюс `GET|PUT /tasks/state`, Evaluation Lab (suites/cases/runs/rubrics/baselines/gates/monitors/annotations), code_agent (ensure-source/import-git/import-archive/copy-tree/rebuild/status/logs/delete), observability Loki logs (`by-trace`/`by-session`/`by-request`/`by-span`/`by-user`) и Tempo traces (`search`/`session`/`task`/`trace`/`handoff-chain`), integrations credentials (`list`/`remove`) и Google Workspace company (`get`/`put`/`delete`), HITL conversation (`get`/`send`), voice-providers catalog, Flow UI shares (`list`/`create`/`remove`), Lara pending-actions apply, company init enqueue — `FLOWS_OPERATIONS` / `op_*` (`apps/flows/realtime/` + `core/integrations/operations.py` + `op_voice_providers_catalog`): REST и Centrifugo RPC `platform.event` зовут одну функцию. UI `flows/flows`, `flows/flow_update`, `flows/flow_reload_from_bundle`, `flows/flow_versions_list`, `flows/flow_store_bundles`, `flows/flow_validate`, `flows/branch_create`, `flows/branch_update`, `flows/branch_remove`, `flows/flow_preview_share`, `flows/flow_voice_session_query`, `flows/editor_bulk_delete`, `flows/sticky_note_upsert`, `flows/dataflow_inspect`, `flows/node_types`, `flows/resource_types`, `flows/exception_absorb_allow_names`, `flows/execution_limits`, `flows/tools`, `flows/tools_all`, `flows/tool_tag_groups`, `flows/triggers_list`, `flows/trigger_get`, `flows/trigger_create`, `flows/trigger_update`, `flows/trigger_remove`, `flows/trigger_verify`, `flows/trigger_reregister`, `flows/trigger_test`, `flows/platform_events_catalog`, `flows/code_documentation`, `flows/code_templates`, `flows/code_editor_state`, `flows/code_source`, `flows/code_flow_functions`, `flows/code_tool_source`, `flows/code_parse_signature`, `flows/code_validate`, `flows/code_execute`, `flows/datasources`, `flows/datasource_test`, `flows/datasource_introspect`, `flows/datasource_query`, `flows/datasource_execute`, `flows/flow_ui_schema`, `flows/flow_ui_templates`, `flows/flow_ui_assist`, `flows/data_table_create`, `flows/llm_context_resolve_parent`, `flows/prompt_render`, `flows/providers_list`, `flows/models_list`, `flows/resources`, `flows/sessions`, `flows/session_state`, `flows/durable_history`, `flows/durable_branches`, `flows/durable_state_at`, `flows/durable_fork`, `flows/durable_rewind`, `flows/durable_retry_from_failure`, `flows/durable_manual_patch`, `flows/agent_skills`, `flows/agent_skill_import`, `flows/agent_skills_ensure_seed`, `flows/mcp_servers`, `flows/mcp_servers_list`, `flows/mcp_server_sync`, `flows/mcp_server_test`, `flows/mcp_server_reset_catalog_defaults`, `flows/mcp_branding_load`, `flows/mcp_branding_slug_suggest`, `flows/mcp_branding_upsert`, `flows/mcp_branding_remove`, `flows/mcp_catalog_store_load`, `flows/mcp_catalog_install`, `flows/mcp_catalog_uninstall`, `flows/nodes_catalog`, `flows/evaluation_*`, `flows/code_agent_ensure_source`, `flows/code_agent_import_git`, `flows/code_agent_import_archive`, `flows/code_agent_copy_tree`, `flows/code_agent_rebuild`, `flows/code_agent_status`, `flows/code_agent_logs`, `flows/code_agent_delete`, `flows/logs_by_trace`, `flows/logs_by_session`, `flows/logs_by_request`, `flows/logs_by_span`, `flows/logs_by_user`, `flows/traces_by_session`, `flows/traces_by_task`, `flows/traces_by_trace`, `flows/traces_by_handoff_chain`, `flows/integrations_list`, `flows/integrations_remove`, `flows/google_workspace_company_get`, `flows/google_workspace_company_put`, `flows/google_workspace_company_delete`, `flows/voice_providers_catalog_load` — `transport: 'ws'`. HITL editor берёт очереди из `worktracker/work_queues` (не flows BFF). Snapshot DataTable — office REST (`GET /documents/api/v1/data-tables/{file_id}`). Дерево code-agent — `office/catalog_items` (`op_catalogs_items`), не HTTP BFF во flows. `flows/google_workspace_authorize` и OAuth callback — HTTP (браузерный redirect). Inbound Telegram/webhook остаются HTTP. `POST /code/lsp/session` и LSP JSON-RPC WS — не command-router. `POST /tasks/submit` остаётся HTTP. `GET /agent/toolkits` catalog — HTTP (device JWT + Host → `mcp_url`). Console manage-список — `flows/agent_toolkits` (`op_flows_agent_toolkits_list`), не HTTP-клон во frontend. `POST /flow-ui/shares/exchange/{grant_id}` — HTTP (аноним + Origin). HITL conversation, Flow UI shares list/create/revoke, Lara pending-actions apply и company init (`POST /company/init` + `POST /internal/company/init`) — тот же `op_*` + тонкий REST. Публичный `/company/init` отклоняет `company_id=system` (`ws_invalid_payload`); internal (idle bootstrap / новая компания) разрешает system. `company_id` тела обязан совпасть с active company. Фабрики редактора на company init нет. operator send, share menu и in-conversation apply в Flow UI остаются HTTP fetch / ui-action (как A2A), не фабрика редактора. `flows` в `COMMAND_WS_SERVICES`. HTTP allowlist: `flows/google_workspace_authorize` (OAuth redirect), `flows/data_table_snapshot` (office GET), `flows/editor` (ui-only канвас), `flows/api_console_run` (A2A), `flows/code_lsp_session` (LSP bootstrap; JSON-RPC кадры — отдельный WS, не command-router). A2A/SSE, `GET .../interface`, chunked uploads, inbound Telegram/webhook, `POST /tasks/submit`, `GET /agent/toolkits` catalog, `POST /flow-ui/shares/exchange/{grant_id}` — не фабрики редактора, остаются своим протоколом.
+1. Одна попытка LLM — `LLMCallConfig` (`core/ai/llm_config.py`); нода — `llm_override` (`NodeLLMOverride`), ресурс — `LLMResourceConfig`; `fallback_models` — упорядоченный `list[LLMCallConfig]` с полным набором полей основной модели; `string[]` и урезанный fallback-контракт запрещены.
+2. Маршрут через шлюз — префикс `<slug>:` в `model` (slug из `core.ai.providers`); `defaults.llm` в `apps/flows/registry.yaml` содержит явный `provider`.
+3. `extra_request_body`/`extra_request_headers` мержатся последними поверх собранного runtime (включая `Authorization`); значения заголовков поддерживают `@var:`; чувствительные заголовки маскируются в логах.
+4. BYOK (непустые `api_key`/`base_url` ноды или ресурса): pre-flight баланса не выполняется, billing resource — `llm:byok` → `billing.mdc`. Контекст `llm_node` собирает context layer → `ai_models.mdc`.
 
-## HITL и задачи оператора
+### Триггеры
 
-HITL и задачи оператора — платформенное ядро `WorkItem` (сервис **worktracker**); flows создаёт `WorkItem(kind=operator_handoff)` через `HitlWorkItemService`, resume — только по `worktracker/work_item/completed` из consumer group `flows`; диалог — `op_flows_hitl_conversation_*` (`HitlConversationService`). Полный канон (режимы, UI оператора/пользователя, test matrix) — **`worktracker.mdc`** § «Возобновление flow (HITL)», runtime interrupt — **`flows_logic.mdc`**.
+1. Типы — `telegram`, `webhook`, `email`, `platform_event` (с handler) и `cron` (контракт без runtime, `apps/flows/docs/triggers_runtime_matrix.md`).
+2. `output_mapping`: слева только `content` и `context.*` (`variables.*` запрещены), справа — путь в payload; `branch_id` триггера — ключ `FlowConfig.branches`.
+3. Webhook — `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`, всегда async (HTTP 202 `{status, task_id, context_id, session_id}`); URL строит `resolve_flows_webhook_public_base_url_from_context` по `Host`; смена apex — `POST .../triggers/{trigger_id}/reregister`.
+4. `platform_event` — consumer group `flows` (`PlatformEventConsumerService` во `flows_worker`) → `dispatch_platform_event_triggers`; identity — `meta.actor_user_id` или владелец flow из OpenFGA; `task_id`/`context_id` = `uuid5(event_id + trigger_id)`; синтетический `user_id` с `:` запрещён → `events.mdc`.
+5. `email` — индекс `flows:email_triggers:{mailbox_binding_id}`, постановка `dispatch_email_triggers` из синхронизации почты → `mail.mdc`.
 
-## Flow как сотрудник (employee)
+### Bundles
 
-`FlowConfig.employee` (`FlowEmployeeConfig`: `enabled`, `roles`, `curator_user_ids` ≥1, `display_name`, `avatar_url`) при `create_flow`/`update_flow` провижнит flow как платформенного `User` `flow_employee_{flow_id}`; employee-flow исполняется от своего имени (`resolve_execution_context` минтит SESSION JWT на точках входа channels / tasks / scheduler / inbox), `ExecutionState.initiator_user_id` хранит запустившего. Identity, provisioning, inbox через consumer group `flows`, act-as куратора, матрица готовности и долг — **`flow_employee.mdc`**.
+1. `apps/flows/bundles/<id>/flow.json` → `FlowConfig.source == "file"`; `POST .../reload-from-bundle` → `FlowsLoader.reload_flow_bundle` — тот же путь, что `company/init`; перезапись — `can_edit`, установка каталожного bundle — член компании с dual-write; нет tuples и нет каталога — 403.
+2. `depends_on_flow_ids` ставит зависимости до зависимого flow; `FlowsLoader` инлайнит `prompt` (`prompts/*.md`), `output_schema_file`, `store_card_image` (→ S3, `store_card_image_url`).
 
-## Push-события (sync открытых редакторов)
+### Evaluation Lab
 
-Бэкенд публикует через `core.events.publish_event_to_user` после успешного `op_flows_update`/`op_flows_remove`, POST `reload-from-bundle`, и POST/PUT/DELETE branch:
+1. `apps/flows/src/evaluation/`; ledger `evaluation_run_events.sequence` — `MAX+1` под `SELECT … FOR UPDATE` на `evaluation_runs` в той же транзакции.
+2. Вход turn — `EvaluationInput` (`text`, `inline_code` через `RemoteCodeRunner`, `node` — только `node_id`); tester вызывается один раз на turn; конец теста — список `turns` (+ `max_turns`).
+3. Судья и tester — `llm_node` в `FlowConfig` с `store.evaluation_role` (`judge`/`tester`); рубрика — `evaluation_rubrics` с immutable версиями; таблица `evaluation_judges` и новый check type вместо `llm_judge` запрещены; evaluation-ноды не соединяются рёбрами (`FlowValidator`); вызов судьи — structured tool с `tool_choice`, fail-closed.
 
-| Push | Источник | Слушатель |
-|---|---|---|
-| `flows/flow/updated` | `update_flow`, `reload_flow_from_bundle` | `<flows-app>` (`useResource('flows/flows').get(flow_id)`) |
-| `flows/flow/deleted` | `delete_flow` | `<flows-app>` (`useResource('flows/flows').load()`) |
-| `flows/branch/created` / `flows/branch/updated` / `flows/branch/deleted` | `apps/flows/src/api/a2a.py` | `<flows-app>` (`get(flow_id)`) |
+### Гостевой preview
 
-## NodeType
+1. `POST .../flows/{flow_id}/preview-share` — новая сессия flow + ветки (не share существующего диалога → `flow_ui.mdc`): ephemeral `EmbedConfig` (`preview_share_link=True`), `EMBED_SESSION` JWT на 24 ч, handoff в Redis (`core/identity/flow_preview_handoff.py`), short link kind `flow_preview_embed` с payload только `handoff_id`.
+2. `GET /l/{code}` сжигает строку атомарно и отвечает 303 на `/flow-preview?h=...`; повтор — 404; `/flow-preview` забирает handoff `GETDEL` (`consume_flow_preview_handoff`), повтор — 404; `HEAD` не сжигает.
+3. Preview-конфиг не попадает в консоль embed; token разрешает только `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks` (с `contextId`), `SubscribeToTask`, `CancelTask`.
 
-| Тип | Класс | Назначение |
-|---|---|---|
-| `llm_node` | `LlmNode` | LLM + tools, ReAct |
-| `code` | `CodeNode` | Isolated Python / JS / TS / Go / C# через code-runner
-| `flow` | `FlowNode` | Вызов вложенного flow (`flow_id` + `branch_id`) |
-| `remote_flow` | `RemoteFlowNode` | A2A ≥1.0: **только** direct URL + Skill ID (`branch_id` → `metadata.branch`) + `metadata_template` → `params.metadata` (`@state:`/`@var:`); без registry `flow_id`, без `guest_runtime_id` |
-| `code_agent` | `CodeAgentNode` | Агент из дерева исходников в Документах (`catalog_id`, `FileSourceKind.CODE_AGENT_SOURCE`) + контейнер на ферме `guest_runtime`; не `remote_flow`. Канон → **`guest_runtime.mdc`** |
-| `external_api` | `ExternalAPINode` | HTTP-запросы |
-| `mcp` | `MCPNode` | MCP tools |
-| `datasource` | `DatasourceNode` | Живая БД (DatasourceProtocol: introspect/query/execute); `connector_id` обязателен, `datasource_id` на runtime обязателен |
-| `channel` | `ChannelNode` | Отправка (Telegram, Webhook, Email via platform mail, SMS HTTP) |
-| `hitl_node` | `HitlNode` | Human-in-the-loop, очередь оператора |
-| `reflection` | `ReflectionNode` | Typed critic/test-time compute gate без side effects |
-| `resource` | `ResourceNode` | Нода-ресурс на графе (`node.resources`); рантайм pass-through, merge ресурсов через тот же путь, что у остальных нод |
+## Контракты
 
-В `nodes[*].type` допускаются **только** значения из таблицы. Строк `tool` / `function` как типа ноды графа **нет** (`tool`/`function` — wire-формат OpenAI в сообщениях).
-
-## Элементы `llm_node.tools[]`
-
-- Строка `tool_id` после инлайна в БД/рантайме — полный `dict`.
-- Dict с `type` из NodeType (`code`, `flow`, `llm_node`, …) → исполнение через `ToolRegistry.materialize` → `CodeTool` или `NodeAsToolWrapper`.
-- Inline-код: непустой `code` (обычно `type: "code"`).
-- `react_role`: `standard` | `reason` | `exit` — роль в ReAct (не путать с `type` ноды и wire-форматом OpenAI `function`).
-- Tools выполняются **параллельно** через `asyncio.gather`.
-
-## Canonical contracts
-
-- Tool schema — только `parameters_schema`: полный JSON Schema object (`{"type":"object","properties":{...},"required":[...]}`). Пустые аргументы задаются явно как `{"type":"object","properties":{},"required":[]}`.
-- Legacy `CallParameter` и поле `args_schema` запрещены в production-коде, API DTO, loader, bundles, frontend payload и tests. Нельзя добавлять конвертеры `args_schema -> parameters_schema`.
-- В Python-авторинге platform tools имя аргументной Pydantic-модели — `parameters_model`. Runtime/API/storage не знают термина `args_schema`.
-- Edge contract — только `from_node`/`to_node`. Поля `from`/`to` запрещены в flow JSON, API payload, bundles, tests и serializer/checksum payload. Исключения возможны только для внешних доменов, где `from`/`to` являются частью чужого протокола (например Telegram payload), и должны быть локально очевидны по типу/файлу.
-- Старый контракт должен падать на Pydantic/validator boundary. Никаких fallback-getter, aliases или silently-normalize проходов.
-
-## State merge
-
-Ноды одного уровня графа — параллельно. Canonical merge выполняется на boundary `SuperstepCommitted` через deterministic reducer (`durable_execution.mdc`). Успешные node writes внутри parallel wave сначала durable записываются как pending writes/events; global state не считается committed до закрытия superstep.
-
-## Маппинги
-
-`input_mapping`: `@state:field` (из state) | `@const:value` (константа). `output_mapping`: `result: field` (`result` → `state.field`).
-
-Свободные строки (HITL title/message, HTTP headers, URL): `MappingResolver.resolve_interpolated_string` — целая `@state:`/`@var:` или токены в тексте → `str`. JSON body cells: `resolve_json_template_*` (целый ref сохраняет тип; mixed `@state:` в JSON-ячейке запрещён). LLM prompts: `VariableResolver.render_template` (`{brace}`) — отдельный домен.
-
-## `@var` strict-контракт
-
-Единый strict-резолвер `core/variables`:
-
-- Форматы только: `@var:key`, `@var:nested.path`.
-- API: `resolve_ref(...)`, `resolve_text(...)`, `resolve_deep(...)` (рекурсивно `dict`/`list`).
-- Любая неразрешимая `@var` → `VariableResolutionError`. Никаких fallback-поведений: запрещён `None` вместо ошибки, оставленные `@var:...` в результате, auto-create пустых переменных, неявные дефолты.
-
-### `@var` в триггерах и verify
-
-Резолв в `triggers.*.config` и `POST /flows/api/v1/triggers/verify` — тот же словарь эффективных variables, что у рантайма для выбранного сценария: `FlowFactory.get_resolved_variables_map` → `VarResolver.resolve_ref` через `apps/flows/src/triggers/config_var_resolve.py::resolve_at_var_for_flow`. `branch_id` в verify и UI редактора должен совпадать со сценарием.
-
-**Перерегистрация хуков:** `POST /flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister` — `TriggerRegistry.reregister_trigger` (unregister → register). Триггер должен быть включён. Внешняя логика — для Telegram (`deleteWebhook` + `setWebhook`); типы без handler в реестре — 409.
-
-## Системные переменные (`Context` после `metadata.variables`)
-
-После мержа `metadata.variables` из A2A в `runtime_flow.variables` подмешиваются идентификационные поля из `flow_variables_from_request_context` (`apps/flows/src/channels/request_context_variables.py`): `user_id`, `user_name`, `user_email` (первый из `user.emails`), `user_first_name`, `user_last_name`, `company_id`, `company_name`, `active_namespace`, `user_language`, `interface_language_code`/`interface_language_name` (по `Context.language`).
-
-Слой идёт **последним** и перекрывает одноимённые ключи из тела запроса (нельзя подделать пользователя из клиента). JWT в шаблоны не попадает.
-
-Системные плейсхолдеры даты/времени в тексте промпта (без добавления в `variables`): `{current_date}`, `{current_time}`, `{current_datetime}`, `{current_year}`, `{current_month}`, `{current_day}` — `core/variables/resolver.py::VariableResolver.resolve_all`.
-
-## `files` на ноде
-
-В конфиге любой ноды может быть `files` (список объектов как элементы `state.files`: обязательны непустые `original_name` и `url`; после материализации присутствуют `content_type`, `file_size`, `file_id`).
-
-При **первом** создании `ExecutionState` для сессии (`BaseChannel.process_task`, ветка нового state) вложения из всех нод эффективного графа собираются `collect_flow_node_files` → `state.files`, затем дописываются файлы из запроса (`params.files_data`). При resume повторной подмеси нет.
-
-`GET /flows/api/v1/code/editor-state` — заполняет `state.files` так же для preview. `POST /flows/api/v1/code/execute` с `flow_id` (опц. `branch_id`): `state.files` = файлы графа + уникальные из тела; `state.variables` = merge резолвнутых переменных flow с переданным `state.variables`; `flow_config_version` из конфига.
-
-Валидация: `FlowValidator._validate_node_files`. UI — закрепление файлов в модалке ноды; в `llm_node` сигнатура `[FILE]…[/FILE]` в промпте через drag (`platform-markdown-editor` `accept-file-drop`). В code-ноде drop чипа в `code-editor` (`accept-node-file-drop`) вставляет `get_files` + `reader.read`. Drag payload: MIME `application/x-humanitec-flows-node-file+json` + `text/plain`.
-
-## Triggers
-
-Хранятся в `FlowConfig.triggers`. Типы: `telegram`, `webhook`, `cron`, `email`, `platform_event`. Живые handlers — `telegram`, `webhook`, `email`, `platform_event`; `cron` — контракт без runtime (см. `apps/flows/docs/triggers_runtime_matrix.md`).
-
-```json
-"triggers": {
-  "telegram_bot": {
-    "trigger_id": "telegram_bot",
-    "name": "Support bot",
-    "type": "telegram",
-    "branch_id": "default",
-    "config": {"bot_token": "@var:telegram_token", "secret_token": "..."},
-    "output_mapping": {"content": "message.text", "context.chat_id": "message.chat.id"},
-    "output_actions": [...]
-  },
-  "inbox_mail": {
-    "trigger_id": "inbox_mail",
-    "name": "Inbound mail",
-    "type": "email",
-    "branch_id": "default",
-    "config": {
-      "mailbox_binding_id": "mailbind_…",
-      "allowed_senders": [],
-      "subject_contains": ""
-    },
-    "output_mapping": {"content": "body", "context.from": "from"}
-  }
-}
-```
-
-Ключи слева в `output_mapping`: только `content` и/или `context.*`. **`variables.*` слева запрещены.** Справа — путь в payload (строка с точками, без префикса `@trigger:`). Устаревшее `input_mapping` в новых конфигах не используется. Контракт — `apps/flows/src/models/trigger_config.py`.
-
-`branch_id` — id ветки из `FlowConfig.branches`; резолв `@var` в `config` привязан к паре `flow_id`+`branch_id`.
-
-`output_actions` — действия после выполнения flow: `{channel, action, mapping, config, condition}`.
-
-Webhook URL: `/flows/api/v1/triggers/{telegram|webhook}/{flow_id}/{trigger_id}`.
-
-**Webhook (inbound HTTP):** `WebhookTriggerConfig` — `secret_token`, `secret_header` (default `X-Trigger-Secret`), `allowed_ips` (без `response_mode` — всегда async). Runtime: `WebhookTriggerHandler` (registry) + `generic_webhook` собирает envelope `{body, headers, query}`, проверяет secret/IP/rate limit, запускает `TriggerExecutor` → HTTP **202** `{status, task_id, context_id, session_id}`. UI: IP — `platform-field type="array"` (теги); Mapping — кликабельные примеры + sample→`/test`; готовый curl.
-
-**Telegram:** `TelegramTriggerConfig.api_base` (optional) — override Bot API base для verify/`setWebhook`/`deleteWebhook` и channel send (helper `get_telegram_api_base` в `channels/telegram_api_base.py`). Без override — `settings.telegram.api_base`.
-
-**Email (platform mail):** `EmailTriggerConfig.mailbox_binding_id` — ящик текущего пользователя (`GET .../api/mail/bindings/me`). Фильтр опционален: `allowed_senders` (substring по `from`), `subject_contains` (пусто = все). Runtime: `EmailTriggerHandler` пишет Redis-индекс `flows:email_triggers:{mailbox_binding_id}`; `mail_sync_tick` **и** `mail_sync_binding_task` (idle_worker) после non-bootstrap new INBOX ставят flows-задачу `dispatch_email_triggers` (`apps/flows/src/tasks/email_trigger_tasks.py`, письма без байтов вложений) → `dispatch_email_triggers_for_messages` → `TriggerExecutor` (детерминированный `task_id`/`context_id` из binding+flow+trigger+uid). UI: 1-клик default-ящик или CTA `openModal('platform.mail', { openSettings: true })`. Сырой IMAP/Mailgun в UI не используется.
-
-**Platform event (шина `platform:events`, → `events.mdc`):** `PlatformEventTriggerConfig` — `event_type` (из каталога, endpoint `GET /flows/api/v1/platform-events/catalog`) + `filters: list[EventFilter(path, op: eq|ne|contains, value)]` (AND, dot-path по payload). Runtime: `PlatformEventTriggerHandler` пишет Redis-индекс `flows:event_triggers:{event_type}` (member `company_id|flow_id|trigger_id`); consumer group `flows` (`PlatformEventConsumerService`, фоновая задача `flows_worker`) на каждое событие вызывает `dispatch_platform_event_triggers` → `TriggerExecutor`. Identity исполнения — как scheduler/inbox: `meta.actor_user_id` (существующий platform user, id без `:`) или owner flow из OpenFGA; затем `build_job_context` + `resolve_execution_context`. Синтетический `trigger:platform_event` user_id запрещён (OpenFGA `user:<id>` не терпит `:`). Payload для `output_mapping`: `{event_id, event_type, company_id, payload, actor_user_id, occurred_ts}`. Идемпотентность at-least-once: `task_id`/`context_id` = `uuid5(event_id + trigger_id)`. Пост-выход в канал у типа отключён (как у cron). Тот же consumer выполняет системный employee-routing (→ `flow_employee.mdc`).
-
-**Email ChannelNode (outbound):** `channel=email`, `channel_config.delivery` = `mailbox` | `smtp` (XOR).
-- `mailbox`: `mailbox_binding_id` (picker `GET .../bindings/me`, user+role); runtime → `MailService.send_message`.
-- `smtp`: `smtp_host`, `from_email`, `password` (рекомендуется `@var:`), optional `smtp_user`/`smtp_port`/`smtp_use_tls`; runtime → ad-hoc `aiosmtplib` (без platform Sent folder).
-Сообщение только через `input_mapping`: `recipient` (Кому), `subject`, `text` (тело). Action v1: только `send_message`.
-
-**SMS ChannelNode (outbound):** `channel=sms`, HTTP-супербаза в `channel_config` (канон External API): `url`, `method`, `headers`, `body_template`, `timeout`, `preset_id` (UI-метка). Сообщение и номер — в `body_template` через `@state:` / `@var:` (MappingResolver); `{key}` из `input_mapping` как у External API. Отдельного facade «Кому/Тело» нет. Runtime — `SmsChannelHandler` + `get_httpx_client`; **без** ветвления по `preset_id`. UI: пресеты `flows-sms-presets.js` + иконки; Method — `platform-segmented-control` как у external_api; headers — `flows-http-headers-editor`. Action v1: только `send_message`.
-
-**Multi-brand webhooks:** `BaseTriggerHandler.generate_webhook_url` строит URL через `resolve_flows_webhook_public_base_url_from_context()` (Host запроса → `{apex}/flows`). Без request context — fallback на `TriggerRegistry.base_url` (TaskIQ/startup). Один Telegram bot = один webhook URL; при смене apex или tenant Host — `POST /flows/api/v1/flows/{flow_id}/triggers/{trigger_id}/reregister`.
-
-## Resources
-
-Переиспользуемые shared-ресурсы графа (только типы каталога):
-
-| Тип | Класс | Назначение |
-|---|---|---|
-| `code` | `CodeModule` | Python-модуль с функциями |
-| `files` | `FilesResource` | S3/MinIO в namespace под ключом ресурса: `read`/`read_bytes`, `write`/`write_bytes`, `list`, `exists`, `delete`; путь = prefix + объектный ключ. Без явных ключей — дефолтный `S3Client` из настроек. |
-| `llm` | `LLMResource` | LLM-вызовы (в т.ч. пресет для `llm_node` через `llm_resource_key`) |
-| `llm_context` | `LLMContextPatch` | Пресет policy контекстного слоя (`profile`, `memory`, `retrieval`, `budget`, `compaction`, `cache`) |
-| `rag` | `RagResourceBindParams` | Привязка к platform **Namespace** (`namespace` = `Namespace.name` = RAG `namespace_id`): search/index overlays для context layer и runtime-кода; ensure namespace при resolve |
-| `data_table` | `DataTableResourceConfig` | Привязка к SQLite DataTable-файлу (`file_id`). Строки не копируются в `ExecutionState`; доступ — тулы `tables_*` / capability `tables.*`. Create scope по умолчанию `flow_asset`. |
-
-Семантический поиск по RAG для пользователя — платформенные тулы (`rag_search`, …) и фасады sandbox; `type: rag` в `resources` — bind namespace/search options для runtime/context layer, не новый RAG-пайплайн. Обёртка для кода — `core.rag.rag_resource.RAGResource` (контейнер с `rag_repository`).
-
-**RAG resource DX:** палитра `FLOW_RESOURCE_TYPE_CARDS` включает `rag`; editor — `flows-rag-resource-editor`. Bind UI = `RagResourceBindParams`: namespace picker/create, `namespace_description`, `default_top_k`, `filters.collection_id`, `search_options` (`platform-rag-retrieval-panel`), `index_profile_config.split.chunk_size`/`chunk_overlap`, `default_ttl_seconds`. Не DX-поля: `company_id` (из execute context), `provider` (Settings RAG), полный произвольный `filters`, полный IndexProfile (`strategy`/`lexical`/`search_defaults`). Документы namespace: upload chunked Files → `POST /rag/api/v1/namespaces/{id}/documents/index-file`, статус по push `rag/document/status_updated` (без HTTP poll). `node.files` на resource-ноде скрыт — это FileRef ноды, не индекс RAG. Play в шапке панели — реестр test-run (`apps/flows/ui/_helpers/node-test-run-registry.js`): `resource`+`rag` → `rag/search` (query/result в slice `flows/rag_node_test` через `bindSearch`); прочие не-resource ноды → `flows/code_execute`; resource без хендлера на клик Play — `throw`. Editor namespaces/documents/upload — те же `@platform` фабрики `rag/namespaces`, `rag/documents`, `rag/document_upload`, `rag/document_remove`, `rag/search_defaults`, без HTTP BFF-клонов во flows. Результаты теста — в editor, не в `slot=assistant` (там `flows-node-ai-helper`). Runtime `resolve_rag_resource_binds_for_runtime` ensure'ит namespace через `NamespaceService.get_or_create` и проверяет `permission` через OpenFGA (`AuthzService`: `[]` = `require_can_view(company)`; named groups = `check` `group#member`; без platform-admin bypass). Поле `permission` редактируется в `flows-base-resource-editor` для всех shared/inline resources.
-
-**DataTable resource DX:** палитра `FLOW_RESOURCE_TYPE_CARDS` включает `data_table`; drop на Logic-канву сразу `flows/data_table_create` (`op_flows_data_tables_create`, `scope: flow_asset`) и пишет `config.file_id` (повторно не создаёт, если `file_id` уже непустой; кнопка Create в editor — fallback без `file_id`). Create создаёт первую таблицу (ident из stem ресурса, колонка `value`). Новые таблицы/колонки/строки — только в Documents viewer, не в инспекторе ноды. Compact-нода: snapshot схемы карточками (имя, колонки-chips, `row_count`) + кнопка Open (`openFile(file_id)`: строки, колонки, фильтр в заголовках, Excel-правка ячеек, удаление строки, экспорт CSV/Excel). Interface: catalog `DataTable` биндит `file_id` на `/content/<name>_file_id` (или `/values/...`); агент `tables_create` пишет тот же путь — host ходит в office, строки в document не кладутся. Runtime: `llm_node` с ресурсом `data_table` в merge flow/skill/node получает builtin `tables_*` (без дубля, если уже стоят). `tables_create` пишет `FileRef` в `state.files`. Не путать с CRM entity / Office xlsx / Google Sheets.
-
-Иерархия слоёв (инвариант merge): **L0** `FlowConfig.resources` (база), **L1** `BranchConfig.resources` (skill/variant), **L2** `NodeConfig.resources`. Для одного логического ключа карты **склеиваются по ключам**: последующий слой перекрывает предыдущий при конфликте **разных ссылок** на тот же ключ; реализация — `merge_flow_skill_node_resource_maps` (`apps/flows/src/resources/merge.py`), тот же порядок, что в `ResourceResolver.resolve_for_node`.
-
-**Shared из БД:** `{"resource_id": "shared_code_1"}` или с переопределением полей: `{"resource_id": "shared_llm_1", "config": {...}}`. Поле `config` у reference — **типизированный patch** к материализованному shared: для `ResourceType.LLM` слияние через `LLMResourcePatch` (extra=forbid), deep merge `extra_request_body`, поверхностное объединение `extra_request_headers`; для `code` и `files` — shallow `{**base, **patch}` с последующей строгой `parse_typed_resource_config` (`merge_shared_definition_config_with_patch`). Два inline под одним ключом с **разными** `type` — ошибка на валидации, не «тихий» выбор победителя.
-
-Inline на слое — полный `config` целевого типа. **Типизированный union** конфигов: `ResourceConfigUnion` + фабрика `parse_typed_resource_config(type, dict)` (`apps/flows/src/models/resource.py`).
-
-**LLM resource island:** оверлей `node.llm` на привязанный LLM в карте ветки использует те же правила patch, что и shared override (`merge_llm_resource_config_with_patch` / `merge_llm_resource_patch_dicts` в `apps/flows/src/resources/merge_llm.py`).
-
-**LLM context layer:** `node.llm_context` — node-level patch; `node.llm_context_resource_key` — ключ `llm_context` resource из merged resources. Если ключ пуст и в merged resources ровно один `llm_context`, runtime выбирает его автоматически; 0 или >1 — без выбора. Явный ключ отсутствует/не `llm_context` — ошибка. Итоговый порядок: platform `settings.llm_context` → company `CompanyAIProviders.llm_context` → resource → node → inline call (`resolve_llm_context_policy_for_runtime`). UI placeholders inherit — `flows/llm_context_resolve_parent` (`op_flows_llm_context_resolve_parent`, platform → company → resource, без node). Company default в `frontend/settings`, ресурс — `flows-llm-context-resource-editor`, нода — секция «Контекст».
-
-Объекты из `resources` доступны как переменные в inline-коде и LlmNode tools (`await storage.write(...)`, `await gpt.complete(...)` для `llm`, вызовы из `CodeModule` для `code`).
-
-## Bundles
-
-Запись в БД из `apps/flows/bundles/<id>/flow.json` задаёт `FlowConfig.source == "file"`. `POST /flows/api/v1/flows/{flow_id}/reload-from-bundle` → `FlowsLoader.reload_flow_bundle(flow_id)` (тот же путь, что при `company/init`): перезапись существующего flow — `can_edit`; установка каталожного bundle без FGA tuples — член компании (как create), затем dual-write. Нет tuples и нет каталога — **403**, не 404. UI: кнопка в `editor-header`, активна при `source=file`.
-
-**Зависимости platform flows (bundle-only):** поле `depends_on_flow_ids: list[str]` в `flow.json` (alias на один релиз: `install_with_bundles`). При `reload-from-bundle`, `load_all` и `load_all_for_company` зависимости ставятся **до** зависимого flow (`FlowsLoader._expand_bundle_ids_with_dependencies`). Значение сохраняется в `FlowConfig.depends_on_flow_ids` для `source=file`. UI для редактирования deps нет — только bundle JSON.
-
-`FlowsLoader` инлайнит:
-- `prompt: "prompts/foo.md"` — текст промпта;
-- `output_schema_file: "schemas/bar.json"` → `output_schema` (поле `output_schema_file` удаляется);
-- `store_card_image: "assets/card.png"` → S3 (публичный объект); в `FlowConfig` сохраняется `store_card_image_url`. Строка `https://...` в `store_card_image` — готовый URL без повторной загрузки. Альтернатива: `store_card_image_url` в `flow.json`.
-
-`FlowsLoader` читает секцию `defaults.llm` из `apps/flows/registry.yaml` (мерж в `NodeLLMOverride` при загрузке из `nodes.json`); там должен быть явный `provider` из `core.ai.providers.PLATFORM_LLM_PROVIDER_ORDER`.
-
-В JSON ноды `llm` — `llm_override` (не `llm_config`).
-
-Явная маршрутизация через платформенный провайдер в одной строке `model`: префикс `<slug>:` (первое вхождение `:`), где `slug` берётся из `core.ai.providers`, затем id модели для этого шлюза (например `openrouter:openai/gpt-4o`). Узор `vendor/model` без такого префикса не трогается. Явное поле `provider` у ноды в bundle предпочтительно; при полном отсутствии сработает слияние `defaults.llm` из registry, иначе — глобальный `settings.llm.provider`. Нормализация при парсинге: `NodeLLMOverride` / `LLMCallConfig`, исполнение — через `core.ai.runtime`.
-
-**Yandex:** при собственном `api_key` в `llm_override` или LLM-ресурсе укажите `folder_id` каталога облака (если не достаточно глобального `llm.yandex.folder_id`). Перед запросом сегмент каталога в идентификаторе вида `gpt://…` / `emb://…` приводится к этому `folder_id`, чтобы совпадал с заголовком `x-folder-id`.
-
-**Доп. тело и заголовки HTTP:** в `NodeLLMOverride` и `LLMResourceConfig` поля `extra_request_body` и `extra_request_headers` (для заголовков — объект только со строковыми ключами и строковыми значениями; в значениях поддерживается `@var:` с резолвом из `ExecutionState.variables` на вызове ноды). В `LLMClient` дополнительные поля JSON-тела и заголовков мержатся **последними** и **перекрывают** всё, что собрал рантайм, включая `Authorization`, `Content-Type` и провайдерские `default_headers`. В логах маскируются чувствительные заголовки (в т.ч. вида `*api-key*`).
-
-**LLM fallback-модели:** одна попытка LLM описывается `core.ai.llm_config.LLMCallConfig`. Основная нода — `NodeLLMOverride`, LLM-ресурс — `LLMResourceConfig`, `fallback_models` — `list[LLMCallConfig]` в том же порядке, что в UI. Каждый fallback — полноценная LLM-попытка с теми же полями, что основная модель: `provider`, `model`, `api_key`, `folder_id`, `base_url`, `temperature`, `max_tokens`, `top_p`, `top_k`, penalties, `seed`, `reasoning_effort`, `extra_request_body`, `extra_request_headers`. `string[]`, отдельные урезанные fallback-модели, миграции старого формата и «кандидаты» как второй Pydantic-контракт запрещены.
-
-UI для основной и fallback-моделей — один редактор/один контракт. Fallback раскрывается тем же набором полей, порядок меняется drag-and-drop и сохраняется как порядок массива. Любая новая LLM-настройка добавляется одновременно в `LLMCallConfig`, `NodeLLMOverride`/`LLMResourceConfig` при необходимости, backend merge/runtime и `flows-llm-config-editor`.
-
-**Пресет LLM из ресурсов графа:** опциональное поле `llm_resource_key` в `NodeLLMOverride` — ключ из словаря `resources` после мержа flow → skill → node. В UI: у `llm_node` в `node.resources` остаётся одно закрепление каталожного `llm` (при выборе другого LLM в списке предыдущее снимается и заменяется); закрепление выставляет `llm_resource_key`. Если ключ пуст, а в merge **ровно один** LLM (inline или shared), рантайм подставляет его перед `LlmNodeRunner` (`infer_unique_llm_resource_key_from_merged_maps`). При нескольких LLM в merge без явного ключа merge не выполняется. Базовая конфигурация из `ResourceType.LLM` подмешивается асинхронно; поля ноды с непустыми значениями перекрывают базу. Явный ключ указывает на несуществующую запись или не-`llm` — ошибка (zero-guess).
-
-**Context packing для `llm_node`:** рантайм резолвит policy, подключает `LLMContextMemorySource` + `RAGLLMContextSource`, и передаёт всё в `llm.stream(..., llm_context=policy, llm_context_source_registry=...)`. Не вставлять retrieved episodes/RAG руками в prompt ноды. Memory compaction/summarization выполняется async через `TextTransformService` (`llm_summarize`) и `RAGLLMContextMemoryStore`; сбой записи памяти не валит ответ LLM.
-
-Resolved LLM candidate может нести `context_length`; context layer использует его как hard clamp перед отправкой в provider и пишет `llm_context.usage/selected_blocks/dropped_blocks` в LLM status metadata + trace attributes. Крупные tool results сжимаются самим compiler'ом, не отдельным tool и не синхронной LLM-суммаризацией.
-
-**BYOK (свой ключ / endpoint):** если в эффективном переопределении ноды непустые `api_key` и/или `base_url`, pre-flight проверки баланса перед вызовом LLM в ноде не выполняется; в биллинге span используется `llm:byok` вместо `llm:{model}`. Аналогично для `LLMResource` при собственных `api_key`/`base_url` в конфиге ресурса. Базовая цена — `billing.resource_base_prices.llm.byok` (типично `0`).
-
-**HITL в bundles:** demo-очередь slug `example_hitl` (WorkQueue) создаётся при `init_company_resources` и при `TESTING=true` после `load_flows_to_db` — `ensure_example_hitl_queue` (`apps/flows/src/services/hitl_demo_queue.py`). Примеры — `example_react`, `example_graph` (нода `hitl_node`, ключи `work_queue_slug`/`handoff_*`). **Agent handoff** (tools между flows) — отдельный контур, см. **`handoff.mdc`** и bundles `handoff_demo_parent`/`handoff_demo_child`.
-
-## Evaluation Lab
-
-Evaluation Lab (`apps/flows/src/evaluation/`, UI `/flows/.../evaluation/...`) — dataset/suite → experiment/run → scorers для flow.
-
-Ledger `evaluation_run_events.sequence` назначается в `append_event` как `MAX+1` в той же транзакции под `SELECT … FOR UPDATE` на `evaluation_runs`. HTTP (granian) и TaskIQ — разные процессы; in-process `asyncio.Lock` append не сериализует.
-
-### Вход turn (`EvaluationInput`)
-
-| `type` | Смысл | Persistence |
-|---|---|---|
-| `text` | Фиксированное user-сообщение | `content` в case |
-| `inline_code` | Генератор через `RemoteCodeRunner` | `source` (+ language) в case |
-| `node` | Tester/generator = `llm_node` flow | **только** `node_id` → effective nodes FlowConfig |
-
-Harness вызывает tester **один раз на каждый turn** case и передаёт dialog so far; тестер возвращает только следующее user-сообщение. Конец теста задаёт список `turns` (+ `max_turns` как safety), не промпт tester.
-
-Inline `node` blob на check/input — legacy/draft-only; UI v1 пишет `node_id`.
-
-### LLM judge
-
-| Сущность | Где живёт | Что хранит case/check |
-|---|---|---|
-| Судья | `llm_node` в FlowConfig (`store.evaluation_role: "judge"`) | `judge_node_id` |
-| Tester | `llm_node` в FlowConfig (`store.evaluation_role: "tester"`) | `EvaluationInputNode.node_id` |
-| Рубрика | `evaluation_rubrics` + immutable versions | `rubric_version_id` |
-
-**Запрещено:** таблица `evaluation_judges`; новый check type вместо `llm_judge`; primary persistence inline `judge_node` / evaluation-owned NodeConfig blob.
-
-UI Eval Lab: create tester/judge пишет orphan `llm_node` в FlowConfig и сразу открывает существующую модалку `flows.embedded_tool_config` (тот же `flows-llm-node-editor`, что у tool config / property panel). Edit/create — иконки в `slot="suffix"` у enum-пикера; сохранение — `flows/flow_update`.
-
-Editor canvas: ноды с `store.evaluation_role ∈ {tester, judge}` рендерятся как **portless** (зеркало `type=resource`): без in/out портов, без виртуального END, без draw-edge; в `.node-type` показывается роль (`tester`/`judge`). Connect запрещён в UI и в `FlowValidator` (`edge_involves_evaluation_node`). Orphan evaluation не попадает в `unreachable_nodes` warning и не считается execution-terminal (`no_exit`).
-
-Runtime (`lab_service`): harness-owned structured call (`record_evaluation_judgment`), не durable graph walk. Резолв `judge_node_id`/`node_id` → `NodeConfig` из effective nodes; из ноды берутся `prompt`, `llm` (`core.ai`), `llm_context`. Structured tool обязателен (fail-closed); вызов идёт с `tool_choice` на конкретный tool name.
-
-Магазин шаблонов судей (MCP-like) — будущий эпик; в v1 не делать.
-
-### Legacy `flow.evaluation`
-
-У шагов тест-кейса поля `input.type` и `check.type`: `text` | `inline_code` | `node` (для check ещё `string`).
-
-`FlowRepository` читает JSON и валидирует `FlowConfig.model_validate` (`apps/flows/src/db/flow_repository.py::_flow_config_from_storage_json`). Легаси `skills → branches` и `evaluation[*].skill_ids → branch_ids` уже применены миграцией `agents_0005`; персистентное обновление — через `alembic upgrade`.
-
-## Code Execution
-
-Полные правила isolated runners / capability gateway — **`eval.mdc`**.
-
-- Пользовательский код не исполняется в процессе `flows`.
-- `code_node`, inline `CodeTool`, evaluation inline-code и edge `condition.type="code"` идут через `RemoteCodeRunner`.
-- Языки: `python`, `javascript`, `typescript`, `go`, `csharp`.
-- Доступ к платформе из пользовательского кода — только через `capability(...)` / `Capability(...)`, backed by `capability-gateway`.
-- `apps.*`/`core.*` imports в пользовательском source отклоняются `reject_forbidden_platform_imports` (`core/capabilities/source_sanitize.py`) с `ValueError` и списком строк.
-
-## REST для редактора
-
-- `GET /flows/api/v1/code/editor-state?flow_id=...&branch_id=default` — стартовый `ExecutionState` как при `FlowFactory.get_flow` + `create_initial_state` (резолвнутые variables, `flow_config`, формат `session_id`). Требуется аутентифицированный пользователь (401 без user). UI подставляет в TestPanel.
-- `GET /flows/api/v1/tasks/state?session_id=...` (или `context_id`+`flow_id`) — сохранённый state сессии. Записи нет — `not_found`. `PUT /tasks/state` — тот же `op_*` (`flows/sessions/state_update_requested`). В TestPanel редактора ноды state вводится только вручную JSON.
-- `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=...` — строковые query-параметры для WebSocket voice-сессии (effective профиль `FlowConfig.speech` + опционально `BranchConfig.speech`), см. `triple_to_voice_ws_query_dict` в `apps/flows/src/services/flow_speech_resolve.py`. Используется SPA flows и embed перед `VoiceMediaSession.connect`.
-
-## Гостевой preview embed (одноразовая ссылка)
-
-Это **flow invite**, не live session share: гость открывает **новую** сессию с flow/веткой. Шеринг уже существующего диалога — Share в Flow UI chrome (`FLOW_UI_SHARE`), канон → **`flow_ui.mdc`**.
-
-| | Flow invite (этот раздел) | Live session share |
-|---|---|---|
-| Scope | flow + branch, новый `context_id` | существующий `context_id` / document |
-| Token | `EMBED_SESSION` | `FLOW_UI_SHARE` |
-| Entry | preview-share modal, embed widgets, landing demos | Share в `<platform-flow-ui>` |
-
-- **Минт:** `POST /flows/api/v1/flows/{flow_id}/preview-share` body `{ "branch_id": "<ветка>", "guest_max_user_messages"?: <1..500> }` — права как у остальных операций с flow; создаётся ephemeral `EmbedConfig` с `preview_share_link=True`, опционально `guest_max_user_messages`, + mapping, `embed_session` JWT (24h), payload handoff в **Redis** (`core/identity/flow_preview_handoff.py`, ключ с префиксом, TTL как у JWT), короткая ссылка kind `flow_preview_embed` (`core/short_links/kinds.py`) с payload только `handoff_id` (без JWT в PostgreSQL). Ответ: `{ "share_url": "<platform_public>/l/{code}" }`.
-- **Редирект:** `GET /l/{code}` на **frontend** — для kind `flow_preview_embed` строка в `platform_short_links` удаляется атомарно (`delete_by_code_and_kind_returning`), при успехе **303** на относительный `/flow-preview?h=<handoff_id>`. Повторный `GET` того же code → **404**. `HEAD /l/{code}` для этого kind не сжигает строку (проверка существования/срока).
-- **Страница:** `GET /flow-preview?h=...` — первое успешное обращение забирает payload из Redis **GETDEL** (`consume_flow_preview_handoff`); HTML: **import map** для bare `lit`/`lit/*` на vendored `/static/core/assets/js/lit/` (как SPA через бандлер, здесь — без бандлера), затем `<script type="module" src="...humanitec-embed-autoload.js">` с `data-static-bearer`. Повтор того же `h` (в т.ч. F5) → **404** без пояснения причины на странице. `HEAD` — только проверка наличия ключа в Redis (без consume).
-- **Консоль embed:** `EmbedConfig` с `preview_share_link=True` не попадает в список виджетов (`apps/frontend/api/embed_configs.py`); прямой доступ по id для правки кода/сессии — **404**.
-- **A2A methods:** embed-session token разрешает тот же scoped набор, что Flow UI guest runtime (`SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`); `ListTasks` требует `contextId`.
-
-## Профиль речи flow (`FlowConfig.speech`)
-
-- Конфиг: `apps/flows/src/models/flow_speech_settings.py` (`FlowSpeechSttBlock`, `FlowSpeechTtsBlock`, `FlowSpeechVadBlock`, вложенный `FlowSpeechSettings`). Поля совместимы с заполнением `SpeechOverride` и query voice WS; **секреты провайдеров в JSON flow не хранятся** (остаются в deployment и `company_voice_providers`).
-- Перекрытие ветки: `BranchConfig.speech` мержится поверх уровня flow (`effective_flow_speech_settings` в `flow_speech_resolve.py`). Для базового графа и запросов без ветки в HTTP-клиентах используется `branch_id=default`; синтетический таб редактора `base` не является ключом `FlowConfig.branches`.
-- Рантайм: после снимка конфига `attach_flow_speech_layers_to_context` записывает в `Context.metadata["platform_flow_speech_layers"]` три блока STT/TTS/VAD (`SpeechOverride.model_dump`). Авто-STT вложений (`audio_input.py`) и фасады `platform_services` (`transcribe_audio` / `synthesize_speech`) вызывают `merge_explicit_over_flow_speech_layer`: явный override побеждает по каждому полю, затем результат уходит в `voice_resolver`.
-- UI редактора: лимиты flow и профиль речи (`flow.speech` / `BranchConfig.speech`) — карточка `flows-flow-property-panel.js` в правом столбе `.editor-right-rail` (`flow-editor-page.js`); открывается и закрывается кнопкой в том же стиле, что строки триггеров, **над** секцией «Триггеры» в `flows-node-types-sidebar.js` (`toggle-flow-settings`). Перекрытие ветки — на активной вкладке ветки (не `base`). Редактор выбранной ноды или ресурса — только во `flows-floating-panel` (`.canvas-host`, floating) → `flows-property-panel.js` / `flows-resource-property-panel.js`. Каталог провайдеров для селектов — `flows/voice_providers_catalog_load` (`op_voice_providers_catalog`, WS) / консоль `frontend/voice_providers_catalog_load` (HTTP, тот же `op_*`).
-
-## Breakpoint и `previewExecutionState`
-
-При срабатывании breakpoint в стриме приходит `metadata.state_snapshot` (dump `ExecutionState`). `flow-editor-page` пишет в `FlowsStore.editor.previewExecutionState` через `setPreviewExecutionStateFromBreakpoint`. После завершения прогона / ошибки выполнения — `refreshPreviewExecutionState` возвращает шаблонный preview.
-
-## Dataflow canvas chips
-
-`POST /flows/api/v1/flows/dataflow/inspect` (`flow_dataflow_inspector.py`) строит два слоя:
-
-- **`incoming_state` / `output_state`** — широкий статический анализ (cap 220) для панели ноды и autocomplete.
-- **`canvas.inputs` / `canvas.outputs`** — только то, что рисуется chip'ами на канвасе.
-
-Канон canvas inputs:
-
-- **Entry-нода** — реалистичные стартовые входы: `content`, `files` (только если есть в `sample_state`), `variables.{key}` из declared branch variables, `{field}` input-блоков интерфейса (`_interface_fields(interface)` → `FlowUIDocument.input_blocks()`, тип — `input_field_type_name`), пути из `triggers[*].output_mapping` enabled triggers (`triggers.{id}.context.*`, `triggers.{id}.payload`). Runtime/frozen поля (`breakpoint_*`, `node_history`, `task_id`, …) на canvas не показываются.
-- **Downstream** — только явный контракт ноды: `input_mapping` + `required_inputs` + `reads`; fallback dump всего `incoming_state` запрещён.
-- Chip `kind`: `content` | `files` | `variable` | `trigger` | `interface` — визуальный tint на Logic canvas; `interface` — отдельный info/cyan (`--info` / `--flows-dataflow-ui-value`), не тот же accent что у variables.
-
-`sample_state` для inspect санитизируется на backend: только `content`, `files`, top-level `variables.{declared_key}` и top-level корни полей интерфейса; полный `previewExecutionState` остаётся в editor state для TestPanel.
-
-`FlowDataflowInspectRequest.interface: FlowUIDocument | None` (редактор — текущий документ ветки); без interface — нет interface chips.
-
-`llm_node` prompt: `{<field>}` читает поле state, записанное `ui-action` (тот же путь, что `field` блока); dataflow помечает такие дескрипторы `source="interface"`, `availability="observed"`; UI chips «Доступно здесь» — `buildPromptVariableContext` source `interface`.
-
-## Трейсы
-
-Дерево в `apps/flows/src/api/v1/traces.py` строится с сортировкой по `start_time` asc на каждом уровне — порядок siblings совпадает с хронологией. `get_spans_by_task` отдаёт spans по `start_time` asc.
+- Команды — `FLOWS_OPERATIONS` (`apps/flows/realtime/`); транспорт → `architecture.mdc`. UI-фабрики flows — `transport: 'ws'`, HTTP — только пункты `COMMAND_WS_HTTP_ALLOWLIST` (OAuth redirect, snapshot DataTable, ui-only editor, A2A console, LSP bootstrap).
+- Своим протоколом остаются: A2A/SSE и `GET .../interface` (→ `a2a.mdc`, `flow_ui.mdc`), inbound Telegram/webhook, `POST /tasks/submit`, `GET /agent/toolkits` (device JWT), `POST /flow-ui/shares/exchange/{grant_id}`, LSP (→ `eval.mdc`).
+- Push: `flows/flow/updated`, `flows/flow/deleted`, `flows/branch/created|updated|deleted`.
+- Публичный `POST /company/init` отклоняет `company_id=system`; `company_id` тела совпадает с активной компанией; internal-вызов bootstrap разрешает `system`.
 
 ## UI
 
-Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Состояние домена — фабрики `apps/flows/ui/events/resources/*.resource.js`, регистрация в `apps/flows/ui/app/flows-app.js::static factories`. Доступ из компонентов — только helpers (`useResource('flows/<entity>')`, `useOp('flows/<entity>_<verb>')`). Запрещены: `services/`, `store/`, `*.service.js`, `BaseStore`, прямые `fetch`/`httpRequest`, прямой `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)`, хеш-роутинг (`#/...`), `CustomEvent('navigate')`. Навигация — `this.navigate(routeKey, params?)`.
+1. Канон UI → `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`; стили flows — токены `--flows-*` в `tokens.css`, hex/rgba и raw `<button>` запрещены.
+2. Run-визуализация графа читает только slice `flows/editor`; `<platform-flow-ui profile="editor_test">` в `flows-execution-panel.js` — реле кадров A2A; полноэкранный `<platform-flow-ui>` вместо канвы запрещён.
+3. Lara в редакторе — `<platform-flow-ui>` для `flow_id=lara`; в `metadata.variables` передаются только id и скаляры (`flow_id`, `node_id`, `node_type`, `editor_dirty`, …), тела нод Lara читает tools (`flows_get_node`, `flows_read_context`); патч ноды — `flows_patch_node` confirm-first.
+4. HITL в редакторе — очереди из `worktracker/work_queues`; подстановка в полях — только `@state:`/`@var:`.
+5. Dataflow inspect (`POST /flows/dataflow/inspect`): chips канвы downstream-ноды — только `input_mapping` + `required_inputs` + `reads`; дамп всего `incoming_state` запрещён.
 
-**Execution history** (`flows.durable_history`, `flows-durable-history-modal.js`) — power-user time-travel UI поверх durable ledger. Канон действий/Outcome/`TimeTravelEffect` → **`durable_execution.mdc`** (секция Time travel UX).
+## Исключения
 
-### Agent Focus Mode
+- Исключение: без request context (TaskIQ, старт) URL webhook строит `TriggerRegistry.base_url`. `[без гейта]`
 
-Когда в ветке ровно одна нода и `type === 'llm_node'`, редактор может открывать **Agent Focus Studio** вместо канвы.
+## Гейты
 
-| Поле / файл | Роль |
-|---|---|
-| `editor.state.editorLayout` | `'agent'` \| `'canvas'` (ортогонально `mode` edit/run) |
-| `isAgentFocusEligible(branchData)` | `_helpers/flow-editor-layout.js` |
-| Preference | `platformStorageKey('flows', 'editor_layout.<flowId>')`, default `'agent'` |
-| Studio | `flows-agent-focus-studio.js` — chrome + sections + `flows-property-panel` с `focusMode` |
-| Toggle | studio → canvas; на канве (если eligible) — float pill → agent |
-
-При `branch_data_updated`, если граф больше не eligible — layout принудительно `'canvas'`. Секции studio: Prompt / Model / Skills & Tools / Advanced; `focusMode`/`focusSection` на `flows-llm-node-editor` + `flows-base-node-editor` без дубля логики секций.
-
-### Design System (flows UI)
-
-- Визуальный канон — `tokens.css` + core UI Kit (`platform-button`, `platform-field`, `platform-segmented-control`, `glass-modal`, `page-header`, `platform-breadcrumbs`, `platform-picker-card`, `platform-json-editor`). Figma Networkle — только reference; hex/rgba в `apps/flows/ui/**` запрещены (исключение: SVG canvas в `flow-canvas/`). CI: `scripts/check_ui_canon.sh` #23 (hex/rgba), #24 (raw `<button`), #25 (legacy button CSS), #26 (`glass-button`), #27 (literal `--platform-button-icon-size`), #28 (inline glass triplet, max 4 файла), #30 (`color: white`), #31 (local `.form-field` CSS), #32 (raw checkbox/radio).
-- Cover/preset gradients — только `--flows-cover-gradient-*` / `--flows-preset-*-gradient` из `tokens.css`; резолвер — `apps/flows/ui/constants/flow-cover-gradients.js` (`resolveFlowCoverGradient`, `resolveFlowPresetGradient`). Эталон компонента — `flow-card.js`.
-- Поиск в модалках/тулбарах — `<platform-modal-search-field>`.
-- **Editor chrome** — header/toolbar action chrome только `<platform-button>` (icon-only + `density="dense"` для compact toolbar). Mode/branch/language segmented toggles — `<platform-segmented-control>`, не raw `<button`. Пример: `flows-editor-header.js` (edit/run mode, branches), `flows-evaluation-case-editor.js`, `flows-state-mapping-editor.js`, `flows-trigger-editor-modal.js`, `flows-api-console-modal.js`.
-- **Action chrome** — только `<platform-button>`. Raw `<button` в `apps/flows/ui/**` запрещён (CI #24, allowlist снят Wave F). Selectable cards — `<article role="button" tabindex="0">`; resize handles — `role="separator"`.
-- **Selectable cards / list rows** — не `<button class="row">`: `<article class="row" tabindex="0" role="button">` + `@click` + `@keydown` (Enter/Space). Эталон: `flows-evaluation-suite-sidebar.js`, `flows-flow-create-modal.js` (preset cards), `flows-node-types-sidebar.js` (`trigger-row` для flow settings).
-- **`<glass-button>`** — запрещён в `apps/flows/ui/**` (CI #26); замена — `<platform-button>`.
-- **Field widgets** — flows-local combobox/variable-input запрещены; используйте core `<platform-searchable-combobox>`, `<platform-variable-input>`. Node editors (HITL / channel / LLM) прокидывают в variable-input и markdown: `.previewValues` / `.variables` + `.variableCatalog` из `buildPromptVariableContext`, `.statePreview` / `.statePaths` из `buildExecutionStatePreview` / `collectStatePathsFromDataflow` (`lib/variables/variable-refs.js`).
-- **Legacy CSS** — классы `.action-btn`, `.icon-btn`, `.ghost-btn`, `.mini-btn`, `.add-btn`, `.mcp-preset` удаляются в том же PR, что и миграция соответствующего UI на `platform-button` (CI #25).
-- **Density contract (control heights)** — на одной панели/модалке все action chrome контролы одного tier'а. Три tier'а flows:
-  - **Primary (44–48px)** — modal body/footer: `platform-field` default, `platform-button` default.
-  - **Chrome (32px)** — editor header, modal header, sidebar toolbar: `platform-button icon-only density="compact"`, `platform-segmented-control density="compact"`, `platform-modal-search-field`. Токены: `--flows-chrome-control-size`, `--flows-chrome-row-min-height`, `--flows-toolbar-shell-min-height`.
-  - **Micro (28px)** — canvas badges, collapsed panel icons: `platform-button icon-only density="dense"`. Токен: `--flows-micro-control-size` / `--flows-card-action-size`.
-  - List rows — layout semantics: `--flows-sidebar-row-min-height`, не button height.
-  - Side panels (evaluation rail, matrix sticky column) — `--flows-side-panel-width` (324px, CRM parity), `--flows-side-panel-min-width`, `--flows-side-panel-max-width`; запрещены magic `260px`/`286px` в evaluation sidebar.
-  - Editor header (desktop) — single chrome row, total stack `--flows-editor-chrome-stack-height` (~60px); branches inline в primary row; вторая строка branches — только mobile (`≤767px`).
-  - Запрещено: локальный `--platform-button-icon-size: Npx` в `apps/flows/ui/**` (CI #27); допустимо только `var(--flows-*)` или density props core-компонентов.
-  - Tab/mode/language pickers — только `<platform-segmented-control>`, не ряды `platform-button`.
-- **Style consolidation contract** — presentational CSS живёт в core shared styles, не копипастится в flows:
-  - Glass surfaces — `glassStyles` (`glass-subtle`, `glass-medium`, `glass-interactive`) из `@platform/lib/styles/shared/glass.styles.js`.
-  - Content panels — `panelShellStyles` (`content-panel`, `content-panel-head`, `content-panel-body`, `content-panel-empty`) из `panel-shell.styles.js`.
-  - Toolbar pill shell — `toolbarShellStyles` (`toolbar-shell`, `toolbar-shell--flex`) из `toolbar-shell.styles.js`.
-  - Code language row — `codeLanguageToolbarStyles` из `code-language-toolbar.styles.js`.
-  - Selectable cards — `<platform-picker-card>` (`platform-picker-card.js`), не raw `<button class="card">`.
-  - JSON fields — `<platform-json-editor validate-json .readonly=${false}>` для произвольного JSON (`body_template`, `extra_request_body`, `metadata_template` у remote_flow). HTTP-заголовки (`headers`, `extra_request_headers`) — только `<flows-http-headers-editor>` (пары name/value, значения с `@var:` / `@state:`); JSON-editor для headers запрещён.
-  - Modal footer actions — `flows.common.action_*`, не дубли per-modal (`action_cancel` × N).
-  - Form layout/errors — `formStyles` из `@platform/lib/styles/shared/form.styles.js` (`.form-group`, `.form-error`); local `.form-field` запрещён (CI #31).
-  - Header presets (MCP servers) — `<platform-picker-card>`, не ghost button row.
-  - Запрещено: inline triplet `--glass-solid-subtle` + `--glass-border-subtle` в одном flows-файле (CI #28, max 4); миграция — `glassStyles` / `panelShellStyles`.
-- Подстраницы (editor, chat, evaluation) — `<platform-breadcrumbs>` + i18n `routes.*`.
-
-### Панель свойств ноды (`flows-floating-panel`)
-
-- Единый chrome property/resource panel — `flows-floating-panel.js`: большое окно поверх канваса (default ~94vw×94vh), лёгкий backdrop без blur только у активной развёрнутой панели (клик закрывает), drag за `.panel-title`, resize, collapse body в компактный chip (~280×44px). Несколько нод — `openNodePanelIds` + `propertyPanelLayouts` в `flows/editor`; предыдущая панель сворачивается при выборе другой ноды.
-- Персональные prefs (`property_panels` rect + `collapsed` per panel-id) — `flows-editor-property-panel-prefs.js` (`localStorage`, ключ `platform:flows:editor_property_panel_prefs`); **не** в `GraphNodeConfig` / flow PATCH.
-- Панель рендерится в `.canvas-host` поверх канваса (рядом с `flows-execution-panel`), не в dock-stack правого rail.
-- Карточки нод на SVG-канвасе — без пользовательского drag/resize/collapse; размеры — `FLOW_NODE_W` / `getNodeCanvasHeight` в `flows-viewbox.js`.
-
-Маршруты (`createRouterEffect(FLOWS_ROUTES)`): `list` (`/flows`), `flow_chat` (`/flows/:flowId`), `flow_chat_branch`, `flow_chat_session`, `flow_editor`, `flow_editor_branch`. Operator-маршрута во flows нет — задачи в worktracker. Старые `?session=`/`?edit=`/`?branch=` query — удалены.
-
-Подтверждения — core-helper `platformConfirm(message, { title, variant, ... })` (`core/frontend/static/lib/components/platform-confirm-modal.js`). Отдельной `flows.confirm` нет.
-
-**Library picker (`flows.tool_picker`)** — одна реализация `flows-library-picker-modal.js`. `useOp('flows/tools_all')`, REST `GET /flows/api/v1/tools/all` (`limit` ≤ 20; при открытии — первая страница, дальше infinite scroll; поиск — query `q` с debounce и сбросом offset). `pickMode: 'all' | 'flow_only' | 'mcp_only' | 'code_node'`. Body один: tag-groups (`buildToolTagGroups`) или MCP grouped layout; `onPick({kind:'tool'|'flow', tool_id, item})` / `onPickBatch`. В LLM-ноде «Из библиотеки» для `kind === 'flow'` в `cfg.tools` добавляется `{type:'flow', tool_id}`; для tool — `{tool_id}`. Canvas drop flow/MCP — `flow_only` / `mcp_only`. Code-нода «из шаблонов» — `pickMode: 'code_node'` + `onCommit({config, nodeName})` (каталог `flows/code_templates` + registry code tools в тех же tag-groups). Kind `flows.code_node_templates` — alias того же компонента (нормализует `pickMode` в `code_node`). MCP node editor смена tool — тот же `flows.tool_picker` `mcp_only`, не enum-поля.
-
-**Lara в редакторе flows:** `<flows-app>` монтирует `<platform-flow-ui surface="drawer">` для `flow-id="lara"` и фиксированной branch `flows`; глобальная кнопка Lara в `flows-editor-header.js` не переключается на специализации нод. AI выбранной ноды использует тот же universal renderer с panel render context и специализированным interface template/variables; собственного чата/transport нет.
-
-Node AI / Flows Lara standing context строится в `apps/flows/ui/_helpers/lara-node-helper.js`: в `metadata.variables` только IDs и скаляры — `flow_id`, `target_branch_id`, `api_branch_id`, `assistant_branch_id`, `node_id`, `node_type`, `branch_node_count`, `branch_edge_count`, `editor_dirty`, `screen`, `selection_source`, `lara_request_kind`. Полные `*_payload_json` / `lara_ui_context_json` / inline code docs **не** передаются. Тела нод Lara читает tools: `flows_get_node`, `flows_list_nodes`, лёгкий `flows_read_context` (summary + `nodes_index`). Tools смотрят сохранённый flow; при `editor_dirty=true` skill просит сохранить. Для каждого типа ноды — отдельная branch Lara: `code_helper`, `llm_node_helper`, `flow_node_helper`, `remote_flow_node_helper`, `code_agent_node_helper`, `external_api_node_helper`, `mcp_node_helper`, `datasource_node_helper`, `channel_node_helper`, `hitl_node_helper`, `reflection_node_helper`, `resource_node_helper`; неизвестный тип → `node_helper`. Патчи — `flows_patch_node` confirm-first (`mode=propose` → `mode=apply`).
-
-**HITL-нода (редактор):** `flows-hitl-node-editor.js` редактирует ключи `NodeConfig`: `work_queue_slug` (slug WorkQueue), `handoff_mode` (`single_reply`/`takeover`), `handoff_task_title`, `handoff_user_message`. Канон подстановки **только** `@state:path` / `@var:name` (как у обычных полей и `platform-variable-input`), не `{brace}`. Заголовок — `<platform-variable-input>` (CM at-ref: highlight/hover/autocomplete); сообщение — `<platform-markdown-editor enable-variables variable-syntax="at-ref">` (тот же `createVariableExtensions` стек). Оба получают `.previewValues`/`.variables` + `.variableCatalog` + `.statePreview` + `.statePaths`. Дроп с палитры — `getBlankHitlNodeConfig()` (`flows-hitl-defaults.js`): пример с `@state:content`. Runtime: `MappingResolver.resolve_interpolated_string` (тот же хелпер, что HTTP headers/URL; JSON body — отдельный `resolve_json_template_*` с typed whole-ref). Выбор очереди — `<platform-searchable-combobox>` по фабрике `worktracker/work_queues` (REST `GET/POST /worktracker/api/v1/work-queues`, тот же `op_work_queues_*`). Create на лету — пункт в dropdown (`createLabel` / `createQueryLabel` → событие `create`); typed slug создаётся сразу, пустой query открывает форму name+slug. Создатель становится owner. `slug` очереди = `assignee_queue` в `hitl_operator_task` и `work_queue_slug` в `hitl_node`. Динамическая очередь — `input_mapping.assignee_queue`. Участники очереди и канбан — в сервисе worktracker.
-
-**Reflection-нода (редактор + канва):** `flows-reflection-node-editor.js` редактирует inline `critic_policy` (`core.reflection.CriticPolicy`) + `llm` (без tools/fallback). UI: intro, пресеты (`final_answer` / `transaction` / `quality` из `flows-reflection-defaults.js`), секция **Exits** (`exits[]`: `exit_id`/`label`/`when`), human labels для `gate`/`target`/`severity`, severity toggles, criteria как карточки. `policy_id` — ярлык для логов/`state.validation.policy_id`, не каталог. `gate` — семантическая метка; алгоритм блока один (`evaluate_reflection_gate`: decision ≠ approved | confidence < min | issue.severity ∈ block_on_severities), затем **first-match** `select_reflection_exit` → `state.validation.exit_id`. `when.kind`: `approved_true`/`approved_false`/`decision_eq`/`blocked_reason_prefix`/`always` (always только последним). На канве у `type=reflection` **N out-портов** из `critic_policy.exits` (`Edge.from_port` = `exit_id`); drag создаёт condition `validation.exit_id == <exit_id>`. `FlowValidator`: каждый declared exit покрыт ребром (error `reflection_exits_incomplete`); unknown `from_port` — error. Dataflow: target (`response`/`result`/`validation`/`state_path`) должен быть `guaranteed` во `incoming_state` иначе `reflection_target_unavailable`. После gate runtime ставит в `conversation` блок `reflection` (`show_reflection`, видимость — `FlowUIConversationSettings.show_reflection`); ветвление только по `condition`.
-
-**i18n:** namespace `flows`, `static i18nNamespace = 'flows'` или `defaultI18nNamespace='flows'` в `<flows-app>`. Бандл — `core/i18n/translations/{ru,en}/flows.json`. Снимающие правила см. `frontend.mdc`. Сообщения `console.*` и технические комментарии в коде — на английском (без i18n).
+- `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые символы flows и контракты reflection, code_agent, observability.
+- `scripts/check_tool_contracts.py`, `scripts/check_tool_tags.py` (`make lint`) — `parameters_schema`, tag builtin tools.
+- `scripts/check_ui_canon.sh` п.23–32 (`make check-ui-canon`) — стили UI flows.
+- `tests/realtime/test_flows_commands.py` — тождество WS ≡ REST команд flows.

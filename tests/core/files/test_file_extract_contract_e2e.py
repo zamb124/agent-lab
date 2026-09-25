@@ -7,8 +7,6 @@ from dataclasses import dataclass
 
 import pytest
 
-from apps.frontend.container import FrontendContainer
-from apps.rag.container import get_rag_container
 from core.files.reader.models import (
     ExtractBlockKind,
     FileExtract,
@@ -331,17 +329,17 @@ def _case_marker(case: GoldenReadCase, unique_id: str) -> str:
 async def _read_case(
     case: GoldenReadCase,
     *,
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
     persist_assets_namespace: str | None,
 ) -> tuple[bytes, FileExtract]:
-    configure_file_reader_persist(frontend_container.files_service)
+    configure_file_reader_persist(frontend_di.files_service)
     if case.expect_mock_vision:
         mock_llm_with_queue(["MOCK_VISION"])
     raw = case.build(unique_id)
     file_ref = await store_golden_file(
-        frontend_container.files_service,
+        frontend_di.files_service,
         raw=raw,
         original_name=f"golden_{case.case_id}_{unique_id}{case.suffix}",
     )
@@ -357,14 +355,14 @@ async def _read_case(
 @pytest.mark.parametrize("case_id", tuple(_CASES_BY_ID))
 async def test_file_extract_contract_without_persist(
     case_id: str,
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     case = _CASES_BY_ID[case_id]
     raw, extract = await _read_case(
         case,
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         mock_llm_with_queue=mock_llm_with_queue,
         persist_assets_namespace=None,
@@ -386,8 +384,11 @@ async def test_file_extract_contract_without_persist(
     )
 
 
-async def _create_rag_namespace(unique_namespace_name: str) -> str:
-    namespace = await get_rag_container().namespace_service.get_or_create(
+async def _create_rag_namespace(
+    frontend_di,
+    unique_namespace_name: str,
+) -> str:
+    namespace = await frontend_di.namespace_service.get_or_create(
         unique_namespace_name
     )
     return namespace.name
@@ -399,7 +400,7 @@ async def _create_rag_namespace(unique_namespace_name: str) -> str:
 )
 async def test_file_extract_persist_writes_fileref(
     case_id: str,
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
     office_service,
@@ -407,10 +408,10 @@ async def test_file_extract_persist_writes_fileref(
 ) -> None:
     _ = office_service
     case = _CASES_BY_ID[case_id]
-    namespace_id = await _create_rag_namespace(unique_namespace_name)
+    namespace_id = await _create_rag_namespace(frontend_di, unique_namespace_name)
     raw, extract = await _read_case(
         case,
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         mock_llm_with_queue=mock_llm_with_queue,
         persist_assets_namespace=namespace_id,
@@ -426,7 +427,7 @@ async def test_file_extract_persist_writes_fileref(
         persist_assets=True,
         expect_mock_vision=case.expect_mock_vision,
         require_unique_marker=case.require_unique_marker,
-        files_service=frontend_container.files_service,
+        files_service=frontend_di.files_service,
         min_pages=case.min_pages,
         expected_labels=case.expected_labels,
         label_prefix=case.label_prefix,

@@ -42,6 +42,7 @@ from core.test_scope import resolve_test_scope
 from core.types import (
     JsonArray,
     JsonObject,
+    JsonValue,
     parse_json_object,
     parse_json_value,
     require_json_array,
@@ -66,6 +67,71 @@ def mock_llm_capture_key(test_scope: str) -> str:
     if not test_scope.strip():
         raise ValueError("mock_llm_capture_key: test_scope must not be empty")
     return f"mock_llm:capture:{test_scope.strip()}"
+
+
+def _example_for_json_schema(schema: JsonObject, text: str) -> JsonValue | None:
+    schema_type = schema.get("type")
+    if schema_type == "object":
+        properties = schema.get("properties")
+        required = schema.get("required")
+        property_schemas = (
+            require_json_object(properties, "json_schema.properties")
+            if isinstance(properties, dict)
+            else {}
+        )
+        required_names = (
+            [name for name in required if isinstance(name, str)]
+            if isinstance(required, list)
+            else list(property_schemas)
+        )
+        example: JsonObject = {}
+        for name in required_names:
+            property_schema = property_schemas.get(name)
+            if not isinstance(property_schema, dict):
+                return None
+            nested = _example_for_json_schema(
+                require_json_object(property_schema, f"json_schema.properties.{name}"),
+                text if name == "summary" else "",
+            )
+            if nested is None:
+                return None
+            example[name] = nested
+        return example
+    if schema_type == "array":
+        return []
+    if schema_type == "integer":
+        return 0
+    if schema_type == "number":
+        return 0
+    if schema_type == "boolean":
+        return False
+    if schema_type == "string":
+        return text
+    return None
+
+
+def _content_for_response_format(content: str, response_format: JsonObject | None) -> str:
+    if response_format is None or content.strip() == "":
+        return content
+    json_schema = response_format.get("json_schema")
+    if not isinstance(json_schema, dict):
+        return content
+    schema = json_schema.get("schema")
+    if not isinstance(schema, dict) or schema.get("type") != "object":
+        return content
+    try:
+        parsed = parse_json_value(content, "mock_llm.structured_content")
+    except ValueError:
+        parsed = None
+    if isinstance(parsed, dict):
+        return content
+    example = _example_for_json_schema(
+        require_json_object(schema, "mock_llm.response_schema"),
+        content,
+    )
+    if example is None:
+        return content
+    return json.dumps(example, ensure_ascii=False)
 
 
 _MOCK_STREAM_CHUNK_MAX = 256
@@ -534,6 +600,7 @@ class MockLLM:
         mock_response = await self._get_response_async(normalized_messages)
         content_raw = mock_response.get("content", "")
         content = content_raw if isinstance(content_raw, str) else ""
+        content = _content_for_response_format(content, response_format)
         reasoning_raw = mock_response.get("reasoning", "")
         reasoning = reasoning_raw if isinstance(reasoning_raw, str) else ""
         tool_calls_raw = mock_response.get("tool_calls")

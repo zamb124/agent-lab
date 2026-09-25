@@ -173,7 +173,7 @@ async def create_entity(
     if namespace is not None:
         payload["namespace"] = namespace
     response = await client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json=payload,
         headers=headers
     )
@@ -201,7 +201,7 @@ async def create_relationship(
     if namespace is not None:
         payload["namespace"] = namespace
     response = await client.post(
-        "/crm/api/v1/relationships/",
+        "/crm/api/v1/relationships",
         json=payload,
         headers=headers,
     )
@@ -1393,7 +1393,7 @@ class TestSameCompanyRegression:
 
         # System user НЕ видит через API
         response = await crm_client.get(
-            f"/crm/api/v1/relationships/?entity_id={a_id}",
+            f"/crm/api/v1/relationships?entity_id={a_id}",
             headers=auth_headers_system
         )
         assert response.status_code == 200

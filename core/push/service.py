@@ -6,9 +6,9 @@ from typing import TypeAlias
 
 from pywebpush import WebPushException, webpush
 
-from core.db.models import PushSubscription
 from core.logging import get_logger
 from core.platform_brand.resolver import resolve_context_host, resolve_vapid_email
+from core.push.models import PushSubscription
 from core.types import JsonObject, PushSubscriptionKeys
 
 logger = get_logger(__name__)

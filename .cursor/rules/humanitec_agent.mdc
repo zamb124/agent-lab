@@ -1,120 +1,52 @@
 ---
-description: "LinnexAgent: LaraOnly desktop, pairing, tunnel WS, Platform MCP; device tools via tunnel"
+description: "LinnexAgent (desktop): LaraOnly, control plane и tunnel во frontend, Platform MCP и LLM proxy во flows, pairing, AgentToolkit. Читать при правке apps/agent и agent API"
+globs:
+  - "apps/agent/**"
+  - "apps/flows/src/agent/**"
+  - "apps/flows/src/api/v1/platform_mcp.py"
+  - "apps/flows/src/api/v1/agent_llm.py"
+  - "apps/frontend/api/agent_devices.py"
+  - "apps/frontend/api/agent_tunnel.py"
+  - "apps/flows/tools/device/**"
+  - "tests/agent/**"
 alwaysApply: false
 ---
-# LinnexAgent и Platform MCP (LaraOnly)
 
-LinnexAgent — desktop-клиент (Goose fork). **Канон продукта: LaraOnly** — единственное platform-окно = flow `lara` на branch `linnex_agent`; локальный ПК — через tunnel device tools внутри Lara. На legacy brand `humanitec.ru` продукт называется **HumanitecAgent**. **Код домена** — `apps/agent/` (библиотека без импортов хостов: модели, `service.py` на `BaseContainer`, device binding, tunnel bus/registry, authz, desktop build); хост-специфичные части живут у хостов — Platform MCP / LLM proxy / device auth в `apps/flows/src/agent/`, control plane и tunnel WS в `apps/frontend/api/agent_devices.py` и `agent_tunnel.py`. Настройки — секция `agent` платформенных `BaseSettings` (`get_settings().agent`, ENV `AGENT__*`).
+# LinnexAgent
 
-## Два HTTP-surface
+Desktop-клиент (Goose fork); на бренде `humanitec.ru` продукт называется HumanitecAgent. Канон — LaraOnly: единственное окно платформы — flow `lara` на branch `linnex_agent`, локальный ПК — device tools через tunnel. Домен — библиотека `apps/agent/` (модели, service, device binding, tunnel bus и registry, authz, desktop build); хостовые части — у `flows` и `frontend`. Настройки — секция `agent` (`AGENT__*`).
 
-| Surface | Сервис | Базовый path | Назначение |
-|---|---|---|---|
-| **Control plane** | `frontend` (:8002) | `/frontend/api/agent/*` | pairing, register, devices, policy, audit, download, releases |
-| **Tunnel WS** | `frontend` | `WS /frontend/api/agent/tunnel?token=` | desktop → platform; ping/pong, policy, `mcp_request`/`mcp_response` |
-| **Platform MCP** | `flows` (:8001) | `/flows/api/v1/agent/platform-mcp` | Streamable HTTP MCP (union + `device/mcp`) |
-| **Platform MCP (toolkit)** | `flows` | `/flows/api/v1/agent/platform-mcp/{toolkit_id}` | scoped MCP; desktop использует **`/platform-mcp/lara`** |
-| **Toolkits catalog** | `flows` | `GET /flows/api/v1/agent/toolkits` | HTTP: device JWT + Host → `mcp_url`; для **device JWT** — только toolkit `lara` |
-| **Toolkits manage** | `flows` | `/flows/api/v1/agent/toolkits/manage` | `op_flows_agent_toolkits_*` + тонкий REST (session JWT); ответ — `AgentToolkit` |
-| **A2A** | `flows` | `/flows/api/v1/a2a/*` | исполнение flow |
-| **OpenAI LLM proxy** | `flows` | `/flows/api/v1/agent/llm/v1` | OpenAI-compatible: models, chat/completions, images/generations, OnlyOffice `/proxy` |
+## Модель
 
-**Platform MCP не в frontend.** Router `apps/flows/src/agent/platform_mcp.py` → `apps/flows/main.py`.
+- Control plane — `frontend` `/frontend/api/agent/*` (pairing, register, devices, policy, audit, download, releases); tunnel — `WS /frontend/api/agent/tunnel?token=` (`agent_tunnel.py`).
+- Platform MCP — `flows` `/flows/api/v1/agent/platform-mcp[/{toolkit_id}]` (Streamable HTTP; desktop — `/platform-mcp/lara`), router `apps/flows/src/api/v1/platform_mcp.py`.
+- OpenAI LLM proxy — `flows` `/flows/api/v1/agent/llm/v1` (`models`, `chat/completions`, `images/generations`, OnlyOffice `/proxy`), `apps/flows/src/agent/llm_proxy.py`.
+- `AgentToolkit` (`apps/flows/src/models/agent_toolkit.py`, таблица `agent_toolkits`, PK `agent_toolkit_id` = `{company_id}:{toolkit_id}`, bootstrap из `registry.yaml`): `lara` (включён для desktop), `humanitec_core`, `networkle`, `docs`, `files`, `browser`; команды `op_flows_agent_toolkits_*`, catalog `GET /flows/api/v1/agent/toolkits` (device JWT → только `lara`).
+- Device — OpenFGA `agent_device` (`company` + `owner`) + запись Redis.
 
-## OpenAI LLM proxy (`apps/flows/src/agent/llm_proxy.py`)
+## Инварианты
 
-Единый OpenAI-compatible surface для **LinnexAgent** и **OnlyOffice AI** (без второго completions API).
+1. Pairing: `POST .../agent/pairing` (код в Redis) → `POST .../agent/register` (device JWT + URLs + tuples); список — `list_objects(can_view)` ∩ Redis; revoke — `require_can_admin` + `is_active=false` + denylist + разрыв tunnel, tuples остаются.
+2. LLM proxy — thin OpenAI adapter (parse → route → encode): `auto`/`<provider>:<model>` → `LLMClient` + `core.ai.runtime`, `lara:<branch_id>` → Lara A2A (`llm_lara.py`), `image-auto` → `NanoBananaClient`, неизвестная модель или пустой branch — 400; codec — `core/clients/llm/openai_api_codec.py`; ошибки — OpenAI envelope `{"error": {...}}` (`extra_exception_handlers`).
+3. Auth proxy: route `anonymous` в `route_config`, handler принимает device JWT (`token_purpose=device`) или editor JWT OnlyOffice с claim `platformAi` (`llm_auth.py`); компания — только из токена; нет компании или членства — 401/403; flow `lara` ищется только в компании токена (нет — 503).
+4. Platform MCP: `initialize` для `lara` — Lara-first instructions; `tools/call flow_*` → A2A (для `lara` — branch `linnex_agent`, variables `device_id`/`linnex_agent_client`), `task_state` результата — kebab платформы; `tools/call tool_*` → `tool_registry.materialize`; `device/mcp` → tunnel → локальный MCP (120 с).
+5. Sticky session: `agent_mcp_session:{mcp_session}:flow:{flow_id}`, без `Mcp-Session-Id` — `agent_mcp_session:device:{device_id}:flow:{flow_id}`; новый MCP session — новый диалог Lara.
+6. Device tools `device_tools_list`/`device_tools_call` доступны любому flow; `device_id` — из `state.variables` (device JWT или server-side bind online-устройства пользователя, `apps/agent/device_binding.py`), не из аргументов LLM.
+7. Tunnel WS: `policy` (DevicePolicy гейтит локальный MCP), `mcp_request`/`mcp_response`, `toolkits_updated` → resync desktop.
+8. Skills, tools и промпты Lara — БД и seed; desktop не пересобирается ради изменений платформы; extension `platform_lara` после pairing всегда включён.
+9. Desktop shell: локальный промпт (`branding/prompts/system.md`) — оркестратор, вопросы платформы — tool `flow_lara`; `Accept-Language` из `GOOSE_LOCALE`; спиннер — `LinnexSpinner`; releases — `LinnexAgent-{platform}-{sha}.{ext}`.
 
-| Инвариант | Деталь |
-|---|---|
-| Path | `/flows/api/v1/agent/llm/v1` (BC: device flow не меняется) |
-| Auth | Route `/flows/api/v1/agent/llm/*` — `anonymous` в `route_config` (middleware не режет OO JWT); handler: **device JWT** (`token_purpose=device`) **или** OnlyOffice editor JWT с claim `platformAi` (`apps/flows/src/agent/llm_auth.py`) |
-| Company context | После auth — `set_context(active_company)` **только** из `company_id` токена/claims. Нет `company_id` / нет membership → 401/403. **Запрещён** фолбек на company `system` для Lara/flows/billing |
-| Models | `auto`, free-pool refs, `lara:<branch_id>`, `image-auto` (`GET /models`) — OpenAI list shape (`object=list`, без OR `total_count`/`links`) |
-| Chat routing | `auto` / `<provider>:<model>` → `core.ai` + **`LLMClient` only**; `lara:<branch>` → Lara A2A (`apps/flows/src/agent/llm_lara.py`); unknown → 400 |
-| Lara flow | `flow_repository.get("lara")` только в namespace `active_company`; нет flow → 503 (не читать из `system`) |
-| Images | `POST /images/generations` model=`image-auto` → `NanoBananaClient` / `AICapability.IMAGE_GEN` |
-| OnlyOffice | `POST /proxy` unwrap `{target,method,headers,data}` + Bearer editor JWT; flows CORS обязан включать `ONLYOFFICE_AI_BROWSER_CORS_ORIGINS` |
-| Errors | OpenAI/OR envelope `{"error":{"message","type","code"}}` на этом surface |
-| Zero-guess | нет валидного токена → 401; пустой/неизвестный `lara:` branch → 400 |
+## Запреты
 
-**Архитектурный инвариант:** proxy — **thin OpenAI adapter** (parse → route → encode). Запрещён второй completions engine: нормализация messages/tools/fallback/billing spans — только `LLMClient` + `core.ai.runtime`. Response/SSE codec — `core/clients/llm/openai_api_codec.py`. OR-only request fields (`provider`, `models`, `plugins`, …) принимаются и игнорируются (`extra=ignore`), без второго роутера.
+1. Platform MCP во `frontend`; второй completions engine в proxy.
+2. Фолбек на компанию `system` для Lara, flows или биллинга.
+3. Зеркало platform Agent Skills в Goose skills; плоский multi-toolkit MCP как основной desktop surface.
 
-**Contract fixtures / tests:** `tests/agent/fixtures/openrouter.openapi.json` (ChatRequest/ChatResult/ChatStreamChunk); строгий suite — `tests/agent/contract/` (MockLLM-only, schema validate, без monkeypatch `LLMClient`/`resolve_ai_model`/Lara). Smoke BC — `tests/agent/e2e/test_agent_llm_proxy_e2e.py`.
+## Исключения
 
-Файлы: `apps/flows/src/agent/llm_proxy.py`, `llm_auth.py`, `llm_lara.py`; claims — `core/office/platform_ai_claims.py`; DS `aiSettings` — `core/office/ai_settings.py`.
+- Исключение: OR-only поля запроса (`provider`, `models`, `plugins`) принимаются и игнорируются моделью запроса (`extra=ignore`). `[без гейта]`
 
-## LaraOnly
+## Гейты
 
-| Инвариант | Деталь |
-|---|---|
-| Desktop catalog | Device JWT → только `lara`; `default_enabled` всегда `true` (даже при stale DB) |
-| Desktop sync | Extension `platform_lara` всегда `enabled=true` после pairing/resync |
-| LLM provider UI | Display name **Linnex** (tech id `humanitec` допустим) |
-| MCP tool | `flow_lara` → A2A `metadata.branch = linnex_agent` |
-| Sticky session | Redis: `Mcp-Session-Id` → A2A `context_id` (новый MCP session = новый диалог Lara); `device:{device_id}` только если нет `Mcp-Session-Id`; result text содержит `context_id: …` |
-| Local PC | Builtin `device_tools_list` / `device_tools_call` — **опциональны в любом flow**; у Lara стоят по умолчанию на всех SPA branches + `linnex_agent`. `device_id` в `state.variables` (не из LLM args): desktop JWT через Platform MCP **или** server-side bind online device текущего user (`apps/agent/device_binding.py` в BaseChannel для любого flow) |
-| SPA presence | Lara drawer: зелёная точка + имя online device в `panel-head` (`platform/agent_devices_load` → `GET /frontend/api/agent/devices?mine=true`) |
-| Tunnel local MCP | Built-in desktop surface (`humanitecLocalDeviceMcp.ts`) под `DevicePolicy`; optional `HUMANITEC_LOCAL_MCP_URL` override |
-| Updates | Skills/tools/prompts Lara — DB/seed; desktop binary не пересобирать ради platform |
-
-Не делать: Goose skills mirror platform Agent Skills; multi-toolkit flat MCP как primary desktop surface.
-
-## AgentToolkit
-
-Database-first (`apps/flows/src/models/agent_toolkit.py`). Bootstrap: `registry.yaml` → `agent_toolkits`. Системные: `lara` (desktop default on), `humanitec_core` (legacy, default off), `networkle`, `docs`, `files`, `browser`. Manage CRUD — `op_flows_agent_toolkits_*`; console-список — owner-фабрика `@platform` `flows/agent_toolkits` (`op_flows_agent_toolkits_list`). Catalog GET строит `AgentToolkitCatalogItem` (`mcp_url` с Host) и остаётся HTTP.
-
-## Pairing и device JWT
-
-1. `POST /frontend/api/agent/pairing` → Redis code  
-2. `POST /frontend/api/agent/register` → device JWT + URLs; OpenFGA `agent_device` (`company` + `owner`)  
-   Phase 1 HTTP-клиенты (`agent_frontend_http_client*`) бьют в `127.0.0.1:9004` с `Host: {subdomain}.lvh.me:9004` — без публичного DNS `lvh.me`. Desktop E2E по-прежнему открывает `*.lvh.me`.  
-3. List → `list_objects(can_view)` ∩ Redis; revoke → `require_can_admin` (owner ∪ company admin) + Redis `is_active=false` + denylist + tunnel disconnect. FGA `company`/`owner` tuples остаются: это видимость записи, не валидность JWT. Credential kill — denylist + `is_active`.  
-
-Desktop onboarding после pair (`HumanitecOnboardingGuard`):
-
-- UI «Pair device» → `onPaired` → `refreshStatus` → LLM setup → chat
-- IPC/`register` в main → `humanitec-agent:platform-mcp-env-updated` → тот же `refreshStatus` (без `page.reload`)
-- E2E `pair_desktop_via_deep_link(page=...)` предпочитает UI submit; reload — только fallback в `ensure_humanitec_paired_and_llm_ready`
-- `phase === 'checking'` рендерит видимый статус (не `null`), иначе Playwright видит `body=''`
-
-## Platform MCP — контракт
-
-| Method | Поведение |
-|---|---|
-| `initialize` | для toolkit `lara` — `instructions` (Lara-first: call `flow_lara`) |
-| `tools/list` | membership toolkit (desktop: `flow_lara`) |
-| `tools/call` `flow_*` | A2A; для `lara` — branch `linnex_agent` + variables `device_id` / `linnex_agent_client`; result.`task_state` — platform kebab (`completed`, `input-required`, …), не ProtoJSON `TASK_STATE_*` |
-| `tools/call` `tool_*` | `tool_registry.materialize` |
-| `device/mcp` | proxy → tunnel → local MCP (timeout 120s) |
-
-Sticky keys: `agent_mcp_session:{mcp_session}:flow:{flow_id}` (приоритет); `agent_mcp_session:device:{device_id}:flow:{flow_id}` — только без MCP session. Новый `Mcp-Session-Id` не переиспользует device context.
-Locale: desktop Platform MCP headers включают `Accept-Language: ru|en` из Goose UI locale (`GOOSE_LOCALE`).
-
-Desktop E2E / LLM setup: device JWT читает `lara` только в namespace компании (без system fallback). Перед pairing + chat-ready фикстуры зовут `ensure_company_public_flows(company_id)` (`tests/agent/_helpers.py`); иначе `GET /llm/v1/models` → 503 «flow lara не найден».
-
-## Tunnel WS
-
-- `policy` → DevicePolicy (gates local MCP)
-- `mcp_request` / `mcp_response` → `device_*` tools и Platform MCP `device/mcp`
-- `toolkits_updated` → desktop resync (LaraOnly: обычно один extension `platform_lara`)
-
-## Desktop (Goose) — Lara-first shell
-
-- Goose local prompt (`branding/prompts/system.md`): оркестратор; platform-вопросы → сразу tool **`flow_lara`**
-- MCP `initialize.instructions` на `/platform-mcp/lara`: делегируй в `flow_lara` (NetWorkle/CRM/Flows/…)
-- CRM с desktop: skill **`networkle`** на branch `linnex_agent`; branch `crm` — только SPA entry, не desktop
-- Distro `default_extensions`: `developer`, `computercontroller` (локальный fallback UI; канон local — Lara device tools)
-- Branding: `humanitecToolkitsSync.ts`, `humanitecTunnelClient.ts`, `humanitecLocalDeviceMcp.ts`, `humanitecAgentRuntime.ts`
-- Loading-индикатор чата (`LoadingGoose`): `LinnexSpinner` + `branding/icons/linnex_spinner_logo.png` (тот же ассет, что platform-spinner); не Goose `FlyingBird` / `AnimatedIcons`
-- Releases: `linnex-agent-{sha}` / `LinnexAgent-{platform}-{sha}.{ext}`
-
-## Файлы
-
-- `apps/flows/registry.yaml` — `agent_toolkits`
-- `apps/flows/bundles/lara/` — branch `linnex_agent`, `prompts/linnex_agent.md`
-- `apps/flows/tools/device/device_tools.py` — `device_tools_list` / `device_tools_call`
-- `apps/agent/device_binding.py` — resolve/bind online device → variables
-- `apps/flows/src/agent/platform_mcp.py`, `device_auth.py`; `apps/frontend/api/agent_tunnel.py`, `apps/agent/tunnel_bus.py`, `tunnel_registry.py`
-- `apps/agent/desktop/branding/humanitecLocalDeviceMcp.ts`
-- `.cursor/rules/agent_skills.mdc` — Agent Skills ≠ AgentToolkit; Lara branch entry
+- `scripts/check_agent_e2e_coverage.py`, `scripts/check_agent_goose_tool_contract.py`, `scripts/check_agent_test_no_monkeypatch.py` (`make lint`) — покрытие E2E, контракт tools Goose, тесты без monkeypatch.
+- `tests/agent/contract/` — строгий контракт proxy против `tests/agent/fixtures/openrouter.openapi.json` (MockLLM, без monkeypatch `LLMClient`/`resolve_ai_model`); `tests/agent/e2e/test_agent_llm_proxy_e2e.py`.

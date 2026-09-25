@@ -9,6 +9,7 @@ import pytest
 from apps.office.services.viewer_context import ViewerOpenContext
 from apps.office.services.viewer_handlers.onlyoffice_handler import OnlyOfficeViewerHandler
 from core.clients.onlyoffice import verify_onlyoffice_jwt_hs256
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.models import FileRecord
 from core.files.types import FileCategory
 from core.office.ai_settings import ONLYOFFICE_AI_PLUGIN_GUID
@@ -21,12 +22,11 @@ from core.office.platform_ai_claims import (
 def _docx_record() -> FileRecord:
     return FileRecord(
         file_id="file_ai_test",
-        provider="minio",
-        original_name="note.docx",
+                original_name="note.docx",
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         file_size=100,
         checksum="deadbeef",
-        s3_bucket="b",
+        storage_id=PLATFORM_STORAGE_ID,
         s3_key="k",
         download_url="/files/download/file_ai_test",
         company_id="company_ai",

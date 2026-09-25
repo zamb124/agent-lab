@@ -20,12 +20,13 @@ from typing import Literal
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import FrontendDi
 from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
 from core.ai.models import AIModelRecord
 from core.ai.providers import AICapability
 from core.authz.models import AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.types import AuthzRelation
+from core.files.company_storage_service import CompanyStorageService
 from core.models.identity_models import Company, User
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
@@ -71,7 +72,7 @@ class Principal:
 class LiveCtx:
     frontend: AsyncClient
     flows: AsyncClient
-    container: FrontendContainer
+    frontend_di: FrontendDi
     principal: Principal
     unique_id: str
     suffix: str
@@ -130,7 +131,7 @@ def _payload(**values: JsonValue) -> SetupFn:
 # --- seeding -------------------------------------------------------------------------
 
 
-async def seed_principal(container: FrontendContainer, *, unique_id: str) -> Principal:
+async def seed_principal(frontend_di, *, unique_id: str) -> Principal:
     """Отдельная компания + admin для мутаций, которые нельзя делать на `system`."""
     user_id = f"live-frontend-user-{unique_id}"
     company_id = f"live-frontend-co-{unique_id}"
@@ -142,7 +143,7 @@ async def seed_principal(container: FrontendContainer, *, unique_id: str) -> Pri
         companies={company_id: roles},
         active_company_id=company_id,
     )
-    _ = await container.user_repository.set(user)
+    _ = await User.set(user)
     company = make_test_company(
         company_id=company_id,
         name=f"Live frontend company {unique_id}",
@@ -150,10 +151,9 @@ async def seed_principal(container: FrontendContainer, *, unique_id: str) -> Pri
         members={user_id: roles},
     )
     company.subdomain = company_id
-    _ = await container.company_repository.set(company)
-    _ = await container.subdomain_repository.set_mapping(company_id, company_id)
+    _ = await Company.set(company)
     await set_test_company_member_roles(
-        container.company_repository, container.authz_service, company_id=company_id, user_id=user_id, roles=roles
+        frontend_di.authz_service, company_id=company_id, user_id=user_id, roles=roles
     )
     token = get_token_service().create_token(user_id, company_id=company_id, roles=roles)
     return Principal(token=token, headers={"Authorization": f"Bearer {token}"}, user_id=user_id, company_id=company_id)
@@ -168,10 +168,9 @@ async def _seed_member(ctx: LiveCtx, *, roles: list[str]) -> str:
         companies={ctx.principal.company_id: roles},
         active_company_id=ctx.principal.company_id,
     )
-    _ = await ctx.container.user_repository.set(member)
+    _ = await User.set(member)
     await set_test_company_member_roles(
-        ctx.container.company_repository,
-        ctx.container.authz_service,
+        ctx.frontend_di.authz_service,
         company_id=ctx.principal.company_id,
         user_id=user_id,
         roles=roles,
@@ -188,8 +187,7 @@ async def _seed_target_company(ctx: LiveCtx) -> Company:
         members={"seed_owner": ["owner", "admin"]},
     )
     company.subdomain = company_id
-    _ = await ctx.container.company_repository.set(company)
-    _ = await ctx.container.subdomain_repository.set_mapping(company_id, company_id)
+    _ = await Company.set(company)
     return company
 
 
@@ -239,14 +237,14 @@ async def _create_api_key(ctx: LiveCtx) -> str:
     return key_id
 
 
-async def _create_namespace(ctx: LiveCtx) -> str:
-    name = f"live-ns-{ctx.token()}"
+async def _create_namespace(ctx: LiveCtx, *, name: str | None = None) -> str:
+    resolved_name = name if name is not None else f"live-ns-{ctx.token()}"
     response = await ctx.frontend.post(
-        f"{_API}/namespaces", headers=ctx.headers, json={"name": name, "description": "identity"}
+        f"{_API}/namespaces", headers=ctx.headers, json={"name": resolved_name, "description": "identity"}
     )
     _ = await _expect_json(response, ok=(200, 201), label="namespace_create")
-    ctx.marker = name
-    return name
+    ctx.marker = resolved_name
+    return resolved_name
 
 
 async def _register_device(ctx: LiveCtx) -> str:
@@ -328,7 +326,7 @@ async def _setup_api_key_remove(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
-    _ = await _create_namespace(ctx)
+    _ = await _create_namespace(ctx, name=f"0live-ns-{ctx.token()}")
     return {"limit": 200, "offset": 0}
 
 
@@ -382,7 +380,7 @@ async def _setup_explorer_why(ctx: LiveCtx) -> JsonObject:
 async def _setup_explorer_revoke(ctx: LiveCtx) -> JsonObject:
     flow_id = await _create_flow(ctx)
     subject_id = f"live-explorer-{ctx.token()}"
-    await ctx.container.authz_service.write(
+    await ctx.frontend_di.authz_service.write(
         [
             AuthzTuple(
                 subject=AuthzSubject.user(subject_id),
@@ -448,7 +446,7 @@ async def _setup_trace_tree(ctx: LiveCtx) -> JsonObject:
 
 async def _seed_catalog_model(ctx: LiveCtx) -> str:
     model_id = f"live/identity-{ctx.unique_id}"
-    await ctx.container.ai_model_catalog_repository.set(
+    await AIModelRecord.set(
         AIModelRecord(
             provider="openrouter",
             model_id=model_id,
@@ -553,6 +551,106 @@ async def _setup_lead_requests(ctx: LiveCtx) -> JsonObject:
     created = await _expect_json(response, ok=(200,), label="lead_create")
     ctx.marker = str(created["lead_request_id"])
     return {"limit": 200}
+
+
+_EXT_MINIO = "http://127.0.0.1:19003"
+_EXT_KEY = "extadmin"
+_EXT_SECRET = "extadminsecret"
+
+
+async def _ensure_ext_bucket(bucket: str) -> None:
+    import aioboto3
+
+    session = aioboto3.Session()
+    async with session.client(
+        "s3",
+        endpoint_url=_EXT_MINIO,
+        aws_access_key_id=_EXT_KEY,
+        aws_secret_access_key=_EXT_SECRET,
+        region_name="us-east-1",
+    ) as client:
+        try:
+            await client.head_bucket(Bucket=bucket)
+        except Exception:
+            await client.create_bucket(Bucket=bucket)
+
+
+def _storage_body(*, name: str, bucket: str) -> JsonObject:
+    return {
+        "name": name,
+        "provider": "minio",
+        "endpoint_url": _EXT_MINIO,
+        "region_name": "us-east-1",
+        "bucket_name": bucket,
+        "path_style": True,
+        "access_key_id": _EXT_KEY,
+        "secret_access_key": _EXT_SECRET,
+    }
+
+
+async def _setup_storage_probe(ctx: LiveCtx) -> JsonObject:
+    _ = ctx
+    await _ensure_ext_bucket("ext-a")
+    body = _storage_body(name="probe", bucket="ext-a")
+    body.pop("name")
+    return body
+
+
+async def _setup_storage_create(ctx: LiveCtx) -> JsonObject:
+    await _ensure_ext_bucket("ext-a")
+    return _storage_body(name=f"live-{ctx.token()}", bucket="ext-a")
+
+
+async def _create_live_storage(ctx: LiveCtx, *, bucket: str, name: str) -> str:
+    await _ensure_ext_bucket(bucket)
+    row = await CompanyStorageService().create(
+        ctx.principal.company_id,
+        name=name,
+        provider="minio",
+        endpoint_url=_EXT_MINIO,
+        region_name="us-east-1",
+        bucket_name=bucket,
+        path_style=True,
+        access_key_id=_EXT_KEY,
+        secret_access_key=_EXT_SECRET,
+    )
+    return row.storage_id
+
+
+async def _setup_storage_rotate(ctx: LiveCtx) -> JsonObject:
+    storage_id = await _create_live_storage(ctx, bucket="ext-a", name=f"rotate-{ctx.token()}")
+    return {
+        "storage_id": storage_id,
+        "access_key_id": _EXT_KEY,
+        "secret_access_key": _EXT_SECRET,
+    }
+
+
+async def _setup_storage_delete(ctx: LiveCtx) -> JsonObject:
+    storage_id = await _create_live_storage(ctx, bucket="ext-a", name=f"delete-{ctx.token()}")
+    return {"storage_id": storage_id}
+
+
+async def _setup_storage_route(ctx: LiveCtx) -> JsonObject:
+    storage_id = await _create_live_storage(ctx, bucket="ext-a", name=f"route-{ctx.unique_id}")
+    return {"storage_id": storage_id, "source_kind": "mail_message"}
+
+
+async def _setup_storage_migration_start(ctx: LiveCtx) -> JsonObject:
+    source = await _create_live_storage(ctx, bucket="ext-a", name=f"src-{ctx.token()}")
+    target = await _create_live_storage(ctx, bucket="ext-b", name=f"dst-{ctx.token()}")
+    return {"source_storage_id": source, "target_storage_id": target}
+
+
+async def _setup_storage_migration_get(ctx: LiveCtx) -> JsonObject:
+    source = await _create_live_storage(ctx, bucket="ext-a", name=f"src-get-{ctx.unique_id}")
+    target = await _create_live_storage(ctx, bucket="ext-b", name=f"dst-get-{ctx.unique_id}")
+    migration = await CompanyStorageService().start_migration(
+        ctx.principal.company_id,
+        source_storage_id=source,
+        target_storage_id=target,
+    )
+    return {"storage_migration_id": migration.storage_migration_id}
 
 
 _CASES: dict[str, OpCase] = {
@@ -908,6 +1006,62 @@ _CASES: dict[str, OpCase] = {
     "frontend/agent/audit_list_requested": OpCase(
         RestMirror("GET", f"{_API}/agent/audit", "query"), _payload(limit=50), True, "succeeded_only"
     ),
+    "frontend/company_storages/list_requested": OpCase(
+        RestMirror("GET", f"{_API}/company-storages", "none"),
+        _empty,
+        True,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storages/probe_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/probe", "body"),
+        _setup_storage_probe,
+        True,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storages/create_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages", "body"),
+        _setup_storage_create,
+        False,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storages/rotate_credentials_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/rotate", "body"),
+        _setup_storage_rotate,
+        True,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storages/delete_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/delete", "body"),
+        _setup_storage_delete,
+        False,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storage_routes/set_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/routes", "body"),
+        _setup_storage_route,
+        True,
+        principal="throwaway",
+        volatile=frozenset({"updated_at"}),
+    ),
+    "frontend/company_storage_migrations/start_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/migrations", "body"),
+        _setup_storage_migration_start,
+        False,
+        "succeeded_only",
+        principal="throwaway",
+    ),
+    "frontend/company_storage_migrations/get_requested": OpCase(
+        RestMirror("POST", f"{_API}/company-storages/migrations/get", "body"),
+        _setup_storage_migration_get,
+        True,
+        "succeeded_only",
+        principal="throwaway",
+    ),
     "frontend/lead_requests/list_requested": OpCase(
         RestMirror("GET", f"{_API}/lead-requests", "query"),
         _setup_lead_requests,
@@ -1044,7 +1198,7 @@ async def test_frontend_op_ws_rest_identical(
     realtime_service: None,
     frontend_client_http: AsyncClient,
     flows_client_http: AsyncClient,
-    frontend_container: FrontendContainer,
+    frontend_di,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -1055,13 +1209,13 @@ async def test_frontend_op_ws_rest_identical(
     if case.principal == "system":
         principal = Principal(token=auth_token_system, headers=auth_headers_system, user_id=system_user_id, company_id="system")
     else:
-        principal = await seed_principal(frontend_container, unique_id=unique_id)
+        principal = await seed_principal(frontend_di, unique_id=unique_id)
 
     def make_ctx(suffix: str) -> LiveCtx:
         return LiveCtx(
             frontend=frontend_client_http,
             flows=flows_client_http,
-            container=frontend_container,
+            frontend_di=frontend_di,
             principal=principal,
             unique_id=unique_id,
             suffix=suffix,

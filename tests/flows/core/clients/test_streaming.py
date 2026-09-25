@@ -32,7 +32,7 @@ from a2a.types.a2a_pb2 import (
 
 from apps.flows.config import get_settings
 from apps.flows.src.a2a import A2ATaskProjectionService
-from apps.flows.src.db import A2ATaskRepository
+from apps.flows.src.models.a2a_projection import A2ATaskProjection
 from apps.flows.src.streaming import Emitter, EventSubscriber, InMemoryEmitter, StreamEvent
 from apps.flows.src.streaming.subscriber import is_final_event
 from core.a2a import TERMINAL_A2A_TASK_STATES, mapping_from_struct, struct_from_mapping
@@ -246,12 +246,8 @@ class TestStreamingWithToolCalls:
             user_id="test-user",
             session_id=f"test-agent:{context_id}",
         )
-        repository = A2ATaskRepository(Storage(db_url=get_settings().database.flows_url))
-        projection_service = A2ATaskProjectionService(
-            repository=repository,
-            redis_client=redis_client,
-        )
-        _ = await repository.ensure_task(
+        projection_service = A2ATaskProjectionService(redis_client=redis_client)
+        _ = await A2ATaskProjection.ensure_task(
             company_id="streaming-test-company",
             session_id=state.session_id,
             flow_id=state.session_flow_id,

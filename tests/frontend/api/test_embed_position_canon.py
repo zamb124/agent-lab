@@ -100,7 +100,7 @@ async def test_patch_position_and_presentation_reach_the_snippet(
                 f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers, json=body
             )
             assert rejected.status_code == 400, rejected.text
-            assert "не может быть null" in rejected.json()["detail"]
+            assert "cannot be null" in rejected.json()["detail"]
         for body in ({"position": "fullscreen"}, {"presentation": "fullscreen"}):
             rejected = await frontend_client.patch(
                 f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers, json=body

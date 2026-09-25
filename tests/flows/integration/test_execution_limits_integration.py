@@ -27,6 +27,7 @@ from apps.flows.src.models.execution_limits import (
 )
 from apps.flows.src.models.flow_config import FlowConfig, FlowType
 from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode
 from apps.flows.src.state.cancellation import (
@@ -92,7 +93,7 @@ async def test_check_cancellation_does_not_raise_when_deadline_in_future(
 
 @pytest.mark.asyncio
 async def test_check_cancellation_wall_clock_before_redis_cancel(
-    app, container, make_test_state, unique_id: str
+    app, di, make_test_state, unique_id: str
 ) -> None:
     """Сначала дедлайн, затем Redis: при просроченном дедлайне — FlowWallClockTimeoutError."""
     state = make_test_state(
@@ -102,7 +103,7 @@ async def test_check_cancellation_wall_clock_before_redis_cancel(
     )
     state.flow_deadline_monotonic = time.monotonic() - 0.5
     state.flow_timeout_effective_seconds = 30
-    token = CancellationToken(f"task-{unique_id}", container.redis_client)
+    token = CancellationToken(f"task-{unique_id}", di.redis_client)
     set_cancellation_token(token)
     try:
         await token.cancel()
@@ -115,7 +116,7 @@ async def test_check_cancellation_wall_clock_before_redis_cancel(
 
 @pytest.mark.asyncio
 async def test_check_cancellation_redis_cancel_when_deadline_not_set(
-    app, container, make_test_state, unique_id: str
+    app, di, make_test_state, unique_id: str
 ) -> None:
     state = make_test_state(
         task_id=f"task-{unique_id}",
@@ -124,7 +125,7 @@ async def test_check_cancellation_redis_cancel_when_deadline_not_set(
     )
     state.flow_deadline_monotonic = None
     state.flow_timeout_effective_seconds = None
-    token = CancellationToken(f"task-{unique_id}", container.redis_client)
+    token = CancellationToken(f"task-{unique_id}", di.redis_client)
     set_cancellation_token(token)
     try:
         await token.cancel()
@@ -138,13 +139,13 @@ async def test_check_cancellation_redis_cancel_when_deadline_not_set(
 
 @pytest.mark.asyncio
 async def test_code_node_node_timeout_stops_overlong_await(
-    app, container, make_test_state, unique_id: str
+    app, di, make_test_state, unique_id: str
 ) -> None:
     code = "\nimport asyncio\nasync def run(args, state):\n    await asyncio.sleep(30)\n    return state\n"
     node = CodeNode(
         f"sleep_node_{unique_id}",
         config={"type": "code", "code": code, "node_timeout_seconds": 1},
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
@@ -152,7 +153,7 @@ async def test_code_node_node_timeout_stops_overlong_await(
         session_id=f"flow_n_{unique_id}:ctx-{unique_id}",
     )
     with pytest.raises(NodeWallClockTimeoutError) as exc_info:
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
     assert exc_info.value.code == "NODE_WALL_CLOCK_TIMEOUT"
     assert exc_info.value.payload["node_id"] == f"sleep_node_{unique_id}"
     assert exc_info.value.payload["timeout_seconds"] == 1
@@ -160,12 +161,12 @@ async def test_code_node_node_timeout_stops_overlong_await(
 
 @pytest.mark.asyncio
 async def test_flow_run_aborts_on_expired_deadline_before_node(
-    app, container, make_test_state, unique_id: str
+    app, di, make_test_state, unique_id: str
 ) -> None:
     code = '\nasync def run(args, state):\n    state.proof = "must_not_run"\n    return state\n'
     n_id = f"step1_{unique_id}"
     flow_id = f"linear_{unique_id}"
-    node = CodeNode(n_id, config={"type": "code", "code": code}, container=container)
+    node = CodeNode(n_id, config={"type": "code", "code": code}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)
     flow = Flow(
         flow_id=flow_id,
         name="linear",
@@ -173,7 +174,7 @@ async def test_flow_run_aborts_on_expired_deadline_before_node(
         nodes={n_id: node},
         edges=[{"from_node": n_id, "to_node": None}],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = make_test_state(
         task_id=f"task-{unique_id}",
@@ -184,7 +185,7 @@ async def test_flow_run_aborts_on_expired_deadline_before_node(
     state.flow_deadline_monotonic = time.monotonic() - 0.01
     state.flow_timeout_effective_seconds = 5
     with pytest.raises(FlowWallClockTimeoutError):
-        await run_flow(container=container, flow=flow, state=state)
+        await run_flow(di=di, flow=flow, state=state)
     assert getattr(state, "proof", None) is None
 
 

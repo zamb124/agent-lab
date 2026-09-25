@@ -1,0 +1,492 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/viktor-shved/PycharmProjects/agent-lab
+configfile: pytest.ini
+plugins: hypothesis-6.153.4, cov-7.1.0, xdist-3.8.0, timeout-2.4.0, asyncio-1.4.0, schemathesis-4.20.1, rerunfailures-16.3, hydra-core-1.3.2, anyio-4.13.0
+timeout: 5.0s
+timeout method: thread
+timeout func_only: True
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 6/6 workers
+6 workers [3344 items]
+
+........................................................................................................................................................................................................................................................................F..................................................................................................................................................................................................................................................................................................F.................................................................................................................[gw3] node down: Not properly terminated
+F
+replacing crashed worker gw3
+..FF........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+=== hang_guard SIGKILL worker=gw3 pid=70619 phase=call age=20.2s timeout=5.0s test=tests/core/clients/test_capability_gateway_client.py::test_capability_gateway_client_get_documentation ===
+
+...................[gw1] node down: Not properly terminated
+F
+replacing crashed worker gw1
+................................................................................................................................................................................................................................................................................................................
+=== hang_guard SIGKILL worker=gw1 pid=70617 phase=call age=21.5s timeout=5.0s test=tests/core/api/test_demo_auth.py::TestDemoAuth::test_demo_login_success ===
+
+..............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................F........................................................................................................F.....F.F.............................................................................................................................EE........................F.F...........F........FE............................................................................................................................................................................................................EE.........................................................................F...............F.....FF..................EE..........................................................................................................................................................................................................................................................................................................................................................................................F....................................................................................................................................................................................................{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-24T18:55:17.397106Z", "message": "files.cairosvg.libcairo.svg"}
+
+==================================== ERRORS ====================================
+_ ERROR at setup of TestPushRepository.test_list_for_user_returns_that_users_rows _
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py, line 74
+      @pytest.mark.asyncio
+      async def test_list_for_user_returns_that_users_rows(self, push_repository, unique_id):
+          """Получение всех подписок пользователя."""
+          user_id = f"user_multi_{unique_id}"
+
+          # Создаем 3 подписки
+          endpoints = []
+          for i in range(3):
+              endpoint = f"https://fcm.googleapis.com/multi-{unique_id}-{i}"
+              endpoints.append(endpoint)
+              await push_repository.upsert_by_endpoint(
+                  user_id=user_id,
+                  endpoint=endpoint,
+                  keys={"p256dh": f"key{i}", "auth": f"auth{i}"},
+                  platform=["desktop", "ios", "android"][i]
+              )
+
+          # Получаем все подписки
+          subscriptions = await push_repository.list_for_user(user_id)
+
+          assert len(subscriptions) == 3
+
+          platforms = {s.platform for s in subscriptions}
+          assert platforms == {"desktop", "ios", "android"}
+
+          # Cleanup
+          for endpoint in endpoints:
+              await push_repository.delete_subscription(user_id, endpoint)
+E       fixture 'push_repository' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py:74
+________ ERROR at setup of TestPushRepository.test_delete_subscription _________
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py, line 103
+      @pytest.mark.asyncio
+      async def test_delete_subscription(self, push_repository, unique_id):
+          """Удаление подписки."""
+          user_id = f"user_delete_{unique_id}"
+          endpoint = f"https://fcm.googleapis.com/delete-{unique_id}"
+
+          # Создаем
+          await push_repository.upsert_by_endpoint(
+              user_id=user_id,
+              endpoint=endpoint,
+              keys={"p256dh": "key", "auth": "auth"},
+              platform="desktop"
+          )
+
+          # Удаляем
+          deleted = await push_repository.delete_subscription(user_id, endpoint)
+          assert deleted is True
+
+          # Проверяем что удалено
+          subs = await push_repository.list_for_user(user_id)
+          assert len(subs) == 0
+E       fixture 'push_repository' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py:103
+_ ERROR at setup of TestNotifyUserIntegration.test_notify_user_sends_push_when_offline _
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py, line 245
+      @pytest.mark.asyncio
+      @patch('core.push.service.webpush')
+      async def test_notify_user_sends_push_when_offline(
+          self,
+          mock_webpush,
+          push_repository,
+          vapid_keys,
+          unique_id
+      ):
+          """
+          notify_user() отправляет push если пользователь не подключен к WebSocket.
+          """
+          from core.push.service import init_web_push_service
+          from core.websocket.publisher import Notification, NotificationType, notify_user
+
+          mock_webpush.return_value = MagicMock(status_code=201)
+
+          # Инициализируем сервис
+          init_web_push_service(
+              vapid_private_key=vapid_keys["private_key"],
+              vapid_public_key=vapid_keys["public_key"],
+              vapid_email=vapid_keys["email"]
+          )
+
+          user_id = f"user_notify_{unique_id}"
+          endpoint = f"https://fcm.googleapis.com/notify-{unique_id}"
+
+          # Создаем подписку
+          await push_repository.upsert_by_endpoint(
+              user_id=user_id,
+              endpoint=endpoint,
+              keys={"p256dh": "key", "auth": "auth"},
+              platform="desktop"
+          )
+
+          # Отправляем уведомление (пользователь offline - нет WebSocket)
+          notification = Notification(
+              type=NotificationType.SYSTEM,
+              title="Test Notification",
+              message="This should trigger push",
+              service="test"
+          )
+
+          await notify_user(user_id, notification)
+
+          # webpush должен быть вызван
+          assert mock_webpush.called, "webpush should be called for offline user"
+
+          # Cleanup
+          await push_repository.delete_subscription(user_id, endpoint)
+E       fixture 'push_repository' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py:245
+___ ERROR at setup of test_orphan_cleanup_tick_removes_orphan_company_chunks ___
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/rag/test_execute_reembed_tick_integration.py, line 341
+  @pytest.mark.asyncio
+  async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
+      rag_provider_pgvector, unique_id, rag_worker_di
+  ) -> None:
+      from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
+
+      chunk_null = f"orphan_null_{unique_id}"
+      chunk_empty = f"orphan_empty_{unique_id}"
+      ns = f"ns_orphan_e2e_{unique_id}"
+      await _insert_stale_chunk(chunk_id=chunk_null, namespace_id=ns,
+                                company_id=None, content="null")
+      await _insert_stale_chunk(chunk_id=chunk_empty, namespace_id=ns,
+                                company_id="", content="empty")
+
+      # Cleanup глобальный: чужой параллельный batch может удалить наши строки
+      # раньше нас (deleted нашего тика тогда < 2). Сходимость собственных строк.
+      for _ in range(50):
+          result = await rag_cleanup_orphan_company_chunks_tick(
+              schedule_task_id=f"orph_{unique_id}",
+              di=rag_worker_di,
+          )
+          assert result["skipped"] is False
+          _, _, exists_null = await _chunk_state(chunk_null)
+          _, _, exists_empty = await _chunk_state(chunk_empty)
+          if not exists_null and not exists_empty:
+              break
+
+      _, _, exists_null = await _chunk_state(chunk_null)
+      _, _, exists_empty = await _chunk_state(chunk_empty)
+      assert exists_null is False
+      assert exists_empty is False
+E       fixture 'rag_worker_di' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/rag/test_execute_reembed_tick_integration.py:341
+_____ ERROR at setup of test_orphan_cleanup_tick_requires_schedule_task_id _____
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/rag/test_execute_reembed_tick_integration.py, line 374
+  @pytest.mark.asyncio
+  async def test_orphan_cleanup_tick_requires_schedule_task_id(rag_worker_di) -> None:
+      from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
+
+      with pytest.raises(ValueError, match="schedule_task_id"):
+          await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="  ", di=rag_worker_di)
+      with pytest.raises(ValueError, match="schedule_task_id"):
+          await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="", di=rag_worker_di)
+E       fixture 'rag_worker_di' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/rag/test_execute_reembed_tick_integration.py:374
+________ ERROR at setup of TestPushRepository.test_create_subscription _________
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py, line 23
+      @pytest.mark.asyncio
+      async def test_create_subscription(self, push_repository, unique_id):
+          """Создание подписки в реальной БД."""
+          user_id = f"user_{unique_id}"
+          endpoint = f"https://fcm.googleapis.com/{unique_id}"
+
+          subscription = await push_repository.upsert_by_endpoint(
+              user_id=user_id,
+              endpoint=endpoint,
+              keys={"p256dh": "test_key", "auth": "test_auth"},
+              platform="desktop",
+              user_agent="Test Browser"
+          )
+
+          assert subscription is not None
+          assert subscription.user_id == user_id
+          assert subscription.platform == "desktop"
+
+          # Cleanup
+          await push_repository.delete_subscription(user_id, endpoint)
+E       fixture 'push_repository' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py:23
+______ ERROR at setup of TestPushRepository.test_upsert_updates_existing _______
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+file /Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py, line 44
+      @pytest.mark.asyncio
+      async def test_upsert_updates_existing(self, push_repository, unique_id):
+          """Upsert обновляет существующую подписку."""
+          endpoint = f"https://fcm.googleapis.com/upsert-{unique_id}"
+          user_id = f"user_{unique_id}"
+
+          # Первое создание
+          sub1 = await push_repository.upsert_by_endpoint(
+              user_id=user_id,
+              endpoint=endpoint,
+              keys={"p256dh": "key1", "auth": "auth1"},
+              platform="ios"
+          )
+
+          # Обновление с новыми keys
+          sub2 = await push_repository.upsert_by_endpoint(
+              user_id=user_id,
+              endpoint=endpoint,
+              keys={"p256dh": "key2", "auth": "auth2"},
+              platform="android"
+          )
+
+          # ID должен остаться тем же
+          assert sub1.id == sub2.id
+          # Platform обновился
+          assert sub2.platform == "android"
+
+          # Cleanup
+          await push_repository.delete_subscription(user_id, endpoint)
+E       fixture 'push_repository' not found
+>       available fixtures: _asyncio_loop_factory, _class_scoped_runner, _function_scoped_runner, _inject_test_scope_header, _live_tests_use_conf_local_llm_keys, _module_scoped_runner, _package_scoped_runner, _platform_runtime_loop_profile, _session_scoped_runner, agent_base_url, agent_base_url_company2, agent_frontend_http_anon, agent_frontend_http_client, agent_frontend_http_client_system, agent_frontend_http_company2, agent_local_release_artifact, agent_paired_device, agent_release_github_missing_repo, agent_tunnel_bus_pod_b, agent_tunnel_ws, all_services, anyio_backend, anyio_backend_name, anyio_backend_options, app, auth_headers, auth_headers_company2, auth_headers_company2_user2, auth_headers_system, auth_headers_system_user2, auth_token, auth_token_company2, auth_token_company2_user2, auth_token_system, auth_token_system_user2, authz_service, cache, capability_gateway_app, capability_gateway_di, capability_gateway_service, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, centrifugo_http, centrifugo_service, client, code_runner_csharp_service, code_runner_go_service, code_runner_node_service, code_runner_python_service, cov, create_page, crm_client, crm_client_http, crm_companies_initialized, crm_di, crm_service, crm_worker, customer_datasource, di, doctest_namespace, embed_test_auth, enforce_no_test_doubles, ensure_default_test_user_authz, ensure_minio_bucket, event_loop_policy, file_reader_billing_service, flows_app, flows_chat_slow_agent, flows_chat_test_agent, flows_client, flows_client_http, flows_service, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, frontend_app, frontend_client, frontend_client_http, frontend_client_with_auth, frontend_di, frontend_service, google_api_emulator, guest_runtime_service, hydra_restore_singletons, hydra_sweep_runner, hydra_task_runner, inline_tools, local_mcp_http_url, local_mcp_registry_stub, mail_personal_bindings, mail_personal_cfg, mail_personal_company_ctx, mail_personal_live_settings, mail_personal_message_sweeper, mail_personal_pair, mail_personal_port, mail_personal_service, mail_subject_marker, make_test_state, mcp_modes_stub, mcp_modes_stub_session, mock_context, mock_llm, mock_llm_capture, mock_llm_redis, mock_llm_with_queue, monkeypatch, no_cover, office_app, office_client, office_client_http, office_service, openfga_settings, openfga_test_env, patch_service_clients_asgi, platform_datasource_customer_db, platform_events_listener, platform_test_scope, provider_litserve_service, push_notification_payload, push_subscription_android_data, push_subscription_data, push_subscription_ios_data, pytestconfig, rag_app, rag_client, rag_client_http, rag_provider_pgvector, rag_service, rag_worker, realtime_client_http, realtime_service, realtime_session_client, realtime_session_client_user2, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_mock_llm, s3_client, s3_client_for_bucket, sandbox_services, scheduler_client_http, scheduler_service, search_app, search_client, search_client_http, search_service, search_worker, search_worker_prerequisites, secrets_app, secrets_client, secrets_client_http, secrets_service, service_processes, setup_database_before_tests, skip_if_code_runner_unavailable, state, state_with_content, stock_app, stock_client, stock_client_company2, stock_di, stock_init, storage, storage_shared, stored_page, subtests, sync_app, sync_client, sync_client_http, sync_service, sync_tools, sync_worker, system_user2_id, system_user_id, taskiq_broker, taskiq_scheduler, taskiq_worker, test_a2a_sample, test_agent, test_agent_fixture, test_agent_for_tool, test_company_subdomains_initialized, test_context, test_node_in_db, test_push_subscription, test_push_subscriptions_multi_device, testrun_uid, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, unique_id, unique_namespace_name, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory, vapid_keys, voice_app, voice_client, voice_service, web_push_service, wiki_app, wiki_client, wiki_client_anonymous, wiki_client_company2, wiki_client_http, wiki_client_member, wiki_client_other_namespace, wiki_di, wiki_domain_context, wiki_namespace, wiki_other_namespace, wiki_page, wiki_rag_index, wiki_service, wiki_service_http, worker_id, worktracker_app, worktracker_client, worktracker_client_http, worktracker_di, worktracker_http_service, ws_cookie_system, ws_cookie_system_user2
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/Users/viktor-shved/PycharmProjects/agent-lab/tests/core/push/test_push_service.py:44
+=================================== FAILURES ===================================
+___________________ test_upsert_by_event_id_updates_same_row ___________________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/calendar/test_calendar_event_by_source.py:82: in test_upsert_by_event_id_updates_same_row
+    await CalendarEvent.upsert_by_event_id(event.model_copy(update={"event_id": ""}))
+core/models/calendar_models.py:147: in upsert_by_event_id
+    raise ValueError("calendar event already exists for this company, source and source_id")
+E   ValueError: calendar event already exists for this company, source and source_id
+
+During handling of the above exception, another exception occurred:
+tests/core/calendar/test_calendar_event_by_source.py:81: in test_upsert_by_event_id_updates_same_row
+    with pytest.raises(ValueError, match="event_id cannot be empty"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'event_id cannot be empty'
+E     Actual message: 'calendar event already exists for this company, source and source_id'
+___________ test_reject_forbidden_platform_imports_raises_with_lines ___________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/capabilities/test_source_sanitize.py:24: in test_reject_forbidden_platform_imports_raises_with_lines
+    assert "2: import core.context" in message
+E   AssertionError: assert '2: import core.context' in 'User source must not import platform modules (apps.* / core.*). Forbidden lines:\n1: import core.context'
+_____________ tests/core/clients/test_capability_gateway_client.py _____________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+worker 'gw3' crashed while running 'tests/core/clients/test_capability_gateway_client.py::test_capability_gateway_client_get_documentation'
+___________ test_sync_empty_catalog_does_not_delete_existing_records ___________
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/clients/test_platform_catalog_fail_closed.py:205: in test_sync_empty_catalog_does_not_delete_existing_records
+    existing = AIModelRecord(
+E   pydantic_core._pydantic_core.ValidationError: 3 validation errors for AIModelRecord
+E   capabilities
+E     Input should be a valid tuple [type=tuple_type, input_value=<AICapability.LLM_CHAT: 'llm_chat'>, input_type=AICapability]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+E   input_modalities
+E     Input should be a valid tuple [type=tuple_type, input_value='text', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+E   output_modalities
+E     Input should be a valid tuple [type=tuple_type, input_value='text', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+__________________ test_sync_http_500_does_not_empty_catalog ___________________
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/clients/test_platform_catalog_fail_closed.py:248: in test_sync_http_500_does_not_empty_catalog
+    existing = AIModelRecord(
+E   pydantic_core._pydantic_core.ValidationError: 3 validation errors for AIModelRecord
+E   capabilities
+E     Input should be a valid tuple [type=tuple_type, input_value=<AICapability.LLM_CHAT: 'llm_chat'>, input_type=AICapability]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+E   input_modalities
+E     Input should be a valid tuple [type=tuple_type, input_value='text', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+E   output_modalities
+E     Input should be a valid tuple [type=tuple_type, input_value='text', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.13/v/tuple_type
+_______________________ tests/core/api/test_demo_auth.py _______________________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+worker 'gw1' crashed while running 'tests/core/api/test_demo_auth.py::TestDemoAuth::test_demo_login_success'
+____________ TestIntegrationCredential.test_upsert_updates_existing ____________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/integrations/test_oauth_service.py:232: in test_upsert_updates_existing
+    await IntegrationCredential.upsert_by_credential_id(
+core/integrations/models.py:164: in upsert_by_credential_id
+    raise ValueError(
+E   ValueError: integration credential already exists for this user, provider, service and mailbox
+
+During handling of the above exception, another exception occurred:
+tests/core/integrations/test_oauth_service.py:231: in test_upsert_updates_existing
+    with pytest.raises(ValueError, match="credential_id cannot be empty"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'credential_id cannot be empty'
+E     Actual message: 'integration credential already exists for this user, provider, service and mailbox'
+_________ test_role_job_actor_uses_company_admin_when_recipients_empty _________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/mail/test_mail_job_context.py:58: in test_role_job_actor_uses_company_admin_when_recipients_empty
+    recipients = await mailbox_recipient_user_ids(di, role_binding)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+apps/idle_worker/tasks/mail_recipients.py:24: in mailbox_recipient_user_ids
+    tuples = await authz.list_tuples(obj, relation=relation)
+                   ^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FlowsDi' object has no attribute 'list_tuples'
+_________ test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status _________
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/mail/test_mail_calendar_autolink.py:234: in test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status
+    stored = await MailboxBinding.get(binding.mailbox_binding_id, company_id)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: PlatformModel.get() takes 2 positional arguments but 3 were given
+___________________ test_role_job_actor_raises_without_admin ___________________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/mail/test_mail_job_context.py:111: in test_role_job_actor_raises_without_admin
+    recipients = await mailbox_recipient_user_ids(di, role_binding)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+apps/idle_worker/tasks/mail_recipients.py:24: in mailbox_recipient_user_ids
+    tuples = await authz.list_tuples(obj, relation=relation)
+                   ^^^^^^^^^^^^^^^^^
+E   AttributeError: 'FlowsDi' object has no attribute 'list_tuples'
+_______________ TestWebPushService.test_send_push_calls_webpush ________________
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/push/test_push_service.py:138: in test_send_push_calls_webpush
+    from core.db.models import PushSubscription
+E   ImportError: cannot import name 'PushSubscription' from 'core.db.models' (/Users/viktor-shved/PycharmProjects/agent-lab/core/db/models/__init__.py)
+_______________ test_personal_unbind_by_owner_deletes_connection _______________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/mail/test_mail_personal.py:179: in test_personal_unbind_by_owner_deletes_connection
+    assert await mail_service._connection_repository.get(connection_id) is None
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'MailService' object has no attribute '_connection_repository'
+___________________ test_mailbox_binding_upsert_list_delete ____________________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/mail/test_mail_repositories.py:237: in test_mailbox_binding_upsert_list_delete
+    deleted = await MailboxBinding.delete(f"mailbind_{unique_id}", company_id)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: Model.delete() takes 1 positional argument but 2 were given
+____________ TestWebPushService.test_expired_subscription_returned _____________
+[gw6] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/push/test_push_service.py:212: in test_expired_subscription_returned
+    from core.db.models import PushSubscription
+E   ImportError: cannot import name 'PushSubscription' from 'core.db.models' (/Users/viktor-shved/PycharmProjects/agent-lab/core/db/models/__init__.py)
+__________________ test_create_cron_schedule_sets_next_run_at __________________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/test_scheduler_service_next_run.py:66: in test_create_cron_schedule_sets_next_run_at
+    assert created.next_run_at > before_create
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: can't compare offset-naive and offset-aware datetimes
+_______________ test_upsert_by_schedule_task_id_updates_same_row _______________
+[gw4] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/test_scheduler_service_next_run.py:393: in test_upsert_by_schedule_task_id_updates_same_row
+    assert stored.created_at == created_at
+E   AssertionError: assert datetime.datetime(2026, 9, 24, 12, 0) == datetime.datetime(2026, 9, 24, 12, 0, tzinfo=datetime.timezone.utc)
+E    +  where datetime.datetime(2026, 9, 24, 12, 0) = PlatformScheduledTask(schedule_task_id='d429d713_schedule', company_id='system', schedule_id=None, target_service='flo... updated_at=datetime.datetime(2026, 9, 24, 18, 56, 18, 851156), last_run_at=None, next_run_at=None, error_message=None).created_at
+________________________ test_sync_app_exposes_i18n_ru _________________________
+[gw7] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/test_platform_i18n_route.py:17: in test_sync_app_exposes_i18n_ru
+    assert response.status_code == 200
+E   assert 500 == 200
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+----------------------------- Captured stdout call -----------------------------
+{"http.method": "GET", "http.route": "/api/i18n/ru", "http.path": "/api/i18n/ru", "http.status_code": 500, "http.duration_ms": 0.193, "request_id": "791dbccfa6594fe59dc3ec99862b722e", "test_scope": "test_83b56e69d219", "http.client_ip": "127.0.0.1", "trace_id": "sync:c8b3d2a63bf24af590ba2f34d85814cb", "service.name": "sync", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "ERROR", "timestamp": "2026-09-24T18:56:18.729893Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request_failed", "exception": "  + Exception Group Traceback (most recent call last):\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 81, in collapse_excgroups\n  |     yield\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 192, in __call__\n  |     async with anyio.create_task_group() as task_group:\n  |                ~~~~~~~~~~~~~~~~~~~~~~~^^\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py\", line 799, in __aexit__\n  |     raise BaseExceptionGroup(\n  |         \"unhandled errors in a TaskGroup\", self._exceptions\n  |     ) from None\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py\", line 107, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 191, in __call__\n    |     with recv_stream, send_stream, collapse_excgroups():\n    |                                    ~~~~~~~~~~~~~~~~~~^^\n    |   File \"/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py\", line 162, in __exit__\n    |     self.gen.throw(value)\n    |     ~~~~~~~~~~~~~~^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 87, in collapse_excgroups\n    |     raise exc\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py\", line 111, in dispatch\n    |     di = require_di(request, PlatformDi)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py\", line 23, in require_di\n    |     di = app_di(source)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py\", line 45, in app_di\n    |     raise RuntimeError(\"Service DI is not open: the ASGI lifespan is not running\")\n    | RuntimeError: Service DI is not open: the ASGI lifespan is not running\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py\", line 107, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 191, in __call__\n    with recv_stream, send_stream, collapse_excgroups():\n                                   ~~~~~~~~~~~~~~~~~~^^\n  File \"/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py\", line 162, in __exit__\n    self.gen.throw(value)\n    ~~~~~~~~~~~~~~^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 87, in collapse_excgroups\n    raise exc\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py\", line 111, in dispatch\n    di = require_di(request, PlatformDi)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py\", line 23, in require_di\n    di = app_di(source)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py\", line 45, in app_di\n    raise RuntimeError(\"Service DI is not open: the ASGI lifespan is not running\")\nRuntimeError: Service DI is not open: the ASGI lifespan is not running"}
+------------------------------ Captured log call -------------------------------
+ERROR    platform.http:access_log.py:115 {'http.method': 'GET', 'http.route': '/api/i18n/ru', 'http.path': '/api/i18n/ru', 'http.status_code': 500, 'http.duration_ms': 0.193, 'request_id': '791dbccfa6594fe59dc3ec99862b722e', 'test_scope': 'test_83b56e69d219', 'http.client_ip': '127.0.0.1', 'trace_id': 'sync:c8b3d2a63bf24af590ba2f34d85814cb', 'service.name': 'sync', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'ERROR', 'timestamp': '2026-09-24T18:56:18.729893Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request_failed', 'exception': '  + Exception Group Traceback (most recent call last):\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 81, in collapse_excgroups\n  |     yield\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 192, in __call__\n  |     async with anyio.create_task_group() as task_group:\n  |                ~~~~~~~~~~~~~~~~~~~~~~~^^\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py", line 799, in __aexit__\n  |     raise BaseExceptionGroup(\n  |         "unhandled errors in a TaskGroup", self._exceptions\n  |     ) from None\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py", line 107, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 191, in __call__\n    |     with recv_stream, send_stream, collapse_excgroups():\n    |                                    ~~~~~~~~~~~~~~~~~~^^\n    |   File "/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py", line 162, in __exit__\n    |     self.gen.throw(value)\n    |     ~~~~~~~~~~~~~~^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 87, in collapse_excgroups\n    |     raise exc\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py", line 111, in dispatch\n    |     di = require_di(request, PlatformDi)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py", line 23, in require_di\n    |     di = app_di(source)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py", line 45, in app_di\n    |     raise RuntimeError("Service DI is not open: the ASGI lifespan is not running")\n    | RuntimeError: Service DI is not open: the ASGI lifespan is not running\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py", line 107, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 191, in __call__\n    with recv_stream, send_stream, collapse_excgroups():\n                                   ~~~~~~~~~~~~~~~~~~^^\n  File "/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py", line 162, in __exit__\n    self.gen.throw(value)\n    ~~~~~~~~~~~~~~^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 87, in collapse_excgroups\n    raise exc\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py", line 111, in dispatch\n    di = require_di(request, PlatformDi)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py", line 23, in require_di\n    di = app_di(source)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py", line 45, in app_di\n    raise RuntimeError("Service DI is not open: the ASGI lifespan is not running")\nRuntimeError: Service DI is not open: the ASGI lifespan is not running'}
+_____________________ test_sync_app_rejects_unknown_locale _____________________
+[gw7] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/test_platform_i18n_route.py:35: in test_sync_app_rejects_unknown_locale
+    assert response.status_code == 400
+E   assert 500 == 400
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+----------------------------- Captured stdout call -----------------------------
+{"http.method": "GET", "http.route": "/api/i18n/de", "http.path": "/api/i18n/de", "http.status_code": 500, "http.duration_ms": 8.407, "request_id": "9b5652a127024b929f54ad58572c5993", "test_scope": "test_b0131715d78d", "http.client_ip": "127.0.0.1", "trace_id": "sync:b62ae32fc66e47b798ad264bd09ea6cd", "service.name": "sync", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "ERROR", "timestamp": "2026-09-24T18:56:18.929444Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request_failed", "exception": "  + Exception Group Traceback (most recent call last):\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 81, in collapse_excgroups\n  |     yield\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 192, in __call__\n  |     async with anyio.create_task_group() as task_group:\n  |                ~~~~~~~~~~~~~~~~~~~~~~~^^\n  |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py\", line 799, in __aexit__\n  |     raise BaseExceptionGroup(\n  |         \"unhandled errors in a TaskGroup\", self._exceptions\n  |     ) from None\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py\", line 107, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 191, in __call__\n    |     with recv_stream, send_stream, collapse_excgroups():\n    |                                    ~~~~~~~~~~~~~~~~~~^^\n    |   File \"/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py\", line 162, in __exit__\n    |     self.gen.throw(value)\n    |     ~~~~~~~~~~~~~~^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 87, in collapse_excgroups\n    |     raise exc\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py\", line 111, in dispatch\n    |     di = require_di(request, PlatformDi)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py\", line 23, in require_di\n    |     di = app_di(source)\n    |   File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py\", line 45, in app_di\n    |     raise RuntimeError(\"Service DI is not open: the ASGI lifespan is not running\")\n    | RuntimeError: Service DI is not open: the ASGI lifespan is not running\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py\", line 107, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 191, in __call__\n    with recv_stream, send_stream, collapse_excgroups():\n                                   ~~~~~~~~~~~~~~~~~~^^\n  File \"/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py\", line 162, in __exit__\n    self.gen.throw(value)\n    ~~~~~~~~~~~~~~^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py\", line 87, in collapse_excgroups\n    raise exc\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py\", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py\", line 111, in dispatch\n    di = require_di(request, PlatformDi)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py\", line 23, in require_di\n    di = app_di(source)\n  File \"/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py\", line 45, in app_di\n    raise RuntimeError(\"Service DI is not open: the ASGI lifespan is not running\")\nRuntimeError: Service DI is not open: the ASGI lifespan is not running"}
+------------------------------ Captured log call -------------------------------
+ERROR    platform.http:access_log.py:115 {'http.method': 'GET', 'http.route': '/api/i18n/de', 'http.path': '/api/i18n/de', 'http.status_code': 500, 'http.duration_ms': 8.407, 'request_id': '9b5652a127024b929f54ad58572c5993', 'test_scope': 'test_b0131715d78d', 'http.client_ip': '127.0.0.1', 'trace_id': 'sync:b62ae32fc66e47b798ad264bd09ea6cd', 'service.name': 'sync', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'ERROR', 'timestamp': '2026-09-24T18:56:18.929444Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request_failed', 'exception': '  + Exception Group Traceback (most recent call last):\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 81, in collapse_excgroups\n  |     yield\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 192, in __call__\n  |     async with anyio.create_task_group() as task_group:\n  |                ~~~~~~~~~~~~~~~~~~~~~~~^^\n  |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py", line 799, in __aexit__\n  |     raise BaseExceptionGroup(\n  |         "unhandled errors in a TaskGroup", self._exceptions\n  |     ) from None\n  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)\n  +-+---------------- 1 ----------------\n    | Traceback (most recent call last):\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py", line 107, in dispatch\n    |     response = await call_next(request)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 168, in call_next\n    |     raise app_exc from app_exc.__cause__ or app_exc.__context__\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 144, in coro\n    |     await self.app(scope, receive_or_disconnect, send_no_error)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 191, in __call__\n    |     with recv_stream, send_stream, collapse_excgroups():\n    |                                    ~~~~~~~~~~~~~~~~~~^^\n    |   File "/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py", line 162, in __exit__\n    |     self.gen.throw(value)\n    |     ~~~~~~~~~~~~~~^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 87, in collapse_excgroups\n    |     raise exc\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 193, in __call__\n    |     response = await self.dispatch_func(request, call_next)\n    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py", line 111, in dispatch\n    |     di = require_di(request, PlatformDi)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py", line 23, in require_di\n    |     di = app_di(source)\n    |   File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py", line 45, in app_di\n    |     raise RuntimeError("Service DI is not open: the ASGI lifespan is not running")\n    | RuntimeError: Service DI is not open: the ASGI lifespan is not running\n    +------------------------------------\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/access_log.py", line 107, in dispatch\n    response = await call_next(request)\n               ^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 168, in call_next\n    raise app_exc from app_exc.__cause__ or app_exc.__context__\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 144, in coro\n    await self.app(scope, receive_or_disconnect, send_no_error)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 191, in __call__\n    with recv_stream, send_stream, collapse_excgroups():\n                                   ~~~~~~~~~~~~~~~~~~^^\n  File "/Users/viktor-shved/.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py", line 162, in __exit__\n    self.gen.throw(value)\n    ~~~~~~~~~~~~~~^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/_utils.py", line 87, in collapse_excgroups\n    raise exc\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/middleware/base.py", line 193, in __call__\n    response = await self.dispatch_func(request, call_next)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/middleware/auth/middleware.py", line 111, in dispatch\n    di = require_di(request, PlatformDi)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/boundary.py", line 23, in require_di\n    di = app_di(source)\n  File "/Users/viktor-shved/PycharmProjects/agent-lab/core/di/state.py", line 45, in app_di\n    raise RuntimeError("Service DI is not open: the ASGI lifespan is not running")\nRuntimeError: Service DI is not open: the ASGI lifespan is not running'}
+____________________ test_access_request_notification_flow _____________________
+[gw7] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/core/websocket/test_notification_e2e.py:118: in test_access_request_notification_flow
+    entity_id = entity["entity_id"]
+                ^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'entity_id'
+---------------------------- Captured stdout setup -----------------------------
+{"http.method": "GET", "http.route": "/crm/api/v1/entity-types/{type_id}", "http.path": "/crm/api/v1/entity-types/meeting", "http.status_code": 404, "http.duration_ms": 3.485, "request_id": "d16c87c3cce14afcbfbb0685f0cbc986", "http.response.size": 96, "test_scope": "test_1943ebb38db3", "http.client_ip": "127.0.0.1", "trace_id": "crm:4b6c04f102464995bb1d4aadb9b60e71", "service.name": "crm", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "WARNING", "timestamp": "2026-09-24T18:56:25.903985Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request"}
+{"http.method": "GET", "http.route": "/crm/api/v1/entity-types/{type_id}", "http.path": "/crm/api/v1/entity-types/meeting", "http.status_code": 404, "http.duration_ms": 3.278, "request_id": "ba2b1f1df0d04383bb8222aa5e2deccf", "http.response.size": 96, "test_scope": "test_1943ebb38db3", "http.client_ip": "127.0.0.1", "trace_id": "crm:880609e5aac3416181ae19cd382321b9", "service.name": "crm", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "WARNING", "timestamp": "2026-09-24T18:56:25.937472Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request"}
+{"http.method": "GET", "http.route": "/crm/api/v1/entity-types/{type_id}", "http.path": "/crm/api/v1/entity-types/call", "http.status_code": 404, "http.duration_ms": 3.007, "request_id": "2e530e9ce2564406b76c8ab0bfea31c0", "http.response.size": 96, "test_scope": "test_1943ebb38db3", "http.client_ip": "127.0.0.1", "trace_id": "crm:a5499c0695b441668b54d6cc756f7c87", "service.name": "crm", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "WARNING", "timestamp": "2026-09-24T18:56:25.963945Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request"}
+{"http.method": "GET", "http.route": "/crm/api/v1/entity-types/{type_id}", "http.path": "/crm/api/v1/entity-types/call", "http.status_code": 404, "http.duration_ms": 3.09, "request_id": "af99359fec5341ed9c03652c99ef48ee", "http.response.size": 96, "test_scope": "test_1943ebb38db3", "http.client_ip": "127.0.0.1", "trace_id": "crm:80094db9773d4492b23c7d64141ef2f3", "service.name": "crm", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "WARNING", "timestamp": "2026-09-24T18:56:25.989795Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request"}
+------------------------------ Captured log setup ------------------------------
+WARNING  platform.http:access_log.py:134 {'http.method': 'GET', 'http.route': '/crm/api/v1/entity-types/{type_id}', 'http.path': '/crm/api/v1/entity-types/meeting', 'http.status_code': 404, 'http.duration_ms': 3.485, 'request_id': 'd16c87c3cce14afcbfbb0685f0cbc986', 'http.response.size': 96, 'test_scope': 'test_1943ebb38db3', 'http.client_ip': '127.0.0.1', 'trace_id': 'crm:4b6c04f102464995bb1d4aadb9b60e71', 'service.name': 'crm', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'WARNING', 'timestamp': '2026-09-24T18:56:25.903985Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request'}
+WARNING  platform.http:access_log.py:134 {'http.method': 'GET', 'http.route': '/crm/api/v1/entity-types/{type_id}', 'http.path': '/crm/api/v1/entity-types/meeting', 'http.status_code': 404, 'http.duration_ms': 3.278, 'request_id': 'ba2b1f1df0d04383bb8222aa5e2deccf', 'http.response.size': 96, 'test_scope': 'test_1943ebb38db3', 'http.client_ip': '127.0.0.1', 'trace_id': 'crm:880609e5aac3416181ae19cd382321b9', 'service.name': 'crm', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'WARNING', 'timestamp': '2026-09-24T18:56:25.937472Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request'}
+WARNING  platform.http:access_log.py:134 {'http.method': 'GET', 'http.route': '/crm/api/v1/entity-types/{type_id}', 'http.path': '/crm/api/v1/entity-types/call', 'http.status_code': 404, 'http.duration_ms': 3.007, 'request_id': '2e530e9ce2564406b76c8ab0bfea31c0', 'http.response.size': 96, 'test_scope': 'test_1943ebb38db3', 'http.client_ip': '127.0.0.1', 'trace_id': 'crm:a5499c0695b441668b54d6cc756f7c87', 'service.name': 'crm', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'WARNING', 'timestamp': '2026-09-24T18:56:25.963945Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request'}
+WARNING  platform.http:access_log.py:134 {'http.method': 'GET', 'http.route': '/crm/api/v1/entity-types/{type_id}', 'http.path': '/crm/api/v1/entity-types/call', 'http.status_code': 404, 'http.duration_ms': 3.09, 'request_id': 'af99359fec5341ed9c03652c99ef48ee', 'http.response.size': 96, 'test_scope': 'test_1943ebb38db3', 'http.client_ip': '127.0.0.1', 'trace_id': 'crm:80094db9773d4492b23c7d64141ef2f3', 'service.name': 'crm', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'WARNING', 'timestamp': '2026-09-24T18:56:25.989795Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request'}
+----------------------------- Captured stdout call -----------------------------
+{"http.method": "POST", "http.route": "/crm/{path:path}", "http.path": "/crm/api/v1/entities/", "http.status_code": 405, "http.duration_ms": 2.322, "request_id": "884042ad377f40f79cfba8e190f8b23f", "http.request.size": 141, "http.response.size": 31, "test_scope": "test_1943ebb38db3", "http.client_ip": "127.0.0.1", "trace_id": "crm:042f4ee0c5f846b0945397ce12b35277", "service.name": "crm", "http.user_agent": "python-httpx/0.28.1", "service.version": "1.0.0", "deployment.environment": "test", "logger": "platform.http", "level": "WARNING", "timestamp": "2026-09-24T18:56:26.056199Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "http_request"}
+------------------------------ Captured log call -------------------------------
+WARNING  platform.http:access_log.py:134 {'http.method': 'POST', 'http.route': '/crm/{path:path}', 'http.path': '/crm/api/v1/entities/', 'http.status_code': 405, 'http.duration_ms': 2.322, 'request_id': '884042ad377f40f79cfba8e190f8b23f', 'http.request.size': 141, 'http.response.size': 31, 'test_scope': 'test_1943ebb38db3', 'http.client_ip': '127.0.0.1', 'trace_id': 'crm:042f4ee0c5f846b0945397ce12b35277', 'service.name': 'crm', 'http.user_agent': 'python-httpx/0.28.1', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'platform.http', 'level': 'WARNING', 'timestamp': '2026-09-24T18:56:26.056199Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'http_request'}
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; tests.fixtures.service_processes
+    self.import_plugin(import_spec)
+
+tests/core/mail/test_mail_calendar_autolink.py::test_autolink_marks_unsupported_domain_without_creating_integration
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='calendar_autolink_status', input_value='unsupported', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/core/mail/test_mail_calendar_autolink.py::test_autolink_marks_gmail_as_oauth_only
+tests/core/mail/test_mail_calendar_autolink.py::test_unbind_removes_mailbox_calendar_integration
+tests/core/mail/test_mail_calendar_autolink.py::test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='calendar_autolink_status', input_value='needs_oauth', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/core/calendar/test_calendar_event_by_source.py::test_upsert_by_event_id_updates_same_row
+FAILED tests/core/capabilities/test_source_sanitize.py::test_reject_forbidden_platform_imports_raises_with_lines
+FAILED tests/core/clients/test_capability_gateway_client.py::test_capability_gateway_client_get_documentation
+FAILED tests/core/clients/test_platform_catalog_fail_closed.py::test_sync_empty_catalog_does_not_delete_existing_records
+FAILED tests/core/clients/test_platform_catalog_fail_closed.py::test_sync_http_500_does_not_empty_catalog
+FAILED tests/core/api/test_demo_auth.py::TestDemoAuth::test_demo_login_success
+FAILED tests/core/integrations/test_oauth_service.py::TestIntegrationCredential::test_upsert_updates_existing
+FAILED tests/core/mail/test_mail_job_context.py::test_role_job_actor_uses_company_admin_when_recipients_empty
+FAILED tests/core/mail/test_mail_calendar_autolink.py::test_unlink_mailbox_calendar_keeps_mailbox_and_resets_status
+FAILED tests/core/mail/test_mail_job_context.py::test_role_job_actor_raises_without_admin
+FAILED tests/core/push/test_push_service.py::TestWebPushService::test_send_push_calls_webpush
+FAILED tests/core/mail/test_mail_personal.py::test_personal_unbind_by_owner_deletes_connection
+FAILED tests/core/mail/test_mail_repositories.py::test_mailbox_binding_upsert_list_delete
+FAILED tests/core/push/test_push_service.py::TestWebPushService::test_expired_subscription_returned
+FAILED tests/core/test_scheduler_service_next_run.py::test_create_cron_schedule_sets_next_run_at
+FAILED tests/core/test_scheduler_service_next_run.py::test_upsert_by_schedule_task_id_updates_same_row
+FAILED tests/core/test_platform_i18n_route.py::test_sync_app_exposes_i18n_ru
+FAILED tests/core/test_platform_i18n_route.py::test_sync_app_rejects_unknown_locale
+FAILED tests/core/websocket/test_notification_e2e.py::test_access_request_notification_flow
+ERROR tests/core/push/test_push_service.py::TestPushRepository::test_list_for_user_returns_that_users_rows
+ERROR tests/core/push/test_push_service.py::TestPushRepository::test_delete_subscription
+ERROR tests/core/push/test_push_service.py::TestNotifyUserIntegration::test_notify_user_sends_push_when_offline
+ERROR tests/core/rag/test_execute_reembed_tick_integration.py::test_orphan_cleanup_tick_removes_orphan_company_chunks
+ERROR tests/core/rag/test_execute_reembed_tick_integration.py::test_orphan_cleanup_tick_requires_schedule_task_id
+ERROR tests/core/push/test_push_service.py::TestPushRepository::test_create_subscription
+ERROR tests/core/push/test_push_service.py::TestPushRepository::test_upsert_updates_existing
+====== 19 failed, 3318 passed, 13 warnings, 7 errors in 81.65s (0:01:21) =======

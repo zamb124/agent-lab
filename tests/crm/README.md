@@ -43,7 +43,7 @@ tests/crm/
 **CRM-специфичные фикстуры** из `tests/crm/conftest.py`:
 
 - **`crm_client`** - HTTP клиент для CRM API
-- **`crm_container`** - CRM container (для прямого доступа к сервисам)
+- **`crm_di`** - CrmDi (для прямого доступа к сервисам)
 
 ## Запуск тестов
 

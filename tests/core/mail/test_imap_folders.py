@@ -380,7 +380,7 @@ async def test_send_multipart_html_and_attachment(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mail_member_context,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"mailhtml_{unique_id}"
@@ -411,7 +411,7 @@ async def test_send_multipart_html_and_attachment(
         ),
         company_id=company_id,
     )
-    file_record = await container.files_service.create(
+    file_record = await di.files_service.create(
         FileCreateSpec(
             source_kind=FileSourceKind.PLATFORM_AUXILIARY,
             source_ref=FileSourceRef(),

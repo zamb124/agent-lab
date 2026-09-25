@@ -1,12 +1,15 @@
 """
 Тесты для Traces API flows после перехода на Tempo.
 
-TempoClient мокается через DI контейнер.
+TempoClient подменяется на границе DI.
 """
+
+import dataclasses
 
 import pytest
 
 from core.clients.tempo_client import TempoClientError
+from core.di import reset_app_di, set_app_di
 
 _SAMPLE_SPANS = [
     {
@@ -52,30 +55,21 @@ class MockTempoClient:
         return self._search_ids
 
 
-_TEMPO_SENTINEL = object()
+def _set_mock_tempo(app, di, mock_client):
+    """Публикует приложению копию FlowsDi с Tempo-клиентом теста; результат — прежний DI."""
+    return set_app_di(app, dataclasses.replace(di, tempo_client=mock_client))
 
 
-def _set_mock_tempo(container, mock_client):
-    prev = getattr(container, "_cached_tempo_client", _TEMPO_SENTINEL)
-    container._cached_tempo_client = mock_client
-    return prev
-
-
-def _restore_mock_tempo(container, prev):
-    if prev is _TEMPO_SENTINEL:
-        delattr(container, "_cached_tempo_client")
-    else:
-        container._cached_tempo_client = prev
+def _restore_mock_tempo(app, prev):
+    reset_app_di(app, prev)
 
 
 class TestTracesTempoApiByTrace:
     """GET /flows/api/v1/traces/trace/{trace_id}"""
 
     @pytest.mark.asyncio
-    async def test_returns_spans_tree(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
-        prev = _set_mock_tempo(container, MockTempoClient(spans=_SAMPLE_SPANS))
+    async def test_returns_spans_tree(self, client, app, auth_headers_system, di):
+        prev = _set_mock_tempo(app, di, MockTempoClient(spans=_SAMPLE_SPANS))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/trace001",
@@ -89,13 +83,11 @@ class TestTracesTempoApiByTrace:
             assert len(body["spans"]) == 1
             assert body["spans"][0]["operation_name"] == "flow.run"
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)
 
     @pytest.mark.asyncio
-    async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
-        prev = _set_mock_tempo(container, MockTempoClient(raise_error=True))
+    async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system, di):
+        prev = _set_mock_tempo(app, di, MockTempoClient(raise_error=True))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/trace001",
@@ -104,13 +96,11 @@ class TestTracesTempoApiByTrace:
             assert resp.status_code == 503
             assert resp.json()["error_code"] == "unavailable"
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)
 
     @pytest.mark.asyncio
-    async def test_returns_empty_spans_when_not_found(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
-        prev = _set_mock_tempo(container, MockTempoClient(spans=[]))
+    async def test_returns_empty_spans_when_not_found(self, client, app, auth_headers_system, di):
+        prev = _set_mock_tempo(app, di, MockTempoClient(spans=[]))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/trace/nonexistent",
@@ -121,18 +111,17 @@ class TestTracesTempoApiByTrace:
             assert body["spans_count"] == 0
             assert body["spans"] == []
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)
 
 
 class TestTracesTempoApiBySession:
     """GET /flows/api/v1/traces/session/{session_id}"""
 
     @pytest.mark.asyncio
-    async def test_returns_spans_tree_via_search_then_get(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
+    async def test_returns_spans_tree_via_search_then_get(self, client, app, auth_headers_system, di):
         prev = _set_mock_tempo(
-            container,
+            app,
+            di,
             MockTempoClient(spans=_SAMPLE_SPANS, search_ids=["trace001"]),
         )
         try:
@@ -145,13 +134,11 @@ class TestTracesTempoApiBySession:
             assert body["session_id"] == "my_flow:ctx1"
             assert body["spans_count"] == 1
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)
 
     @pytest.mark.asyncio
-    async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
-        prev = _set_mock_tempo(container, MockTempoClient(raise_error=True))
+    async def test_returns_503_when_tempo_unavailable(self, client, app, auth_headers_system, di):
+        prev = _set_mock_tempo(app, di, MockTempoClient(raise_error=True))
         try:
             resp = await client.get(
                 "/flows/api/v1/traces/session/my_flow%3Actx1",
@@ -160,18 +147,17 @@ class TestTracesTempoApiBySession:
             assert resp.status_code == 503
             assert resp.json()["error_code"] == "unavailable"
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)
 
 
 class TestTracesTempoApiByTask:
     """GET /flows/api/v1/traces/task/{task_id}"""
 
     @pytest.mark.asyncio
-    async def test_returns_spans_tree(self, client, app, auth_headers_system):
-        from apps.flows.src.container import get_container
-        container = get_container()
+    async def test_returns_spans_tree(self, client, app, auth_headers_system, di):
         prev = _set_mock_tempo(
-            container,
+            app,
+            di,
             MockTempoClient(spans=_SAMPLE_SPANS, search_ids=["trace001"]),
         )
         try:
@@ -184,4 +170,4 @@ class TestTracesTempoApiByTask:
             assert body["task_id"] == "task001"
             assert body["spans_count"] == 1
         finally:
-            _restore_mock_tempo(container, prev)
+            _restore_mock_tempo(app, prev)

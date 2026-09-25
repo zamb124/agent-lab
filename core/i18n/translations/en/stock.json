@@ -1,0 +1,73 @@
+{
+    "routes": {
+        "stock_home": "Stock",
+        "stock_transfers": "Transfers",
+        "stock_transfer": "Transfer",
+        "stock_products": "Products",
+        "stock_locations": "Locations",
+        "stock_valuation": "Valuation"
+    },
+    "bottom_nav": {
+        "home": "Stock",
+        "transfers": "Transfers",
+        "products": "Products",
+        "profile": "Profile"
+    },
+    "home": {
+        "title": "Warehouse pulse",
+        "empty": "No warehouse configured",
+        "quants": "On hand",
+        "transfers": "Transfers"
+    },
+    "transfers": {
+        "title": "Transfers",
+        "empty": "No transfers yet"
+    },
+    "transfer": {
+        "loading": "Loading transfer…",
+        "confirm": "Confirm",
+        "assign": "Reserve",
+        "validate": "Validate",
+        "cancel": "Cancel"
+    },
+    "products": {
+        "title": "Products",
+        "empty": "No products yet"
+    },
+    "locations": {
+        "title": "Locations",
+        "empty": "No locations yet"
+    },
+    "valuation": {
+        "title": "Valuation journal",
+        "empty": "No valuation entries yet"
+    },
+    "fields": {
+        "name": "Name",
+        "product": "Product",
+        "location": "Location",
+        "qty": "Qty",
+        "reserved": "Reserved",
+        "available": "Available",
+        "avg_cost": "Avg cost",
+        "value": "Value",
+        "type": "Type",
+        "state": "State",
+        "scheduled": "Scheduled",
+        "sku": "SKU",
+        "valuation_method": "Valuation",
+        "standard_price": "Price",
+        "tracking": "Tracking",
+        "usage": "Usage",
+        "parent": "Parent",
+        "removal": "Removal",
+        "from": "From",
+        "to": "To",
+        "done_qty": "Done",
+        "entry_no": "No.",
+        "kind": "Kind",
+        "unit_cost": "Unit cost",
+        "qty_after": "Qty after",
+        "value_after": "Value after"
+    }
+}

@@ -9,16 +9,16 @@ import uuid
 from datetime import UTC, date, datetime
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.db.models import CRMEntity
-from apps.crm.db.repositories.entity_repository import EntityRepository
 from apps.crm.integrations.external_ref import external_ref_now, merge_external_refs
+from apps.crm.models.crm_entity import CRMEntity, entity_namespace, index_crm_entity
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
+from core.rag import BaseRAGProvider
 from core.types import JsonObject
 
 
 async def upsert_canonical_by_external_ref(
     *,
-    entity_repo: EntityRepository,
+    rag: BaseRAGProvider,
     entity_access: CrmEntityAccessService,
     namespace: str,
     company_id: str,
@@ -41,7 +41,7 @@ async def upsert_canonical_by_external_ref(
 
     ref = external_ref_now(record_id=rid, account_key=account_key, raw_version=raw_version)
 
-    existing_list = await entity_repo.find_by_external_ref(
+    existing_list = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
         company_id=company_id,
         namespace=namespace,
         entity_type=entity_type,
@@ -69,7 +69,8 @@ async def upsert_canonical_by_external_ref(
             ent.note_date = note_date
         elif entity_type == NOTE_ROOT_ENTITY_TYPE_ID and ent.note_date is None:
             ent.note_date = datetime.now(UTC).date()
-        updated = await entity_repo.update(ent)
+        updated = await CRMEntity.save_loaded(ent)
+        await index_crm_entity(rag, updated, replace=True)
         return updated, False
 
     initial_attrs = merge_external_refs({}, source_id=source_id, ref=ref)
@@ -90,10 +91,13 @@ async def upsert_canonical_by_external_ref(
         user_id=user_id,
         note_date=effective_note_date,
     )
-    created = await entity_repo.create(ent)
+    created = await CRMEntity.create(ent)
+    await index_crm_entity(rag, created, replace=False)
     try:
         await entity_access.sync_entity_created(created)
     except Exception:
-        _ = await entity_repo.delete(created.entity_id)
+        removed = await CRMEntity.take_by_id(created.entity_id)
+        if removed is not None:
+            _ = await rag.delete_document(entity_namespace(removed), removed.entity_id)
         raise
     return created, True

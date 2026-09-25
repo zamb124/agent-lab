@@ -48,12 +48,12 @@ async def test_platform_billing_prices_system(frontend_client_system):
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_put_prices_roundtrip(frontend_client_system, frontend_container):
+async def test_platform_billing_put_prices_roundtrip(frontend_client_system, frontend_di):
     """Единственный тест на платформе, который пишет глобальный
     billing:resource_base_prices_json (single-owner => parallel-safe).
     Merge-семантика прайса покрыта unit-тестами _merge_resource_base_price_override."""
     key = "billing:resource_base_prices_json"
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
     payload = {"llm": {"*": 0.042}}
     response = await frontend_client_system.put(
@@ -62,7 +62,7 @@ async def test_platform_billing_put_prices_roundtrip(frontend_client_system, fro
     )
     assert response.status_code == 200
 
-    raw = await frontend_container.shared_storage.get(key, force_global=True)
+    raw = await frontend_di.shared_storage.get(key, force_global=True)
     assert raw is not None
     assert json.loads(raw) == payload
 
@@ -72,7 +72,7 @@ async def test_platform_billing_put_prices_roundtrip(frontend_client_system, fro
     assert body["storage_override"] == payload
     assert body["effective"]["llm"]["*"] == 0.042
 
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -126,10 +126,10 @@ async def test_platform_billing_company_resolve_accepts_display_label(frontend_c
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_settlement_rules_roundtrip(frontend_client_system, frontend_container, unique_id):
+async def test_platform_billing_settlement_rules_roundtrip(frontend_client_system, frontend_di, unique_id):
     cid = "system"
     key = company_settlement_rules_storage_key(cid)
-    prev = await frontend_container.shared_storage.get(key, force_global=True)
+    prev = await frontend_di.shared_storage.get(key, force_global=True)
     try:
         body = {
             "version": 1,
@@ -157,9 +157,9 @@ async def test_platform_billing_settlement_rules_roundtrip(frontend_client_syste
         assert doc["rules"][0]["rule_id"] == f"api_rule_{unique_id}"
     finally:
         if prev is not None:
-            await frontend_container.shared_storage.set(key, prev, force_global=True)
+            await frontend_di.shared_storage.set(key, prev, force_global=True)
         else:
-            await frontend_container.shared_storage.delete(key, force_global=True)
+            await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -191,10 +191,10 @@ async def test_platform_billing_settlement_rules_unknown_company_404(frontend_cl
 
 
 @pytest.mark.asyncio
-async def test_platform_billing_company_prices_roundtrip(frontend_client_system, frontend_container, unique_id):
+async def test_platform_billing_company_prices_roundtrip(frontend_client_system, frontend_di, unique_id):
     cid = f"co_price_{unique_id}"
     key = company_resource_prices_storage_key(cid)
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
     payload = {"llm": {"*": 77.1}}
     put_r = await frontend_client_system.put(
         f"/frontend/api/platform-billing/prices/company/{cid}",
@@ -206,13 +206,13 @@ async def test_platform_billing_company_prices_roundtrip(frontend_client_system,
     data = get_r.json()
     assert data["company_id"] == cid
     assert data["storage_override"] == payload
-    await frontend_container.shared_storage.delete(key, force_global=True)
+    await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_platform_billing_company_prices_include_tariff_unit_price(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id,
     system_user_id,
 ):
@@ -228,9 +228,9 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
         tariff_plan=TariffPlan.BASIC,
         balance=1000.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     try:
-        await frontend_container.shared_storage.set(
+        await frontend_di.shared_storage.set(
             company_key,
             json.dumps({"llm": {"gpt-test": 0.03}}),
             force_global=True,
@@ -247,7 +247,7 @@ async def test_platform_billing_company_prices_include_tariff_unit_price(
         assert data["tariff_multipliers"]["llm"]["*"] == pytest.approx(1.25)
         assert data["unit_effective"]["llm"]["gpt-test"] == pytest.approx(0.03 * 1.25)
     finally:
-        await frontend_container.shared_storage.delete(company_key, force_global=True)
+        await frontend_di.shared_storage.delete(company_key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -369,7 +369,7 @@ async def test_platform_billing_company_resolve_by_company_id(frontend_client_sy
 @pytest.mark.asyncio
 async def test_platform_billing_company_resolve_by_subdomain_slug(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -382,8 +382,7 @@ async def test_platform_billing_company_resolve_by_subdomain_slug(
         members={system_user_id: ["owner"]},
         subdomain=slug,
     )
-    await frontend_container.company_repository.set(company)
-    await frontend_container.subdomain_repository.set_mapping(slug, cid)
+    await Company.set(company)
     try:
         by_slug = await frontend_client_system.get(
             "/frontend/api/platform-billing/company-resolve",
@@ -399,8 +398,7 @@ async def test_platform_billing_company_resolve_by_subdomain_slug(
         assert mixed.status_code == 200
         assert mixed.json()["company_id"] == cid
     finally:
-        await frontend_container.subdomain_repository.delete(slug)
-        await frontend_container.company_repository.delete(cid)
+        await Company.delete_by_id(cid)
 
 
 @pytest.mark.asyncio
@@ -459,7 +457,7 @@ async def test_platform_billing_balance_grant_unknown_company_404(
 @pytest.mark.asyncio
 async def test_platform_billing_balance_grant_creates_grant_transaction(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -471,7 +469,7 @@ async def test_platform_billing_balance_grant_creates_grant_transaction(
         members={system_user_id: ["owner"]},
         balance=10.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     try:
         r = await frontend_client_system.post(
             "/frontend/api/platform-billing/balance-grant",
@@ -482,13 +480,13 @@ async def test_platform_billing_balance_grant_creates_grant_transaction(
         assert data["amount"] == 2.5
         assert data["company_id"] == cid
         assert data["balance"] == 12.5
-        co2 = await frontend_container.company_repository.get(cid)
+        co2 = await Company.get(cid)
         assert co2 is not None
         assert co2.balance == 12.5
-        txs = await frontend_container.payment_service.get_company_transactions(cid, limit=20)
+        txs = await frontend_di.payment_service.get_company_transactions(cid, limit=20)
         by_id = [t for t in txs if t.transaction_id == data["transaction_id"]]
         assert len(by_id) == 1
         assert by_id[0].payment_provider == PaymentProviderType.GRANT
         assert by_id[0].metadata["note"] == f"n-{unique_id}"
     finally:
-        await frontend_container.company_repository.delete(cid)
+        await Company.delete_by_id(cid)

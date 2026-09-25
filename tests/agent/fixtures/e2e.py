@@ -29,21 +29,21 @@ _AGENT_HTTP_TIMEOUT = Timeout(30.0, connect=10.0)
 @pytest_asyncio.fixture
 async def agent_base_url(
     auth_token: str,
-    frontend_container,
+    frontend_di,
     test_company_subdomains_initialized,
 ) -> str:
     _ = test_company_subdomains_initialized
-    return await agent_base_url_from_token(auth_token, frontend_container)
+    return await agent_base_url_from_token(auth_token, frontend_di)
 
 
 @pytest_asyncio.fixture
 async def agent_base_url_company2(
     auth_token_company2: str,
-    frontend_container,
+    frontend_di,
     test_company_subdomains_initialized,
 ) -> str:
     _ = test_company_subdomains_initialized
-    return await agent_base_url_from_token(auth_token_company2, frontend_container)
+    return await agent_base_url_from_token(auth_token_company2, frontend_di)
 
 
 @pytest_asyncio.fixture
@@ -65,11 +65,11 @@ async def agent_frontend_http_client(
 @pytest_asyncio.fixture
 async def agent_frontend_http_client_system(
     auth_token_system: str,
-    frontend_container,
+    frontend_di,
     test_company_subdomains_initialized,
 ) -> AsyncIterator[AsyncClient]:
     _ = test_company_subdomains_initialized
-    public_origin = await agent_base_url_from_token(auth_token_system, frontend_container)
+    public_origin = await agent_base_url_from_token(auth_token_system, frontend_di)
     base_url, host_headers = loopback_frontend_http_target(public_origin)
     async with AsyncClient(
         base_url=base_url,
@@ -131,7 +131,7 @@ async def agent_tunnel_ws(agent_paired_device: tuple[str, str]) -> AsyncIterator
 
 @pytest_asyncio.fixture
 async def agent_tunnel_bus_pod_b(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> AsyncIterator[None]:
     from apps.agent.tunnel_bus import start_tunnel_bus_listener, stop_tunnel_bus_listener
@@ -140,8 +140,8 @@ async def agent_tunnel_bus_pod_b(
     previous_hostname = os.environ.get("HOSTNAME")
     os.environ["HOSTNAME"] = pod_name
     await stop_tunnel_bus_listener()
-    await frontend_container.redis_client.connect()
-    await start_tunnel_bus_listener(frontend_container.redis_client)
+    await frontend_di.redis_client.connect()
+    await start_tunnel_bus_listener(frontend_di.redis_client)
     try:
         yield
     finally:

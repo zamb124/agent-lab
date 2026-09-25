@@ -4,22 +4,24 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from apps.office.container import OfficeContainer
-from apps.office.db.models import OfficeDocumentBinding
+from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.models.api import OfficeDocumentItem, OfficeDocumentRagIndexStatus
+from apps.office.services.catalog_rag_index_service import OfficeCatalogRagIndexService
 from core.context import get_context
 from core.files.create_spec import FileSourceKind
+from core.files.models import FileRecord
 from core.files.retention import FileRetentionKind
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.rag.indexable import effective_rag_file_category, is_rag_indexable_file_category
-from core.types import JsonObject
 
 logger = get_logger(__name__)
 
 
 async def binding_to_item(
-    container: OfficeContainer,
+    files_service: FilesService,
+    catalog_rag_index_service: OfficeCatalogRagIndexService,
     row: OfficeDocumentBinding,
     users_by_id: dict[str, User] | None = None,
     *,
@@ -28,11 +30,13 @@ async def binding_to_item(
 ) -> OfficeDocumentItem:
     resolved_rag_status: OfficeDocumentRagIndexStatus | None = rag_index_status
     if resolve_rag_index_status:
-        status_by_file_id = await _rag_index_status_by_file_id(container, [row])
+        status_by_file_id = await _rag_index_status_by_file_id(
+            catalog_rag_index_service, [row]
+        )
         resolved_rag_status = status_by_file_id.get(row.file_id)
     author = users_by_id.get(row.created_by_user_id) if users_by_id else None
     if author is None:
-        loaded = await container.user_repository.get(row.created_by_user_id)
+        loaded = await User.get(row.created_by_user_id)
         if loaded is not None:
             author = loaded
     if author is not None:
@@ -41,7 +45,7 @@ async def binding_to_item(
     else:
         display_name = row.created_by_user_id
         avatar_url = None
-    file_record = await container.file_repository.get(row.file_id)
+    file_record = await FileRecord.get(row.file_id)
     if file_record is None:
         logger.warning(
             "office.binding_file_missing",
@@ -65,7 +69,7 @@ async def binding_to_item(
             created_by_avatar_url=avatar_url,
             rag_index_status=resolved_rag_status,
         )
-    file_record = await container.files_service.promote_retention(
+    file_record = await files_service.promote_retention(
         row.file_id,
         retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
         source_kind=FileSourceKind.OFFICE_DOCUMENT,
@@ -89,7 +93,7 @@ async def binding_to_item(
 
 
 async def _rag_index_status_by_file_id(
-    container: OfficeContainer,
+    catalog_rag_index_service: OfficeCatalogRagIndexService,
     rows: list[OfficeDocumentBinding],
 ) -> dict[str, OfficeDocumentRagIndexStatus | None]:
     """Per-file RAG status: null если каталог без индекса; иначе ready/pending/failed/absent.
@@ -111,7 +115,7 @@ async def _rag_index_status_by_file_id(
     catalog_ids = {row.catalog_id for row in rows}
     enabled_catalog_ids: set[str] = set()
     for catalog_id in catalog_ids:
-        catalog = await container.catalog_repository.get(
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(
             catalog_id,
             company_id,
             workspace_namespace,
@@ -126,7 +130,7 @@ async def _rag_index_status_by_file_id(
     for row in rows:
         if row.catalog_id not in enabled_catalog_ids:
             continue
-        file_record = await container.file_repository.get(row.file_id)
+        file_record = await FileRecord.get(row.file_id)
         document_name = file_record.original_name if file_record is not None else row.title
         if not is_rag_indexable_file_category(
             effective_rag_file_category(
@@ -141,7 +145,7 @@ async def _rag_index_status_by_file_id(
     if not indexable_rows:
         return status_by_file_id
 
-    buckets = await container.catalog_rag_index_service.batch_status_buckets(
+    buckets = await catalog_rag_index_service.batch_status_buckets(
         [row.file_id for row in indexable_rows],
     )
     for row in indexable_rows:
@@ -153,21 +157,23 @@ async def _rag_index_status_by_file_id(
 
 
 async def bindings_to_items(
-    container: OfficeContainer,
+    files_service: FilesService,
+    catalog_rag_index_service: OfficeCatalogRagIndexService,
     rows: list[OfficeDocumentBinding],
 ) -> list[OfficeDocumentItem]:
     user_ids = {row.created_by_user_id for row in rows}
     users_by_id: dict[str, User] = {}
     for uid in user_ids:
-        loaded = await container.user_repository.get(uid)
+        loaded = await User.get(uid)
         if loaded is not None:
             users_by_id[uid] = loaded
-    rag_status_by_file_id = await _rag_index_status_by_file_id(container, rows)
+    rag_status_by_file_id = await _rag_index_status_by_file_id(catalog_rag_index_service, rows)
     items: list[OfficeDocumentItem] = []
     for row in rows:
         items.append(
             await binding_to_item(
-                container,
+                files_service,
+                catalog_rag_index_service,
                 row,
                 users_by_id,
                 rag_index_status=rag_status_by_file_id.get(row.file_id),
@@ -175,25 +181,6 @@ async def bindings_to_items(
             )
         )
     return items
-
-
-async def record_document_event(
-    container: OfficeContainer,
-    *,
-    file_id: str,
-    company_id: str,
-    event_type: str,
-    user_id: str,
-    payload: JsonObject | None = None,
-) -> None:
-    event_payload: JsonObject = payload if payload is not None else {}
-    _ = await container.document_event_repository.append(
-        file_id=file_id,
-        company_id=company_id,
-        event_type=event_type,
-        user_id=user_id,
-        payload=event_payload,
-    )
 
 
 def share_expires_at(expires_in_hours: int | None) -> datetime | None:

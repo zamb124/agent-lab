@@ -27,7 +27,6 @@ from core.ai.free_pool import (
     sort_platform_free_records,
 )
 from core.ai.llm_models_service import LLMModelsService
-from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.ai.models import AIModelRecord
 from core.ai.provider_error import (
     AIProviderErrorClass,
@@ -54,7 +53,7 @@ from core.config.llm_openai_compat import (
     llm_provider_block,
     provider_is_configured_for_free_pool,
 )
-from core.db.storage import Storage
+from core.db.oxyde_runtime import init_oxyde_databases
 from core.http.egress_route_preference import (
     egress_prefer_proxy_delete,
     normalized_http_origin,
@@ -213,15 +212,15 @@ def configured_free_pool_providers() -> tuple[str, ...]:
     return tuple(configured)
 
 
-def live_model_service() -> LLMModelsService:
+async def live_model_service() -> LLMModelsService:
     settings = get_settings()
     db_url = settings.database.shared_url
     if not db_url:
-        pytest.skip("database.shared_url не настроен для real AIModelCatalogRepository")
-    repository = AIModelCatalogRepository(Storage(db_url=db_url))
+        pytest.skip("database.shared_url не настроен")
+    await init_oxyde_databases(default_url=db_url, shared_url=db_url)
     scheduler_client = SchedulerClient(ServiceClient())
     redis_client = RedisClient(settings.database.redis_url)
-    return LLMModelsService(repository, scheduler_client, redis_client)
+    return LLMModelsService(scheduler_client, redis_client)
 
 
 def _skip_or_raise_catalog_error(provider: str, exc: BaseException) -> NoReturn:
@@ -236,7 +235,7 @@ def _skip_or_raise_catalog_error(provider: str, exc: BaseException) -> NoReturn:
 
 
 async def discover_live_catalog(provider: str) -> list[AIModelRecord]:
-    service = live_model_service()
+    service = await live_model_service()
     try:
         return await service.discover_model_records_by_provider(provider)
     except (httpx.HTTPStatusError, AIProviderAdapterError) as exc:
@@ -244,7 +243,7 @@ async def discover_live_catalog(provider: str) -> list[AIModelRecord]:
 
 
 async def fetch_live_model_ids(provider: str) -> list[str]:
-    service = live_model_service()
+    service = await live_model_service()
     try:
         return await service.fetch_models_by_provider(provider)
     except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
@@ -252,7 +251,7 @@ async def fetch_live_model_ids(provider: str) -> list[str]:
 
 
 async def fetch_live_model_records(provider: str) -> list[AIModelRecord]:
-    service = live_model_service()
+    service = await live_model_service()
     try:
         return await service.fetch_model_records_by_provider(provider)
     except (httpx.HTTPStatusError, AIProviderAdapterError) as extra:
@@ -550,7 +549,7 @@ async def probe_openai_compat_provider(provider: str) -> ProviderLiveProbe:
             smoke_model=None,
         )
 
-    service = live_model_service()
+    service = await live_model_service()
     smoke_model = _configured_smoke_model_or_none(provider)
     try:
         records = await service.discover_model_records_by_provider(provider)

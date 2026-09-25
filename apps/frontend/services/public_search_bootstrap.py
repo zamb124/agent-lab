@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from core.config import get_settings
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
 from core.identity.system_bootstrap import ensure_system_company_exists
 from core.logging import get_logger
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
+from core.models.context_models import Context
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.i18n_models import Language
 from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.search import (
@@ -19,9 +19,6 @@ from core.search import (
     public_search_branch_id,
     public_search_embed_id,
 )
-
-if TYPE_CHECKING:
-    from apps.frontend.container import FrontendContainer
 
 logger = get_logger(__name__)
 
@@ -92,10 +89,8 @@ def _system_user() -> User:
     )
 
 
-async def _set_system_context(container: "FrontendContainer", *, session_id: str) -> Company:
+async def _set_system_context(*, session_id: str) -> Company:
     company = await ensure_system_company_exists(
-        company_repository=container.company_repository,
-        subdomain_repository=container.subdomain_repository,
     )
     _ = set_context(
         Context(
@@ -110,21 +105,18 @@ async def _set_system_context(container: "FrontendContainer", *, session_id: str
     return company
 
 
-async def ensure_public_search_embed_configs(
-    container: "FrontendContainer",
-) -> dict[PublicSearchMode, EmbedConfig]:
+async def ensure_public_search_embed_configs() -> dict[PublicSearchMode, EmbedConfig]:
     """Создаёт или обновляет фиксированные embed-конфигурации public search."""
-    _ = await _set_system_context(container, session_id="public_search_embed_bootstrap")
+    _ = await _set_system_context(session_id="public_search_embed_bootstrap")
     try:
-        cfg_repo = container.embed_config_repository
-        map_repo = container.embed_mapping_repository
         now = datetime.now(timezone.utc)
         configs: dict[PublicSearchMode, EmbedConfig] = {}
 
         for spec in PUBLIC_SEARCH_EMBED_SPECS:
-            previous = await cfg_repo.get(spec.embed_id)
+            previous = await EmbedConfig.get(spec.embed_id)
             config = EmbedConfig(
                 embed_id=spec.embed_id,
+                company_id=SYSTEM_COMPANY_ID,
                 name=spec.name,
                 flow_id=PUBLIC_SEARCH_FLOW_ID,
                 branch_id=spec.branch_id,
@@ -150,10 +142,7 @@ async def ensure_public_search_embed_configs(
                 ),
                 updated_at=now,
             )
-            _ = await cfg_repo.set(config)
-            _ = await map_repo.set(
-                EmbedMapping(embed_id=spec.embed_id, company_id=SYSTEM_COMPANY_ID)
-            )
+            _ = await EmbedConfig.set(config)
             configs[spec.mode] = config
             logger.info(
                 "public_search_embed_upserted",

@@ -18,9 +18,13 @@ for _k, _v in TEST_DATABASE_ENV.items():
     os.environ.setdefault(_k, _v)
 os.environ.setdefault("S3__ENABLED", "true")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
-os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
-os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID", "minioadmin")
-os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__ENDPOINT_URL", "http://localhost:19002")
+os.environ.setdefault("S3__ACCESS_KEY_ID", "minioadmin")
+os.environ.setdefault("S3__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__BUCKET_NAME", "test-bucket")
+os.environ.setdefault("S3__PROVIDER", "minio")
+
+_SYNC_DI = None
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault(
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT",
@@ -48,20 +52,7 @@ from collections.abc import AsyncIterator  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 
-import apps.sync.db.models  # noqa: E402, F401 — регистрация моделей в Base.metadata
-from apps.sync.db.base import SyncDatabase  # noqa: E402
-from apps.sync.db.repositories.call_repository import CallRepository  # noqa: E402
-from apps.sync.db.repositories.call_speech_egress_repository import (  # noqa: E402
-    CallSpeechEgressTrackRepository,
-)
-from apps.sync.db.repositories.channel_repository import ChannelRepository  # noqa: E402
-from apps.sync.db.repositories.file_repository import SyncFileRepository  # noqa: E402
-from apps.sync.db.repositories.git_resource_ref_repository import (  # noqa: E402
-    GitResourceRefRepository,
-)
-from apps.sync.db.repositories.meeting_repository import CallRecordingRepository  # noqa: E402
-from apps.sync.db.repositories.message_repository import MessageRepository  # noqa: E402
-from apps.sync.db.repositories.thread_repository import ThreadRepository  # noqa: E402
+from apps.sync import models as _sync_models  # noqa: E402, F401
 from core.models.identity_models import Company, User  # noqa: E402
 from core.utils.tokens import get_token_service  # noqa: E402
 
@@ -118,8 +109,8 @@ def sync_db_url() -> str:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
-    """Создаёт SyncDatabase; схема применяется заранее в make test-up (scripts.test_migrate).
+async def sync_database(sync_db_url: str) -> AsyncIterator[None]:
+    """Поднимает пулы Oxyde. Схема применяется заранее в make test-up.
 
     Фикстура ничего не мигрирует: параллельные xdist-воркеры не должны конкурировать
     за Alembic. Актуальность head проверяет session-фикстура setup_database_before_tests.
@@ -129,25 +120,53 @@ async def sync_database(sync_db_url: str) -> AsyncIterator[SyncDatabase]:
     os.environ["DATABASE__SYNC_URL"] = sync_db_url
     config_base._settings_instance = None
 
-    from apps.sync.container import reset_sync_container
-
-    reset_sync_container()
-
-    db = SyncDatabase(sync_db_url)
-
-    from apps.sync.container import get_sync_container
+    from apps.sync.di import SyncDi
     from core.billing import set_billing_service
+    from core.config import get_settings
+    from core.di import open_di
+    from core.di.kit import ProcessIdentity
+    from core.files.urls import resolve_files_route_segment
 
-    container = get_sync_container()
-    set_billing_service(container.billing_service)
+    settings = get_settings()
+    shared_url = settings.database.shared_url
+    if shared_url is None or shared_url == "":
+        raise ValueError("database.shared_url is not set")
 
-    yield db
+    async with open_di(
+        SyncDi,
+        settings=settings,
+        identity=ProcessIdentity(
+            service_name="sync",
+            files_route_segment=resolve_files_route_segment("sync"),
+        ),
+        database="sync_url",
+    ) as di:
+        set_billing_service(di.billing_service)
+        global _SYNC_DI
+        _SYNC_DI = di
+        yield
+        _SYNC_DI = None
+
+
+def require_sync_di():
+    from apps.sync.di import SyncDi
+
+    di = _SYNC_DI
+    if not isinstance(di, SyncDi):
+        raise RuntimeError("Sync DI is not open")
+    return di
+
+
+@pytest.fixture()
+def sync_di(sync_database: None):
+    _ = sync_database
+    return require_sync_di()
 
 
 @pytest_asyncio.fixture()
-async def sync_db_clean(sync_database: SyncDatabase) -> None:
+async def sync_db_clean(sync_database: None) -> None:
     """No-op: тесты изолированы по company_id и уникальным entity ID (параллельный xdist)."""
-    pass
+    _ = sync_database
 
 
 @pytest.fixture()
@@ -162,15 +181,14 @@ def sync_user2_id(unique_id: str) -> str:
 
 @pytest_asyncio.fixture()
 async def sync_auth_token(
-    sync_database: SyncDatabase,
+    sync_database: None,
     company_id: str,
     sync_user_id: str,
     sync_user2_id: str,
 ) -> str:
     """JWT для уникальной компании и пользователя (shared БД)."""
-    from apps.sync.container import get_sync_container
-
-    container = get_sync_container()
+    _ = sync_database
+    di = require_sync_di()
     company = Company(
         company_id=company_id,
         name=f"Sync test {company_id}",
@@ -178,11 +196,10 @@ async def sync_auth_token(
         members={sync_user_id: ["owner", "admin"], sync_user2_id: ["member"]},
         balance=1000.0,
     )
-    await container.company_repository.set(company)
+    await Company.set(company)
     for member_user_id, roles in company.members.items():
         await set_test_company_member_roles(
-            container.company_repository,
-            container.authz_service,
+            di.authz_service,
             company_id=company_id,
             user_id=member_user_id,
             roles=roles,
@@ -194,7 +211,7 @@ async def sync_auth_token(
         companies={company_id: ["owner", "admin"]},
         active_company_id=company_id,
     )
-    await container.user_repository.set(user)
+    await User.set(user)
     user2 = User(
         user_id=sync_user2_id,
         name="Sync test user2",
@@ -202,7 +219,7 @@ async def sync_auth_token(
         companies={company_id: ["member"]},
         active_company_id=company_id,
     )
-    await container.user_repository.set(user2)
+    await User.set(user2)
     token_service = get_token_service()
     return token_service.create_token(sync_user_id, company_id=company_id)
 
@@ -212,11 +229,9 @@ async def sync_auth_token_user2(
     sync_auth_token: str,
     company_id: str,
     sync_user2_id: str,
-    sync_database: SyncDatabase,
+    sync_database: None,
 ) -> str:
-    from apps.sync.container import get_sync_container
-
-    get_sync_container()
+    _ = sync_database
     token_service = get_token_service()
     return token_service.create_token(sync_user2_id, company_id=company_id)
 
@@ -243,52 +258,11 @@ def company_id(unique_id: str) -> str:
     return f"test_company_{unique_id}"
 
 
-@pytest.fixture()
-def channel_repo(sync_database: SyncDatabase) -> ChannelRepository:
-    return ChannelRepository(db=sync_database)
-
 
 @pytest.fixture()
-def thread_repo(sync_database: SyncDatabase) -> ThreadRepository:
-    return ThreadRepository(db=sync_database)
-
-
-@pytest.fixture()
-def message_repo(sync_database: SyncDatabase) -> MessageRepository:
-    return MessageRepository(db=sync_database)
-
-
-@pytest.fixture()
-def file_repo(sync_database: SyncDatabase) -> SyncFileRepository:
-    return SyncFileRepository(db=sync_database)
-
-
-@pytest.fixture()
-def git_ref_repo(sync_database: SyncDatabase) -> GitResourceRefRepository:
-    return GitResourceRefRepository(db=sync_database)
-
-
-@pytest.fixture()
-def call_repo(sync_database: SyncDatabase) -> CallRepository:
-    return CallRepository(db=sync_database)
-
-
-@pytest.fixture()
-def call_recording_repo(sync_database: SyncDatabase) -> CallRecordingRepository:
-    return CallRecordingRepository(db=sync_database)
-
-
-@pytest.fixture()
-def speech_egress_repo(sync_database: SyncDatabase) -> CallSpeechEgressTrackRepository:
-    return CallSpeechEgressTrackRepository(db=sync_database)
-
-
-@pytest.fixture()
-def sync_user_repository(sync_database: SyncDatabase):
-    """UserRepository shared БД (тот же экземпляр, что использует op_*)."""
-    from apps.sync.container import get_sync_container
-
-    return get_sync_container().user_repository
+def sync_user_repository(sync_database: None) -> None:
+    """Shared БД для записей User в sync-тестах."""
+    _ = sync_database
 
 
 @pytest_asyncio.fixture()

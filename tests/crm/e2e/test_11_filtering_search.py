@@ -76,7 +76,7 @@ class TestFilteringSearch:
         assert create_type.status_code == 200
 
         create_first = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Typed A {unique_id}",
@@ -95,7 +95,7 @@ class TestFilteringSearch:
         assert create_first.status_code == 200
 
         create_second = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Typed B {unique_id}",
@@ -124,7 +124,7 @@ class TestFilteringSearch:
         today = date.today().isoformat()
         test_user_id = f"user_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Note {unique_id}",
@@ -176,7 +176,7 @@ class TestFilteringSearch:
         assert create_type.status_code == 200
 
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Task {unique_id}",
@@ -185,7 +185,7 @@ class TestFilteringSearch:
             headers=auth_headers_system,
         )
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Task low {unique_id}",
@@ -235,7 +235,7 @@ class TestFilteringSearch:
         assert create_type.status_code == 200
 
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": type_id, "name": f"Task invalid op {unique_id}", "attributes": {"done": True}},
             headers=auth_headers_system,
         )
@@ -401,7 +401,7 @@ class TestFilteringSearch:
             params={"query": "x"},
             headers=auth_headers_system,
         )
-        assert list_resp.status_code == 405
+        assert list_resp.status_code == 404
         assert search_resp.status_code == 404
 
 
@@ -415,7 +415,7 @@ class TestSearchContract:
     ) -> None:
         marker = f"search_modes_{unique_id}"
         create_response = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Search {marker}",
@@ -464,7 +464,7 @@ class TestSearchContract:
         auth_headers_system: dict[str, str],
     ) -> None:
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"Mention_{unique_id}", "namespace": "default"},
             headers=auth_headers_system,
         )

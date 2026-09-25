@@ -9,8 +9,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from apps.crm.container import get_crm_container
-from apps.crm.db.models import CRMTask
+from apps.crm.models.task import CRMTask
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import (
     build_auth_token_for_company,
     set_crm_context,
@@ -30,6 +30,8 @@ async def scheduled_namespace_integration_unified_sync(
     namespace: str,
     provider_id: str,
     oauth_user_id: str,
+    *,
+    di: Di,
 ) -> JsonObject:
     ns = namespace.strip()
     pid = provider_id.strip()
@@ -41,11 +43,8 @@ async def scheduled_namespace_integration_unified_sync(
     if not uid:
         raise ValueError("oauth_user_id is required")
 
-    container = get_crm_container()
-    repo = container.task_repository
-
     for job in ("entities", "custom_fields"):
-        existing = await repo.find_active_by_data_keys(
+        existing = await CRMTask.active_by_data_keys(
             "namespace_integration_job",
             {"provider_id": pid, "job": job},
             ns,
@@ -55,7 +54,7 @@ async def scheduled_namespace_integration_unified_sync(
             logger.info("crm.scheduled_namespace_integration_unified_sync", job=job, task_id=existing.task_id)
             skip_now = datetime.now(timezone.utc)
             skip_tid = str(uuid.uuid4())
-            _ = await repo.create(
+            _ = await CRMTask.create(
                 CRMTask(
                     task_id=skip_tid,
                     task_type="scheduled_namespace_integration_sync",
@@ -86,7 +85,7 @@ async def scheduled_namespace_integration_unified_sync(
 
     sync_task_id = str(uuid.uuid4())
     sync_started = datetime.now(timezone.utc)
-    _ = await repo.create(
+    _ = await CRMTask.create(
         CRMTask(
             task_id=sync_task_id,
             task_type="scheduled_namespace_integration_sync",
@@ -101,7 +100,7 @@ async def scheduled_namespace_integration_unified_sync(
         )
     )
 
-    auth_token = await build_auth_token_for_company(company_id, uid)
+    auth_token = await build_auth_token_for_company(company_id, uid, authz=di.authz_service)
     await set_crm_context(
         company_id,
         ns,
@@ -111,9 +110,9 @@ async def scheduled_namespace_integration_unified_sync(
     )
 
     try:
-        connector = container.integration_registry.get(pid)
+        connector = di.integration_registry.get(pid)
         entities_stats = await connector.sync_entities(ns)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             sync_task_id,
             company_id,
             status="running",
@@ -130,7 +129,7 @@ async def scheduled_namespace_integration_unified_sync(
         done_patch["fields_stats"] = {key: value for key, value in fields_stats.items()}
 
         done_at = datetime.now(timezone.utc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             sync_task_id,
             company_id,
             status="completed",
@@ -157,7 +156,7 @@ async def scheduled_namespace_integration_unified_sync(
         }
     except Exception as exc:
         fail_at = datetime.now(timezone.utc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             sync_task_id,
             company_id,
             status="failed",

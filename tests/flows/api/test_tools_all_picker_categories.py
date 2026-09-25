@@ -56,18 +56,18 @@ def _flow_config(flow_id: str) -> FlowConfig:
     )
 
 
-async def _persist_tool(container, tool: ToolReference) -> None:
-    await container.tool_repository.set(tool)
-    await container.flow_access_service.sync_tool_saved(
+async def _persist_tool(di, tool: ToolReference) -> None:
+    await ToolReference.set(tool)
+    await di.flow_access_service.sync_tool_saved(
         tool.tool_id,
         company_id=require_active_company().company_id,
         permission=[],
     )
 
 
-async def _persist_flow(container, config: FlowConfig) -> None:
-    await container.flow_repository.set(config)
-    await container.flow_access_service.sync_flow_saved(
+async def _persist_flow(di, config: FlowConfig) -> None:
+    await FlowConfig.create_version(config)
+    await di.flow_access_service.sync_flow_saved(
         config,
         company_id=require_active_company().company_id,
         owner_user_id=require_context().user.user_id,
@@ -98,9 +98,9 @@ async def test_tools_all_rejects_limit_above_page_max(client, app):
 
 
 @pytest.mark.asyncio
-async def test_tools_all_q_filters_before_pagination(client, app, unique_id, container):
+async def test_tools_all_q_filters_before_pagination(client, app, unique_id, di):
     tool_id = f"picker_search_{unique_id}"
-    await _persist_tool(container, _inline_tool_reference(tool_id))
+    await _persist_tool(di, _inline_tool_reference(tool_id))
 
     body = await _get_tools_all(client, picker_category="code", q=tool_id)
     ids = {item["tool_id"] for item in body["items"]}
@@ -110,17 +110,17 @@ async def test_tools_all_q_filters_before_pagination(client, app, unique_id, con
 
 @pytest.mark.asyncio
 async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(
-    client, app, unique_id, container
+    client, app, unique_id, di
 ):
     """Flows вкладка и picker_category=all сохраняют flow при MCP > page size."""
     flow_id = f"picker_flow_{unique_id}"
     code_tool_id = f"picker_code_{unique_id}"
     server_id = f"picker_mcp_{unique_id}"
 
-    await _persist_flow(container, _flow_config(flow_id))
-    await _persist_tool(container, _inline_tool_reference(code_tool_id))
+    await _persist_flow(di, _flow_config(flow_id))
+    await _persist_tool(di, _inline_tool_reference(code_tool_id))
     for index in range(_MCP_OVERFLOW):
-        await _persist_tool(container, _mcp_tool_reference(server_id, f"bulk_tool_{index}"))
+        await _persist_tool(di, _mcp_tool_reference(server_id, f"bulk_tool_{index}"))
 
     flow_body = await _get_tools_all(client, picker_category="flow", q=flow_id)
     flow_ids = {item["tool_id"] for item in flow_body["items"]}
@@ -134,10 +134,10 @@ async def test_picker_category_flow_is_not_truncated_by_many_mcp_tools(
 
 @pytest.mark.asyncio
 async def test_picker_flow_item_contains_complete_flow_tool_schema(
-    client, app, unique_id, container
+    client, app, unique_id, di
 ):
     flow_id = f"picker_contract_{unique_id}"
-    await _persist_flow(container, _flow_config(flow_id))
+    await _persist_flow(di, _flow_config(flow_id))
 
     body = await _get_tools_all(client, picker_category="flow", q=flow_id)
     item = next(entry for entry in body["items"] if entry["tool_id"] == flow_id)
@@ -157,7 +157,7 @@ async def test_picker_flow_item_contains_complete_flow_tool_schema(
 
 @pytest.mark.asyncio
 async def test_picker_category_code_total_ignores_mcp_batch(
-    client, app, unique_id, container
+    client, app, unique_id, di
 ):
     """Пачка MCP не увеличивает picker_category=code total и не попадает в items."""
     before = await client.get(
@@ -169,20 +169,20 @@ async def test_picker_category_code_total_ignores_mcp_batch(
 
     server_id = f"picker_mcp_bulk_{unique_id}"
     for index in range(_MCP_OVERFLOW):
-        await _persist_tool(container, _mcp_tool_reference(server_id, f"bulk_tool_{index}"))
+        await _persist_tool(di, _mcp_tool_reference(server_id, f"bulk_tool_{index}"))
 
     exclude_ids = {
         row.tool_id
-        for row in await container.tool_repository.list_index(mcp="exclude")
+        for row in await ToolReference.list_index(mcp="exclude")
     }
     only_ids = {
         row.tool_id
-        for row in await container.tool_repository.list_index(mcp="only")
+        for row in await ToolReference.list_index(mcp="only")
     }
     mcp_tool_id = mcp_tool_reference_id(server_id, "bulk_tool_0")
     assert mcp_tool_id in only_ids
     assert mcp_tool_id not in exclude_ids
-    assert await container.tool_repository.count_index(mcp="exclude") == len(exclude_ids)
+    assert await ToolReference.count_index(mcp="exclude") == len(exclude_ids)
 
     after = await client.get(
         f"/flows/api/v1/tools/all?limit={_TOOLS_ALL_PAGE}&offset=0&picker_category=code"
@@ -196,15 +196,15 @@ async def test_picker_category_code_total_ignores_mcp_batch(
 
 
 @pytest.mark.asyncio
-async def test_picker_category_filters_code_and_mcp(client, app, unique_id, container):
+async def test_picker_category_filters_code_and_mcp(client, app, unique_id, di):
     """picker_category=code и picker_category=mcp возвращают непересекающиеся наборы."""
     code_tool_id = f"picker_inline_{unique_id}"
     server_id = f"picker_mcp_only_{unique_id}"
     mcp_tool_name = "only_mcp_tool"
     mcp_tool_id = mcp_tool_reference_id(server_id, mcp_tool_name)
 
-    await _persist_tool(container, _inline_tool_reference(code_tool_id))
-    await _persist_tool(container, _mcp_tool_reference(server_id, mcp_tool_name))
+    await _persist_tool(di, _inline_tool_reference(code_tool_id))
+    await _persist_tool(di, _mcp_tool_reference(server_id, mcp_tool_name))
 
     code_body = await _get_tools_all(client, picker_category="code", q=code_tool_id)
     code_ids = {item["tool_id"] for item in code_body["items"]}
@@ -220,21 +220,21 @@ async def test_picker_category_filters_code_and_mcp(client, app, unique_id, cont
 
 @pytest.mark.asyncio
 async def test_picker_category_all_skips_agent_toolkit_lookup(
-    client, app, monkeypatch, unique_id, container
+    client, app, monkeypatch, unique_id, di
 ):
     """picker_category=all не вызывает N+1 lookup agent_toolkit_ids."""
     flow_id = f"picker_fast_flow_{unique_id}"
-    await _persist_flow(container, _flow_config(flow_id))
+    await _persist_flow(di, _flow_config(flow_id))
 
     async def _fail_toolkit_lookup(*_args, **_kwargs):
         raise AssertionError("picker endpoint must not resolve agent_toolkit_ids")
 
     monkeypatch.setattr(
-        "apps.flows.realtime.tool_operations._toolkit_ids_for_tool",
+        "apps.flows.src.models.agent_toolkit.AgentToolkit.get_toolkit_ids_for_tool",
         _fail_toolkit_lookup,
     )
     monkeypatch.setattr(
-        "apps.flows.realtime.tool_operations._toolkit_ids_for_flow",
+        "apps.flows.src.models.agent_toolkit.AgentToolkit.get_toolkit_ids_for_flow",
         _fail_toolkit_lookup,
     )
 

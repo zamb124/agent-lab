@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import get_container
+from apps.flows.src.models import FlowConfig
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -24,11 +24,11 @@ def _system_context(*, user_id: str = "test_user", namespace: str = "default", c
 
 
 @pytest.fixture(autouse=True)
-async def ensure_demo_sales_namespace(container) -> None:
+async def ensure_demo_sales_namespace(di) -> None:
     """Scoped demo_greeting использует namespace=sales; Check — OpenFGA tuples через NamespaceService."""
     set_context(_system_context())
     try:
-        _ = await container.namespace_service.get_or_create(
+        _ = await di.namespace_service.get_or_create(
             "sales",
             description="Demo sales namespace for variable scope tests",
         )
@@ -37,22 +37,22 @@ async def ensure_demo_sales_namespace(container) -> None:
 
 
 @pytest.fixture(autouse=True)
-async def ensure_demo_company_variables_seeded(container) -> None:
+async def ensure_demo_company_variables_seeded(di) -> None:
     """Идемпотентный demo seed перед каждым тестом — защита от загрязнения shared keys."""
     from apps.flows.src.services.demo_company_variables import seed_demo_company_variables
 
     set_context(_system_context())
     try:
-        _ = await seed_demo_company_variables(container.variables_service, "system")
+        _ = await seed_demo_company_variables(di.variables_service, "system")
     finally:
         clear_context()
 
 
 @pytest.mark.asyncio
-async def test_demo_seed_resolves_company_name(container, app) -> None:
+async def test_demo_seed_resolves_company_name(di, app) -> None:
     set_context(_system_context())
     try:
-        resolved = await container.variables_service.resolve_for_run(
+        resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user")
         )
         assert resolved[DEMO_VARIABLE_KEYS[VariableScenario.COMPANY_STATIC]] == "Humanitec Demo"
@@ -61,10 +61,10 @@ async def test_demo_seed_resolves_company_name(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_scoped_greeting_by_namespace(container, app) -> None:
+async def test_scoped_greeting_by_namespace(di, app) -> None:
     set_context(_system_context(namespace="sales"))
     try:
-        resolved = await container.variables_service.resolve_for_run(
+        resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user", namespace="sales")
         )
         assert resolved["demo_greeting"] == "Welcome to Sales"
@@ -73,7 +73,7 @@ async def test_scoped_greeting_by_namespace(container, app) -> None:
 
     set_context(_system_context(namespace="default"))
     try:
-        resolved = await container.variables_service.resolve_for_run(
+        resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user", namespace="default")
         )
         assert resolved["demo_greeting"] == "Hello"
@@ -82,10 +82,10 @@ async def test_scoped_greeting_by_namespace(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_scoped_user_tier_by_user_id(container, app) -> None:
+async def test_scoped_user_tier_by_user_id(di, app) -> None:
     set_context(_system_context(user_id="demo-premium-user"))
     try:
-        resolved = await container.variables_service.resolve_for_run(
+        resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="demo-premium-user")
         )
         assert resolved["demo_user_tier"] == "premium"
@@ -96,10 +96,10 @@ async def test_scoped_user_tier_by_user_id(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_expression_signature_resolves(container, app) -> None:
+async def test_expression_signature_resolves(di, app) -> None:
     set_context(_system_context())
     try:
-        resolved = await container.variables_service.resolve_for_run(
+        resolved = await di.variables_service.resolve_for_run(
             ResolutionContext(company_id="system", user_id="test_user")
         )
         assert resolved["signature"] == "-- Humanitec Demo Support"
@@ -109,10 +109,10 @@ async def test_expression_signature_resolves(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_shared_secret_in_flow_variables(container, app) -> None:
+async def test_shared_secret_in_flow_variables(di, app) -> None:
     set_context(_system_context())
     try:
-        flow = await container.flow_factory.get_flow("example_react", branch_id="default")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="default", tool_registry=di.tool_registry)
         assert flow is not None
         assert flow.variables["support_api_key"] == "demo-shared-api-key-12345"
         assert flow.variables["company_name"] == "Humanitec Demo"
@@ -121,12 +121,12 @@ async def test_shared_secret_in_flow_variables(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_branch_variables_replace_mode(container, app) -> None:
+async def test_branch_variables_replace_mode(di, app) -> None:
     set_context(_system_context())
     try:
-        flow_config = await container.flow_repository.get("example_react")
+        flow_config = await FlowConfig.get_latest("example_react")
         assert flow_config is not None
-        effective = container.flow_factory.apply_branch(flow_config, "variables_replace")
+        effective = di.flow_factory.apply_branch(flow_config, "variables_replace")
         assert effective["variables"]["max_response_length"] == "100"
         assert "company_name" not in effective["variables"]
     finally:
@@ -134,17 +134,16 @@ async def test_branch_variables_replace_mode(container, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_example_graph_greeting_uses_scoped_variables(app, unique_id: str) -> None:
+async def test_example_graph_greeting_uses_scoped_variables(app, unique_id: str, di) -> None:
     set_context(_system_context(namespace="sales"))
     try:
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id="example_graph",
             unique_id=unique_id,
             content="привет",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.get("route") == "greeting"
         response = str(result.get("response", ""))
         assert "Welcome to Sales" in response or "GREETING" in response
@@ -153,10 +152,10 @@ async def test_example_graph_greeting_uses_scoped_variables(app, unique_id: str)
 
 
 @pytest.mark.asyncio
-async def test_secret_keys_audit_list(container, app) -> None:
+async def test_secret_keys_audit_list(di, app) -> None:
     set_context(_system_context())
     try:
-        secret_keys = await container.variables_service.secret_variable_keys()
+        secret_keys = await di.variables_service.secret_variable_keys()
         assert "support_api_key" in secret_keys
         assert "private_owner_token" in secret_keys
     finally:

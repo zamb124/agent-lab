@@ -1,5 +1,5 @@
 """
-Тесты OAuthService и IntegrationCredentialRepository.
+Тесты OAuthService и IntegrationCredential.
 
 Используются реальные PostgreSQL (shared БД через conftest) для repository,
 и mock-storage + mock-HTTP для OAuthService.
@@ -18,7 +18,6 @@ import pytest
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
 from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_referer
-from core.integrations.repository import IntegrationCredentialRepository
 
 
 class FakeHttpClient:
@@ -113,14 +112,14 @@ class FakeStorage:
         return self._data.pop(key, None) is not None
 
 
-@pytest.fixture()
-def credential_repository(app) -> IntegrationCredentialRepository:
+@pytest.fixture(autouse=True)
+def credential_repository(app: object) -> None:
+    _ = app
     from core.config import get_settings
     settings = get_settings()
     shared_url = settings.database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для тестов OAuth")
-    return IntegrationCredentialRepository(db_url=shared_url)
 
 
 @pytest.fixture()
@@ -129,13 +128,14 @@ def fake_storage() -> FakeStorage:
 
 
 @pytest.fixture()
-def oauth_service(credential_repository, fake_storage) -> OAuthService:
-    return OAuthService(repository=credential_repository, storage=fake_storage)
+def oauth_service(app: object, fake_storage) -> OAuthService:
+    _ = app
+    return OAuthService(storage=fake_storage)
 
 
-class TestIntegrationCredentialRepository:
+class TestIntegrationCredential:
     @pytest.mark.asyncio
-    async def test_upsert_and_get(self, credential_repository: IntegrationCredentialRepository, unique_id: str) -> None:
+    async def test_upsert_and_get(self, unique_id: str) -> None:
         now = datetime.now(timezone.utc)
         cred = IntegrationCredential(
             credential_id=f"cred-{unique_id}",
@@ -152,21 +152,46 @@ class TestIntegrationCredentialRepository:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=cred.company_id,
             user_id=cred.user_id,
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is not None
         assert loaded.credential_id == cred.credential_id
         assert loaded.access_token == "access-123"
         assert loaded.metadata == {"key": "value"}
 
+        owned = await IntegrationCredential.find_for_user(
+            company_id=cred.company_id,
+            user_id=cred.user_id,
+            credential_id=cred.credential_id,
+        )
+        assert owned is not None
+        assert owned.credential_id == cred.credential_id
+        assert await IntegrationCredential.find_for_user(
+            company_id=cred.company_id,
+            user_id=f"other-{unique_id}",
+            credential_id=cred.credential_id,
+        ) is None
+        assert await IntegrationCredential.find_for_user(
+            company_id=f"other-{unique_id}",
+            user_id=cred.user_id,
+            credential_id=cred.credential_id,
+        ) is None
+        with pytest.raises(ValueError, match="credential_id cannot be empty"):
+            _ = await IntegrationCredential.find_for_user(
+                company_id=cred.company_id,
+                user_id=cred.user_id,
+                credential_id="",
+            )
+
     @pytest.mark.asyncio
-    async def test_upsert_updates_existing(self, credential_repository: IntegrationCredentialRepository, unique_id: str) -> None:
+    async def test_upsert_updates_existing(self, unique_id: str) -> None:
         now = datetime.now(timezone.utc)
         cred = IntegrationCredential(
             credential_id=f"cred-{unique_id}",
@@ -178,31 +203,44 @@ class TestIntegrationCredentialRepository:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         updated = cred.model_copy(update={
             "access_token": "new-token",
             "updated_at": datetime.now(timezone.utc),
         })
-        await credential_repository.upsert(updated)
+        await IntegrationCredential.upsert_by_credential_id(updated)
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=cred.company_id,
             user_id=cred.user_id,
             provider=IntegrationProvider.GOOGLE,
             service="calendar",
+            mailbox_binding_id=None,
         )
         assert loaded is not None
         assert loaded.access_token == "new-token"
+        assert loaded.credential_id == cred.credential_id
+
+        clash = cred.model_copy(update={"credential_id": f"other-{unique_id}"})
+        with pytest.raises(ValueError, match="already exists"):
+            await IntegrationCredential.upsert_by_credential_id(clash)
+        foreign = cred.model_copy(update={"company_id": f"other-{unique_id}"})
+        with pytest.raises(ValueError, match="another company or user"):
+            await IntegrationCredential.upsert_by_credential_id(foreign)
+        with pytest.raises(ValueError, match="credential_id cannot be empty"):
+            await IntegrationCredential.upsert_by_credential_id(
+                cred.model_copy(update={"credential_id": ""})
+            )
 
     @pytest.mark.asyncio
-    async def test_list_by_user(self, credential_repository: IntegrationCredentialRepository, unique_id: str) -> None:
+    async def test_list_by_user(self, unique_id: str) -> None:
         now = datetime.now(timezone.utc)
         company_id = f"company-{unique_id}"
         user_id = f"user-{unique_id}"
 
         for svc in ("calendar", "docs"):
-            await credential_repository.upsert(IntegrationCredential(
+            await IntegrationCredential.upsert_by_credential_id(IntegrationCredential(
                 credential_id=f"cred-{unique_id}-{svc}",
                 company_id=company_id,
                 user_id=user_id,
@@ -213,15 +251,15 @@ class TestIntegrationCredentialRepository:
                 updated_at=now,
             ))
 
-        items = await credential_repository.list_by_user(company_id=company_id, user_id=user_id)
+        items = await IntegrationCredential.list_by_user(company_id=company_id, user_id=user_id)
         assert len(items) == 2
         services = {c.service for c in items}
         assert services == {"calendar", "docs"}
 
     @pytest.mark.asyncio
-    async def test_delete_by_user_provider_service(self, credential_repository: IntegrationCredentialRepository, unique_id: str) -> None:
+    async def test_delete_by_user_provider_service(self, unique_id: str) -> None:
         now = datetime.now(timezone.utc)
-        await credential_repository.upsert(IntegrationCredential(
+        await IntegrationCredential.upsert_by_credential_id(IntegrationCredential(
             credential_id=f"cred-del-{unique_id}",
             company_id=f"company-{unique_id}",
             user_id=f"user-{unique_id}",
@@ -232,7 +270,7 @@ class TestIntegrationCredentialRepository:
             updated_at=now,
         ))
 
-        deleted = await credential_repository.delete_by_user_provider_service(
+        deleted = await IntegrationCredential.delete_by_user_provider_service(
             company_id=f"company-{unique_id}",
             user_id=f"user-{unique_id}",
             provider=IntegrationProvider.GOOGLE,
@@ -240,21 +278,31 @@ class TestIntegrationCredentialRepository:
         )
         assert deleted is True
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=f"company-{unique_id}",
             user_id=f"user-{unique_id}",
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is None
+        with pytest.raises(ValueError, match="company_id cannot be empty"):
+            _ = await IntegrationCredential.by_natural_key(
+                company_id="",
+                user_id=f"user-{unique_id}",
+                provider=IntegrationProvider.GOOGLE,
+                service="docs",
+                mailbox_binding_id=None,
+            )
 
     @pytest.mark.asyncio
-    async def test_get_nonexistent_returns_none(self, credential_repository: IntegrationCredentialRepository, unique_id: str) -> None:
-        loaded = await credential_repository.get_by_user_provider_service(
+    async def test_get_nonexistent_returns_none(self, unique_id: str) -> None:
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=f"nonexistent-{unique_id}",
             user_id=f"nonexistent-{unique_id}",
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is None
 
@@ -278,7 +326,6 @@ class TestOAuthService:
     async def test_get_valid_token_returns_existing(
         self,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
     ) -> None:
         now = datetime.now(timezone.utc)
@@ -293,7 +340,7 @@ class TestOAuthService:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         result = await oauth_service.get_valid_token(
             company_id=cred.company_id,
@@ -417,7 +464,6 @@ class TestOAuthService:
         self,
         oauth_service: OAuthService,
         fake_storage: FakeStorage,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
         monkeypatch,
     ) -> None:
@@ -458,11 +504,12 @@ class TestOAuthService:
         assert flow_ctx is None
         assert post_origin is None
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=f"company-{unique_id}",
             user_id=f"user-{unique_id}",
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is not None
         assert loaded.access_token == "acc-123"
@@ -604,7 +651,6 @@ class TestOAuthService:
     async def test_refresh_token_success(
         self,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
         monkeypatch,
     ) -> None:
@@ -623,7 +669,7 @@ class TestOAuthService:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         token_resp = _make_token_response(access_token="refreshed-access")
         monkeypatch.setattr(
@@ -634,11 +680,12 @@ class TestOAuthService:
         refreshed = await oauth_service.refresh_token(cred)
         assert refreshed.access_token == "refreshed-access"
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=cred.company_id,
             user_id=cred.user_id,
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is not None
         assert loaded.access_token == "refreshed-access"
@@ -647,7 +694,6 @@ class TestOAuthService:
     async def test_refresh_token_invalid_grant_deletes_credential(
         self,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
         monkeypatch,
     ) -> None:
@@ -666,7 +712,7 @@ class TestOAuthService:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         error_resp = _make_error_response("invalid_grant", "Token has been revoked")
         monkeypatch.setattr(
@@ -677,11 +723,12 @@ class TestOAuthService:
         with pytest.raises(OAuthTokenRefreshError, match="invalid_grant"):
             await oauth_service.refresh_token(cred)
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=cred.company_id,
             user_id=cred.user_id,
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is None
 
@@ -689,7 +736,6 @@ class TestOAuthService:
     async def test_refresh_token_missing_raises_and_deletes(
         self,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
     ) -> None:
         now = datetime.now(timezone.utc)
@@ -705,16 +751,17 @@ class TestOAuthService:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         with pytest.raises(OAuthTokenRefreshError, match="Missing refresh_token"):
             await oauth_service.refresh_token(cred)
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id=cred.company_id,
             user_id=cred.user_id,
             provider=IntegrationProvider.GOOGLE,
             service="docs",
+            mailbox_binding_id=None,
         )
         assert loaded is None
 
@@ -722,7 +769,6 @@ class TestOAuthService:
     async def test_get_valid_token_auto_refreshes_expired(
         self,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
         monkeypatch,
     ) -> None:
@@ -741,7 +787,7 @@ class TestOAuthService:
             created_at=now,
             updated_at=now,
         )
-        await credential_repository.upsert(cred)
+        await IntegrationCredential.upsert_by_credential_id(cred)
 
         token_resp = _make_token_response(access_token="fresh-access", refresh_token="good-refresh")
         monkeypatch.setattr(

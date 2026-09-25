@@ -14,7 +14,6 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
 from core.clients.flow_ui_client import FlowUIStateEvent, decode_task_events
 from core.context import require_context
 from core.flow_ui.document import FlowUIDocument, FlowUIMetric
@@ -176,6 +175,7 @@ async def test_llm_ui_tools_produce_ui_and_state_artifacts_on_every_channel(
     unique_id: str,
     mock_llm_with_queue: object,
     sync_tools: object,
+    di,
 ) -> None:
     _ = app, sync_tools
     _ = require_context()
@@ -215,7 +215,7 @@ async def test_llm_ui_tools_produce_ui_and_state_artifacts_on_every_channel(
         assert isinstance(render.blocks[0], FlowUIMetric) and render.blocks[0].value == "{total}"
         assert isinstance(navigate, FlowUINavigate) and navigate.page_id == "details"
 
-        state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
+        state = await di.workflow_runtime.get_state(f"{flow_id}:{context_id}")
         assert state is not None
         assert state["total"] == 42
         assert [block.block_id for block in state.ui_slots["summary"]] == ["total-metric", "wrap"]
@@ -289,6 +289,7 @@ async def test_invalid_ui_render_arguments_return_to_the_llm_as_tool_error(
     unique_id: str,
     mock_llm_with_queue: object,
     sync_tools: object,
+    di,
 ) -> None:
     _ = app, sync_tools
     _ = require_context()
@@ -310,7 +311,7 @@ async def test_invalid_ui_render_arguments_return_to_the_llm_as_tool_error(
         assert task["status"]["state"] == "TASK_STATE_COMPLETED", task
         assert f"Recovered {unique_id}" in text_of(task, "response")
         assert ui_events_from_task(task) == []
-        state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
+        state = await di.workflow_runtime.get_state(f"{flow_id}:{context_id}")
         assert state is not None and state.ui_slots == {}
     finally:
         await delete_flow(client, flow_id)
@@ -348,7 +349,7 @@ async def test_unknown_navigate_target_fails_the_task_instead_of_guessing(
 async def test_subscribe_returns_terminal_snapshot_without_replaying_the_ledger(
     client: AsyncClient,
     app: object,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     _ = app
     _ = require_context()
@@ -363,6 +364,7 @@ async def test_subscribe_returns_terminal_snapshot_without_replaying_the_ledger(
             "    state['response'] = f\"total={state['total']}\"\n"
             "    return state\n"
         ),
+        di=di,
     )
     try:
         first = await a2a_send(

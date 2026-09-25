@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from apps.wiki.content.public_media import rewrite_cover_for_public, rewrite_media_for_public
-from apps.wiki.dependencies import ContainerDep
+from apps.wiki.di import Di
 from apps.wiki.models.api import (
     WikiMarkdownResponse,
     WikiPublicPageResponse,
@@ -26,8 +26,9 @@ from apps.wiki.models.api import (
 )
 from apps.wiki.models.domain import WikiPage
 from core.files.http_range import RangeNotSatisfiableError
-from core.files.s3_client import S3ClientFactory
-from core.files.streaming import stream_s3_file
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
+from core.files.streaming import stream_file_handle
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -49,8 +50,9 @@ def _public_page_response(page: WikiPage, link_token: str) -> WikiPublicPageResp
 
 
 @router.get("/pages/{link_token}", response_model=WikiPublicPageResponse)
-async def get_public_page(container: ContainerDep, link_token: str) -> WikiPublicPageResponse:
-    page = await container.wiki_service.get_public_page(link_token)
+async def get_public_page(di: Di, link_token: str) -> WikiPublicPageResponse:
+    _ = di
+    page = await WikiPage.get_public_page(link_token)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     return _public_page_response(page, link_token)
@@ -58,9 +60,10 @@ async def get_public_page(container: ContainerDep, link_token: str) -> WikiPubli
 
 @router.get("/pages/{link_token}/markdown", response_model=WikiMarkdownResponse)
 async def get_public_page_markdown(
-    container: ContainerDep, link_token: str
+    di: Di, link_token: str
 ) -> WikiMarkdownResponse:
-    page = await container.wiki_service.get_public_page(link_token)
+    _ = di
+    page = await WikiPage.get_public_page(link_token)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     return WikiMarkdownResponse(
@@ -71,8 +74,8 @@ async def get_public_page_markdown(
 
 
 @router.get("/pages/{link_token}/tree", response_model=WikiPublicTreeResponse)
-async def get_public_site_tree(container: ContainerDep, link_token: str) -> WikiPublicTreeResponse:
-    items = await container.wiki_service.get_public_site_tree(link_token)
+async def get_public_site_tree(di: Di, link_token: str) -> WikiPublicTreeResponse:
+    items = await di.wiki_service.get_public_site_tree(link_token)
     if not items:
         raise HTTPException(status_code=404, detail="Page not found")
     return WikiPublicTreeResponse(
@@ -92,9 +95,9 @@ async def get_public_site_tree(container: ContainerDep, link_token: str) -> Wiki
 
 @router.get("/pages/{link_token}/pages/{wiki_page_id}", response_model=WikiPublicPageResponse)
 async def get_public_site_page(
-    container: ContainerDep, link_token: str, wiki_page_id: str
+    di: Di, link_token: str, wiki_page_id: str
 ) -> WikiPublicPageResponse:
-    page = await container.wiki_service.get_public_site_page(link_token, wiki_page_id)
+    page = await di.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     return _public_page_response(page, link_token)
@@ -104,9 +107,9 @@ async def get_public_site_page(
     "/pages/{link_token}/pages/{wiki_page_id}/markdown", response_model=WikiMarkdownResponse
 )
 async def get_public_site_page_markdown(
-    container: ContainerDep, link_token: str, wiki_page_id: str
+    di: Di, link_token: str, wiki_page_id: str
 ) -> WikiMarkdownResponse:
-    page = await container.wiki_service.get_public_site_page(link_token, wiki_page_id)
+    page = await di.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found")
     return WikiMarkdownResponse(
@@ -118,7 +121,7 @@ async def get_public_site_page_markdown(
 
 @router.get("/pages/{link_token}/files/{file_id}", response_model=None)
 async def get_public_site_file(
-    container: ContainerDep, link_token: str, file_id: str, request: Request
+    di: Di, link_token: str, file_id: str, request: Request
 ) -> StreamingResponse | Response:
     """Файл публичного сайта.
 
@@ -126,27 +129,30 @@ async def get_public_site_file(
     опубликованной странице этого сайта. Отдаём лишь то, что лежит в S3 —
     внешние хранилища через публичную ссылку не проксируем.
     """
-    if not await container.wiki_service.public_site_has_file(link_token, file_id):
+    if not await di.wiki_service.public_site_has_file(link_token, file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        file_record = await container.files_service.get(file_id)
+        file_record = await di.files_service.get(file_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="File not found") from exc
 
-    if file_record.s3_bucket == "" or file_record.s3_key == "":
+    if file_record.storage_id == "" or file_record.s3_key == "":
         raise HTTPException(status_code=404, detail="File not found")
     if file_record.content_type == "":
         raise HTTPException(status_code=500, detail="File has no content_type")
+    if file_record.company_id is None or file_record.company_id == "":
+        raise HTTPException(status_code=404, detail="File not found")
 
-    s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
+    handle = await FileGate().open_record(
+        file_record,
+        SystemPrincipal(company_id=file_record.company_id),
+    )
     range_raw = request.headers.get("range")
     try:
-        return await stream_s3_file(
-            s3_client=s3_client,
-            s3_key=file_record.s3_key,
+        return await stream_file_handle(
+            handle=handle,
             content_type=file_record.content_type,
-            bucket=None,
             range_header=range_raw.strip() if isinstance(range_raw, str) else None,
         )
     except RangeNotSatisfiableError as exc:

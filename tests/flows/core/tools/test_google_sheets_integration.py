@@ -21,7 +21,6 @@ from typing import Any
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
@@ -150,9 +149,9 @@ async def _run_single_tool_flow(
     tool_call_name: str,
     tool_call_args: dict[str, Any],
     mock_llm_with_queue: Any,
+    di,
 ) -> tuple[dict[str, Any], ExecutionState]:
     flow_id = f"sheets_{flow_suffix}_{unique_id}"
-    container = get_container()
 
     flow_config = FlowConfig(
         flow_id=flow_id,
@@ -168,7 +167,7 @@ async def _run_single_tool_flow(
         },
         edges=[],
     )
-    await container.flow_repository.set(flow_config)
+    await FlowConfig.create_version(flow_config)
 
     mock_llm_with_queue(
         [
@@ -177,17 +176,17 @@ async def _run_single_tool_flow(
         ]
     )
 
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     state = _make_state(unique_id, flow_id)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
     )
     final_state = await flow.run(state)
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     return final_state, final_state
 
 
@@ -213,7 +212,7 @@ def test_all_sheets_tools_are_registered_in_suite() -> None:
 
 @pytest.mark.asyncio
 async def test_create_spreadsheet_via_llm_node(
-    app: object, unique_id: str, mock_llm_with_queue: Any
+    app: object, unique_id: str, mock_llm_with_queue: Any, di
 ) -> None:
     _ = app
     result, state = await _run_single_tool_flow(
@@ -226,6 +225,7 @@ async def test_create_spreadsheet_via_llm_node(
             "sheet_titles": ["Main"],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payloads = _tool_payloads_from_state(state)
@@ -241,6 +241,7 @@ async def test_get_metadata_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Meta Target {unique_id}")
@@ -251,6 +252,7 @@ async def test_get_metadata_via_llm_node(
         tool_call_name="sheets_get_metadata",
         tool_call_args={"spreadsheet_id": book.spreadsheet_id},
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -264,6 +266,7 @@ async def test_list_sheets_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(
@@ -277,6 +280,7 @@ async def test_list_sheets_via_llm_node(
         tool_call_name="sheets_list_sheets",
         tool_call_args={"spreadsheet_id": book.spreadsheet_id},
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -292,6 +296,7 @@ async def test_get_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Get Target {unique_id}")
@@ -310,6 +315,7 @@ async def test_get_values_via_llm_node(
             "range": "Sheet1!A1:B1",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -322,6 +328,7 @@ async def test_batch_get_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"BatchGet {unique_id}")
@@ -340,6 +347,7 @@ async def test_batch_get_values_via_llm_node(
             "ranges": ["Sheet1!A1", "Sheet1!B1"],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -354,6 +362,7 @@ async def test_update_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Update Target {unique_id}")
@@ -369,6 +378,7 @@ async def test_update_values_via_llm_node(
             "value_input_option": "USER_ENTERED",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     _ = _tool_payloads_from_state(state)[0]
@@ -382,6 +392,7 @@ async def test_batch_update_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"BatchUpd {unique_id}")
@@ -398,6 +409,7 @@ async def test_batch_update_values_via_llm_node(
             ],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     _ = _tool_payloads_from_state(state)[0]
@@ -411,6 +423,7 @@ async def test_append_rows_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Append Target {unique_id}")
@@ -429,6 +442,7 @@ async def test_append_rows_via_llm_node(
             "insert_data_option": "INSERT_ROWS",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     _ = _tool_payloads_from_state(state)[0]
@@ -442,6 +456,7 @@ async def test_clear_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Clear Target {unique_id}")
@@ -458,6 +473,7 @@ async def test_clear_values_via_llm_node(
             "range": "Sheet1!A1",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     _ = _tool_payloads_from_state(state)[0]
@@ -471,6 +487,7 @@ async def test_batch_clear_values_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"BClear {unique_id}")
@@ -487,6 +504,7 @@ async def test_batch_clear_values_via_llm_node(
             "ranges": ["Sheet1!A1", "Sheet1!B1"],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     _ = _tool_payloads_from_state(state)[0]
@@ -500,6 +518,7 @@ async def test_share_anyone_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Share Target {unique_id}")
@@ -514,6 +533,7 @@ async def test_share_anyone_via_llm_node(
             "role": "reader",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -526,6 +546,7 @@ async def test_share_email_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"ShareEmail {unique_id}")
@@ -542,6 +563,7 @@ async def test_share_email_via_llm_node(
             "anyone": False,
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -555,6 +577,7 @@ async def test_add_rename_delete_sheet_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     sheets_client: GoogleSheetsClient,
+    di,
 ) -> None:
     _ = app
     book = await sheets_client.create_spreadsheet(f"Tabs Target {unique_id}")
@@ -569,6 +592,7 @@ async def test_add_rename_delete_sheet_via_llm_node(
             "title": f"Tab-{unique_id}",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert add_result["response"] == "Готово."
     add_payload = _tool_payloads_from_state(add_state)[0]
@@ -586,6 +610,7 @@ async def test_add_rename_delete_sheet_via_llm_node(
             "title": f"Renamed-{unique_id}",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert rename_result["response"] == "Готово."
     rename_payload = _tool_payloads_from_state(rename_state)[0]
@@ -601,6 +626,7 @@ async def test_add_rename_delete_sheet_via_llm_node(
             "sheet_id": sheet_id,
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert delete_result["response"] == "Готово."
     delete_payload = _tool_payloads_from_state(delete_state)[0]
@@ -614,6 +640,7 @@ async def test_create_then_update_then_get_via_llm_node(
     app: object,
     unique_id: str,
     mock_llm_with_queue: Any,
+    di,
 ) -> None:
     """Цепочка через llm_node: create → update → get (реальный Google)."""
     _ = app
@@ -627,6 +654,7 @@ async def test_create_then_update_then_get_via_llm_node(
             "sheet_titles": ["Main"],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert create_result["response"] == "Готово."
     spreadsheet_id = _tool_payloads_from_state(create_state)[0]["spreadsheet_id"]
@@ -644,6 +672,7 @@ async def test_create_then_update_then_get_via_llm_node(
             "values": [["chain", unique_id]],
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert update_result["response"] == "Готово."
 
@@ -657,6 +686,7 @@ async def test_create_then_update_then_get_via_llm_node(
             "range": "Main!A1:B1",
         },
         mock_llm_with_queue=mock_llm_with_queue,
+        di=di,
     )
     assert get_result["response"] == "Готово."
     get_payload = _tool_payloads_from_state(get_state)[0]

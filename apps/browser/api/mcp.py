@@ -45,8 +45,7 @@ from apps.browser.api.control import (
     save_control_session_state,
     wait_for_agent_control,
 )
-from apps.browser.container import BrowserContainer
-from apps.browser.dependencies import ContainerDep
+from apps.browser.di import Di
 from apps.browser.models.types import ContextSignature
 from apps.browser.services.interaction_profiles import (
     InteractionProfileName,
@@ -316,9 +315,9 @@ async def _tool_call(
     *,
     tool_name: str,
     arguments: JsonObject,
-    container: BrowserContainer,
+    di: Di,
 ) -> MCPToolCallResult:
-    runtime = container.browser_runtime
+    runtime = di.browser_runtime
 
     if tool_name == "browser_create_session":
         args = ToolCreateSessionArgs.model_validate(arguments)
@@ -384,7 +383,7 @@ async def _tool_call(
                     interaction_seed=seed_value,
                 ),
             ),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(_model_json_object(out_model)), is_error=False
@@ -403,7 +402,7 @@ async def _tool_call(
                 navigation_timeout_ms=args.navigation_timeout_ms,
                 new_tab=args.new_tab,
             ),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_navigate result")),
@@ -415,7 +414,7 @@ async def _tool_call(
         payload = await control_observe(
             session_id=args.session_id,
             body=ControlObserveBody(include_snapshot_refs=args.include_snapshot_refs),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "browser_observe result")),
@@ -427,7 +426,7 @@ async def _tool_call(
         _ = await control_click(
             session_id=args.session_id,
             body=ControlClickBody(ref=args.ref, timeout_ms=args.timeout_ms),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_click result")),
@@ -444,7 +443,7 @@ async def _tool_call(
                 timeout_ms=args.timeout_ms,
                 typing_delay_ms=args.typing_delay_ms,
             ),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_fill result")),
@@ -456,7 +455,7 @@ async def _tool_call(
         _ = await control_press(
             session_id=args.session_id,
             body=ControlPressBody(key=args.key),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_press result")),
@@ -472,7 +471,7 @@ async def _tool_call(
                 load_state=args.load_state,
                 timeout_ms=args.timeout_ms,
             ),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value({"ok": True}, "browser_wait result")),
@@ -483,7 +482,7 @@ async def _tool_call(
         args = ToolCloseSessionArgs.model_validate(arguments)
         out = await delete_control_session(
             session_id=args.session_id,
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_close_session result")),
@@ -495,7 +494,7 @@ async def _tool_call(
         out = await save_control_session_state(
             session_id=args.session_id,
             body=ControlSaveStateBody(shared_storage_key=args.shared_storage_key),
-            container=container,
+            di=di,
         )
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(out, "browser_save_state result")),
@@ -522,7 +521,7 @@ async def _tool_call(
                 post_create=FilePostCreate(is_public=False),
                 metadata={"source": "browser_mcp", "session_id": args.session_id, **args.metadata},
             )
-            record = await container.files_service.create(
+            record = await di.files_service.create(
                 spec=spec,
                 data=html.encode("utf-8"),
                 original_name=_ensure_html_name(args.original_name),
@@ -530,9 +529,9 @@ async def _tool_call(
             )
             payload = {
                 "file_id": record.file_id,
-                "s3_bucket": record.s3_bucket,
+                "storage_id": record.storage_id,
                 "s3_key": record.s3_key,
-                "s3_path": f"s3://{record.s3_bucket}/{record.s3_key}",
+                "s3_path": f"s3://{record.storage_id}/{record.s3_key}",
                 "storage_url": record.storage_url,
                 "file_size": record.file_size,
                 "content_type": record.content_type,
@@ -554,7 +553,7 @@ async def mcp_jsonrpc(
     req: MCPJsonRpcRequest,
     request: Request,
     response: Response,
-    container: ContainerDep,
+    di: Di,
 ) -> JsonObject:
     """
     MCP JSON-RPC endpoint (single POST).
@@ -626,7 +625,7 @@ async def mcp_jsonrpc(
                 call_res = await _tool_call(
                     tool_name=name,
                     arguments=arguments_obj,
-                    container=container,
+                    di=di,
                 )
                 span.set_attribute("platform.mcp.tool_result_is_error", bool(call_res.is_error))
         except Exception as exc:

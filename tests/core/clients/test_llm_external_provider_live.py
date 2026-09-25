@@ -67,7 +67,7 @@ _LIVE_EMBEDDING_PROVIDERS = EMBEDDING_PROVIDER_ORDER
 @pytest.mark.parametrize("provider", LIVE_LLM_PROVIDERS)
 async def test_live_provider_model_catalog_returns_configured_smoke_model(provider: str) -> None:
     _ = configured_provider(provider)
-    service = live_model_service()
+    service = await live_model_service()
 
     models = await fetch_live_model_ids(provider)
 
@@ -88,7 +88,7 @@ async def test_live_provider_model_catalog_returns_configured_smoke_model(provid
 @pytest.mark.parametrize("provider", LIVE_LLM_PROVIDERS)
 async def test_live_provider_catalog_records_normalize_algorithm(provider: str) -> None:
     _ = configured_provider(provider)
-    service = live_model_service()
+    service = await live_model_service()
 
     records = await discover_live_catalog(provider)
 
@@ -134,7 +134,7 @@ async def test_live_provider_catalog_records_normalize_algorithm(provider: str) 
 @pytest.mark.parametrize("provider", LIVE_LLM_PROVIDERS)
 async def test_live_provider_chat_completion_smoke(provider: str) -> None:
     _ = configured_provider(provider)
-    service = live_model_service()
+    service = await live_model_service()
     prompt = live_chat_smoke_prompt(EXPECTED_CHAT_MARKER)
     candidate_models = await live_smoke_model_candidates(provider, service)
     last_rate_limit: httpx.HTTPStatusError | None = None
@@ -186,7 +186,7 @@ async def test_live_provider_chat_completion_smoke(provider: str) -> None:
 @pytest.mark.parametrize("provider", _LIVE_EMBEDDING_PROVIDERS)
 async def test_live_embedding_provider_probe_dimension_and_storage_policy(provider: str) -> None:
     _ = configured_provider(provider)
-    service = live_model_service()
+    service = await live_model_service()
     records = await fetch_live_model_records(provider)
 
     embedding_records = [
@@ -237,7 +237,7 @@ async def test_live_embedding_provider_probe_dimension_and_storage_policy(provid
 
 async def test_live_openrouter_rerank_catalog_and_request_work() -> None:
     cfg = configured_provider("openrouter")
-    service = live_model_service()
+    service = await live_model_service()
 
     try:
         records = await service.discover_model_records_by_provider("openrouter")
@@ -294,7 +294,7 @@ async def test_live_provider_litserve_catalog_embeddings_and_rerank_work(
 ) -> None:
     _ = provider_litserve_service
     _ = _provider_litserve_base_url()
-    service = live_model_service()
+    service = await live_model_service()
 
     records = await service.fetch_model_records_by_provider(PROVIDER_LITSERVE)
     assert records, "provider_litserve: /v1/models вернул пустой каталог"

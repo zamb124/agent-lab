@@ -18,6 +18,7 @@ from tests.files.chunked_upload_helpers import (
     platform_auxiliary_upload_spec_json,
 )
 from tests.fixtures.audio_bytes import minimal_wav_silence
+from tests.sync.conftest import require_sync_di
 
 
 def _minimal_mp4_bytes() -> bytes:
@@ -77,7 +78,7 @@ async def test_transcribe_video_endpoint_marks_done_via_worker(
     from tests.sync.api._helpers import seed_namespace_via_repo
 
     namespace = f"ns_{unique_id}_vid"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
         cr = await client.post(
             "/sync/api/v1/channels/",
@@ -173,11 +174,11 @@ async def test_transcribe_call_aggregate_includes_guest_line(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
+    sync_di,
 ) -> None:
     from datetime import UTC, datetime
 
-    from apps.sync.container import get_sync_container
-    from apps.sync.db.models import SyncCallParticipant
+    from apps.sync.models.call_participant import SyncCallParticipant
     from apps.sync.models.messages import (
         AudioAttachmentContent,
         MessageContentModel,
@@ -192,7 +193,7 @@ async def test_transcribe_call_aggregate_includes_guest_line(
     from tests.sync.api._helpers import seed_namespace_via_repo
 
     namespace = f"ns_{unique_id}_callagg"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(sync_di, company_id, namespace)
     async with AsyncClient(base_url="http://127.0.0.1:9005", timeout=120.0) as client:
         cr = await client.post(
             "/sync/api/v1/channels/",
@@ -226,21 +227,28 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             headers=sync_auth_headers,
         )
         assert join_reg.status_code == 200
-        call_id = join_reg.json()["call_id"]
+        call_id_value = join_reg.json()["call_id"]
+        if not isinstance(call_id_value, str) or call_id_value == "":
+            raise TypeError("call_id must be a non-empty string")
+        call_id = call_id_value
 
         join_guest = await client.post(
             f"/sync/api/v1/calls/join/{token}",
             json={"guest_name": guest_label},
         )
         assert join_guest.status_code == 200
-        guest_id = join_guest.json()["participant_identity"]
-        assert guest_id.startswith("guest:")
-        owner_identity = join_reg.json()["participant_identity"]
+        guest_identity = join_guest.json()["participant_identity"]
+        if not isinstance(guest_identity, str) or not guest_identity.startswith("guest:"):
+            raise TypeError("guest participant_identity must start with guest:")
+        guest_id = guest_identity
+        owner_identity_value = join_reg.json()["participant_identity"]
+        if not isinstance(owner_identity_value, str) or owner_identity_value == "":
+            raise TypeError("participant_identity must be a non-empty string")
+        owner_identity = owner_identity_value
 
-        container = get_sync_container()
         for uid in (owner_identity, guest_id):
-            await container.call_repository.add_participant(
-                SyncCallParticipant(
+            _ = await SyncCallParticipant.objects.create(
+                instance=SyncCallParticipant(
                     call_participant_id=uuid.uuid4().hex,
                     call_id=call_id,
                     user_id=uid,
@@ -300,7 +308,8 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             call_id=call_id,
         )
         guest_user = User(user_id=guest_id, name=guest_id, active_company_id=company_id)
-        from core.context import Context, clear_context, set_context
+        from core.context import clear_context, set_context
+        from core.models.context_models import Context
         from core.models.i18n_models import Language
         from core.models.identity_models import Company
 
@@ -321,7 +330,7 @@ async def test_transcribe_call_aggregate_includes_guest_line(
             guest_message = await op_messages_send(
                 MessagesSendPayload(channel_id=channel_id, body=body_guest),
                 user=guest_user,
-                container=container,
+                di=sync_di,
             )
         finally:
             clear_context()

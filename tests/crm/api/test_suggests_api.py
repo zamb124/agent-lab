@@ -8,11 +8,13 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CRMEntity, CRMSuggest
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
+from apps.crm.models.suggest import CRMSuggest
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from tests.crm.e2e._json_helpers import json_object, object_list, object_str
 
 pytestmark = pytest.mark.timeout(20, func_only=True)
@@ -49,7 +51,7 @@ async def test_suggests_list_empty(
 @pytest.mark.asyncio
 async def test_suggests_lifecycle(
     crm_client: AsyncClient,
-    crm_container: CRMContainer,
+    crm_di,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
@@ -66,7 +68,7 @@ async def test_suggests_lifecycle(
         channel="test",
         active_namespace=ns,
     )
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
         survivor = CRMEntity(
             entity_id=survivor_id,
@@ -74,7 +76,6 @@ async def test_suggests_lifecycle(
             namespace=ns,
             entity_type="contact",
             name="Survivor",
-            search_vector="",
             user_id=system_user_id,
         )
         source = CRMEntity(
@@ -83,11 +84,16 @@ async def test_suggests_lifecycle(
             namespace=ns,
             entity_type="contact",
             name="Source",
-            search_vector="",
             user_id=system_user_id,
         )
-        _ = await crm_container.entity_repository.create(survivor)
-        _ = await crm_container.entity_repository.create(source)
+        survivor = await CRMEntity.create(survivor)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), survivor, replace=False,
+        )
+        source = await CRMEntity.create(source)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), source, replace=False,
+        )
 
         now = datetime.now(timezone.utc)
         suggest = CRMSuggest(
@@ -106,7 +112,7 @@ async def test_suggests_lifecycle(
             created_at=now,
             updated_at=now,
         )
-        _ = await crm_container.suggest_repository.create(suggest)
+        _ = await CRMSuggest.create(suggest)
     finally:
         clear_context()
 
@@ -134,9 +140,9 @@ async def test_suggests_lifecycle(
     resolve_body = _http_json(resolve_response)
     assert resolve_body["status"] == "resolved"
 
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
-        source_check = await crm_container.entity_repository.get(source_id)
+        source_check = await CRMEntity.get(source_id)
         assert source_check is None
     finally:
         clear_context()
@@ -145,11 +151,12 @@ async def test_suggests_lifecycle(
 @pytest.mark.asyncio
 async def test_suggests_dismiss(
     crm_client: AsyncClient,
-    crm_container: CRMContainer,
+    crm_di,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
 ) -> None:
+    _ = crm_di
     ns = "default"
     suggest_id = f"sug_{unique_id}_2"
 
@@ -159,7 +166,7 @@ async def test_suggests_dismiss(
         channel="test",
         active_namespace=ns,
     )
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
         now = datetime.now(timezone.utc)
         suggest = CRMSuggest(
@@ -173,7 +180,7 @@ async def test_suggests_dismiss(
             created_at=now,
             updated_at=now,
         )
-        _ = await crm_container.suggest_repository.create(suggest)
+        _ = await CRMSuggest.create(suggest)
     finally:
         clear_context()
 
@@ -198,7 +205,7 @@ async def test_suggests_dismiss(
 
 @pytest.mark.asyncio
 async def test_missed_entity_dismissed_same_draft_is_not_recreated(
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -211,7 +218,7 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
         channel="test",
         active_namespace=ns,
     )
-    set_context(ctx)
+    _ = set_context(ctx)
     try:
         note = CRMEntity(
             entity_id=note_id,
@@ -220,44 +227,46 @@ async def test_missed_entity_dismissed_same_draft_is_not_recreated(
             entity_type="note",
             name="Note with unapplied draft",
             description="Draft was analyzed but not applied yet.",
-            search_vector="",
             user_id=system_user_id,
             attributes={"ai_analysis_draft": {"draft_version": 1}},
         )
-        _ = await crm_container.entity_repository.create(note)
+        note = await CRMEntity.create(note)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), note, replace=False,
+        )
 
-        summary = await crm_container.suggest_service.generate_namespace_suggests(
+        summary = await crm_di.suggest_service.generate_namespace_suggests(
             company_id="system",
             namespace=ns,
         )
         assert summary["missed_entity_created"] == 1
 
-        page = await crm_container.suggest_service.list_suggests(ns, status="pending")
+        page = await crm_di.suggest_service.list_suggests(ns, status="pending")
         created = next(
             item
             for item in page.items
             if item.suggest_type == "missed_entity"
             and item.target_entity_ids == [note_id]
         )
-        _ = await crm_container.suggest_service.dismiss_suggest(
+        _ = await crm_di.suggest_service.dismiss_suggest(
             created.suggest_id,
             namespace=ns,
         )
 
-        second_summary = await crm_container.suggest_service.generate_namespace_suggests(
+        second_summary = await crm_di.suggest_service.generate_namespace_suggests(
             company_id="system",
             namespace=ns,
         )
         assert second_summary["missed_entity_created"] == 0
 
-        pending_page = await crm_container.suggest_service.list_suggests(ns, status="pending")
+        pending_page = await crm_di.suggest_service.list_suggests(ns, status="pending")
         assert not any(
             item.suggest_type == "missed_entity"
             and item.target_entity_ids == [note_id]
             for item in pending_page.items
         )
 
-        all_page = await crm_container.suggest_service.list_suggests(ns, status=None)
+        all_page = await crm_di.suggest_service.list_suggests(ns, status=None)
         dismissed = [
             item
             for item in all_page.items

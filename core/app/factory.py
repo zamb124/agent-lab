@@ -1,28 +1,27 @@
 """
-Фабрика для создания FastAPI приложений.
+Фабрика FastAPI-приложения сервиса.
 
-Базовая функция create_service_app упрощает создание новых сервисов:
-- Загрузка конфигурации
-- Настройка middleware
-- Регистрация CRUD роутеров из контейнера
-- Настройка lifespan
+``create_service_app`` — единственный вход HTTP-процесса: настройки, логирование, middleware,
+платформенные роутеры и lifespan, который eagerly собирает ``<Svc>Di`` через ``open_di``.
 
-Пример использования:
+Пример:
     from core.app import create_service_app
-    from apps.flows.config import FlowSettings
-    from apps.flows.src.container import get_container
+    from apps.secrets.config import SecretsSettings
+    from apps.secrets.di import SecretsDi
+    from apps.secrets.realtime.command_router import SECRETS_OPERATIONS
 
     app = create_service_app(
-        service_name="flows",
-        settings_class=FlowSettings,
-        get_container=get_container,
-        routers=[api_v1_router],
-        on_startup=my_startup_func,
+        "secrets",
+        SecretsSettings,
+        SecretsDi,
+        database="secrets_url",
+        operations=SECRETS_OPERATIONS,
+        routers=[get_api_router()],
     )
 """
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import TypeVar
 
@@ -54,7 +53,10 @@ from core.config import BaseSettings as PlatformBaseSettings
 from core.config import set_settings
 from core.config.loader import get_project_root, load_merged_config
 from core.config.testing import is_testing
-from core.container.base import BaseContainer
+from core.di.kit import ProcessIdentity, Recipe, ServiceDi
+from core.di.platform import PlatformDi
+from core.di.process import open_di
+from core.di.state import reset_app_di, set_app_di
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformBoundaryError,
@@ -91,18 +93,22 @@ from core.push.router import router as push_router
 from core.push.service import init_web_push_service
 from core.realtime.command_http import router as realtime_command_router
 from core.tracing import setup_tracing
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
-from core.types import JsonObject, JsonValue
+from core.tracing.tracer import set_tracing_service_name
+from core.types import JsonObject, JsonValue, MigrationDatabaseUrlKey
 from core.utils.background import run_with_log_context
 from core.websocket import WsCommandError, command_failure_payload
-from core.websocket.operation import WS_COMMAND_ERROR_HTTP_STATUS, ws_command_error_status
+from core.websocket.operation import (
+    WS_COMMAND_ERROR_HTTP_STATUS,
+    RegisteredOperation,
+    register_operations,
+    ws_command_error_status,
+)
 
 logger = get_logger(__name__)
 
 SettingsT = TypeVar("SettingsT", bound=PlatformBaseSettings)
-ContainerT = TypeVar("ContainerT", bound=BaseContainer)
-ServiceStartupHook = Callable[[FastAPI, ContainerT, SettingsT], Awaitable[None]]
-ServiceShutdownHook = Callable[[FastAPI, ContainerT], Awaitable[None]]
+DiT = TypeVar("DiT", bound=ServiceDi)
+ServiceLifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
 def load_service_settings(
@@ -126,28 +132,131 @@ def load_service_settings(
     return settings, project_root
 
 
+def prepare_service_settings(
+    service_name: str,
+    settings_class: type[SettingsT],
+    *,
+    documentation_gateway_prefix: str | None,
+) -> tuple[SettingsT, Path, str]:
+    """Настройки процесса, логирование и Files-сегмент — до создания приложения."""
+    settings, project_root = load_service_settings(service_name, settings_class)
+    setup_logging(service_name, settings.logging)
+    set_settings(settings)
+    files_segment = resolve_files_route_segment(
+        service_name,
+        documentation_gateway_prefix=documentation_gateway_prefix,
+    )
+    set_files_route_segment(files_segment)
+    return settings, project_root, files_segment
+
+
+async def start_platform_process(
+    settings: PlatformBaseSettings,
+    *,
+    service_name: str,
+    tracing: bool,
+    platform: bool,
+) -> None:
+    """Tracing, каталог событий, курс ЦБ, file processors и push процесса."""
+    # Лёгкие sandbox-сервисы пишут spans, но не поднимают billing/push.
+    if tracing and settings.tracing.enabled:
+        setup_tracing(settings.tracing)
+        if settings.tracing.postgres_enabled:
+            if not settings.database.tracing_url:
+                raise ValueError(
+                    'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
+                )
+            set_tracing_service_name(service_name)
+        logger.info("app.event")
+
+    if not platform:
+        return
+
+    await store_registered_platform_events()
+
+    # Курс USD/RUB от ЦБ РФ: один запрос при старте, затем фоновое обновление каждые 5 минут.
+    # Резерв при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
+    cbr_fallback = settings.billing.usd_to_rub_rate
+    if is_testing():
+        logger.info("billing.cbr_rate.skipped_testing", fallback=cbr_fallback)
+    else:
+        await _cbr_refresh_once(fallback=cbr_fallback)
+        _ = run_with_log_context(
+            _cbr_loop_coro(fallback=cbr_fallback),
+            name="billing.cbr_rate_refresh",
+            background_kind="startup",
+        )
+        logger.info("billing.cbr_rate.loop_scheduled")
+
+    initialize_default_processors()
+    logger.info("app.initialize_default_processors")
+
+    if settings.push.enabled:
+        if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
+            raise ValueError(
+                'push.enabled=true requires push.vapid_private_key and push.vapid_public_key'
+            )
+        _ = init_web_push_service(
+            vapid_private_key=settings.push.vapid_private_key,
+            vapid_public_key=settings.push.vapid_public_key,
+            vapid_email=settings.push.vapid_email,
+        )
+        logger.info("app.webpushservice")
+
+    apns = resolve_apns_credentials(settings)
+    if apns:
+        _ = init_apns_push_service(
+            team_id=apns.team_id,
+            key_id=apns.key_id,
+            private_key_pem=apns.private_key_pem,
+            bundle_id=apns.bundle_id,
+            use_sandbox=apns.use_sandbox,
+        )
+        logger.info("app.apnspushservice")
+
+    fcm = resolve_fcm_credentials(settings.push)
+    if fcm:
+        _ = init_fcm_push_service(
+            project_id=fcm.project_id,
+            client_email=fcm.client_email,
+            private_key_pem=fcm.private_key_pem,
+            token_uri=fcm.token_uri,
+        )
+        logger.info("app.fcmpushservice.project_id", project_id=fcm.project_id)
+
+
+async def stop_platform_process(*, platform: bool) -> None:
+    # В одном процессе pytest поднимается несколько приложений; Redis-клиент шины
+    # (publish/catalog) привязан к event loop TestClient — на shutdown в тестах он
+    # закрывается, иначе следующий TestClient ловит «Event loop is closed».
+    if platform and is_testing():
+        await close_publisher_client()
+
+
 def create_service_app(
     service_name: str,
     settings_class: type[SettingsT],
-    get_container: Callable[[], ContainerT],
+    di_class: type[DiT],
+    *,
+    database: MigrationDatabaseUrlKey,
+    operations: Mapping[str, RegisteredOperation[DiT]] | None = None,
+    lifecycle: tuple[Recipe, ...] = (),
     routers: list[APIRouter] | None = None,
     pages_routers: list[APIRouter] | None = None,
-    on_startup: ServiceStartupHook[ContainerT, SettingsT] | None = None,
-    on_shutdown: ServiceShutdownHook[ContainerT] | None = None,
     cors_origins: list[str] | None = None,
     cors_allow_origin_regex: str | None = None,
     extra_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None = None,
+    outer_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None = None,
     extra_exception_handlers: Sequence[tuple[type[Exception], ExceptionHandler]] | None = None,
     static_mounts: list[tuple[str, str, str]] | None = None,
     title: str | None = None,
     description: str | None = None,
     version: str = "1.0.0",
-    api_version: str | None = "v1",  # None - без /api/, "v1" - /api/v1
+    api_version: str | None = "v1",
     docs_url: str = "/docs",
     redoc_url: str = "/redoc",
     openapi_url: str = "/openapi.json",
     include_auth_middleware: bool = True,
-    include_crud_routers: bool = True,
     include_tracing_lifecycle: bool | None = None,
     include_platform_lifecycle: bool = True,
     include_platform_routers: bool = True,
@@ -157,170 +266,145 @@ def create_service_app(
     services_spa_index: Path | None = None,
 ) -> FastAPI:
     """
-    Создает FastAPI приложение для сервиса.
+    Создаёт FastAPI приложение сервиса на Service Kit.
 
     Аргументы:
-        service_name: Имя сервиса (например, "flows")
+        service_name: Имя сервиса (например, "secrets")
         settings_class: Класс настроек (наследник BaseSettings)
-        get_container: Функция получения контейнера
+        di_class: Класс ``<Svc>Di`` процесса; сервис с платформенными роутерами или
+            AuthMiddleware наследует ``PlatformDi``
+        database: Ключ URL базы процесса (``secrets_url``, ``shared_url``, …)
+        operations: Каталог команд ``<SVC>_OPERATIONS``; DI команда берёт из этого приложения
+        lifecycle: Процессные ресурсы (фоновые циклы, seeds): autowired ``@recipe`` с ``None``
         routers: Список API роутеров (prefix зависит от api_version)
         pages_routers: Список page роутеров (без prefix - они имеют свой)
-        on_startup: Функция вызываемая при старте (async)
-        on_shutdown: Функция вызываемая при остановке (async)
         cors_origins: Разрешенные origins для CORS (конкретные URL; с credentials нельзя звёздочку как единственный origin)
         cors_allow_origin_regex: Regex для Origin (Starlette CORSMiddleware), суммируется с allow_origins
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
+            внутри общего CORSMiddleware.
+        outer_middlewares: Middleware снаружи CORSMiddleware. Нужны, когда preflight
+            конкретного пути не должен отвечать общий CORS (embed A2A).
         extra_exception_handlers: Обработчики внешних wire-спек поверх платформенных [(ExcType, handler), ...]
             (например OpenAI error envelope на LLM proxy flows); платформенный JSON-конверт они не заменяют.
         static_mounts: Статические директории [(path, directory, name), ...]
         api_version: Версия API ("v1" для flows и др., None для frontend)
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
-        include_crud_routers: Включать ли автоматические CRUD роутеры
         include_tracing_lifecycle: Включать ли tracing startup hooks. None — вместе с include_platform_lifecycle.
-        include_platform_lifecycle: Включать ли Redis/billing/push startup hooks
+        include_platform_lifecycle: Включать ли каталог событий/курс ЦБ/push startup hooks
         include_platform_routers: Включать ли общие платформенные роутеры (files/auth/calendar/ws/i18n)
         mount_repo_documentation: Смонтировать статическую документацию (Zensical) из корня репозитория ``documentation-dist/`` на ``/documentation/``.
         documentation_gateway_prefix: Если задан (например ``documents`` для office), первый сегмент публичных путей HTTP API и платформенных роутеров (team, files, auth, …); плюс дублирование документации на ``/{prefix}/documentation/`` за ingress. Internal command hop всегда ``/{service_name}/api/internal/realtime/command``.
         include_platform_pwa: Маршруты ``/manifest.json``, ``/sw.js``, ``/offline.html``. None: выключено при ``TESTING=true``, иначе включено.
         services_spa_index: Путь к ``index.html`` SPA; если файл существует, регистрируются
             ``GET /{public_segment}/services`` и ``GET /{public_segment}/services/`` с тем же HTML.
-
-    Возвращает:
-        Настроенное FastAPI приложение
     """
-
+    if (include_platform_routers or include_auth_middleware) and not issubclass(di_class, PlatformDi):
+        raise TypeError(
+            f"{di_class.__qualname__} must inherit PlatformDi: the app mounts platform routers or AuthMiddleware"
+        )
     tracing_lifecycle_enabled = (
         include_platform_lifecycle if include_tracing_lifecycle is None else include_tracing_lifecycle
     )
-
-    # Загрузка конфигурации (silent: без записей до setup_logging)
-    settings, project_root = load_service_settings(service_name, settings_class)
-
-    # Настройка логирования и публикация settings в глобальный синглтон
-    setup_logging(service_name, settings.logging)
-    set_settings(settings)
-    files_segment = resolve_files_route_segment(
+    settings, project_root, files_segment = prepare_service_settings(
         service_name,
+        settings_class,
         documentation_gateway_prefix=documentation_gateway_prefix,
     )
-    set_files_route_segment(files_segment)
-
-    # Получение контейнера
-    container = get_container()
-    container.bind_files_route_segment(files_segment)
+    identity = ProcessIdentity(service_name=service_name, files_route_segment=files_segment)
+    if operations is not None:
+        register_operations(operations, di_class)
 
     # Lifespan: системный скоуп — нет request_id/user_id, но нужен canonical service.name
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        async with SystemLogScope(lifecycle_phase="startup"):
-            await _run_startup(app)
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        async with AsyncExitStack() as stack:
+            async with SystemLogScope(lifecycle_phase="startup"):
+                logger.info("service.starting", service=service_name)
+                await start_platform_process(
+                    settings,
+                    service_name=service_name,
+                    tracing=tracing_lifecycle_enabled,
+                    platform=include_platform_lifecycle,
+                )
+                di = await stack.enter_async_context(
+                    open_di(
+                        di_class,
+                        settings=settings,
+                        identity=identity,
+                        database=database,
+                        lifecycle=lifecycle,
+                    )
+                )
+                if isinstance(di, PlatformDi):
+                    set_billing_service(di.billing_service)
+                outer_di = set_app_di(app, di)
+                logger.info("service.started", service=service_name)
             yield
-        async with SystemLogScope(lifecycle_phase="shutdown"):
-            await _run_shutdown(app)
+            async with SystemLogScope(lifecycle_phase="shutdown"):
+                logger.info("service.stopping", service=service_name)
+                reset_app_di(app, outer_di)
+                await stack.aclose()
+                await stop_platform_process(platform=include_platform_lifecycle)
 
-    async def _run_startup(app: FastAPI) -> None:
-        logger.info("service.starting", service=service_name)
+    return assemble_service_app(
+        service_name=service_name,
+        settings=settings,
+        project_root=project_root,
+        lifespan=lifespan,
+        routers=routers,
+        pages_routers=pages_routers,
+        cors_origins=cors_origins,
+        cors_allow_origin_regex=cors_allow_origin_regex,
+        extra_middlewares=extra_middlewares,
+        outer_middlewares=outer_middlewares,
+        extra_exception_handlers=extra_exception_handlers,
+        static_mounts=static_mounts,
+        title=title,
+        description=description,
+        version=version,
+        api_version=api_version,
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url=openapi_url,
+        include_auth_middleware=include_auth_middleware,
+        include_platform_routers=include_platform_routers,
+        mount_repo_documentation=mount_repo_documentation,
+        documentation_gateway_prefix=documentation_gateway_prefix,
+        include_platform_pwa=include_platform_pwa,
+        services_spa_index=services_spa_index,
+    )
 
-        # Инициализация трейсинга отделена от полного platform lifecycle: lightweight
-        # Лёгкие sandbox-сервисы должны писать spans, но не поднимать Redis/billing/push.
-        if tracing_lifecycle_enabled and settings.tracing.enabled:
-            setup_tracing(settings.tracing)
-            if settings.tracing.postgres_enabled:
-                if not settings.database.tracing_url:
-                    raise ValueError(
-                        'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
-                    )
-                set_tracing_service_name(service_name)
-                set_span_repository(container.span_repository)
-            logger.info("app.event")
 
-        if include_platform_lifecycle:
-
-            # Публикация зарегистрированных типов событий процесса в общий каталог
-            await store_registered_platform_events()
-
-            # Инициализация глобального BillingService
-            set_billing_service(container.billing_service)
-            logger.info("app.billingservice")
-
-            # Инициализация курса USD/RUB от ЦБ РФ: один запрос при старте,
-            # затем фоновое обновление каждые 5 минут.
-            # Резерв при недоступности ЦБ — billing.usd_to_rub_rate из конфига.
-            _cbr_fallback = settings.billing.usd_to_rub_rate
-            if is_testing():
-                logger.info(
-                    "billing.cbr_rate.skipped_testing",
-                    fallback=_cbr_fallback,
-                )
-            else:
-                await _cbr_refresh_once(fallback=_cbr_fallback)
-                _ = run_with_log_context(
-                    _cbr_loop_coro(fallback=_cbr_fallback),
-                    name="billing.cbr_rate_refresh",
-                    background_kind="startup",
-                )
-                logger.info("billing.cbr_rate.loop_scheduled")
-
-            if hasattr(container, "file_repository"):
-                initialize_default_processors(container.file_repository)
-                logger.info("app.initialize_default_processors")
-
-            # Инициализация WebPushService
-            if settings.push.enabled:
-                if not settings.push.vapid_private_key or not settings.push.vapid_public_key:
-                    raise ValueError(
-                        'push.enabled=true requires push.vapid_private_key and push.vapid_public_key'
-                    )
-                _ = init_web_push_service(
-                    vapid_private_key=settings.push.vapid_private_key,
-                    vapid_public_key=settings.push.vapid_public_key,
-                    vapid_email=settings.push.vapid_email,
-                )
-                logger.info("app.webpushservice")
-
-            apns = resolve_apns_credentials(settings)
-            if apns:
-                _ = init_apns_push_service(
-                    team_id=apns.team_id,
-                    key_id=apns.key_id,
-                    private_key_pem=apns.private_key_pem,
-                    bundle_id=apns.bundle_id,
-                    use_sandbox=apns.use_sandbox,
-                )
-                logger.info("app.apnspushservice")
-
-            fcm = resolve_fcm_credentials(settings.push)
-            if fcm:
-                _ = init_fcm_push_service(
-                    project_id=fcm.project_id,
-                    client_email=fcm.client_email,
-                    private_key_pem=fcm.private_key_pem,
-                    token_uri=fcm.token_uri,
-                )
-                logger.info("app.fcmpushservice.project_id", project_id=fcm.project_id)
-
-        # Кастомный startup
-        if on_startup:
-            await on_startup(app, container, settings)
-
-        logger.info("service.started", service=service_name)
-
-    async def _run_shutdown(app: FastAPI) -> None:
-        logger.info("service.stopping", service=service_name)
-
-        if on_shutdown:
-            await on_shutdown(app, container)
-
-        # В одном процессе pytest поднимается несколько приложений (flows, office, rag, sync);
-        # stop_redis_listener останавливает общий tail-listener и ломает доставку в чужих тестах.
-        # Redis-клиент шины (publish/catalog) привязан к event loop TestClient —
-        # на shutdown в тестах закрываем его, иначе следующий TestClient ловит
-        # «Event loop is closed» на store_registered_platform_events / publish.
-        if include_platform_lifecycle:
-            if is_testing():
-                await close_publisher_client()
-
+def assemble_service_app(
+    *,
+    service_name: str,
+    settings: PlatformBaseSettings,
+    project_root: Path,
+    lifespan: ServiceLifespan,
+    routers: list[APIRouter] | None,
+    pages_routers: list[APIRouter] | None,
+    cors_origins: list[str] | None,
+    cors_allow_origin_regex: str | None,
+    extra_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None,
+    outer_middlewares: Sequence[tuple[type, Mapping[str, JsonValue]]] | None,
+    extra_exception_handlers: Sequence[tuple[type[Exception], ExceptionHandler]] | None,
+    static_mounts: list[tuple[str, str, str]] | None,
+    title: str | None,
+    description: str | None,
+    version: str,
+    api_version: str | None,
+    docs_url: str,
+    redoc_url: str,
+    openapi_url: str,
+    include_auth_middleware: bool,
+    include_platform_routers: bool,
+    mount_repo_documentation: bool,
+    documentation_gateway_prefix: str | None,
+    include_platform_pwa: bool | None,
+    services_spa_index: Path | None,
+) -> FastAPI:
+    """Middleware, обработчики ошибок, роутеры и статика — одинаково для каждого сервиса."""
     # Создание приложения
     app = FastAPI(
         title=title or f"{service_name.title()} Service",
@@ -333,7 +417,6 @@ def create_service_app(
         openapi_url=openapi_url,
     )
 
-    app.state.container = container
     app.state.settings = settings
 
     @app.exception_handler(BillingBalanceBlockedError)
@@ -543,13 +626,6 @@ def create_service_app(
         api_prefix = f"/{url_route_segment}"
     logger.info("service.api_prefix", api_prefix=api_prefix)
 
-    # CRUD роутеры
-    if include_crud_routers:
-        crud_routers = container.get_crud_routers()
-        logger.info("service.crud_routers_loaded", count=len(crud_routers))
-        for router in crud_routers:
-            app.include_router(router, prefix=api_prefix)
-
     # API роутеры (с prefix /service_name/api/v1)
     if routers:
         for router in routers:
@@ -560,11 +636,7 @@ def create_service_app(
 
     if include_platform_routers:
         files_api_prefix = f"/{url_route_segment}/api/{api_version or 'v1'}/files"
-        _files_router = build_files_router(
-            get_files_service=lambda: container.files_service,
-            get_chunked_upload_service=lambda: container.chunked_upload_service,
-            files_route_segment=url_route_segment,
-        )
+        _files_router = build_files_router(files_route_segment=url_route_segment)
         app.include_router(_files_router, prefix=files_api_prefix)
         logger.info("service.router_attached", router="files", prefix=files_api_prefix)
 
@@ -765,6 +837,11 @@ def create_service_app(
     # Публичные embed-ассеты `/static/core/...` открыты любому Origin, включая preflight:
     # внешний слой над общим CORSMiddleware, одинаково на каждом сервисе.
     app.add_middleware(StaticCoreModuleCorsMiddleware)
+
+    # Ещё снаружи: путь, чей preflight не должен закрывать общий CORS (embed A2A).
+    if outer_middlewares:
+        for middleware_class, kwargs in outer_middlewares:
+            app.add_middleware(middleware_class, **dict(kwargs))
 
     logger.info("service.created", service=service_name)
 

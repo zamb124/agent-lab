@@ -34,6 +34,7 @@ from core.worktracker.models import (
     FlowSessionLink,
     QueueAssignment,
     SystemActor,
+    WorkItem,
     WorkItemHook,
     WorkItemHookEvent,
     WorkItemInteractionMode,
@@ -88,7 +89,7 @@ class HitlWorkItemService:
         cid = command.correlation_id
         cid_str = str(cid)
 
-        existing = await self._work_items.find_by_completion_correlation(company_id, cid_str)
+        existing = await WorkItem.find_work_item_by_correlation(company_id, cid_str)
         if existing is not None:
             return cid, existing.work_item_id
 
@@ -223,7 +224,7 @@ class HitlWorkItemService:
                 if fid is not None and fid.strip():
                     resolution_file_ids.append(fid.strip())
             if content.strip() or resolution_file_ids:
-                item = await self._work_items.get(resolved_company_id, work_item_id)
+                item = await WorkItem.require_in_company(resolved_company_id, work_item_id)
                 operator_user_id = ""
                 assignment = item.assignment
                 if isinstance(assignment, QueueAssignment):

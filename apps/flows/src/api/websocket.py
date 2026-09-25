@@ -30,11 +30,9 @@ from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtoMessage
 
 from apps.flows.config import get_settings
+from apps.flows.di import Di
 from apps.flows.src.channels import PermissionDenied
-from apps.flows.src.channels.websocket import WebSocketChannel
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.models import FlowConfig
 from core.a2a import (
     A2A_ERROR_CODE_NAMES,
@@ -53,8 +51,10 @@ from core.a2a import (
     A2AErrorCode,
 )
 from core.auth.utils import get_token_info
-from core.context import Context, User, set_context
+from core.context import set_context
 from core.logging import get_logger
+from core.models.context_models import Context
+from core.models.identity_models import User
 from core.types import JsonArray, JsonObject, JsonValue, parse_json_value, require_json_object
 
 logger = get_logger(__name__)
@@ -121,8 +121,8 @@ def _string_list(raw: JsonValue | None) -> list[str]:
     return [item for item in raw if isinstance(item, str)]
 
 
-async def _get_flow_config(flow_id: str, container: FlowContainer) -> FlowConfig | None:
-    return await container.flow_repository.get(flow_id)
+async def _get_flow_config(flow_id: str) -> FlowConfig | None:
+    return await FlowConfig.get_latest(flow_id)
 
 
 def _get_user_groups_from_token(token: str | None) -> list[str]:
@@ -155,8 +155,8 @@ async def _send_json(websocket: WebSocket, payload: JsonObject) -> None:
 
 
 @router.websocket("/ws/{flow_id}")
-async def websocket_a2a(flow_id: str, websocket: WebSocket, container: ContainerDep) -> None:
-    config = await _get_flow_config(flow_id, container)
+async def websocket_a2a(flow_id: str, websocket: WebSocket, di: Di) -> None:
+    config = await _get_flow_config(flow_id)
     if not config:
         await websocket.accept()
         await _send_json(
@@ -199,10 +199,24 @@ async def websocket_a2a(flow_id: str, websocket: WebSocket, container: Container
     )
     _ = set_context(context)
 
-    handler = WebSocketChannel(
+    handler = get_channel(
+        "websocket",
         flow_id,
         context=context,
-        container=as_flow_runtime_container(container),
+        variables_service=di.variables_service,
+        authz_service=di.authz_service,
+        workflow_runtime=di.workflow_runtime,
+        redis_client=di.redis_client,
+        handoff_orchestrator_service=di.handoff_orchestrator_service,
+        flow_factory=di.flow_factory,
+        tool_registry=di.tool_registry,
+        projection_service=di.a2a_task_projection_service,
+        shared_storage=di.shared_storage,
+        channel_registry=di.channel_registry,
+        mail_service=di.mail_service,
+        flow_ui_share_service=di.flow_ui_share_service,
+        hitl_conversation_service=di.hitl_conversation_service,
+        files_service=di.files_service,
     )
 
     try:

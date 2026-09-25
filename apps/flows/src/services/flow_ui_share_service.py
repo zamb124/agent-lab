@@ -6,7 +6,6 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import final
 
-from apps.flows.src.db.flow_ui_share_repository import FlowUIShareRepository
 from apps.flows.src.durable_execution import DurableWorkflowRuntime
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from core.authz.models import AuthzObject
@@ -49,14 +48,12 @@ class FlowUIShareService:
     def __init__(
         self,
         *,
-        repository: FlowUIShareRepository,
         workflow_runtime: DurableWorkflowRuntime,
         short_link_service: ShortLinkService,
         token_service: TokenService,
         flow_access_service: FlowAccessService,
         authz: AuthzService,
     ) -> None:
-        self._repository = repository
         self._workflow_runtime = workflow_runtime
         self._short_links = short_link_service
         self._tokens = token_service
@@ -99,7 +96,7 @@ class FlowUIShareService:
             expires_at=expires_at,
             created_at=now,
         )
-        _ = await self._repository.create(grant)
+        _ = await FlowUIShareGrant.set(grant)
         try:
             await self._flow_access.sync_share_created(
                 share_grant_id=grant.grant_id,
@@ -115,7 +112,7 @@ class FlowUIShareService:
             )
         except Exception as exc:
             await self._flow_access.sync_share_revoked(grant.grant_id)
-            _ = await self._repository.revoke(
+            _ = await FlowUIShareGrant.revoke(
                 grant_id=grant.grant_id,
                 company_id=company_id,
                 created_by_user_id=user_id,
@@ -135,7 +132,7 @@ class FlowUIShareService:
         if state is None:
             raise ValueError("Flow UI session does not exist")
         _assert_owner(state, user_id)
-        return await self._repository.list_for_owner(
+        return await FlowUIShareGrant.list_for_owner(
             company_id=company_id,
             flow_id=flow_id,
             context_id=context_id,
@@ -149,7 +146,7 @@ class FlowUIShareService:
         company_id: str,
         user_id: str,
     ) -> bool:
-        revoked = await self._repository.revoke(
+        revoked = await FlowUIShareGrant.revoke(
             grant_id=grant_id,
             company_id=company_id,
             created_by_user_id=user_id,
@@ -168,7 +165,7 @@ class FlowUIShareService:
         require_editor: bool = False,
         user_id: str | None = None,
     ) -> FlowUIShareGrant:
-        grant = await self._repository.get_active(grant_id)
+        grant = await FlowUIShareGrant.get_active(grant_id)
         if grant is None:
             raise PermissionError("Flow UI share grant is missing, expired or revoked")
         if (
@@ -206,7 +203,7 @@ class FlowUIShareService:
         grant_id: str,
         origin: str,
     ) -> FlowUIShareExchangeResponse:
-        grant = await self._repository.get_active(grant_id)
+        grant = await FlowUIShareGrant.get_active(grant_id)
         if grant is None:
             raise PermissionError("Flow UI share grant is missing, expired or revoked")
         _ = await self.authorize(

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
 from apps.sync.models.git import GitProvider, GitResourceKind, GitResourceRefCreate
 from apps.sync.models.messages import (
@@ -31,13 +30,13 @@ from tests.sync.integration._helpers import seed_test_namespace
 
 async def _create_topic_channel(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     unique_id: str,
     *,
     suffix: str,
     name: str,
 ) -> str:
-    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=suffix)
+    namespace = await seed_test_namespace(op_user, sync_di, unique_id, suffix=suffix)
     channel = await op_channels_create(
         ChannelCreate(
             type=ChannelType.TOPIC,
@@ -46,7 +45,7 @@ async def _create_topic_channel(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return channel.channel_id
 
@@ -54,13 +53,13 @@ async def _create_topic_channel(
 @pytest.mark.asyncio
 async def test_op_channels_create_publishes_channel_created(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
     channel_id = await _create_topic_channel(
-        op_user, op_container, unique_id, suffix="pubch", name=f"PubCh {unique_id}"
+        op_user, sync_di, unique_id, suffix="pubch", name=f"PubCh {unique_id}"
     )
     events = await redis_pubsub_listener("sync/channel/created", timeout=2.0)
     assert any(e.get("payload", {}).get("channel_id") == channel_id for e in events)
@@ -69,13 +68,13 @@ async def test_op_channels_create_publishes_channel_created(
 @pytest.mark.asyncio
 async def test_op_messages_send_publishes_message_created(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
     channel_id = await _create_topic_channel(
-        op_user, op_container, unique_id, suffix="pubm", name=f"PubMsgCh {unique_id}"
+        op_user, sync_di, unique_id, suffix="pubm", name=f"PubMsgCh {unique_id}"
     )
     msg = await op_messages_send(
         MessagesSendPayload(
@@ -91,7 +90,7 @@ async def test_op_messages_send_publishes_message_created(
             ),
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     events = await redis_pubsub_listener("sync/message/created", timeout=2.0)
     assert any(e.get("payload", {}).get("message_id") == msg.message_id for e in events)
@@ -100,18 +99,18 @@ async def test_op_messages_send_publishes_message_created(
 @pytest.mark.asyncio
 async def test_op_channels_typing_publishes_channel_typing(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     redis_pubsub_listener,
     unique_id: str,
 ) -> None:
     channel_id = await _create_topic_channel(
-        op_user, op_container, unique_id, suffix="pubt", name=f"PubTypCh {unique_id}"
+        op_user, sync_di, unique_id, suffix="pubt", name=f"PubTypCh {unique_id}"
     )
     await op_channels_typing(
         ChannelsTypingPayload(channel_id=channel_id, typing=True, thread_id=None),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     events = await redis_pubsub_listener("sync/channel/typing", timeout=2.0)
     assert any(
@@ -123,7 +122,7 @@ async def test_op_channels_typing_publishes_channel_typing(
 @pytest.mark.asyncio
 async def test_op_git_resources_upsert_publishes_git_resource_upserted(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     redis_pubsub_listener,
     unique_id: str,
@@ -137,6 +136,6 @@ async def test_op_git_resources_upsert_publishes_git_resource_upserted(
             url=f"https://git.example/pub/proj_{unique_id}/-/merge_requests/111",
         )
     )
-    ref = await op_git_resources_upsert(payload, user=op_user, container=op_container)
+    ref = await op_git_resources_upsert(payload, user=op_user, di=sync_di)
     events = await redis_pubsub_listener("sync/git_resource/upserted", timeout=2.0)
     assert any(e.get("payload", {}).get("git_ref_id") == ref.git_ref_id for e in events)

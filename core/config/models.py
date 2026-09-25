@@ -139,6 +139,10 @@ class DatabaseConfig(BaseModel):
         default=None,
         description="PostgreSQL platform_realtime (durable-лог PlatformEvent)",
     )
+    stock_url: str | None = Field(
+        default=None,
+        description="PostgreSQL platform_stock (леджер склада: moves, quants, valuation)",
+    )
     redis_url: str = "redis://localhost:8099"
     redis_inventory_interval_seconds: int = Field(
         default=900,
@@ -148,9 +152,7 @@ class DatabaseConfig(BaseModel):
     statement_timeout_ms: int = Field(
         default=30_000,
         description=(
-            "PostgreSQL statement_timeout по умолчанию (мс). 0 — без ограничения. "
-            "Защищает от зависших запросов, исчерпывающих pool. Worker-задачи могут "
-            "поднимать лимит per-session через core.db.session_timeouts."
+            "PostgreSQL statement_timeout по умолчанию (мс). 0 — без ограничения."
         ),
         ge=0,
     )
@@ -166,6 +168,16 @@ class DatabaseConfig(BaseModel):
             "Защищает от висящих транзакций, удерживающих локи."
         ),
         ge=0,
+    )
+    pool_max_connections: int = Field(
+        default=5,
+        description="Верхняя граница пула Oxyde на одну базу процесса.",
+        ge=1,
+    )
+    pool_acquire_timeout_seconds: float = Field(
+        default=30,
+        description="Сколько секунд ждать свободное соединение пула Oxyde.",
+        gt=0,
     )
 
 
@@ -313,6 +325,7 @@ class ServerConfig(BaseModel):
     browser_service_url: str | None = None
     search_service_url: str | None = None
     wiki_service_url: str | None = None
+    stock_service_url: str | None = None
     guest_runtime_service_url: str | None = None
     realtime_service_url: str | None = None
     provider_litserve_service_url: str | None = None
@@ -361,6 +374,7 @@ class ServerConfig(BaseModel):
         "wiki": 8023,
         "guest_runtime": 8024,
         "realtime": 8025,
+        "stock": 8026,
     }
 
     def get_service_url(self, service: str | None = None) -> str:
@@ -408,6 +422,8 @@ class ServerConfig(BaseModel):
                 return self.search_service_url
             case "wiki":
                 return self.wiki_service_url
+            case "stock":
+                return self.stock_service_url
             case "guest_runtime":
                 return self.guest_runtime_service_url
             case "realtime":
@@ -1546,6 +1562,7 @@ def _default_stream_maxlen_by_queue() -> dict[str, int]:
     return {
         "search": 50_000,
         "idle": 20_000,
+        "a2a_push": 20_000,
         "crm": 20_000,
         "crm_summary": 20_000,
         "rag": 20_000,
@@ -2084,26 +2101,17 @@ class LLMConfig(BaseModel):
     platform_free_pool: PlatformFreePoolConfig = Field(default_factory=PlatformFreePoolConfig)
 
 
-class S3BucketConfig(BaseModel):
-    """Конфигурация одного S3 bucket"""
-
-    bucket_name: str | None = Field(
-        default=None, description="Реальное имя bucket (если отличается от ключа конфигурации)"
-    )
-    access_key_id: str | None = Field(default=None)
-    secret_access_key: str | None = Field(default=None)
-    endpoint_url: str | None = Field(default=None)
-    region_name: str = Field(default="us-east-1")
-    provider: str = Field(default="aws")
-    enabled: bool = Field(default=True)
-
-
 class S3Config(BaseModel):
-    """Конфигурация S3 с поддержкой multiple buckets"""
+    """Платформенное объектное хранилище (MinIO кластера). Хранилища компаний — таблица object_storages."""
 
     enabled: bool = Field(default=False)
-    default_bucket: str = Field(default="files")
-    buckets: dict[str, S3BucketConfig] = Field(default_factory=dict)
+    endpoint_url: str | None = Field(default=None)
+    region_name: str = Field(default="us-east-1")
+    bucket_name: str = Field(default="files")
+    access_key_id: str | None = Field(default=None)
+    secret_access_key: str | None = Field(default=None)
+    provider: str = Field(default="minio")
+    path_style: bool = Field(default=True)
 
 
 class FilesRetentionConfig(BaseModel):
@@ -2509,7 +2517,7 @@ def default_billing_resource_base_prices() -> dict[str, dict[str, float]]:
     - search: внешние Search provider calls из search.provider.* spans.
 
     Категория tool в биллинге не используется (тулы flows бесплатны в учёте).
-    Подробнее: configuration.mdc § billing, billing.mdc.
+    Подробнее: billing.mdc § Модель.
     """
     return {
         "llm": {"*": 0.0001},

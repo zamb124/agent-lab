@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.namespace_operations import (
     CONSOLE_NAMESPACE_KINDS,
     ConsoleNamespaceCreatePayload,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/namespaces", tags=["namespaces"])
 
 @router.get("", response_model=OffsetPage[Namespace])
 async def list_console_namespaces(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
     kind: Annotated[Literal["company_workspace", "personal", "all"], Query()] = "all",
@@ -32,17 +32,17 @@ async def list_console_namespaces(
     return await op_namespaces_console_list(
         ConsoleNamespacesListPayload(limit=limit, offset=offset, kinds=kinds),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("", response_model=Namespace, status_code=201)
-async def create_console_namespace(body: ConsoleNamespaceCreatePayload, container: ContainerDep) -> Namespace:
-    return await op_namespaces_console_create(body, user=require_context().user, container=container)
+async def create_console_namespace(body: ConsoleNamespaceCreatePayload, di: Di) -> Namespace:
+    return await op_namespaces_console_create(body, user=require_context().user, di=di)
 
 
 @router.get("/me/personal", response_model=Namespace)
-async def get_my_personal_namespace(container: ContainerDep) -> Namespace:
+async def get_my_personal_namespace(di: Di) -> Namespace:
     return await op_namespaces_personal(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )

@@ -5,15 +5,15 @@ import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingAgentDownloadPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import '@platform/lib/components/platform-icon.js';
-import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
-import { landHumanitecAgentHeroUrl } from '../utils/land-product-images.js';
+import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
+import { landHumanitecAgentHeroUrl } from '../_helpers/land-product-images.js';
 import {
     AGENT_DOWNLOAD_BASE,
     AGENT_PLATFORM_CATALOG,
     detectAgentHostOs,
     detectAgentMacArchitecture,
     getAgentPlatformSpec,
-} from '../utils/agent-download-platforms.js';
+} from '../_helpers/agent-download-platforms.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 
@@ -73,7 +73,7 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @returns {import('../utils/agent-download-platforms.js').AgentPlatformSpec | null}
+     * @returns {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec | null}
      */
     _getPrimaryPlatformSpec() {
         if (this._hostOs === 'windows') {
@@ -92,8 +92,8 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @param {import('../utils/agent-download-platforms.js').AgentPlatformId | null} primaryPlatformId
-     * @returns {readonly import('../utils/agent-download-platforms.js').AgentPlatformSpec[]}
+     * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformId | null} primaryPlatformId
+     * @returns {readonly import('../_helpers/agent-download-platforms.js').AgentPlatformSpec[]}
      */
     _getAlsoAvailablePlatforms(primaryPlatformId) {
         if (!primaryPlatformId) {
@@ -141,7 +141,7 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      */
     _renderPlatformIcon(platformSpec) {
         const iconMaskStyle = `--marketing-download-platform-icon-mask: url('${platformSpec.iconSrc}')`;
@@ -159,7 +159,7 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      */
     _renderPlatformRowIcon(platformSpec) {
         const iconMaskStyle = `--marketing-download-platform-icon-mask: url('${platformSpec.iconSrc}')`;
@@ -188,7 +188,7 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      * @param {{ hero?: boolean, recommended?: boolean }} [options]
      */
     _renderPlatformCard(platformSpec, options = {}) {
@@ -231,7 +231,7 @@ export class AgentDownloadPage extends PlatformPage {
     }
 
     /**
-     * @param {import('../utils/agent-download-platforms.js').AgentPlatformSpec} platformSpec
+     * @param {import('../_helpers/agent-download-platforms.js').AgentPlatformSpec} platformSpec
      */
     _renderInstallButton(platformSpec) {
         const iconMaskStyle = `--marketing-download-platform-icon-mask: url('${platformSpec.iconSrc}')`;

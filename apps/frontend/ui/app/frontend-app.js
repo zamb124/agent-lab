@@ -84,6 +84,17 @@ import {
     aiCustomProviderDeleteOp,
 } from '../events/resources/settings.resource.js';
 import {
+    companyStoragesLoadOp,
+    companyStoragesProbeOp,
+    companyStoragesCreateOp,
+    companyStoragesRotateOp,
+    companyStoragesDeleteOp,
+    companyStorageCreateForm,
+    companyStorageRoutesSetOp,
+    companyStorageMigrationsStartOp,
+    companyStorageMigrationSlice,
+} from '../events/resources/company-storages.resource.js';
+import {
     searchProvidersLoadOp,
     searchProviderPutOp,
     searchProviderOrderPutOp,
@@ -153,7 +164,7 @@ import {
     cookieConsentRecordOp,
     cookieConsentSlice,
 } from '../events/resources/cookie-consent.resource.js';
-import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import { buildFrontendAssistantContext } from '../_helpers/platform-assistant-context.js';
 import { canInjectPublicAnalytics, shouldFetchPublicSiteBundle } from '../_helpers/cookie-consent-analytics.js';
 
@@ -181,7 +192,7 @@ import '../pages/select-company-page.js';
 import '../pages/dashboard-page.js';
 import '../pages/team/team-page.js';
 import '../pages/access/access-page.js';
-import '../sheets/access-why-sheet.js';
+import '../components/sheets/access-why-sheet.js';
 import '../pages/namespaces/namespaces-page.js';
 import '../pages/api-keys/api-keys-page.js';
 import '../pages/company-variables/company-variables-page.js';
@@ -346,6 +357,15 @@ export class FrontendApp extends PlatformApp {
         billingPlanChangeOp,
         billingTopupOp,
         settingsLoadOp,
+        companyStoragesLoadOp,
+        companyStoragesProbeOp,
+        companyStoragesCreateOp,
+        companyStoragesRotateOp,
+        companyStoragesDeleteOp,
+        companyStorageCreateForm,
+        companyStorageRoutesSetOp,
+        companyStorageMigrationsStartOp,
+        companyStorageMigrationSlice,
         settingsUpdateOp,
         aiProvidersLoadOp,
         aiProviderCapabilityPutOp,

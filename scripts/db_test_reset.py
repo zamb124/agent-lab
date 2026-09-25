@@ -11,7 +11,7 @@
     отсутствия ORDER BY и накопленного списка типов company `system`
 
 Канон:
-  - TRUNCATE всех user-таблиц (кроме alembic_version) во всех platform service-БД
+  - TRUNCATE всех user-таблиц (кроме oxyde_migrations) во всех platform service-БД
   - БД `openfga` не трогаем: схема goose OpenFGA, truncate ломает `openfga migrate`
   - `pg_terminate_backend` всех сторонних сессий перед TRUNCATE
   - если backend завис в `BgworkerShutdown` и terminate не снимает lock'и —
@@ -396,7 +396,7 @@ async def _truncate_database(
             FROM information_schema.tables
             WHERE table_schema = 'public'
               AND table_type = 'BASE TABLE'
-              AND table_name <> 'alembic_version'
+              AND table_name <> 'oxyde_migrations'
             """
         )
         tables = [row["table_name"] for row in rows]

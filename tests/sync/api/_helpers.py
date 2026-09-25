@@ -1,12 +1,8 @@
 """Общие helpers для HTTP-тестов sync.
 
-После удаления SyncSpace тесты создают namespace через shared
-`NamespaceRepository` (CRM-сервиса в тестовом контейнере sync нет, поэтому
-вместо REST `/crm/api/v1/namespaces` идём напрямую в репозиторий).
-
-`NamespaceRepository.is_global = False`, поэтому `set` требует активный
-`Context` с `active_company`. В pytest-процессе он не выставлен — поднимаем
-на короткое время для seed'а, потом сбрасываем.
+Тесты создают namespace через `NamespaceService` (таблица `namespaces` в shared).
+Менеджер фильтрует активную компанию, поэтому seed поднимает `Context` и потом
+сбрасывает его.
 """
 
 
@@ -16,6 +12,7 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from core.context import clear_context, get_context, set_context
+from core.di.platform import PlatformDi
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
@@ -73,30 +70,28 @@ def _temporary_company_context(
 
 
 async def seed_namespace_via_repo(
+    di: PlatformDi,
     company_id: str,
     name: str,
     *,
     subdomain: str | None = None,
 ) -> str:
-    """Создаёт namespace через NamespaceService (SQL + OpenFGA dual-write)."""
-    from apps.frontend.container import get_frontend_container
-
+    """Создаёт namespace через NamespaceService (SQL + OpenFGA dual-write) DI вызывающего теста."""
     resolved_subdomain = subdomain
     if resolved_subdomain is None:
-        company = await get_frontend_container().company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is not None and company.subdomain is not None and company.subdomain.strip() != "":
             resolved_subdomain = company.subdomain
 
-    container = get_frontend_container()
     with _temporary_company_context(company_id, subdomain=resolved_subdomain):
-        existing = await container.namespace_service.get(name)
+        existing = await di.namespace_service.get(name)
         if existing is None:
-            _ = await container.namespace_service.create(
+            _ = await di.namespace_service.create(
                 name=name,
                 description="sync test namespace",
             )
         else:
-            await container.authz_service.write(
+            await di.authz_service.write(
                 [
                     platform_namespace_company_link(company_id, name),
                     platform_namespace_company_viewer_tuple(company_id, name),
@@ -116,8 +111,10 @@ async def create_topic_channel_via_http(
     channel_name: str = "TopicChannel",
 ) -> str:
     """Создаёт topic-канал через REST sync, предварительно засеяв namespace."""
+    from tests.sync.conftest import require_sync_di
+
     namespace = f"ns_{unique_id}_{suffix}" if suffix else f"ns_{unique_id}"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
     cr = await sync_client.post(
         "/sync/api/v1/channels/",
         headers=sync_auth_headers,

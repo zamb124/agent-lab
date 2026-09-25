@@ -26,9 +26,9 @@ import {
 import {
     buildEntityTypeColorMapFromItems,
     buildEntityTypeIconMapFromItems,
-} from '../utils/crm-entity-type-visuals.js';
-import { buildRelationshipTypeLabelMapFromItems } from '../utils/crm-relationship-type-labels.js';
-import { buildGraphWorkspaceSearch } from '../utils/graph-view-mode.js';
+} from '../_helpers/crm-entity-type-visuals.js';
+import { buildRelationshipTypeLabelMapFromItems } from '../_helpers/crm-relationship-type-labels.js';
+import { buildGraphWorkspaceSearch } from '../_helpers/graph-view-mode.js';
 import './mindmap-canvas.js';
 
 const API_MAX_DEPTH = 5;

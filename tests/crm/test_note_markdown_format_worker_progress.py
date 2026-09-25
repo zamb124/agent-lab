@@ -1,178 +1,90 @@
-"""Форматирование Markdown заметки: один вызов TextTransformService, финальный WS."""
+"""Форматирование Markdown заметки: TextTransformService через MockLLM, OCC по description."""
 
 from __future__ import annotations
 
-import inspect
-from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
-from types import SimpleNamespace
-from typing import cast
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, datetime
 
 import pytest
-from pytest import MonkeyPatch
+import pytest_asyncio
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from tests.crm.e2e._json_helpers import object_dict, object_str
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm_worker.di import CrmWorkerDi
+from apps.crm_worker.tasks.note_markdown_tasks import format_note_description_markdown_task
+from core.utils.tokens import get_token_service
+from tests.fixtures.service_processes import ServiceProcesses
 
-FormatMarkdownTaskFn = Callable[..., Awaitable[dict[str, object]]]
+_COMPANY_ID = "system"
 
 
-def _note(*, description: str) -> SimpleNamespace:
-    return SimpleNamespace(
-        entity_id="note-1",
-        company_id="co-1",
-        namespace="default",
-        entity_type=NOTE_ROOT_ENTITY_TYPE_ID,
-        description=description,
-        updated_at=datetime(2026, 1, 10, 12, 0, 0, tzinfo=timezone.utc),
-        note_date=datetime(2026, 1, 9, tzinfo=timezone.utc),
+@pytest_asyncio.fixture
+async def di(service_processes: ServiceProcesses) -> CrmWorkerDi:
+    return await service_processes.di(CrmWorkerDi)
+
+
+async def _seed_note(unique_id: str, description: str) -> CRMEntity:
+    return await CRMEntity.create(
+        CRMEntity(
+            entity_id=f"note_md_{unique_id}",
+            company_id=_COMPANY_ID,
+            namespace=f"md_ns_{unique_id}",
+            entity_type=NOTE_ROOT_ENTITY_TYPE_ID,
+            name=f"Note {unique_id}",
+            description=description,
+            user_id="test_user",
+            note_date=datetime(2026, 1, 9, tzinfo=UTC),
+            attributes={},
+        )
     )
 
 
 @pytest.mark.asyncio
-async def test_note_markdown_format_single_text_transform_call_full_body(
-    monkeypatch: MonkeyPatch,
+async def test_note_markdown_format_replaces_description_with_one_transform_call(
+    di: CrmWorkerDi,
+    mock_llm_redis,
+    mock_llm_capture,
+    unique_id: str,
 ) -> None:
-    from apps.crm_worker.tasks import note_markdown_tasks as nmt
-
-    async def _noop(*_args: object, **_kwargs: object) -> None:
-        return None
-
-    monkeypatch.setattr(nmt, "set_crm_context", _noop)
-
     full_text = "alpha\n\n" * 800
-    note_ent = _note(description=full_text)
-
-    async def _apply_description(
-        entity_id: str,
-        *,
-        expected_description: str,
-        description: str,
-    ) -> SimpleNamespace:
-        assert entity_id == "note-1"
-        assert expected_description == full_text
-        note_ent.description = description
-        return note_ent
-
-    repo = MagicMock()
-    repo.get = AsyncMock(return_value=note_ent)
-    repo.update_description_if_current = AsyncMock(side_effect=_apply_description)
-    repo.update = AsyncMock()
-
-    container = MagicMock()
-    container.entity_repository = repo
-    container.company_repository = MagicMock()
-    container.authz_service = MagicMock()
-    monkeypatch.setattr(nmt, "get_crm_container", lambda: container)
-
-    class _TextTransformSettings:
-        markdown_max_chunk_chars: int = 6000
-
-    class _Settings:
-        text_transforms: _TextTransformSettings = _TextTransformSettings()
-
-    monkeypatch.setattr(nmt, "get_settings", lambda: _Settings())
-
-    format_calls: list[dict[str, str]] = []
-
-    class _TextTransformService:
-        async def format_markdown(self, text: str) -> str:
-            format_calls.append({"text": text})
-            return "# ok\n"
-
-    monkeypatch.setattr(nmt, "TextTransformService", _TextTransformService)
-
-    broadcast_calls: list[dict[str, object]] = []
-
-    async def _broadcast(**kwargs: object) -> None:
-        broadcast_calls.append(dict(kwargs))
-
-    monkeypatch.setattr(nmt, "broadcast_crm_note_event", _broadcast)
-
-    raw_fn = cast(
-        FormatMarkdownTaskFn,
-        inspect.unwrap(nmt.format_note_description_markdown_task),
+    note = await _seed_note(unique_id, full_text)
+    _ = await di.namespace_service.get_or_create(
+        note.namespace, description="markdown format test"
     )
-    result = await raw_fn(
-        "note-1",
-        "co-1",
-        "default",
-        "tok",
-        "user-1",
+    await mock_llm_redis([{"type": "text", "content": "# ok\n"}])
+
+    result = await format_note_description_markdown_task(
+        note.entity_id,
+        _COMPANY_ID,
+        note.namespace,
+        get_token_service().create_token("test_user", company_id=_COMPANY_ID),
+        "test_user",
         "ru",
+        di=di,
     )
 
-    assert result["status"] == "completed"
-    assert len(format_calls) == 1
-    assert format_calls[0]["text"] == full_text.strip()
-    assert object_str(cast(object, note_ent.description), field="description") == "# ok"
-    repo.update.assert_not_called()
-    assert len(broadcast_calls) == 1
-    first_broadcast = broadcast_calls[0]
-    assert first_broadcast["skip_notification_center"] is False
-    markdown_format = object_dict(
-        first_broadcast.get("markdown_format"),
-        field="markdown_format",
-    )
-    assert markdown_format["phase"] == "complete"
-    assert markdown_format["chunks_done"] == 1
-    assert markdown_format["chunks_total"] == 1
+    assert result == {
+        "status": "completed",
+        "note_id": note.entity_id,
+        "chunks_total": 1,
+        "chunks_processed": 1,
+    }
+    assert len(await mock_llm_capture()) == 1
+    stored = await CRMEntity.get(note.entity_id)
+    assert stored is not None
+    assert stored.description == "# ok"
 
 
 @pytest.mark.asyncio
-async def test_note_markdown_format_skips_when_description_changed(
-    monkeypatch: MonkeyPatch,
-) -> None:
-    from apps.crm_worker.tasks import note_markdown_tasks as nmt
+async def test_description_update_is_skipped_when_description_changed(unique_id: str) -> None:
+    note = await _seed_note(unique_id, "hello")
 
-    async def _noop(*_args: object, **_kwargs: object) -> None:
-        return None
-
-    monkeypatch.setattr(nmt, "set_crm_context", _noop)
-
-    note_before = _note(description="hello")
-
-    repo = MagicMock()
-    repo.get = AsyncMock(return_value=note_before)
-    repo.update_description_if_current = AsyncMock(return_value=None)
-    repo.update = AsyncMock()
-
-    container = MagicMock()
-    container.entity_repository = repo
-    container.company_repository = MagicMock()
-    container.authz_service = MagicMock()
-    monkeypatch.setattr(nmt, "get_crm_container", lambda: container)
-
-    class _TextTransformSettings:
-        markdown_max_chunk_chars: int = 6000
-
-    class _Settings:
-        text_transforms: _TextTransformSettings = _TextTransformSettings()
-
-    monkeypatch.setattr(nmt, "get_settings", lambda: _Settings())
-
-    class _TextTransformService:
-        async def format_markdown(self, text: str) -> str:
-            _ = text
-            return "# ok\n"
-
-    monkeypatch.setattr(nmt, "TextTransformService", _TextTransformService)
-    monkeypatch.setattr(nmt, "broadcast_crm_note_event", AsyncMock())
-
-    raw_fn = cast(
-        FormatMarkdownTaskFn,
-        inspect.unwrap(nmt.format_note_description_markdown_task),
-    )
-    result = await raw_fn(
-        "note-1",
-        "co-1",
-        "default",
-        "tok",
-        "user-1",
-        "ru",
+    merged = await CRMEntity.update_description_if_current(
+        note.entity_id,
+        expected_description="hello, edited by the user meanwhile",
+        description="# ok",
     )
 
-    assert result["status"] == "skipped_stale"
-    repo.update.assert_not_called()
-    repo.update_description_if_current.assert_awaited_once()
+    assert merged is None
+    stored = await CRMEntity.get(note.entity_id)
+    assert stored is not None
+    assert stored.description == "hello"

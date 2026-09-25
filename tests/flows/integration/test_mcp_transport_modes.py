@@ -16,10 +16,8 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
-from apps.flows.src.models.mcp_catalog import MCPCatalogVerifyStatus
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
 from apps.flows.src.services.mcp_catalog_crawler import crawl_mcp_registry
 from apps.flows.src.services.mcp_catalog_ids import (
     catalog_id_from_registry_name,
@@ -255,27 +253,26 @@ async def test_mcp_catalog_provision_includes_auth_required_entries(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Catalog verify_status=auth_required всё ещё provisionable (needs credentials at runtime)."""
     catalog_id = f"authreq_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         verify_status=MCPCatalogVerifyStatus.AUTH_REQUIRED,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.added == 1
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
     assert get_response.status_code == 200
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -316,6 +313,7 @@ async def test_mcp_catalog_crawl_maps_streamable_http_to_http_transport(
     local_mcp_registry_stub,
     mcp_modes_stub,
     unique_id: str,
+    di,
 ) -> None:
     """Registry remote type `streamable-http` → catalog.transport_type=http."""
     url, _state = mcp_modes_stub(MCPStubMode(tools=default_stub_tools()))
@@ -334,19 +332,18 @@ async def test_mcp_catalog_crawl_maps_streamable_http_to_http_transport(
             "metadata": {},
         }
     ]
-    container = as_flow_runtime_container(get_container())
     with mcp_catalog_settings(
         registry_base_url=registry_base_url,
         max_verify_per_crawl=0,
         auto_provision="disabled",
     ):
-        _ = await crawl_mcp_registry(container=container)
+        _ = await crawl_mcp_registry(di=di)
 
-    entry = await container.mcp_catalog_repository.get(catalog_id)
+    entry = await MCPCatalogEntry.get(catalog_id)
     assert entry is not None
     assert entry.transport_type == "http"
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -359,17 +356,15 @@ async def test_mcp_tool_not_found_rpc_error(mcp_modes_stub, unique_id: str) -> N
 
 
 @pytest.mark.asyncio
-async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique_id: str, app) -> None:
+async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique_id: str, app, di) -> None:
     """Secret @var: резолвится в реальное значение при sync (не маска ***)."""
-    from apps.flows.src.container import get_container
     from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
     url, state = mcp_modes_stub(MCPStubMode(tools=default_stub_tools()))
     server_id = f"secvar_{unique_id}"
     variable_key = f"mcp_secret_hdr_{unique_id}"
-    container = get_container()
     await upsert_static_variable_via_service(
-        container,
+        di,
         variable_key,
         "super-secret-token",
         secret=True,
@@ -400,17 +395,15 @@ async def test_mcp_secret_var_resolved_in_headers(client, mcp_modes_stub, unique
 
 
 @pytest.mark.asyncio
-async def test_mcp_var_in_headers_resolved_before_request(client, mcp_modes_stub, unique_id: str, app) -> None:
+async def test_mcp_var_in_headers_resolved_before_request(client, mcp_modes_stub, unique_id: str, app, di) -> None:
     """@var: в headers резолвится через variables_service при sync."""
-    from apps.flows.src.container import get_container
     from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
     url, state = mcp_modes_stub(MCPStubMode(tools=default_stub_tools()))
     server_id = f"varhdr_{unique_id}"
     variable_key = f"mcp_hdr_token_{unique_id}"
-    container = get_container()
     await upsert_static_variable_via_service(
-        container,
+        di,
         variable_key,
         "resolved-secret",
         secret=True,
@@ -446,6 +439,7 @@ async def test_mcp_catalog_crawl_maps_sse_remote_to_sse_transport(
     local_mcp_registry_stub,
     mcp_modes_stub,
     unique_id: str,
+    di,
 ) -> None:
     """Registry remote type `sse` → catalog.transport_type=sse."""
     url, _state = mcp_modes_stub(MCPStubMode(response_format="sse", tools=default_stub_tools()))
@@ -464,15 +458,14 @@ async def test_mcp_catalog_crawl_maps_sse_remote_to_sse_transport(
             "metadata": {},
         }
     ]
-    container = as_flow_runtime_container(get_container())
     with mcp_catalog_settings(
         registry_base_url=registry_base_url,
         max_verify_per_crawl=0,
         auto_provision="disabled",
     ):
-        _ = await crawl_mcp_registry(container=container)
+        _ = await crawl_mcp_registry(di=di)
 
-    entry = await container.mcp_catalog_repository.get(catalog_id)
+    entry = await MCPCatalogEntry.get(catalog_id)
     assert entry is not None
     assert entry.transport_type == "sse"
 
@@ -484,9 +477,9 @@ async def test_mcp_catalog_crawl_maps_sse_remote_to_sse_transport(
         }
     )
     verified.catalog_snapshot_hash = verified.recompute_snapshot_hash()
-    _ = await persist_catalog_entry(container=container, entry=verified)
+    _ = await persist_catalog_entry(entry=verified)
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -494,6 +487,7 @@ async def test_mcp_catalog_provision_sse_transport_syncs_via_sse_upstream(
     client,
     mcp_modes_stub,
     unique_id: str,
+    di,
 ) -> None:
     """Catalog entry transport_type=sse + SSE upstream → provision + sync."""
     url, _state = mcp_modes_stub(
@@ -501,16 +495,15 @@ async def test_mcp_catalog_provision_sse_transport_syncs_via_sse_upstream(
     )
     catalog_id = f"sse_cat_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=url,
         transport_type="sse",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
     assert stats.added == 1
 
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
@@ -519,7 +512,6 @@ async def test_mcp_catalog_provision_sse_transport_syncs_via_sse_upstream(
     assert len(get_response.json()["cached_tools"]) == 1
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -527,7 +519,7 @@ async def test_mcp_catalog_provision_sse_transport_syncs_via_sse_upstream(
 
 
 @pytest.mark.asyncio
-async def test_mcp_wire_tool_meta_and_output_schema(mcp_modes_stub, unique_id: str) -> None:
+async def test_mcp_wire_tool_meta_and_output_schema(mcp_modes_stub, unique_id: str, di) -> None:
     """Wire tool с outputSchema/annotations/meta → MCPDiscoveredTool."""
     wire_tool: dict[str, object] = {
         "name": "meta_tool",
@@ -539,10 +531,9 @@ async def test_mcp_wire_tool_meta_and_output_schema(mcp_modes_stub, unique_id: s
         "_meta": {"source": "stub"},
     }
     url, _state = mcp_modes_stub(MCPStubMode(tools=[wire_tool]))
-    container = as_flow_runtime_container(get_container())
     server = _server_config(url=url, server_id=f"meta_{unique_id}")
-    _ = await container.mcp_server_repository.set(server)
-    tool_ids, tools = await sync_mcp_server_tools(container=container, server_config=server)
+    _ = await MCPServerConfig.set(server)
+    tool_ids, tools = await sync_mcp_server_tools(di=di, server_config=server)
     assert len(tool_ids) == 1
     discovered = tools[0]
     assert discovered.tool_name == "meta_tool"
@@ -551,7 +542,7 @@ async def test_mcp_wire_tool_meta_and_output_schema(mcp_modes_stub, unique_id: s
     assert discovered.annotations == {"readOnlyHint": True}
     assert discovered.meta == {"source": "stub"}
 
-    _ = await container.mcp_server_repository.delete(server.server_id)
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server.server_id))
 
 
 def test_mcp_jsonrpc_body_parse_multiline_sse_and_done() -> None:

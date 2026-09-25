@@ -20,7 +20,7 @@ AGENT_API_PREFIX = "/frontend/api/agent"
 
 
 async def _seed_agent_pairing(
-    frontend_container,
+    frontend_di,
     *,
     pairing_code: str,
     user_id: str,
@@ -28,7 +28,7 @@ async def _seed_agent_pairing(
 ) -> None:
     key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
     payload = json.dumps({"user_id": user_id, "company_id": company_id})
-    await frontend_container.shared_storage.set(key, payload, force_global=True)
+    await frontend_di.shared_storage.set(key, payload, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ async def test_device_token_unauthorized(frontend_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_issue_device_token_no_active_company(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
 ) -> None:
     user_id = f"agent_no_co_{uuid.uuid4().hex[:10]}"
     user = User(
@@ -89,12 +89,12 @@ async def test_issue_device_token_no_active_company(
         companies={},
         active_company_id="",
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     token = get_token_service().create_token(user_id, company_id="", roles=[])
     frontend_client.cookies.set("auth_token", token)
     response = await frontend_client.post(f"{AGENT_API_PREFIX}/auth/device-token")
     assert response.status_code == 400
-    assert response.json()["detail"] == "Компания не выбрана"
+    assert response.json()["detail"] == "Company is not selected"
 
 
 @pytest.mark.asyncio
@@ -145,7 +145,7 @@ async def test_register_invalid_pairing_code(frontend_client: AsyncClient, uniqu
         },
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Недействительный или истёкший pairing code"
+    assert response.json()["detail"] == "pairing code is invalid or expired"
 
 
 @pytest.mark.asyncio
@@ -190,12 +190,12 @@ async def test_register_wrong_pairing_code_length(frontend_client: AsyncClient, 
 @pytest.mark.asyncio
 async def test_register_corrupted_pairing_data(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     pairing_code = "111111"
     key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
-    await frontend_container.shared_storage.set(key, json.dumps("not-json"), force_global=True)
+    await frontend_di.shared_storage.set(key, json.dumps("not-json"), force_global=True)
     try:
         response = await frontend_client.post(
             f"{AGENT_API_PREFIX}/register",
@@ -208,15 +208,15 @@ async def test_register_corrupted_pairing_data(
             },
         )
         assert response.status_code == 400
-        assert response.json()["detail"] == "Повреждённые данные pairing code"
+        assert response.json()["detail"] == "pairing code payload is corrupt"
     finally:
-        await frontend_container.shared_storage.delete(key, force_global=True)
+        await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_register_success(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -229,7 +229,7 @@ async def test_register_success(
     device_key = f"{DEVICE_KEY_PREFIX}{device_id}"
 
     await _seed_agent_pairing(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=token_data.user_id,
         company_id=token_data.company_id,
@@ -256,7 +256,7 @@ async def test_register_success(
         assert body["tunnel_ws_url"] == "ws://system.lvh.me:9004/frontend/api/agent/tunnel"
         assert body["company_id"] == token_data.company_id
 
-        stored_raw = await frontend_container.shared_storage.get(device_key, force_global=True)
+        stored_raw = await frontend_di.shared_storage.get(device_key, force_global=True)
         assert stored_raw is not None
         device = AgentDeviceRecord.model_validate_json(stored_raw)
         assert device.device_id == device_id
@@ -264,17 +264,17 @@ async def test_register_success(
         assert device.company_id == token_data.company_id
         assert device.policy.shell_enabled is False
 
-        pairing_left = await frontend_container.shared_storage.get(pairing_key, force_global=True)
+        pairing_left = await frontend_di.shared_storage.get(pairing_key, force_global=True)
         assert pairing_left is None
     finally:
-        await frontend_container.shared_storage.delete(pairing_key, force_global=True)
-        await frontend_container.shared_storage.delete(device_key, force_global=True)
+        await frontend_di.shared_storage.delete(pairing_key, force_global=True)
+        await frontend_di.shared_storage.delete(device_key, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_register_pairing_code_single_use(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -286,7 +286,7 @@ async def test_register_pairing_code_single_use(
     pairing_key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
 
     await _seed_agent_pairing(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=token_data.user_id,
         company_id=token_data.company_id,
@@ -304,14 +304,14 @@ async def test_register_pairing_code_single_use(
         second = await frontend_client.post(f"{AGENT_API_PREFIX}/register", json=payload)
         assert second.status_code == 400
     finally:
-        await frontend_container.shared_storage.delete(pairing_key, force_global=True)
-        await frontend_container.shared_storage.delete(device_key, force_global=True)
+        await frontend_di.shared_storage.delete(pairing_key, force_global=True)
+        await frontend_di.shared_storage.delete(device_key, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_list_devices_after_register(
     frontend_client_with_auth: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -324,7 +324,7 @@ async def test_list_devices_after_register(
     pairing_key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
 
     await _seed_agent_pairing(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=token_data.user_id,
         company_id=token_data.company_id,
@@ -348,8 +348,8 @@ async def test_list_devices_after_register(
         device_ids = [item["device_id"] for item in items]
         assert device_id in device_ids
     finally:
-        await frontend_container.shared_storage.delete(pairing_key, force_global=True)
-        await frontend_container.shared_storage.delete(device_key, force_global=True)
+        await frontend_di.shared_storage.delete(pairing_key, force_global=True)
+        await frontend_di.shared_storage.delete(device_key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -379,13 +379,13 @@ async def test_download_unknown_platform(frontend_client: AsyncClient) -> None:
     )
     assert response.status_code == 400
     body = response.json()
-    assert "Неподдерживаемая платформа" in body["detail"]
+    assert "Unsupported platform" in body["detail"]
 
 
 @pytest.mark.asyncio
 async def test_revoke_blocks_tunnel_reconnect(
     frontend_client_with_auth: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from starlette.websockets import WebSocketDisconnect
@@ -436,13 +436,13 @@ async def test_revoke_blocks_tunnel_reconnect(
     tunnel_socket = _RejectedWebSocket()
     await agent_tunnel_websocket(
         cast(WebSocket, cast(object, tunnel_socket)),
-        frontend_container,
+        frontend_di,
         token=device_token,
     )
     assert tunnel_socket.accepted is True
     assert tunnel_socket.close_code in {4401, 4403}
 
-    deny_raw = await frontend_container.shared_storage.get(
+    deny_raw = await frontend_di.shared_storage.get(
         f"{TOKEN_DENY_PREFIX}{device_id}",
         force_global=True,
     )
@@ -452,7 +452,7 @@ async def test_revoke_blocks_tunnel_reconnect(
 @pytest.mark.asyncio
 async def test_update_device_policy(
     frontend_client_with_auth: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -465,7 +465,7 @@ async def test_update_device_policy(
     pairing_key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
 
     await _seed_agent_pairing(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=token_data.user_id,
         company_id=token_data.company_id,
@@ -501,13 +501,13 @@ async def test_update_device_policy(
         body = patch_response.json()
         assert body["policy"]["shell_enabled"] is True
 
-        stored_raw = await frontend_container.shared_storage.get(device_key, force_global=True)
+        stored_raw = await frontend_di.shared_storage.get(device_key, force_global=True)
         assert stored_raw is not None
         device = AgentDeviceRecord.model_validate_json(stored_raw)
         assert device.policy.shell_enabled is True
     finally:
-        await frontend_container.shared_storage.delete(pairing_key, force_global=True)
-        await frontend_container.shared_storage.delete(device_key, force_global=True)
+        await frontend_di.shared_storage.delete(pairing_key, force_global=True)
+        await frontend_di.shared_storage.delete(device_key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -580,7 +580,7 @@ async def test_download_redirect_serves_local_artifact(
 @pytest.mark.asyncio
 async def test_revoke_device(
     frontend_client_with_auth: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -593,7 +593,7 @@ async def test_revoke_device(
     pairing_key = f"{PAIRING_CODE_PREFIX}{pairing_code}"
 
     await _seed_agent_pairing(
-        frontend_container,
+        frontend_di,
         pairing_code=pairing_code,
         user_id=token_data.user_id,
         company_id=token_data.company_id,
@@ -616,19 +616,19 @@ async def test_revoke_device(
         )
         assert revoke_response.status_code == 200, revoke_response.text
 
-        stored_raw = await frontend_container.shared_storage.get(device_key, force_global=True)
+        stored_raw = await frontend_di.shared_storage.get(device_key, force_global=True)
         assert stored_raw is not None
         device = AgentDeviceRecord.model_validate_json(stored_raw)
         assert device.is_active is False
     finally:
-        await frontend_container.shared_storage.delete(pairing_key, force_global=True)
-        await frontend_container.shared_storage.delete(device_key, force_global=True)
+        await frontend_di.shared_storage.delete(pairing_key, force_global=True)
+        await frontend_di.shared_storage.delete(device_key, force_global=True)
 
 
 @pytest.mark.asyncio
 async def test_agent_tunnel_ping_pong(
     frontend_client_with_auth: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from starlette.websockets import WebSocketDisconnect
@@ -676,7 +676,7 @@ async def test_agent_tunnel_ping_pong(
     tunnel_socket = _TunnelWebSocket()
     await agent_tunnel_websocket(
         cast(WebSocket, cast(object, tunnel_socket)),
-        frontend_container,
+        frontend_di,
         token=device_token,
     )
 

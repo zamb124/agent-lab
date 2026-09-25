@@ -3,7 +3,7 @@
  */
 
 import { html } from 'lit';
-import { getNodeTypeMeta } from '../constants/node-icons.js';
+import { getNodeTypeMeta } from './node-icons.js';
 import { inferToolRefLanguage } from './flows-tool-visual.js';
 import { renderMcpServerIcon } from './mcp-server-icon.js';
 

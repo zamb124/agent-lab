@@ -34,9 +34,26 @@ async def test_list_returns_offset_page_shape(wiki_client):
 
 
 async def test_list_contains_current_namespace(wiki_client, wiki_namespace):
-    response = await wiki_client.get(NAMESPACES_URL)
-
-    names = [item["name"] for item in response.json()["items"]]
+    names: set[str] = set()
+    offset = 0
+    while True:
+        response = await wiki_client.get(NAMESPACES_URL, params={"limit": 200, "offset": offset})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        items = body["items"]
+        if not isinstance(items, list):
+            raise AssertionError("namespaces items must be a list")
+        for item in items:
+            name = item["name"]
+            if not isinstance(name, str):
+                raise AssertionError("namespace name must be a string")
+            names.add(name)
+        total = body["total"]
+        if not isinstance(total, int):
+            raise AssertionError("namespaces total must be an int")
+        offset += len(items)
+        if len(items) == 0 or offset >= total:
+            break
     assert wiki_namespace in names
 
 

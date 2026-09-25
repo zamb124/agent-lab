@@ -37,6 +37,9 @@ _FGA_ONLY_NO_SQL_SOURCE: frozenset[str] = frozenset(
         "flow_branch_company_viewer_tuple",
         "tool_group_viewer_tuple",
         "tool_company_viewer_tuple",
+        # Stock warehouse owner/members are FGA grants (нет owner-колонки в SQL)
+        "stock_warehouse_owner_tuple",
+        "stock_warehouse_member_tuple",
     }
 )
 

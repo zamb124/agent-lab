@@ -6,20 +6,22 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import TASK_SPAN_BILLING_SETTLEMENT_TICK
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.billing.span_billing_settlement import SpanBillingSettlement
 from core.config import get_settings
-from core.context import Context, set_context
+from core.context import set_context
 from core.logging import get_logger
 from core.logging.attributes import (
     EVENT_BILLING_SETTLEMENT_LAG,
     LOG_BILLING_SETTLEMENT_LAG_MS,
     LOG_OPERATION_NAME,
 )
+from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.tasks import platform_task
+from core.tracing.models import Span
 
 logger = get_logger(__name__)
 
@@ -28,6 +30,8 @@ logger = get_logger(__name__)
 async def span_billing_settlement_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     settings = get_settings()
     cfg = settings.billing.span_settlement
@@ -42,13 +46,11 @@ async def span_billing_settlement_tick(
     now = datetime.now(timezone.utc)
     from_time = now - timedelta(minutes=cfg.lookback_minutes)
 
-    container = get_container()
-    span_repo = container.span_repository
-    billing = container.billing_service
-    settlement = SpanBillingSettlement(container.shared_storage)
+    billing = di.billing_service
+    settlement = SpanBillingSettlement(di.shared_storage)
 
     scoped_company_id = company_id
-    spans = await span_repo.list_spans_pending_billing_settlement(
+    spans = await Span.list_spans_pending_billing_settlement(
         from_time=from_time,
         to_time=now,
         limit=cfg.batch_limit,
@@ -81,7 +83,10 @@ async def span_billing_settlement_tick(
             rules_doc = await billing.load_settlement_rules_document_for_company(span_company_id)
             rules_by_company[span_company_id] = rules_doc
         if span.end_time is not None:
-            settlement_lag_ms = int((now - span.end_time).total_seconds() * 1000)
+            end_time = span.end_time
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            settlement_lag_ms = int((now - end_time).total_seconds() * 1000)
             logger.info(
                 EVENT_BILLING_SETTLEMENT_LAG,
                 **{

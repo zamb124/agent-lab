@@ -60,7 +60,7 @@ class TestDemoAuth:
         finally:
             set_settings(old)
 
-    async def test_demo_login_success(self, unique_id, frontend_client):
+    async def test_demo_login_success(self, unique_id, frontend_client, frontend_di):
         old = get_settings()
         subdomain = f"d{unique_id}"
         demo_cfg = DemoAuthConfig(
@@ -75,14 +75,8 @@ class TestDemoAuth:
         new_settings = old.model_copy(update={"auth": new_auth})
         set_settings(new_settings)
         try:
-            from apps.frontend.container import get_frontend_container
-
-            container = get_frontend_container()
             await ensure_demo_company_and_user(
-                company_repository=container.company_repository,
-                user_repository=container.user_repository,
-                subdomain_repository=container.subdomain_repository,
-                authz=container.authz_service,
+                authz=frontend_di.authz_service,
             )
 
             response = await frontend_client.post(

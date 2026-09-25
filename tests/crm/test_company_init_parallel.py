@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CompanyMapping, CRMEntity
+from apps.crm.models.company_mapping import CompanyMapping
+from apps.crm.models.crm_entity import CRMEntity
 from core.authz.service import AuthzService
 from core.context import clear_context, set_context
 from core.identity.company_membership import set_company_member_roles
@@ -24,7 +24,7 @@ _PARALLEL_WORKERS = 8
 
 async def test_initialize_company_parallel_workers_share_one_mapping(
     authz_service: AuthzService,
-    crm_container: CRMContainer,
+    crm_di,
     unique_id: str,
 ) -> None:
     """N воркеров как CRM granian: один mapping, без IntegrityError в lifespan."""
@@ -38,11 +38,9 @@ async def test_initialize_company_parallel_workers_share_one_mapping(
         members={},
     )
     owner = User(user_id=owner_id, name="Owner", companies={})
-    _ = await crm_container.company_repository.set(company)
-    _ = await crm_container.user_repository.set(owner)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
     _ = await set_company_member_roles(
-        company_repository=crm_container.company_repository,
-        user_repository=crm_container.user_repository,
         authz=authz_service,
         company=company,
         user=owner,
@@ -59,7 +57,7 @@ async def test_initialize_company_parallel_workers_share_one_mapping(
         results: list[dict[str, int | bool]] = list(
             await asyncio.gather(
                 *[
-                    crm_container.company_init_service.initialize_company(company_id)
+                    crm_di.company_init_service.initialize_company(company_id)
                     for _ in range(_PARALLEL_WORKERS)
                 ]
             )
@@ -68,16 +66,15 @@ async def test_initialize_company_parallel_workers_share_one_mapping(
         clear_context()
 
     assert len(results) == _PARALLEL_WORKERS
-    mapping: CompanyMapping | None = await crm_container.company_mapping_repository.get(
-        company_id
-    )
+    mapping: CompanyMapping | None = await CompanyMapping.get(company_id)
     assert mapping is not None
-    organizations: list[CRMEntity]
-    organizations, _, _ = await crm_container.entity_repository.list_by_cursor(
-        entity_type="organization",
-        namespace="default",
-        company_id=company_id,
-        limit=10,
-    )
+    organizations = (
+        await CRMEntity.cursor_page(
+            entity_type="organization",
+            namespace="default",
+            company_id=company_id,
+            limit=10,
+        )
+    ).items
     assert len(organizations) == 1
     assert mapping.entity_id == organizations[0].entity_id

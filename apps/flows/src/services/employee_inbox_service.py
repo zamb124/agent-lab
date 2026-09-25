@@ -16,20 +16,23 @@ Write-back в WorkItem (видимость «агент взял задачу»)
 
 from __future__ import annotations
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import is_flow_employee, require_flow_employee_flow_id
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.tasks import enqueue
 from core.types import JsonObject
 from core.worktracker.models import (
     FlowSessionLink,
     UserActor,
+    WorkItem,
     WorkItemCommentRole,
 )
+from core.worktracker.service import WorkItemService
 
 logger = get_logger(__name__)
 
@@ -37,8 +40,8 @@ logger = get_logger(__name__)
 class EmployeeInboxService:
     """Запуск flow-сотрудника на входящую работу (sync / worktracker)."""
 
-    def __init__(self, container: FlowRuntimeContainer) -> None:
-        self._container: FlowRuntimeContainer = container
+    def __init__(self, work_item_service: WorkItemService) -> None:
+        self._work_item_service: WorkItemService = work_item_service
 
     async def dispatch_sync_message(
         self,
@@ -100,7 +103,7 @@ class EmployeeInboxService:
             )
             raise
         if dispatched:
-            employee_user = await self._container.user_repository.get(employee_user_id)
+            employee_user = await User.get(employee_user_id)
             if employee_user is None:
                 raise ValueError(f"employee inbox: user {employee_user_id} not found")
             flow_id = require_flow_employee_flow_id(employee_user)
@@ -135,8 +138,7 @@ class EmployeeInboxService:
         branch_id: str = "default",
     ) -> bool:
         """Общий путь запуска; False — адресат не flow-сотрудник (ignored)."""
-        container = self._container
-        employee_user = await container.user_repository.get(employee_user_id)
+        employee_user = await User.get(employee_user_id)
         if employee_user is None:
             raise ValueError(f"employee inbox: user {employee_user_id} not found")
         if not is_flow_employee(employee_user):
@@ -148,11 +150,11 @@ class EmployeeInboxService:
             return False
         flow_id = require_flow_employee_flow_id(employee_user)
 
-        company = await container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"employee inbox: company {company_id} not found")
 
-        sender = await container.user_repository.get(sender_user_id)
+        sender = await User.get(sender_user_id)
         if sender is None:
             raise ValueError(f"employee inbox: sender {sender_user_id} not found")
 
@@ -167,12 +169,11 @@ class EmployeeInboxService:
         previous_context = get_context()
         _ = set_context(initiator_context)
         try:
-            flow_config = await container.flow_repository.get(flow_id)
+            flow_config = await FlowConfig.get_latest(flow_id)
             if flow_config is None:
                 raise ValueError(f"employee inbox: flow {flow_id} not found")
 
             execution = await resolve_execution_context(
-                container,
                 flow_config=flow_config,
                 initiator_context=initiator_context,
             )
@@ -220,8 +221,8 @@ class EmployeeInboxService:
         sender_user_id: str,
     ) -> None:
         """FlowSessionLink + системный комментарий «агент взял задачу»."""
-        work_item_service = self._container.work_item_service
-        item = await work_item_service.get(company_id, work_item_id)
+        work_item_service = self._work_item_service
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         session_id = f"{flow_id}:{context_id}"
         has_session_link = any(
             isinstance(link, FlowSessionLink) and link.session_id == session_id
@@ -260,7 +261,7 @@ class EmployeeInboxService:
     ) -> None:
         """Системный комментарий об ошибке запуска агента (best-effort)."""
         try:
-            _ = await self._container.work_item_service.add_comment(
+            _ = await self._work_item_service.add_comment(
                 company_id=company_id,
                 work_item_id=work_item_id,
                 author=UserActor(user_id=sender_user_id),

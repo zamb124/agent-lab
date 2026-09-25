@@ -6,8 +6,12 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from core.mail.models import MailMessageListPayload, MailSyncNowPayload
-from core.mail.repositories import INBOX_FOLDER, MailboxSyncCursorRepository
+from core.mail.models import (
+    INBOX_FOLDER,
+    MailboxSyncCursor,
+    MailMessageListPayload,
+    MailSyncNowPayload,
+)
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from tests.core.mail.complete_client_helpers import (
@@ -23,7 +27,6 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 async def test_sync_bootstrap_then_incremental_and_uidvalidity_wipe(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -50,7 +53,7 @@ async def test_sync_bootstrap_then_incremental_and_uidvalidity_wipe(
         company_id=company_id,
     )
     assert {item.uid for item in listed.items} == {"1", "2"}
-    cursor = await mailbox_sync_cursor_repository.get(
+    cursor = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder=INBOX_FOLDER
     )
     assert cursor is not None
@@ -203,7 +206,6 @@ async def test_sync_now_refreshes_folders_and_enqueues(
 async def test_sync_backfill_advances_oldest_uid(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -220,7 +222,7 @@ async def test_sync_backfill_advances_oldest_uid(
     ]
     first = await mail_service.sync_binding(binding, max_new_messages=2, backfill_batch_size=2)
     assert first.bootstrap is True
-    cursor = await mailbox_sync_cursor_repository.get(
+    cursor = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder=INBOX_FOLDER
     )
     assert cursor is not None
@@ -231,7 +233,7 @@ async def test_sync_backfill_advances_oldest_uid(
     second = await mail_service.sync_binding(binding, max_new_messages=50, backfill_batch_size=2)
     _ = company_id
     _ = second
-    cursor2 = await mailbox_sync_cursor_repository.get(
+    cursor2 = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder=INBOX_FOLDER
     )
     assert cursor2 is not None
@@ -246,7 +248,7 @@ async def test_sync_backfill_advances_oldest_uid(
     assert len(listed.items) >= 2
     # Continue until backfill completes.
     for _ in range(5):
-        cursor2 = await mailbox_sync_cursor_repository.get(
+        cursor2 = await MailboxSyncCursor.by_binding_folder(
             binding.mailbox_binding_id, folder=INBOX_FOLDER
         )
         assert cursor2 is not None
@@ -255,7 +257,7 @@ async def test_sync_backfill_advances_oldest_uid(
         _ = await mail_service.sync_binding(
             binding, max_new_messages=50, backfill_batch_size=2
         )
-    cursor_final = await mailbox_sync_cursor_repository.get(
+    cursor_final = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder=INBOX_FOLDER
     )
     assert cursor_final is not None

@@ -23,8 +23,9 @@ from a2a.types import (
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import ToolRegistryProtocol
 from apps.flows.src.durable_execution import (
+    DurableWorkflowRuntime,
     ExecutionStateDelta,
     SideEffectPolicy,
     WorkflowEventType,
@@ -75,7 +76,8 @@ from apps.flows.src.state.cancellation import (
     get_cancellation_token,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
-from apps.flows.src.streaming import BaseEmitter, Emitter
+from apps.flows.src.streaming import BaseEmitter
+from apps.flows.src.streaming.emitter import EmitterFactory
 from apps.flows.src.tools.base import BaseTool, OpenAIToolSchema, ToolArguments, sanitize_tool_name
 from core.a2a import (
     get_part_text,
@@ -97,6 +99,7 @@ from core.clients.llm.mock_control import (
     resolve_llm_node_mock,
     resolve_tool_mock_result,
 )
+from core.clients.redis_client import RedisClient
 from core.context import get_context
 from core.errors import FlowExecutionError, ToolExecutionError
 from core.llm_context import (
@@ -104,6 +107,7 @@ from core.llm_context import (
     LLMContextProfile,
     LLMContextSourceRegistry,
 )
+from core.llm_context.memory import LLMContextMemoryStore
 from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION
 from core.logging import get_logger
 from core.logging.attributes import (
@@ -124,6 +128,7 @@ from core.state import (
     PromptHistoryItem,
 )
 from core.state.mutation_policy import FROZEN_STATE_FIELDS, USER_TOOL_PARALLEL_STATE_MERGE_FIELDS
+from core.text_transforms.service import TextTransformService
 from core.tracing import TraceContext, get_tracer
 from core.tracing.attributes import (
     ATTR_MEMORY_COMPACTION,
@@ -264,7 +269,12 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         prompt: str,
         llm_node: LlmNodeRunnerHost | None = None,
         *,
-        container: FlowRuntimeContainer,
+        workflow_runtime: DurableWorkflowRuntime,
+        memory_store: LLMContextMemoryStore,
+        text_transform_service: TextTransformService,
+        emitter_factory: EmitterFactory,
+        redis_client: RedisClient,
+        tool_registry: ToolRegistryProtocol,
         llm_context_policy: LLMContextProfile | None = None,
         llm_context_source_registry: LLMContextSourceRegistry | None = None,
         agent_skill_host: AgentSkillRuntimeHost | None = None,
@@ -276,14 +286,17 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             prompt=prompt,
             llm_node=llm_node,
         )
-        self.container: FlowRuntimeContainer = container
+        self.workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self.memory_store: LLMContextMemoryStore = memory_store
+        self.text_transform_service: TextTransformService = text_transform_service
+        self.emitter_factory: EmitterFactory = emitter_factory
+        self.redis_client: RedisClient = redis_client
+        self.tool_registry: ToolRegistryProtocol = tool_registry
         self.llm_context_policy: LLMContextProfile | None = llm_context_policy
         self.llm_context_source_registry: LLMContextSourceRegistry | None = llm_context_source_registry
         self.agent_skill_host: AgentSkillRuntimeHost | None = agent_skill_host
         if self.agent_skill_host is not None:
             self.agent_skill_host.ensure_index_block()
-        for tool in self.tools:
-            tool.container = container
 
     async def _checkpoint_state(
         self,
@@ -347,7 +360,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             + f"memory_write:schedule:{command.node_schedule_sequence}:"
             + f"input:{hash_state_json(input_payload)}"
         )
-        runtime = self.container.workflow_runtime
+        runtime = self.workflow_runtime
         scheduled_result = await runtime.record_activity_scheduled(
             session_id=state.session_id,
             activity_id=activity_id,
@@ -401,7 +414,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 },
             ):
                 result = await write_runtime_memory_episode(
-                    store=self.container.llm_context_memory_store,
+                    store=self.memory_store,
                     command=command,
                     summarize_episode=self._summarize_context_memory_episode,
                 )
@@ -489,7 +502,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             resource_type="llm_context_memory",
             trace_ctx=_get_trace_ctx_from_state(),
         ):
-            summary = await self.container.text_transform_service.summarize(
+            summary = await self.text_transform_service.summarize(
                 text,
                 max_output_tokens=700,
                 instruction=LLM_CONTEXT_MEMORY_SUMMARY_INSTRUCTION,
@@ -580,7 +593,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         context_id = state.context_id
 
         if emitter is None:
-            emitter = await Emitter.create_ensured(self.container, state)
+            emitter = await self.emitter_factory.create(state)
 
         raw_user_content = input_data.get("content", "")
         if not isinstance(raw_user_content, str):
@@ -624,7 +637,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
         return result
 
     async def _active_execution_branch_id(self, state: ExecutionState) -> str:
-        position = await self.container.workflow_runtime.get_active_execution_position(
+        position = await self.workflow_runtime.get_active_execution_position(
             state.session_id
         )
         if position is None:
@@ -810,12 +823,8 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             raise ValueError("Context with active_company is required for the LLM node")
         if not str(actx.user.user_id).strip():
             raise ValueError("Context with user is required for the LLM node (billing and notifications)")
-        container = self.container
-        # Mock Control: своя очередь ответов для этой llm-ноды (или общая llm).
-        # None — mock не активен; при активном mock без очереди для ноды resolver
-        # бросает MockControlError (fail-closed, без реального LLM-вызова).
         mock_llm_client = await resolve_llm_node_mock(
-            container.redis_client, state.session_id, self._source_node_id()
+            self.redis_client, state.session_id, self._source_node_id()
         )
         # Определяем режим: structured_output или tools
         structured_output = self.node_config.structured_output if self.node_config else False
@@ -1360,7 +1369,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 + f"llm:iteration:{iteration}:attempt:{attempt}:"
                 + f"input:{hash_state_json(input_payload)}"
             )
-            runtime = self.container.workflow_runtime
+            runtime = self.workflow_runtime
             scheduled_result = await runtime.record_activity_scheduled(
                 session_id=state.session_id,
                 activity_id=activity_id,
@@ -1445,9 +1454,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             return
         pending = list(host.pending_tool_refs)
         host.pending_tool_refs.clear()
-        new_tools = await self.container.tool_registry.create_tools(pending)
-        for tool in new_tools:
-            tool.container = self.container
+        new_tools = await self.tool_registry.create_tools(pending)
         self.tools = merge_tools_by_name(self.tools, new_tools)
 
     async def _execute_tools_parallel(
@@ -1636,7 +1643,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
             + f"tool:{tool_call_id}:input:{hash_state_json(input_payload)}"
         )
         idempotency_key = activity_id
-        runtime = self.container.workflow_runtime
+        runtime = self.workflow_runtime
         completed = await runtime.get_completed_activity_result(
             session_id=state.session_id,
             activity_id=activity_id,
@@ -1706,7 +1713,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                 # Mock Control: если tool замокан, берём следующий ответ из его
                 # очереди вместо реального вызова; очередь исчерпана → MockControlError.
                 mock_tool_result = await resolve_tool_mock_result(
-                    self.container.redis_client, state.session_id, tool_name
+                    self.redis_client, state.session_id, tool_name
                 )
                 if mock_tool_result is not None:
                     result = mock_tool_result

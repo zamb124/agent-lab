@@ -5,7 +5,6 @@
 
 import pytest
 
-from apps.flows.src.container import get_container
 from core.variables import VariableResolutionError, VariableResolver
 from tests.fixtures.variables_helpers import (
     delete_variable_via_service,
@@ -875,38 +874,35 @@ class TestVariablesService:
     """Тесты VariablesService (резолвинг @var:key)."""
 
     @pytest.mark.asyncio
-    async def test_resolve_simple_value(self, app):
+    async def test_resolve_simple_value(self, app, di):
         """Простое значение возвращается как есть."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
         result = await service.resolve("simple_string")
         assert result == "simple_string"
 
     @pytest.mark.asyncio
-    async def test_resolve_var_reference(self, app):
+    async def test_resolve_var_reference(self, app, di):
         """@var:key загружает переменную из БД."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
         await upsert_static_variable_via_service(
-            container, "test_resolve_var", "resolved_value"
+            di, "test_resolve_var", "resolved_value"
         )
 
         result = await service.resolve("@var:test_resolve_var")
 
         assert result == "resolved_value"
 
-        await delete_variable_via_service(container, "test_resolve_var")
+        await delete_variable_via_service(di, "test_resolve_var")
 
     @pytest.mark.asyncio
-    async def test_resolve_dict_with_vars(self, app):
+    async def test_resolve_dict_with_vars(self, app, di):
         """Резолвинг словаря с @var:key."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
-        await upsert_static_variable_via_service(container, "company", "TestCorp")
-        await upsert_static_variable_via_service(container, "phone", "123-456")
+        await upsert_static_variable_via_service(di, "company", "TestCorp")
+        await upsert_static_variable_via_service(di, "phone", "123-456")
 
         data = {
             "company_name": "@var:company",
@@ -921,16 +917,15 @@ class TestVariablesService:
         assert result["static"] == "value"
 
         # Cleanup
-        await delete_variable_via_service(container, "company")
-        await delete_variable_via_service(container, "phone")
+        await delete_variable_via_service(di, "company")
+        await delete_variable_via_service(di, "phone")
 
     @pytest.mark.asyncio
-    async def test_resolve_nested_dict(self, app):
+    async def test_resolve_nested_dict(self, app, di):
         """Резолвинг вложенного словаря."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
-        await upsert_static_variable_via_service(container, "nested_var", "nested_value")
+        await upsert_static_variable_via_service(di, "nested_var", "nested_value")
 
         data = {
             "level1": {
@@ -942,15 +937,14 @@ class TestVariablesService:
 
         assert result["level1"]["level2"] == "nested_value"
 
-        await delete_variable_via_service(container, "nested_var")
+        await delete_variable_via_service(di, "nested_var")
 
     @pytest.mark.asyncio
-    async def test_resolve_list(self, app):
+    async def test_resolve_list(self, app, di):
         """Резолвинг списка."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
-        await upsert_static_variable_via_service(container, "list_var", "item")
+        await upsert_static_variable_via_service(di, "list_var", "item")
 
         data = ["static", "@var:list_var", "another"]
 
@@ -958,22 +952,20 @@ class TestVariablesService:
 
         assert result == ["static", "item", "another"]
 
-        await delete_variable_via_service(container, "list_var")
+        await delete_variable_via_service(di, "list_var")
 
     @pytest.mark.asyncio
-    async def test_resolve_missing_var_raises_error(self, app):
+    async def test_resolve_missing_var_raises_error(self, app, di):
         """Несуществующая переменная вызывает VariableResolutionError."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
         with pytest.raises(VariableResolutionError):
             await service.resolve("@var:nonexistent_var_xyz")
 
     @pytest.mark.asyncio
-    async def test_resolve_preserves_non_var_strings(self, app):
+    async def test_resolve_preserves_non_var_strings(self, app, di):
         """Строки без @var: сохраняются."""
-        container = get_container()
-        service = container.variables_service
+        service = di.variables_service
 
         result = await service.resolve("regular string without var")
 

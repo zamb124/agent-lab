@@ -73,7 +73,7 @@ class TestCompanyInit:
         """Системные типы минимального ядра существуют для компании"""
         _ = unique_id
         types_resp = await crm_client.get(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             headers=auth_headers_system,
             params={"limit": 1000, "namespace": "default"},
         )
@@ -211,7 +211,7 @@ class TestCompanyInit:
     ) -> None:
         """Системные типы сущностей имеют промпты для AI"""
         types_resp = await crm_client.get(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             headers=auth_headers_system,
             params={"limit": 1000, "namespace": "default"},
         )
@@ -275,19 +275,19 @@ class TestCompanyInit:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание связи с несуществующим типом возвращает 400"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
         entity1_id = _entity_id(entity1_resp)
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note2 {unique_id}",
         }, headers=auth_headers_system)
         entity2_id = _entity_id(entity2_resp)
 
-        resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": f"nonexistent_type_{unique_id}",

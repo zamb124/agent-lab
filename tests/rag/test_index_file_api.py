@@ -7,12 +7,11 @@ import hashlib
 
 import pytest
 
-from apps.rag.container import get_rag_container
 from core.files.create_spec import FileSourceKind
 from core.files.default_storage import get_default_storage
 from core.files.models import FileRecord
+from core.files.object_store.s3_client import S3ClientFactory
 from core.files.registry import default_retention_for_source
-from core.files.s3_client import S3ClientFactory
 from core.files.storage import retention_fields_from_spec
 from tests.rag.helpers import upload_rag_document_bytes
 
@@ -76,7 +75,6 @@ async def test_index_file_returns_202_without_new_s3_object(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
     file_record = await _persist_test_file_record(
         data=b"Office catalog document body",
         original_name="catalog_doc.txt",
@@ -115,7 +113,7 @@ async def test_index_file_returns_202_without_new_s3_object(
     }
     assert payload["task_id"]
 
-    still_there = await container.file_repository.get(file_record.file_id)
+    still_there = await FileRecord.get(file_record.file_id)
     assert still_there is not None
     assert still_there.s3_key == file_record.s3_key
     assert still_there.file_size == file_record.file_size
@@ -181,7 +179,6 @@ async def test_index_only_delete_preserves_file_record(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
     file_record = await _persist_test_file_record(
         data=b"Index delete preserves bytes",
         original_name="preserve_me.txt",
@@ -213,7 +210,7 @@ async def test_index_only_delete_preserves_file_record(
     assert delete_response.status_code == 200
     assert delete_response.json()["success"] is True
 
-    still_there = await container.file_repository.get(file_record.file_id)
+    still_there = await FileRecord.get(file_record.file_id)
     assert still_there is not None
     assert still_there.s3_key == file_record.s3_key
 
@@ -232,7 +229,6 @@ async def test_index_file_reindex_replaces_chunks(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
     first_body = b"first version of indexed text"
     file_record = await _persist_test_file_record(
         data=first_body,
@@ -264,7 +260,7 @@ async def test_index_file_reindex_replaces_chunks(
             "file_size": len(second_body),
         },
     )
-    s3_client = S3ClientFactory.create_client_for_bucket(updated.s3_bucket)
+    s3_client = S3ClientFactory.create_platform_client()
     try:
         _ = await s3_client.upload_bytes(
             data=second_body,
@@ -276,7 +272,7 @@ async def test_index_file_reindex_replaces_chunks(
         await s3_client.close()
 
     persisted = updated.model_copy(update={"checksum": hashlib.sha256(second_body).hexdigest()})
-    _ = await container.file_repository.set(persisted)
+    _ = await FileRecord.set(persisted)
 
     second_index = await rag_client.post(
         f"/rag/api/v1/namespaces/{namespace_id}/documents/index-file",
@@ -337,7 +333,6 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
     auth_headers_system,
 ):
     _ = rag_worker
-    container = get_rag_container()
     file_record = await _persist_test_file_record(
         data=b"compare delete modes",
         original_name="delete_modes.txt",
@@ -366,7 +361,7 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
         headers=auth_headers_system,
     )
     assert index_only_delete.status_code == 200
-    preserved = await container.file_repository.get(file_record.file_id)
+    preserved = await FileRecord.get(file_record.file_id)
     assert preserved is not None
 
     reindex = await rag_client.post(
@@ -393,8 +388,8 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
     )
     assert full_delete.status_code == 200
 
-    removed = await container.file_repository.get(rag_owned_document_id)
+    removed = await FileRecord.get(rag_owned_document_id)
     assert removed is None
 
-    peer_still_there = await container.file_repository.get(file_record.file_id)
+    peer_still_there = await FileRecord.get(file_record.file_id)
     assert peer_still_there is not None

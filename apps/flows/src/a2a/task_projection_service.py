@@ -11,7 +11,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 
-from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
+from apps.flows.src.models.a2a_projection import A2ATaskEvent, A2ATaskProjection
 from core.a2a import mapping_from_struct, stream_response_from_event, struct_from_mapping
 from core.a2a.codec import stream_response_to_json_dict
 from core.clients.redis_client import RedisClient
@@ -43,30 +43,24 @@ class A2ATaskProjectionService:
     def __init__(
         self,
         *,
-        repository: A2ATaskRepository,
         redis_client: RedisClient,
     ) -> None:
-        self._repository: A2ATaskRepository = repository
         self._redis: RedisClient = redis_client
 
     @property
     def redis_client(self) -> RedisClient:
         return self._redis
 
-    @property
-    def task_repository(self) -> A2ATaskRepository:
-        return self._repository
-
     async def publish(self, *, company_id: str, event: StreamEvent) -> StreamEvent:
         """Persist/enrich one event, publish exact stored bytes, acknowledge delivery."""
         identity = _event_identity(event)
-        appended = await self._repository.append_event(
+        appended = await A2ATaskProjection.append_event(
             company_id=company_id,
             event=event,
             event_identity=identity,
         )
         await self._publish_stored(appended.event)
-        await self._repository.mark_published(
+        await A2ATaskEvent.mark_published(
             company_id=company_id,
             task_id=appended.event.task_id,
             event_identity=identity,
@@ -75,10 +69,10 @@ class A2ATaskProjectionService:
 
     async def recover_unpublished(self, *, limit: int = 100) -> int:
         """Republish committed outbox rows after a Redis/process failure."""
-        pending = await self._repository.list_unpublished(limit=limit)
+        pending = await A2ATaskEvent.list_unpublished(limit=limit)
         for item in pending:
             await self._publish_stored(item.event)
-            await self._repository.mark_published(
+            await A2ATaskEvent.mark_published(
                 company_id=item.company_id,
                 task_id=item.task_id,
                 event_identity=item.event_identity,

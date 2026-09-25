@@ -156,9 +156,12 @@ def _require_state(state: ExecutionState | None) -> ExecutionState:
     return state
 
 
-async def _get_docs_client(state: ExecutionState | None) -> GoogleDocsClient:
+async def _get_docs_client(
+    state: ExecutionState | None,
+    google_workspace_client: GoogleWorkspaceClient,
+) -> GoogleDocsClient:
     execution_state = _require_state(state)
-    material = await GoogleWorkspaceClient().resolve_auth(execution_state)
+    material = await google_workspace_client.resolve_auth(execution_state)
     return GoogleDocsClient(
         credentials_json=material.credentials_json,
         access_token=material.access_token,
@@ -179,8 +182,10 @@ async def gdocs_create_document(
     title: str,
     file_id: str | None = None,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     if file_id:
         docx_bytes = await FilesClient().get_bytes(file_id)
@@ -215,8 +220,10 @@ async def gdocs_create_document(
 async def gdocs_read_document(
     document_id: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     text = await client.read_as_text(document_id)
     return {"document_id": document_id, "text": text}
@@ -232,8 +239,10 @@ async def gdocs_append_text(
     document_id: str,
     text: str,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     _ = await client.append_text(document_id, text)
     return {"document_id": document_id}
@@ -250,8 +259,10 @@ async def gdocs_insert_text(
     text: str,
     index: int,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     _ = await client.insert_text(document_id, text, index)
     return {"document_id": document_id}
@@ -269,8 +280,10 @@ async def gdocs_find_replace(
     replace: str,
     match_case: bool = True,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     result = require_json_object(
         await client.find_and_replace(document_id, find, replace, match_case=match_case),
@@ -305,8 +318,10 @@ async def gdocs_delete_range(
     start_index: int,
     end_index: int,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     _ = await client.delete_range(document_id, start_index, end_index)
     return {"document_id": document_id}
@@ -324,8 +339,10 @@ async def gdocs_share_document(
     role: str = "reader",
     anyone: bool = False,
     state: ExecutionState | None = None,
+    *,
+    google_workspace_client: GoogleWorkspaceClient,
 ) -> JsonObject:
-    client = await _get_docs_client(state)
+    client = await _get_docs_client(state, google_workspace_client)
 
     if anyone:
         _ = await client.share_document_anyone(document_id, role=role)

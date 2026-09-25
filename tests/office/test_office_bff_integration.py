@@ -12,9 +12,9 @@ import pytest
 from aiohttp import web
 
 from apps.office.config import get_office_settings
-from apps.office.container import get_office_container
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.onlyoffice_jwt import decode_download_token
+from core.files.models import FileRecord
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.office.helpers import upload_office_file_bytes
 
@@ -371,6 +371,7 @@ async def test_office_editor_config_download_roundtrip(office_client, auth_heade
 @pytest.mark.asyncio
 async def test_onlyoffice_callback_saves_to_s3(
     office_client,
+    office_di,
     auth_headers_system,
     unique_id,
     office_saved_file_http,
@@ -408,8 +409,7 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert post.status_code == 200
     assert post.json()["error"] == 0
 
-    c = get_office_container()
-    meta = await c.files_service.get(file_id)
+    meta = await office_di.files_service.get(file_id)
     assert meta is not None
     expected_checksum = hashlib.sha256(new_body).hexdigest()
     assert meta.checksum == expected_checksum
@@ -433,7 +433,7 @@ async def test_onlyoffice_callback_saves_to_s3(
     assert post_dup.status_code == 200
     assert post_dup.json()["error"] == 0
 
-    meta_after = await c.files_service.get(file_id)
+    meta_after = await office_di.files_service.get(file_id)
     assert meta_after.checksum == expected_checksum
     assert meta_after.file_size == len(new_body)
 
@@ -581,8 +581,7 @@ async def test_office_list_documents_marks_missing_file_without_500(
     file_id = created["file_id"]
     file_id = created["file_id"]
 
-    container = get_office_container()
-    deleted = await container.file_repository.delete(file_id)
+    deleted = await FileRecord.delete_by_id(file_id)
     assert deleted is True
 
     list_response = await office_client.get(

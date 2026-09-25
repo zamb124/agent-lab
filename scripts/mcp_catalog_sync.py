@@ -6,18 +6,21 @@ import argparse
 import asyncio
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.mcp_catalog_crawler import (
     crawl_mcp_registry,
     load_mcp_catalog_allowlist,
     upsert_allowlist_seed_entries_only,
 )
 from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
+from core.di import ProcessIdentity, open_di
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
+from core.variables.service import VariablesService
 
 logger = get_logger(__name__)
 
@@ -39,10 +42,13 @@ def _scheduler_company_context(*, company: Company, trace_suffix: str) -> Contex
     )
 
 
-async def _provision_company(*, company_id: str | None) -> None:
-    container = get_container()
-    runtime = as_flow_runtime_container(container)
-    companies = await container.company_repository.list(limit=10_000)
+async def _provision_company(
+    *,
+    company_id: str | None,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
+) -> None:
+    companies = await Company.list(limit=10_000)
     if company_id is not None:
         companies = [company for company in companies if company.company_id == company_id]
         if not companies:
@@ -56,7 +62,10 @@ async def _provision_company(*, company_id: str | None) -> None:
         )
         set_context(company_context)
         try:
-            stats = await provision_mcp_catalog_for_company(container=runtime)
+            stats = await provision_mcp_catalog_for_company(
+                variables_service=variables_service,
+                flow_access_service=flow_access_service,
+            )
         finally:
             clear_context()
         totals["added"] += stats.added
@@ -102,12 +111,9 @@ async def main() -> None:
         raise RuntimeError("mcp_catalog.enabled is false in settings")
 
     if not args.provision_only:
-        container = get_container()
-        runtime = as_flow_runtime_container(container)
         if args.seeds_only:
             allowlist = load_mcp_catalog_allowlist()
             seed_stats = await upsert_allowlist_seed_entries_only(
-                container=runtime,
                 allowlist=allowlist,
             )
             print(
@@ -117,7 +123,7 @@ async def main() -> None:
                 f"verify_failed={seed_stats.verify_failed}",
             )
         else:
-            crawl_stats = await crawl_mcp_registry(container=runtime)
+            crawl_stats = await crawl_mcp_registry()
             print(
                 "crawl:",
                 f"fetched={crawl_stats.fetched}",
@@ -134,7 +140,18 @@ async def main() -> None:
         print("auto_provision=disabled; skip company provision (companies install from Store)")
         return
 
-    await _provision_company(company_id=args.company_id)
+    identity = ProcessIdentity(service_name="flows", files_route_segment="flows")
+    async with open_di(
+        FlowsDi,
+        settings=settings,
+        identity=identity,
+        database="flows_url",
+    ) as di:
+        await _provision_company(
+            company_id=args.company_id,
+            variables_service=di.variables_service,
+            flow_access_service=di.flow_access_service,
+        )
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@ from contextlib import contextmanager
 
 from pydantic import Field, ValidationError
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import Di
+from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runners.tool_context_view import build_tool_context_view
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import active_tool_call_context
@@ -29,7 +30,7 @@ from core.context.job_context import build_job_context
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.context_models import Context
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 from core.websocket import raise_forbidden, raise_invalid
@@ -83,10 +84,10 @@ def _tool_capability_definition(
 
 
 async def collect_tool_runtime_capabilities(
-    container: FlowContainer,
+    di: Di,
 ) -> dict[str, CapabilityDefinition]:
     """Builtin docs tools + tool_repository текущей компании, если context есть."""
-    registry = container.tool_registry
+    registry = di.tool_registry
     registry.register_builtin_tools()
     capabilities: dict[str, CapabilityDefinition] = {}
     for tool_id, tool in registry.list_all().items():
@@ -101,7 +102,9 @@ async def collect_tool_runtime_capabilities(
         )
     context = get_context()
     if context is not None and context.active_company is not None:
-        for tool in await container.tool_repository.list(limit=10000):
+        for tool in await ToolReference.list_in_tool_id_order(limit=10000):
+            if tool.parameters_schema is None:
+                continue
             capabilities[f"tools.{tool.tool_id}"] = _tool_capability_definition(
                 tool_id=tool.tool_id,
                 title=tool.title or tool.name,
@@ -116,10 +119,10 @@ async def op_flows_tool_runtime_manifest(
     payload: ToolRuntimeManifestPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CapabilityManifest:
     _ = user
-    capabilities = await collect_tool_runtime_capabilities(container)
+    capabilities = await collect_tool_runtime_capabilities(di)
     capability_list = [capabilities[name] for name in sorted(capabilities)]
     if payload.allowed_capabilities is not None:
         allowed_names = {item.strip() for item in payload.allowed_capabilities if item.strip()}
@@ -133,17 +136,17 @@ async def op_flows_tool_runtime_call(
     payload: ToolRuntimeCallPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CapabilityCallResponse:
     """Исполняет зарегистрированный platform tool по id под подписанным capability context."""
     _ = user
     verify_execution_context(payload.context)
-    runtime_context = await _build_context(container, payload.context)
+    runtime_context = await _build_context(payload.context)
     context_token = set_context(runtime_context)
     try:
         state = ExecutionState.model_validate(payload.state)
         _attach_durable_context(state, payload.context)
-        tool = await container.tool_registry.materialize({"tool_id": payload.tool_id})
+        tool = await di.tool_registry.materialize({"tool_id": payload.tool_id})
         try:
             with _active_tool_runtime_context(payload, state):
                 result = await tool.run(payload.arguments, state)
@@ -214,14 +217,14 @@ def _active_tool_runtime_context(
 
 
 async def _build_context(
-    container: FlowContainer, execution_context: CapabilityExecutionContext
+    execution_context: CapabilityExecutionContext
 ) -> Context:
     if execution_context.user_id is None:
         raise_forbidden(PermissionError("Capability context requires user_id"))
-    user = await container.user_repository.get(execution_context.user_id)
+    user = await User.get(execution_context.user_id)
     if user is None:
         raise_forbidden(PermissionError(f"User not found: {execution_context.user_id}"))
-    company = await container.company_repository.get(execution_context.company_id)
+    company = await Company.get(execution_context.company_id)
     if company is None:
         raise_forbidden(PermissionError(f"Company not found: {execution_context.company_id}"))
     trace_id = execution_context.trace_id

@@ -330,7 +330,7 @@ fi
 #     - <platform-bottom-nav> / <platform-bottom-sheet-stack> / <platform-top-bar> рендерит только PlatformApp (core).
 MOBILE_HEADER_PATTERN="customElements\.define\(\s*['\"][a-z0-9_-]*-mobile-app-header['\"]"
 if rg -nP "${MOBILE_HEADER_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
-    fail "компонент *-mobile-app-header запрещён — mobile shell делает <platform-bottom-nav> + <platform-top-bar> (см. frontend.mdc)"
+    fail "компонент *-mobile-app-header запрещён — mobile shell делает <platform-bottom-nav> + <platform-top-bar> (см. ui_components.mdc § Mobile shell)"
     rg -nP "${MOBILE_HEADER_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
 fi
 MOBILE_HEADER_IMPORT_PATTERN="from\s+['\"][^'\"]*mobile-app-header[^'\"]*['\"]"
@@ -343,7 +343,7 @@ fi
 # в сервисных приложениях запрещена — её делает PlatformApp.render().
 BOTTOM_NAV_LOCAL_PATTERN="<platform-bottom-(nav|sheet-stack)\b|<platform-top-bar\b"
 if rg -nP "${BOTTOM_NAV_LOCAL_PATTERN}" "${APPS_UI_GLOBS[@]}" >/dev/null 2>&1; then
-    fail "рендер <platform-bottom-nav>/<platform-bottom-sheet-stack>/<platform-top-bar> в apps/**/ui запрещён — их монтирует PlatformApp.render() (см. frontend.mdc)"
+    fail "рендер <platform-bottom-nav>/<platform-bottom-sheet-stack>/<platform-top-bar> в apps/**/ui запрещён — их монтирует PlatformApp.render() (см. ui_components.mdc § Mobile shell)"
     rg -nP "${BOTTOM_NAV_LOCAL_PATTERN}" "${APPS_UI_GLOBS[@]}" >&2 || true
 fi
 
@@ -383,7 +383,7 @@ fi
 # 23. Flows UI: hardcoded hex/rgba в JS запрещены (Design System tokens only).
 FLOWS_HEX_HITS="$(rg -n '#[0-9a-fA-F]{3,8}|rgba?\(' apps/flows/ui -g '*.js' \
     --glob '!apps/flows/ui/components/flow-canvas/**' \
-    --glob '!apps/flows/ui/constants/flow-cover-gradients.js' || true)"
+    --glob '!apps/flows/ui/_helpers/flow-cover-gradients.js' || true)"
 if [ -n "$FLOWS_HEX_HITS" ]; then
     fail "apps/flows/ui/**/*.js: hardcoded hex/rgba запрещены — используйте tokens.css (--flows-*, --accent, --glass-*)"
     echo "$FLOWS_HEX_HITS" >&2
@@ -488,7 +488,7 @@ fi
 
 # 33. Platform typography: единый Inter + JetBrains Mono через tokens.css / platform-fonts.css.
 if ! uv run python scripts/check_platform_typography.py; then
-    fail "platform typography canon — см. scripts/check_platform_typography.py и frontend.mdc Typography canon"
+    fail "platform typography canon — см. scripts/check_platform_typography.py и frontend.mdc § Дизайн"
 fi
 
 # 34. Единый спиннер: собственные CSS-спиннеры в apps/** запрещены — используйте <platform-spinner>.

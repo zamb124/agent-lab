@@ -1,0 +1,10 @@
+== g02_core (142s): ================= 3346 passed, 4 warnings in 134.31s (0:02:14) =================
+== g03_crm (881s): ================= 1157 passed, 1 warning in 873.63s (0:14:33) ==================
+== g04_sync (50s): ============================= 252 passed in 42.85s =============================
+== g05_docs (138s): ================= 703 passed, 3 warnings in 131.84s (0:02:11) ==================
+== g06_frontend (42s): ================= 359 passed, 4 skipped, 4 warnings in 34.74s ==================
+== g07_services (117s): ====== 571 passed, 3 skipped, 1 xfailed, 6 warnings in 110.19s (0:01:50) =======
+== g08_misc (49s): ================= 381 passed, 4 skipped, 2 warnings in 41.81s ==================
+== g09_flows (327s): ====== 1 failed, 1983 passed, 1 skipped, 6 warnings in 319.71s (0:05:19) =======
+== g10_realtime (222s): ======================= 658 passed in 215.16s (0:03:35) ========================
+ALL_FULL3_DONE

@@ -12,5 +12,5 @@ def test_pcm_s16le_mono_to_wav_riff_header(unique_id: str) -> None:
 
 
 def test_pcm_s16le_mono_to_wav_rejects_odd_length(unique_id: str) -> None:
-    with pytest.raises(ValueError, match="чётная"):
+    with pytest.raises(ValueError, match="even byte length"):
         pcm_s16le_mono_to_wav(b"\x00\x00\x00", sample_rate=16000)

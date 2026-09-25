@@ -5,16 +5,15 @@ API платформенного календаря.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, NoReturn
+from typing import NoReturn
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from core.app_state import require_platform_app_state
-from core.calendar.service import CalendarService
 from core.context import get_context
+from core.di.platform import Di
 from core.models import (
     CalendarEvent,
     CalendarEventSource,
@@ -54,13 +53,6 @@ class CalendarListResponse(BaseModel):
     integrations: list[CalendarIntegration]
 
 
-def _get_calendar_service(request: Request) -> CalendarService:
-    return require_platform_app_state(request).container.calendar_service
-
-
-CalendarServiceDep = Annotated[CalendarService, Depends(_get_calendar_service)]
-
-
 def _raise_http_for_calendar_service_error(error: Exception) -> NoReturn:
     message = str(error)
     if isinstance(error, ValueError):
@@ -80,12 +72,12 @@ def _append_query(url: str, params: dict[str, str]) -> str:
 
 
 @router.post("/events/list", response_model=CalendarListResponse)
-async def list_calendar_events(payload: CalendarListRequest, service: CalendarServiceDep) -> CalendarListResponse:
+async def list_calendar_events(payload: CalendarListRequest, di: Di) -> CalendarListResponse:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        events = await service.list_events(
+        events = await di.calendar_service.list_events(
             company_id=ctx.active_company.company_id,
             user_id=ctx.user.user_id,
             start_at=payload.start_at,
@@ -93,7 +85,7 @@ async def list_calendar_events(payload: CalendarListRequest, service: CalendarSe
             include_sources=set(payload.include_sources) if payload.include_sources else None,
             limit=payload.limit,
         )
-        integrations = await service.list_integrations(
+        integrations = await di.calendar_service.list_integrations(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
@@ -103,12 +95,12 @@ async def list_calendar_events(payload: CalendarListRequest, service: CalendarSe
 
 
 @router.post("/events", response_model=CalendarEvent)
-async def create_calendar_event(payload: CalendarUpsertRequest, service: CalendarServiceDep) -> CalendarEvent:
+async def create_calendar_event(payload: CalendarUpsertRequest, di: Di) -> CalendarEvent:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        return await service.upsert_event(
+        return await di.calendar_service.upsert_event(
             event_id=None,
             payload=payload,
             user_id=ctx.user.user_id,
@@ -119,12 +111,12 @@ async def create_calendar_event(payload: CalendarUpsertRequest, service: Calenda
 
 
 @router.put("/events/{event_id}", response_model=CalendarEvent)
-async def update_calendar_event(event_id: str, payload: CalendarUpsertRequest, service: CalendarServiceDep) -> CalendarEvent:
+async def update_calendar_event(event_id: str, payload: CalendarUpsertRequest, di: Di) -> CalendarEvent:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        return await service.upsert_event(
+        return await di.calendar_service.upsert_event(
             event_id=event_id,
             payload=payload,
             user_id=ctx.user.user_id,
@@ -135,12 +127,12 @@ async def update_calendar_event(event_id: str, payload: CalendarUpsertRequest, s
 
 
 @router.delete("/events/{event_id}")
-async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> dict[str, bool]:
+async def delete_calendar_event(event_id: str, di: Di) -> dict[str, bool]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        await service.delete_event(
+        await di.calendar_service.delete_event(
             event_id=event_id,
             company_id=ctx.active_company.company_id,
         )
@@ -150,12 +142,12 @@ async def delete_calendar_event(event_id: str, service: CalendarServiceDep) -> d
 
 
 @router.get("/integrations", response_model=ListResponse[CalendarIntegration])
-async def list_calendar_integrations(service: CalendarServiceDep) -> ListResponse[CalendarIntegration]:
+async def list_calendar_integrations(di: Di) -> ListResponse[CalendarIntegration]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        integrations = await service.list_integrations(
+        integrations = await di.calendar_service.list_integrations(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
         )
@@ -167,13 +159,13 @@ async def list_calendar_integrations(service: CalendarServiceDep) -> ListRespons
 @router.post("/integrations/connect", response_model=CalendarIntegration)
 async def connect_calendar_integration(
     payload: CalendarConnectIntegrationRequest,
-    service: CalendarServiceDep,
+    di: Di,
 ) -> CalendarIntegration:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        integration = await service.connect_integration(
+        integration = await di.calendar_service.connect_integration(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             payload=payload,
@@ -186,7 +178,7 @@ async def connect_calendar_integration(
 @router.get("/integrations/google/start")
 async def start_google_calendar_oauth(
     request: Request,
-    service: CalendarServiceDep,
+    di: Di,
     return_path: str = "/",
 ) -> RedirectResponse:
     ctx = get_context()
@@ -202,7 +194,7 @@ async def start_google_calendar_oauth(
     base_host = get_host_with_port(original_host)
     redirect_uri = f"{protocol}://{base_host}/auth/callback/google"
     try:
-        auth_url = await service.start_google_oauth(
+        auth_url = await di.calendar_service.start_google_oauth(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             redirect_uri=redirect_uri,
@@ -215,7 +207,7 @@ async def start_google_calendar_oauth(
 
 @router.get("/integrations/google/callback")
 async def complete_google_calendar_oauth(
-    service: CalendarServiceDep,
+    di: Di,
     state: str,
     code: str | None = None,
     error: str | None = None,
@@ -225,7 +217,7 @@ async def complete_google_calendar_oauth(
     if not code:
         raise HTTPException(status_code=400, detail="Google OAuth code is required")
     try:
-        return_path = await service.complete_google_oauth(
+        return_path = await di.calendar_service.complete_google_oauth(
             state=state,
             code=code,
         )
@@ -242,12 +234,12 @@ async def complete_google_calendar_oauth(
 
 
 @router.delete("/integrations/{integration_id}")
-async def disconnect_calendar_integration(integration_id: str, service: CalendarServiceDep) -> dict[str, bool]:
+async def disconnect_calendar_integration(integration_id: str, di: Di) -> dict[str, bool]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        await service.disconnect_integration(
+        await di.calendar_service.disconnect_integration(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             integration_id=integration_id,
@@ -258,12 +250,12 @@ async def disconnect_calendar_integration(integration_id: str, service: Calendar
 
 
 @router.post("/sync")
-async def sync_calendar(payload: CalendarSyncRequest, service: CalendarServiceDep) -> dict[str, int]:
+async def sync_calendar(payload: CalendarSyncRequest, di: Di) -> dict[str, int]:
     ctx = get_context()
     if not ctx or not ctx.user or not ctx.active_company:
         raise HTTPException(status_code=401, detail="Authentication required")
     try:
-        return await service.run_sync(
+        return await di.calendar_service.run_sync(
             user_id=ctx.user.user_id,
             company_id=ctx.active_company.company_id,
             start_at=payload.start_at,

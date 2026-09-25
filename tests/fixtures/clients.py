@@ -26,12 +26,14 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from tests.fixtures.service_processes import ServiceProcesses, import_service_app
+
 # ASGI-клиенты с Host: humanitec.ru получают 307 на apex домен; base_url должен
 # совпадать с Host, иначе httpx сбрасывает Authorization при cross-host redirect.
 _PLATFORM_ASGI_BASE_URL = "http://humanitec.ru"
 _PLATFORM_ASGI_HOST_HEADERS = {"Host": "humanitec.ru"}
 # Real HTTP e2e: очередь granian под -n10. httpx default 5s → ReadTimeout на enable/enqueue.
-# Длинный граф всё равно SendMessage returnImmediately + GetTask poll (testing.mdc).
+# Длинный граф всё равно SendMessage returnImmediately + GetTask poll (a2a.mdc § Клиенты).
 _E2E_HTTP_TIMEOUT_SECONDS = 60.0
 
 # rag_worker импортируется из tests.conftest через pytest
@@ -41,10 +43,11 @@ _E2E_HTTP_TIMEOUT_SECONDS = 60.0
 @pytest.fixture(autouse=True)
 def patch_service_clients_asgi(
     request: pytest.FixtureRequest,
+    service_processes: ServiceProcesses,
 ) -> None:
     """
     Универсальный патч для ServiceClient, направляющий запросы между сервисами
-    через ASGITransport, если соответствующее приложение доступно.
+    через ASGITransport в приложение того же процесса с запущенным lifespan.
     """
     if request.node.get_closest_marker("no_test_doubles") or request.node.get_closest_marker(
         "no_service_client_patch"
@@ -67,98 +70,43 @@ def patch_service_clients_asgi(
         build_internal_context_headers,
     )
 
-    _apps_cache: dict[str, Any] = {}
+    _voice_app: dict[str, Any] = {}
 
-    def get_service_app(service: str) -> Any:
-        if service in _apps_cache:
-            return _apps_cache[service]
+    def get_voice_app() -> Any:
+        # Как voice_app: batch /transcribe идёт в STTClient, без mock-бэкенда
+        # упрётся в реальный HTTP (litserve/cloud) и падает ConnectError.
+        if "voice" in _voice_app:
+            return _voice_app["voice"]
+        monkeypatch.setenv("VOICE__STT__PROVIDER", "mock")
+        monkeypatch.setenv("VOICE__TTS__PROVIDER", "mock")
+        monkeypatch.setenv("VOICE__VAD__PROVIDER", "mock")
+        import importlib
 
-        # Импорт apps.<svc>.main → create_service_app → set_settings(svc).
-        # Глобальный settings один на pytest-процесс: без preserve/restore
-        # вторичный сервис затирает demo/auth overrides текущего теста.
-        preserved: BaseSettings = get_settings()
-        try:
-            if service == "flows":
-                from apps.flows.main import app
+        import core.config.base as config_base
+        from apps.voice.config import reset_voice_settings
+        from core.ai.runtime import reset_voice_runtime_for_tests
 
-                _apps_cache[service] = app
-            elif service == "rag":
-                from apps.rag.main import app
+        monkeypatch.setattr(config_base, "_settings_instance", None)
+        reset_voice_runtime_for_tests()
+        reset_voice_settings()
+        import apps.voice.main as voice_main_mod
 
-                _apps_cache[service] = app
-            elif service == "crm":
-                from apps.crm.main import create_app
+        # Voice reload намеренно кладёт mock STT/TTS в глобальный settings.
+        importlib.reload(voice_main_mod)
+        _voice_app["voice"] = voice_main_mod.app
+        return voice_main_mod.app
 
-                _apps_cache[service] = create_app()
-            elif service == "frontend":
-                from apps.frontend.main import app
-
-                _apps_cache[service] = app
-            elif service == "sync":
-                from apps.sync.main import app
-
-                _apps_cache[service] = app
-            elif service == "office":
-                from apps.office.main import app
-
-                _apps_cache[service] = app
-            elif service == "voice":
-                # Как voice_app: batch /transcribe идёт в STTClient, без mock-бэкенда
-                # упрётся в реальный HTTP (litserve/cloud) и падает ConnectError.
-                monkeypatch.setenv("VOICE__STT__PROVIDER", "mock")
-                monkeypatch.setenv("VOICE__TTS__PROVIDER", "mock")
-                monkeypatch.setenv("VOICE__VAD__PROVIDER", "mock")
-                import core.config.base as config_base
-                from apps.voice.config import reset_voice_settings
-                from apps.voice.container import reset_voice_container
-                from core.ai.runtime import reset_voice_runtime_for_tests
-
-                monkeypatch.setattr(config_base, "_settings_instance", None)
-                reset_voice_runtime_for_tests()
-                reset_voice_settings()
-                reset_voice_container()
-                import importlib
-
-                import apps.voice.main as voice_main_mod
-
-                importlib.reload(voice_main_mod)
-                _apps_cache[service] = voice_main_mod.app
-            elif service == "capability_gateway":
-                from apps.capability_gateway.main import app
-
-                _apps_cache[service] = app
-            elif service == "search":
-                from apps.search.main import app
-
-                _apps_cache[service] = app
-            elif service == "worktracker":
-                from apps.worktracker.main import app
-
-                _apps_cache[service] = app
-            elif service == "wiki":
-                from apps.wiki.main import app
-
-                _apps_cache[service] = app
-            elif service == "secrets":
-                from apps.secrets.main import app
-
-                _apps_cache[service] = app
-            else:
-                return None
-        except ImportError:
+    async def get_service_app(service: str) -> Any:
+        if service == "voice":
+            return get_voice_app()
+        if import_service_app(service) is None:
             return None
-        finally:
-            # Voice reload намеренно кладёт mock STT/TTS в глобальный settings.
-            # Restore затёрло бы их: app.state.settings остаётся mock, а get_settings()
-            # в session handler снова видит litserve → provider_resolve_failed.
-            if service != "voice":
-                set_settings(preserved)
-        return _apps_cache.get(service)
+        return await service_processes.app(service)
 
     original_request = ServiceClient.request
 
     async def mocked_request(self: ServiceClient, service: str, method: str, path: str, **kwargs: Any) -> Any:
-        app = get_service_app(service)
+        app = await get_service_app(service)
         if not app:
             # Если приложение не найдено (или это внешний сервис), используем оригинальный HTTP-запрос
             return await original_request(self, service, method, path, **kwargs)
@@ -240,35 +188,9 @@ def patch_service_clients_asgi(
 # ==============================================================================
 
 @pytest_asyncio.fixture
-async def flows_client():
-    """
-    HTTP клиент для Agents API (ASGI transport).
-
-    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
-    Таблицы создаются через миграции в setup_database_before_tests.
-    """
-    from apps.flows.main import app
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport,
-        base_url=_PLATFORM_ASGI_BASE_URL,
-        headers=_PLATFORM_ASGI_HOST_HEADERS,
-    ) as client:
-        yield client
-
-
-@pytest_asyncio.fixture
-async def rag_app():
-    """
-    FastAPI приложение RAG сервиса.
-
-    Используется как зависимость для rag_client (ASGI transport).
-    Таблицы создаются через миграции в setup_database_before_tests.
-    """
-    from apps.rag.main import app
-
-    yield app
+async def rag_app(service_processes: ServiceProcesses):
+    """FastAPI приложение RAG с lifespan (``service_processes``)."""
+    return await service_processes.app("rag")
 
 
 @pytest_asyncio.fixture
@@ -292,14 +214,9 @@ async def rag_client(rag_app, rag_worker):
 
 
 @pytest_asyncio.fixture
-async def search_app():
-    """FastAPI приложение search сервиса."""
-    from apps.search.container import reset_search_container
-    from apps.search.main import app
-
-    reset_search_container()
-    yield app
-    reset_search_container()
+async def search_app(service_processes: ServiceProcesses):
+    """FastAPI приложение search с lifespan (``service_processes``)."""
+    return await service_processes.app("search")
 
 
 @pytest_asyncio.fixture
@@ -307,17 +224,16 @@ async def search_client(search_app, setup_database_before_tests, auth_headers_sy
     """HTTP клиент для Search API (ASGI transport)."""
     _ = setup_database_before_tests
     transport = ASGITransport(app=search_app)
-    async with search_app.router.lifespan_context(search_app):
-        async with AsyncClient(
-            transport=transport,
-            base_url=_PLATFORM_ASGI_BASE_URL,
-            headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
-        ) as client:
-            yield client
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
+    ) as client:
+        yield client
 
 
 @pytest_asyncio.fixture(scope="session")
-async def crm_companies_initialized(app, auth_token_system, auth_token_company2):
+async def crm_companies_initialized(app, auth_token_system, auth_token_company2, crm_di):
     """
     Инициализирует компании system и company2 один раз за сессию.
 
@@ -332,7 +248,6 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
     Контекст устанавливается вручную: test_context — function-scoped,
     а эта фикстура — session-scoped, поэтому test_context ещё не существует.
     """
-    from apps.crm.container import get_crm_container
     from core.context import clear_context, set_context
     from core.models.context_models import Context
     from core.models.identity_models import User
@@ -346,8 +261,7 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
         metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
     ))
 
-    container = get_crm_container()
-    await container.company_init_service.initialize_company("system")
+    await crm_di.company_init_service.initialize_company("system")
 
     set_context(Context(
         user=User(user_id="test_user", name="Test User"),
@@ -357,7 +271,7 @@ async def crm_companies_initialized(app, auth_token_system, auth_token_company2)
         metadata={"user_id": "test_user", "email": "test@example.com", "grps": []},
     ))
 
-    await container.company_init_service.initialize_company("company2")
+    await crm_di.company_init_service.initialize_company("company2")
 
     clear_context()
 
@@ -372,9 +286,10 @@ async def crm_client(
     unique_id,
     auth_headers_system,
     auth_headers_company2,
+    service_processes: ServiceProcesses,
 ):
     """
-    HTTP клиент для CRM API (ASGI transport).
+    HTTP клиент для CRM API (ASGI transport, lifespan из ``service_processes``).
 
     Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
     Таблицы создаются через миграции в setup_database_before_tests.
@@ -385,11 +300,9 @@ async def crm_client(
     - rag_service: реальный HTTP сервер для inter-service communication (attachments)
     - rag_worker: для обработки загруженных документов
     """
-    from apps.crm.main import create_app
     from tests.fixtures.crm_test_setup import ensure_crm_per_test_namespace_and_types
 
-    crm_app = create_app()
-
+    crm_app = await service_processes.app("crm")
     transport = ASGITransport(app=crm_app)
     async with AsyncClient(
         transport=transport,
@@ -407,37 +320,15 @@ async def crm_client(
 
 
 @pytest_asyncio.fixture
-async def frontend_client():
-    """
-    HTTP клиент для Frontend API (ASGI transport).
-
-    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
-    """
-    from apps.frontend.main import app
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport,
-        base_url=_PLATFORM_ASGI_BASE_URL,
-        headers=_PLATFORM_ASGI_HOST_HEADERS,
-    ) as client:
-        yield client
+async def sync_app(service_processes: ServiceProcesses):
+    """FastAPI приложение Sync с lifespan (``service_processes``)."""
+    return await service_processes.app("sync")
 
 
 @pytest_asyncio.fixture
-async def sync_app():
-    """FastAPI приложение Sync (ASGI)."""
-    from apps.sync.main import app
-
-    yield app
-
-
-@pytest_asyncio.fixture
-async def office_app():
-    """FastAPI приложение office (Documents / OnlyOffice BFF + UI, ASGI)."""
-    from apps.office.main import app
-
-    yield app
+async def office_app(service_processes: ServiceProcesses):
+    """FastAPI приложение office (Documents / OnlyOffice BFF + UI) с lifespan."""
+    return await service_processes.app("office")
 
 
 @pytest_asyncio.fixture
@@ -462,7 +353,7 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 
     Устанавливает provider = 'mock' для всех провайдеров через monkeypatch env,
     сбрасывает синглтон ``core.config.get_settings``, кэш ``voice_resolver``,
-    затем локальные синглтоны ``VoiceServiceSettings`` и контейнера voice.
+    затем локальные синглтоны ``VoiceServiceSettings`` и voice.
     Провайдеры — реальные классы (MockSTTProvider / MockTTSProvider / MockVADProvider),
     не unittest.mock. Внешние ML-модели и cloud.ru API не используются.
 
@@ -477,13 +368,11 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 
     import core.config.base as config_base
     from apps.voice.config import reset_voice_settings
-    from apps.voice.container import reset_voice_container
     from core.ai.runtime import reset_voice_runtime_for_tests
 
     monkeypatch.setattr(config_base, "_settings_instance", None)
     reset_voice_runtime_for_tests()
     reset_voice_settings()
-    reset_voice_container()
 
     from core.context import clear_context
 
@@ -495,19 +384,21 @@ def voice_app(monkeypatch: pytest.MonkeyPatch):
 
     clear_context()
     reset_voice_runtime_for_tests()
-    reset_voice_container()
     reset_voice_settings()
 
 
 @pytest_asyncio.fixture
 async def voice_client(voice_app):
-    """HTTP-клиент для voice API (ASGI)."""
+    """HTTP-клиент для voice API (ASGI) внутри lifespan приложения этого теста."""
     transport = ASGITransport(app=voice_app)
-    async with AsyncClient(
-        transport=transport,
-        base_url=_PLATFORM_ASGI_BASE_URL,
-        headers=_PLATFORM_ASGI_HOST_HEADERS,
-    ) as client:
+    async with (
+        voice_app.router.lifespan_context(voice_app),
+        AsyncClient(
+            transport=transport,
+            base_url=_PLATFORM_ASGI_BASE_URL,
+            headers=_PLATFORM_ASGI_HOST_HEADERS,
+        ) as client,
+    ):
         yield client
 
 
@@ -524,19 +415,15 @@ async def worktracker_client(worktracker_app, auth_headers_system):
 
 
 @pytest_asyncio.fixture
-async def worktracker_app():
-    """FastAPI приложение worktracker (ASGI)."""
-    from apps.worktracker.main import app
-
-    yield app
+async def worktracker_app(service_processes: ServiceProcesses):
+    """FastAPI приложение worktracker с lifespan (``service_processes``)."""
+    return await service_processes.app("worktracker")
 
 
 @pytest_asyncio.fixture
-async def secrets_app():
-    """FastAPI приложение secrets (ASGI)."""
-    from apps.secrets.main import app
-
-    yield app
+async def secrets_app(service_processes: ServiceProcesses):
+    """FastAPI приложение secrets с lifespan (``service_processes``)."""
+    return await service_processes.app("secrets")
 
 
 @pytest_asyncio.fixture
@@ -544,13 +431,12 @@ async def secrets_client(secrets_app, setup_database_before_tests, auth_headers_
     """HTTP клиент для Secrets API (ASGI transport)."""
     _ = setup_database_before_tests
     transport = ASGITransport(app=secrets_app)
-    async with secrets_app.router.lifespan_context(secrets_app):
-        async with AsyncClient(
-            transport=transport,
-            base_url=_PLATFORM_ASGI_BASE_URL,
-            headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
-        ) as client:
-            yield client
+    async with AsyncClient(
+        transport=transport,
+        base_url=_PLATFORM_ASGI_BASE_URL,
+        headers={**_PLATFORM_ASGI_HOST_HEADERS, **auth_headers_system},
+    ) as client:
+        yield client
 
 
 @pytest_asyncio.fixture

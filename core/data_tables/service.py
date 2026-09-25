@@ -48,8 +48,9 @@ from core.data_tables.sqlite_format import (
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.registry import default_retention_for_source
-from core.files.s3_client import S3ClientFactory
 from core.files.service import FilesService
 from core.files.types import FileCategory, ext_to_category
 from core.logging import get_logger
@@ -450,21 +451,24 @@ class DataTableService:
         return None
 
     async def _download_bytes(self, record: FileRecord) -> bytes:
-        s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
+        if record.company_id is None or record.company_id == "":
+            raise DataTableNotFoundError(f"DataTable {record.file_id} has no company")
         try:
-            return await s3.download_bytes(record.s3_key)
+            handle = await FileGate().open_record(
+                record,
+                SystemPrincipal(company_id=record.company_id),
+            )
+            return await handle.read_bytes()
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
                 "data_tables.data.table.s3.error.file_id",
                 file_id=record.file_id,
-                bucket=record.s3_bucket,
+                storage_id=record.storage_id,
                 key=record.s3_key,
                 code=code,
             )
             raise DataTableNotFoundError(f"failed to read DataTable: {code}") from exc
-        finally:
-            await s3.close()
 
     @asynccontextmanager
     async def _sqlite_file(
@@ -517,17 +521,14 @@ class DataTableService:
                 f"DataTable original_name must use {DATA_TABLE_EXTENSION}, got {record.original_name!r}"
             )
         s3_key = f"files/{record.file_id}_{file_hash}{extension}"
-        s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-        try:
-            _ = await s3.upload_bytes(
-                data=data,
-                key=s3_key,
-                metadata={},
-                content_type=DATA_TABLE_CONTENT_TYPE,
-                public=record.is_public,
-            )
-        finally:
-            await s3.close()
+        s3 = await FileGate().client_for_storage_id(record.storage_id, record=record)
+        _ = await s3.upload_bytes(
+            data=data,
+            key=s3_key,
+            metadata={},
+            content_type=DATA_TABLE_CONTENT_TYPE,
+            public=record.is_public,
+        )
         updated = record.model_copy(
             update={
                 "s3_key": s3_key,

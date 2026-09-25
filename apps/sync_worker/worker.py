@@ -16,36 +16,24 @@ _sync_worker_settings = SyncSettings.model_validate(
 )
 setup_worker_logging_early("sync_worker", logging_config=_sync_worker_settings.logging)
 set_settings(_sync_worker_settings)
-_segment = resolve_files_route_segment("sync_worker")
-set_files_route_segment(_segment)
+set_files_route_segment(resolve_files_route_segment("sync_worker"))
 
-from taskiq import TaskiqState
-
-from apps.platform_tasks.wiring import wire_worker
-from apps.sync.container import get_sync_container
-from core.billing import set_billing_service
-from core.files.processors import initialize_default_processors
+from apps.sync.di import SyncDi
+from apps.worker_manifest import wire_worker
+from core.di import recipe
 from core.logging import get_logger
 from core.push.apns_credentials import resolve_apns_credentials
 from core.push.apns_service import init_apns_push_service
 from core.push.fcm_credentials import resolve_fcm_credentials
 from core.push.fcm_service import init_fcm_push_service
 from core.push.service import init_web_push_service
-from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
+from core.tasks.worker_bootstrap import build_worker
 
 logger = get_logger(__name__)
 
-broker = wire_worker("sync")
 
-
-async def _startup(state: TaskiqState) -> None:
-    settings = _sync_worker_settings
-    container = get_sync_container()
-    container.bind_files_route_segment(_segment)
-    state.container = container
-    initialize_default_processors(container.file_repository)
-    set_billing_service(container.billing_service)
-    init_worker_tracing("sync_worker", container)
+async def init_sync_worker_push(settings: SyncSettings) -> None:
+    """Web Push, APNs и FCM, если в настройках воркера заданы ключи."""
     if settings.push.enabled:
         _ = init_web_push_service(
             vapid_private_key=settings.push.vapid_private_key or "",
@@ -71,23 +59,18 @@ async def _startup(state: TaskiqState) -> None:
             private_key_pem=fcm.private_key_pem,
             token_uri=fcm.token_uri,
         )
-        logger.info(
-            "worker.fcm_initialized",
-            service="sync_worker",
-            project_id=fcm.project_id,
-        )
+        logger.info("worker.fcm_initialized", service="sync_worker", project_id=fcm.project_id)
 
 
-async def _shutdown(state: TaskiqState) -> None:
-    _ = state
-
-
+broker = wire_worker("sync")
 worker_app = build_worker(
     broker,
     service_name="sync_worker",
     queue="sync",
-    on_startup=_startup,
-    on_shutdown=_shutdown,
+    settings=_sync_worker_settings,
+    di_class=SyncDi,
+    database="sync_url",
+    lifecycle=(recipe(init_sync_worker_push),),
 )
 
 __all__ = ["worker_app"]

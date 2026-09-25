@@ -1,7 +1,7 @@
 """
 HTTP-контракт ``POST {RAG_API_V1_PREFIX}/namespaces/{id}/search`` (как ``SearchRequest`` в apps/rag).
 
-Единая сборка path/body для ``RagClient`` и ``RAGRepository.search_namespace``.
+Единая сборка path/body для ``RagClient`` и ``BaseRAGProvider.search_namespace``.
 """
 
 from __future__ import annotations

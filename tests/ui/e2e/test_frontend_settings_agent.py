@@ -17,10 +17,10 @@ os.environ.setdefault("UI_E2E_USE_LVH_ME", "1")
 
 
 @pytest_asyncio.fixture
-async def system_agent_settings_empty(frontend_container) -> None:
+async def system_agent_settings_empty(frontend_di) -> None:
     from tests.ui.e2e_worker import ui_e2e_company_id
 
-    await reset_company_agent_ui_state(frontend_container, company_id=ui_e2e_company_id())
+    await reset_company_agent_ui_state(frontend_di, company_id=ui_e2e_company_id())
 
 
 async def _open_settings_page(scenario: ScenarioRecorder, frontend_ui: AppUI, page: Page) -> None:

@@ -87,7 +87,7 @@ async def test_egress_prefer_proxy_set_warns_when_redis_set_false(
     monkeypatch.setattr(erp, "_platform_proxy_configured", lambda: True)
     await egress_prefer_proxy_set("https://warn.example:443")
     mock_rc.set.assert_awaited_once()
-    assert "SET failed" in caplog.text
+    assert "http.egress_prefer_proxy_set" in caplog.text
 
 
 @pytest.mark.asyncio

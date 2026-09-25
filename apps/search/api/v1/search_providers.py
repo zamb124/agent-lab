@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from apps.search.dependencies import ContainerDep
+from apps.search.di import Di
 from apps.search.realtime.operations import (
     SearchOkResult,
     SearchProviderIdPayload,
@@ -24,30 +24,30 @@ router = APIRouter(prefix="/providers/company", tags=["search-providers"])
 
 
 @router.get("", response_model=CompanySearchProvidersResponse)
-async def get_company_search_providers(container: ContainerDep) -> CompanySearchProvidersResponse:
-    return await op_providers_list(EmptyPayload(), user=require_context().user, container=container)
+async def get_company_search_providers(di: Di) -> CompanySearchProvidersResponse:
+    return await op_providers_list(EmptyPayload(), user=require_context().user, di=di)
 
 
 @router.put("/order", response_model=SearchOkResult)
 async def put_company_search_provider_order(
-    body: SearchProviderOrderPayload, container: ContainerDep
+    body: SearchProviderOrderPayload, di: Di
 ) -> SearchOkResult:
-    return await op_providers_order_update(body, user=require_context().user, container=container)
+    return await op_providers_order_update(body, user=require_context().user, di=di)
 
 
 @router.put("/{provider_id}", response_model=SearchOkResult)
 async def put_company_search_provider(
-    provider_id: SearchProviderId, body: SearchProviderUpdateRequest, container: ContainerDep
+    provider_id: SearchProviderId, body: SearchProviderUpdateRequest, di: Di
 ) -> SearchOkResult:
     return await op_providers_update(
         SearchProviderUpdatePayload.model_validate({**body.model_dump(exclude_unset=True), "provider_id": provider_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{provider_id}", response_model=SearchOkResult)
-async def delete_company_search_provider(provider_id: SearchProviderId, container: ContainerDep) -> SearchOkResult:
+async def delete_company_search_provider(provider_id: SearchProviderId, di: Di) -> SearchOkResult:
     return await op_providers_reset(
-        SearchProviderIdPayload(provider_id=provider_id), user=require_context().user, container=container
+        SearchProviderIdPayload(provider_id=provider_id), user=require_context().user, di=di
     )

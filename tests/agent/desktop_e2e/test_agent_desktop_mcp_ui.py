@@ -110,6 +110,7 @@ async def test_mcp_ui_01_first_launch_bundled_order(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_mcp_ui_02_after_pairing_enabled(
+    di,
     agent_frontend_http_client,
     auth_token: str,
     humanitec_desktop_process_factory,
@@ -125,7 +126,7 @@ async def test_mcp_ui_02_after_pairing_enabled(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             credentials = desktop.read_credentials()
             assert credentials["platform_mcp_url"]
             assert credentials["token"]
@@ -137,6 +138,7 @@ async def test_mcp_ui_02_after_pairing_enabled(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_mcp_ui_03_chat_mcp_picker_order(
+    di,
     agent_frontend_http_client,
     auth_token: str,
     humanitec_desktop_process_factory,
@@ -152,7 +154,7 @@ async def test_mcp_ui_03_chat_mcp_picker_order(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             await assert_platform_mcp_first_in_chat_picker(page)
     finally:
         desktop.stop()
@@ -201,7 +203,7 @@ async def test_mcp_ui_04_flow_tools_visible_via_platform_mcp(
 async def test_mcp_ui_05_post_revoke_credentials_cleared(
     agent_frontend_http_client,
     auth_token: str,
-    frontend_container,
+    frontend_di,
     humanitec_desktop_process_factory,
 ) -> None:
     from apps.agent.service import TOKEN_DENY_PREFIX
@@ -220,7 +222,7 @@ async def test_mcp_ui_05_post_revoke_credentials_cleared(
         assert delete_response.status_code in {200, 204}
         desktop.wait_for_credentials_cleared()
         await wait_for_device_offline(agent_frontend_http_client, device_id)
-        deny_raw = await frontend_container.shared_storage.get(
+        deny_raw = await frontend_di.shared_storage.get(
             f"{TOKEN_DENY_PREFIX}{device_id}",
             force_global=True,
         )
@@ -243,6 +245,7 @@ async def test_mcp_ui_05_post_revoke_credentials_cleared(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
+    di,
     agent_frontend_http_client,
     auth_token: str,
     humanitec_desktop_process_factory,
@@ -259,7 +262,7 @@ async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             await assert_platform_mcp_first_in_chat_picker(page)
     finally:
         desktop.stop()
@@ -268,6 +271,7 @@ async def test_mcp_g_01_empty_chat_picker_platform_mcp_first(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_mcp_g_02_flow_description_in_tools_list(
+    di,
     agent_frontend_http_client,
     auth_token: str,
     flows_client_http,
@@ -318,7 +322,7 @@ async def test_mcp_g_02_flow_description_in_tools_list(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             # Chat picker lists Goose extensions (Platform Lara), not MCP tool descriptions.
             await assert_platform_mcp_first_in_chat_picker(page)
     finally:

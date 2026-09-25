@@ -6,33 +6,35 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventType
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from core.ai.company_settings import METADATA_KEY, CompanyAIProviders, LLMContextPatch
 from core.context import Company, Context, User, clear_context, set_context
+from core.di import require_di
 from core.llm_context import LLMContextProfile
 from core.types import JsonObject
 from tests.flows.agent_skills_harness import make_skill_state
 from tests.flows.durable_runtime_harness import ensure_workflow_started
 
 
-def _runtime_container(app: FastAPI) -> FlowRuntimeContainer:
-    return as_flow_runtime_container(app.state.container)
+def _flows_di(app: FastAPI) -> FlowsDi:
+    return require_di(app, FlowsDi)
 
 
-async def _persist_state(app: FastAPI, state) -> FlowRuntimeContainer:
-    container = _runtime_container(app)
-    _ = await container.workflow_runtime.save_state(
+async def _persist_state(app: FastAPI, state) -> FlowsDi:
+    di = _flows_di(app)
+    _ = await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.run_started,
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    return container
+    return di
 
 
 @pytest.mark.asyncio
@@ -64,9 +66,9 @@ async def test_llm_node_source_registry_respects_mode_and_retrieval(
         llm_context=LLMContextPatch.model_validate(llm_context),
     )
     state = make_skill_state(flow_id=flow_id, unique_id=unique_id)
-    container = await _persist_state(app, state)
+    di = await _persist_state(app, state)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
@@ -75,7 +77,7 @@ async def test_llm_node_source_registry_respects_mode_and_retrieval(
         node_id=node_config.node_id,
         config=cast(JsonObject, node_config.model_dump(mode="json")),
         node_config=node_config,
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
     )
     runner = await node.get_runner(state)
     assert isinstance(runner.llm_context_policy, LLMContextProfile)
@@ -103,9 +105,9 @@ async def test_llm_node_applies_company_llm_context_patch(
         llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
     )
     state = make_skill_state(flow_id=flow_id, unique_id=unique_id)
-    container = await _persist_state(app, state)
+    di = await _persist_state(app, state)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
@@ -124,7 +126,7 @@ async def test_llm_node_applies_company_llm_context_patch(
             node_id=node_config.node_id,
             config=cast(JsonObject, node_config.model_dump(mode="json")),
             node_config=node_config,
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         runner = await node.get_runner(state)
         assert runner.llm_context_policy is not None

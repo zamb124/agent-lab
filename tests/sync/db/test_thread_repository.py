@@ -1,4 +1,4 @@
-"""Тесты ThreadRepository."""
+"""Тред Sync: порядок в канале."""
 
 from __future__ import annotations
 
@@ -6,23 +6,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncChannel, SyncThread
-from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.message import SyncMessage
 from apps.sync.models.messages import MessageContentModel, MessageContentType, TextPlainContent
+from apps.sync.models.threads import SyncThread
 
 
 @pytest.mark.asyncio
 async def test_thread_list_by_channel_order(
-    channel_repo: ChannelRepository,
-    thread_repo: ThreadRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
 ) -> None:
-    """list_by_channel возвращает треды по убыванию created_at."""
+    _ = sync_db_clean
     channel_id = f"ch_tr_{unique_id}"
     ch = SyncChannel(
         channel_id=channel_id,
@@ -34,7 +30,7 @@ async def test_thread_list_by_channel_order(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
+    _ = await SyncChannel.objects.create(instance=ch)
 
     t_old = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
     t_new = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
@@ -43,7 +39,7 @@ async def test_thread_list_by_channel_order(
     thr_old = f"thr_old_{unique_id}"
     thr_new = f"thr_new_{unique_id}"
 
-    await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=root_old,
         company_id=company_id,
         channel_id=channel_id,
@@ -60,7 +56,7 @@ async def test_thread_list_by_channel_order(
             ),
         ],
     )
-    await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=root_new,
         company_id=company_id,
         channel_id=channel_id,
@@ -96,21 +92,25 @@ async def test_thread_list_by_channel_order(
         created_at=t_new,
         created_by_user_id="u1",
     )
-    await thread_repo.create(thread_old)
-    await thread_repo.create(thread_new)
+    _ = await SyncThread.objects.create(instance=thread_old)
+    _ = await SyncThread.objects.create(instance=thread_new)
 
-    rows = await thread_repo.list_by_channel(channel_id, company_id=company_id)
+    rows = await SyncThread.list_threads_in_channel(
+        company_id,
+        channel_id,
+        limit=100,
+        offset=0,
+    )
     assert [r.thread_id for r in rows] == [thr_new, thr_old]
 
 
 @pytest.mark.asyncio
 async def test_thread_list_empty_channel(
-    channel_repo: ChannelRepository,
-    thread_repo: ThreadRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     empty_id = f"ch_empty_{unique_id}"
     ch = SyncChannel(
         channel_id=empty_id,
@@ -122,6 +122,11 @@ async def test_thread_list_empty_channel(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
-    rows = await thread_repo.list_by_channel(empty_id, company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    rows = await SyncThread.list_threads_in_channel(
+        company_id,
+        empty_id,
+        limit=100,
+        offset=0,
+    )
     assert rows == []

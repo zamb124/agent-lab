@@ -77,6 +77,16 @@ export const PLATFORM_SERVICES = Object.freeze([
         metricKey: null,
     }),
     Object.freeze({
+        id: 'stock',
+        nameKey: 'apps.stock.name',
+        logoSrc: `${SERVICE_LOGO_BASE}/stock_logo.svg`,
+        brandFrom: '#22c55e',
+        brandTo: '#0ea5e9',
+        healthName: 'stock',
+        metricField: null,
+        metricKey: null,
+    }),
+    Object.freeze({
         id: 'frontend',
         nameKey: 'apps.frontend.name',
         logoSrc: `${SERVICE_LOGO_BASE}/frontend_logo.svg`,

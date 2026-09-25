@@ -14,7 +14,7 @@ from apps.crm_worker.tasks.task_names import (
     CRM_REEMBED_STALE_DOCUMENTS,
     SCHEDULED_NAMESPACE_INTEGRATION_UNIFIED_SYNC,
 )
-from apps.platform_tasks.wiring import all_queues, wire_all, wire_worker
+from apps.worker_manifest import all_queues, wire_all, wire_worker
 from core.tasks import registered_queue_brokers, scheduled_task_specs
 
 pytestmark = pytest.mark.real_taskiq

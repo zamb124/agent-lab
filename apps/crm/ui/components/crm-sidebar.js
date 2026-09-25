@@ -37,7 +37,7 @@ import {
     mapSidebarNavFromApi,
     mergeCrmSidebarNavMissingGroups,
     replaceCrmSidebarGroupChildrenFromCanonical,
-} from '../utils/build-default-sidebar-nav.js';
+} from '../_helpers/build-default-sidebar-nav.js';
 
 const PRIMARY_NAV = [
     { route: 'notes', icon: 'list', label_key: 'sidebar.nav.notes' },

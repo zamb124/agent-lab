@@ -8,26 +8,26 @@ from __future__ import annotations
 
 import json
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.src.models.tool_reference import ToolReference
+from apps.flows.src.tools.registry import ToolRegistry
 from core.context import get_context
 from core.docs.models import PlatformToolDoc
 
 _MAX_CODE_PREVIEW_CHARS = 4000
 
 
-async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformToolDoc]:
+async def collect_platform_tool_docs(tool_registry: ToolRegistry) -> list[PlatformToolDoc]:
     """
     Все динамические / зарегистрированные tools: сначала из tool_repository текущей компании,
     затем дополняются экземплярами из ToolRegistry, которых нет в БД.
     """
-    registry = container.tool_registry
-    registry.register_builtin_tools()
+    tool_registry.register_builtin_tools()
 
     merged: dict[str, PlatformToolDoc] = {}
 
     ctx = get_context()
     if ctx and ctx.active_company:
-        refs = await container.tool_repository.list(limit=5000)
+        refs = await ToolReference.list_in_tool_id_order(limit=5000)
         for ref in refs:
             effective = ref.effective_parameters_schema()
             parameters_json = json.dumps(effective, ensure_ascii=False, indent=2)
@@ -51,7 +51,7 @@ async def collect_platform_tool_docs(container: FlowContainer) -> list[PlatformT
                 code_preview=code_preview,
             )
 
-    for name, tool in registry.list_all().items():
+    for name, tool in tool_registry.list_all().items():
         if name in merged:
             continue
         if not tool.listed_in_platform_tool_docs:

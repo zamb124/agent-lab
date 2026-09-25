@@ -35,7 +35,7 @@ class TestHistoricalNotes:
         """Создание заметки задним числом"""
         past_date = (date.today() - timedelta(days=30)).isoformat()
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": "meeting",
             "name": f"Историческая заметка {unique_id}",
@@ -63,7 +63,7 @@ class TestHistoricalNotes:
         ]
 
         for i, note_date in enumerate(dates):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": "note",
                 "name": f"Note day {i} {unique_id}",
                 "note_date": note_date,
@@ -98,7 +98,7 @@ class TestHistoricalNotes:
         start_date = (date.today() - timedelta(days=60)).isoformat()
         end_date = (date.today() - timedelta(days=30)).isoformat()
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Old note {unique_id}",
             "note_date": (date.today() - timedelta(days=45)).isoformat(),

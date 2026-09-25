@@ -59,10 +59,20 @@ async def test_secret_masked_in_api_responses(secrets_client, unique_id: str) ->
     assert get_resp.status_code == 200
     assert get_resp.json()["payload"]["base"]["value"] is None
 
-    list_resp = await secrets_client.get(f"{API_PREFIX}/variables")
-    assert list_resp.status_code == 200
-    items = list_resp.json()["items"]
-    listed = next(item for item in items if item["variable_key"] == variable_key)
+    listed = None
+    offset = 0
+    while listed is None:
+        list_resp = await secrets_client.get(
+            f"{API_PREFIX}/variables",
+            params={"limit": 1000, "offset": offset},
+        )
+        assert list_resp.status_code == 200
+        items = list_resp.json()["items"]
+        listed = next((item for item in items if item["variable_key"] == variable_key), None)
+        if len(items) < 1000:
+            break
+        offset += 1000
+    assert listed is not None
     assert listed["payload"]["base"]["value"] is None
 
 

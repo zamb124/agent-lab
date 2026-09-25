@@ -135,7 +135,7 @@ def test_duplicate_api_model_id_raises(unique_id):
         ],
         stt_default=f"dup-{unique_id}",
     )
-    with pytest.raises(ValueError, match="дубликат api_model_id"):
+    with pytest.raises(ValueError, match="duplicate api_model_id"):
         build_stt_api_pairs(cfg)
 
 
@@ -150,7 +150,7 @@ def test_empty_default_raises(unique_id):
         ],
         stt_default="   ",
     )
-    with pytest.raises(ValueError, match="не должен быть пустым"):
+    with pytest.raises(ValueError, match="must not be empty"):
         build_stt_api_pairs(cfg)
 
 

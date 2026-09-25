@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.clients.google_workspace_auth import (
     GoogleAuthMaterial,
@@ -14,8 +13,10 @@ from core.clients.google_workspace_scopes import (
     scopes_for_google_service,
 )
 from core.context import get_context
+from core.integrations.company_credentials import CompanyIntegrationCredentialService
 from core.integrations.constants import TOKEN_TYPE_SERVICE_ACCOUNT
 from core.integrations.models import IntegrationProvider
+from core.integrations.oauth_service import OAuthService
 from core.logging import get_logger
 from core.state import ExecutionState
 from core.state.interrupt import OAuthInterrupt
@@ -27,6 +28,18 @@ logger = get_logger(__name__)
 
 class GoogleWorkspaceClient:
     """Auth material for Google Docs/Sheets tools."""
+
+    _oauth_service: OAuthService
+    _company_credentials: CompanyIntegrationCredentialService
+
+    def __init__(
+        self,
+        *,
+        oauth_service: OAuthService,
+        company_credentials: CompanyIntegrationCredentialService,
+    ) -> None:
+        self._oauth_service = oauth_service
+        self._company_credentials = company_credentials
 
     async def resolve_auth(self, state: ExecutionState) -> GoogleAuthMaterial:
         """
@@ -43,8 +56,7 @@ class GoogleWorkspaceClient:
 
         company_id = ctx.active_company.company_id
         user_id = ctx.user.user_id
-        container = require_current_container()
-        oauth = container.oauth_service
+        oauth = self._oauth_service
 
         workspace_cred = await oauth.get_valid_token(
             company_id=company_id,
@@ -67,10 +79,8 @@ class GoogleWorkspaceClient:
                 logger.debug("flows.google.workspace.prior.credential.service", service=prior_service, user=user_id)
                 return GoogleAuthMaterial(access_token=prior_cred.access_token)
 
-        company_material = await (
-            container.company_integration_credential_service.get_google_workspace_auth_material(
-                company_id
-            )
+        company_material = await self._company_credentials.get_google_workspace_auth_material(
+            company_id
         )
         if company_material is not None:
             logger.debug("flows.google.workspace.company.sa.credential", company=company_id)

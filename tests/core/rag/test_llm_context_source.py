@@ -2,36 +2,24 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import get_settings
 from core.llm_context import (
     LLMContextBudget,
     LLMContextProfile,
     LLMContextRetrievalPolicy,
     LLMContextSourceRequest,
 )
-from core.rag import RAGLLMContextSource, RAGRepository, RagResourceBindParams, RAGSearchResult
+from core.rag import RAGLLMContextSource, RagResourceBindParams, RAGSearchResult
 from core.rag.llm_context_source import _clamp_score
-from core.rag.models import RAGSearchOptions
-from core.rag.search_options_resolver import resolve_platform_search_options
 from core.rag_indexing_schema import SearchChannelsDefaults
-from core.types import JsonObject
 
 
-def _expected_search_options(**kwargs: object) -> JsonObject:
-    overrides = RAGSearchOptions.model_validate(kwargs)
-    return resolve_platform_search_options(
-        settings=get_settings(),
-        overrides=overrides,
-    ).model_dump(exclude_none=True)
-
-
-class CapturingSearchRepository:
+class CapturingRagClient:
     def __init__(self, response: dict) -> None:
         self.response = response
         self.calls: list[dict] = []
 
-    async def search_namespace(self, **kwargs):
-        self.calls.append(kwargs)
+    async def search(self, namespace_id: str, query: str, **kwargs):
+        self.calls.append({"namespace_id": namespace_id, "query": query, **kwargs})
         return self.response
 
 
@@ -79,7 +67,7 @@ def _profile(
 
 @pytest.mark.asyncio
 async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
-    repository = CapturingSearchRepository(
+    rag_client = CapturingRagClient(
         {
             "results": [
                 {
@@ -96,7 +84,7 @@ async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
         }
     )
     source = RAGLLMContextSource(
-        repository=repository,
+        rag_client=rag_client,
         bind=RagResourceBindParams(
             namespace="kb",
             default_top_k=5,
@@ -119,19 +107,17 @@ async def test_rag_context_source_collects_reranked_rag_blocks() -> None:
     assert blocks[0].stable_key == "rag:kb:doc-1:chunk-3"
     assert "Refunds are available" in blocks[0].content
     assert blocks[0].provenance["retriever"] == "pgvector"
-    assert repository.calls[0]["limit"] == 10
-    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == _expected_search_options(
-        channels=SearchChannelsDefaults(semantic=True, lexical=True),
-        rerank=True,
-        retrieval=True,
-    )
+    assert rag_client.calls[0]["limit"] == 10
+    assert rag_client.calls[0]["channels"] == SearchChannelsDefaults(semantic=True, lexical=True)
+    assert rag_client.calls[0]["rerank"] is True
+    assert rag_client.calls[0]["retrieval"] is True
 
 
 @pytest.mark.asyncio
 async def test_rag_context_source_skips_when_retrieval_is_off_or_query_empty() -> None:
-    repository = CapturingSearchRepository({"results": []})
+    rag_client = CapturingRagClient({"results": []})
     source = RAGLLMContextSource(
-        repository=repository,
+        rag_client=rag_client,
         bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
@@ -142,12 +128,12 @@ async def test_rag_context_source_skips_when_retrieval_is_off_or_query_empty() -
             policy=_profile(mode="off", rerank=False),
         )
     ) == []
-    assert repository.calls == []
+    assert rag_client.calls == []
 
 
 @pytest.mark.asyncio
 async def test_rag_context_source_handles_model_results_lexical_mode_and_fallback_keys() -> None:
-    repository = CapturingSearchRepository(
+    rag_client = CapturingRagClient(
         {
             "results": [
                 RAGSearchResult(
@@ -173,7 +159,7 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
         }
     )
     source = RAGLLMContextSource(
-        repository=repository,
+        rag_client=rag_client,
         bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
         name="!!!",
     )
@@ -183,8 +169,8 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
     )
 
     assert source.name == "rag.source"
-    assert repository.calls[0]["search_options"].channels is not None
-    assert repository.calls[0]["search_options"].channels.model_dump() == {
+    assert rag_client.calls[0]["channels"] is not None
+    assert rag_client.calls[0]["channels"].model_dump() == {
         "semantic": False,
         "lexical": True,
     }
@@ -195,9 +181,9 @@ async def test_rag_context_source_handles_model_results_lexical_mode_and_fallbac
 
 @pytest.mark.asyncio
 async def test_rag_context_source_uses_semantic_only_mode() -> None:
-    repository = CapturingSearchRepository({"results": []})
+    rag_client = CapturingRagClient({"results": []})
     source = RAGLLMContextSource(
-        repository=repository,
+        rag_client=rag_client,
         bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
@@ -205,8 +191,8 @@ async def test_rag_context_source_uses_semantic_only_mode() -> None:
         LLMContextSourceRequest(query="contract", policy=_profile(mode="semantic", rerank=False))
     )
 
-    assert repository.calls[0]["search_options"].channels is not None
-    assert repository.calls[0]["search_options"].channels.model_dump() == {
+    assert rag_client.calls[0]["channels"] is not None
+    assert rag_client.calls[0]["channels"].model_dump() == {
         "semantic": True,
         "lexical": False,
     }
@@ -215,7 +201,7 @@ async def test_rag_context_source_uses_semantic_only_mode() -> None:
 @pytest.mark.asyncio
 async def test_rag_context_source_rejects_invalid_response_shape() -> None:
     source = RAGLLMContextSource(
-        repository=CapturingSearchRepository({"results": {}}),
+        rag_client=CapturingRagClient({"results": {}}),
         bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
@@ -231,9 +217,9 @@ def test_rag_context_source_score_guard_handles_invalid_values() -> None:
 
 @pytest.mark.asyncio
 async def test_rag_context_source_passes_advanced_retrieval_options() -> None:
-    repository = CapturingSearchRepository({"results": []})
+    rag_client = CapturingRagClient({"results": []})
     source = RAGLLMContextSource(
-        repository=repository,
+        rag_client=rag_client,
         bind=RagResourceBindParams(namespace="kb", company_id="company-1"),
     )
 
@@ -244,34 +230,32 @@ async def test_rag_context_source_passes_advanced_retrieval_options() -> None:
         )
     )
 
-    assert repository.calls[0]["search_options"].model_dump(exclude_none=True) == _expected_search_options(
-        channels=SearchChannelsDefaults(semantic=True, lexical=True),
-        rerank=True,
-        retrieval=True,
-        rrf_k=40,
-        freshness_weight=0.2,
-    )
+    assert rag_client.calls[0]["channels"] == SearchChannelsDefaults(semantic=True, lexical=True)
+    assert rag_client.calls[0]["rerank"] is True
+    assert rag_client.calls[0]["retrieval"] is True
+    assert rag_client.calls[0]["rrf_k"] == 40
+    assert rag_client.calls[0]["freshness_weight"] == 0.2
 
 
 @pytest.mark.asyncio
-async def test_rag_repository_merges_bind_filters_into_http_search_body() -> None:
-    client = CapturingServiceClient()
-    repository = RAGRepository(
-        provider=object(),
-        service_client=client,
-    )
-
-    await repository.search_namespace(
-        query="pricing",
-        filters={"locale": "ru"},
+async def test_rag_llm_context_source_merges_bind_filters() -> None:
+    rag_client = CapturingRagClient({"results": []})
+    source = RAGLLMContextSource(
+        rag_client=rag_client,
         bind=RagResourceBindParams(
             namespace="kb",
             company_id="company-1",
             filters={"collection_id": "sales", "locale": "en"},
         ),
+        filters={"locale": "ru"},
     )
 
-    assert client.calls[0]["json"]["filters"] == {
+    await source.collect(
+        LLMContextSourceRequest(query="pricing", policy=_profile()),
+    )
+
+    assert rag_client.calls[0]["filters"] == {
         "collection_id": "sales",
         "locale": "ru",
     }
+

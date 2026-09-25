@@ -7,7 +7,7 @@ from contextvars import ContextVar, Token
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 from core.context import get_context, reset_context, set_context
 from core.models.context_models import Context
@@ -27,7 +27,7 @@ def bind_owned_flow_owner(system_user_id: str) -> Iterator[None]:
 
 
 async def persist_owned_flow(
-    container: FlowContainer,
+    di: FlowsDi,
     config: FlowConfig,
     *,
     company_id: str = "system",
@@ -35,8 +35,8 @@ async def persist_owned_flow(
 ) -> None:
     """repository.set + FGA tuples. По умолчанию — HTTP-пользователь `client` (system)."""
     owner = owner_user_id if owner_user_id is not None else _owned_flow_owner.get()
-    _ = await container.flow_repository.set(config)
-    await container.flow_access_service.sync_flow_saved(
+    _ = await FlowConfig.create_version(config)
+    await di.flow_access_service.sync_flow_saved(
         config,
         company_id=company_id,
         owner_user_id=owner,
@@ -63,7 +63,7 @@ def _bind_flow_company_context(company_id: str) -> Token[Context | None]:
 
 
 @pytest.fixture
-async def flow_with_permission(container, unique_id) -> AsyncIterator[str]:
+async def flow_with_permission(di, unique_id) -> AsyncIterator[str]:
     """Flow с permission=managers + OpenFGA tuples в той же company, что Check."""
     flow_id = f"perm_flow_{unique_id}"
     company_id = f"perm_co_{unique_id}"
@@ -84,23 +84,23 @@ async def flow_with_permission(container, unique_id) -> AsyncIterator[str]:
     )
 
     try:
-        await container.flow_repository.set(config)
-        await container.flow_access_service.sync_flow_saved(
+        await FlowConfig.create_version(config)
+        await di.flow_access_service.sync_flow_saved(
             config,
             company_id=company_id,
             owner_user_id=f"owner_{unique_id}",
         )
         yield flow_id
-        await container.flow_access_service.sync_flow_deleted(
+        await di.flow_access_service.sync_flow_deleted(
             flow_id, company_id=company_id, branch_ids=[]
         )
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
     finally:
         reset_context(token)
 
 
 @pytest.fixture
-async def flow_with_skill_permission(container, unique_id) -> AsyncIterator[str]:
+async def flow_with_skill_permission(di, unique_id) -> AsyncIterator[str]:
     """Flow с branch vip (permission=vip) + OpenFGA tuples в той же company, что Check."""
     flow_id = f"skill_perm_flow_{unique_id}"
     company_id = f"skill_co_{unique_id}"
@@ -136,16 +136,16 @@ async def flow_with_skill_permission(container, unique_id) -> AsyncIterator[str]
     )
 
     try:
-        await container.flow_repository.set(config)
-        await container.flow_access_service.sync_flow_saved(
+        await FlowConfig.create_version(config)
+        await di.flow_access_service.sync_flow_saved(
             config,
             company_id=company_id,
             owner_user_id=f"owner_{unique_id}",
         )
         yield flow_id
-        await container.flow_access_service.sync_flow_deleted(
+        await di.flow_access_service.sync_flow_deleted(
             flow_id, company_id=company_id, branch_ids=list(config.branches.keys())
         )
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
     finally:
         reset_context(token)

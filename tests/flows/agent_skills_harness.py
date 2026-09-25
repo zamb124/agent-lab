@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from apps.flows.src.container import FlowContainer, get_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.platform_assistant_skills import (
@@ -37,13 +37,12 @@ def company_context(company_id: str, unique_id: str) -> Context:
 
 
 @asynccontextmanager
-async def company_scope(company_id: str, unique_id: str) -> AsyncIterator[None]:
+async def company_scope(company_id: str, unique_id: str, di) -> AsyncIterator[None]:
     previous = get_context()
     ctx = company_context(company_id, unique_id)
     set_context(ctx)
-    container = get_container()
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=ctx.user.user_id,
         roles=["owner", "admin"],
@@ -122,29 +121,26 @@ def node_tool_ids(main_node: JsonObject | object) -> list[str]:
     return ids
 
 
-async def ensure_platform_assistant_flow(container: FlowContainer) -> FlowConfig:
-    return await ensure_flow_bundle(container, "platform_assistant")
+async def ensure_platform_assistant_flow(di: FlowsDi) -> FlowConfig:
+    return await ensure_flow_bundle(di, "platform_assistant")
 
 
-async def ensure_lara_flow(container: FlowContainer) -> FlowConfig:
-    return await ensure_flow_bundle(container, "lara")
+async def ensure_lara_flow(di: FlowsDi) -> FlowConfig:
+    return await ensure_flow_bundle(di, "lara")
 
 
-async def ensure_flow_bundle(container: FlowContainer, flow_id: str) -> FlowConfig:
+async def ensure_flow_bundle(di: FlowsDi, flow_id: str) -> FlowConfig:
     loader = FlowsLoader(
         bundles_dir=_BUNDLES_DIR,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=_REGISTRY_PATH,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     loader.load_registry_yaml()
     await loader.preload_nodes_to_cache(flow_id)
     loaded_id = await loader._load_flow_bundle(flow_id)
     if loaded_id is None:
         raise AssertionError(f"Failed to load {flow_id} bundle")
-    loaded = await container.flow_repository.get(flow_id)
+    loaded = await FlowConfig.get_latest(flow_id)
     if loaded is None:
         raise AssertionError(f"{flow_id} missing after bundle load")
     return loaded

@@ -63,11 +63,9 @@ async def test_require_company_admin_via_fga(
 @pytest.mark.asyncio
 async def test_set_and_remove_company_membership_dual_write(
     authz_service: AuthzService,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    company_repository = frontend_container.company_repository
-    user_repository = frontend_container.user_repository
     company_id = f"co-mem-{unique_id}"
     user_id = f"u-mem-{unique_id}"
     company = Company(
@@ -77,12 +75,10 @@ async def test_set_and_remove_company_membership_dual_write(
         members={},
     )
     user = User(user_id=user_id, name="Mem User", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(user)
+    _ = await Company.set(company)
+    _ = await User.set(user)
 
     roles = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=user,
@@ -90,10 +86,10 @@ async def test_set_and_remove_company_membership_dual_write(
     )
     assert roles == ["owner", "admin"]
 
-    loaded_company = await company_repository.get(company_id)
+    loaded_company = await Company.get(company_id)
     assert loaded_company is not None
     assert loaded_company.members[user_id] == ["owner", "admin"]
-    loaded_user = await user_repository.get(user_id)
+    loaded_user = await User.get(user_id)
     assert loaded_user is not None
     assert loaded_user.companies[company_id] == ["owner", "admin"]
     assert await authz_service.check(
@@ -103,17 +99,15 @@ async def test_set_and_remove_company_membership_dual_write(
     )
 
     await remove_company_membership(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=loaded_company,
         user=loaded_user,
         allow_empty_companies=True,
     )
-    after_company = await company_repository.get(company_id)
+    after_company = await Company.get(company_id)
     assert after_company is not None
     assert user_id not in after_company.members
-    after_user = await user_repository.get(user_id)
+    after_user = await User.get(user_id)
     assert after_user is not None
     assert company_id not in after_user.companies
     assert (

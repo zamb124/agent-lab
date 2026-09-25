@@ -1,14 +1,16 @@
 import uuid
 from datetime import UTC, date, datetime
 
-from apps.crm.db.models import CRMEntity, CRMSuggest
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.suggest_repository import SuggestRepository
-from apps.crm.models.api import EntityMergeRequest, MergeSide, SuggestResponse
+from apps.crm.models.api import EntityMergeRequest, MergeSide
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.entity_type import EntityType
+from apps.crm.models.suggest import CRMSuggest
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService
+from core.context import require_active_company
 from core.pagination import OffsetPage
+from core.rag import BaseRAGProvider
+from core.rag.post_retrieval_rerank import RerankScoreCache
 from core.types import JsonObject, require_json_object
 
 _DUPLICATE_SIMILARITY_THRESHOLD = 0.85
@@ -26,17 +28,15 @@ _SKIP_DUPLICATE_STATUSES = {"pending", "dismissed"}
 class SuggestService:
     def __init__(
         self,
-        repository: SuggestRepository,
         entity_service: EntityService,
         note_processing_service: NoteProcessingService,
-        entity_repository: EntityRepository,
-        entity_type_repository: EntityTypeRepository,
+        rag: BaseRAGProvider,
+        rerank_score_cache: RerankScoreCache,
     ) -> None:
-        self._repository: SuggestRepository = repository
         self._entity_service: EntityService = entity_service
         self._note_processing_service: NoteProcessingService = note_processing_service
-        self._entity_repository: EntityRepository = entity_repository
-        self._entity_type_repository: EntityTypeRepository = entity_type_repository
+        self._rag: BaseRAGProvider = rag
+        self._rerank_score_cache: RerankScoreCache = rerank_score_cache
 
     async def list_suggests(
         self,
@@ -44,21 +44,22 @@ class SuggestService:
         status: str | None = "pending",
         limit: int = 50,
         offset: int = 0,
-    ) -> OffsetPage[SuggestResponse]:
-        items, total = await self._repository.list_suggests(namespace, status, limit, offset)
-        return OffsetPage[SuggestResponse](
-            items=[SuggestResponse.model_validate(row) for row in items],
-            total=total,
-            limit=limit,
-            offset=offset,
-        )
+    ) -> OffsetPage[CRMSuggest]:
+        rows = CRMSuggest.in_company_namespace(self._company_id(), namespace)
+        if status is not None and status != "":
+            rows = rows.filter(status=status)
+        total = await rows.count()
+        items = await rows.order_by("-created_at").limit(limit).offset(offset).all()
+        return OffsetPage[CRMSuggest](items=items, total=total, limit=limit, offset=offset)
 
     async def get_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest | None:
-        return await self._repository.get(suggest_id, namespace=namespace)
+        return await CRMSuggest.in_company_namespace(
+            self._company_id(), namespace
+        ).filter(suggest_id=suggest_id).get_or_none()
 
     async def resolve_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest:
-        suggest = await self._repository.get(suggest_id, namespace=namespace)
-        if not suggest:
+        suggest = await self.get_suggest(suggest_id, namespace=namespace)
+        if suggest is None:
             raise ValueError(f"Suggest {suggest_id} not found")
 
         if suggest.status != "pending":
@@ -89,23 +90,17 @@ class SuggestService:
         else:
             raise ValueError(f"Unknown suggest type {suggest.suggest_type}")
 
-        updated = await self._repository.update_status(suggest_id, "resolved", namespace=namespace)
-        if not updated:
-            raise ValueError("Failed to update suggest status")
-        return updated
+        return await self._set_status(suggest, "resolved")
 
     async def dismiss_suggest(self, suggest_id: str, *, namespace: str) -> CRMSuggest:
-        suggest = await self._repository.get(suggest_id, namespace=namespace)
-        if not suggest:
+        suggest = await self.get_suggest(suggest_id, namespace=namespace)
+        if suggest is None:
             raise ValueError(f"Suggest {suggest_id} not found")
 
         if suggest.status != "pending":
             raise ValueError(f"Suggest {suggest_id} is already {suggest.status}")
 
-        updated = await self._repository.update_status(suggest_id, "dismissed", namespace=namespace)
-        if not updated:
-            raise ValueError("Failed to update suggest status")
-        return updated
+        return await self._set_status(suggest, "dismissed")
 
     async def generate_namespace_suggests(
         self,
@@ -142,11 +137,12 @@ class SuggestService:
         (50 × (search + N × find_by_targets + N × get_by_type_id)); теперь —
         ~52 (50 search + 1 find_by_targets_batch + 1 get_by_type_ids).
         """
-        entities, _, _ = await self._entity_repository.list_by_cursor(
+        page = await CRMEntity.cursor_page(
             namespace=namespace,
             limit=_SUGGEST_SCAN_LIMIT,
             company_id=company_id,
         )
+        entities = page.items
 
         seen_pairs: set[tuple[str, str]] = set()
         pair_plan: list[tuple[CRMEntity, CRMEntity, tuple[str, str]]] = []
@@ -154,7 +150,7 @@ class SuggestService:
             if entity.is_note:
                 continue
             query = self._entity_search_query(entity)
-            candidates = await self._entity_repository.search_with_similarity(
+            candidates = await self._entity_service.search_similar(
                 query=query,
                 entity_type=entity.entity_type,
                 namespace=namespace,
@@ -180,19 +176,22 @@ class SuggestService:
                 "duplicate_skipped_existing": 0,
             }
 
-        existing_suggests = await self._repository.find_by_targets_batch(
+        existing_suggests = await self._latest_by_targets(
             namespace=namespace,
             suggest_type="duplicate",
             target_entity_ids_batches=[list(pair_key) for _, _, pair_key in pair_plan],
             statuses=_SKIP_DUPLICATE_STATUSES,
         )
 
-        entity_type_ids = [entity.entity_type for entity, _, _ in pair_plan]
-        entity_types_by_id = await self._entity_type_repository.get_by_type_ids(
-            entity_type_ids,
-            namespace=namespace,
-            company_id=company_id,
-        )
+        entity_type_ids = sorted({entity.entity_type.strip() for entity, _, _ in pair_plan if entity.entity_type.strip()})
+        if len(entity_type_ids) == 0:
+            entity_types_by_id = {}
+        else:
+            entity_type_rows = await EntityType.in_company(
+                company_id,
+                namespace=namespace,
+            ).filter(type_id__in=entity_type_ids).all()
+            entity_types_by_id = {row.type_id: row for row in entity_type_rows}
 
         created_count = 0
         auto_resolved_count = 0
@@ -249,7 +248,7 @@ class SuggestService:
         company_id: str,
         namespace: str,
     ) -> int:
-        notes = await self._entity_repository.list_notes_with_analysis_draft_not_applied(
+        notes = await CRMEntity.list_notes_with_analysis_draft_not_applied(
             namespace=namespace,
             limit=_SUGGEST_SCAN_LIMIT,
             company_id=company_id,
@@ -264,7 +263,7 @@ class SuggestService:
             if not isinstance(raw_draft_version, int):
                 raise ValueError(f"Note {note.entity_id} has invalid ai_analysis_draft")
             draft_version = raw_draft_version
-            existing = await self._repository.find_by_targets(
+            existing = await self._latest_for_targets(
                 namespace=namespace,
                 suggest_type="missed_entity",
                 target_entity_ids=[note.entity_id],
@@ -308,7 +307,85 @@ class SuggestService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create(suggest)
+        return await CRMSuggest.create(suggest)
+
+    def _company_id(self) -> str:
+        return require_active_company().company_id
+
+    async def _set_status(self, suggest: CRMSuggest, status: str) -> CRMSuggest:
+        updated_at = datetime.now(UTC)
+        updated = await CRMSuggest.mark_status(suggest, status, updated_at)
+        if updated != 1:
+            raise ValueError("Failed to update suggest status")
+        suggest.status = status
+        suggest.updated_at = updated_at
+        return suggest
+
+    async def _latest_for_targets(
+        self,
+        *,
+        namespace: str,
+        suggest_type: str,
+        target_entity_ids: list[str],
+        statuses: set[str],
+    ) -> CRMSuggest | None:
+        normalized = self._normalized_targets(target_entity_ids)
+        if len(statuses) == 0:
+            raise ValueError("statuses are required")
+        return await (
+            CRMSuggest.in_company_namespace(self._company_id(), namespace)
+            .filter(
+                suggest_type=suggest_type,
+                target_entity_ids=normalized,
+                status__in=sorted(statuses),
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+    async def _latest_by_targets(
+        self,
+        *,
+        namespace: str,
+        suggest_type: str,
+        target_entity_ids_batches: list[list[str]],
+        statuses: set[str],
+    ) -> dict[tuple[str, ...], CRMSuggest]:
+        if len(target_entity_ids_batches) == 0:
+            return {}
+        if len(statuses) == 0:
+            raise ValueError("statuses are required")
+        normalized_batches: list[list[str]] = []
+        for batch in target_entity_ids_batches:
+            normalized = sorted({item.strip() for item in batch if item.strip()})
+            if len(normalized) == 0:
+                continue
+            normalized_batches.append(normalized)
+        if len(normalized_batches) == 0:
+            return {}
+        rows = await (
+            CRMSuggest.in_company_namespace(self._company_id(), namespace)
+            .filter(
+                suggest_type=suggest_type,
+                target_entity_ids__in=normalized_batches,
+                status__in=sorted(statuses),
+            )
+            .order_by("-created_at")
+            .all()
+        )
+        latest: dict[tuple[str, ...], CRMSuggest] = {}
+        for row in rows:
+            key = tuple(row.target_entity_ids)
+            if key not in latest:
+                latest[key] = row
+        return latest
+
+    @staticmethod
+    def _normalized_targets(target_entity_ids: list[str]) -> list[str]:
+        normalized = sorted({item.strip() for item in target_entity_ids if item.strip()})
+        if len(normalized) == 0:
+            raise ValueError("target_entity_ids are required")
+        return normalized
 
     @staticmethod
     def _entity_search_query(entity: CRMEntity) -> str:

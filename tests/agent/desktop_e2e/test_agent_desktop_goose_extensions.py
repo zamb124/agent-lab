@@ -444,6 +444,7 @@ async def test_goose_ext_03_enable_disable_extension_toggle(
 @pytest.mark.asyncio
 @pytest.mark.timeout(30, func_only=True)
 async def test_goose_ext_01_bundled_order_persisted_after_restart(
+    di,
     paired_desktop_session: PairedDesktopSession,
     agent_frontend_http_client,
     auth_token: str,
@@ -469,7 +470,7 @@ async def test_goose_ext_01_bundled_order_persisted_after_restart(
             page,
             agent_frontend_http_client,
             auth_token,
-        )
+        di)
         await assert_platform_mcp_first_in_settings(page)
 
 
@@ -667,6 +668,7 @@ async def test_goose_ipc_07_platform_mcp_env_updated_after_pair(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_goose_ipc_08_llm_autoconfig_after_pair(
+    di,
     agent_frontend_http_client,
     auth_token: str,
     humanitec_desktop_process_factory
@@ -682,7 +684,7 @@ async def test_goose_ipc_08_llm_autoconfig_after_pair(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             credentials = desktop.read_credentials()
             assert credentials["llm_provider_id"] == "humanitec"
             assert credentials["llm_model_id"] == "auto"

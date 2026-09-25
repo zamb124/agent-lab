@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from core.clients.redis_client import RedisClient
@@ -12,6 +13,7 @@ from core.types import JsonValue
 _LEASE_PREFIX = "guest:lease:"
 _COMPANY_COUNT_PREFIX = "guest:lease_count:company:"
 _CLUSTER_COUNT_KEY = "guest:lease_count:cluster"
+_COUNT_LOCK_KEY = "guest:lease_count:lock"
 _TASK_PREFIX = "guest:task:"
 _BUILD_LOCK_KEY = "guest:build_lock"
 _LOG_PREFIX = "guest:logs:"
@@ -144,12 +146,16 @@ class GuestLeaseStore:
             raise RuntimeError("Redis set failed for guest lease")
 
     async def acquire_new(self, lease: GuestLease, *, ttl_seconds: int) -> None:
-        if await self._try_acquire(lease, ttl_seconds=ttl_seconds):
-            return
-        await self.rebuild_counts()
-        if await self._try_acquire(lease, ttl_seconds=ttl_seconds):
-            return
-        raise GuestLeaseCapError("guest lease cap exceeded")
+        await self._acquire_count_lock()
+        try:
+            if await self._try_acquire(lease, ttl_seconds=ttl_seconds):
+                return
+            await self._rebuild_counts()
+            if await self._try_acquire(lease, ttl_seconds=ttl_seconds):
+                return
+            raise GuestLeaseCapError("guest lease cap exceeded")
+        finally:
+            await self._release_count_lock()
 
     async def _try_acquire(self, lease: GuestLease, *, ttl_seconds: int) -> bool:
         result = await self._redis.eval(
@@ -173,6 +179,13 @@ class GuestLeaseStore:
         return True
 
     async def rebuild_counts(self) -> None:
+        await self._acquire_count_lock()
+        try:
+            await self._rebuild_counts()
+        finally:
+            await self._release_count_lock()
+
+    async def _rebuild_counts(self) -> None:
         leases = await self.list_all()
         by_company: dict[str, int] = {}
         for lease in leases:
@@ -206,13 +219,31 @@ class GuestLeaseStore:
                 raise RuntimeError(f"Redis set failed for guest company lease count {company_id}")
 
     async def release(self, lease: GuestLease) -> None:
-        _ = await self._redis.eval(
-            _RELEASE_LUA,
-            3,
-            lease_key(lease.flow_id, lease.node_id),
-            f"{_COMPANY_COUNT_PREFIX}{lease.company_id}",
-            _CLUSTER_COUNT_KEY,
-        )
+        await self._acquire_count_lock()
+        try:
+            _ = await self._redis.eval(
+                _RELEASE_LUA,
+                3,
+                lease_key(lease.flow_id, lease.node_id),
+                f"{_COMPANY_COUNT_PREFIX}{lease.company_id}",
+                _CLUSTER_COUNT_KEY,
+            )
+        finally:
+            await self._release_count_lock()
+
+    async def _acquire_count_lock(self) -> None:
+        # SET счётчика в rebuild_counts затирает параллельный INCR другой компании.
+        deadline = asyncio.get_running_loop().time() + 30
+        while True:
+            if await self._redis.set_nx(_COUNT_LOCK_KEY, "1", 30):
+                return
+            if asyncio.get_running_loop().time() >= deadline:
+                raise RuntimeError("guest lease count lock was not released")
+            await asyncio.sleep(0.05)
+
+    async def _release_count_lock(self) -> None:
+        deleted = await self._redis.delete(_COUNT_LOCK_KEY)
+        _ = deleted
 
     async def list_all(self) -> list[GuestLease]:
         keys = await self._redis.scan_keys(f"{_LEASE_PREFIX}*")

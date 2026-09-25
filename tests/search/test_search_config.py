@@ -1,5 +1,4 @@
 import pytest
-from fastapi import FastAPI
 from pydantic import ValidationError
 
 from apps.search.config import (
@@ -8,13 +7,6 @@ from apps.search.config import (
     get_search_settings,
     reset_search_settings,
 )
-from apps.search.container import (
-    _build_search_container,
-    get_search_container,
-    reset_search_container,
-)
-from apps.search.dependencies import get_container
-from apps.search.main import on_shutdown, on_startup
 from core.config.models import ServerConfig
 from core.search import MetaSearchRequest
 
@@ -46,12 +38,10 @@ def test_search_integration_config_normalizes_provider_order() -> None:
         SearchIntegrationConfig(provider_order=[])
 
 
-def test_search_settings_and_container_are_loadable() -> None:
+def test_search_settings_are_loadable() -> None:
     reset_search_settings()
-    reset_search_container()
 
     settings = get_search_settings()
-    container = get_search_container()
 
     assert settings.server.name == "search"
     assert settings.search.provider_order == ["tinyfish", "linkup", "serper", "tavily"]
@@ -63,26 +53,27 @@ def test_search_settings_and_container_are_loadable() -> None:
     assert len(runet_taxonomy.primary_topics) >= 100
     assert len(runet_taxonomy.topic_tags) >= 250
     assert len(runet_taxonomy.category_paths) >= 200
-    assert container.meta_search_service is get_container().meta_search_service
 
-    reset_search_container()
     reset_search_settings()
 
 
-def test_search_container_requires_shared_database_url() -> None:
-    settings = SearchSettings.model_validate({"database": {"shared_url": ""}})
-
-    with pytest.raises(ValueError, match="database.shared_url is required"):
-        _build_search_container(settings)
+def test_search_settings_require_search_database_url() -> None:
+    with pytest.raises(ValueError, match="database.search_url is required"):
+        SearchSettings.model_validate({"database": {"search_url": "", "shared_url": "postgresql://localhost/shared"}})
 
 
 @pytest.mark.asyncio
-async def test_search_startup_and_shutdown_connect_redis() -> None:
-    settings = get_search_settings()
-    container = _build_search_container(settings)
+async def test_connect_search_redis_pings() -> None:
+    from apps.search.main import connect_search_redis
 
-    await on_startup(FastAPI(), container, settings)
+    settings = get_search_settings()
+    from core.clients.redis_client import RedisClient
+
+    redis_client = RedisClient(settings.database.redis_url)
+    lifecycle = connect_search_redis(redis_client)
+    await anext(lifecycle)
     try:
-        assert await container.redis_client.ping() is True
+        assert await redis_client.ping() is True
     finally:
-        await on_shutdown(FastAPI(), container)
+        await lifecycle.aclose()
+        await redis_client.close()

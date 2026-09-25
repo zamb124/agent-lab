@@ -6,8 +6,11 @@ Real tools + resolve + client HTTP; credentials from state.variables.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,
@@ -88,9 +91,13 @@ async def test_all_sheets_tools_via_run(
     unique_id: str,
 ) -> None:
     state = _make_state(unique_id, google_api_emulator)
+    client = GoogleWorkspaceClient(oauth_service=AsyncMock(), company_credentials=AsyncMock())
+
+    def _bound(tool: object) -> object:
+        return tool.with_dependencies([client])  # type: ignore[attr-defined]
 
     created = _as_payload(
-        await sheets_create_spreadsheet.run(
+        await _bound(sheets_create_spreadsheet).run(
             {"title": f"tool-sheet-{unique_id}", "sheet_titles": ["Main"]},
             state,
         )
@@ -98,14 +105,14 @@ async def test_all_sheets_tools_via_run(
     sid = created["spreadsheet_id"]
     assert isinstance(sid, str)
 
-    meta = _as_payload(await sheets_get_metadata.run({"spreadsheet_id": sid}, state))
+    meta = _as_payload(await _bound(sheets_get_metadata).run({"spreadsheet_id": sid}, state))
     assert meta["title"] == f"tool-sheet-{unique_id}"
 
-    listed = _as_payload(await sheets_list_sheets.run({"spreadsheet_id": sid}, state))
+    listed = _as_payload(await _bound(sheets_list_sheets).run({"spreadsheet_id": sid}, state))
     assert "Main" in listed["titles"]
 
     _ = _as_payload(
-        await sheets_update_values.run(
+        await _bound(sheets_update_values).run(
             {
                 "spreadsheet_id": sid,
                 "range": "Main!A1:B1",
@@ -117,7 +124,7 @@ async def test_all_sheets_tools_via_run(
     )
 
     got = _as_payload(
-        await sheets_get_values.run(
+        await _bound(sheets_get_values).run(
             {"spreadsheet_id": sid, "range": "Main!A1:B1"},
             state,
         )
@@ -125,7 +132,7 @@ async def test_all_sheets_tools_via_run(
     assert got["values"] == [["hello", unique_id]]
 
     batch_got = _as_payload(
-        await sheets_batch_get_values.run(
+        await _bound(sheets_batch_get_values).run(
             {"spreadsheet_id": sid, "ranges": ["Main!A1", "Main!B1"]},
             state,
         )
@@ -133,7 +140,7 @@ async def test_all_sheets_tools_via_run(
     assert len(batch_got["value_ranges"]) == 2
 
     _ = _as_payload(
-        await sheets_batch_update_values.run(
+        await _bound(sheets_batch_update_values).run(
             {
                 "spreadsheet_id": sid,
                 "data": [
@@ -146,7 +153,7 @@ async def test_all_sheets_tools_via_run(
     )
 
     _ = _as_payload(
-        await sheets_append_rows.run(
+        await _bound(sheets_append_rows).run(
             {
                 "spreadsheet_id": sid,
                 "range": "Main!A:C",
@@ -158,41 +165,41 @@ async def test_all_sheets_tools_via_run(
     )
 
     _ = _as_payload(
-        await sheets_clear_values.run(
+        await _bound(sheets_clear_values).run(
             {"spreadsheet_id": sid, "range": "Main!A1:B1"},
             state,
         )
     )
 
     _ = _as_payload(
-        await sheets_batch_clear_values.run(
+        await _bound(sheets_batch_clear_values).run(
             {"spreadsheet_id": sid, "ranges": ["Main!C1"]},
             state,
         )
     )
 
     _ = _as_payload(
-        await sheets_share.run(
+        await _bound(sheets_share).run(
             {"spreadsheet_id": sid, "email": "share@example.com", "role": "reader"},
             state,
         )
     )
 
     added = _as_payload(
-        await sheets_add_sheet.run({"spreadsheet_id": sid, "title": "Tab2"}, state)
+        await _bound(sheets_add_sheet).run({"spreadsheet_id": sid, "title": "Tab2"}, state)
     )
     sheet_id = added["sheet_id"]
     assert isinstance(sheet_id, int)
 
     _ = _as_payload(
-        await sheets_rename_sheet.run(
+        await _bound(sheets_rename_sheet).run(
             {"spreadsheet_id": sid, "sheet_id": sheet_id, "title": "Tab2b"},
             state,
         )
     )
 
     _ = _as_payload(
-        await sheets_delete_sheet.run(
+        await _bound(sheets_delete_sheet).run(
             {"spreadsheet_id": sid, "sheet_id": sheet_id},
             state,
         )

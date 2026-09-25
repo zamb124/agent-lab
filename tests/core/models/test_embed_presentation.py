@@ -10,6 +10,7 @@ def test_embed_config_rejects_unknown_position() -> None:
     with pytest.raises(ValidationError):
         _ = EmbedConfig(
             embed_id="embed_bad_position",
+            company_id="company_test",
             name="Bad position",
             flow_id="flow_x",
             presentation="drawer",
@@ -22,6 +23,7 @@ def test_embed_config_rejects_unknown_position() -> None:
 def test_embed_interface_look_mirrors_config() -> None:
     config = EmbedConfig(
         embed_id="embed_page_1",
+        company_id="company_test",
         name="Page",
         flow_id="flow_x",
         presentation="page",

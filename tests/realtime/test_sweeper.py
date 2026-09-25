@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from httpx import AsyncClient
 
-from apps.realtime.db.repository import PlatformEventLogRepository
+from apps.realtime.services.bus_service import RealtimeBusService
 from core.events.contract import EventDelivery, PlatformEvent, PlatformEventMeta
 from core.realtime.models import BusProcessingState
 from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
@@ -16,7 +16,7 @@ from tests.realtime.centrifugo_ws import connect_centrifugo, wait_platform_event
 @pytest.mark.asyncio
 @pytest.mark.timeout(30)
 async def test_sweeper_publishes_deadline_exceeded(
-    realtime_event_log: PlatformEventLogRepository,
+    realtime_event_log: RealtimeBusService,
     realtime_session_client: AsyncClient,
     auth_token_system: str,
     system_user_id: str,

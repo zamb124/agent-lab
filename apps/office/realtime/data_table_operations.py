@@ -11,7 +11,7 @@ from typing import Literal, TypeVar, assert_never
 
 from pydantic import Field
 
-from apps.office.container import OfficeContainer
+from apps.office.di import Di
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
@@ -40,6 +40,7 @@ from core.data_tables.service import DataTableNotFoundError
 from core.documents.placement import DocsPlacement, DocsPlacementAnchor
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
+from core.files.object_store.principals import SystemPrincipal
 from core.files.registry import default_retention_for_source
 from core.files.types import ext_to_mime
 from core.models.base import StrictBaseModel
@@ -121,18 +122,18 @@ async def _run(awaitable: Awaitable[T]) -> T:
         raise_invalid(exc)
 
 
-async def _require_view(container: OfficeContainer, file_id: str) -> None:
+async def _require_view(di: Di, file_id: str) -> None:
     _ = require_active_company()
     try:
-        await container.authz_service.require_can_view(AuthzObject.office_document(file_id))
+        await di.authz_service.require_can_view(AuthzObject.office_document(file_id))
     except AuthzDenied as exc:
         raise_forbidden(exc)
 
 
-async def _require_edit(container: OfficeContainer, file_id: str) -> None:
+async def _require_edit(di: Di, file_id: str) -> None:
     _ = require_active_company()
     try:
-        await container.authz_service.require_can_edit(AuthzObject.office_document(file_id))
+        await di.authz_service.require_can_edit(AuthzObject.office_document(file_id))
     except AuthzDenied as exc:
         raise_forbidden(exc)
 
@@ -185,17 +186,17 @@ def _data_table_placement(
 
 
 async def _bind_or_delete(
-    container: OfficeContainer, record: FileRecord, placement: DocsPlacement, user: User
+    di: Di, record: FileRecord, placement: DocsPlacement, user: User
 ) -> FileRecord:
     company = require_active_company()
     try:
-        _ = await container.docs_placement_service.bind(
+        _ = await di.docs_placement_service.bind(
             placement,
             company_id=company.company_id,
             user_id=user.user_id,
         )
     except Exception:
-        _ = await container.files_service.delete(record.file_id)
+        _ = await di.files_service.delete(record.file_id)
         raise
     return record
 
@@ -204,12 +205,12 @@ async def op_data_tables_create(
     payload: DataTableCreateRequest,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> FileRecord:
     _ = require_active_company()
     namespace = _resolved_namespace(payload.namespace)
     record = await _run(
-        container.data_table_service.create(
+        di.data_table_service.create(
             original_name=payload.original_name,
             scope=payload.scope,
             flow_id=payload.flow_id,
@@ -226,30 +227,30 @@ async def op_data_tables_create(
         flow_id=payload.flow_id,
         session_id=payload.session_id,
     )
-    return await _bind_or_delete(container, record, placement, user)
+    return await _bind_or_delete(di, record, placement, user)
 
 
 async def op_data_tables_get(
     payload: OfficeDataTableFileIdPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableFileSnapshot:
     _ = user
-    await _require_view(container, payload.file_id)
-    return await _run(container.data_table_service.snapshot(payload.file_id))
+    await _require_view(di, payload.file_id)
+    return await _run(di.data_table_service.snapshot(payload.file_id))
 
 
 async def op_data_tables_promote(
     payload: OfficeDataTablePromotePayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> FileRecord:
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     namespace = _resolved_namespace(None)
     record = await _run(
-        container.data_table_service.promote_session_to_asset(
+        di.data_table_service.promote_session_to_asset(
             payload.file_id,
             flow_id=payload.flow_id,
             original_name=payload.original_name,
@@ -263,34 +264,34 @@ async def op_data_tables_promote(
         flow_id=payload.flow_id,
         session_id=None,
     )
-    return await _bind_or_delete(container, record, placement, user)
+    return await _bind_or_delete(di, record, placement, user)
 
 
 async def op_data_tables_table_create(
     payload: OfficeDataTableCreateTablePayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     spec = DataTableCreateTableRequest(name=payload.name, columns=payload.columns)
-    return await _run(container.data_table_service.create_table(payload.file_id, spec))
+    return await _run(di.data_table_service.create_table(payload.file_id, spec))
 
 
 async def op_data_tables_column_add(
     payload: OfficeDataTableAddColumnPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     spec = DataTableAddColumnRequest(
         name=payload.name, column_type=payload.column_type, not_null=payload.not_null
     )
     return await _run(
-        container.data_table_service.add_column(payload.file_id, payload.table_name, spec)
+        di.data_table_service.add_column(payload.file_id, payload.table_name, spec)
     )
 
 
@@ -298,12 +299,12 @@ async def op_data_tables_rows_list(
     payload: OfficeDataTableRowsListPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> CursorPage[DataTableRow]:
     _ = user
-    await _require_view(container, payload.file_id)
+    await _require_view(di, payload.file_id)
     return await _run(
-        container.data_table_service.page_rows(
+        di.data_table_service.page_rows(
             payload.file_id,
             payload.table_name,
             limit=payload.limit,
@@ -322,12 +323,12 @@ async def op_data_tables_rows_insert(
     payload: OfficeDataTableInsertRowsPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableInsertRowsResponse:
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     row_ids = await _run(
-        container.data_table_service.insert_rows(payload.file_id, payload.table_name, payload.rows)
+        di.data_table_service.insert_rows(payload.file_id, payload.table_name, payload.rows)
     )
     return DataTableInsertRowsResponse(row_ids=row_ids)
 
@@ -336,12 +337,12 @@ async def op_data_tables_row_update(
     payload: OfficeDataTableUpdateRowPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableUpdateRowResponse:
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     await _run(
-        container.data_table_service.update_row(
+        di.data_table_service.update_row(
             payload.file_id, payload.table_name, payload.row_id, payload.values
         )
     )
@@ -352,12 +353,12 @@ async def op_data_tables_rows_delete(
     payload: OfficeDataTableDeleteRowsPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableDeleteRowsResponse:
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     deleted = await _run(
-        container.data_table_service.delete_rows(
+        di.data_table_service.delete_rows(
             payload.file_id, payload.table_name, payload.row_ids
         )
     )
@@ -368,28 +369,28 @@ async def op_data_tables_query(
     payload: OfficeDataTableQueryPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableQueryResult:
     _ = user
     is_write = payload.sql.strip().lower().startswith(("insert", "update", "delete"))
     if is_write:
-        await _require_edit(container, payload.file_id)
+        await _require_edit(di, payload.file_id)
     else:
-        await _require_view(container, payload.file_id)
-    return await _run(container.data_table_service.query(payload.file_id, payload.sql))
+        await _require_view(di, payload.file_id)
+    return await _run(di.data_table_service.query(payload.file_id, payload.sql))
 
 
 async def op_data_tables_export(
     payload: OfficeDataTableExportPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> FileRecord:
     """Выгрузка таблицы в CSV/XLSX как ephemeral файл; клиент скачивает его по `download_url`."""
     _ = user
-    await _require_view(container, payload.file_id)
+    await _require_view(di, payload.file_id)
     exported, filename = await _run(
-        container.data_table_service.export_tabular(
+        di.data_table_service.export_tabular(
             payload.file_id,
             table_name=payload.table_name,
             source_format=payload.source_format,
@@ -401,7 +402,7 @@ async def op_data_tables_export(
         retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
         post_create=FilePostCreate(is_public=False),
     )
-    return await container.files_service.create(
+    return await di.files_service.create(
         spec,
         exported,
         original_name=filename,
@@ -413,18 +414,21 @@ async def op_data_tables_import(
     payload: OfficeDataTableImportPayload,
     *,
     user: User,
-    container: OfficeContainer,
+    di: Di,
 ) -> DataTableSchemaSnapshot:
     """Импорт CSV/XLSX из файла, уже загруженного chunked Files API, в новую таблицу."""
     _ = user
-    await _require_edit(container, payload.file_id)
+    await _require_edit(di, payload.file_id)
     company_id = require_active_company().company_id
-    upload = await container.files_service.get_optional(payload.upload_file_id)
+    upload = await di.files_service.get_optional(payload.upload_file_id)
     if upload is None or upload.company_id != company_id:
         raise_not_found(LookupError(f"import file {payload.upload_file_id!r} not found"))
-    raw = await container.files_service.read_bytes(upload)
+    raw = await di.files_service.read_bytes(
+        upload,
+        SystemPrincipal(company_id=company_id),
+    )
     return await _run(
-        container.data_table_service.import_tabular(
+        di.data_table_service.import_tabular(
             payload.file_id,
             table_name=payload.table_name,
             source_format=payload.source_format,

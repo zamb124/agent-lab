@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import (
     TASK_INIT_NEW_COMPANY,
     TASK_INIT_SYSTEM_COMPANY,
@@ -27,6 +27,7 @@ from apps.idle_worker.tasks.task_names import (
 from core.clients.service_client import ServiceClientError
 from core.internal_context_headers import build_internal_context_headers
 from core.logging import get_logger
+from core.models.identity_models import Company
 from core.tasks import platform_task
 from core.types import JsonObject, require_json_object
 
@@ -52,8 +53,7 @@ async def _set_company_initialization_status(
     параллельно), просто логируем warning без raise: цель статуса —
     диагностика, не data correctness.
     """
-    container = get_container()
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         logger.warning(
             "company_init.status_write_skipped",
@@ -69,7 +69,7 @@ async def _set_company_initialization_status(
     else:
         metadata["initialization_error"] = error_details
     company.metadata = metadata
-    _ = await container.company_repository.set(company)
+    _ = await Company.set(company)
 
 
 @platform_task(TASK_INIT_NEW_COMPANY)
@@ -78,6 +78,8 @@ async def initialize_new_company_task(
     company_name: str,
     subdomain: str,
     owner_user_id: str,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Инициализирует только что созданную компанию.
@@ -86,12 +88,12 @@ async def initialize_new_company_task(
     1. flows: `/flows/api/v1/internal/company/init` — заводит дефолтных агентов / тулы.
     2. crm: `/crm/api/v1/internal/company/init` — системные типы, шаблоны, personal namespace.
     3. sync: `/sync/api/v1/channels/` — создаёт дефолтный topic-канал.
+    4. stock: `/stock/api/v1/internal/company/init` — виртуальные локации и ЕИ.
 
     Каждая ошибка peer-сервиса пробрасывается → TaskIQ retry. После исчерпания
     retry — задача падает, `Company.metadata.initialization_status` = "failed".
     """
-    container = get_container()
-    service_client = container.service_client
+    service_client = di.service_client
 
     await _set_company_initialization_status(company_id=company_id, status="in_progress")
 
@@ -145,7 +147,10 @@ async def initialize_new_company_task(
                 "name": company_name,
                 "is_private": False,
             },
-            headers={"X-Company-Id": company_id, "X-User-Id": owner_user_id},
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=owner_user_id,
+            ),
         )
         channel_payload = require_json_object(
             channel_response, "sync /sync/api/v1/channels/ response"
@@ -154,6 +159,24 @@ async def initialize_new_company_task(
             "company_init.default_channel_created",
             company_id=company_id,
             channel_id=channel_payload.get("id"),
+        )
+
+        stock_response = await service_client.post(
+            "stock",
+            "/stock/api/v1/internal/company/init",
+            json={"company_id": company_id},
+            headers=build_internal_context_headers(
+                company_id=company_id,
+                user_id=owner_user_id,
+            ),
+        )
+        stock_init_payload = require_json_object(
+            stock_response, "stock /stock/api/v1/internal/company/init response"
+        )
+        logger.info(
+            "company_init.stock_init_done",
+            company_id=company_id,
+            result=stock_init_payload.get("result"),
         )
     except ServiceClientError as service_error:
         await _set_company_initialization_status(
@@ -181,14 +204,13 @@ async def initialize_new_company_task(
 
 
 @platform_task(TASK_INIT_SYSTEM_COMPANY)
-async def initialize_system_company_task() -> JsonObject:
+async def initialize_system_company_task(*, di: Di) -> JsonObject:
     """
     Bootstrap компании system: tools/flows/MCP через flows_worker.
 
     Вызывается из `idle_worker_startup` (enqueue only). Sync-канал не создаётся.
     """
-    container = get_container()
-    service_client = container.service_client
+    service_client = di.service_client
 
     try:
         flows_response = await service_client.post(

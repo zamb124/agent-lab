@@ -8,8 +8,6 @@ from collections.abc import Generator
 import pytest
 import pytest_asyncio
 
-from apps.sync.container import get_sync_container
-from apps.sync.db.base import SyncDatabase
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
@@ -20,18 +18,18 @@ from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 @pytest_asyncio.fixture(autouse=True)
 async def _ensure_company_for_realtime(
     company_id: str,
-    sync_database: SyncDatabase,
+    sync_database: None,
     sync_user_id: str,
 ) -> None:
     """Компания в shared-хранилище для биллинга (баланс) и membership-проверок в хендлерах."""
-    container = get_sync_container()
+    _ = sync_database
     members: dict[str, list[str]] = {
         "u1": ["owner"],
         "member1": ["member"],
         "u_other": ["member"],
         sync_user_id: ["owner", "admin"],
     }
-    await container.company_repository.set(
+    await Company.set(
         Company(
             company_id=company_id,
             name=company_id,

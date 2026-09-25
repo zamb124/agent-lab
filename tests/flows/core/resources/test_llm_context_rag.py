@@ -14,23 +14,18 @@ from apps.flows.src.runtime.llm_context_rag import (
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.group_sync import sync_user_groups
 from core.context import clear_context, set_context
-from core.llm_context import (
-    LLMContextBudget,
-    LLMContextProfile,
-    LLMContextRetrievalPolicy,
-    LLMContextSourceRequest,
-)
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
+from core.types import JsonObject
 
 
-async def _company_visible_rag_state(container, unique_id: str) -> ExecutionState:
+async def _company_visible_rag_state(di, unique_id: str) -> ExecutionState:
     """Company member + context для RAG permission=[] (company-visible)."""
     user_id = f"user-rag-{unique_id}"
     company_id = f"co-rag-{unique_id}"
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["member"],
@@ -52,66 +47,30 @@ async def _company_visible_rag_state(container, unique_id: str) -> ExecutionStat
     )
 
 
-class InMemoryResourceRepository:
-    def __init__(self, *definitions: ResourceDefinition) -> None:
-        self._definitions = {
-            definition.resource_id: definition
-            for definition in definitions
-        }
-
-    async def get(self, resource_id: str | None) -> ResourceDefinition | None:
-        if resource_id is None:
-            return None
-        return self._definitions.get(resource_id)
-
-
-class InMemoryRAGRepository:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    async def search_namespace(self, **kwargs):
-        self.calls.append(kwargs)
-        return {
-            "results": [
-                {
-                    "content": "Relevant knowledge",
-                    "score": 0.91,
-                    "document_id": "doc",
-                    "document_name": "kb.md",
-                    "namespace": kwargs["bind"].namespace,
-                    "chunk_id": "chunk",
-                    "provenance": {},
-                }
-            ]
-        }
-
-
-def _profile() -> LLMContextProfile:
-    return LLMContextProfile(
-        mode="smart",
-        budget=LLMContextBudget(
-            max_input_tokens=10_000,
-            output_reserve_tokens=100,
-            reasoning_reserve_tokens=0,
-            safety_buffer_tokens=100,
-            active_window_tokens=1_000,
-            memory_tokens=1_000,
-            rag_tokens=2_000,
-            tool_result_tokens=200,
-        ),
-        memory="session",
-        retrieval=LLMContextRetrievalPolicy(mode="semantic", top_k=4, rerank=False),
-        compaction="auto",
-        cache="auto",
+async def _shared_resource(
+    resource_id: str,
+    config: JsonObject,
+    *,
+    resource_type: ResourceType = ResourceType.RAG,
+    permission: list[str] | None = None,
+) -> str:
+    _ = await ResourceDefinition.set(
+        ResourceDefinition(
+            resource_id=resource_id,
+            type=resource_type,
+            config=config,
+            permission=permission if permission is not None else [],
+        )
     )
+    return resource_id
 
 
 @pytest.mark.asyncio
 async def test_resolves_inline_rag_resource_with_state_templates(
-    container,
+    di,
     unique_id,
 ) -> None:
-    base = await _company_visible_rag_state(container, unique_id)
+    base = await _company_visible_rag_state(di, unique_id)
     state = ExecutionState.create(
         task_id=base.task_id,
         context_id=base.context_id,
@@ -136,7 +95,7 @@ async def test_resolves_inline_rag_resource_with_state_templates(
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
+        authz=di.authz_service,
         state=state,
     )
 
@@ -146,21 +105,20 @@ async def test_resolves_inline_rag_resource_with_state_templates(
 
 
 @pytest.mark.asyncio
-async def test_non_rag_resources_are_ignored_and_empty_registry_is_none() -> None:
+async def test_non_rag_resources_are_ignored_and_empty_registry_is_none(di) -> None:
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources={
             "ctx": {"type": "llm_context", "config": {"profile": "agent"}},
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
+        authz=di.authz_service,
     )
     registry = await resolve_rag_context_source_registry_for_runtime(
         flow_resources={},
         skill_resources=None,
         node_resources_raw={},
-        resource_repository=InMemoryResourceRepository(),
-        rag_repository=InMemoryRAGRepository(),
+        authz=di.authz_service,
     )
 
     assert binds == {}
@@ -169,30 +127,27 @@ async def test_non_rag_resources_are_ignored_and_empty_registry_is_none() -> Non
 
 @pytest.mark.asyncio
 async def test_resolves_shared_rag_resource_with_deep_reference_patch(
-    container,
+    di,
     unique_id,
 ) -> None:
-    state = await _company_visible_rag_state(container, unique_id)
-    repository = InMemoryResourceRepository(
-        ResourceDefinition(
-            resource_id="shared_kb",
-            type=ResourceType.RAG,
-            config={
-                "namespace": "company-kb",
-                "default_top_k": 12,
-                "filters": {"tenant": "acme"},
-                "search_options": {
-                    "channels": {"semantic": True, "lexical": False},
-                    "rerank": False,
-                },
+    state = await _company_visible_rag_state(di, unique_id)
+    resource_id = await _shared_resource(
+        f"shared_kb_{unique_id}",
+        {
+            "namespace": "company-kb",
+            "default_top_k": 12,
+            "filters": {"tenant": "acme"},
+            "search_options": {
+                "channels": {"semantic": True, "lexical": False},
+                "rerank": False,
             },
-        )
+        },
     )
 
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources={
             "kb": {
-                "resource_id": "shared_kb",
+                "resource_id": resource_id,
                 "config": {
                     "filters": {"collection_id": "legal"},
                     "search_options": {"rerank": True},
@@ -201,8 +156,8 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch(
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=repository,
         state=state,
+        authz=di.authz_service,
     )
 
     assert binds["kb"].namespace == "company-kb"
@@ -216,63 +171,45 @@ async def test_resolves_shared_rag_resource_with_deep_reference_patch(
 
 @pytest.mark.asyncio
 async def test_shared_rag_resource_without_patch_uses_definition_config(
-    container,
+    di,
     unique_id,
 ) -> None:
-    state = await _company_visible_rag_state(container, unique_id)
-    repository = InMemoryResourceRepository(
-        ResourceDefinition(
-            resource_id="shared_kb",
-            type=ResourceType.RAG,
-            config={"namespace": "company-kb"},
-        )
-    )
+    state = await _company_visible_rag_state(di, unique_id)
+    resource_id = await _shared_resource(f"shared_kb_{unique_id}", {"namespace": "company-kb"})
 
     binds = await resolve_rag_resource_binds_for_runtime(
-        flow_resources={"kb": {"resource_id": "shared_kb"}},
+        flow_resources={"kb": {"resource_id": resource_id}},
         skill_resources=None,
         node_resources_raw={},
-        repository=repository,
         state=state,
+        authz=di.authz_service,
     )
 
     assert binds["kb"].namespace == "company-kb"
 
 
 @pytest.mark.asyncio
-async def test_shared_rag_resource_errors_are_strict() -> None:
-    with pytest.raises(ValueError, match="resource_repository"):
+async def test_missing_shared_rag_resource_is_rejected(di, unique_id) -> None:
+    with pytest.raises(ValueError, match="not found"):
         await resolve_rag_resource_binds_for_runtime(
-            flow_resources={"kb": {"resource_id": "shared_kb"}},
+            flow_resources={"kb": {"resource_id": f"missing_{unique_id}"}},
             skill_resources=None,
             node_resources_raw={},
-            repository=None,
-        )
-
-    with pytest.raises(ValueError, match="не найден"):
-        await resolve_rag_resource_binds_for_runtime(
-            flow_resources={"kb": {"resource_id": "missing"}},
-            skill_resources=None,
-            node_resources_raw={},
-            repository=InMemoryResourceRepository(),
+            authz=di.authz_service,
         )
 
 
 @pytest.mark.asyncio
-async def test_shared_non_rag_resource_is_ignored() -> None:
-    repository = InMemoryResourceRepository(
-        ResourceDefinition(
-            resource_id="ctx",
-            type=ResourceType.LLM_CONTEXT,
-            config={"profile": "agent"},
-        )
+async def test_shared_non_rag_resource_is_ignored(di, unique_id) -> None:
+    resource_id = await _shared_resource(
+        f"ctx_{unique_id}", {"profile": "agent"}, resource_type=ResourceType.LLM_CONTEXT
     )
 
     binds = await resolve_rag_resource_binds_for_runtime(
-        flow_resources={"ctx": {"resource_id": "ctx"}},
+        flow_resources={"ctx": {"resource_id": resource_id}},
         skill_resources=None,
         node_resources_raw={},
-        repository=repository,
+        authz=di.authz_service,
     )
 
     assert binds == {}
@@ -289,11 +226,7 @@ async def test_inline_rag_resource_without_config_is_rejected() -> None:
     )
 
     with pytest.raises(ValueError, match="inline RAG"):
-        await _resolve_rag_config_for_reference(
-            key="kb",
-            ref=bad_ref,
-            repository=InMemoryResourceRepository(),
-        )
+        await _resolve_rag_config_for_reference(key="kb", ref=bad_ref)
 
 
 def test_runtime_template_helpers_cover_object_state_and_invalid_variables() -> None:
@@ -332,95 +265,70 @@ def test_runtime_template_helpers_reject_non_object_result_and_empty_source_key(
 
 @pytest.mark.asyncio
 async def test_rag_context_registry_uses_all_merged_rag_resources(
-    container,
+    di,
     unique_id,
 ) -> None:
-    state = await _company_visible_rag_state(container, unique_id)
-    rag_repository = InMemoryRAGRepository()
+    state = await _company_visible_rag_state(di, unique_id)
+    merged = {
+        "flow_resources": {"kb": {"type": "rag", "config": {"namespace": "flow-kb"}}},
+        "skill_resources": {"skill_kb": {"type": "rag", "config": {"namespace": "skill-kb"}}},
+        "node_resources_raw": {"node_kb": {"type": "rag", "config": {"namespace": "node-kb"}}},
+    }
 
+    binds = await resolve_rag_resource_binds_for_runtime(
+        **merged, state=state, authz=di.authz_service
+    )
     registry = await resolve_rag_context_source_registry_for_runtime(
-        flow_resources={
-            "kb": {"type": "rag", "config": {"namespace": "flow-kb"}},
-        },
-        skill_resources={
-            "skill_kb": {"type": "rag", "config": {"namespace": "skill-kb"}},
-        },
-        node_resources_raw={
-            "node_kb": {"type": "rag", "config": {"namespace": "node-kb"}},
-        },
-        resource_repository=InMemoryResourceRepository(),
-        rag_repository=rag_repository,
-        state=state,
+        **merged, state=state, authz=di.authz_service
     )
 
+    assert [(key, bind.namespace) for key, bind in binds.items()] == [
+        ("kb", "flow-kb"),
+        ("skill_kb", "skill-kb"),
+        ("node_kb", "node-kb"),
+    ]
     assert registry is not None
-    blocks = await registry.collect(
-        LLMContextSourceRequest(query="question", policy=_profile())
-    )
-
-    assert [call["bind"].namespace for call in rag_repository.calls] == [
-        "flow-kb",
-        "skill-kb",
-        "node-kb",
-    ]
-    assert [block.provenance["namespace"] for block in blocks] == [
-        "flow-kb",
-        "skill-kb",
-        "node-kb",
-    ]
-
-
-class RecordingNamespaceService:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, str | None]] = []
-
-    async def get_or_create(
-        self,
-        name: str,
-        *,
-        description: str | None = None,
-        **_kwargs: object,
-    ) -> object:
-        self.calls.append((name, description))
-        return object()
+    assert registry.has_sources is True
 
 
 @pytest.mark.asyncio
 async def test_resolve_ensures_namespace_via_namespace_service(
-    container,
+    di,
     unique_id,
 ) -> None:
-    state = await _company_visible_rag_state(container, unique_id)
-    ns = RecordingNamespaceService()
+    state = await _company_visible_rag_state(di, unique_id)
+    namespace = f"kb-support-{unique_id}"
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources={
             "kb": {
                 "type": "rag",
                 "config": {
-                    "namespace": "kb-support",
+                    "namespace": namespace,
                     "namespace_description": "Support docs",
                 },
             }
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
-        namespace_service=ns,
+        authz=di.authz_service,
+        namespace_service=di.namespace_service,
         state=state,
     )
-    assert binds["kb"].namespace == "kb-support"
-    assert ns.calls == [("kb-support", "Support docs")]
+    assert binds["kb"].namespace == namespace
+    created = await di.namespace_service.get(namespace)
+    assert created is not None
+    assert created.description == "Support docs"
 
 
 @pytest.mark.asyncio
 async def test_inline_rag_permission_denied_when_groups_missing(
-    container,
+    di,
     unique_id,
 ) -> None:
     user_id = f"user-rag-{unique_id}"
     company_id = f"co-rag-{unique_id}"
     await sync_user_groups(
-        container.authz_service,
+        di.authz_service,
         user_id=user_id,
         groups=["users"],
         company_ids=[company_id],
@@ -442,7 +350,7 @@ async def test_inline_rag_permission_denied_when_groups_missing(
         user_groups=["users"],
     )
     try:
-        with pytest.raises(PermissionError, match="RAG-ресурс"):
+        with pytest.raises(PermissionError, match="no access to RAG resource"):
             await resolve_rag_resource_binds_for_runtime(
                 flow_resources={
                     "kb": {
@@ -453,7 +361,7 @@ async def test_inline_rag_permission_denied_when_groups_missing(
                 },
                 skill_resources=None,
                 node_resources_raw={},
-                repository=InMemoryResourceRepository(),
+        authz=di.authz_service,
                 state=state,
             )
     finally:
@@ -462,25 +370,17 @@ async def test_inline_rag_permission_denied_when_groups_missing(
 
 @pytest.mark.asyncio
 async def test_shared_rag_permission_allows_matching_group(
-    container,
+    di,
     unique_id,
 ) -> None:
     user_id = f"user-rag-{unique_id}"
     company_id = f"co-rag-{unique_id}"
     await sync_user_groups(
-        container.authz_service,
+        di.authz_service,
         user_id=user_id,
         groups=["managers"],
         company_ids=[company_id],
         previous_groups=[],
-    )
-    repository = InMemoryResourceRepository(
-        ResourceDefinition(
-            resource_id="shared_kb",
-            type=ResourceType.RAG,
-            permission=["managers"],
-            config={"namespace": "company-kb"},
-        )
     )
     set_context(
         Context(
@@ -498,12 +398,15 @@ async def test_shared_rag_permission_allows_matching_group(
         user_groups=["managers"],
     )
     try:
+        resource_id = await _shared_resource(
+            f"shared_kb_{unique_id}", {"namespace": "company-kb"}, permission=["managers"]
+        )
         binds = await resolve_rag_resource_binds_for_runtime(
-            flow_resources={"kb": {"resource_id": "shared_kb"}},
+            flow_resources={"kb": {"resource_id": resource_id}},
             skill_resources=None,
             node_resources_raw={},
-            repository=repository,
             state=state,
+            authz=di.authz_service,
         )
     finally:
         clear_context()
@@ -512,13 +415,13 @@ async def test_shared_rag_permission_allows_matching_group(
 
 @pytest.mark.asyncio
 async def test_empty_permission_requires_company_member(
-    container,
+    di,
     unique_id,
 ) -> None:
     user_id = f"user-rag-{unique_id}"
     company_id = f"co-rag-{unique_id}"
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["member"],
@@ -548,7 +451,7 @@ async def test_empty_permission_requires_company_member(
         },
         skill_resources=None,
         node_resources_raw={},
-        repository=InMemoryResourceRepository(),
+        authz=di.authz_service,
         state=state,
     )
     assert binds["kb"].namespace == "kb-open"

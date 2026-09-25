@@ -3,13 +3,20 @@
 Определяет единый интерфейс работы с векторными хранилищами.
 """
 
-import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 from types import TracebackType
 
 from core.config.models import RAGProviderConfig
-from core.files.s3_client import S3ClientFactory
+from core.context import get_context, require_active_company, reset_context, set_context
+from core.files.create_spec import FileCreateSpec, FileSourceKind
+from core.files.hooks import bind_document_placement
+from core.files.models import FileRecord
+from core.files.object_storage import PLATFORM_STORAGE_ID
+from core.files.object_store.gate import FileGate
+from core.files.object_store.pool import client_for
+from core.files.object_store.resolver import resolve_for_record, resolve_for_write
+from core.files.service import FilesService
 from core.files.types import ext_to_mime
 from core.logging import get_logger
 from core.rag.models import (
@@ -148,37 +155,63 @@ class BaseRAGProvider(ABC):
         suffix = Path(file_path).suffix.lower()
         return ext_to_mime(suffix)
 
+    def _rag_files(self) -> FilesService:
+        return FilesService(
+            files_route_segment="rag",
+            docs_bind_hook=bind_document_placement,
+        )
+
+    async def _store_rag_bytes(
+        self,
+        data: bytes,
+        *,
+        namespace_id: str,
+        original_name: str,
+        content_type: str,
+        is_public: bool,
+    ) -> FileRecord:
+        spec = FileCreateSpec.model_validate(
+            {
+                "source_kind": "rag_document",
+                "source_ref": {"namespace_id": namespace_id},
+                "retention": {"kind": "rag_document"},
+                "post_create": {"is_public": is_public},
+            }
+        )
+        token = None
+        context = get_context()
+        if context is not None and context.active_namespace != namespace_id:
+            token = set_context(context.model_copy(update={"active_namespace": namespace_id}))
+        try:
+            return await self._rag_files().create(
+                spec,
+                data,
+                original_name=original_name,
+                content_type=content_type,
+            )
+        finally:
+            if token is not None:
+                reset_context(token)
+
     async def _upload_file_to_s3(
         self,
         file_path: str,
         namespace_id: str,
         public: bool = False,
-    ) -> tuple[str, str, str]:
-        """Загружает файл в S3 и возвращает (s3_key, bucket_name, original_filename)."""
+    ) -> FileRecord:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
-
-        s3_client = S3ClientFactory.create_default_client()
-        prefix = "rag_public" if public else "rag"
-        s3_key = f"{prefix}/{namespace_id}/{uuid.uuid4().hex[:8]}_{path.name}"
-
-        with open(file_path, "rb") as f:
-            file_data = f.read()
-
-        try:
-            _ = await s3_client.upload_bytes(
-                data=file_data,
-                key=s3_key,
-                content_type=self._get_content_type(file_path),
-                public=public,
-            )
-            bucket_name = s3_client.bucket_name
-        finally:
-            await s3_client.close()
-
-        logger.info("rag.s3.file_uploaded", s3_key=s3_key, public=public)
-        return s3_key, bucket_name, path.name
+        data = path.read_bytes()
+        record = await self._store_rag_bytes(
+            data,
+            namespace_id=namespace_id,
+            original_name=path.name,
+            content_type=self._get_content_type(file_path),
+            is_public=public,
+        )
+        logger.info("rag.file.stored", file_id=record.file_id, public=public)
+        return record
 
     async def _download_file_from_s3(
         self,
@@ -186,79 +219,72 @@ class BaseRAGProvider(ABC):
         bucket_config_key: str | None = None,
     ) -> tuple[bytes, str, str]:
         """Скачивает файл из S3 и возвращает (data, bucket_name, filename)."""
+        company_id = require_active_company().company_id
         if bucket_config_key:
-            s3_client = S3ClientFactory.create_client_for_bucket(bucket_config_key)
+            resolved = await resolve_for_write(company_id, FileSourceKind.RAG_DOCUMENT)
+            if bucket_config_key not in (resolved.storage_id, resolved.bucket_name, PLATFORM_STORAGE_ID):
+                raise ValueError(f"unknown storage for RAG download: {bucket_config_key}")
+            s3_client = await client_for(resolved)
+            storage_id = resolved.storage_id
         else:
-            s3_client = S3ClientFactory.create_default_client()
-        try:
-            file_data = await s3_client.download_bytes(s3_key)
-            filename = Path(s3_key).name
-            bucket_name = s3_client.bucket_name
-        finally:
-            await s3_client.close()
-        return file_data, bucket_name, filename
+            resolved, s3_client = await FileGate().client_for_write(
+                company_id,
+                FileSourceKind.RAG_DOCUMENT,
+            )
+            storage_id = resolved.storage_id
+        file_data = await s3_client.download_bytes(s3_key)
+        filename = Path(s3_key).name
+        return file_data, storage_id, filename
+
+    async def _signed_url_for_file(self, file_id: str, expiration: int = 3600) -> str:
+        """Временный URL для внешнего индексатора. В метаданные чанка не пишется."""
+        company_id = require_active_company().company_id
+        record = await self._rag_files().get(file_id)
+        if record.company_id != company_id:
+            raise ValueError(f"RAG file not found: {file_id}")
+        client = await client_for(await resolve_for_record(record))
+        return await client.generate_presigned_url(key=record.s3_key, expiration=expiration)
 
     async def _generate_signed_url(self, s3_key: str, expiration: int = 3600) -> str:
-        """Генерирует временный signed URL для прямого доступа к файлу (внутренний RAG pipeline)."""
-        s3_client = S3ClientFactory.create_default_client()
-        try:
-            signed_url = await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
-        finally:
-            await s3_client.close()
-        return signed_url
+        """URL уже существующего объекта (index-file). Новые записи его не сохраняют."""
+        company_id = require_active_company().company_id
+        _, s3_client = await FileGate().client_for_write(company_id, FileSourceKind.RAG_DOCUMENT)
+        return await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
 
     async def _upload_bytes_to_s3(
         self,
         file_data: bytes,
         namespace_id: str,
         filename: str,
-    ) -> tuple[str, str]:
-        """Загружает bytes в S3 и возвращает (s3_key, bucket_name)."""
-        s3_client = S3ClientFactory.create_default_client()
-        path = Path(filename)
-        s3_key = f"rag/{namespace_id}/{uuid.uuid4().hex[:8]}_{path.name}"
-
-        try:
-            _ = await s3_client.upload_bytes(
-                data=file_data,
-                key=s3_key,
-                content_type=self._get_content_type(filename),
-            )
-            bucket_name = s3_client.bucket_name
-        finally:
-            await s3_client.close()
-
-        logger.info("rag.s3.file_uploaded", s3_key=s3_key)
-        return s3_key, bucket_name
+    ) -> FileRecord:
+        record = await self._store_rag_bytes(
+            file_data,
+            namespace_id=namespace_id,
+            original_name=Path(filename).name,
+            content_type=self._get_content_type(filename),
+            is_public=False,
+        )
+        logger.info("rag.file.stored", file_id=record.file_id)
+        return record
 
     async def _upload_text_to_s3(
         self,
         text: str,
         namespace_id: str,
         filename: str,
-    ) -> tuple[str, str]:
-        """Загружает текст как файл в S3 и возвращает (s3_key, bucket_name)."""
-        s3_client = S3ClientFactory.create_default_client()
-
-        safe_name = "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_')).strip()
+    ) -> FileRecord:
+        safe_name = "".join(c for c in filename if c.isalnum() or c in (" ", "-", "_")).strip()
         if not safe_name:
             safe_name = "text"
-        safe_name = safe_name[:40]
-
-        s3_key = f"rag_text/{namespace_id}/{uuid.uuid4().hex[:8]}_{safe_name}.txt"
-
-        try:
-            _ = await s3_client.upload_bytes(
-                data=text.encode('utf-8'),
-                key=s3_key,
-                content_type="text/plain",
-            )
-            bucket_name = s3_client.bucket_name
-        finally:
-            await s3_client.close()
-
-        logger.info("rag.s3.text_uploaded", s3_key=s3_key)
-        return s3_key, bucket_name
+        record = await self._store_rag_bytes(
+            text.encode("utf-8"),
+            namespace_id=namespace_id,
+            original_name=f"{safe_name[:40]}.txt",
+            content_type="text/plain",
+            is_public=False,
+        )
+        logger.info("rag.file.stored", file_id=record.file_id)
+        return record
 
 
     @property

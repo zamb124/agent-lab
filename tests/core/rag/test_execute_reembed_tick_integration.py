@@ -6,22 +6,24 @@
 
 from __future__ import annotations
 
-import pytest
-from sqlalchemy import select
+from datetime import datetime, timezone
 
-from core.db.models import VectorDocument
+import pytest
+from oxyde import execute_raw
+
 from core.models.identity_models import Company, User
 from core.rag.reembed_stale_documents import _run_reembed_round, execute_reembed_tick
+from core.types import require_json_object
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
-async def _seed_solvent_company(frontend_container, *, cid: str, balance: float = 50.0) -> str:
+async def _seed_solvent_company(frontend_di, *, cid: str, balance: float = 50.0) -> str:
     """Создаёт пользователя и компанию с этим пользователем как owner. Возвращает user_id."""
     uid = f"u_{cid}"
-    await frontend_container.user_repository.set(
+    await User.set(
         User(user_id=uid, name="Owner", companies={cid: ["owner"]})
     )
-    await frontend_container.company_repository.set(
+    await Company.set(
         Company(
             company_id=cid,
             name=cid,
@@ -34,47 +36,59 @@ async def _seed_solvent_company(frontend_container, *, cid: str, balance: float 
 
 
 async def _insert_stale_chunk(
-    session_factory,
     *,
     chunk_id: str,
     namespace_id: str,
     company_id: str | None,
     content: str,
 ) -> None:
-    async with session_factory() as session:
-        session.add(
-            VectorDocument(
-                id=chunk_id,
-                namespace_id=namespace_id,
-                company_id=company_id,
-                document_id=f"doc_{chunk_id}",
-                document_name=f"{chunk_id}.txt",
-                content=content,
-                embedding=None,
-                embedding_model=None,
-                chunk_index=0,
-                total_chunks=1,
-            )
-        )
-        await session.commit()
+    now = datetime.now(timezone.utc)
+    _ = await execute_raw(
+        """
+        INSERT INTO vector_documents (
+            id, namespace_id, company_id, document_id, document_name, content,
+            chunk_index, total_chunks, metadata, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, 0, 1, '{}'::jsonb, $7, $7)
+        """,
+        [
+            chunk_id,
+            namespace_id,
+            company_id,
+            f"doc_{chunk_id}",
+            f"{chunk_id}.txt",
+            content,
+            now,
+        ],
+        using="rag",
+    )
 
 
-async def _chunk_state(session_factory, chunk_id: str) -> tuple[str | None, bool, bool]:
+async def _chunk_state(chunk_id: str) -> tuple[str | None, bool, bool]:
     """Возвращает ``(embedding_model, has_embedding, exists)``."""
-    async with session_factory() as session:
-        row = (
-            await session.execute(
-                select(VectorDocument).where(VectorDocument.id == chunk_id)
-            )
-        ).scalar_one_or_none()
-    if row is None:
+    rows = await execute_raw(
+        """
+        SELECT embedding_model, embedding IS NOT NULL AS has_embedding
+        FROM vector_documents
+        WHERE id = $1
+        """,
+        [chunk_id],
+        using="rag",
+    )
+    if not rows:
         return None, False, False
-    return row.embedding_model, row.embedding is not None, True
+    parsed = require_json_object(rows[0], "stale_chunk")
+    embedding_model = parsed["embedding_model"]
+    has_embedding = parsed["has_embedding"]
+    if embedding_model is not None and not isinstance(embedding_model, str):
+        raise TypeError("embedding_model must be a string")
+    if not isinstance(has_embedding, bool):
+        raise TypeError("has_embedding must be a boolean")
+    return embedding_model, has_embedding, True
 
 
 async def _run_rounds_until_chunk_embedded(
     *,
-    frontend_container,
+    frontend_di,
     provider,
     chunk_id: str,
     target: str,
@@ -86,22 +100,19 @@ async def _run_rounds_until_chunk_embedded(
     воркер может заэмбеддить наш чанк раньше нас — written нашего раунда тогда 0.
     Parallel-safe контракт: сходимость состояния собственного чанка.
     """
-    sf = provider._session_factory
     for _ in range(20):
-        model, has_emb, exists = await _chunk_state(sf, chunk_id)
+        model, has_emb, exists = await _chunk_state(chunk_id)
         assert exists is True
         if model == target and has_emb:
             return
         _, _ = await _run_reembed_round(
             provider=provider,
-            company_repository=frontend_container.company_repository,
-            user_repository=frontend_container.user_repository,
             batch_size=2000,
             target_embedding_model=target,
             schedule_task_id=schedule_task_id,
             channel="test_worker",
         )
-    model, has_emb, _ = await _chunk_state(sf, chunk_id)
+    model, has_emb, _ = await _chunk_state(chunk_id)
     raise AssertionError(
         f"chunk {chunk_id} not reembedded after 20 rounds: model={model}, has_embedding={has_emb}"
     )
@@ -109,26 +120,25 @@ async def _run_rounds_until_chunk_embedded(
 
 @pytest.mark.asyncio
 async def test_run_reembed_round_embeds_chunk_for_solvent_company(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     cid = f"co_reembed_ok_{unique_id}"
     chunk_id = f"reembed_ok_chunk_{unique_id}"
     ns = f"ns_reembed_ok_{unique_id}"
-    await _seed_solvent_company(frontend_container, cid=cid, balance=50.0)
-    sf = rag_provider_pgvector._session_factory
+    await _seed_solvent_company(frontend_di, cid=cid, balance=50.0)
     await _insert_stale_chunk(
-        sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="reembed me",
+        chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="reembed me",
     )
     target = rag_provider_pgvector.embedding_model_name()
 
     await _run_rounds_until_chunk_embedded(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         provider=rag_provider_pgvector,
         chunk_id=chunk_id,
         target=target,
         schedule_task_id=f"t_{unique_id}",
     )
-    model, has_emb, exists = await _chunk_state(sf, chunk_id)
+    model, has_emb, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model == target
     assert has_emb is True
@@ -136,39 +146,36 @@ async def test_run_reembed_round_embeds_chunk_for_solvent_company(
 
 @pytest.mark.asyncio
 async def test_run_reembed_round_skips_low_balance_company(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     cid = f"co_reembed_zero_{unique_id}"
     chunk_id = f"reembed_zero_chunk_{unique_id}"
     ns = f"ns_reembed_zero_{unique_id}"
-    await _seed_solvent_company(frontend_container, cid=cid, balance=0.0)
-    sf = rag_provider_pgvector._session_factory
+    await _seed_solvent_company(frontend_di, cid=cid, balance=0.0)
     await _insert_stale_chunk(
-        sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="stays stale",
+        chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="stays stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
     _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
-        company_repository=frontend_container.company_repository,
-        user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
-    model, _, exists = await _chunk_state(sf, chunk_id)
+    model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
 
 
 @pytest.mark.asyncio
 async def test_run_reembed_round_skips_company_without_billing_owner(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     cid = f"co_reembed_no_owner_{unique_id}"
     chunk_id = f"reembed_no_owner_chunk_{unique_id}"
     ns = f"ns_reembed_no_owner_{unique_id}"
-    await frontend_container.company_repository.set(
+    await Company.set(
         Company(
             company_id=cid,
             name="NoOwner",
@@ -177,113 +184,106 @@ async def test_run_reembed_round_skips_company_without_billing_owner(
             balance=20.0,
         )
     )
-    sf = rag_provider_pgvector._session_factory
     await _insert_stale_chunk(
-        sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="no owner stale",
+        chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="no owner stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
     _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
-        company_repository=frontend_container.company_repository,
-        user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
-    model, _, exists = await _chunk_state(sf, chunk_id)
+    model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
 
 
 @pytest.mark.asyncio
 async def test_run_reembed_round_skips_chunk_with_missing_company(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     """Чанк указывает на несуществующую компанию — skip, чанк остаётся stale."""
     cid_missing = f"co_missing_{unique_id}"
     chunk_id = f"missing_co_chunk_{unique_id}"
     ns = f"ns_missing_co_{unique_id}"
-    sf = rag_provider_pgvector._session_factory
     await _insert_stale_chunk(
-        sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid_missing,
+        chunk_id=chunk_id, namespace_id=ns, company_id=cid_missing,
         content="dangling company stale",
     )
     target = rag_provider_pgvector.embedding_model_name()
     _, _ = await _run_reembed_round(
         provider=rag_provider_pgvector,
-        company_repository=frontend_container.company_repository,
-        user_repository=frontend_container.user_repository,
         batch_size=2000,
         target_embedding_model=target,
         schedule_task_id=f"t_{unique_id}",
         channel="test_worker",
     )
-    model, _, exists = await _chunk_state(sf, chunk_id)
+    model, _, exists = await _chunk_state(chunk_id)
     assert exists is True
     assert model is None
 
 
 @pytest.mark.asyncio
 async def test_run_reembed_round_one_bad_company_does_not_fail_others(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     """Группа без owner не валит обработку соседних компаний."""
     cid_bad = f"co_mix_bad_{unique_id}"
     cid_good = f"co_mix_good_{unique_id}"
     ns = f"ns_mix_{unique_id}"
-    await frontend_container.company_repository.set(
+    await Company.set(
         Company(
             company_id=cid_bad, name="MixBad", owner_user_id=None,
             members={f"u_admin_{unique_id}": ["admin"]}, balance=20.0,
         )
     )
-    await _seed_solvent_company(frontend_container, cid=cid_good, balance=20.0)
-    sf = rag_provider_pgvector._session_factory
+    await _seed_solvent_company(frontend_di, cid=cid_good, balance=20.0)
     chunk_bad = f"mix_bad_chunk_{unique_id}"
     chunk_good = f"mix_good_chunk_{unique_id}"
-    await _insert_stale_chunk(sf, chunk_id=chunk_bad, namespace_id=ns,
+    await _insert_stale_chunk(chunk_id=chunk_bad, namespace_id=ns,
                               company_id=cid_bad, content="bad group")
-    await _insert_stale_chunk(sf, chunk_id=chunk_good, namespace_id=ns,
+    await _insert_stale_chunk(chunk_id=chunk_good, namespace_id=ns,
                               company_id=cid_good, content="good group")
     target = rag_provider_pgvector.embedding_model_name()
     await _run_rounds_until_chunk_embedded(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         provider=rag_provider_pgvector,
         chunk_id=chunk_good,
         target=target,
         schedule_task_id=f"t_{unique_id}",
     )
-    bad_model, _, _ = await _chunk_state(sf, chunk_bad)
-    good_model, good_has_emb, _ = await _chunk_state(sf, chunk_good)
+    bad_model, _, _ = await _chunk_state(chunk_bad)
+    good_model, good_has_emb, _ = await _chunk_state(chunk_good)
     assert bad_model is None
     assert good_model == target
     assert good_has_emb is True
 
 
 @pytest.mark.asyncio
-async def test_execute_reembed_tick_requires_schedule_task_id(frontend_container) -> None:
+async def test_execute_reembed_tick_requires_schedule_task_id(frontend_di) -> None:
     with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
-            container=frontend_container, channel="t", schedule_task_id="  ",
+            channel="t", schedule_task_id="  ",
         )
     with pytest.raises(ValueError, match="schedule_task_id"):
         await execute_reembed_tick(
-            container=frontend_container, channel="t", schedule_task_id="",
+            channel="t", schedule_task_id="",
         )
 
 
 @pytest.mark.asyncio
-async def test_execute_reembed_tick_requires_channel(frontend_container) -> None:
+async def test_execute_reembed_tick_requires_channel(frontend_di) -> None:
     with pytest.raises(ValueError, match="channel"):
         await execute_reembed_tick(
-            container=frontend_container, channel="  ", schedule_task_id="t",
+            channel="  ", schedule_task_id="t",
         )
 
 
 @pytest.mark.asyncio
 async def test_execute_reembed_tick_full_run_embeds_chunk(
-    frontend_container, rag_provider_pgvector, unique_id
+    frontend_di, rag_provider_pgvector, unique_id
 ) -> None:
     """End-to-end: execute_reembed_tick через настоящий контейнер и фабрику pgvector."""
     from core.config import get_settings
@@ -299,17 +299,16 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     cid = f"co_e2e_{unique_id}"
     chunk_id = f"e2e_chunk_{unique_id}"
     ns = f"ns_e2e_{unique_id}"
-    await _seed_solvent_company(frontend_container, cid=cid, balance=50.0)
+    await _seed_solvent_company(frontend_di, cid=cid, balance=50.0)
 
-    company = await frontend_container.company_repository.get(cid)
+    company = await Company.get(cid)
     assert company is not None
     assert company.balance > 0
 
-    sf = rag_provider_pgvector._session_factory
     await _insert_stale_chunk(
-        sf, chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="e2e content",
+        chunk_id=chunk_id, namespace_id=ns, company_id=cid, content="e2e content",
     )
-    stale_model, stale_has_emb, stale_exists = await _chunk_state(sf, chunk_id)
+    stale_model, stale_has_emb, stale_exists = await _chunk_state(chunk_id)
     assert stale_exists is True
     assert stale_has_emb is False
     assert stale_model is None
@@ -324,7 +323,6 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
     target = rag_provider_pgvector.embedding_model_name()
     for _ in range(20):
         result = await execute_reembed_tick(
-            container=frontend_container,
             channel="test_worker_e2e",
             schedule_task_id=f"e2e_{unique_id}",
         )
@@ -332,27 +330,26 @@ async def test_execute_reembed_tick_full_run_embeds_chunk(
             pytest.fail(f"execute_reembed_tick skipped unexpectedly: {result}")
         assert isinstance(result.get("by_company_written"), dict)
         assert result.get("target_embedding_model") == target
-        model, has_emb, _ = await _chunk_state(sf, chunk_id)
+        model, has_emb, _ = await _chunk_state(chunk_id)
         if model == target and has_emb:
             break
-    model, has_emb, _ = await _chunk_state(sf, chunk_id)
+    model, has_emb, _ = await _chunk_state(chunk_id)
     assert model == target
     assert has_emb is True
 
 
 @pytest.mark.asyncio
 async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
-    rag_provider_pgvector, unique_id
+    rag_provider_pgvector, unique_id, rag_worker_di
 ) -> None:
     from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
 
-    sf = rag_provider_pgvector._session_factory
     chunk_null = f"orphan_null_{unique_id}"
     chunk_empty = f"orphan_empty_{unique_id}"
     ns = f"ns_orphan_e2e_{unique_id}"
-    await _insert_stale_chunk(sf, chunk_id=chunk_null, namespace_id=ns,
+    await _insert_stale_chunk(chunk_id=chunk_null, namespace_id=ns,
                               company_id=None, content="null")
-    await _insert_stale_chunk(sf, chunk_id=chunk_empty, namespace_id=ns,
+    await _insert_stale_chunk(chunk_id=chunk_empty, namespace_id=ns,
                               company_id="", content="empty")
 
     # Cleanup глобальный: чужой параллельный batch может удалить наши строки
@@ -360,22 +357,25 @@ async def test_orphan_cleanup_tick_removes_orphan_company_chunks(
     for _ in range(50):
         result = await rag_cleanup_orphan_company_chunks_tick(
             schedule_task_id=f"orph_{unique_id}",
+            di=rag_worker_di,
         )
         assert result["skipped"] is False
-        _, _, exists_null = await _chunk_state(sf, chunk_null)
-        _, _, exists_empty = await _chunk_state(sf, chunk_empty)
+        _, _, exists_null = await _chunk_state(chunk_null)
+        _, _, exists_empty = await _chunk_state(chunk_empty)
         if not exists_null and not exists_empty:
             break
 
-    _, _, exists_null = await _chunk_state(sf, chunk_null)
-    _, _, exists_empty = await _chunk_state(sf, chunk_empty)
+    _, _, exists_null = await _chunk_state(chunk_null)
+    _, _, exists_empty = await _chunk_state(chunk_empty)
     assert exists_null is False
     assert exists_empty is False
 
 
 @pytest.mark.asyncio
-async def test_orphan_cleanup_tick_requires_schedule_task_id() -> None:
+async def test_orphan_cleanup_tick_requires_schedule_task_id(rag_worker_di) -> None:
     from apps.rag_worker.tasks.maintenance_tasks import rag_cleanup_orphan_company_chunks_tick
 
     with pytest.raises(ValueError, match="schedule_task_id"):
-        await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="  ")
+        await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="  ", di=rag_worker_di)
+    with pytest.raises(ValueError, match="schedule_task_id"):
+        await rag_cleanup_orphan_company_chunks_tick(schedule_task_id="", di=rag_worker_di)

@@ -10,8 +10,14 @@ import pytest
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.crawl.models import CrawlDomain, CrawlJob, CrawlProfile, CrawlProfileWithIndex, CrawlUrl
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
+
+
+@pytest.fixture(autouse=True)
+def _fake_crawl_job_counter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Тесты подменяют CrawlJob.start фейком job-1: счётчик в БД не пишется."""
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
 
 
 def _profile_bundle(*, max_domains_per_tick: int = 2) -> CrawlProfileWithIndex:
@@ -39,7 +45,6 @@ def _profile_bundle(*, max_domains_per_tick: int = 2) -> CrawlProfileWithIndex:
         rag_collection_id="runet",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
@@ -60,18 +65,8 @@ def _domain(domain_id: str, domain_name: str) -> CrawlDomain:
     )
 
 
-def _orchestrator(
-    *,
-    profile_bundle: CrawlProfileWithIndex,
-    domain_repo: object,
-    url_repo: object,
-    job_repo: object,
-) -> CrawlOrchestratorService:
+def _orchestrator() -> CrawlOrchestratorService:
     return CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=domain_repo,  # pyright: ignore[reportArgumentType]
-        crawl_url_repository=url_repo,  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=job_repo,  # pyright: ignore[reportArgumentType]
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(
@@ -100,32 +95,19 @@ async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.Mo
     due_domain = _domain("dom-due", "example.com")
     due_domain = due_domain.model_copy(update={"next_crawl_after": datetime.now(UTC) - timedelta(minutes=1)})
 
-    class _DomainRepo:
-        async def list_with_pending_urls(self, crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
-            assert crawl_profile_id == "cr_test"
-            assert limit == 2
-            return [backlog_domain]
+    async def list_with_pending_urls(crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
+        assert crawl_profile_id == "cr_test"
+        assert limit == 2
+        return [backlog_domain]
 
-        async def list_due(self, crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
-            assert limit == 1
-            return [due_domain]
+    async def list_due(crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
+        assert limit == 1
+        return [due_domain]
 
-        async def schedule_next(self, crawl_domain_id: str, next_crawl_after: datetime, **kwargs: object) -> None:
-            pass
-
-    class _UrlRepo:
-        async def count_pending(self, crawl_domain_id: str) -> int:
-            if crawl_domain_id == "dom-backlog":
-                return 100
-            return 0
-
-        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
+    async def count_pending(crawl_domain_id: str) -> int:
+        if crawl_domain_id == "dom-backlog":
             return 100
-
-        async def domain_change_stats(
-            self, crawl_domain_id: str, *, since: datetime
-        ) -> tuple[int, int]:
-            return (0, 0)
+        return 0
 
     job = CrawlJob(
         crawl_job_id="job-1",
@@ -134,18 +116,17 @@ async def test_run_tick_prioritizes_backlog_over_cooldown(monkeypatch: pytest.Mo
         status="running",
         started_at=datetime.now(UTC),
     )
-    job_repo = AsyncMock()
-    job_repo.start = AsyncMock(return_value=job)
-    job_repo.increment = AsyncMock()
-    job_repo.finish = AsyncMock()
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "list_with_pending_urls", list_with_pending_urls)
+    monkeypatch.setattr(CrawlDomain, "list_due", list_due)
+    monkeypatch.setattr(CrawlDomain, "schedule_next", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "count_pending", count_pending)
+    monkeypatch.setattr(CrawlUrl, "count_pending_for_profile", AsyncMock(return_value=100))
+    monkeypatch.setattr(CrawlUrl, "domain_change_stats", AsyncMock(return_value=(0, 0)))
+    monkeypatch.setattr(CrawlJob, "start", AsyncMock(return_value=job))
+    monkeypatch.setattr(CrawlJob, "finish", AsyncMock())
 
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=_DomainRepo(),
-        url_repo=_UrlRepo(),
-        job_repo=job_repo,
-    )
-
+    orchestrator = _orchestrator()
     result = await orchestrator.run_tick(
         crawl_profile_id="cr_test",
         trigger="manual",
@@ -180,41 +161,29 @@ async def test_fetch_one_url_reenqueues_while_pending(monkeypatch: pytest.Monkey
     domain = _domain("dom-1", "example.com")
     now = datetime.now(UTC)
 
-    class _UrlRepo:
-        async def claim_pending_batch(self, crawl_domain_id: str, limit: int) -> list[object]:
-            from core.crawl.models import CrawlUrl
+    async def claim_pending_batch(crawl_domain_id: str, limit: int) -> list[CrawlUrl]:
+        return [
+            CrawlUrl(
+                crawl_url_id="url-1",
+                crawl_domain_id=crawl_domain_id,
+                url="https://example.com/page",
+                canonical_url="https://example.com/page",
+                crawl_status="fetching",
+                created_at=now,
+                updated_at=now,
+            )
+        ]
 
-            return [
-                CrawlUrl(
-                    crawl_url_id="url-1",
-                    crawl_domain_id=crawl_domain_id,
-                    url="https://example.com/page",
-                    canonical_url="https://example.com/page",
-                    crawl_status="fetching",
-                    created_at=now,
-                    updated_at=now,
-                )
-            ]
+    async def mark_crawled(crawl_domain_id: str, crawled_at: datetime) -> None:
+        raise AssertionError("mark_crawled must not run while pending remains")
 
-        async def count_pending(self, crawl_domain_id: str) -> int:
-            return 4
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "get", AsyncMock(return_value=domain))
+    monkeypatch.setattr(CrawlDomain, "mark_crawled", mark_crawled)
+    monkeypatch.setattr(CrawlUrl, "claim_pending_batch", claim_pending_batch)
+    monkeypatch.setattr(CrawlUrl, "count_pending", AsyncMock(return_value=4))
 
-    class _DomainRepo:
-        async def get(self, crawl_domain_id: str) -> CrawlDomain:
-            return domain
-
-        async def mark_crawled(self, crawl_domain_id: str, crawled_at: datetime) -> None:
-            raise AssertionError("mark_crawled must not run while pending remains")
-
-    job_repo = AsyncMock()
-    job_repo.increment = AsyncMock()
-
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=_DomainRepo(),
-        url_repo=_UrlRepo(),
-        job_repo=job_repo,
-    )
+    orchestrator = _orchestrator()
     orchestrator._fetch_and_index_url = AsyncMock()  # pyright: ignore[reportAttributeAccessIssue]
 
     await orchestrator.fetch_one_url("dom-1", "job-1", "cr_test", url_budget=1)
@@ -242,45 +211,31 @@ async def test_fetch_one_url_enqueues_tick_when_domain_drained_but_profile_pendi
     domain = _domain("dom-1", "example.com")
     now = datetime.now(UTC)
 
-    class _UrlRepo:
-        async def claim_pending_batch(self, crawl_domain_id: str, limit: int) -> list[object]:
-            from core.crawl.models import CrawlUrl
+    async def claim_pending_batch(crawl_domain_id: str, limit: int) -> list[CrawlUrl]:
+        return [
+            CrawlUrl(
+                crawl_url_id="url-1",
+                crawl_domain_id=crawl_domain_id,
+                url="https://example.com/page",
+                canonical_url="https://example.com/page",
+                crawl_status="fetching",
+                created_at=now,
+                updated_at=now,
+            )
+        ]
 
-            return [
-                CrawlUrl(
-                    crawl_url_id="url-1",
-                    crawl_domain_id=crawl_domain_id,
-                    url="https://example.com/page",
-                    canonical_url="https://example.com/page",
-                    crawl_status="fetching",
-                    created_at=now,
-                    updated_at=now,
-                )
-            ]
+    async def count_pending_for_profile(crawl_profile_id: str) -> int:
+        assert crawl_profile_id == "cr_test"
+        return 50
 
-        async def count_pending(self, crawl_domain_id: str) -> int:
-            return 0
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "get", AsyncMock(return_value=domain))
+    monkeypatch.setattr(CrawlDomain, "mark_crawled", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "claim_pending_batch", claim_pending_batch)
+    monkeypatch.setattr(CrawlUrl, "count_pending", AsyncMock(return_value=0))
+    monkeypatch.setattr(CrawlUrl, "count_pending_for_profile", count_pending_for_profile)
 
-        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
-            assert crawl_profile_id == "cr_test"
-            return 50
-
-    class _DomainRepo:
-        async def get(self, crawl_domain_id: str) -> CrawlDomain:
-            return domain
-
-        async def mark_crawled(self, crawl_domain_id: str, crawled_at: datetime) -> None:
-            assert crawl_domain_id == "dom-1"
-
-    job_repo = AsyncMock()
-    job_repo.increment = AsyncMock()
-
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=_DomainRepo(),
-        url_repo=_UrlRepo(),
-        job_repo=job_repo,
-    )
+    orchestrator = _orchestrator()
     orchestrator._fetch_and_index_url = AsyncMock()  # pyright: ignore[reportAttributeAccessIssue]
 
     await orchestrator.fetch_one_url("dom-1", "job-1", "cr_test", url_budget=1)
@@ -306,18 +261,6 @@ async def test_run_tick_does_not_reenqueue_when_no_domains_scheduled(
     )
 
     profile_bundle = _profile_bundle(max_domains_per_tick=1)
-
-    class _DomainRepo:
-        async def list_with_pending_urls(self, crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
-            return []
-
-        async def list_due(self, crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
-            return []
-
-    class _UrlRepo:
-        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
-            return 10
-
     job = CrawlJob(
         crawl_job_id="job-1",
         crawl_profile_id="cr_test",
@@ -325,17 +268,15 @@ async def test_run_tick_does_not_reenqueue_when_no_domains_scheduled(
         status="running",
         started_at=datetime.now(UTC),
     )
-    job_repo = AsyncMock()
-    job_repo.start = AsyncMock(return_value=job)
-    job_repo.finish = AsyncMock()
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "list_with_pending_urls", AsyncMock(return_value=[]))
+    monkeypatch.setattr(CrawlDomain, "list_due", AsyncMock(return_value=[]))
+    monkeypatch.setattr(CrawlUrl, "count_pending_for_profile", AsyncMock(return_value=10))
+    monkeypatch.setattr(CrawlJob, "start", AsyncMock(return_value=job))
+    monkeypatch.setattr(CrawlJob, "finish", AsyncMock())
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
 
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=_DomainRepo(),
-        url_repo=_UrlRepo(),
-        job_repo=job_repo,
-    )
-
+    orchestrator = _orchestrator()
     result = await orchestrator.run_tick(
         crawl_profile_id="cr_test",
         trigger="manual",
@@ -348,20 +289,8 @@ async def test_run_tick_does_not_reenqueue_when_no_domains_scheduled(
 
 
 @pytest.mark.asyncio
-async def test_run_tick_creates_rag_namespace_once_per_worker() -> None:
+async def test_run_tick_creates_rag_namespace_once_per_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     profile_bundle = _profile_bundle(max_domains_per_tick=1)
-
-    class _DomainRepo:
-        async def list_with_pending_urls(self, crawl_profile_id: str, *, limit: int) -> list[CrawlDomain]:
-            return []
-
-        async def list_due(self, crawl_profile_id: str, *, now: datetime, limit: int) -> list[CrawlDomain]:
-            return []
-
-    class _UrlRepo:
-        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
-            return 0
-
     job = CrawlJob(
         crawl_job_id="job-1",
         crawl_profile_id="cr_test",
@@ -369,18 +298,14 @@ async def test_run_tick_creates_rag_namespace_once_per_worker() -> None:
         status="running",
         started_at=datetime.now(UTC),
     )
-    job_repo = AsyncMock()
-    job_repo.start = AsyncMock(return_value=job)
-    job_repo.finish = AsyncMock()
-    job_repo.increment = AsyncMock()
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "list_with_pending_urls", AsyncMock(return_value=[]))
+    monkeypatch.setattr(CrawlDomain, "list_due", AsyncMock(return_value=[]))
+    monkeypatch.setattr(CrawlUrl, "count_pending_for_profile", AsyncMock(return_value=0))
+    monkeypatch.setattr(CrawlJob, "start", AsyncMock(return_value=job))
+    monkeypatch.setattr(CrawlJob, "finish", AsyncMock())
 
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=_DomainRepo(),
-        url_repo=_UrlRepo(),
-        job_repo=job_repo,
-    )
-
+    orchestrator = _orchestrator()
     await orchestrator.run_tick(
         crawl_profile_id="cr_test",
         trigger="manual",
@@ -440,15 +365,10 @@ async def test_fetch_and_index_url_enqueues_enrich_when_llm_enabled(
         fetch_transport="http",
     )
 
-    orchestrator = _orchestrator(
-        profile_bundle=profile_bundle,
-        domain_repo=AsyncMock(get=AsyncMock(return_value=domain)),
-        url_repo=AsyncMock(
-            mark_indexed=AsyncMock(),
-            mark_failed=AsyncMock(),
-        ),
-        job_repo=AsyncMock(increment=AsyncMock()),
-    )
+    monkeypatch.setattr(CrawlUrl, "mark_indexed", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "mark_failed", AsyncMock())
+
+    orchestrator = _orchestrator()
     orchestrator._fetch_service.fetch_markdown = AsyncMock(return_value=fetched)  # pyright: ignore[reportAttributeAccessIssue]
     orchestrator._ingest_service.ingest_page = AsyncMock(return_value="doc-1")  # pyright: ignore[reportAttributeAccessIssue]
 

@@ -3,7 +3,7 @@
  */
 
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { buildGraphWorkspaceSearch } from '../utils/graph-view-mode.js';
+import { buildGraphWorkspaceSearch } from '../_helpers/graph-view-mode.js';
 
 export function createCrmGraphLegacyRoutesEffect() {
     return async function crmGraphLegacyRoutesEffect(event, ctx) {

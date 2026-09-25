@@ -12,7 +12,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy.exc import IntegrityError
+from oxyde.exceptions import UniqueViolationError
 
 from apps.crm.constants_graph import (
     BELONGS_TO_RELATIONSHIP_TYPE,
@@ -21,15 +21,13 @@ from apps.crm.constants_graph import (
     PLATFORM_COMPANY_ID_ATTR,
     PLATFORM_NAMESPACE_ATTR,
 )
-from apps.crm.db.base import CRMDatabase
-from apps.crm.db.integrity import is_unique_violation
-from apps.crm.db.models import CompanyMapping, CRMEntity, EntityType, Relationship, RelationshipType
-from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-from apps.crm.db.repositories.namespace_template_repository import NamespaceTemplateRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
+from apps.crm.db.company_init_lock import crm_company_init_lock
+from apps.crm.models.company_mapping import CompanyMapping
+from apps.crm.models.crm_entity import CRMEntity, entity_namespace, index_crm_entity
+from apps.crm.models.entity_type import EntityType
+from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.system_templates import (
     COMMON_NAMESPACE_ANCHOR_TYPES,
@@ -38,10 +36,10 @@ from apps.crm.system_templates import (
     SYSTEM_RELATIONSHIP_TYPE_TEMPLATES,
     EntityTypeTemplate,
 )
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.user_repository import UserRepository
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.namespace import NamespaceService, ensure_personal_namespace_for_user
+from core.rag import BaseRAGProvider
 from core.types import require_json_object
 
 logger = get_logger(__name__)
@@ -62,28 +60,12 @@ class CompanyInitService:
 
     def __init__(
         self,
-        crm_db: CRMDatabase,
-        entity_type_repo: EntityTypeRepository,
-        relationship_type_repo: RelationshipTypeRepository,
-        namespace_template_repo: NamespaceTemplateRepository,
-        entity_repo: EntityRepository,
-        company_repo: CompanyRepository,
-        relationship_repo: RelationshipRepository,
-        company_mapping_repo: CompanyMappingRepository,
+        rag: BaseRAGProvider,
         namespace_service: NamespaceService,
-        user_repo: UserRepository,
         entity_access: CrmEntityAccessService,
     ) -> None:
-        self._crm_db: CRMDatabase = crm_db
-        self._entity_type_repo: EntityTypeRepository = entity_type_repo
-        self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
-        self._namespace_template_repo: NamespaceTemplateRepository = namespace_template_repo
-        self._entity_repo: EntityRepository = entity_repo
-        self._company_repo: CompanyRepository = company_repo
-        self._relationship_repo: RelationshipRepository = relationship_repo
-        self._company_mapping_repo: CompanyMappingRepository = company_mapping_repo
+        self._rag: BaseRAGProvider = rag
         self._namespace_service: NamespaceService = namespace_service
-        self._user_repo: UserRepository = user_repo
         self._entity_access: CrmEntityAccessService = entity_access
 
     async def initialize_company(self, company_id: str, *, reseed: bool = False) -> dict[str, int | bool]:
@@ -103,7 +85,7 @@ class CompanyInitService:
         personal namespace всех накопленных ``system.members`` и душит
         Postgres/OpenFGA → ERROR setup ``crm_client``.
         """
-        async with self._crm_db.advisory_lock("crm.company_init", company_id):
+        async with crm_company_init_lock(company_id):
             return await self._initialize_company_locked(company_id, reseed=reseed)
 
     async def _initialize_company_locked(
@@ -166,25 +148,27 @@ class CompanyInitService:
             if existing is not None:
                 if not reseed:
                     continue
-                await self._entity_type_repo.update_metadata(
+                await EntityType.update_fields(
                     template["type_id"],
                     namespace=init_namespace,
                     company_id=company_id,
-                    parent_type_id=template.get("parent_type_id"),
-                    name=template["name"],
-                    description=template.get("description"),
-                    prompt=template.get("prompt"),
-                    required_fields=template.get("required_fields", {}),
-                    optional_fields=template.get("optional_fields", {}),
-                    icon=template.get("icon"),
-                    color=template.get("color"),
-                    is_system=True,
-                    is_event=template.get("is_event", False),
-                    check_duplicates=template.get("check_duplicates", True),
-                    weight_coefficient=template.get("weight_coefficient", 1.0),
-                    is_context_anchor=template.get("is_context_anchor", False),
-                    is_voice_target=template.get("is_voice_target", False),
-                    extractable=template.get("extractable", True),
+                    patch={
+                        "parent_type_id": template.get("parent_type_id"),
+                        "name": template["name"],
+                        "description": template.get("description"),
+                        "prompt": template.get("prompt"),
+                        "required_fields": template.get("required_fields", {}),
+                        "optional_fields": template.get("optional_fields", {}),
+                        "icon": template.get("icon"),
+                        "color": template.get("color"),
+                        "is_system": True,
+                        "is_event": template.get("is_event", False),
+                        "check_duplicates": template.get("check_duplicates", True),
+                        "weight_coefficient": template.get("weight_coefficient", 1.0),
+                        "is_context_anchor": template.get("is_context_anchor", False),
+                        "is_voice_target": template.get("is_voice_target", False),
+                        "extractable": template.get("extractable", True),
+                    },
                 )
                 continue
             entity_type = EntityType(
@@ -209,11 +193,9 @@ class CompanyInitService:
                 created_at=datetime.now(UTC),
             )
             try:
-                _ = await self._entity_type_repo.create(entity_type)
+                _ = await EntityType.create(entity_type)
                 created_count += 1
-            except IntegrityError as exc:
-                if not is_unique_violation(exc):
-                    raise
+            except UniqueViolationError:
                 logger.info(
                     "crm.entitytype.worker.company.namespace",
                     type_id=template['type_id'],
@@ -251,7 +233,7 @@ class CompanyInitService:
                 existing.color = template.get("color")
                 existing.is_system = True
                 existing.weight_default = template.get("weight_default", 1.0)
-                _ = await self._relationship_type_repo.update(existing)
+                _ = await RelationshipType.update_by_company_and_type_id(existing)
                 continue
 
             rel_type = RelationshipType(
@@ -269,12 +251,14 @@ class CompanyInitService:
                 created_at=datetime.now(UTC),
             )
             try:
-                _ = await self._relationship_type_repo.update(rel_type)
+                _ = await RelationshipType.create(rel_type)
                 created_count += 1
-            except IntegrityError as exc:
-                if not is_unique_violation(exc):
-                    raise
-                logger.info("crm.relationshiptype.worker.company", type_id=template['type_id'], company=company_id)
+            except UniqueViolationError:
+                logger.info(
+                    "crm.relationshiptype.worker.company",
+                    type_id=template["type_id"],
+                    company_id=company_id,
+                )
 
         return created_count
 
@@ -292,8 +276,8 @@ class CompanyInitService:
                 if raw_crm_settings is not None
                 else None
             )
-            existing = await self._namespace_template_repo.get_by_template_id(
-                seed["template_id"], company_id=company_id
+            existing = await NamespaceTemplate.by_template_id(
+                company_id, seed["template_id"]
             )
             if existing is not None:
                 if not reseed:
@@ -303,33 +287,39 @@ class CompanyInitService:
                 existing.icon = seed.get("icon")
                 existing.is_system = True
                 existing.crm_settings = seed_crm_settings
-                existing = await self._namespace_template_repo.update(existing)
+                existing.updated_at = datetime.now(UTC)
+                existing = await existing.save(using="crm")
             else:
                 try:
-                    existing = await self._namespace_template_repo.create_template(
-                        template_id=seed["template_id"],
-                        name=seed["name"],
-                        description=seed.get("description"),
-                        icon=seed.get("icon"),
-                        company_id=company_id,
-                        is_system=True,
-                        crm_settings=seed_crm_settings,
+                    existing = await NamespaceTemplate.create(
+                        NamespaceTemplate(
+                            template_key=str(uuid.uuid4()),
+                            company_id=company_id,
+                            template_id=seed["template_id"],
+                            name=seed["name"],
+                            description=seed.get("description"),
+                            icon=seed.get("icon"),
+                            is_system=True,
+                            crm_settings=seed_crm_settings,
+                        )
                     )
                     created_count += 1
-                except IntegrityError as exc:
-                    if not is_unique_violation(exc):
-                        raise
-                    logger.info("crm.namespacetemplate.worker.company", template_id=seed['template_id'], company=company_id)
-                    existing = await self._namespace_template_repo.get_by_template_id(
-                        seed["template_id"], company_id=company_id
+                except UniqueViolationError:
+                    logger.info(
+                        "crm.namespacetemplate.worker.company",
+                        template_id=seed["template_id"],
+                        company_id=company_id,
+                    )
+                    existing = await NamespaceTemplate.by_template_id(
+                        company_id, seed["template_id"]
                     )
                     if existing is None:
                         raise RuntimeError(
-                            f"NamespaceTemplate {seed['template_id']!r} not found after IntegrityError for company={company_id!r}"
+                            f"NamespaceTemplate {seed['template_id']} not found after unique violation for company={company_id}"
                         )
 
             for item in seed["types"]:
-                _ = await self._namespace_template_repo.upsert_type(
+                _ = await NamespaceTemplateType.upsert_by_template_key_and_type_id(
                     template_key=existing.template_key,
                     type_id=item["type_id"],
                     parent_type_id=item.get("parent_type_id"),
@@ -350,14 +340,12 @@ class CompanyInitService:
 
         if reseed:
             for retired_id in sorted(RETIRED_NAMESPACE_TEMPLATE_IDS):
-                retired_row = await self._namespace_template_repo.get_by_template_id(
-                    retired_id,
-                    company_id=company_id,
+                retired_row = await NamespaceTemplate.by_template_id(
+                    company_id, retired_id
                 )
                 if retired_row is not None:
-                    _ = await self._namespace_template_repo.delete_template_with_types(
-                        retired_row.template_key,
-                    )
+                    _ = await NamespaceTemplateType.delete_by_template_key(retired_row.template_key)
+                    _ = await NamespaceTemplate.delete_by_id(retired_row.template_key)
 
         return created_count
 
@@ -371,19 +359,19 @@ class CompanyInitService:
         Возвращает:
             Список существующих типов компании
         """
-        return await self._entity_type_repo.load_all_entity_types_for_company(
+        return await EntityType.catalog(
             company_id=company_id,
-            catalog_only=False,
         )
 
     async def _check_existing_relationship_types(self, company_id: str) -> list[RelationshipType]:
-        return await self._relationship_type_repo.list_all_by_company(
-            company_id=company_id, include_system=True
-        )
+        return await RelationshipType.in_company(
+            company_id,
+            include_system=True,
+        ).order_by("type_id").all()
 
     async def _ensure_company_entity(self, company_id: str, *, reseed: bool) -> str:
         """Идемпотентно создает CRM-сущность для компании-тенанта."""
-        existing = await self._entity_repo.find_by_attribute(
+        existing = await CRMEntity.all_by_entity_type_and_attribute(
             entity_type=COMPANY_ENTITY_TYPE,
             attribute_key=PLATFORM_COMPANY_ID_ATTR,
             attribute_value=company_id,
@@ -394,7 +382,7 @@ class CompanyInitService:
                 await self._entity_access.sync_entity_created(existing[0])
             return existing[0].entity_id
 
-        company = await self._company_repo.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found: {company_id}")
 
@@ -409,12 +397,11 @@ class CompanyInitService:
             user_id=company.owner_user_id or company_id,
         )
         try:
-            _ = await self._entity_repo.create(entity)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
+            entity = await CRMEntity.create(entity)
+            await index_crm_entity(self._rag, entity, replace=False)
+        except UniqueViolationError:
             logger.info("crm.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            raced = await self._entity_repo.find_by_attribute(
+            raced = await CRMEntity.all_by_entity_type_and_attribute(
                 entity_type=COMPANY_ENTITY_TYPE,
                 attribute_key=PLATFORM_COMPANY_ID_ATTR,
                 attribute_value=company_id,
@@ -427,7 +414,9 @@ class CompanyInitService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            _ = await self._entity_repo.delete(entity.entity_id)
+            removed = await CRMEntity.take_by_id(entity.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
         logger.info("crm.company_init.company_entity", entity_id=entity.entity_id, company_id=company_id)
         return entity.entity_id
@@ -439,12 +428,12 @@ class CompanyInitService:
 
     async def _ensure_personal_namespaces_for_members(self, company_id: str) -> int:
         """Идемпотентно создаёт personal namespace каждому member компании."""
-        company = await self._company_repo.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found: {company_id}")
         ensured = 0
         for member_user_id in company.members:
-            user = await self._user_repo.get(member_user_id)
+            user = await User.get(member_user_id)
             if user is None:
                 logger.warning(
                     "company_init.personal_ns_skip_missing_user",
@@ -468,7 +457,7 @@ class CompanyInitService:
         reseed: bool = False,
     ) -> str:
         """Идемпотентно создает CRM-сущность для namespace."""
-        existing = await self._entity_repo.find_by_attribute(
+        existing = await CRMEntity.all_by_entity_type_and_attribute(
             entity_type=NAMESPACE_ENTITY_TYPE,
             attribute_key=PLATFORM_NAMESPACE_ATTR,
             attribute_value=namespace_name,
@@ -480,7 +469,7 @@ class CompanyInitService:
             return existing[0].entity_id
 
         company_entity_id = await self._ensure_company_entity(company_id, reseed=reseed)
-        company = await self._company_repo.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found: {company_id}")
 
@@ -495,12 +484,11 @@ class CompanyInitService:
             user_id=company.owner_user_id or company_id,
         )
         try:
-            _ = await self._entity_repo.create(entity)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
+            entity = await CRMEntity.create(entity)
+            await index_crm_entity(self._rag, entity, replace=False)
+        except UniqueViolationError:
             logger.info("crm.namespace.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            raced = await self._entity_repo.find_by_attribute(
+            raced = await CRMEntity.all_by_entity_type_and_attribute(
                 entity_type=NAMESPACE_ENTITY_TYPE,
                 attribute_key=PLATFORM_NAMESPACE_ATTR,
                 attribute_value=namespace_name,
@@ -513,7 +501,9 @@ class CompanyInitService:
         try:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
-            _ = await self._entity_repo.delete(entity.entity_id)
+            removed = await CRMEntity.take_by_id(entity.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
 
         rel = Relationship(
@@ -525,11 +515,13 @@ class CompanyInitService:
             relationship_type=BELONGS_TO_RELATIONSHIP_TYPE,
         )
         try:
-            _ = await self._relationship_repo.create(rel)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
-            logger.info("crm.relationship.worker.company", relationship_id=rel.relationship_id, company=company_id)
+            _ = await Relationship.create(rel)
+        except UniqueViolationError:
+            logger.info(
+                "crm.relationship.worker.company",
+                relationship_id=rel.relationship_id,
+                company_id=company_id,
+            )
 
         logger.info("crm.company_init.namespace_entity", entity_id=entity.entity_id, namespace=namespace_name)
         return entity.entity_id
@@ -537,42 +529,26 @@ class CompanyInitService:
     async def ensure_namespace_entity(self, company_id: str, namespace_name: str) -> str:
         return await self._ensure_namespace_entity(company_id, namespace_name, reseed=False)
 
-    async def _ensure_company_mapping(self, company_id: str, entity_id: str) -> None:
-        """Один ``company_mapping`` на компанию. UniqueViolation = параллельный worker уже записал."""
-        existing_mapping = await self._company_mapping_repo.get(company_id)
-        if existing_mapping is not None:
-            return
-        mapping = CompanyMapping(
-            company_id=company_id,
-            entity_id=entity_id,
-            is_owner=True,
-        )
-        try:
-            _ = await self._company_mapping_repo.create(mapping)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
-            logger.info("crm.companymapping.company.worker", company=company_id)
-
     async def _ensure_default_organization_entity(self, company_id: str, *, reseed: bool) -> None:
         """Организация по умолчанию для графа CRM и company_mapping (is_owner)."""
-        existing_mapping = await self._company_mapping_repo.get(company_id)
+        existing_mapping = await CompanyMapping.get(company_id)
         if existing_mapping is not None:
             return
 
-        entities, _, _ = await self._entity_repo.list_by_cursor(
+        page = await CRMEntity.cursor_page(
             entity_type="organization",
             namespace="default",
             company_id=company_id,
             limit=1,
         )
+        entities = page.items
         if len(entities) > 0:
             if reseed:
                 await self._entity_access.sync_entity_created(entities[0])
-            await self._ensure_company_mapping(company_id, entities[0].entity_id)
+            await CompanyMapping.ensure_for_company(company_id, entities[0].entity_id)
             return
 
-        company = await self._company_repo.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company not found: {company_id}")
 
@@ -587,17 +563,17 @@ class CompanyInitService:
             user_id=company.owner_user_id if company.owner_user_id else company_id,
         )
         try:
-            _ = await self._entity_repo.create(entity)
-        except IntegrityError as exc:
-            if not is_unique_violation(exc):
-                raise
+            entity = await CRMEntity.create(entity)
+            await index_crm_entity(self._rag, entity, replace=False)
+        except UniqueViolationError:
             logger.info("crm.organization.entity.worker.company", entity_id=entity.entity_id, company=company_id)
-            entities, _, _ = await self._entity_repo.list_by_cursor(
+            page = await CRMEntity.cursor_page(
                 entity_type="organization",
                 namespace="default",
                 company_id=company_id,
                 limit=1,
             )
+            entities = page.items
             if not entities:
                 raise
             entity = entities[0]
@@ -608,9 +584,14 @@ class CompanyInitService:
             await self._entity_access.sync_entity_created(entity)
         except Exception:
             if created_now:
-                _ = await self._entity_repo.delete(entity.entity_id)
+                removed = await CRMEntity.take_by_id(entity.entity_id)
+                if removed is not None:
+                    _ = await self._rag.delete_document(
+                        entity_namespace(removed),
+                        removed.entity_id,
+                    )
             raise
-        await self._ensure_company_mapping(company_id, entity.entity_id)
+        await CompanyMapping.ensure_for_company(company_id, entity.entity_id)
         logger.info(
             "crm.company.default_organization_created",
             entity_id=entity.entity_id,

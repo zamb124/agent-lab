@@ -1,241 +1,80 @@
 ---
-description: "Documents (apps/office): OnlyOffice BFF, /documents, platform_office"
+description: "Документы (apps/office): каталоги и placement по file_id, доступ и публичные ссылки, OnlyOffice BFF и AI, File Viewer, DataTable, catalog RAG. Читать при правке apps/office"
 globs:
   - "apps/office/**"
-  - "migrations/office/**"
   - "core/documents/viewer/**"
+  - "core/office/**"
   - "core/viz/**"
   - "core/frontend/static/lib/components/platform-document-viewer-host.js"
   - "core/frontend/static/lib/components/platform-data-table-host.js"
   - "core/frontend/static/lib/components/platform-onlyoffice-host.js"
   - "core/frontend/static/lib/components/platform-viz-host.js"
-  - "core/frontend/static/lib/components/platform-echarts-host.js"
-  - "core/frontend/static/lib/components/platform-mermaid-host.js"
   - "core/frontend/static/lib/components/platform-file-viewer-modal.js"
   - "core/frontend/static/assets/icons/files_icons/**"
 alwaysApply: false
 ---
-# Документы (`apps/office`, URL `/documents`)
 
-## Контракт сервиса
+# Документы
 
-- **Продукт в UI** — «Документы». Публичный HTTP-префикс `/documents` (`server.name = "documents"` в `services.office` после merge). Порт **8008**. Slug `onlyoffice` зарезервирован (`validate_slug` в `core/utils/subdomain.py`), чтобы не пересекаться с DS-хостом `onlyoffice.<домен>`.
-- **`apps/office`:** FastAPI BFF `/documents/api/v1/*`, Lit в `apps/office/ui/`, статика `/documents/ui/static`. `SERVER__OFFICE_SERVICE_URL` / `get_service_url("office")`. Health: `GET /health`, `GET /office/health` и алиас `GET /documents/health`. В dev-proxy первый сегмент `documents` мапится на `office`; префиксы OnlyOffice — на `server.document_server_dev_upstream_url` (`DevInterServiceProxyMiddleware`).
-- **Межсервисный вызов BFF:** `ServiceClient` → `"office"`, путь `/documents/api/v1/...`.
-- **Flows/Lara tools поверх BFF:** `ServiceClient("office")` → `/documents/api/v1/...` + `X-Platform-Namespace`. Skill tree: root `documents-platform` → `documents-catalog` (browse/find/read/link + catalog CRUD/members/ACL/public link rotate + catalog RAG admin), `document-workspace` (create_file/open/mutations + empty/rename/move/copy/trash), `diagrams-viz`, `knowledge-rag`. Code: `apps/flows/tools/documents/documents_catalog.py`, `documents.py`, `files.py`, `viz.py`. Methodology — `documents-platform/references/documents-employee-methodology.md`. OOS for tools: OnlyOffice iframe/JWT/callback/anonymous viewer, starred/recent UI prefs. Детали → **`agent_skills.mdc`**, **`tools.mdc`**.
-- **Данные:** `DATABASE__OFFICE_URL` → `migrations/office/`; placement в каталоге — `office_document_bindings` с **PK = `file_id`** (`company_id` + `namespace`). Публичный id документа = `file_id`. Второй id placement запрещён (CI `scripts/check_office_file_id_canon.py`). Исходники `code_agent`: path `Flows/{flow}/code_agent/{node_id}/…` (`FileSourceKind.CODE_AGENT_SOURCE`); ensure пустого дерева — `POST /documents/api/v1/catalogs/ensure-path` (маршрут **до** `/{catalog_id}`). Канон → **`guest_runtime.mdc`**.
-- **Lara context:** `file_id` + `catalog_id` + `document_type` из route/selection; без второго id. Секреты OnlyOffice и публичные URL — `OfficeIntegrationConfig` (`services.office.office` / ENV `OFFICE__*`).
-- **`OfficeContainer.file_repository`:** `FileRepository(storage=shared_storage)` напрямую, не `HTTPRepositoryProxy` на core, иначе анонимный `GET /documents/api/v1/office-download` без сессии не прочитает метаданные файла из БД.
-- **Auth routes:** префикс `/documents/*` в `route_config`. Эндпоинты `/documents/api/v1/office-download`, `/documents/api/v1/onlyoffice/callback`, `/documents/api/v1/public/*`, `/documents/api/v1/viewer-stream|viewer-frame|viewer-save` — **`anonymous`** (JWT в query / Bearer от Document Server). Остальной `/documents/api/v1/*` — session.
+Documents (`apps/office`) — каталог файлов компании поверх Files API и BFF к OnlyOffice. Продукт в UI — «Документы», публичный префикс `/documents` (`server.name = "documents"`), hop шины — `service_name` `office`. Байты, `FileRecord`, placement по `FileSourceKind` → `files.mdc`.
 
-## WS / REST / command
+## Модель
 
-Команды с сессией — `OFFICE_OPERATIONS` / `op_*` (`apps/office/realtime/`): REST (`apps/office/api/commands.py`, публичный префикс `/documents/api/v1`) и Centrifugo RPC `platform.event` зовут одну функцию. Hop шины — `POST /office/api/internal/realtime/command` (`service_name`, не `documents`). `office` в `COMMAND_WS_SERVICES`. UI-фабрики `transport: 'ws'`, payload = Pydantic snake_case. Namespace на WS — `PlatformEvent.meta.namespace` → `Context.active_namespace` → `require_namespace`. Кросс-сервисное дерево каталога — `@platform/lib/events/resources/office-catalog-items.resource.js` (`office/catalog_items` → `op_catalogs_items`). Browse для `platform.file_picker` — `@platform/lib/events/resources/office-documents-browse.resource.js` (`office/catalogs_list` / `office/documents_list` / `office/documents_search`). HTTP BFF-клонов во flows/wiki нет.
+- `office_document_catalogs` — дерево каталогов namespace (`parent_catalog_id`), настройки видимости и RAG-индекса каталога.
+- `office_document_bindings` — placement файла в каталоге, PK = `file_id` (+ `company_id`, `namespace`); публичный id документа — `file_id`, второй id запрещён; `document_type` (`word`/`cell`/`slide`) — только для JWT OnlyOffice.
+- Публичная ссылка — `link_enabled`, `link_token_hash`, `link_permission` ∈ `viewer`/`editor` на каталоге или binding; неверный permission — 400.
+- `OfficeIntegrationConfig` (`services.office.office`, ENV `OFFICE__*`): `document_server_public_url` (origin страницы `/documents`), `callback_public_base_url` (origin, с которого Document Server зовёт `office-download` и callback), `jwt_secret`.
 
-HTTP-only (allowlist): `office/document_upload` (chunked Files), `office/document_editor_config` (DocsAPI JWT/URL), `office/public_*` (анонимный preview), OnlyOffice callback/download, file/document sync, viewer-stream, data_tables. Live WS=REST identity — `tests/realtime/test_office_commands.py` (все `OFFICE_OPERATIONS`).
+## Инварианты
 
-Доменные ошибки границы — сразу `WsCommandError` (`require_company` / `require_namespace`). Not-found и conflict — сразу `WsCommandError`. HTTP-исключения в `op_*` запрещены. Списки — `ListResponse[T]` / `OffsetPage[T]`, без близнецов `*ListResponse`.
+1. Доступ с сессией — только OpenFGA (`office_catalog`, `office_document` наследует каталог через `catalog`, вложенность — `parent`; company-visible — `company#member` viewer) → `authorization.mdc`; `OfficeAccessService` пишет tuples, `owner_user_id` каталога — зеркало для восстановления.
+2. Анонимный доступ — token AuthN публичной ссылки, не FGA; публичный каталог показывает только документы с собственным `link_enabled=true`; URL — `{origin}/documents/p/{raw_token}`.
+3. Документ без каталога запрещён: create/upload в BFF требует явный `catalog_id`; корень namespace — только каталоги.
+4. Открытие любого файла платформы — `GET /documents/api/v1/files/{file_id}/editor-config` → `DocumentOpenConfigResponse` (`handler`, `capabilities`, typed payload) из реестра handlers (`core/documents/viewer/` + `apps/office/services/viewer_handlers/`, `DocumentViewerService`); UI — `this.openFile(...)` → модалка `platform.file_viewer` → `<platform-document-viewer-host>`.
+5. Handlers: OnlyOffice — office_doc/spreadsheet/presentation/pdf; `viz` — `<platform-viz-host>`; `data_table` — `<platform-data-table-host>`; image/media/text/binary — native hosts с JWT `typ=office_view` на `viewer-stream`/`viewer-frame`/`viewer-save`; OnlyOffice-eligible файл без интеграции — 503 `office_integration_not_configured`.
+6. `handler=text`: presentation `html`/`markdown`/`code` и `default_view_mode` (`resolve_text_presentation`); правка и сохранение — только в `source`; режим не персистится.
+7. Callback OnlyOffice (статусы 2 и 6) записывает S3 и `FileRecord.checksum`/`file_size`; идемпотентность — Redis `SET NX` 300 с по `file_id + status + url` (`apps/office/services/callback_dedupe.py`); для `viewer_scope="catalog"` — `notify_user` автору и push `office/document/saved`.
+8. DataTable: `DataTableService` (S3 SQLite + Redis lock `data_table:{file_id}:mutation`); команды — `office/data_tables/*_requested` (`apps/office/realtime/data_table_operations.py`), REST `/documents/api/v1/data-tables/{file_id}/...` (`CursorPage`, `limit` ≤ 200); SQL от UI и LLM — один SELECT/DML по whitelist пользовательских таблиц, DDL колонок — typed API, `ATTACH`/`PRAGMA` запрещены; экспорт — CSV/xlsx активной таблицы.
+9. Catalog RAG index (`OfficeCatalogRagIndexService`): флаг `rag_index_enabled`, RAG namespace `office-catalog-{catalog_id}`, индексация — `RagClient.index_file` по существующему `FileRecord` (`document_id = file_id`), только категории `RAG_INDEXABLE_FILE_CATEGORIES` (`core/rag/indexable.py`); деиндексация и rebuild — только при включённом индексе; инкрементальные хуки — upload, save, delete, move, copy, restore.
+10. OnlyOffice AI без BYOK: `aiSettings` (`core/office/ai_settings.py::build_onlyoffice_ai_settings`) указывают на `/flows/api/v1/agent/llm`, auth — editor JWT с claim `platformAi` (`company_id`, `user_id`, `namespace`, `file_id`, `viewer_scope`); публичная ссылка — без AI; Origin плагина обязателен в CORS `flows`; отдельный AI-стек в `/documents` запрещён.
+11. `editorConfig.customization` — `OfficeEditorCustomizationSettings` (компактные панели, тема `theme-platform-docs-light`); Developer-only `logo`/`customer`/white-label не отправляются (CE, LICENSE §7).
 
-## Unified access (OpenFGA + public link AuthN)
+## Контракты
 
-Authenticated ACL — **только OpenFGA** (`AuthzService` через `OfficeAccessService`). SQL member tables / `is_public` удалены. `owner_user_id` на catalog — **structural materialization** (dual-write с FGA owner) для backfill/recovery, **не** Check. Anonymous public links — отдельный AuthN (`link_token_hash`), не FGA (`user:*` на office types запрещён). Invalid `link_permission` → **400** (fail-closed; soft-coerce в `viewer` запрещён).
+- Команды — `OFFICE_OPERATIONS` (`apps/office/realtime/`), REST — `apps/office/api/commands.py`; namespace на WS — `PlatformEvent.meta.namespace` → `require_namespace`; списки — `ListResponse[T]`/`OffsetPage[T]`.
+- HTTP без команды (`COMMAND_WS_HTTP_ALLOWLIST`, `PROTOCOL_HANDLERS`): `office/document_upload` (chunked Files), `office/document_editor_config`, `office/public_*`, callback OnlyOffice, `office-download`, `viewer-stream`/`viewer-frame`/`viewer-save`, export/import DataTable.
+- Anonymous маршруты (`route_config`): `/documents/api/v1/office-download`, `/onlyoffice/callback`, `/public/*`, `/viewer-stream|viewer-frame|viewer-save`; остальной `/documents/api/v1/*` — сессия.
+- Общие фабрики для других сервисов: `office-catalog-items.resource.js` (`office/catalog_items`), `office-documents-browse.resource.js` (browse для `platform.file_picker`); BFF-клонов во flows и wiki нет.
+- Tools flows и Lara — `ServiceClient("office")` → `/documents/api/v1/...` + `X-Platform-Namespace` (`apps/flows/tools/documents/`) → `tools.mdc`, `agent_skills.mdc`.
+- `POST /documents/api/v1/catalogs/ensure-path` — дерево исходников `code_agent` (маршрут до `/{catalog_id}`) → `guest_runtime.mdc`.
 
-| Ось | Хранение | Смысл |
-|---|---|---|
-| Company-visible | FGA `office_catalog#viewer@company:{id}#member` | Вся компания в namespace (не internet-public); API `company_visible`; `company` tuple = tenancy |
-| Owner | FGA `owner` на `office_catalog` / `office_document` | Admin/share — `list_users(OWNER)` / `resolve_catalog_owner_user_id`. List item `owner_user_id` — SQL dual-write mirror после FGA `can_view` (не Check, не N+1 `list_users` на каждое дерево) |
-| Members | FGA `viewer`/`editor` user tuples | `members: [{user_id, relation}]` |
-| Parent TTU | FGA `parent` на catalog | Nested inherit viewer/editor |
-| Document↔catalog | FGA `catalog` на `office_document` | Document inherits catalog ACL |
-| Public link | `link_enabled`, `link_token_hash`, `link_permission ∈ {viewer, editor}` на catalog/document | Анонимный preview без регистрации |
+## Интеграции
 
-- **Effective access (authenticated):** `OfficeAccessService` → `authz.can_view` / `require_can_*` на `AuthzObject.office_catalog` / `office_document`.
-- **Writes:** `apps/office/authz/tuples.py` + `sync_catalog_*` / `sync_document_*` на create/move/delete; backfill `python -m apps.office.authz.backfill`.
-- **Public link AuthN:** `link_token_hash` / `link_enabled` / `link_permission` на catalog/binding; таблица `office_document_shares` удалена.
-- **Public catalog browse (restrictive):** в `GET /public/catalog/{token}/items` только документы с собственным `link_enabled=true`; public catalog не «раздаёт» файлы без link.
-- **User-facing URL:** `{origin}/documents/p/{raw_token}` (SPA `documents_public_preview`), не JSON `/shares/{token}`.
-- **REST:** `GET/PATCH /catalogs/{id}/access`, `/documents/{file_id}/access`, `POST …/access/link/rotate`; anonymous `GET /public/resolve/{token}`, `/public/open/{token}`, `/public/catalog/{token}/items`, `/public/catalog/{token}/files/{file_id}/open`.
-- **Legacy `POST /documents/{id}/shares`:** thin wrapper на enable/rotate public link → `public_url` с `/documents/p/…`.
-- **Viewer JWT:** `OfficeViewerStreamTokenClaims.public_link_token_hash` для anonymous `viewer-stream`/`viewer-save`; `DocumentOpenConfigResponse.download_url` — signed `office-download`.
-- **UI:** модалка `office.access` (`office-access-modal.js`), фабрики `events/resources/access.resource.js`; маршрут `/documents/p/:token` → `office-public-preview-page.js`.
+- Document Server: прод — субдомен `onlyoffice.<apex>` (Ingress `path: /`, Helm `60-external/onlyoffice.yaml`, JWT из `platform-secrets`); локально — `DevInterServiceProxy` на `server.document_server_dev_upstream_url` с `Host` браузера → `integrations.mdc`; `callback_public_base_url` в dev — `http://host.docker.internal:8008`.
+- Образ — `onlyoffice/documentserver` CE; slug компании `onlyoffice` зарезервирован (`validate_slug`).
 
-## OnlyOffice Document Server
+## UI
 
-- **Прод (MicroK8s):** DS на отдельном субдомене `onlyoffice.linnex.io` (primary) / `onlyoffice.humanitec.ru` (legacy), отдельный Ingress (`deploy/helm/agent-lab/templates/80-ingress/onlyoffice-ingress.yaml`), `path: /` покрывает все пути DS (web-apps, sdkjs, fonts, doc/co-editing, cache, downloadfile, версионные `/{semver}-{hex}/…`). Hostname — `values.ingress.onlyofficeHost`, TLS — cert-manager (`values.ingress.onlyofficeTlsSecretName`, `clusterIssuer letsencrypt-prod`). В `services.office.office.document_server_public_url` — тот же origin. После правки чарта/values: `make k8s-deploy`.
-- **Локально без K8s:** `DevInterServiceProxyMiddleware` проксирует на `document_server_dev_upstream_url` пути `/web-apps`, `/common`, `/cache`, `/fonts`, `/sdkjs`, `/downloadfile/...` и версионные `/{semver}-{hex}/...`. `Host` к DS — как у клиента (иначе подписанные `/cache/...` указывают на порт контейнера → CORS). `document_server_public_url` = origin страницы (например `http://localhost:8002`).
-- **Локально:** office на хосте, DS в Docker → `callback_public_base_url = http://host.docker.internal:8008` (DS ходит за файлом на этот URL); если office тоже в compose — `http://office:8008`.
-- **Образ:** `onlyoffice/documentserver:latest` (CE) — без `TRIAL DEVELOPER MODE`. В шапке остаётся брендинг ONLYOFFICE (LICENSE §7); Developer-only `customization.logo`/`customer` не используются. Compose dev/test: `docker-compose-dev.yaml` (8088, `extra_hosts: host.docker.internal:host-gateway`), `docker-compose-test.yaml` (18088). Прод: Deployment `onlyoffice` в Helm (`60-external/onlyoffice.yaml`); JWT — `JWT_ENABLED`, `JWT_SECRET = ONLYOFFICE_JWT_SECRET / OFFICE__JWT_SECRET` из Kubernetes Secret `platform-secrets`. Тема Paper Stage: ConfigMap `onlyoffice-theme` → `theme-platform-docs-light.json` (источник `deploy/helm/agent-lab/files/onlyoffice-theme.json`). DE/white-label — коммерческая лицензия Docs, не «флажок» в CE.
+1. `apps/office/ui/` по канону фабрик (`frontend.mdc`, `ui_factories.mdc`); i18n-бандл `documents`, `this.t(...)` без кросс-сервисных префиксов.
+2. Проводник `office-documents-explorer-page`: в каталоге — сначала дочерние каталоги, затем файлы в тех же `platform-file-row`/`platform-file-card`; клик — выбор, двойной клик — открыть; дерево каталогов и nav-rail — в `<office-sidebar>`; стили — токены `--documents-*` и `documents-explorer.styles.js`.
+3. Deep-link `/documents?namespace=<slug>&catalog_id=<id>` (`access=1` — модалка доступа); редактор — маршрут `document_editor` (`edit/:fileId`) с Paper Stage без sidebar.
+4. Список namespace — только `company_workspace` (`list_company_workspaces`).
+5. Иконки типов файлов — `core/frontend/static/assets/icons/files_icons/`, `<platform-icon file-icon name=...>` (`resolveFileIconBasename`, `FILE_ICON_ALIASES`).
+6. Realtime: push `office/document/saved` и `rag/document/status_updated` патчат slice `office/documents` по `file_id`.
 
-## OnlyOffice AI (из коробки)
+## Запреты
 
-Платформенный AI plugin без BYOK: Document Server `aiSettings` указывает на тот же OpenAI API, что и LinnexAgent.
+1. SQL-таблицы участников и `user:*` на типах office; soft-coerce `link_permission`.
+2. Второй id placement; auto-pick каталога и «Общие» по умолчанию при create.
+3. `upload_namespace_document`/`delete_namespace_document` для индекса каталога.
+4. Fallback OnlyOffice-файла на binary handler.
 
-| Слой | Канон |
-|---|---|
-| API | `/flows/api/v1/agent/llm` (+ addon `v1`); proxy unwrap — `…/v1/proxy` |
-| Auth | Editor JWT целиком (`Asc.plugin.info.jwt`) → multi-auth в `apps/flows/src/agent/llm_auth.py` |
-| Claims | Top-level `platformAi` в signed editor config: `company_id`, `user_id`, `namespace`, `file_id`, `viewer_scope` (`catalog`|`file`) (`OnlyOfficeViewerHandler`) |
-| Autostart | `editorConfig.plugins.autostart = ["asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}"]` для session editors; **public link** (`public_link_token_hash`) — без AI claims и без autostart |
-| Actions | Chat → `lara:documents`; Summarization/Translation/TextAnalyze/OCR/Vision → `auto`; ImageGeneration → `image-auto` |
-| DS infra | Helm `onlyoffice.ai.*` + ConfigMap `onlyoffice-ai` (fragment + entrypoint merge в `local.json`); compose монтирует те же files из `deploy/helm/agent-lab/files/` |
-| Builder | `core/office/ai_settings.py::build_onlyoffice_ai_settings`; fixture `tests/office/fixtures/onlyoffice_ai_settings.json` |
-| flows CORS | Browser Origin плагина (`ONLYOFFICE_AI_BROWSER_CORS_ORIGINS`: CDN + `onlyoffice.<brand>`) **обязателен** в CORS `flows`. Без него fetch на `/agent/llm` блокируется → UI «Ошибка: [provider]» без логов proxy |
+## Исключения
 
-Инвариант: ни один dropdown «Конфигурация ИИ» не пустой. Отдельный `/documents/.../oo-ai` stack **запрещён**.
+- Исключение: `POST /documents/{file_id}/shares` включает или ротирует публичную ссылку каталога-совместимым ответом `public_url`. `[без гейта]`
 
-## `editorConfig.customization` (CE Paper Stage)
+## Гейты
 
-`OfficeEditorCustomizationSettings` → `onlyoffice_editor_customization_payload`: `compactToolbar`, `compactHeader`, `uiTheme` (`theme-platform-docs-light`), `features.featuresTips`, `features.tabStyle` (`line`), `features.tabBackground` (`toolbar`). Theme JSON — [`deploy/helm/agent-lab/files/onlyoffice-theme.json`](deploy/helm/agent-lab/files/onlyoffice-theme.json), mount как `theme-platform-docs-light.json` на DS. Developer-only `logo`/`customer`/white-label `layout` **не** отправляются (CE + LICENSE §7: логотип ONLYOFFICE остаётся). UI оболочки редактора — immersive Paper Stage на `office-document-editor-page` (без sidebar).
-
-`OFFICE__DOCUMENT_SERVER_PUBLIC_URL` — публичный origin страницы с `/documents`. `OFFICE__CALLBACK_PUBLIC_BASE_URL` — origin, с которого DS вызывает `office-download` и `callback` (apex или `host.docker.internal:8008` в dev).
-
-## Что используем из DS / что не интегрировано
-
-**Используем:** viewer handler registry (`core/documents/viewer/` + `apps/office/services/viewer_handlers/` + `DocumentViewerService`); единый контракт `GET …/editor-config` → `DocumentOpenConfigResponse` (`handler` + `capabilities` + typed payload); UI shell `<platform-document-viewer-host>` (OnlyOffice → `platform-onlyoffice-host`; image/media/text/binary/viz/data_table → native Lit hosts); OnlyOffice для office_doc/spreadsheet/presentation/pdf (`OnlyOfficeViewerHandler`); **viz** (`FileCategory.VIZ`, `.viz`, MIME `application/vnd.platform.viz+json`) → `VizViewerHandler` + `<platform-viz-host>` (ECharts/Mermaid); **data_table** (`FileCategory.DATA_TABLE`, `.sqlite`, MIME `application/vnd.sqlite3`) → `DataTableViewerHandler` + `<platform-data-table-host>` (сетка + paging HTTP, SQLite не грузится в JS; `server_mutations=true`, `sync_on_close=false`); image/media/text/binary handlers + anonymous `viewer-stream`/`viewer-save`; upload любого файла с `file_category` из `core.files.types`; `onlyoffice_document_type` (`word|cell|slide`) только для OnlyOffice JWT; JWT на конфиг OnlyOffice (с `document.permissions`); callback (статусы 2 и 6); `office-download`; mutations gated by `capabilities.server_mutations`; sync/preview через capabilities matrix.
-
-**Намеренно вне BFF:** отдельный режим `mode: view` с разными `permissions` по ролям (кроме AI autostart/platformAi выше), forcesave как UX, Conversion API как сервис, embedded без нашего UI, мобильные SDK, co-editing вне выдачи нашего `editor-config` (co-edit идёт внутри DS при двух клиентах с одним `document.key`).
-
-## Глобальный File Viewer
-
-Файлы из любой части платформы открываются по `file_id`. Источник правды — shared `FileRecord`. Durable create через Files API автоматически создаёт `office_document_bindings` + дерево каталогов по `FileSourceKind` (см. **`files.mdc`**). Строка каталога нужна для explorer/AI namespace; open без binding остаётся возможен для legacy/exempt.
-
-Контракт:
-
-- UI: `this.openFile(fileOrId)` → `files.effect.js` → `GET /documents/api/v1/files/{file_id}/editor-config` → modal `platform.file_viewer`.
-- `<platform-file-viewer-modal>` рендерит `<platform-document-viewer-host>`; sync при закрытии только если `capabilities.sync_on_close`.
-- BFF: `viewer_scope="file"` + публичный id = `file_id`. Namespace для OnlyOffice AI: binding (`get_by_file_and_company`) → иначе `Context.active_namespace`; без namespace AI claims не выставляются (не 422).
-- OnlyOffice callback для `viewer_scope="file"` перезаписывает S3 + `FileRecord.checksum/file_size`.
-- Non-OnlyOffice: JWT `typ=office_view` на `viewer-stream`/`viewer-frame`; text edit — `viewer-save`.
-- OnlyOffice-eligible без configured integration → **503** `office_integration_not_configured` (не fallback на binary).
-
-### Text presentation subtypes
-
-`handler=text` остаётся единым; subtype задаёт `TextOpenPayload.presentation` + `default_view_mode` (`core/documents/viewer/text_presentation.py::resolve_text_presentation`):
-
-| presentation | default_view_mode | Preview surface | Raw |
-|---|---|---|---|
-| `html` | `preview` | sandbox iframe `srcdoc` | CodeMirror |
-| `markdown` | `preview` | `platform-markdown-editor` readonly `view-mode="preview"` (`.value` = MD) | CodeMirror |
-| `code` | `source` | — | CodeMirror / JSON editor |
-
-- Edit/save только в `view_mode=source` (preview не мутирует файл).
-- Type-actions Preview/Raw: в `platform.file_viewer` modal-header (группа `.header-type-actions`, визуально отделена от download/minimize/close) и в `document-editor-page` stage-bar.
-- Mode не персистится: каждый open → `default_view_mode`.
-
-### DataTable (`.sqlite`)
-
-Одна табличная база = один `FileRecord` (`file_id`). Handler `data_table`, не OnlyOffice `cell` и не `binary`.
-
-- Runtime: `core/data_tables/DataTableService` (S3 SQLite + Redis lock `data_table:{file_id}:mutation`). Команды владельца — `apps/office/realtime/data_table_operations.py` (`office/data_tables/{create,get,promote,table_create,column_add,rows_list,rows_insert,row_update,rows_delete,query}_requested` в `OFFICE_OPERATIONS`), REST-зеркало `GET/POST/PATCH /documents/api/v1/data-tables/{file_id}/...` (`CursorPage`, `limit` ≤ 200); байты — только REST (`GET .../export`, multipart `POST .../import`). Query `q` — `LIKE %q%` по text-колонкам (AND с точным `filter_column=`). Повторный `column_q=column:query` — AND `CAST(col AS TEXT) LIKE %query%` по указанным колонкам (UI-фильтр в `<th>`).
-- Host: `<platform-data-table-host>` владеет тулбаром (segmented SQL-таблицы / Данные·Схема / размер страницы; icon-only: новая таблица, колонка, строка, CSV, Excel; в строке сетки — удалить) и Excel-редактированием ячеек (`data-canon="inline-edit"`: клик/F2/печатный символ, commit на Enter/blur, Tab — соседняя колонка). Строка из input приводится к `column_type` до PATCH (пустое → `null`); ошибка типа — баннер в host, не full-page. Documents `interaction=edit`; Flow UI `interaction=view` (фильтры колонок, CSV/Excel, «Дальше»; bootstrap по `file-id` без viewer `openConfig`). Пустое имя таблицы/колонки — ошибка формы в host, не uncaught throw. Overlay `platform.file_viewer`: floating header только имя файла + min/max/close; sqlite-download скрыт (экспорт таблицы — CSV/xlsx с host).
-- Экспорт активной таблицы: `GET /documents/api/v1/data-tables/{file_id}/tables/{table_name}/export?format=csv|xlsx` (пользовательские колонки, без `row_id`; лимит `MAX_EXPORT_ROWS`). Хранение по-прежнему `.sqlite` FileRecord.
-- `DocumentOpenConfigResponse.download_url` для браузера — `browser_public_base_url` (host запроса, например `lol.lvh.me:8008`). `callback_public_base_url` (`host.docker.internal`) — только Document Server → office, не кнопка «Скачать».
-- PDP: `authz.require_can_view|edit(AuthzObject.office_document(file_id))`.
-- SQL от UI/LLM: один SELECT/DML, whitelist пользовательских таблиц; DDL колонок — typed API; `ATTACH`/`PRAGMA` запрещены. `sqlite3` в code-runner sandbox нет.
-
-## Иконки типов файлов
-
-- SVG: `core/frontend/static/assets/icons/files_icons/` (цветные иконки типов; не смешивать с UI-иконками в корне `assets/icons/`).
-- Slice `state.icon` (`core/frontend/static/lib/events/reducers/icon.js`); эффект `effects/icon.effect.js` грузит SVG по `ICON_EVENTS.UI_LOAD_REQUESTED` (UI) и `ICON_EVENTS.FILE_LOAD_REQUESTED` (файловые). Список basename — `FILE_ICON_BASE_NAMES`; алиасы расширений — `FILE_ICON_ALIASES` (`csv`/`xlsx` → `006-excel`, `db` → `034-database`, `sqlite`/`data_table` → `035-data-table`, `folder`/`catalog` → `033-folder`). Компонент `<platform-icon>` подписан на slice; `IconService` в сервисах нет. URL файловой иконки: `{basePath}/files_icons/{encodeURIComponent(basename)}.svg`.
-- `<platform-icon file-icon name="csv">` (алиас `word`/`pdf`/`xlsx`/`cell`/`db`/`sqlite`/`data_table`/`folder`/`catalog`) — `resolveFileIconBasename` → `FILE_LOAD_REQUESTED`; стили обводки UI к таким SVG не применяются. Гейт ассетов различает `file-icon` и UI: `tests/frontend_core/unit/utils/ui-icon-assets.spec.js`. `db` → `034-database`; `sqlite`/`data_table` → `035-data-table`; `folder`/`catalog` → `033-folder`. Монохромный UI `folder` (без `file-icon`) остаётся в дереве сайдбара.
-
-## UI канон
-
-UI сервиса — `apps/office/ui/`, полностью на event-канон фабрик (см. `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`).
-
-```
-app/office-app.js            # PlatformApp; static factories, defaultI18nNamespace='documents'
-events/resources/            # доменные фабрики (createAsyncOp/Resource/Form)
-components/                  # PlatformElement (office-sidebar, office-explorer-nav-rail, office-explorer-tree, office-catalog-context-menu, office-catalog-actions-menu, office-file-toolbar, office-file-details-panel, office-integration-banner)
-pages/                       # PlatformPage: documents-explorer-page, document-editor-page
-styles/                      # documents-explorer.styles.js — единые стили explorer (tree, toolbar, dropzone, bulk bar)
-modals/                      # PlatformFormModal + registerModalKind: namespace/catalog/document/RAG
-```
-
-Главный список документов — **file explorer** (`office-documents-explorer-page`): full-bleed layout (`platform-island padding="none"`, `content-no-scroll`), breadcrumbs в toolbar, single-row toolbar, dropzone empty state, таблица/сетка через `platform-file-table` / `platform-file-row` / `platform-file-card`. В режиме `explorerView === 'catalog'` содержимое открытой папки — **каталоги, затем файлы** в тех же row/card (цветная folder file-icon `033-folder`, `itemKind=catalog`, обязательный `sizeLabel`). Одинарный клик — выбор (`selectedCatalogId` / `selectedFileId`), двойной клик / kebab «Открыть» — войти в каталог или открыть файл. `.folder-rows` / `.folder-row` над таблицей запрещены. Checkbox bulk — только файлы. Details справа: выбранный файл, выбранный дочерний каталог или текущая папка — одна композиция (icon 48px, title, действия, meta-grid). Nav-rail (All/Recent/Starred/Deleted) и **дерево `office-explorer-tree`** (бесконечно вложенные каталоги через `parent_catalog_id`) — в `<office-sidebar>` на маршрутах `documents_list` / `documents_recent`, не во втором столбце страницы. Shared presentational компоненты — `core/frontend/static/lib/components/platform-file-*.js`. Стили explorer — только `--documents-*` из `tokens.css` + `documents-explorer.styles.js`; hardcoded light hex в `apps/office/ui/**` запрещён.
-
-Slice `office/documents` хранит `items`, `loadedCatalogIds`, `activeCatalogId`, `filterCatalogIds`, `viewMode`, `searchQuery`, `sortKey`, `sortDir`, `selectedFileId`, `selectedCatalogId`, `selectedFileIds`, `uploadJobs`, `explorerView`, `recentFileIds`, `starredFileIds`, `expandedCatalogIds` (persist `platformStorageKey('office', ...)`). `activeCatalogId === null` в режиме `catalog` — **корень namespace**: в главной панели только каталоги с пустым `parent_catalog_id`; `GET /documents` не вызывается. Файл без каталога запрещён (upload / «Новый документ» на корне disabled). «Все документы» в nav-rail: `setExplorerView('catalog')` + `setActiveCatalog({ catalogId: null })` + пустой filter; пункт подсвечен только в корне, внутри каталога active — пункт дерева. Breadcrumbs: первая крошка — корень (`nav.allDocuments`), дальше предки, текущий disabled. Список документов внутри каталога — `GET /documents?catalog_ids=` (файлы только в этом каталоге, не рекурсивно); дочерние каталоги — из `office/catalogs` по `parent_catalog_id`, не mixed DTO. Trash — soft delete (`DELETE /documents/{id}`), restore/permanent delete, `GET /documents/deleted`. Nested catalogs — `parent_catalog_id` на `office_document_catalogs` (дерево explorer + строки таблицы) + FGA `parent` TTU; настройки (`title`, `company_visible`, members) на каждом уровне через OpenFGA. Move/copy/share/preview/revisions/activity — BFF `/documents/api/v1/*`. Create empty/from-file в BFF — только явный `catalog_id`, без auto-pick и без `get_or_create_default("Общие")`.
-
-### Маршруты
-
-`createRouterEffect({ baseUrl: '/documents', routes })` в `OfficeApp.getServiceEffects()`:
-
-| `routeKey` | path | компонент |
-|---|---|---|
-| `documents_list` | `''` | `<office-documents-explorer-page>` |
-| `documents_recent` | `'recent'` | `<office-documents-explorer-page>` (initialExplorerView=recent) |
-| `documents_catalogs` | `'catalogs'` | legacy URL → redirect на `documents_list` (`office-catalogs-legacy-routes.effect.js`) |
-| `documents_public_preview` | `'p/:token'` | `<office-public-preview-page>` (без sidebar) |
-| `document_editor` | `'edit/:fileId'` | `<office-document-editor-page>` (Paper Stage) |
-
-Deep-link проводника: `/documents?namespace=<slug>&catalog_id=<id>` (`documentsExplorerPageQuery`). Query читается из `state.router.search`; если он ещё пустой — из `window.location.search` (полный заход на `/documents?…`). `namespace` переключает workspace (главнее last-used в сайдбаре и автовыбора первого workspace). `catalog_id` после list каталогов — `setActiveCatalog` + filter + expand предков. Нет `namespace` при непустом `catalog_id` → workspace `default`. Каталога нет в list после загрузки — toast `toast.catalog_open_failed`, не пустой корень. `access=1` открывает модалку доступа после выбора каталога.
-
-Открытие документа — `this.navigate('document_editor', { fileId })`, action «Открыть» в kebab/details panel, либо **двойной клик** по строке/карточке файла (`platform-file-row`/`platform-file-card` → событие `activate`). Одинарный клик (`open`) — только выбор для details panel. Каталог в таблице: клик — `setSelectedCatalog`, двойной клик / kebab «Открыть» — `setActiveCatalog` + `setFilterCatalogs`. Кнопки действий в details panel — сразу после title / missing-banner, не внизу панели. Открытие каталога с фильтром — `_documents.setActiveCatalog({catalogId}) + setFilterCatalogs({catalogIds:[catalogId]}) + navigate('documents_list')`.
-
-### Модалки
-
-Все наследуют `PlatformFormModal`, имеют `static modalKind = 'office.<entity>'`, регистрируются через `registerModalKind`. Открытие — `this.openModal('office.<kind>', { props })`. Закрытие — `closeAfterSave()`. `<modal .open=true>` или `document.body.appendChild` запрещены — рендерит `<platform-modal-stack>`.
-
-### Sidebar / namespace / редактор
-
-`<office-sidebar>`: `useResource('office/namespaces', autoload)` для NS-select; list API — только `company_workspace` (`NamespaceService.list_company_workspaces`), без personal/technical. `setPlatformNamespaceSelection(companyId, name)` пишет выбор через `UI_NAMESPACE_SELECT_REQUESTED`. В редакторе — кнопка «Назад». На `documents_list` и `documents_recent` — `office-explorer-nav-rail` (в т.ч. «Все документы») + `office-explorer-tree` (nested catalogs). Настройки каталога (edit, members, RAG, delete) — контекстное меню `office-catalog-context-menu` на пункте дерева (ПКМ или ⋮), модалки `office.catalog_edit` / `office.catalog_members` / `office.catalog_rag`. Создание и загрузка — в toolbar explorer (`office-file-toolbar`), не в sidebar.
-
-`document-editor-page` — Paper Stage: stage bar (back / title / save chip) + ambient; sidebar скрыт на `document_editor`. `useOp('office/document_editor_config').run({fileId})` → `/files/{file_id}/editor-config` → `<platform-document-viewer-host>`.
-
-`<platform-onlyoffice-host>` (`core/frontend/static/lib/components/platform-onlyoffice-host.js`, presentational): динамическая загрузка `{document_server_url}/web-apps/apps/api/documents/api.js` (singleton по origin), `new DocsAPI.DocEditor(placeholder.id, ...)`. `placeholder` создаётся в `document.body` (DocsAPI требует `getElementById`); `iframe[name="frameEditor"]` после появления переносится в `#oo-editor-target` shadow-host. `MutationObserver` на `document.body` до переноса + на `width/height` iframe; `ResizeObserver` на anchor + `:host`; `window.resize`; `document.scroll` capture. Запасной режим: `position: fixed` по `getBoundingClientRect(.editor-host)` (`z-index: 41`). `disconnectedCallback` убивает редактор и observers. Фатальные ошибки → `editor-error` с `{ code: 'bad_config'|'docs_api'|'ds_error'|'open_timeout', detail }`. Состояние dirty → DOM event `document-state` и postMessage для legacy embed. Page/modal переводит ошибку в i18n-сообщение и зовёт `this.toast`.
-
-Защита от мусорных URL — `_isPlausibleFileId` (запрет `/`, `..`, `.html?`) до запуска `documentEditorConfigOp`.
-
-### i18n
-
-Бандл `documents` (`core/i18n/translations/{ru,en}/documents.json`). `OfficeApp.defaultI18nNamespace = 'documents'`; везде `this.t('key', vars?)` без `this.i18n.t` и без кросс-сервисных префиксов (`crm:*` запрещён). Toast/Form-ключи и секции модалок парны в ru/en.
-
-### CI
-
-`office` входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`). `check_ui_factories.py` знает маппинг `office → documents` (allowed `/documents/api`), `check_command_rest_mirror.py` — тот же через `SERVICE_PUBLIC_NAME`. Цель: `make check-events-canon` exit 0 для office.
-
-### Primary-кнопки
-
-`apps/office/ui/index.html` на `body.platform-shell` задаёт `--platform-btn-primary-*` (градиент как у лого/заголовка): модалки порталятся в `document.body` и должны наследовать те же токены. Базовый `core/frontend/static/lib/components/platform-button.js` читает переменные с фолбэком на `--accent`.
-
-## Catalog RAG index
-
-Опциональная индексация документов каталога в RAG для семантического поиска по файлам каталога.
-
-- **Сервис:** `apps/office/services/catalog_rag_index_service.py::OfficeCatalogRagIndexService` (DI: `OfficeContainer.catalog_rag_index_service`).
-- **Флаг:** `office_document_catalogs.rag_index_enabled` (+ `rag_index_updated_at`, `rag_index_include_subcatalogs`).
-- **RAG namespace:** детерминированно `office-catalog-{catalog_id}` (отдельный namespace на каталог); создаётся через `RagClient.create_namespace` при enable.
-- **Индексация файла:** `RagClient.index_file` → TaskIQ `rag_index_document_s3` по существующему `FileRecord.s3_key` (`document_id = file_id`). **Не** `upload_namespace_document` и **не** `delete_namespace_document` (удаляет S3).
-- **Только RAG-indexable категории:** whitelist `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES` (`is_rag_indexable_file_category` / `effective_rag_file_category`). Skip до enqueue в `index_binding`; defense в `rag_index_document_s3`. Не indexable: `signature` (`.sig`/`.p7s`/`.sgn`), `archive`, `unknown`. В `GET …/rag-index/status` такие документы всегда в `totals.absent` (старые failed-статусы подписей не считаются ошибками).
-- **Деиндексация:** только если `rag_index_enabled` (как index); `RagClient.delete_document_index` (vector chunks + processing status). Каталог без RAG не ходит в RAG — иначе Check `platform_namespace:office-catalog-{id}` без tuples даёт 403 на move/delete.
-- **Rebuild:** `CatalogRagIndexService.rebuild_catalog` идёт по bindings каталога и ставит каждый документ через `RagClient.index_file` (владелец индекса — RAG); своих задач в очереди `rag` у office нет. Ответ — `task_id` последнего документа и `enqueued_documents`.
-- **REST:** `POST /documents/api/v1/catalogs/{catalog_id}/rag-index/{enable,disable,rebuild}`, `GET .../status` (`search_options` = catalog overrides, `platform_defaults` = `resolve_platform_search_options` для UI placeholders), `PATCH .../settings` (`include_subcatalogs`), `POST .../search` (семантический поиск по scope каталога; управление settings — только owner, search/status — access как у каталога).
-- **Per-file status:** `OfficeDocumentItem.rag_index_status` ∈ `ready|pending|failed|absent|null`. `null` если у каталога `rag_index_enabled=false`; иначе batch через `RagClient.get_documents_processing_statuses` → `POST /rag/api/v1/documents/statuses`. Totals в `GET …/rag-index/status` тоже через batch.
-- **Callback save path (as-is):** после записи S3 (статусы 2/6) — `notify_user` (toast) **и** domain push `office/document/saved` на `platform:events` (UI merge в `office/documents`). Не toast-only.
-- **UI realtime статуса:** push `rag/document/status_updated` → `office/documents` `extraReducer` (точечный patch `rag_index_status`). Push `office/document/saved` → тот же slice (patch `updated_at` / `title` по `file_id`). List SUCCEEDED — `_mergeDocumentItems` (тот же object-ref для неизменённых; add/remove по `file_id`). Soft-refresh того же catalog scope не обнуляет `items`. Рендер строк — `lit/directives/repeat` по `file_id`. i18n: `rag_index.*`, `details.ragIndex`.
-- **Scope subtree:** `rag_index_include_subcatalogs` расширяет search/status/rebuild на проиндексированные подкаталоги; RAG на потомках не включается автоматически.
-- **Поиск (backend):** `OfficeCatalogRagIndexService.search_catalog` → `RagClient.search` (один namespace) или `RagClient.global_search` (несколько); enrichment file_id/title/snippet, dedupe по `file_id`.
-- **Explorer UI (semantic):** `office-file-toolbar` — segment **Files | Semantic** в `.search-wrap`; режим `semantic` + непустой query заменяет list/grid на `office-catalog-semantic-search-results` (SERP). Semantic disabled, если в scope нет searchable namespace.
-- **Incremental hooks:** upload/empty/from-file, OnlyOffice callback save, soft/permanent delete, move, copy, restore; disable при удалении каталога с включённым индексом.
-
-## Callback OnlyOffice и уведомления
-
-После успешной записи в S3 (статусы 2/6): для `viewer_scope="catalog"` — `notify_user` автору (`created_by_user_id`), тип `NotificationType.OFFICE_DOCUMENT_SAVED`, `action_url = /documents/edit/{file_id}`, `service="office"`; для `viewer_scope="file"` — запись в shared `FileRecord` без уведомления каталога документов. **Идемпотентность:** Redis `SET NX` TTL 300с, ключ — `file_id + status + url` из callback (`apps/office/services/callback_dedupe.py`); повтор с тем же URL не перезаписывает S3 и возвращает `error: 0`. Регрессия — `tests/office/test_office_bff_integration.py`.
-
-## Тесты
-
-- `tests/office/access_helpers.py` — shared setup для unified access integration tests.
-- `tests/office/test_office_access_public.py` — anonymous public API: resolve/open/catalog browse, auth regression, negative tokens.
-- `tests/office/test_office_access_authenticated.py` — catalog/document `GET/PATCH/rotate` access, ACL, cross-axis company/members/link.
-- `tests/office/test_office_access_viewer.py` — anonymous `viewer-stream|viewer-frame|viewer-save`, `office-download` через real S3.
-- `tests/office/test_office_access_legacy.py` — legacy `POST /documents/{id}/shares` → `/documents/p/…`.
-- `tests/office/test_office_documents_service_coverage.py` — `company_visible`, список/деталь каталога, ACL приватного, company-visible в списке у коллеги, запрет `PATCH company_visible` не-владельцу, запрет members для company-visible.
-- `tests/office/unit/test_office_authz_model.py` — parent TTU / company / document inherits catalog.
-- OpenFGA обязателен: `tests/office/conftest.py` autouse `openfga_settings`.
-- `tests/office/test_office_bff_integration.py` — `POST /documents/empty` и upload через chunked Files API требуют явный `catalog_id`.
-- `tests/office/test_catalog_rag_index.py` — enable/disable/rebuild/status, nested semantic search, PATCH settings, upload → index enqueue, skip `.sig` (`rag_service` + `rag_worker`).
-- `tests/office/test_office_document_type.py` — типы / MIME.
-- `tests/office/test_onlyoffice_document_server.py` (`@pytest.mark.integration`) — `GET …/healthcheck` к `OFFICE__DOCUMENT_SERVER_PUBLIC_URL`. После `make test-up`: `OFFICE__DOCUMENT_SERVER_PUBLIC_URL=http://localhost:18088` (`tests/conftest.py setdefault`).
-- Редактор с `make app`: shell `http://localhost:8002`, DS в Docker на 8088, `conf.json` — `document_server_dev_upstream_url` + `document_server_public_url` как выше. Из dashboard ссылки на Документы ведут на `http://localhost:8002/documents` (через `DevInterServiceProxyMiddleware`), не на 8008 — иначе другой origin → 401 → `/login`.
-
-См. `configuration.mdc`, `migrations.mdc`, `integrations.mdc`, `frontend.mdc`, `testing.mdc`, `notifications.mdc`.
+- `scripts/check_office_file_id_canon.py` (`make lint`) — один публичный id `file_id`.
+- `scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py` (`make check-events-canon`) — office в `FACTORY_CANON_SERVICES`, маппинг `office → documents`.
+- `tests/realtime/test_office_commands.py` — WS ≡ REST всех `OFFICE_OPERATIONS`; `tests/office/` — доступ, публичные ссылки, viewer, callback, catalog RAG index (OpenFGA обязателен).

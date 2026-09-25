@@ -9,6 +9,7 @@ import pytest
 from aiohttp import web
 
 from apps.flows.src.models import Edge, FlowConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import RemoteFlowNode, create_node
 from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
@@ -53,37 +54,37 @@ class TestRemoteFlowNode:
             yield base_url
 
     @pytest.mark.asyncio
-    async def test_create_remote_flow_node(self, container):
+    async def test_create_remote_flow_node(self, di):
         """Создание RemoteFlowNode через create_node."""
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
             "branch_id": "custom",
         }
-        node = await create_node("remote_test", node_config, container=container)
+        node = await create_node("remote_test", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
 
         assert isinstance(node, RemoteFlowNode)
         assert node.url == "http://example.com:8080"
         assert node.branch_id == "custom"
 
     @pytest.mark.asyncio
-    async def test_create_remote_flow_node_default_skill(self, container):
+    async def test_create_remote_flow_node_default_skill(self, di):
         """branch_id по умолчанию = 'default'."""
         node_config = {
             "type": "remote_flow",
             "url": "http://example.com:8080",
         }
-        node = await create_node("remote_test", node_config, container=container)
+        node = await create_node("remote_test", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
 
         assert node.branch_id == "default"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_execution(self, remote_flow_server, container, unique_id):
+    async def test_remote_flow_node_execution(self, remote_flow_server, di, unique_id):
         """Выполнение RemoteFlowNode."""
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": remote_flow_server},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(
@@ -91,18 +92,18 @@ class TestRemoteFlowNode:
             unique_id=f"remote-node-{unique_id}",
             content="Hello from flow",
         )
-        result = await run_node(container=container, node=node, state=state)
+        result = await run_node(di=di, node=node, state=state)
 
         assert result["response"] == "Remote says: Hello from flow"
         assert result["remote_status"] == "completed"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_preserves_state(self, remote_flow_server, container, unique_id):
+    async def test_remote_flow_node_preserves_state(self, remote_flow_server, di, unique_id):
         """RemoteFlowNode сохраняет существующие поля state."""
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": remote_flow_server},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(
@@ -112,7 +113,7 @@ class TestRemoteFlowNode:
             existing_field="preserved",
             counter=42,
         )
-        result = await run_node(container=container, node=node, state=state)
+        result = await run_node(di=di, node=node, state=state)
 
         assert result["existing_field"] == "preserved"
         assert result["counter"] == 42
@@ -157,7 +158,7 @@ class TestFlowWithRemoteAgent:
             yield base_url
 
     @pytest.mark.asyncio
-    async def test_flow_with_single_remote_node(self, remote_flow_server, container, unique_id):
+    async def test_flow_with_single_remote_node(self, remote_flow_server, di, unique_id):
         """Agent с одной remote нодой."""
         config = FlowConfig(
             flow_id="remote_flow",
@@ -177,7 +178,7 @@ class TestFlowWithRemoteAgent:
         flow = await Flow.from_config(
             config=config.model_dump(mode="json"),
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -185,12 +186,12 @@ class TestFlowWithRemoteAgent:
             unique_id=f"remote-single-{unique_id}",
             content="Hello remote",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result["response"] == "Processed: Hello remote"
 
     @pytest.mark.asyncio
-    async def test_flow_with_inline_then_remote(self, remote_flow_server, container, unique_id):
+    async def test_flow_with_inline_then_remote(self, remote_flow_server, di, unique_id):
         """Agent: inline function → remote agent."""
         config = FlowConfig(
             flow_id="mixed_flow",
@@ -220,7 +221,7 @@ async def run(args, state):
         flow = await Flow.from_config(
             config=config.model_dump(mode="json"),
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -228,13 +229,13 @@ async def run(args, state):
             unique_id=f"remote-inline-{unique_id}",
             content="hello",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result["prepared"] is True
         assert result["response"] == "Processed: HELLO"
 
     @pytest.mark.asyncio
-    async def test_flow_remote_then_inline(self, remote_flow_server, container, unique_id):
+    async def test_flow_remote_then_inline(self, remote_flow_server, di, unique_id):
         """Agent: remote agent → inline function."""
         config = FlowConfig(
             flow_id="remote_first_flow",
@@ -264,7 +265,7 @@ async def run(args, state):
         flow = await Flow.from_config(
             config=config.model_dump(mode="json"),
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -272,7 +273,7 @@ async def run(args, state):
             unique_id=f"remote-first-{unique_id}",
             content="test",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result["final"] == "Final: Processed: test"
 
@@ -318,14 +319,14 @@ class TestRemoteAgentInputMapping:
 
     @pytest.mark.asyncio
     async def test_input_mapping_content_default(
-        self, mock_a2a_server_with_logging, container, unique_id
+        self, mock_a2a_server_with_logging, di, unique_id
     ):
         """По умолчанию берётся state['content']."""
         server = mock_a2a_server_with_logging
         node = RemoteFlowNode(
             node_id="remote",
             config={"type": "remote_flow", "url": server["url"]},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(
@@ -334,14 +335,14 @@ class TestRemoteAgentInputMapping:
             content="default content",
             other_field="ignored",
         )
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
 
         assert len(server["received"]) == 1
         assert server["received"][0] == "default content"
 
     @pytest.mark.asyncio
     async def test_input_mapping_state_field(
-        self, mock_a2a_server_with_logging, container, unique_id
+        self, mock_a2a_server_with_logging, di, unique_id
     ):
         """input_mapping с @state:field берёт указанное поле."""
         server = mock_a2a_server_with_logging
@@ -352,7 +353,7 @@ class TestRemoteAgentInputMapping:
                 "url": server["url"],
                 "input_mapping": {"content": "@state:my_query"}
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(
@@ -361,14 +362,14 @@ class TestRemoteAgentInputMapping:
             content="ignored",
             my_query="custom field value",
         )
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
 
         assert len(server["received"]) == 1
         assert server["received"][0] == "custom field value"
 
     @pytest.mark.asyncio
     async def test_input_mapping_state_field_json(
-        self, mock_a2a_server_with_logging, container, unique_id
+        self, mock_a2a_server_with_logging, di, unique_id
     ):
         """Если поле не строка - сериализуется в JSON."""
         server = mock_a2a_server_with_logging
@@ -379,7 +380,7 @@ class TestRemoteAgentInputMapping:
                 "url": server["url"],
                 "input_mapping": {"content": "@state:data"}
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(
@@ -388,7 +389,7 @@ class TestRemoteAgentInputMapping:
             content="ignored",
             data={"key": "value", "num": 42},
         )
-        await run_node(container=container, node=node, state=state)
+        await run_node(di=di, node=node, state=state)
 
         assert len(server["received"]) == 1
         received_data = json.loads(server["received"][0])
@@ -396,7 +397,7 @@ class TestRemoteAgentInputMapping:
 
     @pytest.mark.asyncio
     async def test_flow_with_input_mapping(
-        self, mock_a2a_server_with_logging, container, unique_id
+        self, mock_a2a_server_with_logging, di, unique_id
     ):
         """Agent где function пишет в state, а remote_flow читает через input_mapping."""
         server = mock_a2a_server_with_logging
@@ -431,7 +432,7 @@ async def run(args, state):
         flow = await Flow.from_config(
             config=config.model_dump(mode="json"),
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -439,7 +440,7 @@ async def run(args, state):
             unique_id=f"remote-input-flow-{unique_id}",
             content="original content",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # Проверяем что remote agent получил данные из prepared_query
         assert len(server["received"]) == 1

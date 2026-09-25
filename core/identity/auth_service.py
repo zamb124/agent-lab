@@ -6,17 +6,14 @@ import secrets
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
-
-from pydantic import TypeAdapter
-from sqlalchemy import text
 
 from core.auth.utils import compare_passwords
 from core.authz.group_sync import sync_user_groups
 from core.authz.service import AuthzService
+from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.config.models import AuthProviderConfig
-from core.db.storage import Storage
+from core.db.storage import SharedStorage
 from core.identity.base_provider import BaseAuthProvider
 from core.identity.providers.apple import AppleProvider
 from core.identity.providers.github import GithubProvider
@@ -38,15 +35,7 @@ from core.models.identity_models import (
 from core.platform_brand.resolver import resolve_auth_apple_client_id
 from core.utils.tokens import get_token_service
 
-if TYPE_CHECKING:
-    from core.db.repositories.auth_session_repository import AuthSessionRepository
-    from core.db.repositories.company_repository import CompanyRepository
-    from core.db.repositories.user_repository import UserRepository
-
 logger = get_logger(__name__)
-_USER_PROVIDER_RECORDS_ADAPTER: TypeAdapter[dict[str, UserProviderRecord]] = TypeAdapter(
-    dict[str, UserProviderRecord]
-)
 
 
 class AuthService:
@@ -57,34 +46,27 @@ class AuthService:
 
     def __init__(
         self,
-        user_repository: UserRepository,
-        company_repository: CompanyRepository,
-        auth_session_repository: AuthSessionRepository,
-        storage: Storage,
+        storage: SharedStorage,
+        redis: RedisClient,
         authz: AuthzService,
     ) -> None:
         """
         Аргументы:
-            user_repository: Репозиторий для работы с пользователями
-            company_repository: Репозиторий для работы с компаниями
-            auth_session_repository: Репозиторий для работы с сессиями
             authz: OpenFGA dual-write для User.groups
         """
-        self._user_repository: UserRepository = user_repository
-        self._company_repository: CompanyRepository = company_repository
-        self._auth_session_repository: AuthSessionRepository = auth_session_repository
-        self._storage: Storage = storage
+        self._storage: SharedStorage = storage
+        self._redis: RedisClient = redis
         self._authz: AuthzService = authz
         self._providers: dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
 
     async def _persist_user(self, user: User) -> bool:
-        previous = await self._user_repository.get(user.user_id)
+        previous = await User.get(user.user_id)
         previous_groups = list(previous.groups) if previous is not None else []
         previous_company_ids = (
             list(previous.companies.keys()) if previous is not None else []
         )
-        saved = await self._user_repository.set(user)
+        saved = await User.set(user)
         if saved:
             try:
                 await sync_user_groups(
@@ -97,9 +79,9 @@ class AuthService:
                 )
             except Exception:
                 if previous is not None:
-                    _ = await self._user_repository.set(previous)
+                    _ = await User.set(previous)
                 else:
-                    _ = await self._user_repository.delete(user.user_id)
+                    _ = await User.delete_by_id(user.user_id)
                 raise
         return saved
 
@@ -138,7 +120,8 @@ class AuthService:
 
     @property
     def storage_configured(self) -> bool:
-        return self._storage.session_factory is not None
+        db_url = self._storage.db_url
+        return db_url is not None and db_url != ""
 
     @property
     def provider_count(self) -> int:
@@ -210,7 +193,7 @@ class AuthService:
             result_cache = AuthCodeCache.model_validate_json(cached_result)
 
             user = await self.get_user(result_cache.user_id)
-            session = await self.get_session(result_cache.session_id)
+            session = await AuthSession.get(result_cache.session_id)
 
             if user and session:
                 return AuthResult(
@@ -313,7 +296,7 @@ class AuthService:
         if norm(email) != norm(demo.email):
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
-        matched = await self._user_repository.find_all_by_email_ci(demo.email)
+        matched = await User.find_all_by_email_ci(demo.email)
         if len(matched) != 1:
             return AuthResult(success=False, error_message="Неверные учётные данные")
 
@@ -345,7 +328,7 @@ class AuthService:
 
     async def get_user_by_session(self, session_id: str) -> User | None:
         """Получает пользователя по ID сессии"""
-        session = await self.get_session(session_id)
+        session = await AuthSession.get(session_id)
         if not session:
             return None
 
@@ -353,7 +336,7 @@ class AuthService:
 
     async def logout(self, session_id: str) -> bool:
         """Завершает сессию пользователя"""
-        await self._delete_session(session_id)
+        _ = await AuthSession.delete_by_id(session_id)
         logger.info("auth.session.ended", session_id=session_id)
         return True
 
@@ -374,7 +357,7 @@ class AuthService:
             created_at=datetime.now(timezone.utc),
         )
         key = f"auth_state:{state}"
-        _ = await self._storage.set(key, auth_state.model_dump_json(), ttl=600)
+        _ = await self._redis.set(key, auth_state.model_dump_json(), ttl=600)
 
     async def get_auth_state(self, state: str) -> AuthState | None:
         """Получает временное состояние авторизации"""
@@ -382,7 +365,7 @@ class AuthService:
             return None
 
         key = f"auth_state:{state}"
-        data = await self._storage.get(key)
+        data = await self._redis.getdel(key)
         if data is None:
             return None
         return AuthState.model_validate_json(data)
@@ -391,7 +374,7 @@ class AuthService:
         """Удаляет временное состояние авторизации"""
         if state:
             key = f"auth_state:{state}"
-            _ = await self._storage.delete(key)
+            _ = await self._redis.delete(key)
 
     async def _get_or_create_user(
         self, provider: AuthProvider, user_info: ProviderUserInfo
@@ -400,7 +383,7 @@ class AuthService:
         user_id = await self._find_user_by_provider_id(user_info.provider_user_id)
 
         if user_id:
-            user = await self._user_repository.get(user_id)
+            user = await User.get(user_id)
 
             if not user:
                 logger.error("auth.user.index_orphaned", user_id=user_id)
@@ -418,7 +401,7 @@ class AuthService:
                 raise ValueError(
                     f"Provider {provider.value} did not return email; cannot register a new user"
                 )
-            existing_list = await self._user_repository.find_all_by_email_ci(user_info.email)
+            existing_list = await User.find_all_by_email_ci(user_info.email)
             if len(existing_list) > 1:
                 raise ValueError(
                     f"Multiple users with email {user_info.email}: "
@@ -454,47 +437,24 @@ class AuthService:
             return user
 
     async def _find_user_by_provider_id(self, provider_user_id: str) -> str | None:
-        """Находит user_id по provider_user_id через индекс JSONB"""
-        async with self._storage.get_session() as session:
-            query = text("""
-                SELECT substring(key from 16) as user_id
-                FROM users
-                WHERE key LIKE 'user_providers:%'
-                AND value ? :provider_user_id
-                LIMIT 1
-            """)
-            result = await session.execute(query, {"provider_user_id": provider_user_id})
-            user_id = result.scalar_one_or_none()
-            if user_id is None:
-                return None
-            if not isinstance(user_id, str):
-                raise ValueError("provider user index returned non-string user_id")
-            return user_id
+        row = await UserProviderRecord.find_by_provider_user_id(provider_user_id)
+        if row is None:
+            return None
+        return row.user_id
 
     async def _add_user_provider(
         self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo
     ) -> None:
-        """Добавляет провайдера в список провайдеров пользователя"""
-        providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key, force_global=True)
-
-        if providers_data is not None:
-            providers = _USER_PROVIDER_RECORDS_ADAPTER.validate_json(providers_data)
-        else:
-            providers: dict[str, UserProviderRecord] = {}
-
-        providers[user_info.provider_user_id] = UserProviderRecord(
+        record = UserProviderRecord(
+            user_provider_id=f"{provider.value}:{user_info.provider_user_id}",
+            user_id=user_id,
+            provider_user_id=user_info.provider_user_id,
             provider_name=provider,
             email=user_info.email,
             avatar_url=user_info.avatar_url,
             metadata=user_info.raw_data,
         )
-
-        _ = await self._storage.set(
-            providers_key,
-            _USER_PROVIDER_RECORDS_ADAPTER.dump_json(providers).decode(),
-            force_global=True,
-        )
+        _ = await record.save()
 
     async def _update_provider_data(
         self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo
@@ -531,7 +491,7 @@ class AuthService:
 
     async def get_user(self, user_id: str) -> User | None:
         """Получает пользователя по ID"""
-        return await self._user_repository.get(user_id)
+        return await User.get(user_id)
 
     async def save_user(self, user: User) -> bool:
         """Сохраняет пользователя и dual-write User.groups в OpenFGA."""
@@ -539,7 +499,7 @@ class AuthService:
 
     async def get_company(self, company_id: str) -> Company | None:
         """Получает компанию по ID"""
-        return await self._company_repository.get(company_id)
+        return await Company.get(company_id)
 
     async def get_user_provider_info(
         self,
@@ -561,12 +521,10 @@ class AuthService:
         self, user_id: str
     ) -> dict[str, UserProviderRecord] | None:
         """Получает информацию о всех провайдерах пользователя"""
-        providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key)
-
-        if providers_data is None:
+        rows = await UserProviderRecord.list_by_user_id(user_id)
+        if not rows:
             return None
-        return _USER_PROVIDER_RECORDS_ADAPTER.validate_json(providers_data)
+        return {row.provider_user_id: row for row in rows}
 
     async def _create_session(
         self, user: User, provider: AuthProvider, access_token: str, refresh_token: str | None
@@ -588,15 +546,7 @@ class AuthService:
             expires_at=expires_at,
         )
 
-        _ = await self._auth_session_repository.set(session)
+        _ = await AuthSession.set(session)
 
         logger.info("auth.session.created", session_id=session_id, user_id=user.user_id)
         return session
-
-    async def get_session(self, session_id: str) -> AuthSession | None:
-        """Получает сессию по ID"""
-        return await self._auth_session_repository.get(session_id)
-
-    async def _delete_session(self, session_id: str) -> None:
-        """Удаляет сессию"""
-        _ = await self._auth_session_repository.delete(session_id)

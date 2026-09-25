@@ -22,13 +22,13 @@ from core.identity.flow_employee import (
     is_flow_employee_user_id,
     require_flow_employee_flow_id,
 )
-from core.models.identity_models import User, UserStatus
+from core.models.identity_models import Company, User, UserStatus
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 @pytest_asyncio.fixture
-async def employee_company(container, unique_id):
+async def employee_company(di, unique_id):
     """Изолированная компания для employee-провижна; teardown чистит запись."""
     company_id = f"emp_co_{unique_id}"
     curator_id = f"curator_{unique_id}"
@@ -38,9 +38,9 @@ async def employee_company(container, unique_id):
         owner_user_id=curator_id,
         members={curator_id: ["owner", "admin"]},
     )
-    await container.company_repository.set(company)
+    await Company.set(company)
     yield company_id, curator_id
-    await container.company_repository.delete(company_id)
+    await Company.delete_by_id(company_id)
 
 
 # --- Чистые хелперы (без БД) ---
@@ -124,13 +124,13 @@ def test_flow_employee_curator_user_ids_errors():
 # --- Provisioning (двусторонний) ---
 
 
-async def test_ensure_flow_employee_happy_two_sided(container, employee_company, unique_id):
+async def test_ensure_flow_employee_happy_two_sided(di, employee_company, unique_id):
     company_id, curator_id = employee_company
     flow_id = f"flow_{unique_id}"
     roles = ["member", "flow_operator"]
 
     user = await ensure_flow_employee(
-        container,
+        di.authz_service,
         flow_id=flow_id,
         company_id=company_id,
         name="AI Worker",
@@ -147,21 +147,21 @@ async def test_ensure_flow_employee_happy_two_sided(container, employee_company,
     assert user.avatar_url == "https://example.com/a.png"
     assert user.companies[company_id] == roles
 
-    stored = await container.user_repository.get(user.user_id)
+    stored = await User.get(user.user_id)
     assert stored is not None
     assert stored.companies[company_id] == roles
 
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     assert set(company.members[user.user_id]) == set(roles)
 
 
-async def test_ensure_flow_employee_idempotent_and_update(container, employee_company, unique_id):
+async def test_ensure_flow_employee_idempotent_and_update(di, employee_company, unique_id):
     company_id, curator_id = employee_company
     flow_id = f"flow_{unique_id}"
 
     first = await ensure_flow_employee(
-        container,
+        di.authz_service,
         flow_id=flow_id,
         company_id=company_id,
         name="Worker",
@@ -169,7 +169,7 @@ async def test_ensure_flow_employee_idempotent_and_update(container, employee_co
         curator_user_ids=[curator_id],
     )
     again = await ensure_flow_employee(
-        container,
+        di.authz_service,
         flow_id=flow_id,
         company_id=company_id,
         name="Worker Renamed",
@@ -181,86 +181,86 @@ async def test_ensure_flow_employee_idempotent_and_update(container, employee_co
     assert again.name == "Worker Renamed"
     assert again.avatar_url == "https://example.com/new.png"
 
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     # членство не дублируется
     assert company.members[again.user_id].count("member") == 1
 
 
-async def test_ensure_flow_employee_edge_errors(container, employee_company, unique_id):
+async def test_ensure_flow_employee_edge_errors(di, employee_company, unique_id):
     company_id, curator_id = employee_company
 
     with pytest.raises(ValueError):
         await ensure_flow_employee(
-            container, flow_id="  ", company_id=company_id, name="X",
+            di.authz_service, flow_id="  ", company_id=company_id, name="X",
             roles=["member"], curator_user_ids=[curator_id],
         )
     with pytest.raises(ValueError):
         await ensure_flow_employee(
-            container, flow_id=f"f_{unique_id}", company_id="  ", name="X",
+            di.authz_service, flow_id=f"f_{unique_id}", company_id="  ", name="X",
             roles=["member"], curator_user_ids=[curator_id],
         )
     with pytest.raises(ValueError):
         await ensure_flow_employee(
-            container, flow_id=f"f_{unique_id}", company_id=company_id, name="X",
+            di.authz_service, flow_id=f"f_{unique_id}", company_id=company_id, name="X",
             roles=["member"], curator_user_ids=[],
         )
     missing_company = f"missing_{uuid.uuid4().hex[:8]}"
     with pytest.raises(ValueError):
         await ensure_flow_employee(
-            container, flow_id=f"f_{unique_id}", company_id=missing_company, name="X",
+            di.authz_service, flow_id=f"f_{unique_id}", company_id=missing_company, name="X",
             roles=["member"], curator_user_ids=[curator_id],
         )
 
 
-async def test_deactivate_flow_employee(container, employee_company, unique_id):
+async def test_deactivate_flow_employee(di, employee_company, unique_id):
     company_id, curator_id = employee_company
     flow_id = f"flow_{unique_id}"
 
     user = await ensure_flow_employee(
-        container, flow_id=flow_id, company_id=company_id, name="Worker",
+        di.authz_service, flow_id=flow_id, company_id=company_id, name="Worker",
         roles=["member"], curator_user_ids=[curator_id],
     )
 
-    await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
+    await deactivate_flow_employee(di.authz_service, flow_id=flow_id, company_id=company_id)
 
-    stored = await container.user_repository.get(user.user_id)
+    stored = await User.get(user.user_id)
     assert stored is not None  # запись сохраняется для аудита
     assert stored.status == UserStatus.INACTIVE
     assert company_id not in stored.companies
 
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     assert user.user_id not in company.members
 
     # повторная деактивация идемпотентна
-    await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
+    await deactivate_flow_employee(di.authz_service, flow_id=flow_id, company_id=company_id)
 
 
-async def test_deactivate_missing_does_not_raise(container, employee_company, unique_id):
+async def test_deactivate_missing_does_not_raise(di, employee_company, unique_id):
     company_id, _ = employee_company
     await deactivate_flow_employee(
-        container, flow_id=f"never_{unique_id}", company_id=company_id
+        di.authz_service, flow_id=f"never_{unique_id}", company_id=company_id
     )
 
 
-async def test_reactivate_flow_employee(container, employee_company, unique_id):
+async def test_reactivate_flow_employee(di, employee_company, unique_id):
     company_id, curator_id = employee_company
     flow_id = f"flow_{unique_id}"
 
     await ensure_flow_employee(
-        container, flow_id=flow_id, company_id=company_id, name="Worker",
+        di.authz_service, flow_id=flow_id, company_id=company_id, name="Worker",
         roles=["member"], curator_user_ids=[curator_id],
     )
-    await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
+    await deactivate_flow_employee(di.authz_service, flow_id=flow_id, company_id=company_id)
 
     reactivated = await ensure_flow_employee(
-        container, flow_id=flow_id, company_id=company_id, name="Worker",
+        di.authz_service, flow_id=flow_id, company_id=company_id, name="Worker",
         roles=["member"], curator_user_ids=[curator_id],
     )
     assert reactivated.status == UserStatus.ACTIVE
     assert company_id in reactivated.companies
 
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     assert reactivated.user_id in company.members

@@ -1,25 +1,21 @@
 """Контракт RAGResource: поиск через HTTP RAG API (ASGI); add_document через pgvector в той же БД."""
 
+from apps.flows.di import FlowsDi
+
 import uuid
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
-from core.config import get_settings
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.rag.rag_resource import RAGResource
 from tests.fixtures.auth import service_client_asgi_auth_context
-
-
-@pytest.fixture
-def flow_container_for_rag() -> FlowContainer:
-    s = get_settings()
-    return FlowContainer(db_url=s.database.flows_url, shared_db_url=s.database.shared_url)
 
 
 @pytest.mark.asyncio
 async def test_search_via_rag_asgi_hybrid_channels(
     monkeypatch: pytest.MonkeyPatch,
-    flow_container_for_rag: FlowContainer,
+    di: FlowsDi,
     rag_app,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -38,11 +34,11 @@ async def test_search_via_rag_asgi_hybrid_channels(
             "channels": {"semantic": True, "lexical": True},
             "rerank": False,
         },
-        container=flow_container_for_rag,
+        namespace_service=di.namespace_service,
     )
     await r.add_document("d1", body, metadata={"category": "pets"}, name="n.txt")
 
-    prov = flow_container_for_rag.rag_repository.provider
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
     stored = await prov.get_document(ns, "d1")
     assert stored is not None
     assert stored.metadata["total_chunks"] == 1
@@ -57,10 +53,10 @@ async def test_search_via_rag_asgi_hybrid_channels(
 
 @pytest.mark.asyncio
 async def test_add_document_passes_metadata_through(
-    flow_container_for_rag: FlowContainer,
+    di: FlowsDi,
 ) -> None:
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"
-    r = RAGResource(namespace=ns, container=flow_container_for_rag)
+    r = RAGResource(namespace=ns, namespace_service=di.namespace_service)
     await r.add_document(
         "fid",
         "hello",
@@ -68,7 +64,7 @@ async def test_add_document_passes_metadata_through(
         name="n.txt",
     )
 
-    prov = flow_container_for_rag.rag_repository.provider
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
     stored = await prov.get_document(ns, "fid")
     assert stored is not None
     assert stored.metadata.get("tag") == "t"
@@ -77,12 +73,12 @@ async def test_add_document_passes_metadata_through(
 
 @pytest.mark.asyncio
 async def test_add_document_merges_index_profile_config(
-    flow_container_for_rag: FlowContainer,
+    di: FlowsDi,
 ) -> None:
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"
     r = RAGResource(
         namespace=ns,
-        container=flow_container_for_rag,
+        namespace_service=di.namespace_service,
         index_profile_config={"split": {"chunk_size": 256}},
     )
     await r.add_document(
@@ -93,7 +89,7 @@ async def test_add_document_merges_index_profile_config(
         index_profile_config={"lexical": {"enabled": True}},
     )
 
-    prov = flow_container_for_rag.rag_repository.provider
+    prov = get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)
     stored = await prov.get_document(ns, "fid")
     assert stored is not None
     ir = stored.metadata["indexing_runtime"]

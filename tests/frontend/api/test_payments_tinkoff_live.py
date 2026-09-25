@@ -54,8 +54,8 @@ pytestmark = [pytest.mark.network, pytest.mark.timeout(240)]
 _CANCELLED_STATUSES = frozenset({"CANCELED", "CANCELLED", "REFUNDED", "REVERSED"})
 
 
-async def _company_balance(frontend_container, company_id: str) -> float:
-    company = await frontend_container.company_repository.get(company_id)
+async def _company_balance(frontend_di, company_id: str) -> float:
+    company = await Company.get(company_id)
     assert company is not None
     return company.balance
 
@@ -166,7 +166,7 @@ class TestTinkoffLiveBillingGuards:
     async def test_topup_viewer_403(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         unique_id: str,
     ) -> None:
         company_id = f"tfv{unique_id}"
@@ -179,7 +179,7 @@ class TestTinkoffLiveBillingGuards:
             members={user_id: ["viewer"]},
             balance=0.0,
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
         user = User(
             user_id=user_id,
             name=f"Tinkoff viewer {unique_id}",
@@ -187,10 +187,9 @@ class TestTinkoffLiveBillingGuards:
             companies={company_id: ["viewer"]},
             active_company_id=company_id,
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=user_id,
             roles=["viewer"],
@@ -208,7 +207,7 @@ class TestTinkoffLiveBillingGuards:
         tinkoff_unreachable_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         unique_id: str,
-        frontend_container,
+        frontend_di,
     ) -> None:
         request = make_tinkoff_payment_request(
             transaction_id=f"{tinkoff_pay_company.company_id}:{unique_id}",
@@ -218,7 +217,7 @@ class TestTinkoffLiveBillingGuards:
         )
         with pytest.raises((ConnectError, ConnectTimeout, HTTPError, OSError)):
             await tinkoff_unreachable_provider.create_payment(request)
-        missing = await frontend_container.payment_service.get_transaction(
+        missing = await frontend_di.payment_service.get_transaction(
             request.transaction_id
         )
         assert missing is None
@@ -228,14 +227,14 @@ class TestTinkoffLiveCards:
     async def test_card_4300_confirmed_checkorder_credits_once(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await pay_tinkoff_demo_card(
             tinkoff_payment_page,
@@ -251,20 +250,20 @@ class TestTinkoffLiveCards:
         )
         assert bank_status == TINKOFF_CONFIRMED
         stats = await sync_company_payments(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         )
         assert stats.updated == 1
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == TINKOFF_LIVE_AMOUNT
         second = await sync_company_payments(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         )
         assert second.updated == 0
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == TINKOFF_LIVE_AMOUNT
-        txn = await frontend_container.payment_service.get_transaction(
+        txn = await frontend_di.payment_service.get_transaction(
             payment.transaction_id
         )
         assert txn is not None
@@ -274,14 +273,14 @@ class TestTinkoffLiveCards:
     async def test_card_test2_rejected_does_not_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await open_tinkoff_payment_form(tinkoff_payment_page, payment.payment_url)
         await fill_tinkoff_card(
@@ -298,22 +297,22 @@ class TestTinkoffLiveCards:
         paid = tinkoff_payment_page.get_by_text("Оплачено")
         assert await paid.count() == 0
         assert "payment=success" not in tinkoff_payment_page.url
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_card_4000_test7_receipt_paid(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await pay_tinkoff_demo_card(
             tinkoff_payment_page,
@@ -328,22 +327,22 @@ class TestTinkoffLiveCards:
             wanted=frozenset({TINKOFF_CONFIRMED}),
         )
         assert bank_status == TINKOFF_CONFIRMED
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == TINKOFF_LIVE_AMOUNT
 
     async def test_card_5000_cancel_after_confirm(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await pay_tinkoff_demo_card(
             tinkoff_payment_page,
@@ -375,56 +374,56 @@ class TestTinkoffLiveBreakage:
     async def test_close_after_payment_url_stays_pending(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await tinkoff_payment_page.goto(payment.payment_url, wait_until="load")
         await tinkoff_payment_page.close()
         status = await tinkoff_live_provider.check_payment_status(payment_id)
         assert status in TINKOFF_PENDING_STATUSES
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_open_form_without_card_does_not_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await open_tinkoff_payment_form(tinkoff_payment_page, payment.payment_url)
         await tinkoff_payment_page.close()
         status = await tinkoff_live_provider.check_payment_status(payment_id)
         assert status != TINKOFF_CONFIRMED
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_submit_then_close_does_not_guess(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await open_tinkoff_payment_form(tinkoff_payment_page, payment.payment_url)
         await fill_tinkoff_card(
@@ -438,9 +437,9 @@ class TestTinkoffLiveBreakage:
         status = await current_status_after_wait(
             tinkoff_live_provider, payment_id, timeout_sec=90.0
         )
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         balance = await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         )
         if status == TINKOFF_CONFIRMED:
             assert balance == TINKOFF_LIVE_AMOUNT
@@ -450,14 +449,14 @@ class TestTinkoffLiveBreakage:
     async def test_fail_url_or_close_transaction_not_success(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         await tinkoff_payment_page.goto(payment.payment_url, wait_until="load")
         await tinkoff_payment_page.close()
-        txn = await frontend_container.payment_service.get_transaction(
+        txn = await frontend_di.payment_service.get_transaction(
             payment.transaction_id
         )
         assert txn is not None
@@ -466,14 +465,14 @@ class TestTinkoffLiveBreakage:
     async def test_authorized_does_not_credit_until_confirmed(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         await pay_tinkoff_demo_card(
             tinkoff_payment_page,
@@ -485,25 +484,25 @@ class TestTinkoffLiveBreakage:
         status = await tinkoff_live_provider.check_payment_status(payment_id)
         if status == "AUTHORIZED":
             await sync_company_payments(
-                frontend_container, tinkoff_pay_company.company_id
+                frontend_di, tinkoff_pay_company.company_id
             )
             assert await _company_balance(
-                frontend_container, tinkoff_pay_company.company_id
+                frontend_di, tinkoff_pay_company.company_id
             ) == 0.0
         await poll_bank_status(
             tinkoff_live_provider,
             payment_id,
             wanted=frozenset({TINKOFF_CONFIRMED}),
         )
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == TINKOFF_LIVE_AMOUNT
 
     async def test_two_topups_pay_only_one(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         tinkoff_payment_page: Page,
@@ -511,7 +510,7 @@ class TestTinkoffLiveBreakage:
         first = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         second = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         first_payment_id = await require_external_payment_id(
-            frontend_container, first.transaction_id
+            frontend_di, first.transaction_id
         )
         await pay_tinkoff_demo_card(
             tinkoff_payment_page,
@@ -525,11 +524,11 @@ class TestTinkoffLiveBreakage:
             first_payment_id,
             wanted=frozenset({TINKOFF_CONFIRMED}),
         )
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == TINKOFF_LIVE_AMOUNT
-        unpaid = await frontend_container.payment_service.get_transaction(
+        unpaid = await frontend_di.payment_service.get_transaction(
             second.transaction_id
         )
         assert unpaid is not None
@@ -561,13 +560,13 @@ class TestTinkoffLiveBreakage:
     async def test_cancel_new_payment_zero_balance(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
     ) -> None:
         payment = await create_billing_topup(frontend_client, tinkoff_pay_company.token)
         payment_id = await require_external_payment_id(
-            frontend_container, payment.transaction_id
+            frontend_di, payment.transaction_id
         )
         cancel_status = await tinkoff_live_provider.cancel_payment(
             payment_id,
@@ -575,9 +574,9 @@ class TestTinkoffLiveBreakage:
             customer_email=tinkoff_pay_company.email,
         )
         assert cancel_status in (_CANCELLED_STATUSES | TINKOFF_FAILED_STATUSES)
-        await sync_company_payments(frontend_container, tinkoff_pay_company.company_id)
+        await sync_company_payments(frontend_di, tinkoff_pay_company.company_id)
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
 
@@ -585,7 +584,7 @@ class TestTinkoffLiveWebhookContract:
     async def test_non_json_is_not_200_with_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_pay_company: TinkoffLiveCompany,
     ) -> None:
         response = await frontend_client.post(
@@ -595,13 +594,13 @@ class TestTinkoffLiveWebhookContract:
         )
         assert response.status_code != 200
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_json_without_token_returns_ok_no_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
     ) -> None:
@@ -621,13 +620,13 @@ class TestTinkoffLiveWebhookContract:
         assert response.status_code == 200
         assert response.text == "OK"
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_wrong_token_returns_ok_no_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
     ) -> None:
@@ -646,13 +645,13 @@ class TestTinkoffLiveWebhookContract:
         assert response.status_code == 200
         assert response.text == "OK"
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_unknown_order_id_returns_ok_no_credit(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         tinkoff_live_provider: TinkoffProvider,
         tinkoff_pay_company: TinkoffLiveCompany,
         unique_id: str,
@@ -671,7 +670,7 @@ class TestTinkoffLiveWebhookContract:
         assert response.status_code == 200
         assert response.text == "OK"
         assert await _company_balance(
-            frontend_container, tinkoff_pay_company.company_id
+            frontend_di, tinkoff_pay_company.company_id
         ) == 0.0
 
     async def test_unknown_provider_404(self, frontend_client: AsyncClient) -> None:

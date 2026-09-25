@@ -23,7 +23,6 @@ Zero-Guess: при отсутствии активной компании в req
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
@@ -33,12 +32,11 @@ from core.ai.runtime import transcribe_audio_bytes
 from core.clients.speech_override import SpeechOverride
 from core.context import get_context
 from core.files.file_ref import FileRef
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
+from core.files.service import FilesService
 from core.files.types import FileCategory, ext_to_category, mime_to_category
 from core.logging import get_logger
-
-if TYPE_CHECKING:
-    from apps.flows.src.container_contracts import FlowRuntimeContainer
 
 logger = get_logger(__name__)
 
@@ -57,7 +55,7 @@ def _is_audio_item(item: FileRef) -> bool:
 
 async def _read_persisted_audio_bytes(
     *,
-    container: "FlowRuntimeContainer",
+    files_service: FilesService,
     file_id: str,
 ) -> tuple[bytes, str, str]:
     """
@@ -65,18 +63,20 @@ async def _read_persisted_audio_bytes(
 
     Возвращает (audio_bytes, original_name, content_type).
     """
-    record = await container.files_service.get(file_id)
-    s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-    try:
-        audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
-    finally:
-        await s3.close()
+    record = await files_service.get(file_id)
+    if record.company_id is None or record.company_id == "":
+        raise ValueError(f"file {file_id} has no company_id")
+    handle = await FileGate().open_record(
+        record,
+        SystemPrincipal(company_id=record.company_id),
+    )
+    audio_bytes = await handle.read_bytes()
     return audio_bytes, record.original_name, record.content_type
 
 
 async def transcribe_incoming_audio_files(
     *,
-    container: "FlowRuntimeContainer",
+    files_service: FilesService,
     files_data: list[FileRef],
     company_id: str,
     language: str | None = None,
@@ -116,7 +116,7 @@ async def transcribe_incoming_audio_files(
             )
             continue
         audio_bytes, original_name, content_type = await _read_persisted_audio_bytes(
-            container=container,
+            files_service=files_service,
             file_id=item.file_id,
         )
         result = await transcribe_audio_bytes(

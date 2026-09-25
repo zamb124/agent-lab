@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
 from apps.sync.realtime.operations import op_channels_create
 from core.context import require_active_company
@@ -15,7 +14,7 @@ from core.models.identity_models import User
 
 async def seed_test_namespace(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     unique_id: str,
     *,
     suffix: str = "",
@@ -30,7 +29,7 @@ async def seed_test_namespace(
             f"seed_test_namespace company mismatch: context={active_company_id} user={company_id}"
         )
     name = f"ns_{unique_id}_{suffix}" if suffix else f"ns_{unique_id}"
-    _ = await op_container.namespace_service.get_or_create(
+    _ = await sync_di.namespace_service.get_or_create(
         name,
         description=f"sync test namespace {unique_id}",
     )
@@ -39,13 +38,13 @@ async def seed_test_namespace(
 
 async def create_test_topic_channel(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     unique_id: str,
     *,
     name_suffix: str = "",
 ) -> str:
     """Создаёт topic-канал в новом namespace и возвращает channel_id."""
-    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=name_suffix or "ch")
+    namespace = await seed_test_namespace(op_user, sync_di, unique_id, suffix=name_suffix or "ch")
     ch = await op_channels_create(
         ChannelCreate(
             type=ChannelType.TOPIC,
@@ -54,6 +53,6 @@ async def create_test_topic_channel(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return ch.channel_id

@@ -34,18 +34,30 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _seed_public_flows_for_contract_company(auth_token: str) -> AsyncIterator[None]:
+async def _seed_public_flows_for_contract_company(auth_token: str, di) -> AsyncIterator[None]:
     """Public flows (lara) в company токена — без чтения/фолбека на system."""
-    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
     yield
 
 
-def _assert_openai_error_envelope(body: object, *, status_code: int) -> None:
+def _openai_error_type(status_code: int) -> str:
+    if status_code == 401:
+        return "authentication_error"
+    if status_code == 403:
+        return "permission_error"
+    if status_code == 429:
+        return "rate_limit_error"
+    if status_code >= 500:
+        return "api_error"
+    return "invalid_request_error"
+
+
+def _assert_openai_error_envelope(body: object, *, status_code: int, code: str) -> None:
     payload = require_json_object(body, "llm_proxy.error")
     error = require_json_object(payload.get("error"), "llm_proxy.error.error")
     assert isinstance(error.get("message"), str) and error["message"]
-    assert isinstance(error.get("type"), str) and error["type"]
-    assert error.get("code") == str(status_code)
+    assert error.get("type") == _openai_error_type(status_code)
+    assert error.get("code") == code
 
 
 def _parse_sse_chunks(text: str) -> list[JsonObject]:
@@ -247,7 +259,11 @@ async def test_contract_auth_matrix_device_oo_invalid_revoked(
         headers={"Authorization": "Bearer not-a-valid-token"},
     )
     assert invalid.status_code == 401
-    _assert_openai_error_envelope(invalid.json(), status_code=401)
+    _assert_openai_error_envelope(
+        invalid.json(),
+        status_code=401,
+        code="llm_proxy_token_invalid",
+    )
 
     device_id, device_token = await pair_and_register_device(
         agent_frontend_http_client,
@@ -268,13 +284,18 @@ async def test_contract_auth_matrix_device_oo_invalid_revoked(
     assert oo_ok.status_code == 200
 
     revoke = await agent_frontend_http_client.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
-    assert revoke.status_code == 204
+    assert revoke.status_code == 200
+    assert revoke.json() == {"device_id": device_id, "revoked": True}
     revoked = await flows_client_http.get(
         LLM_MODELS_PATH,
         headers={"Authorization": f"Bearer {device_token}"},
     )
     assert revoked.status_code == 401
-    _assert_openai_error_envelope(revoked.json(), status_code=401)
+    _assert_openai_error_envelope(
+        revoked.json(),
+        status_code=401,
+        code="device_token_revoked",
+    )
 
 
 async def test_contract_routing_unknown_lara_and_image_auto_on_chat(
@@ -303,7 +324,11 @@ async def test_contract_routing_unknown_lara_and_image_auto_on_chat(
         },
     )
     assert unknown_lara.status_code == 400
-    _assert_openai_error_envelope(unknown_lara.json(), status_code=400)
+    _assert_openai_error_envelope(
+        unknown_lara.json(),
+        status_code=400,
+        code="agent_llm_model_not_allowed",
+    )
 
     image_on_chat = await flows_client_http.post(
         LLM_CHAT_COMPLETIONS_PATH,
@@ -315,7 +340,11 @@ async def test_contract_routing_unknown_lara_and_image_auto_on_chat(
         },
     )
     assert image_on_chat.status_code == 400
-    _assert_openai_error_envelope(image_on_chat.json(), status_code=400)
+    _assert_openai_error_envelope(
+        image_on_chat.json(),
+        status_code=400,
+        code="image_auto_wrong_endpoint",
+    )
 
     images_wrong_model = await flows_client_http.post(
         LLM_IMAGES_GENERATIONS_PATH,
@@ -323,7 +352,11 @@ async def test_contract_routing_unknown_lara_and_image_auto_on_chat(
         json={"model": "auto", "prompt": "a cat"},
     )
     assert images_wrong_model.status_code == 400
-    _assert_openai_error_envelope(images_wrong_model.json(), status_code=400)
+    _assert_openai_error_envelope(
+        images_wrong_model.json(),
+        status_code=400,
+        code="image_gen_model_invalid",
+    )
 
 
 async def test_contract_onlyoffice_proxy_unwrap_models(

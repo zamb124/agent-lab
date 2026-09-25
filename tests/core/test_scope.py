@@ -25,7 +25,7 @@ def test_side_effect_test_scope_appends_kind() -> None:
 
 
 def test_side_effect_test_scope_rejects_colon_in_kind() -> None:
-    with pytest.raises(ValueError, match="не должен содержать"):
+    with pytest.raises(ValueError, match="must not contain"):
         _ = side_effect_test_scope("test_deadbeef", "crm:summary")
 
 

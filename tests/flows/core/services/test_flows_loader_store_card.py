@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
 
 
@@ -15,13 +14,11 @@ def _repo_root() -> Path:
 
 
 @pytest.mark.asyncio
-async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
+async def test_landing_demo_bundles_store_card_image_in_storage(app, di) -> None:
     """Демо-лендинг bundles: JPEG рядом с flow.json → store_card_image_url и запись файла в БД/S3."""
     _ = app
-    container = get_container()
     await load_tools_to_db(
-        container.tool_repository,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
 
     bundles_dir = _repo_root() / "apps" / "flows" / "bundles"
@@ -29,11 +26,8 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
 
     loader = FlowsLoader(
         bundles_dir=bundles_dir,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=registry_path,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     loader._target_company_id = "system"
 
@@ -53,7 +47,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
 
         file_id = url.rstrip("/").split("/")[-1]
         assert file_id.startswith("file_")
-        record = await container.files_service.get(file_id)
+        record = await di.files_service.get(file_id)
         assert record is not None
         assert record.content_type.startswith("image/")
         assert record.is_public is True
@@ -61,19 +55,15 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_store_card_image_https_passthrough(app) -> None:
+async def test_resolve_store_card_image_https_passthrough(app, di) -> None:
     """Строка store_card_image с https:// не проходит повторную загрузку."""
     _ = app
-    container = get_container()
     bundles_dir = _repo_root() / "apps" / "flows" / "bundles"
     registry_path = _repo_root() / "apps" / "flows" / "registry.yaml"
     loader = FlowsLoader(
         bundles_dir=bundles_dir,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=registry_path,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     loader._target_company_id = "system"
 

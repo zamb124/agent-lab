@@ -7,7 +7,7 @@ import uuid
 import pytest
 from taskiq import InMemoryBroker
 
-from apps.platform_tasks.wiring import all_queues, wire_all, wire_brokers, wire_worker
+from apps.worker_manifest import all_queues, wire_all, wire_brokers, wire_worker
 from core.tasks import (
     TaskPriority,
     TaskSpec,
@@ -37,7 +37,7 @@ def test_declare_task_rejects_non_snake_case() -> None:
 
 
 def test_declare_task_rejects_empty_queue() -> None:
-    with pytest.raises(ValueError, match="queue обязателен"):
+    with pytest.raises(ValueError, match="queue is required"):
         _ = declare_task(_unique("empty_queue_task"), queue="  ")
 
 
@@ -52,12 +52,12 @@ def test_declare_task_idempotent_same_spec() -> None:
 def test_declare_task_conflict_raises() -> None:
     name = _unique("conflict_task")
     _ = declare_task(name, queue="idle", scheduled=False)
-    with pytest.raises(ValueError, match="уже объявлена иначе"):
+    with pytest.raises(ValueError, match="already declared differently"):
         _ = declare_task(name, queue="idle", scheduled=True)
 
 
 def test_get_task_spec_unknown_raises() -> None:
-    with pytest.raises(ValueError, match="не объявлена"):
+    with pytest.raises(ValueError, match="is not declared"):
         _ = get_task_spec(_unique("missing_task"))
 
 
@@ -186,7 +186,7 @@ async def test_enqueue_sets_taskiq_task_id(
 
 @pytest.mark.asyncio
 async def test_enqueue_rejects_blank_taskiq_task_id() -> None:
-    with pytest.raises(ValueError, match="taskiq_task_id пустой"):
+    with pytest.raises(ValueError, match="taskiq_task_id is empty"):
         _ = await enqueue("unused_task_never_resolved", taskiq_task_id="   ")
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from apps.platform_tasks.wiring import all_queues, wire_all
+from apps.worker_manifest import all_queues, wire_all
 from core.tasks import all_task_specs, registered_queue_brokers, scheduled_task_specs
 
 pytestmark = pytest.mark.real_taskiq

@@ -1,6 +1,9 @@
 """Provision flow-сотрудника в shared/flows БД для интеграционных тестов."""
 
+
 from __future__ import annotations
+
+from apps.flows.di import FlowsDi
 
 from apps.flows.src.models import Edge, FlowConfig, FlowEmployeeConfig
 from core.identity.flow_employee import (
@@ -8,18 +11,17 @@ from core.identity.flow_employee import (
     ensure_flow_employee,
     flow_employee_user_id,
 )
+from core.models.identity_models import User
 
 
 async def provision_flow_employee_for_tests(
     *,
+    di: FlowsDi,
     flow_id: str,
     curator_user_id: str,
     company_id: str = "system",
 ) -> str:
     """Сидит минимальный flow + сотрудника; возвращает ``flow_employee_user_id``."""
-    from apps.flows.src.container import get_container
-
-    container = get_container()
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=f"Test flow {flow_id}",
@@ -37,14 +39,14 @@ async def provision_flow_employee_for_tests(
             curator_user_ids=[curator_user_id],
         ),
     )
-    _ = await container.flow_repository.set(flow_config)
-    await container.flow_access_service.sync_flow_saved(
+    _ = await FlowConfig.create_version(flow_config)
+    await di.flow_access_service.sync_flow_saved(
         flow_config,
         company_id=company_id,
         owner_user_id=curator_user_id,
     )
     _ = await ensure_flow_employee(
-        container,
+        di.authz_service,
         flow_id=flow_id,
         company_id=company_id,
         name=f"AI Worker {flow_id}",
@@ -56,19 +58,17 @@ async def provision_flow_employee_for_tests(
 
 async def cleanup_flow_employee_for_tests(
     *,
+    di: FlowsDi,
     flow_id: str,
     company_id: str = "system",
 ) -> None:
-    from apps.flows.src.container import get_container
-
-    container = get_container()
-    await deactivate_flow_employee(container, flow_id=flow_id, company_id=company_id)
+    await deactivate_flow_employee(di.authz_service, flow_id=flow_id, company_id=company_id)
     emp_id = flow_employee_user_id(flow_id)
-    _ = await container.user_repository.delete(emp_id)
-    await container.flow_access_service.sync_flow_deleted(
+    _ = await User.delete_by_id(emp_id)
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id=company_id, branch_ids=[]
     )
-    _ = await container.flow_repository.delete(flow_id)
+    _ = await FlowConfig.delete_by_flow_id(flow_id)
 
 
 __all__ = [

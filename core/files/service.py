@@ -5,17 +5,18 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from core.authz.service import AuthzService
 from core.config import get_settings
 from core.context import require_active_company, require_context
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE, normalize_data_table_filename
 from core.documents.placement import DocsBindResult, DocsPlacement
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind
-from core.files.file_repository import FileRepository
 from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import FilePrincipal
 from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
-from core.files.s3_client import S3ClientFactory
 from core.files.storage import FileStorage, retention_fields_from_spec
 from core.files.types import FileCategory, ext_to_category
 from core.files.urls import normalize_files_route_segment
@@ -33,13 +34,12 @@ def _source_kind_metadata_value(source_kind: FileSourceKind | str) -> str:
 class FilesService:
     def __init__(
         self,
-        file_repository: FileRepository,
         *,
         files_route_segment: str,
         rag_index_hook: RagIndexHook | None = None,
         docs_bind_hook: DocsBindHook | None = None,
     ) -> None:
-        self._storage: FileStorage = FileStorage(file_repository=file_repository)
+        self._storage: FileStorage = FileStorage()
         self._files_route_segment: str = normalize_files_route_segment(files_route_segment)
         self._rag_index_hook: RagIndexHook | None = rag_index_hook
         self._docs_bind_hook: DocsBindHook | None = docs_bind_hook
@@ -60,7 +60,7 @@ class FilesService:
         route_segment: str | None = None,
     ) -> FileRecord:
         settings = get_settings()
-        if not settings.s3.enabled or not settings.s3.default_bucket:
+        if not settings.s3.enabled:
             raise RuntimeError("S3 is not configured")
 
         context = require_context()
@@ -82,6 +82,7 @@ class FilesService:
 
         metadata: JsonObject = dict(spec.metadata) if spec.metadata else {}
         metadata["source_kind"] = _source_kind_metadata_value(spec.source_kind)
+        metadata["source_ref"] = spec.source_ref.model_dump(exclude_none=True)
 
         file_record = await self._storage.upload_bytes(
             data=data,
@@ -96,6 +97,7 @@ class FilesService:
             tags=spec.tags,
             content_sha256_hex=content_sha256_hex,
             route_segment=self._resolve_route_segment(route_segment),
+            source_kind=FileSourceKind(spec.source_kind),
         )
 
         await self._run_post_create(file_record, spec, post_create)
@@ -107,7 +109,7 @@ class FilesService:
         spec: FileCreateSpec,
         *,
         s3_key: str,
-        s3_bucket: str,
+        storage_id: str,
         original_name: str,
         content_type: str,
         file_size: int,
@@ -129,10 +131,11 @@ class FilesService:
         post_create = spec.post_create if spec.post_create is not None else FilePostCreate()
         metadata: JsonObject = dict(spec.metadata) if spec.metadata else {}
         metadata["source_kind"] = _source_kind_metadata_value(spec.source_kind)
+        metadata["source_ref"] = spec.source_ref.model_dump(exclude_none=True)
 
         file_record = await self._storage.register_s3_object(
             s3_key=s3_key,
-            s3_bucket=s3_bucket,
+            storage_id=storage_id,
             original_name=original_name,
             content_type=content_type,
             file_size=file_size,
@@ -168,19 +171,33 @@ class FilesService:
         _ = await self.get(file_id)
         return await self._docs_bind_hook(placement)
 
-    async def read_bytes(self, file_record: FileRecord) -> bytes:
-        """Содержимое объекта S3 записи целиком; для больших файлов — `stream_s3_file`."""
-        s3 = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
-        try:
-            return await s3.download_bytes(file_record.s3_key)
-        finally:
-            await s3.close()
+    async def read_bytes(
+        self,
+        file_record: FileRecord,
+        principal: FilePrincipal,
+        *,
+        authz: AuthzService | None = None,
+    ) -> bytes:
+        handle = await FileGate(authz).open_record(file_record, principal)
+        return await handle.read_bytes()
 
     async def delete(self, file_id: str) -> bool:
         return await self._storage.delete(file_id)
 
     async def save(self, file_record: FileRecord) -> FileRecord:
         return await self._storage.save(file_record)
+
+    async def save_file_size_checksum(
+        self,
+        file_record: FileRecord,
+        *,
+        file_size: int,
+        checksum: str,
+    ) -> FileRecord:
+        updated = file_record.model_copy(
+            update={"file_size": file_size, "checksum": checksum},
+        )
+        return await self.save(updated)
 
     async def promote_retention(
         self,

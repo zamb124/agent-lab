@@ -6,9 +6,9 @@ import time
 
 from fastapi import APIRouter, Request
 
-from core.app_state import require_platform_app_state
 from core.config import get_settings
 from core.context import get_context
+from core.di.state import app_di
 from core.events import publish_event_to_user
 from core.events.contract import PlatformEvent
 from core.logging import get_logger
@@ -53,7 +53,7 @@ async def execute_realtime_command(
     event: PlatformEvent,
     request: Request,
 ) -> RealtimeCommandAccepted:
-    _ = require_platform_app_state(request)
+    di = app_di(request)
     context = get_context()
     if context is None:
         raise RuntimeError("execute_realtime_command requires request context")
@@ -63,6 +63,7 @@ async def execute_realtime_command(
         event.type,
         event.payload,
         context.user,
+        di,
     )
     command_status = "error" if reply_type.endswith("_failed") else "ok"
     command_duration_ms = round((time.perf_counter() - command_start) * 1000.0, 3)

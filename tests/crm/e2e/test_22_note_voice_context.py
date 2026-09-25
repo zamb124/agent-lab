@@ -118,7 +118,7 @@ class TestNoteVoiceAndContext:
 
         anchor_type_id = f"anchor_ctx_{unique_id}"
         ct = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": anchor_type_id,
                 "name": "Тестовый якорь",
@@ -130,7 +130,7 @@ class TestNoteVoiceAndContext:
         assert ct.status_code == 200
 
         voice_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"Голос {unique_id}",
@@ -142,7 +142,7 @@ class TestNoteVoiceAndContext:
         voice_id = _entity_id(voice_resp)
 
         anchor_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": anchor_type_id,
                 "name": f"Якорь {unique_id}",
@@ -154,7 +154,7 @@ class TestNoteVoiceAndContext:
         anchor_id = _entity_id(anchor_resp)
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка {unique_id}",
@@ -191,7 +191,7 @@ class TestNoteVoiceAndContext:
     ) -> None:
         """note не имеет is_voice_target=True, поэтому не может быть голосом."""
         wrong = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Не голос {unique_id}",
@@ -203,7 +203,7 @@ class TestNoteVoiceAndContext:
         wrong_id = _entity_id(wrong)
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка {unique_id}",
@@ -222,7 +222,7 @@ class TestNoteVoiceAndContext:
         unique_id: str,
     ) -> None:
         plain = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"Не якорь {unique_id}",
@@ -234,7 +234,7 @@ class TestNoteVoiceAndContext:
         plain_id = _entity_id(plain)
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка {unique_id}",
@@ -254,7 +254,7 @@ class TestNoteVoiceAndContext:
     ) -> None:
         """Регрессия: минимальное создание заметки (как test_01) без полей voice/context."""
         resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Простая заметка {unique_id}",
@@ -331,15 +331,26 @@ class TestNoteVoiceAndContext:
         assert show_ui is False
         assert object_str(cs.get("default_note_voice"), field="default_note_voice") == "none"
 
-        listed = await crm_client.get(
-            "/crm/api/v1/namespaces",
-            headers=auth_headers_system,
-        )
-        assert listed.status_code == 200
         match: dict[str, object] | None = None
-        for namespace in _namespace_items(listed):
-            if object_str(namespace.get("name"), field="name") == ns_name:
-                match = namespace
+        offset = 0
+        limit = 200
+        while match is None:
+            listed = await crm_client.get(
+                "/crm/api/v1/namespaces",
+                headers=auth_headers_system,
+                params={"limit": limit, "offset": offset},
+            )
+            assert listed.status_code == 200
+            page = _namespace_items(listed)
+            for namespace in page:
+                if object_str(namespace.get("name"), field="name") == ns_name:
+                    match = namespace
+                    break
+            total_raw = _http_json(listed).get("total")
+            if not isinstance(total_raw, int):
+                raise AssertionError("namespaces total must be int")
+            offset += len(page)
+            if len(page) == 0 or offset >= total_raw:
                 break
         assert match is not None
         listed_cs = _crm_settings(match)
@@ -397,7 +408,7 @@ class TestNoteVoiceAndContext:
         assert r.status_code == 200
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"NV {unique_id}",
@@ -425,7 +436,7 @@ class TestNoteVoiceAndContext:
     ) -> None:
         anchor_type_id = f"anchor_upd_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": anchor_type_id,
                 "name": "Якорь upd",
@@ -435,7 +446,7 @@ class TestNoteVoiceAndContext:
             headers=auth_headers_system,
         )
         anchor_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": anchor_type_id,
                 "name": f"A {unique_id}",
@@ -446,7 +457,7 @@ class TestNoteVoiceAndContext:
         anchor_id = _entity_id(anchor_resp)
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Upd {unique_id}",

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 
 def _schedule_dependencies() -> dict[str, MagicMock]:
-    return {
-        "task_service": MagicMock(),
-        "entity_repository": MagicMock(),
-        "authz": MagicMock(),
-    }
+    return {"authz": MagicMock()}
 
 
 @pytest.mark.asyncio
@@ -58,7 +54,7 @@ async def test_schedule_note_markdown_format_skips_without_context(monkeypatch: 
 async def test_schedule_note_markdown_format_coalesces_active_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from apps.crm.services.task_service import ActiveTaskExistsError
+    from apps.crm.services.note_markdown_format_schedule import ActiveTaskExistsError
 
     mock_settings = MagicMock()
     mock_settings.note_attachment_markdown_format_enabled = True
@@ -72,15 +68,17 @@ async def test_schedule_note_markdown_format_coalesces_active_task(
         "apps.crm.services.note_markdown_format_schedule.get_context",
         lambda: mock_context,
     )
-    task_service = MagicMock()
-    task_service.start_note_markdown_format = AsyncMock(
-        side_effect=ActiveTaskExistsError("note_markdown_format", "task-1", dedup={"note_id": "note-1"}),
+
+    async def _raise_active(*_args: object, **_kwargs: object) -> None:
+        raise ActiveTaskExistsError("note_markdown_format", "task-1", dedup={"note_id": "note-1"})
+
+    monkeypatch.setattr(
+        "apps.crm.services.note_markdown_format_schedule.begin_note_markdown_format",
+        _raise_active,
     )
     from apps.crm.services.note_markdown_format_schedule import schedule_note_markdown_format
 
     out = await schedule_note_markdown_format(
-        task_service=task_service,
-        entity_repository=MagicMock(),
         authz=MagicMock(),
         note_id="note-1",
         company_id="company-1",
@@ -90,17 +88,18 @@ async def test_schedule_note_markdown_format_coalesces_active_task(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_note_markdown_format_task_requires_context() -> None:
-    task_service = MagicMock()
-    task_service.start_note_markdown_format = AsyncMock(
-        side_effect=ValueError("Для старта форматирования заметки нужен контекст запроса"),
+async def test_enqueue_note_markdown_format_task_requires_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _raise_context(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("Request context is required to start note formatting")
+
+    monkeypatch.setattr(
+        "apps.crm.services.note_markdown_format_schedule.begin_note_markdown_format",
+        _raise_context,
     )
     from apps.crm.services.note_markdown_format_schedule import enqueue_note_markdown_format_task
 
-    with pytest.raises(ValueError, match="контекст"):
-        await enqueue_note_markdown_format_task(
-            task_service=task_service,
-            entity_repository=MagicMock(),
+    with pytest.raises(ValueError, match="context"):
+        _ = await enqueue_note_markdown_format_task(
             authz=MagicMock(),
             note_id="note-1",
             company_id="company-1",

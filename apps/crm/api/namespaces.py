@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.api import (
     NamespaceCreateRequest,
     NamespaceEditabilityResponse,
@@ -48,62 +48,62 @@ router = APIRouter(prefix="/namespaces", tags=["CRM Namespaces"])
 
 @router.get("", response_model=OffsetPage[NamespaceResponse])
 async def list_namespaces(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[NamespaceResponse]:
     return await op_namespaces_list(
         CrmOffsetPagePayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/templates", response_model=OffsetPage[NamespaceTemplateResponse])
 async def list_namespace_templates(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[NamespaceTemplateResponse]:
     return await op_templates_list(
         CrmOffsetPagePayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/templates/schema/options", response_model=NamespaceTemplateSchemaOptionsResponse)
 async def get_template_schema_options(
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceTemplateSchemaOptionsResponse:
     return await op_templates_schema_options(
         EmptyPayload(),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/templates", response_model=NamespaceTemplateResponse, status_code=201)
 async def create_namespace_template(
     body: NamespaceTemplateCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceTemplateResponse:
     return await op_templates_create(
         body,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/templates/{template_id}", response_model=NamespaceTemplateDetailsResponse)
 async def get_namespace_template(
     template_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceTemplateDetailsResponse:
     return await op_templates_item(
         CrmTemplateIdPayload(template_id=template_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -111,7 +111,7 @@ async def get_namespace_template(
 async def update_namespace_template(
     template_id: str,
     body: NamespaceTemplateUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceTemplateResponse:
     return await op_templates_update(
         CrmTemplateUpdatePayload(
@@ -122,19 +122,19 @@ async def update_namespace_template(
             crm_settings=body.crm_settings,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/templates/{template_id}", status_code=204)
 async def delete_namespace_template(
     template_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     await op_templates_remove(
         CrmTemplateIdPayload(template_id=template_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
@@ -147,7 +147,7 @@ async def delete_namespace_template(
 async def upsert_template_type(
     template_id: str,
     body: NamespaceTemplateTypeUpsertRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceTemplateTypeResponse:
     return await op_templates_type_upsert(
         CrmTemplateTypeUpsertPayload(
@@ -169,7 +169,7 @@ async def upsert_template_type(
             is_voice_target=body.is_voice_target,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -177,12 +177,12 @@ async def upsert_template_type(
 async def delete_template_type(
     template_id: str,
     type_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     await op_templates_type_remove(
         CrmTemplateTypeRemovePayload(template_id=template_id, type_id=type_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
@@ -190,24 +190,24 @@ async def delete_template_type(
 @router.post("", status_code=201, response_model=NamespaceResponse)
 async def create_namespace(
     body: NamespaceCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceResponse:
     return await op_namespaces_create(
         body,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{namespace_name}/editability", response_model=NamespaceEditabilityResponse)
 async def get_namespace_editability(
     namespace_name: str,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceEditabilityResponse:
     return await op_namespaces_editability(
         CrmNamespaceNamePayload(name=namespace_name),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -215,7 +215,7 @@ async def get_namespace_editability(
 async def update_namespace(
     namespace_name: str,
     body: NamespaceUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> NamespaceResponse:
     payload = CrmNamespaceUpdatePayload(name=namespace_name)
     if "description" in body.model_fields_set:
@@ -227,5 +227,5 @@ async def update_namespace(
     return await op_namespaces_update(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )

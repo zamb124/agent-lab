@@ -1,0 +1,116 @@
+/**
+ * Пульс склада: остатки со стоимостью и открытые переводы первого склада.
+ */
+
+import { html, css } from 'lit';
+import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import '@platform/lib/components/platform-button.js';
+import '@platform/lib/components/platform-icon.js';
+
+export class StockHomePage extends PlatformPage {
+    static i18nNamespace = 'stock';
+
+    static properties = {
+        _pulse: { state: true },
+        _warehouseId: { state: true },
+    };
+
+    static styles = [
+        PlatformPage.styles,
+        css`
+            :host { display: block; height: 100%; overflow-y: auto; }
+            .wrap { max-width: 1100px; margin: 0 auto; padding: var(--space-6); }
+            h1 { margin: 0; font-size: var(--text-2xl); color: var(--text-primary); }
+            .section { margin-top: var(--space-6); }
+            .section-title {
+                color: var(--text-tertiary); font-size: var(--text-xs);
+                font-weight: var(--font-semibold); letter-spacing: var(--tracking-wide);
+                text-transform: uppercase; margin-bottom: var(--space-2);
+            }
+            table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+            th, td {
+                padding: var(--space-2) var(--space-3); text-align: left;
+                border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary);
+            }
+            th { color: var(--text-tertiary); font-weight: var(--font-medium); }
+            .num { text-align: right; font-variant-numeric: tabular-nums; }
+            .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
+            .actions { margin-top: var(--space-4); display: flex; gap: var(--space-2); }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this._warehouses = this.useResource('stock/warehouses');
+        this._pulse = this.useOp('stock/warehouse_pulse');
+        this._warehouseId = '';
+    }
+
+    async onRouteActive() {
+        await this._warehouses.load();
+        const first = this._warehouses.items[0];
+        if (first && typeof first.warehouse_id === 'string') {
+            this._warehouseId = first.warehouse_id;
+            await this._pulse.run({ warehouse_id: first.warehouse_id });
+        }
+    }
+
+    render() {
+        const pulse = this._pulse.lastResult;
+        return html`
+            <div class="wrap">
+                <h1>${this.t('home.title')}</h1>
+                ${!pulse ? html`<div class="empty">${this.t('home.empty')}</div>` : html`
+                    <div class="section">
+                        <div class="section-title">${this.t('home.quants')}</div>
+                        <table>
+                            <thead><tr>
+                                <th>${this.t('fields.product')}</th>
+                                <th>${this.t('fields.location')}</th>
+                                <th class="num">${this.t('fields.qty')}</th>
+                                <th class="num">${this.t('fields.reserved')}</th>
+                                <th class="num">${this.t('fields.available')}</th>
+                                <th class="num">${this.t('fields.avg_cost')}</th>
+                                <th class="num">${this.t('fields.value')}</th>
+                            </tr></thead>
+                            <tbody>
+                                ${(pulse.quants || []).map((row) => html`
+                                    <tr>
+                                        <td>${row.product_id}</td>
+                                        <td>${row.location_id}</td>
+                                        <td class="num">${row.quantity}</td>
+                                        <td class="num">${row.reserved_quantity}</td>
+                                        <td class="num">${row.available_quantity}</td>
+                                        <td class="num">${row.avg_cost}</td>
+                                        <td class="num">${row.value}</td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="section">
+                        <div class="section-title">${this.t('home.transfers')}</div>
+                        <table>
+                            <thead><tr>
+                                <th>${this.t('fields.name')}</th>
+                                <th>${this.t('fields.type')}</th>
+                                <th>${this.t('fields.state')}</th>
+                            </tr></thead>
+                            <tbody>
+                                ${(pulse.transfers || []).map((row) => html`
+                                    <tr>
+                                        <td>${row.name}</td>
+                                        <td>${row.operation_code}</td>
+                                        <td>${row.state}</td>
+                                    </tr>
+                                `)}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+    }
+}
+
+customElements.define('stock-home-page', StockHomePage);

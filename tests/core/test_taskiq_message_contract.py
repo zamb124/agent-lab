@@ -56,7 +56,7 @@ def test_platform_label_reader_rejects_non_string_platform_label() -> None:
         kwargs={},
     )
 
-    with pytest.raises(ValueError, match="Платформенная TaskIQ-метка 'request_id' должна быть строкой"):
+    with pytest.raises(ValueError, match="Platform TaskIQ label 'request_id' must be a string"):
         task_message_string_labels(message, keys={"request_id"})
 
 

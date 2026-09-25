@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.mail.models import (
+    INBOX_FOLDER,
     MailAttachment,
     MailDraftSavePayload,
     MailMessageFlagPayload,
@@ -15,8 +16,8 @@ from core.mail.models import (
     MailMessageMovePayload,
     MailMessageStarPayload,
     MailSendPayload,
+    StoredMailMessage,
 )
-from core.mail.repositories import INBOX_FOLDER, MailMessageRepository
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from tests.core.mail.complete_client_helpers import (
@@ -32,7 +33,6 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 async def test_move_updates_local_and_imap(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -60,12 +60,12 @@ async def test_move_updates_local_and_imap(
     assert moved.destination_uid is not None
     assert (INBOX_FOLDER, "11", "Archive") in recording_mail_port.uid_move_calls
     assert (
-        await mail_message_repository.get_by_uid(
+        await StoredMailMessage.by_binding_folder_uid(
             binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=11
         )
         is None
     )
-    archived = await mail_message_repository.get_by_uid(
+    archived = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="Archive", uid=int(moved.destination_uid)
     )
     assert archived is not None
@@ -76,7 +76,6 @@ async def test_move_updates_local_and_imap(
 async def test_trash_archive_delete_star_roundtrip(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -128,7 +127,7 @@ async def test_trash_archive_delete_star_roundtrip(
     assert delete.uid == "23"
     assert (INBOX_FOLDER, "23") in recording_mail_port.uid_expunge_calls
     assert (
-        await mail_message_repository.get_by_uid(
+        await StoredMailMessage.by_binding_folder_uid(
             binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=23
         )
         is None
@@ -148,7 +147,7 @@ async def test_trash_archive_delete_star_roundtrip(
         mailbox == INBOX_FOLDER and uid == "24" and "\\Flagged" in add_flags
         for mailbox, uid, add_flags, _remove in recording_mail_port.uid_store_flags_calls
     )
-    starred = await mail_message_repository.get_by_uid(
+    starred = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=24
     )
     assert starred is not None
@@ -164,7 +163,7 @@ async def test_trash_archive_delete_star_roundtrip(
         company_id=company_id,
     )
     assert unstar.flagged is False
-    unstarred = await mail_message_repository.get_by_uid(
+    unstarred = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=24
     )
     assert unstarred is not None
@@ -237,7 +236,6 @@ async def test_draft_save_append_replace_and_list_in_drafts(
 async def test_prepare_send_local_creates_temp_sent_then_send_completes(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -272,7 +270,7 @@ async def test_prepare_send_local_creates_temp_sent_then_send_completes(
     )
     assert prepared.message_id == message_id
     assert prepared.accepted == ["peer@example.com"]
-    sent_rows = await mail_message_repository.list_folder(
+    sent_rows = await StoredMailMessage.list_folder(
         binding.mailbox_binding_id,
         folder="Sent",
         limit=50,

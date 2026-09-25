@@ -15,6 +15,7 @@ from apps.office.config import get_office_settings
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.minimal_ooxml import minimal_pptx_bytes, minimal_xlsx_bytes
 from apps.office.services.onlyoffice_jwt import encode_download_token
+from core.models.identity_models import Company, User
 from tests.office.helpers import upload_office_file_bytes
 
 pytestmark = [pytest.mark.timeout(120)]
@@ -132,25 +133,24 @@ async def test_company_members_lists_company_from_shared_storage(
     office_client,
     auth_headers_system,
     system_user_id,
-    frontend_container,
+    frontend_di,
 ):
     company_id = "system"
     for _attempt in range(5):
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise AssertionError("system company must exist")
         if system_user_id not in company.members:
             from tests.fixtures.auth import set_test_company_member_roles
 
             await set_test_company_member_roles(
-                frontend_container.company_repository,
-                frontend_container.authz_service,
+                frontend_di.authz_service,
                 company_id=company_id,
                 user_id=system_user_id,
                 roles=["owner", "admin"],
             )
 
-        user = await frontend_container.user_repository.get(system_user_id)
+        user = await User.get(system_user_id)
         if user is None:
             raise AssertionError(f"system user must exist: {system_user_id}")
 

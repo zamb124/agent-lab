@@ -6,7 +6,8 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request, Response
 
-from apps.office.dependencies import ContainerDep
+from apps.office.db.models import OfficeDocumentEvent, OfficeDocumentRevision
+from apps.office.di import Di
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
     OfficeCatalogDetailResponse,
@@ -28,7 +29,6 @@ from apps.office.models.api import (
     OfficeDocumentCopyRequest,
     OfficeDocumentCreateResponse,
     OfficeDocumentEditorSessionResponse,
-    OfficeDocumentEventItem,
     OfficeDocumentFromFileRequest,
     OfficeDocumentItem,
     OfficeDocumentListResponse,
@@ -39,7 +39,6 @@ from apps.office.models.api import (
     OfficeDocumentRenameRequest,
     OfficeDocumentRenameResponse,
     OfficeDocumentReplaceTextRequest,
-    OfficeDocumentRevisionItem,
     OfficeDocumentShareCreateRequest,
     OfficeDocumentShareItem,
     OfficeDocumentsRagIndexStatusesRequest,
@@ -127,6 +126,7 @@ from apps.office.realtime.operations import (
     op_namespaces_templates,
 )
 from core.context import require_context
+from core.di.platform import Di as PlatformDiDep
 from core.documents.placement import (
     DocsBindResult,
     DocsEnsurePathRequest,
@@ -151,100 +151,96 @@ def _request_origin(http_request: Request) -> str:
 
 
 @router.get("/integration/status", response_model=OfficeIntegrationStatusResponse)
-async def integration_status(container: ContainerDep) -> OfficeIntegrationStatusResponse:
+async def integration_status(di: Di) -> OfficeIntegrationStatusResponse:
     return await op_integration_status(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.get("/namespaces", response_model=OffsetPage[Namespace])
 async def list_namespaces(
-    container: ContainerDep,
+    di: PlatformDiDep,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     return await op_namespaces_list(
         NamespacesListPayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/namespaces/templates", response_model=OffsetPage[OfficeNamespaceTemplateItem])
 async def list_namespace_templates(
-    container: ContainerDep,
+    di: Di,
 ) -> OffsetPage[OfficeNamespaceTemplateItem]:
     return await op_namespaces_templates(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.post("/namespaces", response_model=OfficeNamespaceCreateResponse, status_code=201)
 async def create_namespace(
-    container: ContainerDep, body: OfficeNamespaceCreateRequest
+    di: Di, body: OfficeNamespaceCreateRequest
 ) -> OfficeNamespaceCreateResponse:
     return await op_namespaces_create(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.get("/company-members", response_model=ListResponse[TeamMemberResponse])
-async def list_company_members(
-    container: ContainerDep,
-) -> ListResponse[TeamMemberResponse]:
-    return await op_team_members_list(
-        EmptyPayload(), user=require_context().user, container=container
-    )
+async def list_company_members(di: PlatformDiDep) -> ListResponse[TeamMemberResponse]:
+    return await op_team_members_list(EmptyPayload(), user=require_context().user, di=di)
 
 
 @router.get("/catalogs", response_model=OfficeCatalogListResponse)
-async def list_catalogs(container: ContainerDep) -> OfficeCatalogListResponse:
+async def list_catalogs(di: Di) -> OfficeCatalogListResponse:
     return await op_catalogs_list(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.post("/catalogs/ensure-path", response_model=DocsEnsurePathResult)
 async def ensure_catalog_path(
-    container: ContainerDep, body: DocsEnsurePathRequest
+    di: Di, body: DocsEnsurePathRequest
 ) -> DocsEnsurePathResult:
     return await op_catalogs_ensure_path(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.post("/catalogs", response_model=OfficeCatalogDetailResponse)
 async def create_catalog(
-    container: ContainerDep, body: OfficeCatalogCreateRequest
+    di: Di, body: OfficeCatalogCreateRequest
 ) -> OfficeCatalogDetailResponse:
-    return await op_catalogs_create(body, user=require_context().user, container=container)
+    return await op_catalogs_create(body, user=require_context().user, di=di)
 
 
 @router.get("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def get_catalog(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogDetailResponse:
     return await op_catalogs_item(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/catalogs/{catalog_id}/items", response_model=OfficeCatalogItemsResponse)
 async def list_catalog_items(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogItemsResponse:
     return await op_catalogs_items(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.patch("/catalogs/{catalog_id}", response_model=OfficeCatalogDetailResponse)
 async def update_catalog(
-    container: ContainerDep, catalog_id: str, body: OfficeCatalogPatchRequest
+    di: Di, catalog_id: str, body: OfficeCatalogPatchRequest
 ) -> OfficeCatalogDetailResponse:
     return await op_catalogs_update(
         OfficeCatalogUpdatePayload(
@@ -253,16 +249,16 @@ async def update_catalog(
             company_visible=body.company_visible,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/catalogs/{catalog_id}", status_code=204)
-async def delete_catalog(container: ContainerDep, catalog_id: str) -> Response:
+async def delete_catalog(di: Di, catalog_id: str) -> Response:
     await op_catalogs_remove(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
@@ -272,12 +268,12 @@ async def delete_catalog(container: ContainerDep, catalog_id: str) -> Response:
     response_model=OfficeCatalogRagIndexEnableResponse,
 )
 async def enable_catalog_rag_index(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogRagIndexEnableResponse:
     return await op_catalogs_rag_enable(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -286,12 +282,12 @@ async def enable_catalog_rag_index(
     response_model=OfficeCatalogRagIndexDisableResponse,
 )
 async def disable_catalog_rag_index(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogRagIndexDisableResponse:
     return await op_catalogs_rag_disable(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -301,12 +297,12 @@ async def disable_catalog_rag_index(
     response_model=OfficeCatalogRagIndexRebuildResponse,
 )
 async def rebuild_catalog_rag_index(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogRagIndexRebuildResponse:
     return await op_catalogs_rag_rebuild(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -315,12 +311,12 @@ async def rebuild_catalog_rag_index(
     response_model=OfficeCatalogRagIndexStatusResponse,
 )
 async def catalog_rag_index_status(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogRagIndexStatusResponse:
     return await op_catalogs_rag_status(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -329,7 +325,7 @@ async def catalog_rag_index_status(
     response_model=OfficeCatalogRagIndexSettingsResponse,
 )
 async def patch_catalog_rag_index_settings(
-    container: ContainerDep,
+    di: Di,
     catalog_id: str,
     body: OfficeCatalogRagIndexSettingsPatchRequest,
 ) -> OfficeCatalogRagIndexSettingsResponse:
@@ -348,7 +344,7 @@ async def patch_catalog_rag_index_settings(
             clear_search_options=body.clear_search_options,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -357,7 +353,7 @@ async def patch_catalog_rag_index_settings(
     response_model=OfficeCatalogSemanticSearchResponse,
 )
 async def search_catalog_rag_index(
-    container: ContainerDep,
+    di: Di,
     catalog_id: str,
     body: OfficeCatalogSemanticSearchRequest,
 ) -> OfficeCatalogSemanticSearchResponse:
@@ -377,24 +373,24 @@ async def search_catalog_rag_index(
             freshness_half_life_days=body.freshness_half_life_days,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def list_catalog_members(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeCatalogMembersResponse:
     return await op_catalogs_members_list(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/catalogs/{catalog_id}/members", response_model=OfficeCatalogMembersResponse)
 async def add_catalog_member(
-    container: ContainerDep, catalog_id: str, body: OfficeCatalogMemberAddRequest
+    di: Di, catalog_id: str, body: OfficeCatalogMemberAddRequest
 ) -> OfficeCatalogMembersResponse:
     return await op_catalogs_member_add(
         OfficeCatalogMemberAddPayload(
@@ -403,38 +399,38 @@ async def add_catalog_member(
             relation=body.relation,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/catalogs/{catalog_id}/members/{member_user_id}", status_code=204)
 async def remove_catalog_member(
-    container: ContainerDep, catalog_id: str, member_user_id: str
+    di: Di, catalog_id: str, member_user_id: str
 ) -> Response:
     await op_catalogs_member_remove(
         OfficeCatalogMemberRemovePayload(
             catalog_id=catalog_id, member_user_id=member_user_id
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
 
 @router.get("/catalogs/{catalog_id}/access", response_model=OfficeResourceAccessResponse)
 async def get_catalog_access(
-    container: ContainerDep, catalog_id: str
+    di: Di, catalog_id: str
 ) -> OfficeResourceAccessResponse:
     return await op_catalogs_access(
         OfficeCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.patch("/catalogs/{catalog_id}/access", response_model=OfficeResourceAccessResponse)
 async def patch_catalog_access(
-    container: ContainerDep,
+    di: Di,
     catalog_id: str,
     body: OfficeResourceAccessPatchRequest,
     http_request: Request,
@@ -449,7 +445,7 @@ async def patch_catalog_access(
             members=body.members,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -458,20 +454,20 @@ async def patch_catalog_access(
     response_model=OfficeResourceAccessRotateLinkResponse,
 )
 async def rotate_catalog_access_link(
-    container: ContainerDep, catalog_id: str, http_request: Request
+    di: Di, catalog_id: str, http_request: Request
 ) -> OfficeResourceAccessRotateLinkResponse:
     return await op_catalogs_access_rotate_link(
         OfficeCatalogAccessRotatePayload(
             catalog_id=catalog_id, origin=_request_origin(http_request)
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents", response_model=OfficeDocumentListResponse)
 async def list_documents(
-    container: ContainerDep,
+    di: Di,
     catalog_id: Annotated[str | None, Query(min_length=1)] = None,
     catalog_ids: Annotated[list[str] | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=500)] = None,
@@ -486,24 +482,24 @@ async def list_documents(
     return await op_documents_list(
         OfficeDocumentsListPayload(catalog_ids=raw, q=q, sort=sort, order=order),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/documents", response_model=OfficeDocumentCreateResponse)
 async def create_document_from_uploaded_file(
-    container: ContainerDep, body: OfficeDocumentFromFileRequest
+    di: Di, body: OfficeDocumentFromFileRequest
 ) -> OfficeDocumentCreateResponse:
     return await op_documents_create_from_file(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.post("/documents/bind", response_model=DocsBindResult)
 async def bind_file_to_catalog(
-    container: ContainerDep, body: DocsPlacement
+    di: Di, body: DocsPlacement
 ) -> DocsBindResult:
-    return await op_documents_bind(body, user=require_context().user, container=container)
+    return await op_documents_bind(body, user=require_context().user, di=di)
 
 
 @router.post(
@@ -511,18 +507,18 @@ async def bind_file_to_catalog(
     response_model=OfficeDocumentsRagIndexStatusesResponse,
 )
 async def documents_rag_index_statuses(
-    container: ContainerDep, body: OfficeDocumentsRagIndexStatusesRequest
+    di: Di, body: OfficeDocumentsRagIndexStatusesRequest
 ) -> OfficeDocumentsRagIndexStatusesResponse:
     return await op_documents_rag_statuses(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.post("/documents/empty", response_model=OfficeDocumentCreateResponse)
 async def create_empty_document(
-    container: ContainerDep, body: OfficeEmptyCreateRequest
+    di: Di, body: OfficeEmptyCreateRequest
 ) -> OfficeDocumentCreateResponse:
-    return await op_documents_empty(body, user=require_context().user, container=container)
+    return await op_documents_empty(body, user=require_context().user, di=di)
 
 
 @router.post(
@@ -530,12 +526,12 @@ async def create_empty_document(
     response_model=OfficeDocumentEditorSessionResponse,
 )
 async def document_editor_session(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> OfficeDocumentEditorSessionResponse:
     return await op_documents_editor_session(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -544,7 +540,7 @@ async def document_editor_session(
     response_model=OfficeDocumentMutationResponse,
 )
 async def replace_document_text(
-    container: ContainerDep, file_id: str, body: OfficeDocumentReplaceTextRequest
+    di: Di, file_id: str, body: OfficeDocumentReplaceTextRequest
 ) -> OfficeDocumentMutationResponse:
     return await op_documents_replace_text(
         OfficeDocumentReplaceTextPayload(
@@ -555,7 +551,7 @@ async def replace_document_text(
             tool_call_id=body.tool_call_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -564,7 +560,7 @@ async def replace_document_text(
     response_model=OfficeDocumentMutationResponse,
 )
 async def append_document_text(
-    container: ContainerDep, file_id: str, body: OfficeDocumentAppendTextRequest
+    di: Di, file_id: str, body: OfficeDocumentAppendTextRequest
 ) -> OfficeDocumentMutationResponse:
     return await op_documents_append_text(
         OfficeDocumentAppendTextPayload(
@@ -573,7 +569,7 @@ async def append_document_text(
             tool_call_id=body.tool_call_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -582,7 +578,7 @@ async def append_document_text(
     response_model=OfficeDocumentMutationResponse,
 )
 async def update_document_cells(
-    container: ContainerDep, file_id: str, body: OfficeSpreadsheetUpdateCellsRequest
+    di: Di, file_id: str, body: OfficeSpreadsheetUpdateCellsRequest
 ) -> OfficeDocumentMutationResponse:
     return await op_documents_update_cells(
         OfficeDocumentUpdateCellsPayload(
@@ -592,107 +588,107 @@ async def update_document_cells(
             tool_call_id=body.tool_call_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.patch("/documents/{file_id}", response_model=OfficeDocumentRenameResponse)
 async def rename_document(
-    container: ContainerDep, file_id: str, body: OfficeDocumentRenameRequest
+    di: Di, file_id: str, body: OfficeDocumentRenameRequest
 ) -> OfficeDocumentRenameResponse:
     return await op_documents_rename(
         OfficeDocumentRenamePayload(file_id=file_id, title=body.title),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/documents/{file_id}", status_code=204)
-async def delete_document(container: ContainerDep, file_id: str) -> Response:
+async def delete_document(di: Di, file_id: str) -> Response:
     await op_documents_remove(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
 
 @router.get("/documents/deleted", response_model=OfficeDocumentListResponse)
-async def list_deleted_documents(container: ContainerDep) -> OfficeDocumentListResponse:
+async def list_deleted_documents(di: Di) -> OfficeDocumentListResponse:
     return await op_documents_deleted_list(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.post("/documents/{file_id}/restore", response_model=OfficeDocumentItem)
-async def restore_document(container: ContainerDep, file_id: str) -> OfficeDocumentItem:
+async def restore_document(di: Di, file_id: str) -> OfficeDocumentItem:
     return await op_documents_restore(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/documents/{file_id}/permanent", status_code=204)
-async def permanent_delete_document(container: ContainerDep, file_id: str) -> Response:
+async def permanent_delete_document(di: Di, file_id: str) -> Response:
     await op_documents_permanent_remove(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
 
 @router.post("/documents/{file_id}/move", response_model=OfficeDocumentItem)
 async def move_document(
-    container: ContainerDep, file_id: str, body: OfficeDocumentMoveRequest
+    di: Di, file_id: str, body: OfficeDocumentMoveRequest
 ) -> OfficeDocumentItem:
     return await op_documents_move(
         OfficeDocumentMovePayload(file_id=file_id, catalog_id=body.catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/documents/{file_id}/copy", response_model=OfficeDocumentCreateResponse)
 async def copy_document(
-    container: ContainerDep, file_id: str, body: OfficeDocumentCopyRequest
+    di: Di, file_id: str, body: OfficeDocumentCopyRequest
 ) -> OfficeDocumentCreateResponse:
     return await op_documents_copy(
         OfficeDocumentCopyPayload(
             file_id=file_id, catalog_id=body.catalog_id, title=body.title
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents/search", response_model=OfficeDocumentListResponse)
 async def search_documents(
-    container: ContainerDep,
+    di: Di,
     q: Annotated[str, Query(min_length=1, max_length=500)],
 ) -> OfficeDocumentListResponse:
     return await op_documents_search(
         OfficeDocumentSearchPayload(q=q),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents/{file_id}/access", response_model=OfficeResourceAccessResponse)
 async def get_document_access(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> OfficeResourceAccessResponse:
     return await op_documents_access(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.patch("/documents/{file_id}/access", response_model=OfficeResourceAccessResponse)
 async def patch_document_access(
-    container: ContainerDep,
+    di: Di,
     file_id: str,
     body: OfficeResourceAccessPatchRequest,
     http_request: Request,
@@ -707,7 +703,7 @@ async def patch_document_access(
             members=body.members,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -716,31 +712,31 @@ async def patch_document_access(
     response_model=OfficeResourceAccessRotateLinkResponse,
 )
 async def rotate_document_access_link(
-    container: ContainerDep, file_id: str, http_request: Request
+    di: Di, file_id: str, http_request: Request
 ) -> OfficeResourceAccessRotateLinkResponse:
     return await op_documents_access_rotate_link(
         OfficeDocumentAccessRotatePayload(
             file_id=file_id, origin=_request_origin(http_request)
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents/{file_id}/preview", response_model=OfficeDocumentPreviewResponse)
 async def document_preview(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> OfficeDocumentPreviewResponse:
     return await op_documents_preview(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/documents/{file_id}/shares", response_model=OfficeDocumentShareItem)
 async def create_document_share(
-    container: ContainerDep,
+    di: Di,
     file_id: str,
     body: OfficeDocumentShareCreateRequest,
     http_request: Request,
@@ -753,7 +749,7 @@ async def create_document_share(
             expires_in_hours=body.expires_in_hours,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -762,62 +758,62 @@ async def create_document_share(
     response_model=ListResponse[OfficeDocumentShareItem],
 )
 async def list_document_shares(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> ListResponse[OfficeDocumentShareItem]:
     return await op_documents_shares_list(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get(
     "/documents/{file_id}/revisions",
-    response_model=ListResponse[OfficeDocumentRevisionItem],
+    response_model=ListResponse[OfficeDocumentRevision],
 )
 async def list_document_revisions(
-    container: ContainerDep, file_id: str
-) -> ListResponse[OfficeDocumentRevisionItem]:
+    di: Di, file_id: str
+) -> ListResponse[OfficeDocumentRevision]:
     return await op_documents_revisions_list(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
-@router.post("/documents/{file_id}/revisions", response_model=OfficeDocumentRevisionItem)
+@router.post("/documents/{file_id}/revisions", response_model=OfficeDocumentRevision)
 async def create_document_revision(
-    container: ContainerDep, file_id: str
-) -> OfficeDocumentRevisionItem:
+    di: Di, file_id: str
+) -> OfficeDocumentRevision:
     return await op_documents_revision_create(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get(
     "/documents/{file_id}/events",
-    response_model=ListResponse[OfficeDocumentEventItem],
+    response_model=ListResponse[OfficeDocumentEvent],
 )
 async def list_document_events(
-    container: ContainerDep, file_id: str
-) -> ListResponse[OfficeDocumentEventItem]:
+    di: Di, file_id: str
+) -> ListResponse[OfficeDocumentEvent]:
     return await op_documents_events_list(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/documents/{file_id}/metadata", response_model=OfficeDocumentMetadataResponse)
 async def document_metadata(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> OfficeDocumentMetadataResponse:
     return await op_documents_metadata(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -826,10 +822,10 @@ async def document_metadata(
     response_model=OfficeDocumentAiSummaryResponse,
 )
 async def document_ai_summary(
-    container: ContainerDep, file_id: str
+    di: Di, file_id: str
 ) -> OfficeDocumentAiSummaryResponse:
     return await op_documents_ai_summary(
         OfficeFileIdPayload(file_id=file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

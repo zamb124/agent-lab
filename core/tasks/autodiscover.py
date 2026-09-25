@@ -2,7 +2,7 @@
 
 Импорт модуля с ``@platform_task`` регистрирует задачу на брокере очереди.
 Здесь — только generic обход дерева модулей; apps-специфичная топология
-(очередь → пакеты задач) живёт в ``apps/platform_tasks/wiring.py``.
+(очередь → пакеты задач) живёт в ``apps/worker_manifest.py``.
 """
 
 from __future__ import annotations

@@ -15,6 +15,7 @@ from collections.abc import Mapping
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.src.models import FlowConfig
 from tests.capabilities.code_lsp_helpers import create_code_lsp_session, session_request
 
 
@@ -409,12 +410,12 @@ class TestFlowWithInlineCodeAPI:
     """E2E тесты: создание flow с inline function через API."""
 
     @pytest.fixture
-    async def cleanup_flow(self, container, unique_id):
+    async def cleanup_flow(self, di, unique_id):
         """Cleanup fixture для удаления созданных flow."""
         flow_id = f"test_inline_flow_{unique_id}"
         yield flow_id
         try:
-            await container.flow_repository.delete(flow_id)
+            await FlowConfig.delete_by_flow_id(flow_id)
         except Exception:
             pass
 
@@ -477,7 +478,7 @@ class TestFlowWithInlineCodeAPI:
 
     @pytest.mark.asyncio
     async def test_full_workflow_validate_execute_create(
-        self, client, app, container, cleanup_flow, unique_id
+        self, client, app, di, cleanup_flow, unique_id
     ):
         """Полный workflow: валидация -> тест -> создание flow."""
         flow_id = cleanup_flow

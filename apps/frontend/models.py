@@ -2,9 +2,11 @@
 Модели данных для Frontend сервиса
 """
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import ClassVar, Literal, Self, override
 
+from oxyde import Field as DbField
+from oxyde import Index
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from apps.frontend.cookie_consent import CookieConsentDecision, CookieConsentLocale
@@ -12,20 +14,9 @@ from core.ai.company_settings import CapabilityLiteral
 from core.ai.llm_config import LLMCallConfig
 from core.billing.settlement_rules import SettlementRulesDocument
 from core.config.models import LegalConfig, PublicSiteConfig
-from core.tracing.models import TraceSpanRecord
+from core.models.platform_model import PlatformModel
+from core.tracing.models import Span
 from core.types import JsonObject
-
-
-class ApiKey(BaseModel):
-    """API ключ компании"""
-    key_id: str = Field(description="ID ключа")
-    name: str = Field(description="Название ключа")
-    key_prefix: str = Field(description="Префикс ключа (первые 8 символов)")
-    scopes: list[str] = Field(description="Разрешения ключа")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_used: datetime | None = Field(default=None, description="Время последнего использования")
-    company_id: str = Field(description="ID компании")
-    created_by: str = Field(description="ID пользователя, создавшего ключ")
 
 
 class ApiKeyCreate(BaseModel):
@@ -215,23 +206,31 @@ class CookieConsentCreateBody(BaseModel):
         return value.strip()
 
 
-class CookieConsentRecord(BaseModel):
-    """Запись журнала согласия на cookie (доказательство ст. 9 152-ФЗ)."""
+class CookieConsentRecord(PlatformModel):
+    """Журнал согласия на cookie. Таблица ``cookie_consents`` в ``platform_shared``."""
 
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    cookie_consent_id: str
-    created_at: datetime
-    brand_host: str
-    apex_domain: str
-    decision: CookieConsentDecision
-    analytics_allowed: bool
-    consent_text_version: str
-    locale: CookieConsentLocale
-    request_id: str
-    user_agent: str
-    ip_hash: str
-    supersedes_cookie_consent_id: str | None = None
+    cookie_consent_id: str = DbField(db_pk=True, max_length=36)
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "cookie_consents"
+        indexes: list[Index] = [Index(("apex_domain", "created_at"))]
+
+    created_at: datetime = DbField(db_index=True)
+    brand_host: str = DbField(max_length=255)
+    apex_domain: str = DbField(max_length=255)
+    decision: CookieConsentDecision = DbField()
+    analytics_allowed: bool = DbField()
+    consent_text_version: str = DbField(max_length=64)
+    locale: CookieConsentLocale = DbField()
+    request_id: str = DbField(max_length=128)
+    user_agent: str = DbField(max_length=512)
+    ip_hash: str = DbField(max_length=64)
+    supersedes_cookie_consent_id: str | None = DbField(default=None, max_length=36)
 
 
 class PublicBlogCard(BaseModel):
@@ -420,7 +419,7 @@ class PlatformTracingFacetItemsResponse(BaseModel):
     items: list[PlatformTracingFacetItem]
 
 
-class PlatformTracingSpanItem(TraceSpanRecord):
+class PlatformTracingSpanItem(Span):
     """Span для админского API с человекочитаемым enrichment."""
 
     company_name: str | None = None
@@ -429,46 +428,15 @@ class PlatformTracingSpanItem(TraceSpanRecord):
     @classmethod
     def from_trace_span(
         cls,
-        span: TraceSpanRecord,
+        span: Span,
         *,
         company_name: str | None,
         user_display_name: str | None,
     ) -> "PlatformTracingSpanItem":
-        return cls(
-            span_id=span.span_id,
-            trace_id=span.trace_id,
-            parent_span_id=span.parent_span_id,
-            operation_name=span.operation_name,
-            kind=span.kind,
-            start_time=span.start_time,
-            end_time=span.end_time,
-            duration_ms=span.duration_ms,
-            status=span.status,
-            status_message=span.status_message,
-            service_name=span.service_name,
-            company_id=span.company_id,
-            namespace=span.namespace,
-            user_id=span.user_id,
-            user_name=span.user_name,
-            user_groups=span.user_groups,
-            session_auth=span.session_auth,
-            session_agent=span.session_agent,
-            channel=span.channel,
-            event_type=span.event_type,
-            resource_type=span.resource_type,
-            resource_id=span.resource_id,
-            attributes=span.attributes,
-            events=span.events,
-            flow_id=span.flow_id,
-            task_id=span.task_id,
-            context_id=span.context_id,
-            branch_id=span.branch_id,
-            node_id=span.node_id,
-            agent_name=span.agent_name,
-            is_resume=span.is_resume,
-            company_name=company_name,
-            user_display_name=user_display_name,
-        )
+        item = cls.model_validate(span.model_dump(include=set(Span.model_fields)))
+        item.company_name = company_name
+        item.user_display_name = user_display_name
+        return item
 
     @override
     def to_json_object(self) -> JsonObject:

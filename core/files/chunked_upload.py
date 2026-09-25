@@ -12,9 +12,9 @@ from core.clients.redis_client import RedisClient, RedisOperationError
 from core.config import get_settings
 from core.context import require_active_company, require_context
 from core.files.create_spec import FileCreateSpec, FileSourceKind
-from core.files.file_repository import FileRepository
 from core.files.models import FileRecord
-from core.files.s3_client import S3Client, S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.s3_client import S3Client
 from core.files.service import DocsBindHook, FilesService, RagIndexHook
 from core.files.storage import original_name_with_extension, to_ascii_s3_metadata
 from core.files.urls import normalize_files_route_segment
@@ -39,7 +39,7 @@ class ChunkedUploadSession(StrictBaseModel):
     file_id: str
     company_id: str
     user_id: str
-    s3_bucket: str
+    storage_id: str
     s3_key: str
     s3_upload_id: str
     original_name: str
@@ -51,6 +51,7 @@ class ChunkedUploadSession(StrictBaseModel):
     spec_json: str
     content_sha256_hex: str | None = None
     files_route_segment: str = Field(min_length=1)
+    source_kind: str
 
 
 class ChunkedUploadInitResult(StrictBaseModel):
@@ -77,7 +78,6 @@ class ChunkedUploadService:
 
     def __init__(
         self,
-        file_repository: FileRepository,
         *,
         files_route_segment: str,
         rag_index_hook: RagIndexHook | None = None,
@@ -85,17 +85,16 @@ class ChunkedUploadService:
     ) -> None:
         self._files_route_segment: str = normalize_files_route_segment(files_route_segment)
         self._files: FilesService = FilesService(
-            file_repository=file_repository,
             files_route_segment=self._files_route_segment,
             rag_index_hook=rag_index_hook,
             docs_bind_hook=docs_bind_hook,
         )
-        self._s3_client: S3Client | None = None
 
-    async def _s3(self) -> S3Client:
-        if self._s3_client is None:
-            self._s3_client = S3ClientFactory.create_default_client()
-        return self._s3_client
+    async def _client_for_session(self, session: ChunkedUploadSession) -> S3Client:
+        from core.files.object_store.pool import client_for
+        from core.files.object_store.resolver import resolve_storage_id
+
+        return await client_for(await resolve_storage_id(session.storage_id))
 
     async def init_upload(
         self,
@@ -108,7 +107,7 @@ class ChunkedUploadService:
         route_segment: str | None = None,
     ) -> ChunkedUploadInitResult:
         settings = get_settings()
-        if not settings.s3.enabled or not settings.s3.default_bucket:
+        if not settings.s3.enabled or not settings.s3.bucket_name:
             raise RuntimeError("S3 is not configured")
         files_cfg = settings.files
         if file_size <= 0:
@@ -142,20 +141,20 @@ class ChunkedUploadService:
         metadata["source_kind"] = _source_kind_wire(spec.source_kind)
         s3_metadata = to_ascii_s3_metadata(metadata)
 
-        s3_client = await self._s3()
+        source_kind = FileSourceKind(spec.source_kind)
+        resolved, s3_client = await FileGate().client_for_write(company_id, source_kind)
         s3_upload_id = await s3_client.create_multipart_upload(
             s3_key,
             content_type=content_type,
             metadata=s3_metadata,
         )
-        bucket_key = s3_client.require_bucket_config_key()
 
         session = ChunkedUploadSession(
             upload_id=upload_id,
             file_id=file_id,
             company_id=company_id,
             user_id=user_id,
-            s3_bucket=bucket_key,
+            storage_id=resolved.storage_id,
             s3_key=s3_key,
             s3_upload_id=s3_upload_id,
             original_name=effective_name,
@@ -167,6 +166,7 @@ class ChunkedUploadService:
             spec_json=spec.model_dump_json(),
             content_sha256_hex=content_sha256_hex,
             files_route_segment=files_route_segment,
+            source_kind=_source_kind_wire(source_kind),
         )
         await self._save_session(session)
         return ChunkedUploadInitResult(
@@ -208,7 +208,7 @@ class ChunkedUploadService:
                 f"non-final part must be exactly {session.chunk_size_bytes} bytes, got {len(data)}"
             )
 
-        s3_client = await self._s3()
+        s3_client = await self._client_for_session(session)
         etag = await s3_client.upload_part(
             session.s3_key,
             upload_id=session.s3_upload_id,
@@ -235,7 +235,7 @@ class ChunkedUploadService:
         if len(session.parts) == 0:
             raise ValueError("complete requires at least one part")
 
-        s3_client = await self._s3()
+        s3_client = await self._client_for_session(session)
         await s3_client.complete_multipart_upload(
             session.s3_key,
             upload_id=session.s3_upload_id,
@@ -244,13 +244,13 @@ class ChunkedUploadService:
 
         checksum = session.content_sha256_hex
         if checksum is None:
-            checksum = await self._sha256_s3_object(session.s3_key)
+            checksum = await self._sha256_s3_object(session)
 
         spec = FileCreateSpec.model_validate_json(session.spec_json)
         file_record = await self._files.register_s3(
             spec,
             s3_key=session.s3_key,
-            s3_bucket=session.s3_bucket,
+            storage_id=session.storage_id,
             original_name=session.original_name,
             content_type=session.content_type,
             file_size=session.file_size,
@@ -264,16 +264,16 @@ class ChunkedUploadService:
     async def abort_upload(self, upload_id: str) -> None:
         session = await self._load_session(upload_id)
         self._assert_session_owner(session)
-        s3_client = await self._s3()
+        s3_client = await self._client_for_session(session)
         await s3_client.abort_multipart_upload(
             session.s3_key,
             upload_id=session.s3_upload_id,
         )
         await self._delete_session(upload_id)
 
-    async def _sha256_s3_object(self, s3_key: str) -> str:
-        s3_client = await self._s3()
-        body = await s3_client.open_object_body(s3_key)
+    async def _sha256_s3_object(self, session: ChunkedUploadSession) -> str:
+        s3_client = await self._client_for_session(session)
+        body = await s3_client.open_object_body(session.s3_key)
         hasher = hashlib.sha256()
         try:
             while True:

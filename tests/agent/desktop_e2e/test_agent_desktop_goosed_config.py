@@ -24,6 +24,7 @@ from tests.agent.desktop_e2e.helpers import (
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_goose_cfg_01_config_extensions_platform_mcp_first(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -40,7 +41,7 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             extensions = await goosed_get_config_extensions(page)
             names = [
                 entry["name"]
@@ -64,6 +65,7 @@ async def test_goose_cfg_01_config_extensions_platform_mcp_first(
 @pytest.mark.asyncio
 @pytest.mark.timeout(60, func_only=True)
 async def test_goose_cfg_02_disable_developer_reflected_in_tools(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -82,6 +84,7 @@ async def test_goose_cfg_02_disable_developer_reflected_in_tools(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             await wait_for_goosed_tools(page, session_id, name_suffix="tree")
             await disable_extension_in_settings(page, "Developer")

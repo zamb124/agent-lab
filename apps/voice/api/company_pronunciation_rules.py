@@ -12,23 +12,24 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di
 from core.ai.runtime import invalidate_voice_company_overrides_cache
 from core.authz.models import AuthzObject
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
     PronunciationRule,
+    PronunciationRulePatch,
     PronunciationRuleSet,
+    PronunciationRuleWrite,
 )
 from core.clients.tts_pronunciation.pipeline import get_tts_text_pipeline
 from core.context import require_context
-from core.db.repositories.pronunciation_rule_repository import pronunciation_rule
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -40,36 +41,6 @@ router = APIRouter(
 )
 
 _MAX_RULES_PER_COMPANY = 1000
-
-
-class PronunciationRuleCreateRequest(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    kind: Literal["alias", "regex", "stress"] = Field(description="Тип правила.")
-    pattern: str = Field(min_length=1, description="Искомое слово / regex.")
-    replacement: str = Field(description="Замена.")
-    language: str | None = Field(default=None, description="BCP-47 (только ISO 639-1, например 'ru').")
-    case_sensitive: bool = Field(default=False)
-    word_boundary: bool = Field(default=True)
-    providers: list[str] | None = Field(default=None)
-    voices: list[str] | None = Field(default=None)
-    enabled: bool = Field(default=True)
-    note: str | None = Field(default=None)
-
-
-class PronunciationRuleUpdateRequest(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-
-    kind: Literal["alias", "regex", "stress"] | None = None
-    pattern: str | None = Field(default=None, min_length=1)
-    replacement: str | None = None
-    language: str | None = None
-    case_sensitive: bool | None = None
-    word_boundary: bool | None = None
-    providers: list[str] | None = None
-    voices: list[str] | None = None
-    enabled: bool | None = None
-    note: str | None = None
 
 
 class PronunciationRuleTestRequest(BaseModel):
@@ -99,15 +70,15 @@ class PronunciationRulesListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Вспомогательные функции
 # ---------------------------------------------------------------------------
-async def _ensure_member(container: ContainerDep, user: User, company_id: str) -> None:
-    await container.authz_service.require_can_view(
+async def _ensure_member(di: Di, user: User, company_id: str) -> None:
+    await di.authz_service.require_can_view(
         AuthzObject.company(company_id),
         user_id=user.user_id,
     )
 
 
-async def _ensure_admin(container: ContainerDep, user: User, company_id: str) -> None:
-    await container.authz_service.require_company_admin(
+async def _ensure_admin(di: Di, user: User, company_id: str) -> None:
+    await di.authz_service.require_company_admin(
         company_id=company_id,
         user_id=user.user_id,
     )
@@ -120,43 +91,29 @@ async def _ensure_admin(container: ContainerDep, user: User, company_id: str) ->
 @router.get("", response_model=PronunciationRulesListResponse)
 async def list_company_pronunciation_rules(
     company_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> PronunciationRulesListResponse:
     """Список правил произношения TTS компании."""
     user = require_context().user
-    await _ensure_member(container, user, company_id)
-    rows = await container.company_pronunciation_rule_repository.list_all(
-        company_id=company_id
-    )
-    return PronunciationRulesListResponse(
-        company_id=company_id,
-        items=[pronunciation_rule(r) for r in rows],
-    )
+    await _ensure_member(di, user, company_id)
+    rows = await PronunciationRule.all_for_company_scope(company_id=company_id)
+    return PronunciationRulesListResponse(company_id=company_id, items=rows)
 
 
 @router.post("", response_model=PronunciationRule, status_code=201)
 async def create_company_pronunciation_rule(
     company_id: str,
-    payload: PronunciationRuleCreateRequest,
-    container: ContainerDep,
+    payload: PronunciationRuleWrite,
+    di: Di,
 ) -> PronunciationRule:
     """Создать правило произношения TTS для компании."""
     user = require_context().user
-    await _ensure_admin(container, user, company_id)
+    await _ensure_admin(di, user, company_id)
 
     try:
-        row = await container.company_pronunciation_rule_repository.create(
+        row = await PronunciationRule.create_for_company_scope(
             company_id=company_id,
-            kind=payload.kind,
-            pattern=payload.pattern,
-            replacement=payload.replacement,
-            language=payload.language,
-            case_sensitive=payload.case_sensitive,
-            word_boundary=payload.word_boundary,
-            providers=payload.providers,
-            voices=payload.voices,
-            enabled=payload.enabled,
-            note=payload.note,
+            rule=payload,
             max_rules=_MAX_RULES_PER_COMPANY,
         )
     except ValueError as exc:
@@ -166,37 +123,28 @@ async def create_company_pronunciation_rule(
     logger.info(
         "frontend.company_pronunciation_rule_created",
         company_id=company_id,
-        rule_id=row.id,
+        rule_id=row.pronunciation_rule_id,
         kind=payload.kind,
         actor_user_id=user.user_id,
     )
-    return pronunciation_rule(row)
+    return row
 
 
 @router.put("/{rule_id}", response_model=PronunciationRule)
 async def update_company_pronunciation_rule(
     company_id: str,
     rule_id: str,
-    payload: PronunciationRuleUpdateRequest,
-    container: ContainerDep,
+    payload: PronunciationRulePatch,
+    di: Di,
 ) -> PronunciationRule:
     """Обновить правило произношения TTS компании."""
     user = require_context().user
-    await _ensure_admin(container, user, company_id)
+    await _ensure_admin(di, user, company_id)
 
-    row = await container.company_pronunciation_rule_repository.update(
+    row = await PronunciationRule.update_by_company_scope_and_rule_id(
         company_id=company_id,
         rule_id=rule_id,
-        kind=payload.kind,
-        pattern=payload.pattern,
-        replacement=payload.replacement,
-        language=payload.language,
-        case_sensitive=payload.case_sensitive,
-        word_boundary=payload.word_boundary,
-        providers=payload.providers,
-        voices=payload.voices,
-        enabled=payload.enabled,
-        note=payload.note,
+        patch=payload,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -208,20 +156,20 @@ async def update_company_pronunciation_rule(
         rule_id=rule_id,
         actor_user_id=user.user_id,
     )
-    return pronunciation_rule(row)
+    return row
 
 
 @router.delete("/{rule_id}")
 async def delete_company_pronunciation_rule(
     company_id: str,
     rule_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> dict[str, bool]:
     """Удалить правило произношения TTS компании."""
     user = require_context().user
-    await _ensure_admin(container, user, company_id)
+    await _ensure_admin(di, user, company_id)
 
-    deleted = await container.company_pronunciation_rule_repository.delete(
+    deleted = await PronunciationRule.delete_by_company_scope_and_rule_id(
         company_id=company_id,
         rule_id=rule_id,
     )
@@ -240,20 +188,17 @@ async def delete_company_pronunciation_rule(
 async def test_company_pronunciation_rules(
     company_id: str,
     payload: PronunciationRuleTestRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> PronunciationRuleTestResponse:
     """Dry-run: применить текущие правила произношения к тексту и вернуть результат.
 
     Включает только per-company правила (без платформенных).
     """
     user = require_context().user
-    await _ensure_member(container, user, company_id)
+    await _ensure_member(di, user, company_id)
 
-    rows = await container.company_pronunciation_rule_repository.list_enabled(
-        company_id=company_id
-    )
-    rules = [pronunciation_rule(r) for r in rows]
-    rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
+    rows = await PronunciationRule.all_enabled_for_company_scope(company_id=company_id)
+    rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
 
     pipeline = get_tts_text_pipeline()

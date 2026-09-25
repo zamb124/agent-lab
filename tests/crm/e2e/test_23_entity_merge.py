@@ -31,7 +31,7 @@ class TestEntityMerge:
         auth_headers_system: dict[str, str],
     ) -> None:
         a_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"MergeA {unique_id}",
@@ -42,7 +42,7 @@ class TestEntityMerge:
         a_id = _entity_id(a_resp)
 
         b_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"MergeB {unique_id}",
@@ -53,7 +53,7 @@ class TestEntityMerge:
         b_id = _entity_id(b_resp)
 
         x_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"MergeX {unique_id}",
@@ -64,7 +64,7 @@ class TestEntityMerge:
         x_id = _entity_id(x_resp)
 
         rel_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": b_id,
                 "target_entity_id": x_id,
@@ -117,7 +117,7 @@ class TestEntityMerge:
         auth_headers_system: dict[str, str],
     ) -> None:
         contact_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"MergeContact {unique_id}",
@@ -128,7 +128,7 @@ class TestEntityMerge:
         contact_id = _entity_id(contact_resp)
 
         task_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "task",
                 "name": f"MergeTask {unique_id}",

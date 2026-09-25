@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from tests.flows.e2e.llm_context.harness import (
     call_text,
     cleanup_flow_context,
@@ -19,7 +20,7 @@ pytestmark = pytest.mark.asyncio
 async def test_high_min_score_drops_weak_rag_hits(
     app,
     rag_app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -38,7 +39,7 @@ async def test_high_min_score_drops_weak_rag_hits(
         "rerank": False,
         "min_score": 0.99,
     }
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="Answer from knowledge if present.",
@@ -49,13 +50,13 @@ async def test_high_min_score_drops_weak_rag_hits(
     )
     try:
         await index_rag_document(
-            container=container,
+            di=di,
             namespace=namespace,
             collection_id=collection_id,
             marker=foreign_marker,
         )
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_MINSCORE_RAG_ZZZZ_{unique_id}_unrelated_xyz",
             response="no knowledge",
@@ -68,7 +69,7 @@ async def test_high_min_score_drops_weak_rag_hits(
         assert foreign_marker not in prompt
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[namespace],
             auth_headers_system=auth_headers_system,

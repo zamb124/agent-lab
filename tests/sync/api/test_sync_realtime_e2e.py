@@ -32,6 +32,7 @@ from tests.sync.api._realtime_helpers import (
     send_text_message,
     wait_frame,
 )
+from tests.sync.conftest import require_sync_di
 
 
 def _user_id_from_token(token: str) -> str:
@@ -340,8 +341,8 @@ async def test_forward_publishes_message_created_in_target_channel(
     async with http_owner(sync_auth_token) as http:
         ns_a = f"ns_{unique_id}_fwd_a"
         ns_b = f"ns_{unique_id}_fwd_b"
-        await seed_namespace_via_repo(company_id, ns_a)
-        await seed_namespace_via_repo(company_id, ns_b)
+        await seed_namespace_via_repo(require_sync_di(), company_id, ns_a)
+        await seed_namespace_via_repo(require_sync_di(), company_id, ns_b)
 
         cr_a = await http.post(
             "/sync/api/v1/channels/",

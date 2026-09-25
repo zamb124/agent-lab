@@ -1,39 +1,29 @@
-"""Audio processing and file message parsing helpers."""
+"""Обработка аудиофайлов."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import re
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from urllib.parse import quote
 
 from core.context import require_active_company
+from core.files.create_spec import FileSourceKind
 from core.files.default_storage import initialize_default_storage
-from core.files.file_repository import FileRepository
 from core.files.media.transcriber import MediaTranscriber
-from core.files.models import (
-    AudioRecord,
-    AudioTranscriptionStatus,
-    FileRecord,
-    FileStatus,
-)
-from core.files.s3_client import S3Client, S3ClientFactory
+from core.files.models import AudioTranscriptionStatus, FileRecord, FileStatus
+from core.files.object_storage import PLATFORM_STORAGE_ID
+from core.files.object_store.gate import FileGate
+from core.files.object_store.s3_client import S3Client
 from core.logging import get_logger
 from core.types import JsonObject
 
 logger = get_logger(__name__)
-FILE_MESSAGE_RE = re.compile(
-    r"\[FILE\][\s\n]*📎?\s*Файл:\s*([^\(]+)\s*"
-    + r"\(ID:\s*([^,]+),\s*URL:\s*([^,]+),\s*тип:\s*([^,]+),\s*"
-    + r"размер:\s*([^)]+)\)[\s\n]*\[/FILE\]",
-    re.MULTILINE,
-)
 
 _default_audio_processor: AudioProcessor | None = None
-_default_file_repository: FileRepository | None = None
+_processors_ready = False
 
 
 def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
@@ -50,60 +40,24 @@ def _to_ascii_s3_metadata(metadata: JsonObject) -> dict[str, str]:
     return out
 
 
-def format_file_message(file_record: object) -> str:
-    if not isinstance(file_record, FileRecord):
-        raise TypeError("file_record must be FileRecord")
-    size_mb = file_record.file_size / (1024 * 1024)
-    size_str = (
-        f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_record.file_size} байт"
-    )
-    url = file_record.url
-    return (
-        f"[FILE] "
-        f"Файл: {file_record.original_name} "
-        f"(ID: {file_record.file_id}, "
-        f"URL: {url}, "
-        f"тип: {file_record.content_type}, "
-        f"размер: {size_str}) "
-        f"[/FILE]"
-    )
-
-
-def extract_file_info_from_message(message_content: str) -> list[JsonObject]:
-    file_info_list: list[JsonObject] = []
-    for match in FILE_MESSAGE_RE.finditer(message_content):
-        file_info_list.append({
-            "original_name": match.group(1).strip(),
-            "file_id": match.group(2).strip(),
-            "url": match.group(3).strip(),
-            "content_type": match.group(4).strip(),
-            "file_size": match.group(5).strip(),
-        })
-    return file_info_list
-
-
 class AudioProcessor:
-    def __init__(
-        self,
-        file_repository: FileRepository,
-        bucket_name: str | None = None,
-    ) -> None:
-        self.file_repository: FileRepository = file_repository
-        self.bucket_name: str | None = bucket_name
+    def __init__(self) -> None:
         self._s3_client: S3Client | None = None
+        self._storage_id: str | None = None
 
-    async def get_s3_client(self) -> S3Client:
-        if self._s3_client is None:
-            if self.bucket_name:
-                self._s3_client = S3ClientFactory.create_client_for_bucket(self.bucket_name)
-            else:
-                self._s3_client = S3ClientFactory.create_default_client()
-        return self._s3_client
+    async def get_s3_client(self, company_id: str) -> tuple[str, S3Client]:
+        if self._s3_client is None or self._storage_id is None:
+            resolved, client = await FileGate().client_for_write(
+                company_id,
+                FileSourceKind.PLATFORM_AUXILIARY,
+            )
+            self._s3_client = client
+            self._storage_id = resolved.storage_id
+        return self._storage_id, self._s3_client
 
     async def close(self) -> None:
-        if self._s3_client:
-            await self._s3_client.close()
-            self._s3_client = None
+        self._s3_client = None
+        self._storage_id = None
 
     async def process_audio_from_bytes(
         self,
@@ -116,15 +70,19 @@ class AudioProcessor:
         metadata: JsonObject | None = None,
         tags: list[str] | None = None,
         public: bool = True,
-    ) -> AudioRecord:
+    ) -> FileRecord:
         logger.info("files.event", original_name=original_name, data_count=len(data))
+
+        company_id = require_active_company().company_id
+        if company_id == "":
+            raise ValueError("process_audio_from_bytes: active company required.")
 
         file_id = f"file_{uuid.uuid4().hex[:12]}"
         file_hash = hashlib.sha256(data).hexdigest()[:16]
         extension = Path(original_name).suffix or ".wav"
         s3_key = f"audio/{file_id}_{file_hash}{extension}"
 
-        s3_client = await self.get_s3_client()
+        storage_id, s3_client = await self.get_s3_client(company_id)
 
         _ = await s3_client.upload_bytes(
             data=data,
@@ -140,11 +98,6 @@ class AudioProcessor:
         transcription_provider: str | None = None
 
         if auto_recognize:
-            company_id = require_active_company().company_id
-            if company_id == "":
-                raise ValueError(
-                    "process_audio_from_bytes: active company required for auto_recognize."
-                )
             transcriber = MediaTranscriber(company_id=company_id)
             transcription_result = await transcriber.transcribe_audio(
                 audio_bytes=data,
@@ -156,54 +109,45 @@ class AudioProcessor:
             transcription_status = AudioTranscriptionStatus.DONE
             transcription_provider = transcription_result.provider
 
-        audio_record = AudioRecord(
+        audio_record = FileRecord(
             file_id=file_id,
-            provider=s3_client.provider_name,
             original_name=original_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.require_bucket_config_key(),
+            storage_id=storage_id if storage_id != "" else PLATFORM_STORAGE_ID,
             s3_key=s3_key,
-            s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
+            company_id=company_id,
             status=FileStatus.READY,
             metadata=metadata or {},
             tags=tags or [],
+            is_public=public,
             transcription_status=transcription_status,
             transcription_text=transcription_text,
             transcription_error=transcription_error,
             transcription_provider=transcription_provider,
         )
 
-        _ = await self.file_repository.set(audio_record)
+        _ = await FileRecord.set(audio_record)
         logger.info("files.event", file_id=file_id)
         return audio_record
 
-    async def get_audio_record(self, audio_id: str) -> AudioRecord | None:
-        record = await self.file_repository.get(audio_id)
-        if record is None:
-            return None
-        if isinstance(record, AudioRecord):
-            return record
-        fields = {name: getattr(record, name) for name in FileRecord.model_fields}
-        return AudioRecord.model_validate(fields)
 
-
-def initialize_default_processors(file_repository: FileRepository) -> None:
-    global _default_file_repository, _default_audio_processor
-    _default_file_repository = file_repository
+def initialize_default_processors() -> None:
+    global _default_audio_processor, _processors_ready
     _default_audio_processor = None
-    initialize_default_storage(file_repository)
+    _processors_ready = True
+    initialize_default_storage()
 
 
 async def get_default_audio_processor() -> AudioProcessor:
     global _default_audio_processor
+    if not _processors_ready:
+        raise RuntimeError(
+            "Processors not initialized. Call initialize_default_processors at startup."
+        )
     if _default_audio_processor is None:
-        if _default_file_repository is None:
-            raise RuntimeError(
-                "Processors not initialized. Call initialize_default_processors at startup."
-            )
-        _default_audio_processor = AudioProcessor(file_repository=_default_file_repository)
+        _default_audio_processor = AudioProcessor()
     return _default_audio_processor
 
 

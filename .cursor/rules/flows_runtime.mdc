@@ -1,0 +1,87 @@
+---
+description: "Исполнение flows: ledger workflow_events, reducer, ExecutionState, activities, supersteps, прерывания и resume, time travel. Читать при правке рантайма и состояния"
+globs:
+  - "apps/flows/src/runtime/**"
+  - "apps/flows/src/durable_execution/**"
+  - "apps/flows/src/state/**"
+  - "core/state/**"
+alwaysApply: false
+---
+
+# Исполнение flows
+
+Flows исполняются как durable workflow: append-only ledger `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Ядро — `DurableWorkflowRuntime` (`apps/flows/src/durable_execution/manager.py`), модели — `apps/flows/src/durable_execution/models.py` (алиас `flows`, `__global_model__ = True`, методы передают `company_id` сами).
+
+## Модель
+
+- `workflow_events` (`WorkflowEvent`) — упорядоченная история: `sequence`, `event_type` (`WorkflowEventType`), `payload` (факт для человека), `state_delta` (`ExecutionStateDelta` для reducer), `prev_state_hash`/`next_state_hash`, `causation_id`.
+- `workflow_instances` — head сессии: `active_execution_branch_id`, `head_sequence`, `head_state_hash`, `latest_snapshot_id`, `status`.
+- `workflow_snapshots` — anchors для rehydrate; создаются на `RunStarted`, terminal, каждые N событий, при крупной delta; не заменяют историю.
+- `execution_branches` — линии fork/rewind/retry/manual_patch; `execution_branch_id` не путается с `branch_id` конфига flow.
+- `activity_tasks` (`ActivityTask`: identity, `input_hash`, `idempotency_key`, `side_effect_policy` `pure`/`idempotent`/`non_idempotent`) и `activity_attempts` (`ActivityAttempt`: попытка, статус, lease).
+- `ExecutionState` (`core/state/execution_state.py`) — нативный Pydantic во всём runtime; сериализация — только на границах (snapshot, event, TaskIQ, API, tracing). Граф нод и JSON flow в state не хранятся; ресурсы — `FlowFactory.get_resource_maps(...)`.
+- `session_id` = `{flow_id}:{context_id}`; один `context_id` — одна durable-беседа, каждый ход (текст или `ui-action`) — новый `task_id` в ней.
+- Итог задачи — `terminal_task_state` + `terminal_task_error`; имена `terminal_status`, `terminal_error` запрещены.
+
+## Инварианты
+
+### Ledger
+
+1. Голова, событие, ветка и снимок одной записи коммитятся в одном `atomic(using="flows")`; append — optimistic concurrency по `expected_head_sequence` + `active_execution_branch_id`, stale writer перечитывает projection.
+2. Событие не меняется и не удаляется; исправление — новое событие (`ManualStatePatchApplied`, `RewindCommitted`, `ForkCreated`, `RetryScheduled`).
+3. `snapshot + events_after_snapshot → reducer → ExecutionState`; reducer — единственное место применения `ExecutionStateDelta`; `save_state(dict)` как canonical commit запрещён.
+4. Redis хранит cache projection (`flows:workflow_projection:{company_id}:{session_id}`, TTL 14 суток, удаление на terminal); расхождение hash/sequence с `workflow_instances` — rehydrate из snapshots + events; расхождение `next_state_hash` — `WorkflowProjectionMismatchError`.
+5. A2A Task/Artifact projections и Flow UI revisions — materialized state, полностью rebuildable из ledger; порядок: validate → append event → projections + outbox atomically → commit → publish Redis/SSE → ack → `a2a.mdc`.
+
+### Оркестратор и activities
+
+1. Оркестратор детерминирован: читает projection, вычисляет следующую волну, пишет события; LLM, tools, external API, MCP, channel, inline code с эффектами, code edge condition, remote flow, wall-clock и random исполняются только как activities, результат возвращается событиями.
+2. `activity_id` = `{session_id}:{execution_branch_id}:node:{node_id}:{activity_type}:schedule:{NodeScheduled.sequence}:input:{input_hash}`; ключ по `node_history`, счётчику вызовов, времени или случайности запрещён; `idempotency_key` включает session, branch и command scope.
+3. Completed activity с тем же ключом и `input_hash` не исполняется повторно; non-idempotent activity при replay не повторяется без journal и approve policy.
+4. Параллельная волна: `SuperstepStarted` → `NodeScheduled` → activities → `NodeWriteRecorded` (pending delta, projection не меняется) → `SuperstepCommitted` (детерминированный merge pending writes). Projection меняют только boundary-события (`SuperstepCommitted`, `InterruptRaised`, `RetryScheduled`, …); runner и нода не пишут checkpoint напрямую.
+5. `NodeFailed.payload` содержит `recover_sequence` и `preserved_node_writes`; retry после `raise` — через `RetryScheduled` на recoverable boundary, успешные writes волны не повторяются.
+6. `FlowNode` — отдельная durable сессия: parent пишет `ChildWorkflowStarted` и `ChildWorkflowSuspended`/`Completed`/`Failed`; `child_session_id` детерминирован (parent session, branch, `NodeScheduled.sequence`, node, child flow/branch, input hash); resume берёт его из `interrupt_path`/`child_workflows`, а не копию child state.
+
+### Граф
+
+1. Нода с несколькими входами: `incoming_policy` `any` (по умолчанию) или `all` (AND-join, учёт в `state.join_arrived_preds`); ребро участвует в join при `contributes_to_join` (по умолчанию `true`).
+2. Тихое завершение запрещено: незакрытый AND-join — `FlowPrematureCompletionError` (`incomplete_and_join`); все исходящие рёбра с условием и ни одно не активно — `no_conditional_match` (`stuck_at` в payload); нет активного перехода при безусловных рёбрах — `no_active_outgoing_edge`.
+3. Любая нода — tool для `llm_node` через `NodeAsToolWrapper` (`apps/flows/src/tools/node_wrapper.py`); ветка своего flow — tool `{"type": "flow", "flow_id": ..., "branch_id": ...}` с `parameters_schema`.
+4. `messages_filter` (`all`, `own`, список `node_id`) задаёт срез `state.messages` на входе LLM и не удаляет записи; `own`/список учитывают только `metadata.node_id`; неверное значение — `ValueError`; элементы списка — существующие `node_id` (`FlowValidator`). Долгая память и RAG — context layer → `ai_models.mdc`.
+5. `CodeNode` без `entrypoint` вызывает первую объявленную функцию; `args` — входы ноды.
+
+### Прерывания
+
+1. `FlowInterrupt(question=...)` или `FlowInterrupt(body=UserMessageInterrupt|OperatorTaskInterrupt|OAuthInterrupt|HandoffInterrupt)` останавливает выполнение; `state.interrupt` — `InterruptData` `{body, system, correlation_id?}` (`core/state/interrupt.py`); плоская форма `{question, context}` запрещена.
+2. Запись прерывания — только `InterruptManager.apply_interrupt`; канал дополняет `system` через `enrich_system_from_channel` (`apps/flows/src/state/interrupt_manager.py`).
+3. `state.interrupt_path` — путь к месту прерывания; `nested_states` — только activity-local вложенные tools; `child_workflows` — durable-связи `FlowNode`; `current_nodes` — точка resume.
+4. HITL: `hitl_node` и tool `hitl_operator_task` через `HitlWorkItemService` создают `WorkItem(kind=operator_handoff, blocking=True)`; resume находит завершённый WorkItem по `correlation_id` (`find_work_item_by_correlation`, `core/worktracker/models.py`), идемпотентен; HTTP wake запрещён → `worktracker.mdc`. `handoff_mode` (`single_reply`/`takeover`) — режим HITL, не agent handoff.
+5. OAuth: `OAuthInterrupt` → `TASK_STATE_INPUT_REQUIRED` с `metadata.platform_oauth_continue=true`; после callback — `enqueue(TASK_PROCESS_FLOW, is_resume=True, ...)` без участия пользователя.
+6. Agent handoff: `HandoffInterrupt`; ответ пользователя маршрутизирует channel layer (`resolve_execution_target`) → `handoff.mdc`.
+7. Resume: projection через `workflow_runtime.get_state`, ответ пользователя, новое событие `user_input_applied`; после `OperatorTaskInterrupt` worker выходит, продолжение — `SubscribeToTask`.
+
+### Состояние
+
+1. Системные поля `FROZEN_STATE_FIELDS` (`core/state/mutation_policy.py`) не меняются пользовательским кодом (CodeNode, inline tool, evaluation) — `FrozenStateFieldError`; остальные поля и extra нода пишет свободно.
+2. Параллельный merge: `messages` — extend, `tool_results` — update; из параллельных tools переносятся только `USER_TOOL_PARALLEL_STATE_MERGE_FIELDS`; системные поля веток не перезаписывают объединённый state.
+3. `messages` — единый упорядоченный лог с `metadata.node_id` источника; физически сокращает его только async-запись памяти context layer (`prune_state_messages_to_memory_cursor_for_runtime`).
+4. Flow UI: документ интерфейса в state не хранится; `apply_flow_ui_action` (`core/flow_ui/action.py`) пишет `fields` по их путям, ставит `ui_action` и `content`; события агента копятся в `queue_ui_events` и забираются `drain_ui_events()`; `ui_slots` пишет только доверенный runtime (`FIELDS_COPY_FROM_RUNTIME_NODE_STATE`) → `flow_ui.mdc`.
+5. Для вложенного flow `current_nodes` сбрасывается в `[]`.
+
+### Time travel
+
+1. Операции `DurableWorkflowRuntime`: `get_state_history`, `load_state_at_sequence`, `fork_state_at_sequence`, `rewind_to_sequence`, `patch_state_at_sequence`, `retry_from_failure`; изменяющие создают новую `execution_branch` (reason `fork`/`rewind`/`manual_patch`/`retry`) и не переписывают историю; по умолчанию — fork.
+2. Ответ branch-команды (`WorkflowBranchResult`) содержит `effect: TimeTravelEffect` (`activates_head`, якорь, `source_events_after_base`, `instance_status`, `auto_resumes_run = false`).
+3. Публичный метод, читающий прошлый state, принимает `execution_branch_id` или явно использует активную ветку.
+
+## Запреты
+
+1. Mutable-строка БД или Redis как хранилище истины исполнения; checkpoint как overwrite одной projection-строки.
+2. Time travel только в tracing spans; fork через копирование всей истории событий.
+3. Retry из terminal failed snapshot без recoverable boundary.
+4. Публикация A2A-обновления до durable commit; единственная копия Artifact или UI revision в Redis/DOM.
+
+## Гейты
+
+- `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые runtime-символы flows.
+- Инварианты ledger (append-only, activity key, boundary-коммит) `[без гейта]`.

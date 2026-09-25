@@ -1,0 +1,10 @@
+== g02_core (192s): ============ 6 failed, 3336 passed, 4 warnings in 185.52s (0:03:05) ============
+== g03_crm (262s): ============ 6 failed, 1151 passed, 1 warning in 237.03s (0:03:57) =============
+== g04_sync (50s): ============================= 252 passed in 43.04s =============================
+== g05_docs (86s): ============= 702 passed, 3 warnings, 1 error in 79.72s (0:01:19) ==============
+== g06_frontend (47s): ================= 359 passed, 4 skipped, 6 warnings in 39.38s ==================
+== g07_services (54s): ====== 36 failed, 535 passed, 3 skipped, 1 xfailed, 6 warnings in 47.71s =======
+== g08_misc (14s): ============================ no tests ran in 7.30s =============================
+== g09_flows (134s): = 266 failed, 1623 passed, 1 skipped, 4 warnings, 22 errors in 127.36s (0:02:07) =
+== g10_realtime (141s): ================== 48 failed, 610 passed in 134.22s (0:02:14) ==================
+ALL DONE

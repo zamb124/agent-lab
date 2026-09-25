@@ -58,10 +58,10 @@ async def _seed_device(
 
 @pytest.mark.asyncio
 async def test_resolve_user_online_device_picks_newest(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    storage = frontend_container.shared_storage
+    storage = frontend_di.shared_storage
     company_id = f"co-{unique_id}"
     user_id = f"user-{unique_id}"
     now = datetime.now(timezone.utc)
@@ -114,10 +114,10 @@ async def test_resolve_user_online_device_picks_newest(
 
 @pytest.mark.asyncio
 async def test_bind_rejects_foreign_device_id_and_auto_binds(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    storage = frontend_container.shared_storage
+    storage = frontend_di.shared_storage
     company_id = f"co-{unique_id}"
     user_id = f"user-{unique_id}"
     now = datetime.now(timezone.utc)
@@ -158,10 +158,10 @@ async def test_bind_rejects_foreign_device_id_and_auto_binds(
 
 @pytest.mark.asyncio
 async def test_bind_keeps_linnex_agent_client_from_desktop(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    storage = frontend_container.shared_storage
+    storage = frontend_di.shared_storage
     company_id = f"co-{unique_id}"
     user_id = f"user-{unique_id}"
     device_id = f"desk-{unique_id}"
@@ -193,10 +193,10 @@ async def test_bind_keeps_linnex_agent_client_from_desktop(
 
 @pytest.mark.asyncio
 async def test_bind_clears_when_no_online_device(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    storage = frontend_container.shared_storage
+    storage = frontend_di.shared_storage
     variables: JsonObject = {"device_id": "", "device_name": "x"}
     await bind_user_device_variables(
         variables,

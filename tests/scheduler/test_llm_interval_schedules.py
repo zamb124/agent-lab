@@ -156,11 +156,6 @@ class _InMemorySchedulerService:
         self.run_now_ids.append(schedule_task_id)
 
 
-class _Container:
-    def __init__(self, scheduler_service: _InMemorySchedulerService) -> None:
-        self.scheduler_service = scheduler_service
-
-
 def _task(
     schedule_task_id: str,
     *,
@@ -188,10 +183,8 @@ def _task(
 @pytest.mark.asyncio
 async def test_ensure_idle_interval_schedule_creates_idle_schedule_and_kicks_it() -> None:
     service = _InMemorySchedulerService()
-    container = _Container(service)
-
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=service,
         config_enabled=True,
         task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
@@ -222,10 +215,8 @@ async def test_ensure_idle_interval_schedule_resumes_compatible_paused_schedule(
             )
         ]
     )
-    container = _Container(service)
-
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=service,
         config_enabled=True,
         task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
@@ -251,10 +242,8 @@ async def test_ensure_idle_interval_schedule_leaves_incompatible_pending_and_cre
             )
         ]
     )
-    container = _Container(service)
-
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=service,
         config_enabled=True,
         task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,
@@ -285,10 +274,8 @@ async def test_ensure_idle_interval_schedule_reconciles_payload_without_task_fal
             )
         ]
     )
-    container = _Container(service)
-
     await _ensure_idle_interval_schedule(
-        container=container,
+        scheduler_service=service,
         config_enabled=True,
         task_name=TASK_REFRESH_PLATFORM_FREE_MODELS.name,
         interval_seconds=3300,

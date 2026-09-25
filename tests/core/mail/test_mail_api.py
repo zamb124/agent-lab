@@ -7,14 +7,12 @@ from datetime import datetime, timezone
 import pytest
 
 from core.ai.company_settings import encrypt_secret
-from core.config import get_settings
 from core.mail.models import (
     CompanyMailConnection,
     IspmanagerProvisionConfig,
     MailConnectionStatus,
     MailProvider,
 )
-from core.mail.repositories import CompanyMailConnectionRepository
 
 
 @pytest.mark.asyncio
@@ -23,12 +21,8 @@ async def test_mail_connection_get_and_bindings_list(
     auth_headers_system,
     unique_id: str,
 ) -> None:
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен")
-    repo = CompanyMailConnectionRepository(db_url=shared_url)
     now = datetime.now(timezone.utc)
-    _ = await repo.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=f"mailconn_api_{unique_id}",
             company_id="system",
@@ -51,7 +45,7 @@ async def test_mail_connection_get_and_bindings_list(
         )
     )
 
-    loaded = await repo.get_by_company("system")
+    loaded = await CompanyMailConnection.for_company("system")
     assert loaded is not None
     assert loaded.mail_domain == "linnex.io"
 

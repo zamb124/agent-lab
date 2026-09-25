@@ -5,25 +5,20 @@ import pytest
 import apps.idle_worker.tasks.platform_free_models_tasks as task_module
 
 
-class _Container:
+class _TaskDi:
     redis_client = object()
-    ai_model_catalog_repository = object()
-    llm_model_score_repository = object()
 
 
 @pytest.mark.asyncio
 async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) -> None:
-    calls: list[tuple[object, object, object, object]] = []
+    calls: list[tuple[object, object]] = []
     settings = object()
 
     async def fake_refresh(
         redis_client: object,
         settings_obj: object,
-        model_catalog_repository: object,
-        *,
-        model_score_provider: object,
     ) -> dict[str, object]:
-        calls.append((redis_client, settings_obj, model_catalog_repository, model_score_provider))
+        calls.append((redis_client, settings_obj))
         return {
             "count": 2,
             "providers": ["openrouter", "bothub"],
@@ -32,7 +27,6 @@ async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) 
             "redis_ok": True,
         }
 
-    monkeypatch.setattr(task_module, "get_container", lambda: _Container())
     monkeypatch.setattr(task_module, "get_settings", lambda: settings)
     monkeypatch.setattr(task_module, "refresh_platform_free_models_cache", fake_refresh)
 
@@ -40,6 +34,7 @@ async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) 
         schedule_task_id="schedule-1",
         company_id="system",
         system_task="platform_free_models_background_sync",
+        di=_TaskDi(),
     )
 
     assert result == {
@@ -51,9 +46,7 @@ async def test_platform_free_models_task_accepts_scheduler_payload(monkeypatch) 
     }
     assert calls == [
         (
-            _Container.redis_client,
+            _TaskDi.redis_client,
             settings,
-            _Container.ai_model_catalog_repository,
-            _Container.llm_model_score_repository,
         )
     ]

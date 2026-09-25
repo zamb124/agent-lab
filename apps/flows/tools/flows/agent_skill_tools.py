@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.clients.agent_skill_client import AgentSkillClient
+from apps.flows.src.models.agent_skill import AgentSkill
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     require_agent_skill_runtime_host,
@@ -82,7 +82,7 @@ async def load_agent_skill(agent_skill_id: str, *, state: "ExecutionState") -> J
         return payload
 
     depth = _resolve_load_depth(host, skill_id)
-    skill = await AgentSkillClient().get(skill_id)
+    skill = await AgentSkill.require_by_agent_skill_id(skill_id)
     body_key = f"agent_skills.body.{skill_id}"
     if not any(block.stable_key == body_key for block in host.context_blocks):
         host.context_blocks.append(

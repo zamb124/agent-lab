@@ -1,249 +1,50 @@
 ---
-description: "Логирование платформы: контракт записи, request_id E2E, get_logger, scope, CI"
+description: "Логирование: get_logger, контракт записи, request_id E2E, скоупы request/system, TaskIQ и background, LoggingConfig. Читать при добавлении лога или точки входа"
+globs:
+  - "core/logging/**"
+  - "core/middleware/access_log.py"
+  - "core/tasks/logging_middleware.py"
+  - "core/utils/background.py"
 alwaysApply: false
 ---
+
 # Логирование
 
-Все процессы (HTTP, TaskIQ, scheduler, фоновые задачи, WebSocket) пишут в **stdout** через единый `structlog`-pipeline поверх stdlib `logging`. Один контракт записи, один способ получения логгера, один способ привязки контекста. Никаких файловых хендлеров, `print(...)`, эмодзи в сообщениях, голых `try/except` ради «лишь бы залогировать».
+Все процессы пишут в stdout через один `structlog`-pipeline (`core/logging/`). Сбор — Grafana Alloy → Loki (14 дней), корреляция с трейсами — по `trace_id` → `tracing.mdc`.
 
-См. также: `tracing.mdc` (`trace_id`/`span_id`), `architecture.mdc` (REST-зеркало), `taskiq.mdc`.
+## Канон
 
-## МЕГА-ПРАВИЛО: `request_id` E2E
+1. Логгер — только `core.logging.get_logger(__name__)`; сообщение — стабильный event-id snake_case с точками (`payments.payment_processed`), значения — отдельными ключами; f-string, `%s`, пробелы в event-id и эмодзи запрещены.
+2. Запись — `LogRecordPayload` (`core/logging/contract.py`), имена полей — OpenTelemetry semantic conventions из `core/logging/attributes.py` (кастомные — `attributes.<key>`); всегда `timestamp`, `level`, `logger`, `message`, `service.name`, `service.version`, `deployment.environment`.
+3. Скоуп `system` (старт, lifespan, фоновые ticks без запроса) — поля п.2. Скоуп `request` (HTTP, WS-команда, TaskIQ, scheduler tick, background из запроса) — дополнительно `request_id`, `trace_id`; при `requires_user=True` — `user_id`, `company_id`. Нарушение — `enforce_required_fields` не пропускает запись и пишет `logging.contract_violation` в stderr.
+4. Нет значения — поле не пишется (пустые строки и `null` запрещены); строка длиннее `max_string_len` обрезается с `_truncated: true`.
+5. Ошибка: `logger.exception("<event>", ...)` и `raise`; LLM-стрим — `log_llm_stream_response` (`core/clients/llm/logging.py`); HTTP access — одна строка `http_request` из `AccessLogMiddleware` (INFO 2xx/3xx, WARNING 4xx, ERROR 5xx).
+6. Конфиг — `LoggingConfig` (`core/config/models.py`): `level`, `format` `json`/`console`, sampling, `loggers_levels`, `max_string_len`, `drop_keys`, `grafana_public_url` + `grafana_loki_datasource_uid` (ссылка Explore в JSON-ошибке → `architecture.mdc` § Ошибки границы); невалидный конфиг — `LoggingMisconfigured`.
+7. `setup_logging` идемпотентен и вызывается платформой: HTTP — `create_service_app`, TaskIQ — `register_worker_events`, scheduler — `apps/scheduler/scheduler.py`.
 
-`request_id` — единственный сквозной идентификатор запроса от точки входа (HTTP, WS, scheduler tick, background) до самого глубокого лога самой далёкой задачи. По нему обязан искаться в Loki/Grafana **полный** поток событий запроса.
+### request_id E2E
 
-### Источники
+`request_id` — сквозной идентификатор от точки входа до последнего лога самой далёкой задачи.
 
-| Точка входа | Кто ставит | Формат |
-|---|---|---|
-| HTTP с `X-Request-Id` от клиента | `AccessLogMiddleware` | как пришло |
-| HTTP без `X-Request-Id` | `AccessLogMiddleware` | `uuid4().hex` |
-| User WS connect | Centrifugo (не Python) | SESSION JWT `auth_token` |
-| User WS команда | `core/realtime/command_http.py` | `event.meta.request_id` inbound / HTTP scope владельца |
-| TaskIQ из request scope | `LoggingMiddleware.pre_send` (из лог-контекста) | как у HTTP/WS |
-| TaskIQ из system scope | `LoggingMiddleware.pre_send` + WARN `task.kiq_request_id_missing` | `kiq-orphan:<uuid>` |
-| Scheduler dispatch | `apps/scheduler/dispatch.py` | `sched:<uuid>` |
-| Background через `run_with_log_context` | наследует/генерирует по `background_kind` | как у источника или `<kind>:<uuid>` |
-| UI event delivery | bus `realtime` → Centrifugo | из `event.meta.request_id` |
+1. Источник: HTTP — `AccessLogMiddleware` (`X-Request-Id` клиента или `uuid4().hex`; ответ всегда несёт `X-Request-Id` и `X-Trace-Id`); WS-команда — `event.meta.request_id` в `core/realtime/command_http.py`; scheduler — `sched:<uuid>` (`apps/scheduler/dispatch.py`); background из system scope — `<kind>:<uuid>`; `kiq()` без контекста — `kiq-orphan:<uuid>` + WARN `task.kiq_request_id_missing`.
+2. Перенос: `ServiceClient` → `X-Request-Id`/`X-Trace-Id` (`_build_headers`); TaskIQ → `message.labels["request_id"]` (`LoggingMiddleware.pre_send` → `pre_execute`); scheduler → `task.labels`; шина → `meta.request_id` (`publish_event_*`).
+3. Скоуп переключают только `enter_request_scope`/`exit_request_scope`/`RequestLogScope`/`SystemLogScope` в платформенных точках входа: `core/middleware/access_log.py`, `core/tasks/logging_middleware.py`, `core/utils/background.py`, `core/realtime/command_http.py`; `AuthMiddleware` только добавляет `user_id`, `company_id`, `company_subdomain`, `session_id`, `namespace`. `enter_request_scope` без обязательных полей — `ValueError`.
+4. Фоновая задача — только `run_with_log_context(coro, name=..., background_kind=...)` (`core/utils/background.py`); из request scope контекст наследуется, из system scope `background_kind` обязателен (`startup`/`recovery`/`polling`/`cron`).
+5. Контекст в `apps/` добавляют только `bind_session_agent` и `bind_test_scope`; `bind_log_context` — в `core/`, `clear_log_context` — только в `core/logging/**`.
 
-### Прокидывание между сервисами
+## Запреты
 
-| Канал | Поле | Кто ставит на исходящем | Кто читает на входящем |
-|---|---|---|---|
-| HTTP `ServiceClient` | `X-Request-Id` | `core/clients/service_client.py::_build_headers` | `AccessLogMiddleware` |
-| Dev inter-service proxy | `X-Request-Id` | `core/middleware/dev_inter_service_proxy.py` | `AccessLogMiddleware` |
-| TaskIQ `kiq()` | `message.labels["request_id"]` | `LoggingMiddleware.pre_send` | `LoggingMiddleware.pre_execute` |
-| Scheduler → worker | `task.labels["request_id"]` | `apps/scheduler/dispatch.py` | `LoggingMiddleware.pre_execute` |
-| Platform event stream | `meta.request_id` | `core/events/publisher.py` | bus `realtime` persist / Centrifugo publication |
+1. `logging.getLogger`, `print`, `loguru`, файловые хендлеры в `apps/**` и `core/**`.
+2. Голый `asyncio.create_task`; прямые `.kiq(`, `find_task(`, `AsyncKicker(`, `create_broker(` вне whitelist (постановка — `core.tasks.enqueue` → `taskiq.mdc`).
+3. `setup_logging` в `apps/*_worker/broker.py` и `apps/sync/realtime/broker.py`.
+4. Скоуп и `bind_log_context` в `apps/**`.
 
-### Контракт `enforce_required_fields`
+## Исключения
 
-Каждая запись проходит через `core/logging/processors.py::enforce_required_fields`. Два скоупа:
+- Исключение: `logging.getLogger` в `core/logging/setup.py`, `core/logging/processors.py`, `core/logging/__init__.py`, `core/tracing/tracer.py`; allowlist `scripts/check_logging_canon.sh`.
+- Исключение: TaskIQ-запись без labels (старый stream) — `pre_execute` восстанавливает контекст `build_log_labels(background_kind='taskiq_recover')` + WARN `task.execute_log_labels_recovered`. `[без гейта]`
 
-- **`system`** — стартовая инициализация, lifespan startup/shutdown, фоновые ticks без привязки к запросу. Достаточно: `service.name`, `service.version`, `deployment.environment`, `timestamp`, `level`, `logger`, `message`.
-- **`request`** — обработка одного запроса (HTTP, WS-команда, TaskIQ-задача, scheduler tick, фоновая задача из request scope). В каждой записи **обязательно** есть `request_id`, `trace_id`, `service.name`. Если scope с `requires_user=True` — дополнительно `user_id` и `company_id`.
+## Гейты
 
-При нарушении контракта **запись не уходит в stdout** (raise `DropEvent`); в `sys.stderr` пишется аварийная JSON-строка `logging.contract_violation` с `missing_fields`, именем нарушающего логгера и event-id. Точку, которая пишет лог в request scope без `request_id`, нужно правильно инициализировать через `enter_request_scope(...)`.
-
-### Скоуп переключают только платформенные точки входа
-
-```python
-from core.logging import enter_request_scope, exit_request_scope, RequestLogScope, SystemLogScope
-
-token = enter_request_scope(
-    request_id=request_id, trace_id=trace_id, service_name="frontend",
-    user_id=user_id, company_id=company_id, requires_user=False,
-)
-try:
-    await handler(...)
-finally:
-    exit_request_scope(token)
-
-async with RequestLogScope(request_id=..., trace_id=..., service_name="crm"):
-    await op(...)
-
-async with SystemLogScope(lifecycle_phase="startup"):
-    await bootstrap()
-```
-
-`enter_request_scope` бросает `ValueError` при пустом `request_id`, `trace_id`, `service_name` или при `requires_user=True` без `user_id`/`company_id`.
-
-`enter_request_scope` / `exit_request_scope` / `RequestLogScope` / `SystemLogScope` — единственные API скоупа. В `apps/**` и произвольном core-коде запрещены (CI). Разрешённые места:
-
-- `core/middleware/access_log.py` — HTTP request scope
-- `core/middleware/auth/middleware.py` — расширение HTTP scope полями user/company
-- `core/tasks/logging_middleware.py` — TaskIQ request scope
-- `core/utils/background.py` — background scope
-- `apps/scheduler/dispatch.py` — scheduler tick (через labels, не через прямой `enter`)
-
-`clear_log_context()` запрещён вне `core/logging/**`. Для очистки — `exit_request_scope(token)`.
-
-## Канон API `core/logging`
-
-| Имя | Назначение |
-|---|---|
-| `get_logger(name)` | Единственный способ получить логгер. Имя — обычно `__name__`. |
-| `setup_logging(service_name, config?)` | Идемпотентная инициализация: HTTP — в `create_service_app`; TaskIQ — в `register_worker_events`; scheduler — при загрузке `apps/scheduler/scheduler.py`. |
-| `bind_log_context(**fields)` | Биндит поля в structlog contextvars. В `apps/` запрещён — только хелперы ниже. |
-| `bind_session_agent(session_id)` | Биндит `session_agent` (исполнение flow). |
-| `bind_test_scope(test_scope)` | Биндит `test_scope` (MockLLM / TESTING). |
-| `unbind_log_context(*keys)` | Снимает конкретные ключи. |
-| `clear_log_context()` | Полная очистка contextvars; **только** внутри `core/logging`. |
-| `get_log_context()` | Snapshot текущего контекста (для пробрасывания в фоновую задачу). |
-| `LogContextScope(**fields)` | `with`/`async with` обёртка: bind → clear на выходе. |
-| `enter_request_scope` / `exit_request_scope` / `RequestLogScope` / `SystemLogScope` | Скоуп с обязательными полями. |
-| `get_log_scope()` / `get_log_scope_requires_user()` | Чтение скоупа. |
-| `LogContractViolation` | Исключение контракта (для тестов). |
-| `LogRecordPayload` | Pydantic-контракт записи (`core/logging/contract.py`). |
-
-### Запреты
-
-- `import logging; logging.getLogger(...)` в `apps/**` и `core/**` (исключение — `core/logging/setup.py`, `core/logging/processors.py`, `core/tracing/tracer.py`).
-- `print(...)` в любом коде приложений и core (доктесты в docstring отлавливаются AST и не считаются нарушением).
-- `loguru`, `eliot`, ad-hoc fan-out в файлы.
-
-## Контракт записи (`LogRecordPayload`)
-
-Имена полей — **OpenTelemetry semantic conventions**, чтобы Loki/ELK/Datadog понимали лог без переименований. Полный список — `core/logging/contract.py` и `core/logging/attributes.py`.
-
-**Обязательные поля каждой записи** (заполняются процессорами автоматически):
-
-- `timestamp` — ISO 8601 в UTC
-- `level` — `DEBUG|INFO|WARNING|ERROR|CRITICAL`
-- `logger` — dotted name (`__name__`)
-- `message` — стабильный машинно-читаемый event-id (snake_case с точками: `auth.session.matched`, `payments.balance_updated`). Никаких эмодзи и интерполяции значений в строку — значения отдельными ключами.
-- `service.name` — `flows|frontend|crm|rag|sync|office|voice|browser|provider_litserve|guest_runtime|*_worker|scheduler`
-- `service.version` — из `settings.server.deployment_version`
-- `deployment.environment` — `local|test|production`
-
-**В request scope** (валидация — `enforce_required_fields`):
-
-- `request_id` (см. мега-правило)
-- `trace_id` — OTel trace_id; fallback — `core.context.trace_id`
-- При `requires_user=True`: `user_id`, `company_id`
-
-**Опциональные** (биндятся `bind_log_context` или из labels TaskIQ): `span_id`, `company_subdomain`, `session_id`, `namespace`, `task.{id,name,queue}`, `ws.{command,request_id}`.
-
-**Доменные** (OTel-совместимые): HTTP — `http.{method,path,route,status_code,duration_ms,request.size,response.size}`; DB — `db.{system,operation,duration_ms}`; LLM — `llm.{provider,model,tokens.input,tokens.output,duration_ms}`; Files — `file.{id,size,mime}`; Errors — `exception.{type,message,stacktrace}`.
-
-**Запреты:** пустые строки/`null` в обязательных полях (если значения нет — поле не пишется); произвольные имена в hot-path (только из `attributes.py`; кастомные — в namespace `attributes.<key>`); размер строкового значения ограничен `max_string_len` (по умолчанию 8 KiB) — обрезается с маркером `_truncated: true`.
-
-## Шаблоны записи
-
-```python
-from core.logging import get_logger
-logger = get_logger(__name__)
-
-logger.info("payments.payment_processed", transaction_id=txn.transaction_id, company_id=txn.company_id, amount=txn.amount)
-
-try:
-    await provider.charge(...)
-except ProviderError as exc:
-    logger.exception("payments.provider_failed", provider=provider.name, **{"exception.type": type(exc).__name__})
-    raise
-```
-
-LLM-стрим — только через `core/clients/llm/logging.log_llm_stream_response(...)` (сама проставит `llm.{provider,model,tokens.*,duration_ms}`).
-
-HTTP access — `AccessLogMiddleware` пишет одну строку `event="http_request"` (`http.{method,path,status_code,duration_ms}` + `request_id`/`trace_id`/`user_id`). Уровень: `INFO` для 2xx/3xx, `WARNING` для 4xx (кроме 401/404 на skip-paths), `ERROR` для 5xx.
-
-## Точки входа и контекст
-
-### HTTP
-
-`AccessLogMiddleware` (внешний слой) — единственная точка генерации `request_id` и `trace_id` на HTTP-входе. `enter_request_scope(...)` с `service_name`. На выходе — `exit_request_scope(token)`. В `response.headers` гарантированно проставлены `X-Request-Id` и `X-Trace-Id`.
-
-`AuthMiddleware` (внутренний слой) берёт `trace_id` из `request.state.trace_id`, биндит `user_id`, `company_id`, `company_subdomain`, `session_id`, `namespace` после авторизации. Скоуп **не** меняет.
-
-### TaskIQ (`core/tasks/logging_middleware.py`)
-
-1. `pre_send` (на инициаторе): `request_id`, `trace_id`, `service_name`, `user_id`, `company_id`, `namespace`, `session_id` из лог-контекста в `message.labels`. Нет `request_id`/`trace_id` — генерирует `kiq-orphan:<uuid>` и WARN `task.kiq_request_id_missing`.
-2. `pre_execute` (на воркере): нет `request_id`/`trace_id`/`service_name` (устаревшие записи stream) — `build_log_labels(background_kind='taskiq_recover')` + WARN `task.execute_log_labels_recovered`; затем `enter_request_scope`.
-3. `post_execute`/`on_error`: `exit_request_scope`.
-
-Воркер инициализируется через `register_worker_events(broker, startup, shutdown, service_name=...)`. `setup_logging` внутри сервисных `broker.py` запрещён CI.
-
-### Scheduler
-
-`apps/scheduler/dispatch.py` — для каждой запланированной задачи: `request_id="sched:<uuid>"`, `trace_id="sched:<uuid>"`, `service_name="scheduler"` (или из `task.labels`), `triggered_by="scheduler"`.
-
-### User WS (Centrifugo + bus `realtime`)
-
-Сокет пользователя — Centrifugo. Python не держит user WS.
-Команда `_requested`: CF RPC → `apps/realtime` inbound → `POST /{owner}/api/internal/realtime/command`
-(`core/realtime/command_http.py`) в HTTP request-скоупе владельца.
-
-### Background
-
-Голый `asyncio.create_task(...)` запрещён. Только `core.utils.background.run_with_log_context(coro, name=..., background_kind=...)`. Из request scope — `request_id`/`trace_id`/`user_id`/`company_id` наследуются автоматически (`background_kind` опционален). Из system scope — `background_kind` обязателен (`startup`/`recovery`/`polling`/`cron`); генерирует `request_id="<kind>:<uuid>"`, `trace_id="<kind>:<uuid>"`.
-
-### Шина `platform:events` (request_id в meta)
-
-`core/events/publisher.py::publish_event_*` автоматически проставляет `meta.trace_id` и `meta.request_id` из лог-контекста (можно явно через kwargs). Bus `realtime` пишет лог и публикует в Centrifugo.
-
-### Inter-service HTTP
-
-`core/clients/service_client.py::_build_headers`: `X-Request-Id` и `X-Trace-Id` всегда форвардятся из лог-контекста; `Authorization`, `X-Company-Id`, `X-User-Id`, `X-Platform-Namespace` — из бизнес-контекста (`get_context()`).
-
-## Конфигурация (`LoggingConfig`, `core/config/models.py`)
-
-```python
-class LoggingConfig(BaseModel):
-    level: Literal["DEBUG","INFO","WARNING","ERROR","CRITICAL"] = "INFO"
-    format: Literal["json","console"] = "json"
-    console_colors: bool = False
-    sample_rate_info: float = 1.0
-    sampled_loggers: list[str] = []
-    loggers_levels: dict[str, str] = {}
-    max_string_len: int = 8192
-    drop_keys: list[str] = []
-    grafana_public_url: Optional[str] = None
-    grafana_loki_datasource_uid: Optional[str] = None
-    grafana_org_id: str = "1"
-```
-
-`format: json` — одна JSON-строка на событие в stdout (для агрегаторов). `format: console` — `structlog.dev.ConsoleRenderer`. `ensure_ascii=False` для JSON. `setup_logging` падает (`LoggingMisconfigured`) при невалидном `level`/`format`/`service_name` (Zero-Guess).
-
-### JSON ошибок HTTP и Grafana Explore
-
-`PlatformHttpErrorEnvelopeMiddleware` сливает в JSON-тело ответов с HTTP ≥ 400 поля `request_id`, `trace_id`, `service`. Если `company_id == "system"` (`request.state.company`) и заданы `logging.grafana_public_url` (без завершающего `/`) и `logging.grafana_loki_datasource_uid`, добавляется `observability.logs_explore_url` (LogQL по whitelist сервисов как в `core.clients.loki_client`; при наличии `trace_id` — фильтр по нему, иначе — `request_id`). Поля `observability` без доверенной выдачи сервер удаляет. Конструктор Explore — `core.observability.grafana_explore`. Клиент — `core/frontend/static/lib/events/http.js` (`HttpError`).
-
-## Crawl / RuNet indexing events
-
-Константы — `core/logging/attributes.py` (`EVENT_CRAWL_*`, `LOG_CRAWL_*`). Эмиссия — `core/crawl/logging_events.py` (orchestrator, fetch, ingest, enrichment, reclaim, bootstrap).
-
-Примеры LogQL (Grafana dashboard `crawl-indexing`):
-
-```logql
-sum by (crawl_outcome) (rate({service="search-worker"} | json | message="crawl.url.outcome" [2m])) * 60
-quantile_over_time(0.95, {service="search-worker"} | json | message="crawl.fetch.completed" | unwrap fetch_duration_ms [5m]) by (fetch_transport)
-```
-
-## CI: `make check-logging` (`scripts/check_logging_canon.sh`)
-
-Exit 1 на нарушении:
-
-1. `logging.getLogger(...)` запрещён вне `core/logging/setup.py`, `core/logging/processors.py`, `core/logging/__init__.py`, `core/tracing/tracer.py`.
-2. `from core.logging.logger import` — модуль удалён.
-3. Файловые хендлеры запрещены вне `core/logging/**` и `scripts/**`.
-4. `print(...)` запрещён в `apps/**` и `core/**` (AST).
-5. Эмодзи в любом `logger.*` запрещены.
-6. `setup_logging(...)` запрещён в `apps/*_worker/broker.py` и `apps/sync/realtime/broker.py` — только `register_worker_events(...)`.
-7. `asyncio.create_task(...)` запрещён вне whitelisted инфраструктуры.
-8. `logger.<level>(f"...")` в `apps/`/`core/` запрещён (`scripts/check_logging_canon.sh`). Тот же счётчик — `logger_fstring` в `scripts/ratchet_baseline.json` (должен быть 0). Рядом ratchet: `logger_percent` (`%s`-format) и `logger_sentence` (пробел в первом аргументе вместо event-id).
-9. `enter_request_scope(...)` — только в платформенных точках входа.
-10. `clear_log_context()` запрещён вне `core/logging/**`.
-11. Прямые `.kiq(` / `find_task(` / `AsyncKicker(` / `create_broker(` вне whitelist — **FAIL**. Канон постановки в очередь — `core.tasks.enqueue`. Полный реестр/wiring — `scripts/check_taskiq_canon.py` / `make check-taskiq-canon`.
-12. `bind_log_context(...)` в `apps/` запрещён — `bind_session_agent` / `bind_test_scope`.
-
-## Сбор логов
-
-Stdout → **Grafana Alloy** → **Loki** (retention 14 дней). Поиск: `https://grafana.linnex.io` (primary) / `https://grafana.humanitec.ru` (legacy) → Explore → Loki.
-
-```
-{service="crm"} | json | level="ERROR"
-{svc="flows"} | json | trace_id="abc123def456..."
-{service="frontend"} | json | message="http_request" | http_status_code >= 500
-```
-
-Корреляция с трейсами — клик на `trace_id` в логе → Tempo waterfall. Подробнее — `infrastructure.mdc` → Observability.
+- `scripts/check_logging_canon.sh` (`make check-logging`, в `make lint-ts`) — `getLogger`, удалённый `core.logging.logger`, файловые хендлеры, `print` (AST), эмодзи, `setup_logging` в broker, `create_task`, f-string логи, `enter_request_scope` вне точек входа, `clear_log_context`, `.kiq(`, `bind_log_context` в `apps/`.
+- `scripts/check_ratchet_counts.py` (`make lint`) — `logger_fstring` = 0, `logger_percent`, `logger_sentence` не растут.

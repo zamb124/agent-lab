@@ -20,14 +20,14 @@ import pytest
 from core.clients.speech_override import SpeechOverride
 from core.clients.voice_resolver import (
     _company_cache,
-    _CompanyOverrideRow,
     get_stt_client,
     get_vad_client,
     reset_voice_resolver_for_tests,
     resolve_stt_settings,
 )
+from core.models.voice_models import CompanyVoiceProvider
 from core.config import get_settings
-from core.db.repositories.company_voice_provider_repository import VoiceKind
+from core.models.voice_models import VoiceKind
 from core.logging.scope import SystemLogScope
 
 pytestmark = pytest.mark.timeout(15)
@@ -79,7 +79,7 @@ def _find_voice_resolver_caplog_record(
     raise AssertionError(f"Нет log record voice_resolver с событием {event_name!r}")
 
 
-def _stub_company_cache(company_id: str, *, kind: VoiceKind, row: _CompanyOverrideRow | None) -> None:
+def _stub_company_cache(company_id: str, *, kind: VoiceKind, row: CompanyVoiceProvider | None) -> None:
     """Положить готовое значение в TTL-кэш, чтобы не ходить в БД."""
     _company_cache[(company_id, kind)] = (time.monotonic() + 3600, row)
 
@@ -127,15 +127,12 @@ async def test_resolve_stt_settings_company_override_wins(unique_id: str) -> Non
     _stub_company_cache(
         cid,
         kind="stt",
-        row=_CompanyOverrideRow(
+        row=CompanyVoiceProvider(
+            company_id=cid,
+            kind="stt",
             provider="cloud_ru",
             model="openai/whisper-large-v3",
-            voice=None,
             language="en",
-            sample_rate=None,
-            threshold=None,
-            response_format=None,
-            secrets=None,
         ),
     )
 
@@ -154,15 +151,12 @@ async def test_resolve_stt_settings_override_beats_company(unique_id: str) -> No
     _stub_company_cache(
         cid,
         kind="stt",
-        row=_CompanyOverrideRow(
+        row=CompanyVoiceProvider(
+            company_id=cid,
+            kind="stt",
             provider="cloud_ru",
             model="openai/whisper-large-v3",
-            voice=None,
             language="en",
-            sample_rate=None,
-            threshold=None,
-            response_format=None,
-            secrets=None,
         ),
     )
 
@@ -210,15 +204,12 @@ async def test_get_vad_client_ignores_company_vad_row_in_cache(
     _stub_company_cache(
         cid,
         kind="vad",
-        row=_CompanyOverrideRow(
+        row=CompanyVoiceProvider(
+            company_id=cid,
+            kind="vad",
             provider="cloud_ru",
             model="openai/whisper-large-v3",
-            voice=None,
             language="en",
-            sample_rate=None,
-            threshold=None,
-            response_format=None,
-            secrets=None,
         ),
     )
 

@@ -6,7 +6,8 @@ from collections.abc import Sequence
 
 import pytest
 
-from apps.crm.db.models import EntityType
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.entity_type import EntityType
 from core.authz.errors import AuthzUnavailable
 from core.authz.models import AuthzTuple
 from core.authz.service import AuthzService
@@ -18,9 +19,24 @@ from core.models.identity_models import Company, Namespace, NamespaceKind, User
 pytestmark = pytest.mark.asyncio
 
 
+async def test_search_similar_requires_user_context(crm_di) -> None:
+    set_context(
+        Context(
+            user=User(user_id=" ", name="No User"),
+            active_company=Company(company_id="system", name="System"),
+            channel="test",
+        )
+    )
+    try:
+        with pytest.raises(ValueError, match="User context is required for CRM semantic search"):
+            _ = await crm_di.entity_service.search_similar("alpha")
+    finally:
+        clear_context()
+
+
 async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
     authz_service: AuthzService,
-    crm_container,
+    crm_di,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -29,8 +45,6 @@ async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
     namespace = f"ns-{unique_id}"
     note_name = f"Compensate {unique_id}"
 
-    company_repository = crm_container.company_repository
-    user_repository = crm_container.user_repository
     company = Company(
         company_id=company_id,
         name="CRM Compensate",
@@ -38,11 +52,9 @@ async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
         members={},
     )
     owner = User(user_id=owner_id, name="Owner", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(owner)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=owner,
@@ -58,15 +70,15 @@ async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
         )
     )
     try:
-        _ = await crm_container.namespace_service.save(
+        _ = await crm_di.namespace_service.save(
             Namespace(
                 name=namespace,
                 company_id=company_id,
                 kind=NamespaceKind.COMPANY_WORKSPACE,
             )
         )
-        _ = await crm_container.namespace_service.ensure_exists(namespace)
-        _ = await crm_container.entity_type_repository.create_custom_type(
+        _ = await crm_di.namespace_service.ensure_exists(namespace)
+        _ = await EntityType.create(
             EntityType(
                 company_id=company_id,
                 namespace=namespace,
@@ -74,27 +86,28 @@ async def test_create_entity_compensate_deletes_row_when_fga_write_fails(
                 name="Note",
                 is_system=False,
             ),
-            company_id=company_id,
         )
 
         async def fail_write(_tuples: Sequence[AuthzTuple]) -> None:
             raise AuthzUnavailable("openfga down")
 
-        monkeypatch.setattr(crm_container.authz_service, "write", fail_write)
+        monkeypatch.setattr(crm_di.authz_service, "write", fail_write)
 
         with pytest.raises(AuthzUnavailable):
-            _ = await crm_container.entity_service.create_entity(
+            _ = await crm_di.entity_service.create_entity(
                 "note",
                 note_name,
                 namespace=namespace,
                 user_id=owner_id,
             )
 
-        rows, _, _ = await crm_container.entity_repository.list_by_cursor(
-            entity_type="note",
-            namespace=namespace,
-            company_id=company_id,
-        )
+        rows = (
+            await CRMEntity.cursor_page(
+                entity_type="note",
+                namespace=namespace,
+                company_id=company_id,
+            )
+        ).items
         assert rows == []
     finally:
         clear_context()

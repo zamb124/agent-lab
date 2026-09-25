@@ -6,11 +6,14 @@ MCP серверы подключаются по HTTP и предоставля�
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self, override
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from oxyde import Field as DbField
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from core.context.context import require_active_company
 from core.integrations.mcp import MCPDiscoveredTool, MCPInitializeResult, MCPToolDefinition
+from core.models.platform_model import CompanyScopedModel
 from core.types import JsonObject
 
 __all__ = [
@@ -46,95 +49,91 @@ class MCPTransportType(str, Enum):
     SSE = "sse"
 
 
-class MCPServerConfig(BaseModel):
-    """
-    Конфигурация MCP сервера.
+class MCPServerConfig(CompanyScopedModel):
+    """MCP-сервер компании. Таблица ``mcp_servers`` в базе flows."""
 
-    Хранится в Storage, используется для подключения к внешним MCP серверам.
-    Поддерживает @var: ссылки в headers для секретов.
-
-    NOTE: Используем BaseModel вместо StrictBaseModel,
-    т.к. StrictBaseModel имеет use_enum_values=True который
-    конвертирует enum в строку при присваивании.
-    """
-
+    __database_alias__: ClassVar[str | None] = "flows"
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
-    server_id: str = Field(
-        ...,
-        description="Уникальный идентификатор сервера",
-        pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*$",
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "mcp_servers"
+        unique_together: list[tuple[str, str]] = [("company_id", "server_id")]
+
+    server_id: str = DbField(
         min_length=2,
         max_length=64,
+        pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*$",
+        db_index=True,
+        description="Уникальный идентификатор сервера",
     )
-    name: str = Field(..., description="Отображаемое имя сервера")
-    url: str = Field(..., description="URL MCP сервера (JSON-RPC endpoint)")
-    transport_type: MCPTransportType = Field(
+    name: str = DbField(min_length=1, description="Отображаемое имя сервера")
+    url: str = DbField(min_length=1, description="URL MCP сервера (JSON-RPC endpoint)")
+    company_id: str = DbField(default="", db_index=True)
+    mcp_server_id: str = DbField(default="", db_pk=True)
+    transport_type: MCPTransportType = DbField(
         default=MCPTransportType.HTTP,
-        description="Тип транспорта: http или sse"
+        description="Тип транспорта: http или sse",
     )
+    headers: dict[str, str] = DbField(
+        default_factory=dict,
+        description="HTTP headers, поддерживает @var: ссылки",
+    )
+    propagate_platform_context: bool = DbField(default=False)
+    request_timeout_seconds: int | None = DbField(default=None)
+    is_active: bool = DbField(default=True, description="Активен ли сервер")
+    cached_tools: list[str] = DbField(
+        default_factory=list,
+        description="Закэшированные tool_id после синхронизации",
+    )
+    last_sync_at: datetime | None = DbField(default=None)
+    description: str | None = DbField(default=None, description="Описание сервера")
+    source: MCPServerSource = DbField(default=MCPServerSource.MANUAL)
+    catalog_id: str | None = DbField(default=None)
+    catalog_snapshot_hash: str | None = DbField(default=None)
+    catalog_auto_provisioned: bool = DbField(default=False)
+    override_locked: bool = DbField(default=False)
+    override_locked_at: datetime | None = DbField(default=None)
+    override_locked_by_user_id: str | None = DbField(default=None)
+    # Вычисляется при ответе API. db_reverse_fk не создаёт колонку.
+    icon_url: str | None = DbField(default=None, db_reverse_fk="mcp_server_id")
 
     @field_validator("transport_type", mode="before")
     @classmethod
-    def parse_transport_type(cls, v: str | MCPTransportType) -> MCPTransportType:
-        """Конвертирует строку в enum при десериализации из БД."""
-        return MCPTransportType(v)
-    headers: dict[str, str] = Field(
-        default_factory=dict,
-        description="HTTP headers, поддерживает @var: ссылки"
-    )
-    propagate_platform_context: bool = Field(
-        default=False,
-        description=(
-            "Для platform MCP серверов: добавить подписанные X-Platform-Context-* headers "
-            "из state.variables company_id/user_id."
-        ),
-    )
-    request_timeout_seconds: int | None = Field(
-        default=None,
-        description=(
-            "Per-server HTTP timeout (сек) для MCP JSON-RPC вызовов. None — общий default клиента. "
-            "Для platform search server поднят до окна public search chain."
-        ),
-    )
-    is_active: bool = Field(default=True, description="Активен ли сервер")
-    cached_tools: list[str] = Field(
-        default_factory=list,
-        description="Закэшированные tool_id после синхронизации"
-    )
-    last_sync_at: datetime | None = Field(
-        default=None,
-        description="Время последней синхронизации"
-    )
-    description: str | None = Field(default=None, description="Описание сервера")
-    source: MCPServerSource = Field(
-        default=MCPServerSource.MANUAL,
-        description="platform | catalog | manual",
-    )
-    catalog_id: str | None = Field(
-        default=None,
-        description="ID записи в глобальном MCP catalog (для source=catalog)",
-    )
-    catalog_snapshot_hash: str | None = Field(
-        default=None,
-        description="Hash catalog snapshot при последнем provision/reset",
-    )
-    catalog_auto_provisioned: bool = Field(
-        default=False,
-        description=(
-            "True — сервер создан auto-provisioner (platform_approved tier); "
-            "False — opt-in install из MCP Store или запись без catalog_auto_provisioned"
-        ),
-    )
-    override_locked: bool = Field(
-        default=False,
-        description="True — catalog provisioner не обновляет запись",
-    )
-    override_locked_at: datetime | None = Field(default=None)
-    override_locked_by_user_id: str | None = Field(default=None)
-    icon_url: str | None = Field(
-        default=None,
-        description="Вычисленный URL иконки; в Storage не хранится",
-    )
+    def parse_transport_type(cls, value: str | MCPTransportType) -> MCPTransportType:
+        return MCPTransportType(value)
+
+    @classmethod
+    def row_id(cls, server_id: str) -> str:
+        company_id = require_active_company().company_id
+        if server_id == "" or company_id == "":
+            raise ValueError("server_id is required")
+        if ":" in server_id or ":" in company_id:
+            raise ValueError("server_id and company_id must not contain ':'")
+        return f"{company_id}:{server_id}"
+
+    @model_validator(mode="after")
+    def bind_company(self) -> Self:
+        company_id = require_active_company().company_id
+        if company_id == "":
+            raise ValueError("company_id is required")
+        if self.company_id == "":
+            self.company_id = company_id
+        elif self.company_id != company_id:
+            raise ValueError("company_id does not match the active company")
+        expected = type(self).row_id(self.server_id)
+        if self.mcp_server_id == "":
+            self.mcp_server_id = expected
+        elif self.mcp_server_id != expected:
+            raise ValueError("mcp_server_id does not match company_id and server_id")
+        return self
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = is_create, update_fields
+        expected = type(self).row_id(self.server_id)
+        if self.company_id == "" or self.mcp_server_id != expected:
+            raise ValueError("mcp_server_id does not match the active company")
 
 
 class MCPCallResult(BaseModel):

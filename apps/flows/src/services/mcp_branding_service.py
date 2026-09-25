@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from apps.flows.src.db.mcp_catalog_repository import MCPCatalogRepository
-from apps.flows.src.db.mcp_server_branding_repository import MCPServerBrandingRepository
 from apps.flows.src.models.mcp_branding import MCPServerBranding, MCPServerBrandingResolved
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 from apps.flows.src.services.mcp_branding_aliases import (
     BRANDING_SERVER_ID_ALIASES,
     resolve_branding_server_id,
@@ -32,12 +31,8 @@ class MCPServerBrandingService:
     def __init__(
         self,
         *,
-        branding_repository: MCPServerBrandingRepository,
-        catalog_repository: MCPCatalogRepository,
         files_service: FilesService,
     ) -> None:
-        self._branding_repository: MCPServerBrandingRepository = branding_repository
-        self._catalog_repository: MCPCatalogRepository = catalog_repository
         self._files_service: FilesService = files_service
 
     @staticmethod
@@ -82,7 +77,7 @@ class MCPServerBrandingService:
         limit: int,
         offset: int,
     ) -> tuple[list[MCPServerBrandingResolved], int]:
-        entries = await self._branding_repository.list(limit=10_000)
+        entries = await MCPServerBranding.list(limit=10_000)
         query = search.strip().casefold()
         if query:
             entries = [entry for entry in entries if query in entry.server_id.casefold()]
@@ -95,7 +90,7 @@ class MCPServerBrandingService:
         return items, total
 
     async def suggest_branding_slugs(self, *, search: str, limit: int) -> list[str]:
-        entries = await self._catalog_repository.list(limit=10_000)
+        entries = await MCPCatalogEntry.list(limit=10_000)
         default_server_ids = [server.server_id for server in build_default_mcp_servers()]
         slugs = sorted({*default_server_ids, *(entry.catalog_id for entry in entries)}, key=str.casefold)
         query = search.strip().casefold()
@@ -104,7 +99,7 @@ class MCPServerBrandingService:
         return slugs[:limit]
 
     async def build_icon_url_map(self) -> dict[str, str]:
-        entries = await self._branding_repository.list(limit=10_000)
+        entries = await MCPServerBranding.list(limit=10_000)
         icon_map: dict[str, str] = {}
         for entry in entries:
             icon_map[entry.server_id] = await self._resolve_icon_url(entry.icon_file_id)
@@ -129,11 +124,11 @@ class MCPServerBrandingService:
         return icon_map
 
     async def get_icon_url(self, server_id: str) -> str | None:
-        branding = await self._branding_repository.get(server_id)
+        branding = await MCPServerBranding.get(server_id)
         if branding is None:
             canonical_server_id = resolve_branding_server_id(server_id)
             if canonical_server_id != server_id:
-                branding = await self._branding_repository.get(canonical_server_id)
+                branding = await MCPServerBranding.get(canonical_server_id)
         if branding is None:
             return None
         return await self._resolve_icon_url(branding.icon_file_id)
@@ -152,7 +147,7 @@ class MCPServerBrandingService:
             updated_at=now,
             updated_by_user_id=ctx.user.user_id,
         )
-        _ = await self._branding_repository.set(branding)
+        _ = await MCPServerBranding.set(branding)
         return MCPServerBrandingResolved(
             server_id=branding.server_id,
             icon_file_id=branding.icon_file_id,
@@ -164,7 +159,7 @@ class MCPServerBrandingService:
     async def delete_branding(self, server_id: str) -> None:
         self._require_system_company()
         normalized_server_id = self._validate_server_id(server_id)
-        existing = await self._branding_repository.get(normalized_server_id)
+        existing = await MCPServerBranding.get(normalized_server_id)
         if existing is None:
             raise LookupError(f"MCP branding {normalized_server_id} not found")
-        _ = await self._branding_repository.delete(normalized_server_id)
+        _ = await MCPServerBranding.delete_by_id(normalized_server_id)

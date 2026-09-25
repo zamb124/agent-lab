@@ -1,7 +1,7 @@
 """
 Alembic env для rag БД.
 
-Управляет таблицами: document_processing_status, vector_documents.
+RAG больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -16,11 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.db.models.rag import (  # noqa: F401
-    Base,
-    DocumentProcessingStatus,
-    VectorDocument,
-)
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -30,7 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {"document_processing_status", "vector_documents"}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

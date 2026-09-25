@@ -14,14 +14,13 @@ from pathlib import Path
 from types import FrameType, FunctionType, MethodType, ModuleType, TracebackType
 from typing import TypedDict, cast
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     inline_tools_list,
     require_company_member,
     require_view_flow,
 )
 from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.durable_execution import (
     NodeCompletedPayload,
     NodeScheduledPayload,
@@ -262,9 +261,9 @@ def _tool_call_code(
 
 
 def _platform_tool_templates(
-    container: FlowContainer, language: CapabilityLanguage
+    di: Di, language: CapabilityLanguage
 ) -> list[CodeTemplate]:
-    registry = container.tool_registry
+    registry = di.tool_registry
     registry.register_builtin_tools()
     templates: list[CodeTemplate] = []
     for tool_id, tool in sorted(registry.list_all().items(), key=lambda item: item[0]):
@@ -422,10 +421,10 @@ async def op_flows_code_documentation(
     payload: CodeDocumentationPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeDocumentationResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     capability_language = _require_capability_language(payload.language)
     _ = payload.perspective, payload.include_runtime_namespace_extras
     return CodeDocumentationResponse(
@@ -438,16 +437,16 @@ async def op_flows_code_templates(
     payload: CodeTemplatesPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TemplatesResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     capability_language = _require_capability_language(payload.language)
     _ = payload.category, payload.node_type, payload.tags
     return TemplatesResponse(
         templates=[
             *_capability_templates(capability_language),
-            *_platform_tool_templates(container, capability_language),
+            *_platform_tool_templates(di, capability_language),
         ]
     )
 
@@ -456,11 +455,15 @@ async def op_flows_code_editor_state(
     payload: CodeEditorStatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> JsonObject:
     _ = user
-    scope = await require_view_flow(container, payload.flow_id)
-    runtime_flow = await container.flow_factory.get_flow(payload.flow_id, payload.branch_id)
+    scope = await require_view_flow(di, payload.flow_id)
+    runtime_flow = await di.flow_factory.get_flow(
+        payload.flow_id,
+        payload.branch_id,
+        tool_registry=di.tool_registry,
+    )
     if runtime_flow is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {payload.flow_id}"))
 
@@ -500,10 +503,10 @@ async def op_flows_code_source(
     payload: CodeSourcePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> SourceResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return _get_source_by_path(payload.function_path)
 
 
@@ -511,10 +514,10 @@ async def op_flows_code_flow_functions(
     payload: CodeFlowFunctionsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowFunctionsResponse:
     _ = user
-    _ = await require_view_flow(container, payload.flow_id)
+    _ = await require_view_flow(di, payload.flow_id)
     flow_id = payload.flow_id
     try:
         module_path = f"apps.flows.bundles.{flow_id}.functions"
@@ -555,13 +558,13 @@ async def op_flows_code_tool_source(
     payload: CodeToolSourcePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> SourceResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     tool_path = payload.tool_path
 
-    registry = container.tool_registry
+    registry = di.tool_registry
     registry.register_builtin_tools()
     tool = registry.get(tool_path)
     if tool is None:
@@ -737,10 +740,10 @@ async def op_flows_code_parse_signature(
     payload: ParseSignatureRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ParseSignatureResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     request = payload
     if not request.code or not request.code.strip():
         return ParseSignatureResponse(success=False, error="Код пустой")
@@ -813,14 +816,18 @@ async def _merge_execute_state_with_flow(
     *,
     flow_id: str,
     branch_id: str,
-    container: "FlowContainer",
+    di: Di,
 ) -> FlowUIDocument:
     """
     Приближает state к реальному старту flow: файлы из всех нод графа + резолвнутые variables flow.
     Записи state.files из запроса, которых нет среди файлов графа, дописываются в конец.
     Возвращает интерфейс ветки — цели ``ui.render``/``ui.navigate`` проверяются по нему.
     """
-    runtime_flow = await container.flow_factory.get_flow(flow_id, branch_id)
+    runtime_flow = await di.flow_factory.get_flow(
+        flow_id,
+        branch_id,
+        tool_registry=di.tool_registry,
+    )
     if runtime_flow is None:
         raise ValueError(f"Flow not found: {flow_id}")
 
@@ -871,13 +878,13 @@ async def op_flows_code_validate(
     payload: ValidateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ValidateResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     request = payload
     if request.flow_id is not None and request.flow_id.strip():
-        _ = await require_view_flow(container, request.flow_id)
+        _ = await require_view_flow(di, request.flow_id)
     code = request.code
     validation_kind = _require_validation_kind(request)
     capability_language = _require_capability_language(request.language)
@@ -901,7 +908,7 @@ async def op_flows_code_validate(
             error=f"Invalid {capability_language} entrypoint name: {entrypoint_for_validation!r}",
         )
 
-    runner = container.get_code_runner(capability_language)
+    runner = di.code_runners.runner(capability_language)
     try:
         validation = await runner.validate_remote(
             code=code,
@@ -950,12 +957,12 @@ async def op_flows_code_execute(
     payload: ExecuteRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ExecuteResponse:
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     request = payload
     if request.flow_id is not None and request.flow_id.strip():
-        _ = await require_view_flow(container, request.flow_id)
+        _ = await require_view_flow(di, request.flow_id)
     input_state_raw = require_json_object(copy.deepcopy(request.state), "execute.state")
     start_time = time.time()
 
@@ -1035,14 +1042,14 @@ async def op_flows_code_execute(
                 input_state_normalized,
                 flow_id=resolved_flow_id,
                 branch_id=resolved_branch_id,
-                container=container,
+                di=di,
             )
 
         node_config = await _build_node_config(request)
         output_state = await _execute_node(
             node_config,
             input_state_normalized,
-            container,
+            di,
             flow_id=resolved_flow_id,
             interface=interface,
             user_id=user.user_id,
@@ -1246,7 +1253,7 @@ async def _build_node_config(request: ExecuteRequest) -> JsonObject:
 async def _execute_node(
     node_config: JsonObject,
     input_state: JsonObject,
-    container: FlowContainer,
+    di: Di,
     flow_id: str,
     interface: FlowUIDocument,
     user_id: str,
@@ -1267,13 +1274,15 @@ async def _execute_node(
         if isinstance(tools, list) and tools:
             node_config = {
                 **node_config,
-                "tools": await inline_tools_list(tools, container),
+                "tools": await inline_tools_list(tools, di),
             }
 
     node = await create_node(
         "test_node",
         node_config,
-        container=as_flow_runtime_container(container),
+        node_constructor=di.node_constructor,
+        tool_registry=(di).tool_registry,
+        flow_factory=di.flow_factory,
     )
     state = ExecutionState.model_validate(state_data)
     node_type = node_config.get("type")
@@ -1281,7 +1290,7 @@ async def _execute_node(
         raise ValueError("execute.node_config.type must be a non-empty string")
     state.current_nodes = ["test_node"]
 
-    runtime = container.workflow_runtime
+    runtime = di.workflow_runtime
     base_event = await runtime.record_state_event(
         state.session_id,
         state,
@@ -1318,7 +1327,6 @@ async def _execute_node(
     if context is None or context.active_company is None:
         raise ValueError("Node execute requires active_company for durable A2A projection")
     await ensure_submitted_a2a_task(
-        repository=container.a2a_task_repository,
         company_id=context.active_company.company_id,
         state=state,
     )

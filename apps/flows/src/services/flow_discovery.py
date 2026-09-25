@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from apps.flows.config import ExternalFlowConfig
-from apps.flows.src.db.flow_repository import FlowRepository
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from core.clients.a2a_client import A2AClient
 from core.logging import get_logger
@@ -22,10 +21,8 @@ class FlowDiscoveryService:
 
     def __init__(
         self,
-        repository: FlowRepository,
         a2a_client: A2AClient,
     ) -> None:
-        self._repository: FlowRepository = repository
         self._a2a_client: A2AClient = a2a_client
 
     async def init_from_config(self, external_flows_config: list[ExternalFlowConfig]) -> int:
@@ -61,7 +58,7 @@ class FlowDiscoveryService:
         """
         url = url.rstrip("/")
 
-        stored_flows = await self._repository.list(limit=10000)
+        stored_flows = await FlowConfig.list_current(limit=10000)
         for existing in stored_flows:
             if existing.type == FlowType.EXTERNAL and existing.url == url:
                 logger.info("flows.discovery.already_registered", url=url)
@@ -98,21 +95,21 @@ class FlowDiscoveryService:
             updated_at=now,
         )
 
-        _ = await self._repository.set(flow_cfg)
+        _ = await FlowConfig.create_version(flow_cfg)
         logger.info("flows.discovery.registered", name=display_name, url=url)
 
         return flow_cfg
 
     async def unregister_agent(self, flow_id: str) -> bool:
         """Удаляет запись EXTERNAL flow из репозитория."""
-        result = await self._repository.delete(flow_id)
+        result = await FlowConfig.delete_by_flow_id(flow_id)
         if result:
             logger.info("flows.discovery.unregistered", flow_id=flow_id)
         return result
 
     async def get_flow(self, flow_id: str) -> FlowConfig | None:
         """Внешний flow (EXTERNAL) по flow_id."""
-        flow_cfg = await self._repository.get(flow_id)
+        flow_cfg = await FlowConfig.get_latest(flow_id)
         if flow_cfg and flow_cfg.type == FlowType.EXTERNAL:
             return flow_cfg
         return None
@@ -120,7 +117,7 @@ class FlowDiscoveryService:
     async def get_flow_by_url(self, url: str) -> FlowConfig | None:
         """Внешний flow по нормализованному base URL."""
         url = url.rstrip("/")
-        stored_flows = await self._repository.list(limit=10000)
+        stored_flows = await FlowConfig.list_current(limit=10000)
         for row in stored_flows:
             if row.type == FlowType.EXTERNAL and row.url == url:
                 return row
@@ -128,7 +125,7 @@ class FlowDiscoveryService:
 
     async def list_agents(self, only_active: bool = True) -> list[FlowConfig]:
         """Список EXTERNAL flows (имя метода историческое; сущность — flow)."""
-        stored_flows = await self._repository.list(limit=10000)
+        stored_flows = await FlowConfig.list_current(limit=10000)
         external = [row for row in stored_flows if row.type == FlowType.EXTERNAL]
 
         if only_active:
@@ -137,7 +134,7 @@ class FlowDiscoveryService:
 
     async def health_check_all(self) -> dict[str, bool]:
         """Health-check по всем записям в репозитории."""
-        rows = await self._repository.list(limit=10000)
+        rows = await FlowConfig.list_current(limit=10000)
         results: dict[str, bool] = {}
 
         for row in rows:
@@ -148,7 +145,7 @@ class FlowDiscoveryService:
 
     async def health_check_agent(self, flow_id: str) -> bool:
         """Health-check для EXTERNAL flow по flow_id."""
-        ext_cfg = await self._repository.get(flow_id)
+        ext_cfg = await FlowConfig.get_latest(flow_id)
         if ext_cfg is None or ext_cfg.type != FlowType.EXTERNAL:
             return False
         if ext_cfg.url is None:
@@ -161,7 +158,7 @@ class FlowDiscoveryService:
             ext_cfg.last_health_check = datetime.now(timezone.utc)
             ext_cfg.agent_card = card_payload
             ext_cfg.updated_at = datetime.now(timezone.utc)
-            _ = await self._repository.set(ext_cfg)
+            _ = await FlowConfig.create_version(ext_cfg)
 
             logger.debug("flows.discovery.healthy", flow_id=flow_id)
             return True
@@ -172,7 +169,7 @@ class FlowDiscoveryService:
             ext_cfg.status = ExternalAgentStatus.UNHEALTHY
             ext_cfg.last_health_check = datetime.now(timezone.utc)
             ext_cfg.updated_at = datetime.now(timezone.utc)
-            _ = await self._repository.set(ext_cfg)
+            _ = await FlowConfig.create_version(ext_cfg)
 
             return False
 

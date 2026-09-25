@@ -31,5 +31,7 @@ def iter_builtin_tool_definitions() -> list[ToolDefinition]:
             raise TypeError(
                 f"Builtin tool {module_name}.{attr_name} must be a BaseTool instance"
             )
+        if raw_tool.name.startswith("stock_"):
+            continue
         definitions.append(build_tool_definition_from_base_tool(raw_tool))
     return definitions

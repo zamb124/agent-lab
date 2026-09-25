@@ -8,8 +8,7 @@ from enum import StrEnum
 
 from pydantic import Field
 
-from apps.flows.src.db import ResourceRepository
-from apps.flows.src.models.resource import ResourceType
+from apps.flows.src.models.resource import ResourceDefinition, ResourceType
 from core.models import StrictBaseModel
 from core.state import ExecutionState
 from core.state.interrupt import HandoffInterrupt
@@ -35,18 +34,15 @@ class HandoffContextResourceConfig(StrictBaseModel):
 
 
 class HandoffContextService:
-    _resource_repository: ResourceRepository
-
-    def __init__(self, *, resource_repository: ResourceRepository) -> None:
-        self._resource_repository = resource_repository
-
     async def resolve_config(
         self,
         resource_key: str | None,
     ) -> HandoffContextResourceConfig | None:
         if resource_key is None or not resource_key.strip():
             return None
-        resource = await self._resource_repository.get(resource_key)
+        resource = await ResourceDefinition.get(
+            ResourceDefinition.row_id(resource_key)
+        )
         if resource is None:
             raise ValueError(f"handoff context resource not found: {resource_key}")
         if resource.type != ResourceType.HANDOFF_CONTEXT:

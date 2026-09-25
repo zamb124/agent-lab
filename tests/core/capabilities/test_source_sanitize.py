@@ -14,7 +14,7 @@ def test_reject_forbidden_platform_imports_allows_clean_source() -> None:
 
 def test_reject_forbidden_platform_imports_raises_with_lines() -> None:
     code = (
-        "from apps.flows.src.container import get_container\n"
+        "from apps.flows.src.runtime.nodes import NodeConstructor\n"
         "import core.context\n"
         "async def run(args, state):\n"
         "    return {}\n"
@@ -22,5 +22,5 @@ def test_reject_forbidden_platform_imports_raises_with_lines() -> None:
     with pytest.raises(ValueError, match="Forbidden lines") as exc_info:
         _ = reject_forbidden_platform_imports(code)
     message = str(exc_info.value)
-    assert "1: from apps.flows.src.container import get_container" in message
+    assert "1: from apps.flows.src.runtime.nodes import NodeConstructor" in message
     assert "2: import core.context" in message

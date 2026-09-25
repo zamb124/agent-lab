@@ -23,7 +23,7 @@
  */
 
 import { html, css } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/page-header.js';

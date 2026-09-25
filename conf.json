@@ -11,6 +11,7 @@
     "wiki_service_url": "http://localhost:8023",
     "guest_runtime_service_url": "http://localhost:8024",
     "realtime_service_url": "http://localhost:8025",
+    "stock_service_url": "http://localhost:8026",
     "office_service_url": "http://localhost:8008",
     "browser_service_url": "http://localhost:8009",
     "search_service_url": "http://localhost:8010",
@@ -37,6 +38,7 @@
     "secrets_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_secrets",
     "wiki_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_wiki",
     "realtime_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_realtime",
+    "stock_url": "postgresql+asyncpg://platform_user:admin@localhost:54321/platform_stock",
     "redis_url": "redis://localhost:63791/0"
   },
   "openfga": {
@@ -54,7 +56,7 @@
   "realtime": {
     "centrifugo_api_url": "http://127.0.0.1:8000/api",
     "centrifugo_api_key": "YOUR_CENTRIFUGO_API_KEY",
-    "command_deadline_seconds": 30,
+    "command_deadline_seconds": 60,
     "sweeper_interval_seconds": 5.0
   },
   "logging": {
@@ -537,27 +539,13 @@
   },
   "s3": {
     "enabled": true,
-    "default_bucket": "shvedzilla",
-    "buckets": {
-      "shvedzilla": {
-        "provider": "aws",
-        "access_key_id": "YOUR_SELECTEL_ACCESS_KEY",
-        "secret_access_key": "YOUR_SELECTEL_SECRET_KEY",
-        "region_name": "ru-3",
-        "endpoint_url": "https://s3.ru-3.storage.selcloud.ru",
-        "bucket_name": "shvedzilla",
-        "enabled": true
-      },
-      "test-bucket": {
-        "provider": "minio",
-        "bucket_name": "test-bucket",
-        "access_key_id": "YOUR_MINIO_ACCESS_KEY",
-        "secret_access_key": "YOUR_MINIO_SECRET_KEY",
-        "region_name": "us-east-1",
-        "endpoint_url": "http://127.0.0.1:19001",
-        "enabled": false
-      }
-    }
+    "provider": "minio",
+    "endpoint_url": "http://minio.platform.svc.cluster.local:9000",
+    "region_name": "us-east-1",
+    "bucket_name": "platform",
+    "access_key_id": "YOUR_MINIO_ACCESS_KEY",
+    "secret_access_key": "YOUR_MINIO_SECRET_KEY",
+    "path_style": true
   },
   "proxy": {
     "enabled": false,
@@ -898,6 +886,14 @@
         "name": "secrets",
         "host": "0.0.0.0",
         "port": 8022,
+        "debug": true
+      }
+    },
+    "stock": {
+      "server": {
+        "name": "stock",
+        "host": "0.0.0.0",
+        "port": 8026,
         "debug": true
       }
     },

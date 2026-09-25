@@ -51,19 +51,19 @@ async def test_function_tool_inherits_contract_metadata() -> None:
 
 
 @pytest.mark.asyncio
-async def test_function_tool_inherits_permission_check(container, unique_id) -> None:
+async def test_function_tool_inherits_permission_check(di, unique_id) -> None:
     denied_user = f"echo-denied-{unique_id}"
     allowed_user = f"echo-allowed-{unique_id}"
     company_id = f"echo-co-{unique_id}"
     await sync_user_groups(
-        container.authz_service,
+        di.authz_service,
         user_id=denied_user,
         groups=["users"],
         company_ids=[company_id],
         previous_groups=[],
     )
     await sync_user_groups(
-        container.authz_service,
+        di.authz_service,
         user_id=allowed_user,
         groups=["managers"],
         company_ids=[company_id],

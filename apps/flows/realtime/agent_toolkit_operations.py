@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from apps.agent.service import build_toolkit_mcp_url_for_frontend
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.agent_toolkit import (
     AgentToolkit,
     AgentToolkitCatalogItem,
@@ -20,11 +20,6 @@ from apps.flows.src.services.agent_toolkit_notify import notify_agent_toolkits_u
 from apps.flows.src.services.agent_toolkit_service import (
     CUSTOM_TOOLKIT_SOURCE,
     PLATFORM_TOOLKIT_SOURCE,
-    delete_agent_toolkit,
-    ensure_agent_toolkits_bootstrapped,
-    get_agent_toolkit,
-    list_agent_toolkits,
-    save_agent_toolkit,
 )
 from core.models.identity_models import User
 from core.pagination import ListResponse
@@ -42,16 +37,14 @@ async def op_flows_agent_toolkits_catalog_list(
     payload: AgentToolkitCatalogListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[AgentToolkitCatalogItem]:
     """Каталог групп инструментов с MCP URL; спаренный desktop (LaraOnly) видит только `lara`."""
     _ = user
-    scope = await require_company_member(container)
-    _ = await ensure_agent_toolkits_bootstrapped(
-        container.agent_toolkit_repository, company_id=scope.company_id
-    )
+    scope = await require_company_member(di)
+    _ = await AgentToolkit.ensure_agent_toolkits_bootstrapped(company_id=scope.company_id)
     items: list[AgentToolkitCatalogItem] = []
-    for toolkit in await list_agent_toolkits(container.agent_toolkit_repository):
+    for toolkit in await AgentToolkit.list_agent_toolkits():
         is_desktop_toolkit = toolkit.toolkit_id == LINNEX_AGENT_DESKTOP_TOOLKIT_ID
         if payload.desktop_only and not is_desktop_toolkit:
             continue
@@ -74,12 +67,12 @@ async def op_flows_agent_toolkits_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[AgentToolkit]:
     _ = payload, user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse[AgentToolkit](
-        items=await list_agent_toolkits(container.agent_toolkit_repository)
+        items=await AgentToolkit.list_agent_toolkits()
     )
 
 
@@ -87,11 +80,11 @@ async def op_flows_agent_toolkits_item(
     payload: AgentToolkitIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> AgentToolkit:
     _ = user
-    _ = await require_company_member(container)
-    toolkit = await get_agent_toolkit(container.agent_toolkit_repository, payload.toolkit_id)
+    _ = await require_company_member(di)
+    toolkit = await AgentToolkit.by_toolkit_id(payload.toolkit_id)
     if toolkit is None:
         raise_not_found(LookupError(f"toolkit {payload.toolkit_id!r} not found"))
     return toolkit
@@ -101,27 +94,25 @@ async def op_flows_agent_toolkits_create(
     payload: AgentToolkitCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> AgentToolkit:
     _ = user
-    scope = await require_company_member(container)
-    existing = await get_agent_toolkit(container.agent_toolkit_repository, payload.toolkit_id)
+    scope = await require_company_member(di)
+    existing = await AgentToolkit.by_toolkit_id(payload.toolkit_id)
     if existing is not None:
         raise_conflict(ValueError(f"toolkit {payload.toolkit_id!r} already exists"))
-    saved = await save_agent_toolkit(
-        container.agent_toolkit_repository,
-        AgentToolkit(
-            toolkit_id=payload.toolkit_id,
-            name=payload.name,
-            description=payload.description,
-            default_enabled=payload.default_enabled,
-            position=payload.position,
-            flow_ids=list(payload.flow_ids),
-            tool_ids=list(payload.tool_ids),
-            source=CUSTOM_TOOLKIT_SOURCE,
-        ),
+    saved = AgentToolkit(
+        toolkit_id=payload.toolkit_id,
+        name=payload.name,
+        description=payload.description,
+        default_enabled=payload.default_enabled,
+        position=payload.position,
+        flow_ids=list(payload.flow_ids),
+        tool_ids=list(payload.tool_ids),
+        source=CUSTOM_TOOLKIT_SOURCE,
     )
-    await notify_agent_toolkits_updated(container.redis_client, scope.company_id)
+    _ = await AgentToolkit.set(saved)
+    await notify_agent_toolkits_updated(di.redis_client, scope.company_id)
     return saved
 
 
@@ -129,27 +120,25 @@ async def op_flows_agent_toolkits_update(
     payload: AgentToolkitUpdatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> AgentToolkit:
     _ = user
-    scope = await require_company_member(container)
-    existing = await get_agent_toolkit(container.agent_toolkit_repository, payload.toolkit_id)
+    scope = await require_company_member(di)
+    existing = await AgentToolkit.by_toolkit_id(payload.toolkit_id)
     if existing is None:
         raise_not_found(LookupError(f"toolkit {payload.toolkit_id!r} not found"))
-    saved = await save_agent_toolkit(
-        container.agent_toolkit_repository,
-        existing.model_copy(
-            update={
-                "name": payload.name,
-                "description": payload.description,
-                "default_enabled": payload.default_enabled,
-                "position": payload.position,
-                "flow_ids": list(payload.flow_ids),
-                "tool_ids": list(payload.tool_ids),
-            }
-        ),
+    saved = existing.model_copy(
+        update={
+            "name": payload.name,
+            "description": payload.description,
+            "default_enabled": payload.default_enabled,
+            "position": payload.position,
+            "flow_ids": list(payload.flow_ids),
+            "tool_ids": list(payload.tool_ids),
+        },
     )
-    await notify_agent_toolkits_updated(container.redis_client, scope.company_id)
+    _ = await AgentToolkit.set(saved)
+    await notify_agent_toolkits_updated(di.redis_client, scope.company_id)
     return saved
 
 
@@ -157,15 +146,15 @@ async def op_flows_agent_toolkits_remove(
     payload: AgentToolkitIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> AgentToolkitDeletedResponse:
     _ = user
-    scope = await require_company_member(container)
-    existing = await get_agent_toolkit(container.agent_toolkit_repository, payload.toolkit_id)
+    scope = await require_company_member(di)
+    existing = await AgentToolkit.by_toolkit_id(payload.toolkit_id)
     if existing is None:
         raise_not_found(LookupError(f"toolkit {payload.toolkit_id!r} not found"))
     if existing.source == PLATFORM_TOOLKIT_SOURCE:
         raise_forbidden(PermissionError("platform toolkit cannot be deleted"))
-    await delete_agent_toolkit(container.agent_toolkit_repository, payload.toolkit_id)
-    await notify_agent_toolkits_updated(container.redis_client, scope.company_id)
+    _ = await AgentToolkit.delete_by_toolkit_id(payload.toolkit_id)
+    await notify_agent_toolkits_updated(di.redis_client, scope.company_id)
     return AgentToolkitDeletedResponse(status="deleted", toolkit_id=payload.toolkit_id)

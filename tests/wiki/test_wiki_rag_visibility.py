@@ -13,14 +13,13 @@ from __future__ import annotations
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from oxyde import execute_raw
 
 from apps.wiki.models.domain import WikiVisibility
 from apps.wiki.services.rag_index import restricted_namespace_id
 from apps.wiki.services.rag_metadata import WIKI_SOURCE_KIND
 from core.config import get_settings
-from core.db.models.rag import VectorDocument
+from core.types import require_json_object
 from tests.wiki.conftest import API_PREFIX, PAGES_URL
 
 pytestmark = pytest.mark.no_test_doubles
@@ -34,34 +33,38 @@ async def rag_index_session():
     только так видно, что текст действительно уехал из общего пространства.
     """
     rag_url = get_settings().database.rag_url
-    assert rag_url, "database.rag_url обязателен для проверки индекса"
-    engine = create_async_engine(rag_url, echo=False)
-    factory = async_sessionmaker(bind=engine, expire_on_commit=False)
-    try:
-        yield factory
-    finally:
-        await engine.dispose()
+    if rag_url is None or rag_url == "":
+        pytest.fail("database.rag_url is required for the RAG index check")
+    yield None
 
 
-async def _indexed_namespaces(session_factory, wiki_page_id: str) -> set[str]:
+async def _indexed_namespaces(_session: object, wiki_page_id: str) -> set[str]:
     """Пространства RAG, в которых сейчас лежат чанки страницы."""
-    async with session_factory() as session:
-        rows = await session.execute(
-            select(VectorDocument.namespace_id)
-            .where(VectorDocument.document_id == wiki_page_id)
-            .distinct()
-        )
-        return set(rows.scalars().all())
+    rows = await execute_raw(
+        "SELECT DISTINCT namespace_id FROM vector_documents WHERE document_id = $1",
+        [wiki_page_id],
+        using="rag",
+    )
+    namespaces: set[str] = set()
+    for row in rows:
+        parsed = require_json_object(row, "wiki_rag_namespace")
+        namespace_id = parsed["namespace_id"]
+        if not isinstance(namespace_id, str):
+            raise TypeError("vector_documents.namespace_id must be a string")
+        namespaces.add(namespace_id)
+    return namespaces
 
 
-async def _chunk_metadata(session_factory, wiki_page_id: str) -> dict[str, object]:
-    async with session_factory() as session:
-        row = await session.execute(
-            select(VectorDocument.metadata_).where(VectorDocument.document_id == wiki_page_id)
-        )
-        metadata = row.scalars().first()
-    assert metadata is not None, "чанки страницы не найдены в индексе"
-    return dict(metadata)
+async def _chunk_metadata(_session: object, wiki_page_id: str):
+    rows = await execute_raw(
+        "SELECT metadata FROM vector_documents WHERE document_id = $1 LIMIT 1",
+        [wiki_page_id],
+        using="rag",
+    )
+    if not rows:
+        raise AssertionError("чанки страницы не найдены в индексе")
+    metadata = require_json_object(rows[0], "wiki_rag_chunk")["metadata"]
+    return dict(require_json_object(metadata, "wiki_rag_metadata"))
 
 
 async def test_new_page_lands_in_shared_company_namespace(
@@ -220,11 +223,14 @@ async def test_updating_page_replaces_indexed_text(
     )
     assert updated.status_code == 200, updated.text
 
-    async with rag_index_session() as session:
-        rows = await session.execute(
-            select(VectorDocument.content).where(VectorDocument.document_id == page_id)
-        )
-        contents = " ".join(rows.scalars().all())
+    content_rows = await execute_raw(
+        "SELECT content FROM vector_documents WHERE document_id = $1",
+        [page_id],
+        using="rag",
+    )
+    contents = " ".join(
+        str(require_json_object(row, "wiki_rag_content")["content"]) for row in content_rows
+    )
 
     assert "Новая формулировка" in contents
     assert "Старая формулировка" not in contents
@@ -286,13 +292,12 @@ async def test_index_has_single_copy_per_page(
         )
         assert response.status_code == 200, response.text
 
-    async with rag_index_session() as session:
-        total = await session.execute(
-            select(func.count())
-            .select_from(VectorDocument)
-            .where(VectorDocument.document_id == page_id)
-        )
-        chunks = total.scalar_one()
+    total_rows = await execute_raw(
+        "SELECT COUNT(*)::int AS cnt FROM vector_documents WHERE document_id = $1",
+        [page_id],
+        using="rag",
+    )
+    chunks = require_json_object(total_rows[0], "wiki_rag_count")["cnt"]
 
     # Перезапись не должна оставлять предыдущие версии рядом с актуальной.
     assert chunks == 1

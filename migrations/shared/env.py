@@ -1,7 +1,7 @@
 """
 Alembic env для shared БД.
 
-Управляет таблицами: storage, users, usage, namespaces, push_subscriptions.
+Shared больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -16,25 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from core.db.models.platform import (  # noqa: F401 — регистрируют таблицы в Base.metadata
-    ApiKeyRecord,
-    Base,
-    CalendarEventRecord,
-    CalendarIntegrationRecord,
-    CompanyMailConnectionRecord,
-    CookieConsentSqlRecord,
-    DatasourceConnectionRecord,
-    DatasourceConnectorRecord,
-    IntegrationCredentialRecord,
-    MailboxBindingRecord,
-    Namespaces,
-    PlatformShortLink,
-    PushSubscription,
-    SchedulerTaskRecord,
-    Storage,
-    Usage,
-    Users,
-)
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -44,15 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "storage", "users", "usage",
-    "namespaces", "push_subscriptions",
-    "calendar_events", "calendar_integrations", "integration_credentials",
-    "scheduler_tasks", "platform_short_links", "api_keys",
-    "company_mail_connections", "mailbox_bindings", "mailbox_sync_cursors", "mail_messages",
-    "datasource_connections", "datasource_connectors",
-    "cookie_consents",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

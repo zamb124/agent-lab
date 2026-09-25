@@ -541,7 +541,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _startEditRule(item) {
-        this._ruleEditId = item.id;
+        this._ruleEditId = item.pronunciation_rule_id;
         this._ruleDraft = {
             kind:           item.kind,
             pattern:        item.pattern,
@@ -917,7 +917,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
     }
 
     _renderRuleItem(item, isDeleting) {
-        const isEditing = this._ruleEditId === item.id;
+        const isEditing = this._ruleEditId === item.pronunciation_rule_id;
         return html`
             <div class="rule-item
                 ${!item.enabled ? 'rule-disabled' : ''}
@@ -940,7 +940,7 @@ class FrontendCompanyVoiceProvidersPage extends PlatformPage {
                     <glass-button size="sm" variant="ghost"
                         title="${this.t('pronunciation_rules_page.btn_delete')}"
                         ?disabled=${isDeleting}
-                        @click=${() => this._deleteRule(item.id)}
+                        @click=${() => this._deleteRule(item.pronunciation_rule_id)}
                     ><platform-icon name="trash" size="14"></platform-icon></glass-button>
                 </span>
             </div>

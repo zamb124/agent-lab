@@ -55,7 +55,7 @@ async def test_01_entity_public_grant(
     }
 
     create_response = await crm_client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json=entity_data,
         headers=auth_headers_system,
     )
@@ -131,7 +131,7 @@ async def test_02_entity_user_grant(
     }
 
     create_response = await crm_client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json=entity_data,
         headers=auth_headers_system,
     )

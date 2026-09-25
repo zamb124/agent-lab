@@ -14,9 +14,9 @@ from tests.fixtures.auth import set_test_company_member_roles
 
 @pytest.mark.asyncio
 async def test_function_tool_permission_denied_without_company_membership(
-    container, unique_id
+    di, unique_id
 ) -> None:
-    _ = container
+    _ = di
     state = ExecutionState(
         task_id="perm-task",
         context_id="perm-context",
@@ -32,7 +32,7 @@ async def test_function_tool_permission_denied_without_company_membership(
 
 @pytest.mark.asyncio
 async def test_function_tool_permission_granted_for_company_member(
-    container,
+    di,
     unique_id,
 ) -> None:
     user_id = f"member-{unique_id}"
@@ -48,11 +48,10 @@ async def test_function_tool_permission_granted_for_company_member(
         name="Co",
         members={user_id: ["member"]},
     )
-    await container.user_repository.set(user)
-    await container.company_repository.set(company)
+    await User.set(user)
+    await Company.set(company)
     await set_test_company_member_roles(
-        container.company_repository,
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["member"],

@@ -14,7 +14,7 @@ from core.clients.llm.context_layer import (
     prepare_messages_for_context_layer,
 )
 from core.clients.llm.messages import messages_to_openai, normalize_messages
-from core.context import Company, Context, User, clear_context, set_context
+from core.context import clear_context, set_context
 from core.llm_context import (
     LLM_CONTEXT_PROFILE_METADATA_KEY,
     LLMContextBlock,
@@ -26,6 +26,8 @@ from core.llm_context import (
     LLMContextSourceRequest,
     SimpleTokenCounter,
 )
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 
 
 def _compiler() -> LLMContextCompiler:

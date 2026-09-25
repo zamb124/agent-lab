@@ -5,7 +5,7 @@
         payload: <Op>Payload,
         *,
         user: User,
-        container: SyncContainer,
+        di: Di,
     ) -> <Op>Result | None
 
 Для каждой операции:
@@ -43,9 +43,7 @@ from pydantic import BaseModel, Field
 
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.constants import CHANNEL_TYPE_CALENDAR_MEETING
-from apps.sync.container import SyncContainer
-from apps.sync.db.models import SyncCall, SyncCallLink, SyncCallRecording, SyncChannel
-from apps.sync.db.repositories.meeting_repository import call_recording_read
+from apps.sync.di import Di
 from apps.sync.events import (
     MessageStatusChangedPayload,
     event_call_admin_changed,
@@ -66,6 +64,9 @@ from apps.sync.events import (
     event_thread_created,
 )
 from apps.sync.message_read_helpers import message_read_from_entity
+from apps.sync.models.call import SyncCall
+from apps.sync.models.call_link import SyncCallLink
+from apps.sync.models.call_participant import SyncCallParticipant
 from apps.sync.models.calls import (
     CallLinkCreate,
     CallLinkInfo,
@@ -81,6 +82,10 @@ from apps.sync.models.calls import (
     GuestJoinRequest,
     JoinResponse,
 )
+from apps.sync.models.channel import (
+    SyncChannel,
+    SyncChannelMember,
+)
 from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberRead,
@@ -93,10 +98,12 @@ from apps.sync.models.company_members import CompanyMemberRead
 from apps.sync.models.git import (
     GitProvider,
     GitResourceKind,
+    GitResourceRef,
     GitResourceRefCreate,
     GitResourceRefRead,
 )
-from apps.sync.models.meetings import CallRecordingRead
+from apps.sync.models.meetings import CallRecordingRead, SyncCallRecording
+from apps.sync.models.message import SyncMessage, SyncMessageContent
 from apps.sync.models.messages import (
     CallBoundaryContent,
     MessageContentModel,
@@ -107,7 +114,7 @@ from apps.sync.models.messages import (
     MessageStatus,
     ReactionEntry,
 )
-from apps.sync.models.threads import ThreadCreate, ThreadRead, ThreadRow
+from apps.sync.models.threads import SyncThread, ThreadCreate, ThreadRead, ThreadRow
 from apps.sync.realtime.call_handlers import (
     call_read_from_entities,
     handle_call_accept,
@@ -148,13 +155,16 @@ from core.calls.turn import generate_turn_credentials
 from core.config import BaseSettings, get_settings
 from core.events import publish_events
 from core.events.contract import PlatformEvent
+from core.files.create_spec import FileSourceKind
 from core.files.file_ref import FileRef, stored_file_ref
 from core.files.models import AudioTranscriptionStatus, FileRecord
+from core.files.object_store.gate import FileGate
 from core.logging import get_logger
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.pagination import CursorPage, ListResponse, OffsetPage
 from core.platform_brand.resolver import resolve_context_host, resolve_livekit_public_url
 from core.request_scope import require_company
+from core.short_links.models import PlatformShortLink
 from core.tasks import enqueue
 from core.types import JsonObject, parse_json_object
 from core.websocket import WsCommandError
@@ -235,13 +245,13 @@ class ChannelsListMembersPayload(BaseModel):
 
 
 async def _build_channel_read(
-    container: SyncContainer,
+    di: Di,
     channel: SyncChannel,
     *,
     viewer_id: str,
     company_id: str,
 ) -> ChannelRead:
-    summaries = await container.message_repository.channel_lane_summaries_batch(
+    summaries = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=[channel.channel_id],
         viewer_user_id=viewer_id,
@@ -249,16 +259,15 @@ async def _build_channel_read(
     return await channel_read_from_entity(
         channel,
         viewer_user_id=viewer_id,
-        channel_repository=container.channel_repository,
-        channel_access=container.channel_access_service,
-        user_repository=container.user_repository,
+        channel_access=di.channel_access_service,
+        resolve_user=True,
         company_id=company_id,
         lane_summary=summaries[channel.channel_id],
     )
 
 
 async def _filter_channels_by_can_view(
-    container: SyncContainer,
+    di: Di,
     channels: list[SyncChannel],
     *,
     user_id: str,
@@ -286,7 +295,7 @@ async def _filter_channels_by_can_view(
             )
             for channel in channels
         )
-    allowed = await container.authz_service.batch_check(checks)
+    allowed = await di.authz_service.batch_check(checks)
     if peer_user_id is None:
         return [
             channel
@@ -308,10 +317,10 @@ async def op_channels_list(
     payload: ChannelsListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[ChannelRead]:
     company_id = require_company().company_id
-    candidates = await container.channel_repository.list_for_user(
+    candidates = await SyncChannel.list_channels_for_user(
         user.user_id,
         namespace=payload.namespace,
         limit=payload.limit,
@@ -319,10 +328,10 @@ async def op_channels_list(
         company_id=company_id,
     )
     channels = await _filter_channels_by_can_view(
-        container, candidates, user_id=user.user_id
+        di, candidates, user_id=user.user_id
     )
     channel_ids = [c.channel_id for c in channels]
-    summaries = await container.message_repository.channel_lane_summaries_batch(
+    summaries = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=channel_ids,
         viewer_user_id=user.user_id,
@@ -333,9 +342,8 @@ async def op_channels_list(
             await channel_read_from_entity(
                 c,
                 viewer_user_id=user.user_id,
-                channel_repository=container.channel_repository,
-                channel_access=container.channel_access_service,
-                user_repository=container.user_repository,
+                channel_access=di.channel_access_service,
+                resolve_user=True,
                 company_id=company_id,
                 lane_summary=summaries[c.channel_id],
             )
@@ -349,21 +357,19 @@ async def op_channels_create(
     payload: ChannelCreate,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ChannelRead:
     company_id = require_company().company_id
     channel, created_new = await create_channel(
         payload,
         actor_user_id=user.user_id,
         company_id=company_id,
-        channels=container.channel_repository,
-        channel_access=container.channel_access_service,
-        namespaces=container.namespace_service,
-        user_repository=container.user_repository,
+        channel_access=di.channel_access_service,
+        namespaces=di.namespace_service,
     )
     if created_new:
         recipients = await channel_recipient_user_ids(
-            container.channel_access_service, channel.channel_id
+            di.channel_access_service, channel.channel_id
         )
         await publish_events(
             [
@@ -379,7 +385,7 @@ async def op_channels_update(
     payload: ChannelsUpdatePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ChannelRead:
     company_id = require_company().company_id
     return await update_channel(
@@ -387,8 +393,7 @@ async def op_channels_update(
         payload.body,
         actor_user_id=user.user_id,
         company_id=company_id,
-        channels=container.channel_repository,
-        authz=container.authz_service,
+        authz=di.authz_service,
     )
 
 
@@ -396,25 +401,28 @@ async def op_channels_mark_read(
     payload: ChannelsMarkReadPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> None:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
             "forbidden", f"User is not a member of channel {payload.channel_id}.",
                   error_code='forbidden',
               )
-    max_at = await container.message_repository.max_root_lane_sent_at(
+    max_at = await SyncMessage.max_root_lane_sent_at(
         payload.channel_id, company_id=company_id
     )
     read_at = max_at if max_at is not None else datetime.now(UTC)
-    await container.channel_repository.set_member_last_read_at(
-        payload.channel_id, user.user_id, read_at, company_id=company_id
+    await SyncChannelMember.set_channel_member_last_read_at(
+        payload.channel_id,
+        user.user_id,
+        read_at,
+        company_id=company_id,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -434,10 +442,10 @@ async def op_channels_typing(
     payload: ChannelsTypingPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> None:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
@@ -445,21 +453,21 @@ async def op_channels_typing(
                   error_code='forbidden',
               )
     if payload.thread_id is not None and payload.thread_id != "":
-        thread = await container.thread_repository.get(payload.thread_id)
+        thread = await SyncThread.get(payload.thread_id)
         if thread is None:
             raise WsCommandError("not_found", f"Thread {payload.thread_id} not found.", error_code='not_found')
         if thread.company_id != company_id:
             raise WsCommandError("forbidden", "Thread does not belong to the company.", error_code='forbidden')
         if thread.channel_id != payload.channel_id:
             raise WsCommandError("forbidden", "Thread does not belong to the given channel.", error_code='forbidden')
-    user_obj = await container.user_repository.get(user.user_id)
+    user_obj = await User.get(user.user_id)
     if user_obj is None:
         raise WsCommandError("not_found", f"User {user.user_id} not found.", error_code='not_found')
     user_brief = UserBrief(
         user_id=user.user_id, display_name=user_obj.name, avatar_url=user_obj.avatar_url
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -480,24 +488,24 @@ async def op_channels_notification_settings_update(
     payload: ChannelsNotificationSettingsUpdatePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ChannelRead:
     company_id = require_company().company_id
-    ch = await container.channel_repository.get(payload.channel_id)
+    ch = await SyncChannel.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    await container.channel_repository.set_member_notifications_muted(
+    await SyncChannelMember.set_channel_member_notifications_muted(
         payload.channel_id,
         user.user_id,
         payload.notifications_muted,
         company_id=company_id,
     )
     return await _build_channel_read(
-        container, ch, viewer_id=user.user_id, company_id=company_id
+        di, ch, viewer_id=user.user_id, company_id=company_id
     )
 
 
@@ -505,35 +513,35 @@ async def op_channels_add_member(
     payload: ChannelsAddMemberPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ChannelMemberRead:
     company_id = require_company().company_id
-    ch = await container.channel_repository.get(payload.channel_id)
+    ch = await SyncChannel.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
-    if not await container.authz_service.can_admin(
+    if not await di.authz_service.can_admin(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No permission to manage channel members.", error_code='forbidden')
-    await container.channel_repository.ensure_member_row(
+    await SyncChannelMember.ensure_channel_member_row(
         payload.channel_id,
         payload.user_id,
         company_id=company_id,
     )
     try:
-        await container.channel_access_service.set_member(
+        await di.channel_access_service.set_member(
             payload.channel_id,
             user_id=payload.user_id,
             relation=payload.role,
         )
     except Exception:
-        _ = await container.channel_repository.delete_member(
+        _ = await SyncChannelMember.delete_channel_member(
             payload.channel_id,
             payload.user_id,
             company_id=company_id,
         )
         raise
-    recipients = await container.channel_access_service.list_member_user_ids(
+    recipients = await di.channel_access_service.list_member_user_ids(
         payload.channel_id
     )
     await publish_events(
@@ -553,17 +561,17 @@ async def op_channels_list_members(
     payload: ChannelsListMembersPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ListResponse[ChannelMemberRead]:
     company_id = require_company().company_id
-    ch = await container.channel_repository.get(payload.channel_id)
+    ch = await SyncChannel.get(payload.channel_id)
     if ch is None or ch.company_id != company_id:
         raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    rows = await container.channel_access_service.list_member_rows(payload.channel_id)
+    rows = await di.channel_access_service.list_member_rows(payload.channel_id)
     return ListResponse[ChannelMemberRead](
         items=[ChannelMemberRead(user_id=uid, role=role) for uid, role in rows]
     )
@@ -592,26 +600,18 @@ async def op_threads_list(
     payload: ThreadsListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[ThreadRow]:
     _ = user
+    _ = di
     company_id = require_company().company_id
-    threads = await container.thread_repository.list_by_channel(
+    threads = await SyncThread.list_threads_in_channel(
+        company_id,
         payload.channel_id,
         limit=payload.limit,
-        company_id=company_id,
+        offset=payload.offset,
     )
-    items = [
-        ThreadRow(
-            thread_id=t.thread_id,
-            channel_id=t.channel_id,
-            root_message_id=t.root_message_id,
-            title=t.title,
-            created_at=t.created_at,
-            created_by_user_id=t.created_by_user_id,
-        )
-        for t in threads
-    ]
+    items = [ThreadRow.model_validate(thread.model_dump()) for thread in threads]
     return OffsetPage[ThreadRow](
         items=items, total=len(items), limit=payload.limit, offset=payload.offset
     )
@@ -621,40 +621,32 @@ async def op_threads_item(
     payload: ThreadsItemPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ThreadRow:
     _ = user
+    _ = di
     _ = require_company()
-    thread = await container.thread_repository.get(payload.thread_id)
+    thread = await SyncThread.get(payload.thread_id)
     if thread is None:
         raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.", error_code='not_found')
-    return ThreadRow(
-        thread_id=thread.thread_id,
-        channel_id=thread.channel_id,
-        root_message_id=thread.root_message_id,
-        title=thread.title,
-        created_at=thread.created_at,
-        created_by_user_id=thread.created_by_user_id,
-    )
+    return ThreadRow.model_validate(thread.model_dump())
 
 
 async def op_threads_create(
     payload: ThreadsCreatePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ThreadRead:
     company_id = require_company().company_id
     thread = await create_thread(
         payload.body,
         actor_user_id=user.user_id,
         company_id=company_id,
-        threads=container.thread_repository,
-        messages=container.message_repository,
-        user_repository=container.user_repository,
+        resolve_user=True,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, thread.channel_id
+        di.channel_access_service, thread.channel_id
     )
     await publish_events(
         [
@@ -684,7 +676,7 @@ async def _listed_message_sender_brief(
 ) -> UserBrief:
     u = users_by_id.get(sender_user_id)
     if u is None:
-        return await sender_brief_for_message(None, sender_user_id)
+        return await sender_brief_for_message(sender_user_id, resolve_user=False)
     return UserBrief(
         user_id=sender_user_id, display_name=u.name, avatar_url=u.avatar_url
     )
@@ -753,9 +745,10 @@ async def op_messages_list(
     payload: MessagesListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CursorPage[MessageRead]:
     _ = user
+    _ = di
     company_id = require_company().company_id
     if payload.before is not None and payload.after is not None:
         raise WsCommandError(
@@ -772,7 +765,7 @@ async def op_messages_list(
     if payload.after is not None and payload.after != "":
         after_sent_at, after_message_id = _decode_message_cursor(payload.after)
 
-    window = await container.message_repository.list_by_channel_cursor(
+    window = await SyncMessage.list_root_lane_cursor(
         channel_id=payload.channel_id,
         limit=payload.limit,
         before_sent_at=before_sent_at,
@@ -788,12 +781,12 @@ async def op_messages_list(
         )
 
     user_ids = list({m.sender_user_id for m in rows})
-    users_by_id = await container.user_repository.get_many(user_ids)
+    users_by_id = await User.get_many(user_ids)
 
     chronological = list(reversed(rows))
     items: list[MessageRead] = []
     for m in chronological:
-        contents = await container.message_repository.list_contents(m.message_id)
+        contents = await SyncMessageContent.list_for_message(m.message_id)
         sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
         items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
 
@@ -828,14 +821,14 @@ async def op_messages_list_thread(
     payload: MessagesListThreadPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[MessageRead]:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "Not a channel member", error_code='forbidden')
-    thread = await container.thread_repository.get(payload.thread_id)
+    thread = await SyncThread.get(payload.thread_id)
     if thread is None:
         raise WsCommandError("not_found", f"Thread {payload.thread_id!r} not found.", error_code='not_found')
     if thread.channel_id != payload.channel_id:
@@ -844,7 +837,7 @@ async def op_messages_list_thread(
             "thread_id does not belong to channel_id",
                   error_code='ws_invalid_payload',
               )
-    rows = await container.message_repository.list_by_thread(
+    rows = await SyncMessage.list_by_thread(
         thread_id=payload.thread_id,
         limit=payload.limit,
         offset=payload.offset,
@@ -858,10 +851,10 @@ async def op_messages_list_thread(
             offset=payload.offset,
         )
     user_ids = list({m.sender_user_id for m in rows})
-    users_by_id = await container.user_repository.get_many(user_ids)
+    users_by_id = await User.get_many(user_ids)
     items: list[MessageRead] = []
     for m in rows:
-        contents = await container.message_repository.list_contents(m.message_id)
+        contents = await SyncMessageContent.list_for_message(m.message_id)
         sender = await _listed_message_sender_brief(users_by_id, m.sender_user_id)
         items.append(message_read_from_entity(m=m, contents=contents, sender=sender))
     return OffsetPage[MessageRead](
@@ -876,13 +869,13 @@ async def op_messages_send(
     payload: MessagesSendPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     return await send_message_with_side_effects(
         channel_id=payload.channel_id,
         body=payload.body,
         user=user,
-        container=container,
+        di=di,
     )
 
 
@@ -890,12 +883,12 @@ async def op_messages_mark_read(
     payload: MessagesMarkReadPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> None:
     _ = user
     company_id = require_company().company_id
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -916,14 +909,14 @@ async def op_messages_edit(
     payload: MessagesEditPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
@@ -933,17 +926,17 @@ async def op_messages_edit(
     if m.sender_user_id != user.user_id:
         raise WsCommandError("forbidden", "Only the author can edit.", error_code='forbidden')
     edited_at = datetime.now(tz=UTC)
-    await container.message_repository.replace_message_contents(
+    await SyncMessage.replace_contents(
         payload.message_id, payload.body.contents, edited_at
     )
-    m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m2 = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m2 is None:
         raise WsCommandError("internal", "Message disappeared after edit.", error_code='internal')
     read = await message_read_from_db(
-        m2, container.message_repository, container.user_repository
+        m2, resolve_user=True
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -959,29 +952,29 @@ async def op_messages_delete(
     payload: MessagesDeletePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessagesDeletePayload:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
-    if m.sender_user_id != user.user_id and not await container.authz_service.check(
+    if m.sender_user_id != user.user_id and not await di.authz_service.check(
         AuthzSubject.user(user.user_id),
         AuthzRelation.OWNER,
         AuthzObject.sync_channel(payload.channel_id),
     ):
         raise WsCommandError("forbidden", "Insufficient permission to delete.", error_code='forbidden')
     now = datetime.now(tz=UTC)
-    await container.message_repository.soft_delete_message(payload.message_id, now)
-    ch = await container.channel_repository.get(payload.channel_id)
+    await SyncMessage.soft_delete(payload.message_id, now)
+    ch = await SyncChannel.get(payload.channel_id)
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     events: list[PlatformEvent] = [
         event_message_deleted(
@@ -995,10 +988,12 @@ async def op_messages_delete(
         pids = list(ch.pinned_message_ids)
         if payload.message_id in pids:
             new_pids = [x for x in pids if x != payload.message_id]
-            await container.channel_repository.set_pinned_message_ids(
-                payload.channel_id, new_pids, company_id=company_id
+            await SyncChannel.set_channel_pinned_message_ids(
+                payload.channel_id,
+                new_pids,
+                company_id=company_id,
             )
-            ch2 = await container.channel_repository.get(payload.channel_id)
+            ch2 = await SyncChannel.get(payload.channel_id)
             if ch2 is not None:
                 events.append(
                     event_channel_pins_changed(
@@ -1015,31 +1010,31 @@ async def op_messages_forward(
     payload: MessagesForwardPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.from_channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the source channel.", error_code='forbidden')
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.to_channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the target channel.", error_code='forbidden')
-    m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.from_channel_id:
         raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
         raise WsCommandError("forbidden", "Cannot forward a deleted message.", error_code='forbidden')
-    contents = await container.message_repository.list_contents(m.message_id)
+    contents = await SyncMessageContent.list_for_message(m.message_id)
     body = MessageCreate(
         thread_id=payload.thread_id,
         parent_message_id=None,
         contents=contents,
     )
-    src_ch = await container.channel_repository.get(payload.from_channel_id)
+    src_ch = await SyncChannel.get(payload.from_channel_id)
     if src_ch is None:
         raise WsCommandError("not_found", "Source channel not found.", error_code='not_found')
     raw_name = src_ch.name
@@ -1051,15 +1046,14 @@ async def op_messages_forward(
         body,
         actor_user_id=user.user_id,
         company_id=company_id,
-        messages=container.message_repository,
-        user_repository=container.user_repository,
+        resolve_user=True,
         forwarded_from_channel_id=payload.from_channel_id,
         forwarded_from_channel_name=fwd_label,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.to_channel_id
+        di.channel_access_service, payload.to_channel_id
     )
-    dst_ch = await container.channel_repository.get(payload.to_channel_id)
+    dst_ch = await SyncChannel.get(payload.to_channel_id)
     if dst_ch is None:
         raise WsCommandError("not_found", "Target channel not found.", error_code='not_found')
     await publish_events(
@@ -1098,14 +1092,14 @@ async def op_messages_react(
     payload: MessagesReactPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
@@ -1114,15 +1108,15 @@ async def op_messages_react(
         raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
     now = datetime.now(tz=UTC)
     new_reactions = _apply_reaction_json(m.reactions, user.user_id, payload.emoji, now)
-    await container.message_repository.set_message_reactions(payload.message_id, new_reactions)
-    m2 = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    await SyncMessage.set_reactions(payload.message_id, new_reactions)
+    m2 = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m2 is None:
         raise WsCommandError("internal", "Message disappeared after reaction.", error_code='internal')
     read = await message_read_from_db(
-        m2, container.message_repository, container.user_repository
+        m2, resolve_user=True
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -1145,27 +1139,27 @@ async def op_messages_pin(
     payload: MessagesPinPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ChannelRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    if not await container.authz_service.check(
+    if not await di.authz_service.check(
         AuthzSubject.user(user.user_id),
         AuthzRelation.OWNER,
         AuthzObject.sync_channel(payload.channel_id),
     ):
         raise WsCommandError("forbidden", "Only the channel owner can pin.", error_code='forbidden')
-    m = await container.message_repository.get_by_id_for_company(payload.message_id, company_id)
+    m = await SyncMessage.find_in_company(company_id, payload.message_id)
     if m is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
     if m.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if m.deleted_at is not None:
         raise WsCommandError("forbidden", "Cannot pin a deleted message.", error_code='forbidden')
-    ch = await container.channel_repository.get(payload.channel_id)
+    ch = await SyncChannel.get(payload.channel_id)
     if ch is None:
         raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
     pids = list(ch.pinned_message_ids)
@@ -1174,15 +1168,17 @@ async def op_messages_pin(
             pids.insert(0, payload.message_id)
     else:
         pids = [x for x in pids if x != payload.message_id]
-    await container.channel_repository.set_pinned_message_ids(
-        payload.channel_id, pids, company_id=company_id
+    await SyncChannel.set_channel_pinned_message_ids(
+        payload.channel_id,
+        pids,
+        company_id=company_id,
     )
-    ch2 = await container.channel_repository.get(payload.channel_id)
+    ch2 = await SyncChannel.get(payload.channel_id)
     if ch2 is None:
         raise WsCommandError("internal", "Channel disappeared after update.", error_code='internal')
     cr = channel_read_entity(ch2)
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -1198,15 +1194,15 @@ async def op_messages_transcribe_audio(
     payload: MessagesTranscribeAudioPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    source = await container.message_repository.get_by_id_for_company(
-        payload.message_id, company_id
+    source = await SyncMessage.find_in_company(
+        company_id, payload.message_id
     )
     if source is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
@@ -1214,7 +1210,7 @@ async def op_messages_transcribe_audio(
         raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
-    source_contents = await container.message_repository.list_contents(payload.message_id)
+    source_contents = await SyncMessageContent.list_for_message(payload.message_id)
     try:
         processing_contents = set_audio_transcription_state(
             source_contents,
@@ -1225,16 +1221,16 @@ async def op_messages_transcribe_audio(
     except ValueError as exc:
         raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
     edited_at = datetime.now(tz=UTC)
-    await container.message_repository.replace_message_contents(
+    await SyncMessage.replace_contents(
         payload.message_id, processing_contents, edited_at
     )
-    updated_entity = await container.message_repository.get_by_id_for_company(
-        payload.message_id, company_id
+    updated_entity = await SyncMessage.find_in_company(
+        company_id, payload.message_id
     )
     if updated_entity is None:
         raise WsCommandError("internal", "Message disappeared after transcription start.", error_code='internal')
     updated_read = await message_read_from_db(
-        updated_entity, container.message_repository, container.user_repository
+        updated_entity, resolve_user=True
     )
     _ = await enqueue(
         SYNC_TRANSCRIBE_AUDIO_MESSAGE,
@@ -1245,7 +1241,7 @@ async def op_messages_transcribe_audio(
         background_kind="sync_transcribe",
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -1261,15 +1257,15 @@ async def op_messages_transcribe_video(
     payload: MessagesTranscribeVideoPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessageRead:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    source = await container.message_repository.get_by_id_for_company(
-        payload.message_id, company_id
+    source = await SyncMessage.find_in_company(
+        company_id, payload.message_id
     )
     if source is None:
         raise WsCommandError("not_found", "Message not found.", error_code='not_found')
@@ -1277,7 +1273,7 @@ async def op_messages_transcribe_video(
         raise WsCommandError("forbidden", "Channel mismatch.", error_code='forbidden')
     if source.deleted_at is not None:
         raise WsCommandError("forbidden", "Message is deleted.", error_code='forbidden')
-    source_contents = await container.message_repository.list_contents(payload.message_id)
+    source_contents = await SyncMessageContent.list_for_message(payload.message_id)
     try:
         processing_contents = set_video_transcription_state(
             source_contents,
@@ -1288,16 +1284,16 @@ async def op_messages_transcribe_video(
     except ValueError as exc:
         raise WsCommandError("ws_invalid_payload", str(exc), error_code='ws_invalid_payload') from exc
     edited_at = datetime.now(tz=UTC)
-    await container.message_repository.replace_message_contents(
+    await SyncMessage.replace_contents(
         payload.message_id, processing_contents, edited_at
     )
-    updated_entity = await container.message_repository.get_by_id_for_company(
-        payload.message_id, company_id
+    updated_entity = await SyncMessage.find_in_company(
+        company_id, payload.message_id
     )
     if updated_entity is None:
         raise WsCommandError("internal", "Message disappeared after transcription start.", error_code='internal')
     updated_read = await message_read_from_db(
-        updated_entity, container.message_repository, container.user_repository
+        updated_entity, resolve_user=True
     )
     _ = await enqueue(
         SYNC_TRANSCRIBE_VIDEO_MESSAGE,
@@ -1308,7 +1304,7 @@ async def op_messages_transcribe_video(
         background_kind="sync_transcribe",
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, payload.channel_id
+        di.channel_access_service, payload.channel_id
     )
     await publish_events(
         [
@@ -1324,14 +1320,14 @@ async def op_messages_transcribe_call(
     payload: MessagesTranscribeCallPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> MessagesTranscribeCallResult:
     company_id = require_company().company_id
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(payload.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
-    call = await container.call_repository.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
     if call.channel_id != payload.channel_id:
         raise WsCommandError("forbidden", "call_id does not belong to this channel.", error_code='forbidden')
     _ = await enqueue(
@@ -1362,12 +1358,13 @@ async def op_git_resources_upsert(
     payload: GitResourcesUpsertPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> GitResourceRefRead:
     _ = user
+    _ = di
     company_id = require_company().company_id
     ref = await upsert_git_resource(
-        payload.body, company_id=company_id, git_refs=container.git_resource_ref_repository
+        payload.body, company_id=company_id
     )
     await publish_events([event_git_resource_upserted(ref, company_id=company_id)])
     return ref
@@ -1377,11 +1374,12 @@ async def op_git_resources_get(
     payload: GitResourcesGetPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> GitResourceRefRead:
     _ = user
+    _ = di
     _ = require_company()
-    ref = await container.git_resource_ref_repository.get(payload.git_ref_id)
+    ref = await GitResourceRef.get(payload.git_ref_id)
     if ref is None:
         raise WsCommandError("not_found", "Git resource not found", error_code='not_found')
     return GitResourceRefRead(
@@ -1420,12 +1418,9 @@ async def _post_call_boundary_message_op(
     phase: Literal["started", "ended"],
     sender_user_id: str,
     company_id: str,
-    container: SyncContainer,
 ) -> MessageRead:
     if phase == "ended":
-        recordings = await container.call_recording_repository.list_for_call(
-            call_id, company_id
-        )
+        recordings = await SyncCallRecording.list_for_call(call_id, company_id)
         has_recording = any(r.status == "uploaded" for r in recordings)
         boundary_data = CallBoundaryContent(
             call_id=call_id, phase=phase, has_recording=has_recording
@@ -1451,8 +1446,7 @@ async def _post_call_boundary_message_op(
         body,
         actor_user_id=sender_user_id,
         company_id=company_id,
-        messages=container.message_repository,
-        user_repository=container.user_repository,
+        resolve_user=True,
     )
 
 
@@ -1460,7 +1454,7 @@ async def op_calls_invite(
     payload: CallsInvitePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     company_id = require_company().company_id
     try:
@@ -1468,15 +1462,13 @@ async def op_calls_invite(
             payload,
             actor_user_id=user.user_id,
             company_id=company_id,
-            calls=container.call_repository,
-            channels=container.channel_repository,
-            channel_access=container.channel_access_service,
-            authz=container.authz_service,
-            user_repository=container.user_repository,
+            channel_access=di.channel_access_service,
+            authz=di.authz_service,
+            resolve_user=True,
         )
     except PermissionError as exc:
         raise WsCommandError("forbidden", str(exc), error_code='forbidden') from exc
-    member_rows = await container.channel_access_service.list_member_rows(out.channel_id)
+    member_rows = await di.channel_access_service.list_member_rows(out.channel_id)
     member_ids = [uid for uid, _role in member_rows]
     started_read = await _post_call_boundary_message_op(
         channel_id=out.channel_id,
@@ -1484,9 +1476,8 @@ async def op_calls_invite(
         phase="started",
         sender_user_id=out.created_by_user_id,
         company_id=company_id,
-        container=container,
     )
-    invite_channel = await container.channel_repository.get(out.channel_id)
+    invite_channel = await SyncChannel.get(out.channel_id)
     if invite_channel is None:
         raise WsCommandError("not_found", f"Channel {out.channel_id} not found.", error_code='not_found')
     evs.append(
@@ -1499,14 +1490,13 @@ async def op_calls_invite(
     )
     if len(member_ids) <= 1:
         now = datetime.now(UTC)
-        await container.call_repository.update_call_status(out.call_id, "active", started_at=now)
-        solo_call = await container.call_repository.get_call(out.call_id, company_id)
+        await SyncCall.mark_call_status(out.call_id, "active", started_at=now)
+        solo_call = await SyncCall.require_company_call(out.call_id, company_id)
         await maybe_start_speech_to_chat_poll(
             call_id=solo_call.call_id,
             company_id=company_id,
             channel_id=solo_call.channel_id,
             livekit_room_name=solo_call.livekit_room_name,
-            channels=container.channel_repository,
         )
     await publish_events(evs)
     return out
@@ -1516,7 +1506,7 @@ async def op_calls_accept(
     payload: CallsAcceptPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     company_id = require_company().company_id
     try:
@@ -1524,8 +1514,7 @@ async def op_calls_accept(
             payload,
             actor_user_id=user.user_id,
             company_id=company_id,
-            calls=container.call_repository,
-            channel_access=container.channel_access_service,
+            channel_access=di.channel_access_service,
         )
     except ValueError as exc:
         raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
@@ -1535,7 +1524,6 @@ async def op_calls_accept(
             company_id=company_id,
             channel_id=out.channel_id,
             livekit_room_name=out.livekit_room_name,
-            channels=container.channel_repository,
         )
     await publish_events(evs)
     return out
@@ -1545,7 +1533,7 @@ async def op_calls_decline(
     payload: CallsDeclinePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     company_id = require_company().company_id
     try:
@@ -1553,8 +1541,7 @@ async def op_calls_decline(
             payload,
             actor_user_id=user.user_id,
             company_id=company_id,
-            calls=container.call_repository,
-            channel_access=container.channel_access_service,
+            channel_access=di.channel_access_service,
         )
     except ValueError as exc:
         raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
@@ -1566,13 +1553,13 @@ async def op_calls_hangup(
     payload: CallsHangupPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     company_id = require_company().company_id
 
     auto_stopped_recording_event: PlatformEvent | None = None
-    call = await container.call_repository.get_call(payload.call_id, company_id)
-    active_recording = await container.call_recording_repository.get_active_for_call(
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
+    active_recording = await SyncCallRecording.active_for_call(
         payload.call_id, company_id
     )
     if active_recording is not None and active_recording.started_by_user_id == user.user_id:
@@ -1581,10 +1568,9 @@ async def op_calls_hangup(
             recording=active_recording,
             company_id=company_id,
             actor_user_id=user.user_id,
-            call_recordings=container.call_recording_repository,
         )
         rec_stop_recipients = await channel_recipient_user_ids(
-            container.channel_access_service, call.channel_id
+            di.channel_access_service, call.channel_id
         )
         auto_stopped_recording_event = event_call_recording_stopped(
             stopped_recording, company_id=company_id, recipient_user_ids=rec_stop_recipients
@@ -1595,8 +1581,8 @@ async def op_calls_hangup(
             payload,
             actor_user_id=user.user_id,
             company_id=company_id,
-            calls=container.call_repository,
-            channel_access=container.channel_access_service,
+            channel_access=di.channel_access_service,
+            di=di,
         )
     except ValueError as exc:
         raise WsCommandError("conflict", str(exc), error_code='conflict') from exc
@@ -1609,12 +1595,11 @@ async def op_calls_hangup(
             phase="ended",
             sender_user_id=out.created_by_user_id,
             company_id=company_id,
-            container=container,
         )
         recipients = await channel_recipient_user_ids(
-            container.channel_access_service, out.channel_id
+            di.channel_access_service, out.channel_id
         )
-        hangup_channel = await container.channel_repository.get(out.channel_id)
+        hangup_channel = await SyncChannel.get(out.channel_id)
         if hangup_channel is None:
             raise WsCommandError("not_found", f"Channel {out.channel_id} not found.", error_code='not_found')
         evs.append(
@@ -1633,10 +1618,10 @@ async def op_calls_recording_start(
     payload: CallsRecordingStartPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRecordingRead:
     company_id = require_company().company_id
-    call = await container.call_repository.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
     if call.status == "ended":
         raise WsCommandError("forbidden", "Cannot start recording for an ended call.", error_code='forbidden')
     if call.created_by_user_id != user.user_id:
@@ -1646,17 +1631,15 @@ async def op_calls_recording_start(
             "forbidden", f"Call {call.call_id} has no livekit_room_name.",
                   error_code='forbidden',
               )
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
-    active = await container.call_recording_repository.get_active_for_call(
-        payload.call_id, company_id
-    )
+    active = await SyncCallRecording.active_for_call(payload.call_id, company_id)
     if active is not None:
         raise WsCommandError("forbidden", "Recording is already running.", error_code='forbidden')
 
-    channel_entity = await container.channel_repository.get(call.channel_id)
+    channel_entity = await SyncChannel.get(call.channel_id)
     if channel_entity is None:
         raise WsCommandError("not_found", f"Channel {call.channel_id} not found.", error_code='not_found')
     settings = get_settings()
@@ -1664,33 +1647,17 @@ async def op_calls_recording_start(
         raise WsCommandError("internal", "recording_max_duration_seconds must be greater than 0.", error_code='internal')
     if not settings.s3.enabled:
         raise WsCommandError("internal", "S3 is disabled: call recording to S3 is unavailable.", error_code='internal')
-    default_bucket_key = settings.s3.default_bucket
-    if default_bucket_key == "":
-        raise WsCommandError("internal", "s3.default_bucket is not set.", error_code='internal')
-    if default_bucket_key not in settings.s3.buckets:
-        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' not found.", error_code='internal')
-    bucket_config = settings.s3.buckets[default_bucket_key]
-    if not bucket_config.enabled:
-        raise WsCommandError("internal", f"S3 bucket '{default_bucket_key}' is disabled.", error_code='internal')
-    if not bucket_config.access_key_id:
-        raise WsCommandError(
-            "internal", f"S3 access_key_id is not set for bucket '{default_bucket_key}'.",
-                  error_code='internal',
-              )
-    if not bucket_config.secret_access_key:
+    try:
+        egress_target = await FileGate().egress_target(
+            company_id,
+            FileSourceKind.SYNC_CALL_RECORDING,
+        )
+    except Exception as exc:
         raise WsCommandError(
             "internal",
-            f"S3 secret_access_key is not set for bucket '{default_bucket_key}'.",
-                  error_code='internal',
-              )
-    if not bucket_config.region_name:
-        raise WsCommandError(
-            "internal", f"S3 region_name is not set for bucket '{default_bucket_key}'.",
-                  error_code='internal',
-              )
-    real_bucket_name = bucket_config.bucket_name or default_bucket_key
-    if real_bucket_name == "":
-        raise WsCommandError("internal", "S3 bucket name for egress must not be empty.", error_code='internal')
+            f"S3 egress target resolution failed: {exc}",
+            error_code="internal",
+        ) from exc
     recording_id = uuid4().hex
     egress_filepath = (
         f"sync-recordings/{company_id}/{call.call_id}/{recording_id}.mp4"
@@ -1702,13 +1669,13 @@ async def op_calls_recording_start(
     egress_info = await livekit_client.start_room_composite_egress_to_s3(
         room_name=call.livekit_room_name,
         filepath=egress_filepath,
-        s3_access_key=bucket_config.access_key_id,
-        s3_secret_key=bucket_config.secret_access_key,
-        s3_region=bucket_config.region_name,
-        s3_bucket=real_bucket_name,
+        s3_access_key=egress_target.access_key_id,
+        s3_secret_key=egress_target.secret_access_key,
+        s3_region=egress_target.region_name,
+        s3_bucket=egress_target.bucket_name,
         company_id=company_id,
         user_id=user.user_id,
-        s3_endpoint=normalize_s3_egress_endpoint(bucket_config.endpoint_url),
+        s3_endpoint=normalize_s3_egress_endpoint(egress_target.endpoint_url),
         audio_only=(call.call_type == "audio"),
     )
     provider_job_id = read_livekit_egress_id(egress_info)
@@ -1729,12 +1696,13 @@ async def op_calls_recording_start(
         status="recording",
         started_by_user_id=user.user_id,
         provider_job_id=provider_job_id,
+        storage_id=egress_target.storage_id,
         started_at=datetime.now(UTC),
     )
-    _ = await container.call_recording_repository.create(recording)
-    out = call_recording_read(recording)
+    _ = await SyncCallRecording.set(recording)
+    out = CallRecordingRead.model_validate(recording.model_dump())
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, call.channel_id
+        di.channel_access_service, call.channel_id
     )
     await publish_events(
         [
@@ -1750,17 +1718,15 @@ async def op_calls_recording_stop(
     payload: CallsRecordingStopPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRecordingRead:
     company_id = require_company().company_id
-    call = await container.call_repository.get_call(payload.call_id, company_id)
-    if not await container.authz_service.can_view(
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
-    active = await container.call_recording_repository.get_active_for_call(
-        payload.call_id, company_id
-    )
+    active = await SyncCallRecording.active_for_call(payload.call_id, company_id)
     if active is None:
         raise WsCommandError("not_found", "Active recording not found.", error_code='not_found')
     is_meeting_admin = call.created_by_user_id == user.user_id
@@ -1776,10 +1742,9 @@ async def op_calls_recording_stop(
         recording=active,
         company_id=company_id,
         actor_user_id=user.user_id,
-        call_recordings=container.call_recording_repository,
     )
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, call.channel_id
+        di.channel_access_service, call.channel_id
     )
     await publish_events(
         [
@@ -1795,26 +1760,26 @@ async def op_calls_admin_transfer(
     payload: CallsAdminTransferPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     company_id = require_company().company_id
-    call = await container.call_repository.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
     if call.created_by_user_id != user.user_id:
         raise WsCommandError(
             "forbidden", "Only the current meeting admin can transfer admin.",
                   error_code='forbidden',
               )
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=payload.target_user_id
     ):
         raise WsCommandError("forbidden", "New admin is not a channel member.", error_code='forbidden')
     if payload.target_user_id.startswith("guest:"):
         raise WsCommandError("forbidden", "Cannot assign a guest as meeting admin.", error_code='forbidden')
-    participants = await container.call_repository.list_participants(call.call_id)
+    participants = await SyncCallParticipant.list_for_call(call.call_id)
     target_participant = next(
         (item for item in participants if item.user_id == payload.target_user_id), None
     )
@@ -1825,12 +1790,12 @@ async def op_calls_admin_transfer(
             "forbidden", "New admin must be an active call participant.",
                   error_code='forbidden',
               )
-    await container.call_repository.set_call_admin(call.call_id, payload.target_user_id)
-    updated_call = await container.call_repository.get_call(call.call_id, company_id)
-    updated_participants = await container.call_repository.list_participants(call.call_id)
+    await SyncCall.assign_admin(call.call_id, payload.target_user_id)
+    updated_call = await SyncCall.require_company_call(call.call_id, company_id)
+    updated_participants = await SyncCallParticipant.list_for_call(call.call_id)
     out = call_read_from_entities(updated_call, updated_participants)
     recipients = await channel_recipient_user_ids(
-        container.channel_access_service, out.channel_id
+        di.channel_access_service, out.channel_id
     )
     await publish_events(
         [
@@ -1846,10 +1811,10 @@ async def op_calls_signal(
     payload: CallsSignalPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> None:
     """Быстрый путь сигналинга: без TaskIQ, прямая публикация события."""
-    _ = container
+    _ = di
     company_id = require_company().company_id
     event = event_call_signal(
         payload.call_id,
@@ -1937,65 +1902,74 @@ def _livekit_public_url(settings: BaseSettings) -> str:
     return str(configured).strip()
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def _ttl_hours_from_schedule(scheduled_end: datetime, now: datetime) -> int:
-    delta = scheduled_end - now
+    delta = _as_utc(scheduled_end) - _as_utc(now)
     hours = int(delta.total_seconds() / 3600.0) + 2
     return max(1, min(168, hours))
 
 
 async def _participant_names_for_call(
-    container: SyncContainer, call: SyncCall
+    di: Di, call: SyncCall
 ) -> dict[str, str]:
     out: dict[str, str] = {}
-    member_ids = await container.channel_access_service.list_member_user_ids(
+    member_ids = await di.channel_access_service.list_member_user_ids(
         call.channel_id
     )
     for uid in member_ids:
-        u = await container.user_repository.get(uid)
+        u = await User.get(uid)
         out[uid] = u.name if u is not None else uid
 
-    for p in await container.call_repository.list_participants(call.call_id):
-        uid = p.user_id
+    for participant_row in await SyncCallParticipant.list_for_call(call.call_id):
+        uid = participant_row.user_id
         if uid in out:
             continue
         if uid.startswith("guest:"):
             parts = uid.split(":", 2)
             out[uid] = parts[2] if len(parts) >= 3 else "Гость"
         else:
-            u = await container.user_repository.get(uid)
+            u = await User.get(uid)
             out[uid] = u.name if u is not None else uid
     return out
 
 
 async def _mint_join_short_url(
-    container: SyncContainer, link_token: str, expires_at: datetime, company_id: str
+    di: Di, link_token: str, expires_at: datetime, company_id: str
 ) -> str:
-    return await container.short_link_service.mint_sync_call_join(
+    return await di.short_link_service.mint_sync_call_join(
         link_token, expires_at, company_id
     )
 
 
 async def _reconcile_calendar_meeting_channel_members(
     *,
-    container: SyncContainer,
+    di: Di,
     channel_id: str,
     company_id: str,
     link_creator_user_id: str,
     calendar_member_user_ids: list[str],
 ) -> None:
-    channels = container.channel_repository
-    access = container.channel_access_service
+    access = di.channel_access_service
     desired_guests = {
         uid for uid in calendar_member_user_ids if uid and uid != link_creator_user_id
     }
     for uid in sorted(desired_guests):
-        await channels.ensure_member_row(channel_id, uid, company_id=company_id)
+        await SyncChannelMember.ensure_channel_member_row(
+            channel_id, uid, company_id=company_id
+        )
         await access.set_member(channel_id, user_id=uid, relation="member")
     current = await access.list_member_user_ids(channel_id)
     desired = {link_creator_user_id} | desired_guests
     for uid in current:
         if uid not in desired:
-            _ = await channels.delete_member(channel_id, uid, company_id=company_id)
+            _ = await SyncChannelMember.delete_channel_member(
+                channel_id, uid, company_id=company_id
+            )
             await access.remove_member(channel_id, user_id=uid)
 
 
@@ -2003,15 +1977,16 @@ async def op_calls_get(
     payload: CallsGetPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallRead:
     _ = user
+    _ = di
     company_id = require_company().company_id
     try:
-        call = await container.call_repository.get_call(payload.call_id, company_id)
+        call = await SyncCall.require_company_call(payload.call_id, company_id)
     except ValueError as exc:
         raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
-    participants = await container.call_repository.list_participants(payload.call_id)
+    participants = await SyncCallParticipant.list_for_call(payload.call_id)
     return call_read_from_entities(call, participants)
 
 
@@ -2019,28 +1994,30 @@ async def op_calls_recordings_list(
     payload: CallsRecordingsListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> ListResponse[CallRecordingRead]:
     company_id = require_company().company_id
-    call = await container.call_repository.get_call(payload.call_id, company_id)
-    if not await container.authz_service.can_view(
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the call.", error_code='forbidden')
-    rows = await container.call_recording_repository.list_for_call(payload.call_id, company_id)
-    return ListResponse[CallRecordingRead](items=[call_recording_read(r) for r in rows])
+    rows = await SyncCallRecording.list_for_call(payload.call_id, company_id)
+    return ListResponse[CallRecordingRead](
+        items=[CallRecordingRead.model_validate(row.model_dump()) for row in rows]
+    )
 
 
 async def op_calls_token(
     payload: CallsTokenPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallsTokenResult:
     company_id = require_company().company_id
     settings = get_settings()
     try:
-        call = await container.call_repository.get_call(payload.call_id, company_id)
+        call = await SyncCall.require_company_call(payload.call_id, company_id)
     except ValueError as exc:
         raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
     if call.mode != "sfu":
@@ -2053,7 +2030,7 @@ async def op_calls_token(
             "forbidden", f"Call {payload.call_id} has no LiveKit room.",
                   error_code='forbidden',
               )
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(call.channel_id), user_id=user.user_id
     ):
         raise WsCommandError(
@@ -2070,10 +2047,10 @@ async def op_calls_turn_credentials(
     payload: CallsTurnCredentialsPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> TurnCredentials:
     _ = payload
-    _ = container
+    _ = di
     settings = get_settings()
     return generate_turn_credentials(
         user_id=user.user_id,
@@ -2088,10 +2065,10 @@ async def op_calls_links_list(
     payload: CallsLinksListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[CallScheduledLinkRead]:
     company_id = require_company().company_id
-    rows = await container.call_repository.list_scheduled_calendar_links_for_user(
+    rows = await SyncCallLink.list_scheduled_calendar_links_for_user(
         company_id,
         user.user_id,
         range_start=payload.start_at,
@@ -2105,7 +2082,7 @@ async def op_calls_links_list(
         if row.calendar_event_id is None:
             continue
         join_url = await _mint_join_short_url(
-            container, row.link_token, row.expires_at, row.company_id
+            di, row.link_token, row.expires_at, row.company_id
         )
         out.append(
             CallScheduledLinkRead(
@@ -2129,7 +2106,7 @@ async def op_calls_links_create(
     body: CallLinkCreate,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallLinkRead:
     company_id = require_company().company_id
     actor_id = user.user_id
@@ -2163,7 +2140,7 @@ async def op_calls_links_create(
                 message,
                       error_code='ws_invalid_payload',
                   )
-        dup = await container.call_repository.get_link_by_calendar_event(
+        dup = await SyncCallLink.find_by_calendar_event(
             company_id, body.calendar_event_id
         )
         if dup is not None:
@@ -2183,24 +2160,24 @@ async def op_calls_links_create(
             created_by_user_id=actor_id,
             pinned_message_ids=[],
         )
-        _ = await container.channel_repository.create(ch)
+        _ = await SyncChannel.set(ch)
         member_ids = [uid for uid in calendar_member_user_ids if uid and uid != actor_id]
-        await container.channel_repository.ensure_member_row(
+        await SyncChannelMember.ensure_channel_member_row(
             channel_id, actor_id, company_id=company_id
         )
         for uid in member_ids:
-            await container.channel_repository.ensure_member_row(
+            await SyncChannelMember.ensure_channel_member_row(
                 channel_id, uid, company_id=company_id
             )
         try:
-            await container.channel_access_service.sync_channel_created(
+            await di.channel_access_service.sync_channel_created(
                 channel_id,
                 company_id=company_id,
                 owner_user_id=actor_id,
                 member_user_ids=member_ids,
             )
         except Exception:
-            _ = await container.channel_repository.delete(channel_id)
+            _ = await SyncChannel.delete_by_id(channel_id)
             raise
         now = datetime.now(UTC)
         ttl_hours = _ttl_hours_from_schedule(scheduled_end_at, now)
@@ -2217,16 +2194,13 @@ async def op_calls_links_create(
                       error_code='ws_invalid_payload',
                   )
         channel_id = body.channel_id
-        if not await container.authz_service.can_view(
+        if not await di.authz_service.can_view(
             AuthzObject.sync_channel(channel_id), user_id=actor_id
         ):
             raise WsCommandError("forbidden", "No access to channel.", error_code='forbidden')
         expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
         if body.call_id:
-            try:
-                existing = await container.call_repository.get_call(body.call_id, company_id)
-            except ValueError as exc:
-                raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
+            existing = await SyncCall.require_company_call(body.call_id, company_id)
             if existing.channel_id != channel_id:
                 raise WsCommandError(
                     "ws_invalid_payload", "Call belongs to another channel.",
@@ -2247,7 +2221,7 @@ async def op_calls_links_create(
                 raise WsCommandError("forbidden", "Call has no LiveKit room.", error_code='forbidden')
             attached_call_id = existing.call_id
         else:
-            ch = await container.channel_repository.get(channel_id)
+            ch = await SyncChannel.get(channel_id)
             if ch is None:
                 raise WsCommandError("not_found", "Channel not found.", error_code='not_found')
             if ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
@@ -2256,16 +2230,14 @@ async def op_calls_links_create(
                     "A persistent link for a calendar meeting channel is not created via channel_id.",
                           error_code='ws_invalid_payload',
                       )
-            existing_p = await container.call_repository.get_persistent_channel_link(
+            existing_p = await SyncCallLink.find_persistent_for_channel(
                 company_id, channel_id
             )
             if body.reuse_channel_link:
                 if existing_p is not None:
-                    await container.call_repository.update_link_expires_at(
-                        existing_p.link_token, expires_at
-                    )
+                    await SyncCallLink.set_expires_at(existing_p.link_token, expires_at)
                     join_url = await _mint_join_short_url(
-                        container, existing_p.link_token, expires_at, company_id
+                        di, existing_p.link_token, expires_at, company_id
                     )
                     return CallLinkRead(
                         link_token=existing_p.link_token,
@@ -2280,9 +2252,9 @@ async def op_calls_links_create(
                     )
             else:
                 if existing_p is not None:
-                    _ = await container.short_link_service.delete_sync_by_link_token(existing_p.link_token)
-                    deleted = await container.call_repository.delete_link(
-                        existing_p.link_token, company_id
+                    _ = await PlatformShortLink.delete_sync_by_link_token(existing_p.link_token)
+                    deleted = await SyncCallLink.delete_in_company(
+                        company_id, existing_p.link_token
                     )
                     if not deleted:
                         raise WsCommandError("internal", "Failed to replace the persistent link.", error_code='internal')
@@ -2303,9 +2275,9 @@ async def op_calls_links_create(
         calendar_event_id=cal_event_id,
         is_persistent_channel_link=is_persistent_channel_link,
     )
-    _ = await container.call_repository.create_link(link)
+    _ = await SyncCallLink.set(link)
 
-    join_url = await _mint_join_short_url(container, link_token, expires_at, company_id)
+    join_url = await _mint_join_short_url(di, link_token, expires_at, company_id)
     return CallLinkRead(
         link_token=link_token,
         channel_id=channel_id,
@@ -2323,11 +2295,11 @@ async def op_calls_links_update(
     payload: CallsLinksUpdatePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallLinkRead:
     company_id = require_company().company_id
     body = payload.body
-    link = await container.call_repository.get_link_for_company(
+    link = await SyncCallLink.require_company_call_link(
         payload.link_token, company_id
     )
     if link.calendar_event_id is None:
@@ -2335,15 +2307,17 @@ async def op_calls_links_update(
             "forbidden", "Patch is supported only for calendar links.",
                   error_code='forbidden',
               )
-    if not await container.authz_service.can_view(
+    if not await di.authz_service.can_view(
         AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
     ):
         raise WsCommandError("forbidden", "No access to the link.", error_code='forbidden')
 
-    new_start = body.scheduled_start_at if body.scheduled_start_at is not None else link.scheduled_start_at
-    new_end = body.scheduled_end_at if body.scheduled_end_at is not None else link.scheduled_end_at
-    if new_start is None or new_end is None:
+    raw_start = body.scheduled_start_at if body.scheduled_start_at is not None else link.scheduled_start_at
+    raw_end = body.scheduled_end_at if body.scheduled_end_at is not None else link.scheduled_end_at
+    if raw_start is None or raw_end is None:
         raise WsCommandError("ws_invalid_payload", "Link must have schedule bounds.", error_code='ws_invalid_payload')
+    new_start = _as_utc(raw_start)
+    new_end = _as_utc(raw_end)
     if new_start >= new_end:
         raise WsCommandError("ws_invalid_payload", "Invalid meeting interval.", error_code='ws_invalid_payload')
 
@@ -2351,7 +2325,7 @@ async def op_calls_links_update(
     now = datetime.now(UTC)
     new_expires = now + timedelta(hours=_ttl_hours_from_schedule(new_end, now))
 
-    await container.call_repository.update_calendar_link(
+    await SyncCallLink.update_calendar_call_link(
         payload.link_token,
         company_id,
         title=new_title,
@@ -2360,25 +2334,26 @@ async def op_calls_links_update(
         expires_at=new_expires,
     )
     if body.scheduled_title is not None:
-        ch = await container.channel_repository.get(link.channel_id)
+        ch = await SyncChannel.get(link.channel_id)
         if ch is None or ch.company_id != company_id:
             raise WsCommandError("not_found", "Link channel not found.", error_code='not_found')
         name = body.scheduled_title.strip()
         if name == "":
             raise WsCommandError("ws_invalid_payload", "scheduled_title must not be empty.", error_code='ws_invalid_payload')
-        ch.name = name
-        _ = await container.channel_repository.update(ch)
+        _ = await SyncChannel.rename_channel(ch, name)
     if body.calendar_member_user_ids is not None:
         await _reconcile_calendar_meeting_channel_members(
-            container=container,
+            di=di,
             channel_id=link.channel_id,
             company_id=company_id,
             link_creator_user_id=link.created_by_user_id,
             calendar_member_user_ids=body.calendar_member_user_ids,
         )
-    updated = await container.call_repository.get_link_for_company(payload.link_token, company_id)
+    updated = await SyncCallLink.require_company_call_link(
+        payload.link_token, company_id
+    )
     join_url = await _mint_join_short_url(
-        container, payload.link_token, updated.expires_at, company_id
+        di, payload.link_token, updated.expires_at, company_id
     )
     return CallLinkRead(
         link_token=updated.link_token,
@@ -2397,29 +2372,33 @@ async def op_calls_links_remove(
     payload: CallsLinksRemovePayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> None:
     company_id = require_company().company_id
-    link = await container.call_repository.get_link_for_company(payload.link_token, company_id)
+    link = await SyncCallLink.require_company_call_link(
+        payload.link_token, company_id
+    )
     if link.calendar_event_id is None:
         raise WsCommandError(
             "forbidden", "Delete via this contract is only for calendar links.",
                   error_code='forbidden',
               )
-    can_admin = await container.authz_service.can_admin(
+    can_admin = await di.authz_service.can_admin(
         AuthzObject.sync_channel(link.channel_id), user_id=user.user_id
     )
     if link.created_by_user_id != user.user_id and not can_admin:
         raise WsCommandError("forbidden", "No permission to delete this link.", error_code='forbidden')
     channel_id = link.channel_id
-    deleted = await container.call_repository.delete_link(payload.link_token, company_id)
+    deleted = await SyncCallLink.delete_in_company(
+        company_id, payload.link_token
+    )
     if not deleted:
         raise WsCommandError("not_found", "Link not found.", error_code='not_found')
-    _ = await container.short_link_service.delete_sync_by_link_token(payload.link_token)
-    ch = await container.channel_repository.get(channel_id)
+    _ = await PlatformShortLink.delete_sync_by_link_token(payload.link_token)
+    ch = await SyncChannel.get(channel_id)
     if ch is not None and ch.company_id == company_id and ch.type == CHANNEL_TYPE_CALENDAR_MEETING:
-        await container.channel_access_service.sync_channel_deleted(channel_id)
-        _ = await container.channel_repository.delete(channel_id)
+        await di.channel_access_service.sync_channel_deleted(channel_id)
+        _ = await SyncChannel.delete_by_id(channel_id)
     return None
 
 
@@ -2427,20 +2406,21 @@ async def op_calls_join_info(
     payload: CallsJoinInfoPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> CallLinkInfo:
     _ = user
+    _ = di
     try:
-        link = await container.call_repository.get_link(payload.link_token)
+        link = await SyncCallLink.require_active_call_link(payload.link_token)
     except ValueError as exc:
         raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
 
-    channel = await container.channel_repository.get(link.channel_id)
+    channel = await SyncChannel.get(link.channel_id)
     channel_name = channel.name if channel else None
 
     creator_name = link.created_by_user_id
     creator_avatar_url: str | None = None
-    creator = await container.user_repository.get(link.created_by_user_id)
+    creator = await User.get(link.created_by_user_id)
     if creator is not None:
         creator_name = creator.name
         creator_avatar_url = creator.avatar_url
@@ -2461,11 +2441,11 @@ async def op_calls_join_accept(
     payload: CallsJoinAcceptPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> JoinResponse:
     settings = get_settings()
     try:
-        link = await container.call_repository.get_link(payload.link_token)
+        link = await SyncCallLink.require_active_call_link(payload.link_token)
     except ValueError as exc:
         raise WsCommandError("not_found", str(exc), error_code='not_found') from exc
 
@@ -2485,7 +2465,7 @@ async def op_calls_join_accept(
         participant_identity = f"guest:{uuid4().hex[:8]}:{safe_name}"
 
     if link.call_id:
-        call = await container.call_repository.get_call(link.call_id, link.company_id)
+        call = await SyncCall.require_company_call(link.call_id, link.company_id)
         if call.status == "ended":
             livekit_room = call.livekit_room_name
             if not livekit_room:
@@ -2510,10 +2490,8 @@ async def op_calls_join_accept(
                 started_at=datetime.now(UTC),
                 created_by_user_id=link.created_by_user_id,
             )
-            _ = await container.call_repository.create_call(new_call)
-            await container.call_repository.attach_call_to_link(
-                payload.link_token, new_call.call_id
-            )
+            _ = await SyncCall.set(new_call)
+            await SyncCallLink.attach_call(payload.link_token, new_call.call_id)
             call = new_call
     else:
         livekit_room_name = f"link-{payload.link_token[:16]}"
@@ -2533,8 +2511,8 @@ async def op_calls_join_accept(
             started_at=datetime.now(UTC),
             created_by_user_id=link.created_by_user_id,
         )
-        _ = await container.call_repository.create_call(call)
-        await container.call_repository.attach_call_to_link(payload.link_token, call.call_id)
+        _ = await SyncCall.set(call)
+        await SyncCallLink.attach_call(payload.link_token, call.call_id)
 
     if not call.livekit_room_name:
         raise WsCommandError("internal", "Call has no LiveKit room.", error_code='internal')
@@ -2542,7 +2520,7 @@ async def op_calls_join_accept(
     token = _livekit_client(settings).generate_token(
         room_name=call.livekit_room_name, identity=participant_identity
     )
-    participant_names = await _participant_names_for_call(container, call)
+    participant_names = await _participant_names_for_call(di, call)
 
     return JoinResponse(
         call_id=call.call_id,
@@ -2576,10 +2554,11 @@ async def op_company_members_list(
     payload: CompanyMembersListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[CompanyMemberRead]:
+    _ = di
     company_id = require_company().company_id
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise WsCommandError("not_found", "Company not found.", error_code='not_found')
 
@@ -2594,7 +2573,7 @@ async def op_company_members_list(
 
     presence_map, users_by_id = await asyncio.gather(
         batch_peer_presence(redis_url, member_uids),
-        container.user_repository.get_many(member_uids),
+        User.get_many(member_uids),
     )
 
     items: list[CompanyMemberRead] = []
@@ -2629,17 +2608,17 @@ async def op_company_shared_channels_list(
     payload: CompanySharedChannelsListPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> OffsetPage[ChannelRead]:
     company_id = require_company().company_id
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise WsCommandError("not_found", "Company not found.", error_code='not_found')
     if payload.peer_user_id not in company.members:
         raise WsCommandError("not_found", "User is not in the company.", error_code='not_found')
 
     if payload.peer_user_id == user.user_id:
-        candidates = await container.channel_repository.list_for_user(
+        candidates = await SyncChannel.list_channels_for_user(
             user.user_id,
             namespace=None,
             limit=payload.limit,
@@ -2647,10 +2626,10 @@ async def op_company_shared_channels_list(
             company_id=company_id,
         )
         channels = await _filter_channels_by_can_view(
-            container, candidates, user_id=user.user_id
+            di, candidates, user_id=user.user_id
         )
     else:
-        candidates = await container.channel_repository.list_channels_where_both_members(
+        candidates = await SyncChannel.list_channels_where_both_members(
             user.user_id,
             payload.peer_user_id,
             limit=payload.limit,
@@ -2658,14 +2637,14 @@ async def op_company_shared_channels_list(
             company_id=company_id,
         )
         channels = await _filter_channels_by_can_view(
-            container,
+            di,
             candidates,
             user_id=user.user_id,
             peer_user_id=payload.peer_user_id,
         )
 
     channel_ids = [c.channel_id for c in channels]
-    summaries = await container.message_repository.channel_lane_summaries_batch(
+    summaries = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=channel_ids,
         viewer_user_id=user.user_id,
@@ -2676,9 +2655,8 @@ async def op_company_shared_channels_list(
             await channel_read_from_entity(
                 c,
                 viewer_user_id=user.user_id,
-                channel_repository=container.channel_repository,
-                channel_access=container.channel_access_service,
-                user_repository=container.user_repository,
+                channel_access=di.channel_access_service,
+                resolve_user=True,
                 company_id=company_id,
                 lane_summary=summaries[c.channel_id],
             )
@@ -2701,7 +2679,7 @@ async def op_files_upload_completed(
     payload: FilesUploadCompletedPayload,
     *,
     user: User,
-    container: SyncContainer,
+    di: Di,
 ) -> FileRef:
     """Подтверждение метаданных файла после chunked REST upload.
 
@@ -2709,7 +2687,8 @@ async def op_files_upload_completed(
     а через WS клиент шлёт этот фрейм с `file_id` и получает `FileRef`.
     """
     _ = user
-    record: FileRecord | None = await container.file_repository.get(payload.file_id)
+    _ = di
+    record: FileRecord | None = await FileRecord.get(payload.file_id)
     if record is None:
         raise WsCommandError("not_found", f"File {payload.file_id!r} not found.", error_code='not_found')
     return stored_file_ref(record)

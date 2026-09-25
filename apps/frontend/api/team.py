@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import (
     TeamMemberRemoveResponse,
     TeamMemberRoleUpdateResponse,
@@ -23,17 +23,17 @@ router = APIRouter(prefix="/api/team", tags=["team"])
 async def update_member_role(
     user_id: str,
     update: TeamMemberUpdate,
-    container: ContainerDep,
+    di: Di,
 ) -> TeamMemberRoleUpdateResponse:
     return await op_team_member_roles_update(
         TeamMemberRolesUpdatePayload(user_id=user_id, roles=update.roles),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/members/{user_id}", response_model=TeamMemberRemoveResponse)
-async def remove_member(user_id: str, container: ContainerDep) -> TeamMemberRemoveResponse:
+async def remove_member(user_id: str, di: Di) -> TeamMemberRemoveResponse:
     return await op_team_member_remove(
-        TeamMemberIdPayload(user_id=user_id), user=require_context().user, container=container
+        TeamMemberIdPayload(user_id=user_id), user=require_context().user, di=di
     )

@@ -14,8 +14,7 @@ import hashlib
 from core.context import get_context
 from core.llm_context.models import LLMContextBlock
 from core.llm_context.sources import LLMContextSourceRequest
-from core.worktracker.models import TERMINAL_WORK_ITEM_STATES
-from core.worktracker.service import WorkItemService
+from core.worktracker.models import TERMINAL_WORK_ITEM_STATES, WorkItem
 
 _MAX_ITEMS = 20
 
@@ -25,16 +24,13 @@ class WorkItemLLMContextSource:
 
     name: str = "memory.work_items"
 
-    def __init__(self, work_item_service: WorkItemService) -> None:
-        self._work_items: WorkItemService = work_item_service
-
     async def collect(self, request: LLMContextSourceRequest) -> list[LLMContextBlock]:
         _ = request
         context = get_context()
         if context is None or context.active_company is None:
             return []
         company_id = context.active_company.company_id
-        items = await self._work_items.list(company_id, limit=_MAX_ITEMS)
+        items = await WorkItem.list_work_items(company_id, limit=_MAX_ITEMS)
         active = [item for item in items if item.state not in TERMINAL_WORK_ITEM_STATES]
         if not active:
             return []

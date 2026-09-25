@@ -41,6 +41,7 @@ _VOLATILE_KEYS = frozenset(
         "share_id",
         "event_id",
         "revision_id",
+        "revision_file_id",
         "task_id",
         "initial_task_id",
         "rag_namespace_id",
@@ -218,7 +219,7 @@ async def _setup_empty(ctx: LiveCtx) -> JsonObject:
 
 async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
     template_id = await _first_template_id(ctx)
-    name = f"n-{_token(ctx)}"
+    name = f"0n-{_token(ctx)}"
     created = await ctx.client.post(
         f"{_API}/namespaces",
         headers=ctx.headers,
@@ -701,6 +702,18 @@ async def _setup_data_table_promote(ctx: LiveCtx) -> JsonObject:
     return {"file_id": _str_field(payload, "file_id"), "flow_id": flow_id}
 
 
+async def _setup_templates_list(ctx: LiveCtx) -> JsonObject:
+    template_id = f"tmpl-{ctx.unique_id}-{ctx.suffix}"
+    response = await ctx.client.post(
+        "http://localhost:9003/crm/api/v1/namespaces/templates",
+        headers=ctx.headers,
+        json={"template_id": template_id, "name": f"Live tmpl {ctx.unique_id}-{ctx.suffix}"},
+    )
+    _ = await _expect_json(response, ok=(201,), label="create_template")
+    ctx.marker = template_id
+    return {}
+
+
 def _op(
     method: str,
     url: str,
@@ -732,7 +745,8 @@ _CASES: dict[str, OpCase] = {
         same=True, compare="marker_row", marker_field="name",
     ),
     "office/namespaces/templates_requested": _op(
-        "GET", f"{_API}/namespaces/templates", "none", _setup_empty, same=True,
+        "GET", f"{_API}/namespaces/templates", "none", _setup_templates_list,
+        same=True, compare="marker_row", marker_field="template_id",
     ),
     "office/namespaces/create_requested": _op(
         "POST", f"{_API}/namespaces", "body", _setup_namespace_create, same=False,

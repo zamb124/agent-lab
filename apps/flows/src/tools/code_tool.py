@@ -9,15 +9,14 @@ tools package during module initialization.
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING, ClassVar, cast, override
+from typing import TYPE_CHECKING, ClassVar, override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.enums import ReactToolRole
+from apps.flows.src.runtime.execution_context import CodeRunnerRegistry
 from apps.flows.src.tools.base import (
     BaseTool,
     Permission,
     ToolArguments,
-    ToolContainerRef,
     ToolParametersSchema,
     ToolResult,
 )
@@ -53,7 +52,6 @@ class CodeTool(BaseTool):
         language: str = "python",
         entrypoint: str | None = None,
         resources: JsonObject | None = None,
-        container: FlowRuntimeContainer | None = None,
     ):
         self.name: str = tool_id
         self.description: str = description or f"Code tool: {tool_id}"
@@ -66,7 +64,7 @@ class CodeTool(BaseTool):
         )
         self._code: str = code
         self._resources_config: JsonObject = resources or {}
-        self.container: ToolContainerRef | None = container
+        self._code_runners: CodeRunnerRegistry = CodeRunnerRegistry()
         self._parameters: ToolParametersSchema
 
         schema_obj = require_json_object(parameters_schema, f"CodeTool.{tool_id}.parameters_schema")
@@ -102,12 +100,7 @@ class CodeTool(BaseTool):
             schema=self._parameters, arguments=dict(full_args)
         )
 
-        container = cast(FlowRuntimeContainer | None, self.container)
-        if container is None:
-            raise RuntimeError(
-                f"CodeTool '{self.name}' requires FlowContainer to execute remote code"
-            )
-        runner = container.get_code_runner(language=self.language)
+        runner = self._code_runners.runner(self.language)
         return require_json_value(
             await runner.execute_tool(self._code, full_args, state, entrypoint=self.entrypoint),
             f"CodeTool.{self.name}.result",

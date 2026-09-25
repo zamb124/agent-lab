@@ -48,7 +48,9 @@ async def _post_mcp(client: AsyncClient, payload: dict[str, object], *, protocol
 @pytest.mark.asyncio
 async def test_search_mcp_jsonrpc_endpoint_contract() -> None:
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://search") as client:
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=transport, base_url="http://search"
+    ) as client:
         initialize = await client.post(
             "/search/api/v1/mcp",
             json={"jsonrpc": "2.0", "id": 1, "method": "initialize"},

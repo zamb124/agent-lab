@@ -1,4 +1,4 @@
-"""Репозиторий sync_call_speech_egress_tracks: реальная БД."""
+"""Трек egress «речь в ленту»: запись и чтение."""
 
 from __future__ import annotations
 
@@ -6,22 +6,19 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncCall, SyncCallSpeechEgressTrack, SyncChannel
-from apps.sync.db.repositories.call_repository import CallRepository
-from apps.sync.db.repositories.call_speech_egress_repository import CallSpeechEgressTrackRepository
-from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.models.call import SyncCall
+from apps.sync.models.channel import SyncChannel
 from apps.sync.models.channels import ChannelType
+from apps.sync.models.speech_egress import SyncCallSpeechEgressTrack
 
 
 @pytest.mark.asyncio
 async def test_speech_egress_crud_and_list(
     sync_db_clean: None,
     company_id: str,
-    channel_repo: ChannelRepository,
-    call_repo: CallRepository,
-    speech_egress_repo: CallSpeechEgressTrackRepository,
     unique_id: str,
 ) -> None:
+    _ = sync_db_clean
     actor = f"u_{unique_id}"
     channel = SyncChannel(
         channel_id=f"ch_{unique_id}",
@@ -34,7 +31,7 @@ async def test_speech_egress_crud_and_list(
         created_by_user_id=actor,
         speech_to_chat_enabled=True,
     )
-    await channel_repo.create(channel)
+    _ = await SyncChannel.objects.create(instance=channel)
     call = SyncCall(
         call_id=f"call_{unique_id}",
         company_id=company_id,
@@ -46,7 +43,7 @@ async def test_speech_egress_crud_and_list(
         created_at=datetime.now(tz=UTC),
         created_by_user_id=actor,
     )
-    await call_repo.create_call(call)
+    _ = await SyncCall.objects.create(instance=call)
 
     row = SyncCallSpeechEgressTrack(
         row_id=f"row_{unique_id}",
@@ -58,33 +55,38 @@ async def test_speech_egress_crud_and_list(
         egress_id=f"EG_{unique_id}",
         segments_posted=0,
     )
-    created = await speech_egress_repo.create(row)
-    assert created.egress_id == row.egress_id
+    assert await SyncCallSpeechEgressTrack.set(row)
 
-    got = await speech_egress_repo.get_by_call_and_track(call.call_id, row.track_sid)
+    got = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
     assert got is not None
     assert got.row_id == row.row_id
 
-    by_eg = await speech_egress_repo.get_by_egress_id(row.egress_id)
+    by_eg = await SyncCallSpeechEgressTrack.objects.filter(
+        egress_id=row.egress_id
+    ).get_or_none()
     assert by_eg is not None
     assert by_eg.track_sid == row.track_sid
 
-    listed = await speech_egress_repo.list_for_call(call.call_id, company_id)
+    listed = await SyncCallSpeechEgressTrack.list_for_call(call.call_id, company_id)
     assert len(listed) == 1
 
-    await speech_egress_repo.set_segments_posted(row.row_id, 2)
-    fresh = await speech_egress_repo.get_by_call_and_track(call.call_id, row.track_sid)
+    await SyncCallSpeechEgressTrack.mark_speech_egress_segments(row.row_id, 2, None)
+    fresh = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
     assert fresh is not None
     assert fresh.segments_posted == 2
     assert fresh.last_segment_s3_key is None
 
-    await speech_egress_repo.set_segments_posted(
-        row.row_id, 3, last_segment_s3_key="sync-speech/c/call/u/TR/k1.aac"
+    await SyncCallSpeechEgressTrack.mark_speech_egress_segments(
+        row.row_id,
+        3,
+        "sync-speech/c/call/u/TR/k1.aac",
     )
-    fresh2 = await speech_egress_repo.get_by_call_and_track(call.call_id, row.track_sid)
+    fresh2 = await SyncCallSpeechEgressTrack.get_for_track(call.call_id, row.track_sid)
     assert fresh2 is not None
     assert fresh2.segments_posted == 3
     assert fresh2.last_segment_s3_key == "sync-speech/c/call/u/TR/k1.aac"
 
-    await speech_egress_repo.delete_for_call(call.call_id, company_id)
-    assert await speech_egress_repo.get_by_call_and_track(call.call_id, row.track_sid) is None
+    await SyncCallSpeechEgressTrack.delete_for_call(call.call_id, company_id)
+    assert await SyncCallSpeechEgressTrack.get_for_track(
+        call.call_id, row.track_sid
+    ) is None

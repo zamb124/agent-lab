@@ -13,11 +13,12 @@ from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
-from core.models.embed_models import EmbedStatus
+from core.models.embed_models import EmbedConfig, EmbedStatus
+from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
@@ -59,28 +60,21 @@ def _normalize_origin(raw: str) -> str:
 async def issue_embed_page_session(
     body: EmbedPageSessionRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> EmbedPageSessionResponse:
     embed_id = body.embed_id.strip()
     origin = _normalize_origin(body.origin)
     if not origin:
         raise HTTPException(status_code=400, detail="origin is required")
 
-    mapping = await container.embed_mapping_repository.get(embed_id)
-    if mapping is None:
+    config = await EmbedConfig.get(embed_id)
+    if config is None:
         raise HTTPException(status_code=404, detail="Widget not found")
 
-    company = await container.company_repository.get(mapping.company_id)
+    company = await Company.get(config.company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Widget not found")
 
-    company_identifier = (company.subdomain or "").strip() or company.company_id
-    config = await container.embed_config_repository.get_for_company_identifier(
-        company_identifier,
-        embed_id,
-    )
-    if config is None:
-        raise HTTPException(status_code=404, detail="Configuration not found")
     if config.preview_share_link:
         raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
@@ -100,7 +94,7 @@ async def issue_embed_page_session(
         )
 
     await enforce_public_session_issue_rate_limit(
-        redis_client=container.redis_client,
+        redis_client=di.redis_client,
         request=request,
         scope="public_embed_page",
     )
@@ -109,7 +103,7 @@ async def issue_embed_page_session(
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
     _ = await ensure_persisted_runtime_user(
-        container,
+        di.authz_service,
         user_id=guest_id,
         company_id=company.company_id,
         name="Embed Page Guest",

@@ -330,19 +330,18 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_current_date_variable_from_metadata_with_var_reference(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app
-    ):
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app,
+    di):
         """
         6. Проверяет что company-переменная из metadata с @var: ссылкой правильно резолвится.
         """
-        from apps.flows.src.container import get_container
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
         var_value = "2024-12-18"
         variable_key = "e2e_report_date"
 
         await upsert_static_variable_via_service(
-            get_container(), variable_key, var_value
+            di, variable_key, var_value
         )
 
         # Настраиваем mock LLM ответ
@@ -393,8 +392,8 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_var_reference_in_metadata_recursive_resolution(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str
-    ):
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str,
+    di):
         """
         7. Проверяет рекурсивный резолв @var: ссылок в metadata.
 
@@ -403,17 +402,15 @@ class TestVariablesE2E:
         - Эта переменная содержит другую @var: ссылку
         - Обе должны быть рекурсивно зарезолвлены
         """
-        from apps.flows.src.container import get_container
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
-        container = get_container()
         base_url_key = f"base_url_e2e_{unique_id}"
         api_endpoint_key = f"api_endpoint_e2e_{unique_id}"
         await upsert_static_variable_via_service(
-            container, base_url_key, "https://api.example.com"
+            di, base_url_key, "https://api.example.com"
         )
         await upsert_static_variable_via_service(
-            container, api_endpoint_key, f"@var:{base_url_key}/v1"
+            di, api_endpoint_key, f"@var:{base_url_key}/v1"
         )
 
         # Настраиваем mock LLM ответ
@@ -462,8 +459,8 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_var_reference_in_json_metadata_recursive_resolution(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str
-    ):
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app, unique_id: str,
+    di):
         """
         8. Проверяет рекурсивный резолв @var: ссылок внутри JSON объектов в metadata.
 
@@ -473,17 +470,15 @@ class TestVariablesE2E:
         - Эти ссылки должны быть рекурсивно зарезолвлены
         - Если резолвнутое значение тоже содержит @var:, оно тоже резолвится
         """
-        from apps.flows.src.container import get_container
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
-        container = get_container()
         db_host_key = f"db_host_e2e_{unique_id}"
         db_port_key = f"db_port_e2e_{unique_id}"
         db_connection_key = f"db_connection_e2e_{unique_id}"
-        await upsert_static_variable_via_service(container, db_host_key, "localhost")
-        await upsert_static_variable_via_service(container, db_port_key, "5432")
+        await upsert_static_variable_via_service(di, db_host_key, "localhost")
+        await upsert_static_variable_via_service(di, db_port_key, "5432")
         await upsert_static_variable_via_service(
-            container, db_connection_key, f"@var:{db_host_key}:@var:{db_port_key}"
+            di, db_connection_key, f"@var:{db_host_key}:@var:{db_port_key}"
         )
 
         # Настраиваем mock LLM ответ
@@ -541,8 +536,8 @@ class TestVariablesE2E:
 
     @pytest.mark.asyncio
     async def test_var_reference_in_nested_json_metadata_recursive_resolution(
-        self, client, flow_id, mock_llm_with_queue, sync_tools, app
-    ):
+        self, client, flow_id, mock_llm_with_queue, sync_tools, app,
+    di):
         """
         9. Проверяет рекурсивный резолв @var: ссылок в глубоко вложенных JSON структурах.
 
@@ -551,14 +546,12 @@ class TestVariablesE2E:
         - Внутри есть @var: ссылки на разных уровнях вложенности
         - Все ссылки должны быть рекурсивно зарезолвлены
         """
-        from apps.flows.src.container import get_container
         from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
-        container = get_container()
-        await upsert_static_variable_via_service(container, "service_name", "my-service")
-        await upsert_static_variable_via_service(container, "service_version", "1.0.0")
+        await upsert_static_variable_via_service(di, "service_name", "my-service")
+        await upsert_static_variable_via_service(di, "service_version", "1.0.0")
         await upsert_static_variable_via_service(
-            container,
+            di,
             "full_service_name",
             "@var:service_name-v@var:service_version",
         )

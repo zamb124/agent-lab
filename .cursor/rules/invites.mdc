@@ -1,79 +1,54 @@
 ---
-description: "Инвайты по ссылке: одноразовые JWT, short links, accept-флоу"
+description: "Инвайты в компанию по ссылке — одноразовый invite JWT, короткие ссылки platform_short_links, preview и accept до сессии компании. Читать при правке инвайтов и short links"
+globs:
+  - "apps/frontend/api/invites.py"
+  - "apps/frontend/ui/pages/join-page.js"
+  - "apps/frontend/ui/events/resources/invites.resource.js"
+  - "core/utils/invite_tokens.py"
+  - "core/short_links/**"
 alwaysApply: false
 ---
+
 # Инвайты по ссылке
 
-Одноразовые JWT для приглашения пользователей в компанию. **Отдельный тип токена** — не смешивать с сессионным `TokenData`.
+Приглашение пользователя в компанию одноразовой ссылкой: генерация — команда сервиса `frontend`, preview и accept — HTTP `frontend` до сессии компании. Короткие ссылки платформы — `core/short_links/` (таблица в `platform_shared`). Не владеет: членством в компании и сессией → `authorization.mdc`; OAuth-входом → `integrations.mdc`; гостевыми ссылками звонков → `sync.mdc`.
 
-## Публичные URL и нативное приложение
+## Модель
 
-Публичная ссылка — короткая: `{server.platform_public_base_url}/l/{code}` (таблица `platform_short_links` в shared БД). Резолв: `GET /l/{code}` на frontend → редирект на `/join?c={code}` (JWT не в query). Страница join читает `c`, в теле `POST .../invites/accept` передаёт `short_code` (сервер поднимает JWT из БД по коду).
+- Invite JWT — `InviteTokenData`, `InviteTokenService` (`core/utils/invite_tokens.py`): отдельный тип токена, не сессионный `TokenData`. Поля: `typ="invite"`, `aud="invite"`, `company_id`, `role`, `invited_by` (обязателен), `jti` (uuid4), `iat`, `exp`; срок — `INVITE_EXPIRES_SECONDS` (7 дней).
+- `PlatformShortLink` (`core/short_links/models.py`), таблица `platform_short_links`, PK `code`: `kind`, `payload` (JSONB), `expires_at`. Виды — `core/short_links/kinds.py`: `company_invite` (`CompanyInvitePayload.jwt`), `sync_call_join` (`SyncCallJoinPayload`: `link_token`, `company_id`), `flow_preview_embed`, `flow_ui_session_share`; payload — `core/short_links/payloads.py`.
+- `ShortLinkService` (`core/short_links/service.py`) — выпуск `mint_*`, публичный URL `{server.platform_public_base_url}/l/{code}`, резолв редиректа, JWT инвайта по коду (`get_invite_jwt_by_code`: только `company_invite` с неистёкшим сроком).
+- Одноразовость — Redis-ключ `invite:used:{jti}` с TTL = остаток жизни токена (`burn_invite_token`, SET NX).
 
-Публичные URL, которые открываются в оболочке по Universal Link без отдельной настройки на каждом поддомене, держат на **apex** того же публичного origin (не на `https://<slug>.../`), если для wildcard-поддоменов не выданы отдельные `applinks:*` и AASA. После accept переход в интерфейс компании — внутри приложения. Deep links — `frontend.mdc`.
+## Инварианты
 
-## Файлы
+- Публичная ссылка инвайта — короткая, от `server.platform_public_base_url` (apex публичного origin, не поддомен компании); JWT в URL не передаётся: `/l/{code}` → `/join?c={code}`, клиент шлёт `short_code`, сервер поднимает JWT из `platform_short_links`.
+- Generate — `op_invites_generate` (`apps/frontend/realtime/company_operations.py`): `require_company_admin` активной компании, роль из `COMPANY_ROLES`, short link `company_invite` с тем же сроком, что у JWT.
+- Preview по `short_code` отдаёт компанию, роль и пригласившего без авторизации и без расхода токена; использованный токен — 410.
+- Accept: уже участник компании получает идемпотентный успех `already_member=true` без расхода токена и с перевыпуском сессии на компанию приглашения.
+- Иначе токен расходуется атомарно `burn_invite_token` до добавления в компанию; повторный расход — 410.
+- Добавление — роли в `company.members` и `user.companies` с dual-write OpenFGA fail-closed (`set_company_member_roles`, `core/identity/company_membership.py`), `user.active_company_id` и personal namespace (`ensure_personal_namespace_for_user`) → `namespace.mdc § Инварианты`.
+- После accept short link удаляется, SESSION JWT перевыпускается на компанию приглашения (`rebind_session_to_company`, `core/utils/auth_session_rebind.py`) в cookie; клиент уходит на поддомен из ответа (`subdomain`).
+- Истёкший JWT — 410, поддельный или чужого типа — 403, неизвестный или истёкший код — 404.
+- `return_path` входа через OAuth — только относительный путь `/…`; хранится в `auth_state` (Redis, TTL 600 с) и после callback заменяет стартовую страницу; внешний URL — 400. `[без гейта]`
 
-| Файл | Что |
-|---|---|
-| `core/short_links/` | `ShortLinkService`, `ShortLinkRepository`, виды `company_invite` / `sync_call_join` |
-| `core/db/models/platform.py` | `PlatformShortLink` |
-| `core/utils/invite_tokens.py` | `InviteTokenService` (create/validate), `burn_invite_token()` Redis SET NX |
-| `apps/frontend/api/invites.py` | `POST /api/invites/generate` (mint short link), `POST /api/invites/accept` (`short_code`) |
-| `apps/frontend/main.py` | `GET /l/{code}` |
-| `apps/frontend/ui/pages/join-page.js` | `/join?c=...`, accept с `short_code` |
-| `apps/frontend/ui/events/resources/invites.resource.js` | `acceptInviteOp` (`createAsyncOp`, `POST /frontend/api/invites/accept`) |
-| `apps/frontend/ui/events/resources/team.resource.js` | `teamInviteGenerateOp` (`POST /frontend/api/invites/generate`) |
-| `core/middleware/auth/company_resolver.py` | для `POST .../invites/accept` на субдомене компании **не** требуется, чтобы пользователь был в `user.companies` (иначе 403 до хендлера) |
+## Контракты
 
-## Invite JWT payload
+- Команда `frontend/invites/generate_requested` (`FRONTEND_OPERATIONS`, `apps/frontend/realtime/command_router.py`), REST `POST /frontend/api/invites/generate`; фабрика `frontend/team_invite` (`inviteGenerateOp`, `apps/frontend/ui/events/resources/team.resource.js`).
+- Протокольные хендлеры до сессии из `PROTOCOL_HANDLERS` (`scripts/check_rest_handlers_call_ops.py`): `accept_invite`, `preview_invite` (`apps/frontend/api/invites.py`); HTTP-фабрики из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/check_command_rest_mirror.py`): `frontend/invite_preview`, `frontend/invite_accept` (`apps/frontend/ui/events/resources/invites.resource.js`).
+- Маршрут `/l/{code}` — `apps/frontend/main.py`; страница `/join?c=…` — `apps/frontend/ui/pages/join-page.js`.
+- Route config (`core/middleware/auth/route_config.py`): `/join`, `/l/*`, `/api/invites/preview`, `/frontend/api/invites/preview` — anonymous; `/api/invites/accept`, `/frontend/api/invites/accept` — auth; все они в `NO_SUBDOMAIN_ALLOWED_PATHS`, `/l/` — в `SPA_FALLBACK_EXCLUDED_PREFIXES`. `CompanyResolver` (`core/middleware/auth/company_resolver.py`) не требует членства в компании субдомена только для `POST` accept.
 
-```python
-{
-  "typ": "invite", "aud": "invite",
-  "company_id": "...", "role": "developer",
-  "jti": "<uuid4>",
-  "iat": <ts>, "exp": <ts>,  # TTL: 7 дней
-}
-```
+## Запреты
 
-## Одноразовость
+- Invite JWT в query и сессионный токен в роли инвайта. `[без гейта]`
+- Расход токена при preview и для уже участника компании. `[без гейта]`
+- Добавление в компанию без dual-write OpenFGA. `[без гейта]`
+- Внешний URL в `return_path`. `[без гейта]`
 
-Redis-ключ `invite:used:{jti}`, TTL = оставшееся время жизни токена.
+## Гейты
 
-**Порядок проверки в `accept`:**
-
-1. Валидация JWT (подпись, тип, аудитория, истечение).
-2. Существование компании.
-3. Если пользователь уже участник → идемпотентный OK, **без расхода токена**.
-4. Иначе: `SET NX` → токен уже сожжён → **410 Gone**.
-5. Добавление в `company.members` + `user.companies` + `user.active_company_id`.
-6. Перевыпуск сессионного токена с новым `company_id` в cookie.
-
-## UX-потоки
-
-- **Не авторизован:** `/join?c=...` → join-page показывает OAuth-кнопки → передаёт `return_path=/join?c=...` → после OAuth возврат на `/join` → auto-accept.
-- **Уже авторизован:** `/join?c=...` → join-page сразу зовёт accept.
-- **Уже участник:** `accept` возвращает `already_member=true`, ссылка не сжигается.
-- **Истёкший / использованный / поддельный:** 410/403; повторный accept после успешного join — запись short link удалена → **404** на `GET /l/{code}`.
-
-## `return_path` в OAuth
-
-`GET /api/auth/login/{provider}?return_path=/join?c=...`. `return_path` хранится в `auth_state` (Redis, TTL 10 мин), в callback используется вместо `/select-company` / `/dashboard`. Допускаются только пути `/...` (без внешних URL).
-
-## Права
-
-- `generate` — FGA `require_company_admin` действующей компании (требует `company` в state).
-- `accept` — любой авторизованный, без обязательного `company_id` в сессии; в том же step dual-write roster + OpenFGA company membership (`sync_company_member_roles` / AccessService), fail-closed.
-
-## Route config
-
-- `/join` — `auth_required=False` (SPA-страница, JS сам проверяет auth).
-- `/l/*` — `auth_required=False`, `context_type="anonymous"`; в `SPA_FALLBACK_EXCLUDED_PREFIXES` и `NO_SUBDOMAIN_ALLOWED_PATHS`.
-- `/api/invites/accept`, `/frontend/api/invites/accept` — `auth_required=True`, в `NO_SUBDOMAIN_ALLOWED_PATHS`; `CompanyResolver` для frontend пропускает проверку «участник компании с субдомена» только для этих путей и `POST`.
-- `/api/invites/*`, `/frontend/api/invites/*` — `auth_required=True`, `context_type="api"`.
-
-## Тесты
-
-- `tests/frontend/api/test_invites_api.py` — реальные `frontend_client` (ASGI), БД через `frontend_container`, Redis из `DATABASE__REDIS_URL`. Без моков сервисов.
-- `tests/core/test_short_links_integration.py` — `ShortLinkService` / репозиторий против shared PostgreSQL.
+- `tests/frontend/api/test_invites_api.py` — generate, preview, accept: одноразовость SET NX, идемпотентность участника, коды 410/403/404.
+- `tests/core/test_short_links_integration.py` — `ShortLinkService` и `PlatformShortLink` против shared PostgreSQL.
+- `scripts/check_rest_handlers_call_ops.py`, `scripts/check_command_rest_mirror.py` (`make lint`) — accept и preview только в allowlist протокольных хендлеров и HTTP-фабрик.
+- `scripts/check_authz_dual_write.py` (`make lint`) — dual-write членства компании (`core/identity/company_membership.py`).

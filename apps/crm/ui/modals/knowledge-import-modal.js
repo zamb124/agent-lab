@@ -24,7 +24,7 @@
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
-import { selectCrmApiNamespace } from '../utils/crm-namespace-select.js';
+import { selectCrmApiNamespace } from '../_helpers/crm-namespace-select.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import { buildPlatformAuxiliaryFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';

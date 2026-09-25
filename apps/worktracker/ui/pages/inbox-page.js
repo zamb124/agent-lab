@@ -5,7 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
-import { WorktrackerUiEvents } from '../events/worktracker-ui-events.js';
+import { WorktrackerUiEvents } from '../events/types.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '../components/worktracker-work-item-card.js';

@@ -23,6 +23,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from core.di.kit import ServiceDi
 from core.errors.boundary import (
     PlatformAccessDeniedError,
     PlatformBoundaryError,
@@ -90,7 +91,7 @@ def _boundary_failure_payload(error: PlatformBoundaryError) -> JsonObject:
     return payload
 
 
-CommandHandler = Callable[[JsonObject, User], Awaitable[JsonObject | None]]
+CommandHandler = Callable[[JsonObject, User, ServiceDi], Awaitable[JsonObject | None]]
 
 
 _handlers: dict[str, CommandHandler] = {}
@@ -119,7 +120,8 @@ def register_ws_command_handler(command_type: str, handler: CommandHandler) -> N
     """
     Зарегистрировать handler команды. Повторная регистрация того же `command_type` — ошибка.
 
-    Handler получает `(payload, user)` и возвращает `dict` (станет payload'ом
+    Handler получает `(payload, user, di)` — `di` берётся из ASGI-приложения владельца —
+    и возвращает `dict` (станет payload'ом
     `*_succeeded`) или `None` (payload reply'я будет `null`). Доменная
     ошибка — `raise WsCommandError(code, detail)`.
     """
@@ -193,6 +195,7 @@ async def dispatch_ws_command(
     command_type: str,
     payload: JsonValue | None,
     user: User,
+    di: ServiceDi,
 ) -> tuple[str, JsonObject | None]:
     """
     Выполнить command-handler. Возвращает кортеж `(reply_type, reply_payload)`.
@@ -221,7 +224,7 @@ async def dispatch_ws_command(
                 error_code="ws_invalid_payload",
             ) from exc
     try:
-        result = await handler(payload_dict, user)
+        result = await handler(payload_dict, user, di)
     except WsCommandError as err:
         return derive_failed_type(command_type), command_failure_payload(err)
     except PlatformNotFoundError as err:

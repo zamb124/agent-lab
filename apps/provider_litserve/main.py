@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -23,11 +24,12 @@ from apps.provider_litserve.config import (
     ProviderLitserveServiceSettings,
     get_provider_litserve_settings,
 )
-from apps.provider_litserve.container import (
-    ProviderLitserveContainer,
-    get_provider_litserve_container,
-)
+from apps.provider_litserve.di import Di, ProviderLitserveDi
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
+from apps.provider_litserve.litserve_runtime import (
+    ProviderLitserveRuntime,
+    provider_litserve_runtime,
+)
 from apps.provider_litserve.model_registry import (
     init_registry,
     sync_defaults_from_config,
@@ -49,15 +51,13 @@ from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.app.server import serve
 from core.config.models import ProviderLitserveInfraConfig
+from core.di import recipe
 
 UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UI_ROOT_PATH = Path(__file__).parent / "ui"
 UI_INDEX_PATH = UI_ROOT_PATH / "index.html"
 CORE_STATIC_PATH = PROJECT_ROOT / "core" / "frontend" / "static"
-_provider_litserve_server: ls.LitServer | None = None
-_provider_litserve_manager: ls.LitServerManager | None = None
-_provider_litserve_response_task: asyncio.Task[None] | None = None
 
 
 class _CudaDeviceProperties(Protocol):
@@ -104,11 +104,11 @@ def _cuda_runtime() -> _CudaRuntime:
     return cast(_CudaRuntime, _as_object(torch.cuda))
 
 
-def _inference_health_handler() -> JSONResponse:
+def _inference_health_handler(di: Di) -> JSONResponse:
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
-    response_task = _provider_litserve_response_task
-    runtime_started = _provider_litserve_manager is not None and response_task is not None and not response_task.done()
+    runtime = di.litserve_runtime
+    runtime_started = runtime.inference_started()
     cuda_required = _cuda_required_for_inference()
     cuda_runtime = _cuda_runtime()
     cuda_available = cuda_runtime.is_available()
@@ -243,9 +243,7 @@ def _build_litserver_apis(cfg: ProviderLitserveInfraConfig) -> list[ls.LitAPI]:
     return apis
 
 
-def _register_litserver_v1(app: FastAPI) -> None:
-    global _provider_litserve_server
-
+def _register_litserver_v1(app: FastAPI, runtime: ProviderLitserveRuntime) -> None:
     settings = get_provider_litserve_settings()
     cfg = settings.provider_litserve.infra
     lit_server = ls.LitServer(
@@ -258,7 +256,7 @@ def _register_litserver_v1(app: FastAPI) -> None:
     _register_v1_models_route(lit_server)
     _register_v1_inference_health_route(lit_server)
     _merge_litserver_v1_routes(app, lit_server.app)
-    _provider_litserve_server = lit_server
+    runtime.server = lit_server
 
 
 async def _bootstrap_runtime_registry() -> None:
@@ -269,10 +267,8 @@ async def _bootstrap_runtime_registry() -> None:
     _ = reload_runtime_catalog_from_sqlite(cfg)
 
 
-async def _start_litserver_runtime(app: FastAPI) -> None:
-    global _provider_litserve_manager, _provider_litserve_response_task
-
-    lit_server = _provider_litserve_server
+async def _start_litserver_runtime(app: FastAPI, runtime: ProviderLitserveRuntime) -> None:
+    lit_server = runtime.server
     if lit_server is None:
         raise RuntimeError("provider_litserve LitServer is not registered")
 
@@ -299,20 +295,18 @@ async def _start_litserver_runtime(app: FastAPI) -> None:
         ),
         name="provider_litserve_response_queue_to_buffer",
     )
-    _provider_litserve_manager = manager
-    _provider_litserve_response_task = task
+    runtime.manager = manager
+    runtime.response_task = task
 
 
-async def _stop_litserver_runtime() -> None:
-    global _provider_litserve_manager, _provider_litserve_response_task
-
-    lit_server = _provider_litserve_server
+async def _stop_litserver_runtime(runtime: ProviderLitserveRuntime) -> None:
+    lit_server = runtime.server
     if lit_server is None:
         raise RuntimeError("provider_litserve LitServer is not registered")
-    task = _provider_litserve_response_task
+    task = runtime.response_task
     if task is None:
         raise RuntimeError("provider_litserve response task is not started")
-    manager = _provider_litserve_manager
+    manager = runtime.manager
     if manager is None:
         raise RuntimeError("provider_litserve manager is not started")
 
@@ -322,34 +316,27 @@ async def _stop_litserver_runtime() -> None:
     except asyncio.CancelledError:
         pass
     lit_server._perform_graceful_shutdown(manager, {}, "normal")
-    _provider_litserve_manager = None
-    _provider_litserve_response_task = None
+    runtime.manager = None
+    runtime.response_task = None
 
 
-async def _on_startup(
-    app: FastAPI,
-    _container: ProviderLitserveContainer,
-    _settings: ProviderLitserveServiceSettings,
-) -> None:
+async def litserve_workers(litserve_runtime: ProviderLitserveRuntime) -> AsyncIterator[None]:
     await _bootstrap_runtime_registry()
-    await _start_litserver_runtime(app)
-
-
-async def _on_shutdown(_app: FastAPI, _container: ProviderLitserveContainer) -> None:
-    await _stop_litserver_runtime()
+    await _start_litserver_runtime(app, litserve_runtime)
+    yield
+    await _stop_litserver_runtime(litserve_runtime)
 
 
 def build_app() -> FastAPI:
     app = create_service_app(
-        service_name="provider_litserve",
-        settings_class=ProviderLitserveServiceSettings,
-        get_container=get_provider_litserve_container,
+        "provider_litserve",
+        ProviderLitserveServiceSettings,
+        ProviderLitserveDi,
+        database="shared_url",
+        lifecycle=(recipe(litserve_workers),),
         services_spa_index=UI_INDEX_PATH,
         routers=[models_router],
-        on_startup=_on_startup,
-        on_shutdown=_on_shutdown,
         api_version=None,
-        include_crud_routers=False,
         documentation_gateway_prefix="litserve",
         static_mounts=[
             ("/static/core", str(CORE_STATIC_PATH), "litserve-core-static"),
@@ -358,7 +345,7 @@ def build_app() -> FastAPI:
         mount_repo_documentation=False,
     )
     _register_ui_routes(app)
-    _register_litserver_v1(app)
+    _register_litserver_v1(app, provider_litserve_runtime)
     return app
 
 

@@ -9,13 +9,17 @@ from typing import Literal
 
 from pydantic import Field
 
-from apps.crm.container import CRMContainer
+from apps.crm.services.crm_work_item_service import CrmWorkItemService
 from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
+from apps.crm.services.entity_service import EntityService
 from core.context import resolve_namespace_or_raise
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
 from core.files.registry import default_retention_for_source
+from core.files.service import FilesService
 from core.models import StrictBaseModel
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.types import JsonObject
 
 EXPORT_PAGE_SIZE = 500
@@ -35,13 +39,18 @@ class CrmEntitiesExportPayload(StrictBaseModel):
     limit: int = Field(default=5000, ge=1, le=EXPORT_MAX_ROWS)
 
 
-async def export_entities_to_file(container: CRMContainer, payload: CrmEntitiesExportPayload) -> FileRecord:
+async def export_entities_to_file(
+    entity_service: EntityService,
+    crm_work_item_service: CrmWorkItemService,
+    files_service: FilesService,
+    payload: CrmEntitiesExportPayload,
+) -> FileRecord:
     """Постранично собирает сущности (ACL учитывается в `list_entities`) и кладёт выгрузку в S3."""
     filters: JsonObject | None = None
     filter_field_types: dict[str, str] = {}
     if payload.status:
         filters = {"field": "status", "op": "$eq", "value": payload.status}
-        filter_field_types = await container.entity_service.resolve_filter_field_types(
+        filter_field_types = await entity_service.resolve_filter_field_types(
             namespace=resolve_namespace_or_raise(payload.namespace),
             entity_type=payload.entity_type,
             entity_subtype=payload.entity_subtype,
@@ -58,7 +67,7 @@ async def export_entities_to_file(container: CRMContainer, payload: CrmEntitiesE
     remaining = payload.limit
     cursor: str | None = None
     while remaining > 0:
-        batch, cursor, has_more = await container.entity_service.list_entities(
+        batch, cursor, has_more = await entity_service.list_entities(
             entity_type=payload.entity_type,
             entity_subtype=payload.entity_subtype,
             namespace=payload.namespace,
@@ -82,9 +91,9 @@ async def export_entities_to_file(container: CRMContainer, payload: CrmEntitiesE
                 )
         else:
             enriched = await build_entity_responses_with_semantic_index(
-                container.entity_repository,
+                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
                 batch,
-                crm_work_item_service=container.crm_work_item_service,
+                crm_work_item_service=crm_work_item_service,
             )
             for entity_response in enriched:
                 _ = buffer.write("" if first_json_row else ",\n")
@@ -102,7 +111,7 @@ async def export_entities_to_file(container: CRMContainer, payload: CrmEntitiesE
         retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
         post_create=FilePostCreate(is_public=False),
     )
-    return await container.files_service.create(
+    return await files_service.create(
         spec,
         buffer.getvalue().encode("utf-8"),
         original_name=f"entities.{payload.export_format}",

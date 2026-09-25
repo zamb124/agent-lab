@@ -24,8 +24,8 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def _seed_public_flows_for_llm_proxy_e2e(auth_token: str) -> AsyncIterator[None]:
-    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
+async def _seed_public_flows_for_llm_proxy_e2e(auth_token: str, di) -> AsyncIterator[None]:
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
     yield
 
 

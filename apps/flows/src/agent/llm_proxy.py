@@ -18,27 +18,38 @@ from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import Response as StarletteResponse
 from starlette.types import ExceptionHandler
 
-from apps.flows.src.agent.llm_auth import LlmProxyAuthResult, require_llm_proxy_auth
+from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
+from apps.flows.src.agent.llm_auth import LlmProxyAuthResult
 from apps.flows.src.agent.llm_lara import (
     list_lara_branch_model_ids,
     load_lara_branch_ids,
     run_lara_chat_completion,
 )
-from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.channels.factory import get_channel
+from apps.flows.src.contracts import (
+    ChannelRegistryProtocol,
+    FlowFactoryProtocol,
+    ToolRegistryProtocol,
+)
+from apps.flows.src.durable_execution.manager import DurableWorkflowRuntime
+from apps.flows.src.services.flow_ui_share_service import FlowUIShareService
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
+from apps.flows.src.services.hitl_conversation_service import HitlConversationService
 from core.a2a import (
     coerce_usage_token_count,
     get_part_text,
     mapping_from_struct,
     part_has_text,
 )
-from core.ai.models import ResolvedAIModel
+from core.ai.llm_models_service import LLMModelsService
+from core.ai.models import AIModelRecord, ResolvedAIModel
 from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_error
 from core.ai.providers import (
     HUMANITEC_LLM_AUTO_MODEL,
@@ -51,6 +62,7 @@ from core.ai.providers import (
 from core.ai.requirements import AISelection
 from core.ai.resolver import COST_ORIGIN_PLATFORM, resolve_ai_model
 from core.ai.runtime import create_llm_client_from_ai_model
+from core.authz.service import AuthzService
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.clients.llm.client import LLMClient
 from core.clients.llm.context_layer import openai_messages_to_a2a_messages
@@ -67,10 +79,15 @@ from core.clients.llm.openai_api_codec import (
     sse_done_line,
 )
 from core.clients.nano_banana import NanoBananaClient
-from core.context import require_context
+from core.clients.redis_client import RedisClient
+from core.context import get_context
+from core.db.storage import SharedStorage
 from core.files.models import FileRecord
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
+from core.files.service import FilesService
 from core.logging import get_logger
+from core.mail.service import MailService
 from core.office.ai_settings import (
     IMAGE_AUTO_MODEL_ID,
     LARA_MODEL_PREFIX,
@@ -80,15 +97,14 @@ from core.types import (
     JsonArray,
     JsonObject,
     JsonValue,
-    parse_json_object,
     require_json_array,
     require_json_object,
 )
+from core.variables.service import VariablesService
 from core.websocket import WsCommandError, command_failure_payload
 from core.websocket.operation import ws_command_error_status
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["agent-llm-proxy"])
 
 AGENT_LLM_PROXY_USE_MOCK_AUTO_ENV = "AGENT_LLM_PROXY_USE_MOCK_AUTO"
 _LLM_PROXY_PATH_PREFIX = "/flows/api/v1/agent/llm/"
@@ -308,7 +324,7 @@ def _resolve_agent_llm_model(requested_model: str) -> ResolvedAIModel:
     return resolved
 
 
-async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
+async def read_agent_llm_model_ids(llm_models_service: LLMModelsService) -> list[str]:
     model_ids: list[str] = []
     seen: set[str] = set()
 
@@ -321,11 +337,11 @@ async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
     append_model_id(HUMANITEC_LLM_AUTO_MODEL)
     append_model_id(IMAGE_AUTO_MODEL_ID)
 
-    lara_branches = await load_lara_branch_ids(container)
+    lara_branches = await load_lara_branch_ids()
     for lara_model_id in list_lara_branch_model_ids(lara_branches):
         append_model_id(lara_model_id)
 
-    configured_providers = container.llm_models_service.get_configured_providers_by_capability(
+    configured_providers = llm_models_service.get_configured_providers_by_capability(
         AICapability.LLM_CHAT,
     )
     for provider in configured_providers:
@@ -333,7 +349,7 @@ async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
             continue
         if provider not in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_SLUGS:
             continue
-        catalog_records = await container.ai_model_catalog_repository.list_by_provider_capability(
+        catalog_records = await AIModelRecord.list_by_provider_capability(
             provider,
             AICapability.LLM_CHAT,
         )
@@ -341,7 +357,7 @@ async def _read_agent_llm_model_ids(container: ContainerDep) -> list[str]:
             append_model_id(humanitec_llms_model_ref(record.provider, record.model_id))
 
     if len(model_ids) == 2 + len(lara_branches):
-        humanitec_llm_options = await container.llm_models_service.get_model_ids_by_provider_capability(
+        humanitec_llm_options = await llm_models_service.get_model_ids_by_provider_capability(
             HUMANITEC_LLM_PROVIDER,
             AICapability.LLM_CHAT,
         )
@@ -775,8 +791,8 @@ async def _stream_lara_sse(*, model_id: str, content: str) -> AsyncIterator[byte
     yield sse_done_line()
 
 
-async def _file_id_to_b64_json(container: ContainerDep, file_id: str) -> str:
-    file_payload = await container.shared_storage.get(f"file:{file_id}")
+async def _file_id_to_b64_json(shared_storage: SharedStorage, file_id: str) -> str:
+    file_payload = await shared_storage.get(f"file:{file_id}")
     if file_payload is None:
         raise WsCommandError(
             "upstream",
@@ -785,11 +801,18 @@ async def _file_id_to_b64_json(container: ContainerDep, file_id: str) -> str:
             error_params={"file_id": file_id},
         )
     file_record = FileRecord.model_validate_json(file_payload)
-    s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
-    try:
-        file_bytes = await s3_client.download_bytes(file_record.s3_key)
-    finally:
-        await s3_client.close()
+    if file_record.company_id is None or file_record.company_id == "":
+        raise WsCommandError(
+            "upstream",
+            f"generated file {file_id} has no company_id",
+            error_code="generated_file_not_found",
+            error_params={"file_id": file_id},
+        )
+    handle = await FileGate().open_record(
+        file_record,
+        SystemPrincipal(company_id=file_record.company_id),
+    )
+    file_bytes = await handle.read_bytes()
     if not file_bytes:
         raise WsCommandError(
             "upstream",
@@ -800,7 +823,7 @@ async def _file_id_to_b64_json(container: ContainerDep, file_id: str) -> str:
     return base64.b64encode(file_bytes).decode("ascii")
 
 
-def _proxy_target_path(target: str) -> str:
+def proxy_target_path(target: str) -> str:
     parsed = urlparse(target.strip())
     path = parsed.path if parsed.scheme else target.strip()
     if not path.startswith("/"):
@@ -826,11 +849,25 @@ def _validate_chat_request_n(body: AgentOpenAIChatCompletionsRequest) -> None:
     )
 
 
-async def _dispatch_chat_completions(
+async def dispatch_chat_completions(
     *,
     body: AgentOpenAIChatCompletionsRequest,
-    container: ContainerDep,
     auth: LlmProxyAuthResult,
+    llm_models_service: LLMModelsService,
+    variables_service: VariablesService,
+    authz_service: AuthzService,
+    workflow_runtime: DurableWorkflowRuntime,
+    redis_client: RedisClient,
+    handoff_orchestrator_service: HandoffOrchestratorService,
+    flow_factory: FlowFactoryProtocol,
+    tool_registry: ToolRegistryProtocol,
+    projection_service: A2ATaskProjectionService,
+    shared_storage: SharedStorage,
+    channel_registry: ChannelRegistryProtocol,
+    mail_service: MailService,
+    flow_ui_share_service: FlowUIShareService,
+    hitl_conversation_service: HitlConversationService,
+    files_service: FilesService,
 ) -> JSONResponse | StreamingResponse:
     if not body.messages:
         raise WsCommandError(
@@ -840,7 +877,7 @@ async def _dispatch_chat_completions(
         )
     _validate_chat_request_n(body)
 
-    model_ids = await _read_agent_llm_model_ids(container)
+    model_ids = await read_agent_llm_model_ids(llm_models_service)
     requested_model = _validate_requested_agent_model(body.model, set(model_ids))
     logger.info(
         "agent.llm_proxy.request",
@@ -852,8 +889,34 @@ async def _dispatch_chat_completions(
 
     lara_branch = parse_lara_branch_model_id(requested_model)
     if lara_branch is not None:
+        context = get_context()
+        if context is None:
+            raise WsCommandError(
+                "unauthorized",
+                "context is not set",
+                error_code="context_not_set",
+            )
+        channel = get_channel(
+            "a2a",
+            "lara",
+            context,
+            variables_service=variables_service,
+            authz_service=authz_service,
+            workflow_runtime=workflow_runtime,
+            redis_client=redis_client,
+            handoff_orchestrator_service=handoff_orchestrator_service,
+            flow_factory=flow_factory,
+            tool_registry=tool_registry,
+            projection_service=projection_service,
+            shared_storage=shared_storage,
+            channel_registry=channel_registry,
+            mail_service=mail_service,
+            flow_ui_share_service=flow_ui_share_service,
+            hitl_conversation_service=hitl_conversation_service,
+            files_service=files_service,
+        )
         content = await run_lara_chat_completion(
-            container,
+            channel,
             model_id=requested_model,
             openai_messages=_openai_messages_from_body(body),
             office_ai=auth.office_ai,
@@ -938,10 +1001,10 @@ async def _dispatch_chat_completions(
     )
 
 
-async def _dispatch_images_generations(
+async def dispatch_images_generations(
     *,
     body: AgentOpenAIImagesGenerationsRequest,
-    container: ContainerDep,
+    shared_storage: SharedStorage,
 ) -> JSONResponse:
     _ = body.size
     model_id = body.model.strip() if body.model.strip() else IMAGE_AUTO_MODEL_ID
@@ -967,7 +1030,7 @@ async def _dispatch_images_generations(
             error_code="image_gen_unavailable",
         )
 
-    client = NanoBananaClient(storage=container.shared_storage)
+    client = NanoBananaClient(storage=shared_storage)
     try:
         file_ids = await client.generate_images(prompt=body.prompt, num_images=num_images)
     except BillingBalanceBlockedError as exc:
@@ -993,158 +1056,8 @@ async def _dispatch_images_generations(
     data_items: list[JsonObject] = []
     for file_id in file_ids:
         if response_format == "b64_json":
-            data_items.append({"b64_json": await _file_id_to_b64_json(container, file_id)})
+            data_items.append({"b64_json": await _file_id_to_b64_json(shared_storage, file_id)})
         else:
             data_items.append({"url": f"file:{file_id}"})
     return JSONResponse({"created": int(time.time()), "data": data_items})
 
-
-@router.get("/agent/llm/v1/models", tags=["agent-llm-proxy", "public"])
-async def agent_llm_models(
-    request: Request,
-    container: ContainerDep,
-) -> AgentOpenAIModelsResponse:
-    _ = await require_llm_proxy_auth(request, container)
-    _ = require_context()
-    model_ids = await _read_agent_llm_model_ids(container)
-    created_at = int(time.time())
-    return AgentOpenAIModelsResponse(
-        data=[
-            AgentOpenAIModelItem(
-                id=model_id,
-                created=created_at,
-            )
-            for model_id in model_ids
-        ]
-    )
-
-
-@router.post(
-    "/agent/llm/v1/chat/completions",
-    tags=["agent-llm-proxy", "public"],
-    response_model=None,
-)
-async def agent_llm_chat_completions(
-    body: AgentOpenAIChatCompletionsRequest,
-    request: Request,
-    container: ContainerDep,
-) -> JSONResponse | StreamingResponse:
-    auth = await require_llm_proxy_auth(request, container)
-    _ = require_context()
-    return await _dispatch_chat_completions(body=body, container=container, auth=auth)
-
-
-@router.post(
-    "/agent/llm/v1/images/generations",
-    tags=["agent-llm-proxy", "public"],
-    response_model=None,
-)
-async def agent_llm_images_generations(
-    body: AgentOpenAIImagesGenerationsRequest,
-    request: Request,
-    container: ContainerDep,
-) -> JSONResponse:
-    _ = await require_llm_proxy_auth(request, container)
-    _ = require_context()
-    return await _dispatch_images_generations(body=body, container=container)
-
-
-@router.post(
-    "/agent/llm/v1/proxy",
-    tags=["agent-llm-proxy", "public"],
-    response_model=None,
-)
-async def agent_llm_onlyoffice_proxy(
-    envelope: OnlyOfficeLlmProxyEnvelope,
-    request: Request,
-    container: ContainerDep,
-) -> JSONResponse | StreamingResponse | Response:
-    """Unwrap OnlyOffice AI ``{target,method,headers,data}`` → OpenAI handlers."""
-    auth = await require_llm_proxy_auth(request, container)
-    _ = require_context()
-    method = envelope.method.strip().upper()
-    if method not in {"GET", "POST"}:
-        raise WsCommandError(
-            "ws_invalid_payload",
-            f"proxy method {method!r} is not supported",
-            error_code="llm_proxy_method_unsupported",
-            error_params={"method": method},
-        )
-
-    relative = _proxy_target_path(envelope.target)
-    logger.info(
-        "agent.llm_proxy.onlyoffice_proxy",
-        target_path=relative,
-        method=method,
-        auth_kind=auth.kind,
-    )
-
-    if relative == "models":
-        if method != "GET":
-            raise WsCommandError(
-                "method_not_allowed",
-                "models accepts GET only",
-                error_code="llm_proxy_models_get_only",
-            )
-        model_ids = await _read_agent_llm_model_ids(container)
-        created_at = int(time.time())
-        return JSONResponse(
-            AgentOpenAIModelsResponse(
-                data=[
-                    AgentOpenAIModelItem(id=model_id, created=created_at)
-                    for model_id in model_ids
-                ]
-            ).model_dump(mode="json")
-        )
-
-    raw_data = envelope.data
-    payload: JsonObject
-    if isinstance(raw_data, str):
-        if not raw_data.strip():
-            payload = {}
-        else:
-            try:
-                payload = parse_json_object(raw_data, "onlyoffice.proxy.data")
-            except ValueError as exc:
-                raise WsCommandError(
-                    "ws_invalid_payload",
-                    "proxy.data must be a JSON object",
-                    error_code="llm_proxy_data_invalid",
-                ) from exc
-    elif isinstance(raw_data, dict):
-        payload = require_json_object(raw_data, "onlyoffice.proxy.data")
-    elif raw_data is None:
-        payload = {}
-    else:
-        raise WsCommandError(
-            "ws_invalid_payload",
-            "proxy.data must be a JSON object or string",
-            error_code="llm_proxy_data_invalid",
-        )
-
-    if relative == "chat/completions":
-        if method != "POST":
-            raise WsCommandError(
-                "method_not_allowed",
-                "chat/completions accepts POST only",
-                error_code="llm_proxy_chat_post_only",
-            )
-        body = AgentOpenAIChatCompletionsRequest.model_validate(payload)
-        return await _dispatch_chat_completions(body=body, container=container, auth=auth)
-
-    if relative == "images/generations":
-        if method != "POST":
-            raise WsCommandError(
-                "method_not_allowed",
-                "images/generations accepts POST only",
-                error_code="llm_proxy_images_post_only",
-            )
-        images_body = AgentOpenAIImagesGenerationsRequest.model_validate(payload)
-        return await _dispatch_images_generations(body=images_body, container=container)
-
-    raise WsCommandError(
-        "not_found",
-        f"proxy target path {relative!r} not found",
-        error_code="llm_proxy_target_not_found",
-        error_params={"path": relative},
-    )

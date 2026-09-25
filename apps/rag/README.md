@@ -82,7 +82,7 @@
 
 Параметры конфига: **`namespace`**, **`provider`**, **`default_top_k`**, опционально **`company_id`**, **`search_options`** и **`index_profile_config`**.
 
-**`RAGRepository`** (`core/rag/repository.py`): in-process **`provider`** (на контейнере — pgvector, см. **`RAG_IN_PROCESS_PROVIDER_ID`** в `core/rag/constants.py`) и опционально **`service_client`** + **`bind`** для HTTP **`search_namespace`** (тот же контракт, что **`POST /rag/api/v1/namespaces/{id}/search`**). Постановка индексации из API и воркера — напрямую через TaskIQ-задачи в `apps/rag_worker/tasks/` и вызовы из `apps/rag/api/`.
+**`RAGRepository`** (`core/rag/repository.py`): in-process **`provider`** (pgvector, см. **`RAG_IN_PROCESS_PROVIDER_ID`** в `core/rag/constants.py`) и опционально **`service_client`** + **`bind`** для HTTP **`search_namespace`** (тот же контракт, что **`POST /rag/api/v1/namespaces/{id}/search`**). Постановка индексации из API и воркера — напрямую через TaskIQ-задачи в `apps/rag_worker/tasks/` и вызовы из `apps/rag/api/`.
 
 Единая сборка path/body для HTTP-поиска по namespace — **`core/rag/rag_http_namespace_search.py`** (используют **`RagClient.search`** и **`RAGRepository.search_namespace`**).
 
@@ -94,8 +94,7 @@
 apps/rag/
 ├── main.py
 ├── config.py
-├── container.py
-├── dependencies.py
+├── di.py
 ├── api/
 │   ├── providers.py
 │   ├── namespaces.py
@@ -156,6 +155,6 @@ results = await provider.search(
 ## Устранение неполадок
 
 - **Документ в очереди / не индексируется** — проверьте процесс **rag_worker** и логи задач TaskIQ.
-- **Pgvector** — доступность БД RAG и миграции схемы (см. **`migrations.mdc`**).
+- **Pgvector** — доступность БД RAG и миграции схемы (см. **`database.mdc`**).
 - **Agentset** — корректность **`api_key`** и **`base_url`** в **`rag.providers.agentset`**.
 - **Реранк / эмбеддинги** — см. **`rag.embedding`**, **`rag.reranker`** и при **`provider: provider_litserve`** — **`provider_litserve`** и **`apps/provider_litserve/README.md`**.

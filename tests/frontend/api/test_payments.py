@@ -44,7 +44,7 @@ def _require_configured_provider() -> TinkoffProvider:
 
 
 async def _seed_billing_company(
-    frontend_container,
+    frontend_di,
     *,
     company_id: str,
     name: str,
@@ -57,10 +57,9 @@ async def _seed_billing_company(
         owner_user_id=owner_user_id,
         balance=balance,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=owner_user_id,
         roles=["owner"],
@@ -80,9 +79,9 @@ class TestTinkoffWebhookHttp:
     async def test_invalid_token_returns_ok(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
     ) -> None:
-        _ = frontend_container
+        _ = frontend_di
         provider = _require_configured_provider()
         payload = {
             "TerminalKey": provider.config.terminal_key,
@@ -102,9 +101,9 @@ class TestTinkoffWebhookHttp:
         assert response.text == "OK"
 
     async def test_missing_token_returns_ok(
-        self, frontend_client: AsyncClient, frontend_container
+        self, frontend_client: AsyncClient, frontend_di
     ) -> None:
-        _ = frontend_container
+        _ = frontend_di
         _ = _require_configured_provider()
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/tinkoff_main",
@@ -124,10 +123,10 @@ class TestTinkoffWebhookHttp:
     async def test_unknown_order_id_returns_ok(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         unique_id: str,
     ) -> None:
-        _ = frontend_container
+        _ = frontend_di
         provider = _require_configured_provider()
         payload = {
             "TerminalKey": provider.config.terminal_key,
@@ -155,9 +154,9 @@ class TestTinkoffWebhookHttp:
         assert response.status_code != 200
 
     async def test_unknown_provider_404(
-        self, frontend_client: AsyncClient, frontend_container
+        self, frontend_client: AsyncClient, frontend_di
     ) -> None:
-        _ = frontend_container
+        _ = frontend_di
         response = await frontend_client.post(
             "/frontend/api/v1/payments/webhook/no_such_tinkoff_provider",
             json={"OrderId": "x:y"},
@@ -354,19 +353,19 @@ class TestTinkoffCheckOrderStatus:
 class TestPaymentSyncApply:
     async def test_rejected_sync_does_not_credit_balance(
         self,
-        frontend_container,
+        frontend_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
         cid = f"co_psync_{unique_id}"
         await _seed_billing_company(
-            frontend_container,
+            frontend_di,
             company_id=cid,
             name=f"Payment sync {unique_id}",
             owner_user_id=system_user_id,
             balance=10.0,
         )
-        payment_service = frontend_container.payment_service
+        payment_service = frontend_di.payment_service
         txn_id = new_payment_transaction_id(cid)
         txn = Transaction(
             transaction_id=txn_id,
@@ -392,27 +391,27 @@ class TestPaymentSyncApply:
             assert stored is not None
             assert stored.status == PaymentStatus.FAILED
             assert stored.external_payment_id == "pay_rej"
-            co = await frontend_container.company_repository.get(cid)
+            co = await Company.get(cid)
             assert co is not None
             assert co.balance == 10.0
         finally:
-            await frontend_container.company_repository.delete(cid)
+            await Company.delete_by_id(cid)
 
     async def test_refunded_sync_does_not_credit_balance(
         self,
-        frontend_container,
+        frontend_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
         cid = f"co_prefund_{unique_id}"
         await _seed_billing_company(
-            frontend_container,
+            frontend_di,
             company_id=cid,
             name=f"Payment refund {unique_id}",
             owner_user_id=system_user_id,
             balance=10.0,
         )
-        payment_service = frontend_container.payment_service
+        payment_service = frontend_di.payment_service
         txn_id = new_payment_transaction_id(cid)
         txn = Transaction(
             transaction_id=txn_id,
@@ -437,11 +436,11 @@ class TestPaymentSyncApply:
             stored = await payment_service.get_transaction(txn_id)
             assert stored is not None
             assert stored.status == PaymentStatus.REFUNDED
-            co = await frontend_container.company_repository.get(cid)
+            co = await Company.get(cid)
             assert co is not None
             assert co.balance == 10.0
         finally:
-            await frontend_container.company_repository.delete(cid)
+            await Company.delete_by_id(cid)
 
 
 class TestPlatformPublicBaseUrl:
@@ -460,11 +459,11 @@ class TestTinkoffInitNotificationUrl:
     async def test_topup_uses_platform_public_base(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         auth_headers: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        _ = frontend_container
+        _ = frontend_di
         provider = _require_configured_provider()
         captured: list[PaymentRequest] = []
 
@@ -493,9 +492,9 @@ class TestTinkoffInitNotificationUrl:
         )
         payload = response.json()
         transaction_id = payload["transaction_id"]
-        stored = await frontend_container.payment_service.get_transaction(transaction_id)
+        stored = await frontend_di.payment_service.get_transaction(transaction_id)
         assert stored is not None
-        deleted = await frontend_container.shared_storage.delete(
+        deleted = await frontend_di.shared_storage.delete(
             f"payment:{stored.company_id}:{stored.payment_provider.value}:{stored.transaction_id}",
             force_global=True,
         )
@@ -508,20 +507,20 @@ class TestTinkoffWebhookCredits:
     async def test_confirmed_credits_without_sync(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
         provider = _require_configured_provider()
         cid = f"co_wh_{unique_id}"
         await _seed_billing_company(
-            frontend_container,
+            frontend_di,
             company_id=cid,
             name=f"Webhook credit {unique_id}",
             owner_user_id=system_user_id,
             balance=10.0,
         )
-        payment_service = frontend_container.payment_service
+        payment_service = frontend_di.payment_service
         txn_id = new_payment_transaction_id(cid)
         txn = Transaction(
             transaction_id=txn_id,
@@ -554,23 +553,23 @@ class TestTinkoffWebhookCredits:
             assert stored is not None
             assert stored.status == PaymentStatus.SUCCESS
             assert stored.balance_applied is True
-            co = await frontend_container.company_repository.get(cid)
+            co = await Company.get(cid)
             assert co is not None
             assert co.balance == 110.0
         finally:
-            _ = await frontend_container.shared_storage.delete(
+            _ = await frontend_di.shared_storage.delete(
                 f"payment_external:{PaymentProviderType.TINKOFF.value}:{payment_id}",
                 force_global=True,
             )
-            await _delete_company_payments(frontend_container.shared_storage, cid)
-            await frontend_container.company_repository.delete(cid)
+            await _delete_company_payments(frontend_di.shared_storage, cid)
+            await Company.delete_by_id(cid)
 
 
 @pytest.mark.asyncio
 class TestPaymentSyncPendingOnly:
     async def test_success_rows_do_not_call_check_order(
         self,
-        frontend_container,
+        frontend_di,
         unique_id: str,
         system_user_id: str,
         monkeypatch: pytest.MonkeyPatch,
@@ -578,13 +577,13 @@ class TestPaymentSyncPendingOnly:
         _ = _require_configured_provider()
         cid = f"co_ok_{unique_id}"
         await _seed_billing_company(
-            frontend_container,
+            frontend_di,
             company_id=cid,
             name=f"Payment success flood {unique_id}",
             owner_user_id=system_user_id,
             balance=0.0,
         )
-        payment_service = frontend_container.payment_service
+        payment_service = frontend_di.payment_service
         now = datetime.now(timezone.utc)
         for index in range(120):
             txn = Transaction(
@@ -613,7 +612,7 @@ class TestPaymentSyncPendingOnly:
         monkeypatch.setattr(TinkoffProvider, "sync_pending_transactions", fake_sync)
         sync_service = PaymentSyncService(
             payment_service=payment_service,
-            storage=frontend_container.shared_storage,
+            storage=frontend_di.shared_storage,
         )
         try:
             stats = await sync_service.sync_pending_transactions(cid)
@@ -621,12 +620,12 @@ class TestPaymentSyncPendingOnly:
             assert stats.checked == 0
             assert check_calls == []
         finally:
-            await _delete_company_payments(frontend_container.shared_storage, cid)
-            await frontend_container.company_repository.delete(cid)
+            await _delete_company_payments(frontend_di.shared_storage, cid)
+            await Company.delete_by_id(cid)
 
     async def test_stale_pending_expires_after_check_order(
         self,
-        frontend_container,
+        frontend_di,
         unique_id: str,
         system_user_id: str,
         monkeypatch: pytest.MonkeyPatch,
@@ -636,13 +635,13 @@ class TestPaymentSyncPendingOnly:
         monkeypatch.setattr(get_settings().payment_providers, "sync_check_order_limit", 50)
         cid = f"co_exp_{unique_id}"
         await _seed_billing_company(
-            frontend_container,
+            frontend_di,
             company_id=cid,
             name=f"Payment expire {unique_id}",
             owner_user_id=system_user_id,
             balance=10.0,
         )
-        payment_service = frontend_container.payment_service
+        payment_service = frontend_di.payment_service
         stale_id = new_payment_transaction_id(cid)
         fresh_id = new_payment_transaction_id(cid)
         stale = Transaction(
@@ -678,7 +677,7 @@ class TestPaymentSyncPendingOnly:
         monkeypatch.setattr(TinkoffProvider, "sync_pending_transactions", fake_sync)
         sync_service = PaymentSyncService(
             payment_service=payment_service,
-            storage=frontend_container.shared_storage,
+            storage=frontend_di.shared_storage,
         )
         try:
             stats = await sync_service.sync_pending_transactions(cid)
@@ -691,16 +690,16 @@ class TestPaymentSyncPendingOnly:
             assert stored_stale.status == PaymentStatus.FAILED
             assert stored_fresh.status == PaymentStatus.PENDING
             assert stats.updated == 1
-            co = await frontend_container.company_repository.get(cid)
+            co = await Company.get(cid)
             assert co is not None
             assert co.balance == 10.0
         finally:
-            await _delete_company_payments(frontend_container.shared_storage, cid)
-            await frontend_container.company_repository.delete(cid)
+            await _delete_company_payments(frontend_di.shared_storage, cid)
+            await Company.delete_by_id(cid)
 
     async def test_global_sync_does_not_scan_subdomain_keys(
         self,
-        frontend_container,
+        frontend_di,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         _ = _require_configured_provider()
@@ -721,13 +720,13 @@ class TestPaymentSyncPendingOnly:
 
         monkeypatch.setattr(Storage, "list_by_prefix", wrapped)
         monkeypatch.setattr(
-            frontend_container.payment_service,
+            frontend_di.payment_service,
             "list_pending_transactions",
             no_pending,
         )
         sync_service = PaymentSyncService(
-            payment_service=frontend_container.payment_service,
-            storage=frontend_container.shared_storage,
+            payment_service=frontend_di.payment_service,
+            storage=frontend_di.shared_storage,
         )
         stats = await sync_service.sync_all_companies()
         assert stats.total_pending == 0

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.registry_contracts import (
     RegistryCatalogPayload,
     RegistryProviderOption,
@@ -126,14 +126,14 @@ async def op_flows_registry_providers_list(
     payload: RegistryCatalogPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[str | RegistryProviderOption]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     capability = _capability_from_query(payload.capability)
     brand = _resolve_brand_for_registry(resolve_context_host())
     platform_items = _platform_provider_options(
-        container.llm_models_service.get_configured_providers_by_capability(capability),
+        di.llm_models_service.get_configured_providers_by_capability(capability),
         llms_display_label=brand.llms_display_label,
     )
     return ListResponse[str | RegistryProviderOption](
@@ -148,10 +148,10 @@ async def op_flows_registry_models_list(
     payload: RegistryCatalogPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[str | JsonObject]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     capability = _capability_from_query(payload.capability)
     provider = payload.provider
     catalog: list[str | JsonObject] = []
@@ -166,14 +166,14 @@ async def op_flows_registry_models_list(
             )
         elif provider:
             catalog.extend(
-                await container.llm_models_service.get_model_ids_by_provider_capability(
+                await di.llm_models_service.get_model_ids_by_provider_capability(
                     provider,
                     capability,
                 )
             )
         else:
             catalog.extend(
-                await container.llm_models_service.get_default_model_ids_by_capability(
+                await di.llm_models_service.get_default_model_ids_by_capability(
                     capability,
                 )
             )

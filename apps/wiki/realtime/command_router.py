@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.wiki.container import WikiContainer, get_wiki_container
+from apps.wiki.di import WikiDi
 from apps.wiki.models.api import (
     WikiMarkdownImportRequest,
     WikiMarkdownParseRequest,
@@ -58,13 +58,10 @@ from apps.wiki.realtime.operations import (
     op_revisions_restore,
     op_search_run,
 )
-from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
+WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiDi]] = {
     "wiki/pages/list_requested": Operation(payload_model=EmptyPayload, fn=op_pages_list),
     "wiki/pages/deleted_list_requested": Operation(
         payload_model=EmptyPayload, fn=op_pages_deleted_list
@@ -153,8 +150,3 @@ WIKI_OPERATIONS: dict[str, RegisteredOperation[WikiContainer]] = {
         payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
 }
-
-
-def register_wiki_ws_commands() -> None:
-    register_service_operations(WIKI_OPERATIONS, get_wiki_container)
-    logger.info("wiki.ws.command.handlers", WIKI_OPERATIONS_count=len(WIKI_OPERATIONS))

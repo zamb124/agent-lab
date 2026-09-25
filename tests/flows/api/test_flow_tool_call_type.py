@@ -23,13 +23,13 @@ def _child_flow(flow_id: str) -> FlowConfig:
 @pytest.mark.asyncio
 async def test_create_flow_persists_typed_handoff_on_exact_tool_attachment(
     client,
-    container,
+    di,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     child_flow_id = f"api-child-{unique_id}"
     parent_flow_id = f"api-parent-{unique_id}"
-    await container.flow_repository.set(_child_flow(child_flow_id))
+    await FlowConfig.create_version(_child_flow(child_flow_id))
 
     response = await client.post(
         "/flows/api/v1/flows/",
@@ -58,7 +58,7 @@ async def test_create_flow_persists_typed_handoff_on_exact_tool_attachment(
     )
 
     assert response.status_code == 200, response.text
-    stored = await container.flow_repository.get(parent_flow_id)
+    stored = await FlowConfig.get_latest(parent_flow_id)
     assert stored is not None
     assert stored.nodes is not None
     assert "call_type" not in stored.nodes["main"]
@@ -106,12 +106,12 @@ async def test_create_flow_rejects_flow_tool_without_flow_id(
 @pytest.mark.asyncio
 async def test_create_flow_rejects_unknown_target_branch(
     client,
-    container,
+    di,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     child_flow_id = f"api-branch-child-{unique_id}"
-    await container.flow_repository.set(_child_flow(child_flow_id))
+    await FlowConfig.create_version(_child_flow(child_flow_id))
 
     response = await client.post(
         "/flows/api/v1/flows/",

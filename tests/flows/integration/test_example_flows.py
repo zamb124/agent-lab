@@ -58,9 +58,12 @@ def filter_messages_by_role(messages: List[Message], role: str) -> List[Message]
     return [m for m in messages if msg_role(m) == role]
 
 
-from apps.flows.src.container import get_container  # noqa: E402
-from apps.flows.src.container_contracts import FlowRuntimeContainer  # noqa: E402
-from apps.flows.src.models import FlowConfig  # noqa: E402
+from apps.flows.di import FlowsDi  # noqa: E402
+from apps.flows.src.models import (
+    FlowConfig,  # noqa: E402
+    NodeConfig,
+    ToolReference,
+)
 from apps.flows.src.runtime.flow import Flow  # noqa: E402
 from core.state import ExecutionState  # noqa: E402
 from tests.flows.durable_runtime_harness import run_flow, run_node, workflow_state  # noqa: E402
@@ -85,22 +88,21 @@ def make_flow_state(
 
 async def run_loaded_flow(
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     flow: Flow | None,
     state: ExecutionState,
 ) -> ExecutionState:
     assert flow is not None
-    return await run_flow(container=container, flow=flow, state=state)
+    return await run_flow(di=di, flow=flow, state=state)
 
 
 class TestExampleReactAgent:
     """Тесты для example_react flow."""
 
     @pytest_asyncio.fixture
-    async def flow_config(self, app) -> FlowConfig:
+    async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_react из БД."""
-        container = get_container()
-        config = await container.flow_repository.get("example_react")
+        config = await FlowConfig.get_latest("example_react")
         assert config is not None, "Agent example_react не найден в БД"
         return config
 
@@ -154,7 +156,7 @@ class TestExampleReactAgent:
         assert "direct_mode" in flow_config.branches
 
     @pytest.mark.asyncio
-    async def test_skill_concise_overrides_variables(self, flow_config, container):
+    async def test_skill_concise_overrides_variables(self, flow_config, di):
         """Skill 'concise' переопределяет max_response_length."""
         from apps.flows.src.models.flow_config import FlowVariableConfig
 
@@ -166,13 +168,13 @@ class TestExampleReactAgent:
         assert skill.variables_mode == "merge"
 
         # Применяем skill
-        effective = container.flow_factory.apply_branch(flow_config, "concise")
+        effective = di.flow_factory.apply_branch(flow_config, "concise")
         assert effective["variables"]["max_response_length"] == "200"
         # Остальные variables сохраняются (merge mode)
         assert effective["variables"]["company_name"] == "@var:company_name"
 
     @pytest.mark.asyncio
-    async def test_skill_detailed_overrides_variables(self, flow_config, container):
+    async def test_skill_detailed_overrides_variables(self, flow_config, di):
         """Skill 'detailed' переопределяет max_response_length."""
         from apps.flows.src.models.flow_config import FlowVariableConfig
 
@@ -182,62 +184,60 @@ class TestExampleReactAgent:
         assert isinstance(var, FlowVariableConfig)
         assert var.value == "2000"
 
-        effective = container.flow_factory.apply_branch(flow_config, "detailed")
+        effective = di.flow_factory.apply_branch(flow_config, "detailed")
         assert effective["variables"]["max_response_length"] == "2000"
 
     @pytest.mark.asyncio
-    async def test_skill_variables_replace_mode(self, flow_config, container):
+    async def test_skill_variables_replace_mode(self, flow_config, di):
         """Skill 'variables_replace' заменяет все flow variables (variables_mode=replace)."""
         skill = flow_config.branches["variables_replace"]
         assert skill.variables_mode == "replace"
-        effective = container.flow_factory.apply_branch(flow_config, "variables_replace")
+        effective = di.flow_factory.apply_branch(flow_config, "variables_replace")
         assert effective["variables"]["max_response_length"] == "100"
         assert "company_name" not in effective["variables"]
 
     @pytest.mark.asyncio
-    async def test_skill_no_subflow_replaces_nodes(self, flow_config, container):
+    async def test_skill_no_subflow_replaces_nodes(self, flow_config, di):
         """Skill 'no_subflow' заменяет nodes."""
         skill = flow_config.branches["no_subflow"]
         assert skill.name == "Без вложенного subflow"
         assert skill.nodes_mode == "replace"
 
-        effective = container.flow_factory.apply_branch(flow_config, "no_subflow")
+        effective = di.flow_factory.apply_branch(flow_config, "no_subflow")
         # Должен быть только один node из skill
         assert "main" in effective["nodes"]
         # tools без субагента
         assert "example_subflow" not in effective["nodes"]["main"].get("tools", [])
 
     @pytest.mark.asyncio
-    async def test_skill_direct_mode_changes_entry(self, flow_config, container):
+    async def test_skill_direct_mode_changes_entry(self, flow_config, di):
         """Skill 'direct_mode' меняет точку входа."""
         skill = flow_config.branches["direct_mode"]
         assert skill.name == "Прямой вход в subflow"
         assert skill.entry == "direct_subflow"
 
-        effective = container.flow_factory.apply_branch(flow_config, "direct_mode")
+        effective = di.flow_factory.apply_branch(flow_config, "direct_mode")
         assert effective["entry"] == "direct_subflow"
 
     @pytest.mark.asyncio
-    async def test_flow_factory_applies_entry_skill(self, app):
+    async def test_flow_factory_applies_entry_skill(self, app, di):
         """FlowFactory применяет entry из skill."""
-        container = get_container()
 
-        flow = await container.flow_factory.get_flow("example_react", branch_id="direct_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="direct_mode", tool_registry=di.tool_registry)
         assert flow is not None
         assert flow.entry == "direct_subflow"
 
     @pytest.mark.asyncio
-    async def test_nodes_from_bundle_loaded(self, app):
+    async def test_nodes_from_bundle_loaded(self, app, di):
         """Ноды из nodes.json загружены в БД."""
-        container = get_container()
 
-        main_agent = await container.node_repository.get("example_main_agent")
+        main_agent = await NodeConfig.get("example_main_agent")
         assert main_agent is not None, "example_main_agent не найден"
         assert main_agent.name == "Main Node"
         assert "calculator" in [t.tool_id for t in main_agent.tools]
         assert "example_subflow" in [t.tool_id for t in main_agent.tools]
 
-        subagent = await container.node_repository.get("example_subflow")
+        subagent = await NodeConfig.get("example_subflow")
         assert subagent is not None, "example_subflow не найден"
         assert subagent.name == "Subflow-помощник"
         assert "ask_user" in [t.tool_id for t in subagent.tools]
@@ -280,20 +280,18 @@ class TestExampleReactAgent:
         assert subagent_tool.get("prompt"), "субагент должен иметь инлайн prompt"
 
     @pytest.mark.asyncio
-    async def test_flow_factory_creates_flow(self, app):
+    async def test_flow_factory_creates_flow(self, app, di):
         """FlowFactory создает flow из конфига."""
-        container = get_container()
 
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
         assert flow is not None
         assert flow.entry == "main"
 
     @pytest.mark.asyncio
-    async def test_flow_factory_applies_skill(self, app):
+    async def test_flow_factory_applies_skill(self, app, di):
         """FlowFactory применяет skill при создании flow."""
-        container = get_container()
 
-        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="concise", tool_registry=di.tool_registry)
         assert flow is not None
         # Variables из skill должны быть применены
         assert flow.variables.get("max_response_length") == "200"
@@ -303,10 +301,9 @@ class TestExampleGraphAgent:
     """Тесты для example_graph flow."""
 
     @pytest_asyncio.fixture
-    async def flow_config(self, app) -> FlowConfig:
+    async def flow_config(self, app, di) -> FlowConfig:
         """Загружает конфиг example_graph из БД."""
-        container = get_container()
-        config = await container.flow_repository.get("example_graph")
+        config = await FlowConfig.get_latest("example_graph")
         assert config is not None, "Agent example_graph не найден в БД"
         return config
 
@@ -432,13 +429,13 @@ class TestExampleGraphAgent:
         assert "orders_only" in flow_config.branches
 
     @pytest.mark.asyncio
-    async def test_skill_fast_track_replaces_edges(self, flow_config, container):
+    async def test_skill_fast_track_replaces_edges(self, flow_config, di):
         """Skill 'fast_track' заменяет edges: LLM-процессоры → null, hitl-ноды → formatter."""
         skill = flow_config.branches["fast_track"]
         assert skill.name == "Быстрая обработка"
         assert skill.edges_mode == "replace"
 
-        effective = container.flow_factory.apply_branch(flow_config, "fast_track")
+        effective = di.flow_factory.apply_branch(flow_config, "fast_track")
 
         # LLM-процессоры ведут в null (пропуск formatter)
         for processor in ["order_processor", "complaint_processor", "general_processor"]:
@@ -457,13 +454,13 @@ class TestExampleGraphAgent:
         }
 
     @pytest.mark.asyncio
-    async def test_skill_orders_only_merges_nodes(self, flow_config, container):
+    async def test_skill_orders_only_merges_nodes(self, flow_config, di):
         """Skill 'orders_only' мержит nodes с новым classifier."""
         skill = flow_config.branches["orders_only"]
         assert skill.name == "Только заказы"
         assert skill.nodes_mode == "merge"
 
-        effective = container.flow_factory.apply_branch(flow_config, "orders_only")
+        effective = di.flow_factory.apply_branch(flow_config, "orders_only")
 
         # Classifier заменен на упрощенный
         classifier_code = effective["nodes"]["classifier"]["code"]
@@ -481,29 +478,27 @@ class TestExampleGraphAgent:
         assert ("route", "==", "complaint") not in conditions
 
     @pytest.mark.asyncio
-    async def test_example_graph_nodes_loaded(self, app):
+    async def test_example_graph_nodes_loaded(self, app, di):
         """Ноды example_graph из nodes.json загружены в БД."""
-        container = get_container()
 
-        order_agent = await container.node_repository.get("example_order_agent")
+        order_agent = await NodeConfig.get("example_order_agent")
         assert order_agent is not None, "example_order_agent не найден"
         assert order_agent.name == "Агент заказов"
 
-        complaint_agent = await container.node_repository.get("example_complaint_agent")
+        complaint_agent = await NodeConfig.get("example_complaint_agent")
         assert complaint_agent is not None, "example_complaint_agent не найден"
         assert complaint_agent.name == "Агент жалоб"
 
     @pytest.mark.asyncio
-    async def test_flow_factory_creates_flow(self, app):
+    async def test_flow_factory_creates_flow(self, app, di):
         """FlowFactory создает flow из конфига."""
-        container = get_container()
 
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
         assert flow is not None
         assert flow.entry == "classifier"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_order(self, flow_config, container, unique_id):
+    async def test_classifier_routes_to_order(self, flow_config, di, unique_id):
         """Classifier роутит на order при соответствующем content."""
         from apps.flows.src.runtime.nodes import create_node
 
@@ -511,7 +506,7 @@ class TestExampleGraphAgent:
         classifier_node = await create_node(
             "classifier",
             classifier_config,
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -519,12 +514,12 @@ class TestExampleGraphAgent:
             unique_id=unique_id,
             content="Хочу узнать про мой заказ",
         )
-        result = await run_node(container=container, node=classifier_node, state=state)
+        result = await run_node(di=di, node=classifier_node, state=state)
 
         assert result["route"] == "order"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_complaint(self, flow_config, container, unique_id):
+    async def test_classifier_routes_to_complaint(self, flow_config, di, unique_id):
         """Classifier роутит на complaint при соответствующем content."""
         from apps.flows.src.runtime.nodes import create_node
 
@@ -532,7 +527,7 @@ class TestExampleGraphAgent:
         classifier_node = await create_node(
             "classifier",
             classifier_config,
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -540,12 +535,12 @@ class TestExampleGraphAgent:
             unique_id=unique_id,
             content="У меня жалоба на сервис",
         )
-        result = await run_node(container=container, node=classifier_node, state=state)
+        result = await run_node(di=di, node=classifier_node, state=state)
 
         assert result["route"] == "complaint"
 
     @pytest.mark.asyncio
-    async def test_classifier_routes_to_general(self, flow_config, container, unique_id):
+    async def test_classifier_routes_to_general(self, flow_config, di, unique_id):
         """Classifier роутит на general для обычных вопросов."""
         from apps.flows.src.runtime.nodes import create_node
 
@@ -553,7 +548,7 @@ class TestExampleGraphAgent:
         classifier_node = await create_node(
             "classifier",
             classifier_config,
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
 
         state = workflow_state(
@@ -561,7 +556,7 @@ class TestExampleGraphAgent:
             unique_id=unique_id,
             content="Какой у вас график работы?",
         )
-        result = await run_node(container=container, node=classifier_node, state=state)
+        result = await run_node(di=di, node=classifier_node, state=state)
 
         assert result["route"] == "general"
 
@@ -586,20 +581,18 @@ class TestExampleFlowsIntegration:
     """Интеграционные тесты обоих flows вместе."""
 
     @pytest.mark.asyncio
-    async def test_both_flows_loaded(self, app):
+    async def test_both_flows_loaded(self, app, di):
         """Оба flow загружены в БД."""
-        container = get_container()
 
-        react_flow = await container.flow_repository.get("example_react")
-        graph_flow = await container.flow_repository.get("example_graph")
+        react_flow = await FlowConfig.get_latest("example_react")
+        graph_flow = await FlowConfig.get_latest("example_graph")
 
         assert react_flow is not None
         assert graph_flow is not None
 
     @pytest.mark.asyncio
-    async def test_all_agents_loaded(self, app):
+    async def test_all_agents_loaded(self, app, di):
         """Все ноды из обоих agents загружены."""
-        container = get_container()
 
         expected_nodes = [
             "example_main_agent",
@@ -609,16 +602,15 @@ class TestExampleFlowsIntegration:
         ]
 
         for node_id in expected_nodes:
-            node = await container.node_repository.get(node_id)
+            node = await NodeConfig.get(node_id)
             assert node is not None, f"Node {node_id} не найдена"
 
     @pytest.mark.asyncio
-    async def test_tools_in_repository(self, app):
+    async def test_tools_in_repository(self, app, di):
         """Базовые tools загружены в БД с code."""
-        container = get_container()
 
-        calculator = await container.tool_repository.get("calculator")
-        ask_user = await container.tool_repository.get("ask_user")
+        calculator = await ToolReference.get("calculator")
+        ask_user = await ToolReference.get("ask_user")
 
         assert calculator is not None, "calculator tool не найден в БД"
         assert calculator.code is not None, "calculator должен иметь inline code"
@@ -627,11 +619,10 @@ class TestExampleFlowsIntegration:
         assert ask_user.code is not None, "ask_user должен иметь inline code"
 
     @pytest.mark.asyncio
-    async def test_branch_id_preserved_in_state(self, app):
+    async def test_branch_id_preserved_in_state(self, app, di):
         """branch_id сохраняется в state при выполнении."""
-        container = get_container()
 
-        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="concise", tool_registry=di.tool_registry)
 
         # Проверяем что ветка применена через variables
         assert flow.variables.get("max_response_length") == "200"
@@ -641,21 +632,20 @@ class TestExampleReactE2E:
     """E2E тесты example_react с MockLLM."""
 
     @pytest.mark.asyncio
-    async def test_basic_flow_execution(self, app, mock_llm_with_queue):
+    async def test_basic_flow_execution(self, app, mock_llm_with_queue, di):
         """Базовое выполнение flow - агент отвечает напрямую."""
         mock_llm_with_queue(["Привет! Я ваш ассистент. Чем могу помочь?"])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="Привет")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
         assert result.current_nodes == []  # Agent завершен
 
     @pytest.mark.asyncio
-    async def test_flow_with_calculator_tool(self, app, mock_llm_with_queue, unique_id):
+    async def test_flow_with_calculator_tool(self, app, mock_llm_with_queue, unique_id, di):
         """Агент использует calculator tool."""
         mock_llm_with_queue(
             [
@@ -664,22 +654,21 @@ class TestExampleReactE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(
             flow_id="example_react",
             unique_id=f"calc-{unique_id}",
             content="Сколько будет 25 умножить на 4?",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
         assert "tool_results" in result.model_dump()
         assert "calculator" in result.model_dump()["tool_results"]
 
     @pytest.mark.asyncio
-    async def test_flow_with_interrupt(self, app, mock_llm_with_queue, sync_tools):
+    async def test_flow_with_interrupt(self, app, mock_llm_with_queue, sync_tools, di):
         """Агент запрашивает информацию у пользователя через ask_user."""
         mock_llm_with_queue(
             [
@@ -687,18 +676,17 @@ class TestExampleReactE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="Хочу познакомиться")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Interrupt возвращается в state
         assert result.interrupt is not None
         assert result.interrupt.question == "Как вас зовут?"
 
     @pytest.mark.asyncio
-    async def test_flow_with_subagent_tool(self, app, mock_llm_with_queue, sync_tools):
+    async def test_flow_with_subagent_tool(self, app, mock_llm_with_queue, sync_tools, di):
         """Агент делегирует задачу субагенту."""
         mock_llm_with_queue(
             [
@@ -717,23 +705,21 @@ class TestExampleReactE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="Нужна информация о локации")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Interrupt возвращается в state
         assert result.interrupt is not None
         assert "город" in result.interrupt.question.lower()
 
     @pytest.mark.asyncio
-    async def test_skill_concise_execution(self, app, mock_llm_with_queue):
+    async def test_skill_concise_execution(self, app, mock_llm_with_queue, di):
         """Выполнение с skill 'concise' - переменные применены."""
         mock_llm_with_queue(["Краткий ответ."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="concise")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="concise", tool_registry=di.tool_registry)
 
         # Проверяем переменные
         assert flow.variables.get("max_response_length") == "200"
@@ -743,19 +729,18 @@ class TestExampleReactE2E:
             branch_id="concise",
             content="Что-нибудь",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
         # Variables доступны в state
         assert result.variables["max_response_length"] == "200"
 
     @pytest.mark.asyncio
-    async def test_skill_detailed_execution(self, app, mock_llm_with_queue):
+    async def test_skill_detailed_execution(self, app, mock_llm_with_queue, di):
         """Выполнение с skill 'detailed' - переменные применены."""
         mock_llm_with_queue(["Подробный развернутый ответ с деталями."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="detailed")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="detailed", tool_registry=di.tool_registry)
 
         assert flow.variables.get("max_response_length") == "2000"
 
@@ -764,12 +749,12 @@ class TestExampleReactE2E:
             branch_id="detailed",
             content="Расскажи подробно",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.variables["max_response_length"] == "2000"
 
     @pytest.mark.asyncio
-    async def test_skill_direct_mode_entry(self, app, mock_llm_with_queue):
+    async def test_skill_direct_mode_entry(self, app, mock_llm_with_queue, di):
         """Skill 'direct_mode' меняет точку входа на субагента."""
         mock_llm_with_queue(
             [
@@ -781,8 +766,7 @@ class TestExampleReactE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="direct_mode")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="direct_mode", tool_registry=di.tool_registry)
 
         # Entry изменен на direct_subflow
         assert flow.entry == "direct_subflow"
@@ -794,25 +778,24 @@ class TestExampleReactE2E:
         )
 
         # Субагент сразу задает вопрос через interrupt (сохраняется в state)
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "узнать" in result.interrupt.question.lower()
 
     @pytest.mark.asyncio
-    async def test_skill_no_subflow_no_delegation(self, app, mock_llm_with_queue):
+    async def test_skill_no_subflow_no_delegation(self, app, mock_llm_with_queue, di):
         """Skill 'no_subflow' — главная нода отвечает без делегирования в subflow."""
         mock_llm_with_queue(["Отвечаю сам без делегирования."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="no_subflow")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="no_subflow", tool_registry=di.tool_registry)
 
         state = make_flow_state(
             flow_id="example_react",
             branch_id="no_subflow",
             content="Вопрос",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
         # Субагент не использовался
@@ -823,15 +806,14 @@ class TestExampleGraphE2E:
     """E2E тесты example_graph с MockLLM."""
 
     @pytest.mark.asyncio
-    async def test_route_to_order_processor(self, app, mock_llm_with_queue):
+    async def test_route_to_order_processor(self, app, mock_llm_with_queue, di):
         """Роутинг на order_processor."""
         mock_llm_with_queue(["Ваш заказ ORD-12345678 в пути."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="Где мой заказ?")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Classifier определил route = order
         assert result.get("route") == "order"
@@ -840,39 +822,37 @@ class TestExampleGraphE2E:
         assert result.get("processed") is True
 
     @pytest.mark.asyncio
-    async def test_route_to_complaint_processor(self, app, mock_llm_with_queue):
+    async def test_route_to_complaint_processor(self, app, mock_llm_with_queue, di):
         """Роутинг на complaint_processor."""
         mock_llm_with_queue(
             ["Приносим извинения за неудобства. Ваше обращение CMP-12345678 зарегистрировано."]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="Хочу подать жалобу на сервис")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.get("route") == "complaint"
         assert "[COMPLAINT]" in result.get("response", "")
         assert result.get("processed") is True
 
     @pytest.mark.asyncio
-    async def test_route_to_general_processor(self, app, mock_llm_with_queue):
+    async def test_route_to_general_processor(self, app, mock_llm_with_queue, di):
         """Роутинг на general_processor."""
         mock_llm_with_queue(["Мы работаем с 9:00 до 18:00."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="Какой у вас график работы?")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.get("route") == "general"
         assert "[GENERAL]" in result.get("response", "")
         assert result.get("processed") is True
 
     @pytest.mark.asyncio
-    async def test_order_processor_with_interrupt(self, app, mock_llm_with_queue):
+    async def test_order_processor_with_interrupt(self, app, mock_llm_with_queue, di):
         """Order processor запрашивает номер заказа."""
         mock_llm_with_queue(
             [
@@ -884,29 +864,27 @@ class TestExampleGraphE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="Проверить статус заказа")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "заказ" in result.interrupt.question.lower()
 
     @pytest.mark.asyncio
-    async def test_skill_fast_track_skips_formatter(self, app, mock_llm_with_queue):
+    async def test_skill_fast_track_skips_formatter(self, app, mock_llm_with_queue, di):
         """Skill 'fast_track' пропускает formatter."""
         mock_llm_with_queue(["Быстрый ответ без форматирования."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", branch_id="fast_track")
+        flow = await di.flow_factory.get_flow("example_graph", branch_id="fast_track", tool_registry=di.tool_registry)
 
         state = make_flow_state(
             flow_id="example_graph",
             branch_id="fast_track",
             content="Срочный вопрос про заказ",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.get("route") == "order"
         # Formatter пропущен - нет префикса и processed
@@ -914,12 +892,11 @@ class TestExampleGraphE2E:
         assert result.get("processed") is None
 
     @pytest.mark.asyncio
-    async def test_skill_orders_only_no_complaint_route(self, app, mock_llm_with_queue):
+    async def test_skill_orders_only_no_complaint_route(self, app, mock_llm_with_queue, di):
         """Skill 'orders_only' направляет жалобы в general."""
         mock_llm_with_queue(["Для жалоб обратитесь по телефону."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph", branch_id="orders_only")
+        flow = await di.flow_factory.get_flow("example_graph", branch_id="orders_only", tool_registry=di.tool_registry)
 
         # Жалоба идет в general (так как complaint route убран)
         state = make_flow_state(
@@ -927,28 +904,27 @@ class TestExampleGraphE2E:
             branch_id="orders_only",
             content="Хочу подать жалобу",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # С этим skill жалобы идут в general
         assert result.get("route") == "general"
 
     @pytest.mark.asyncio
-    async def test_variables_in_agent_prompts(self, app, mock_llm_with_queue):
+    async def test_variables_in_agent_prompts(self, app, mock_llm_with_queue, di):
         """Variables доступны в промптах агентов."""
         mock_llm_with_queue(["Ваш заказ ORD-12345678 обрабатывается."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="Статус order")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Variables переданы в state
         assert result.variables.get("order_prefix") == "ORD-"
         assert result.variables.get("complaint_prefix") == "CMP-"
 
     @pytest.mark.asyncio
-    async def test_complaint_processor_with_interrupt(self, app, mock_llm_with_queue):
+    async def test_complaint_processor_with_interrupt(self, app, mock_llm_with_queue, di):
         """Complaint processor запрашивает детали жалобы."""
         mock_llm_with_queue(
             [
@@ -960,22 +936,20 @@ class TestExampleGraphE2E:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_graph", content="У меня серьезная жалоба")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.interrupt is not None
         assert "проблем" in result.interrupt.question.lower()
 
     @pytest.mark.asyncio
-    async def test_variables_from_metadata_override_flow_variables(self, app, mock_llm_with_queue):
+    async def test_variables_from_metadata_override_flow_variables(self, app, mock_llm_with_queue, di):
         """Variables из metadata переопределяют flow variables."""
         mock_llm_with_queue(["Ответ с переопределенными переменными."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         # Agent имеет переменную company_name
         assert "company_name" in flow.variables
@@ -986,18 +960,17 @@ class TestExampleGraphE2E:
         flow.variables["max_response_length"] = "300"
 
         state = make_flow_state(flow_id="example_react", content="Тест")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert result.variables["company_name"] == "MetadataCompany"
         assert result.variables["max_response_length"] == "300"
 
     @pytest.mark.asyncio
-    async def test_dict_variables_from_metadata(self, app, mock_llm_with_queue):
+    async def test_dict_variables_from_metadata(self, app, mock_llm_with_queue, di):
         """Dict переменные из metadata доступны в промптах через точку."""
         mock_llm_with_queue(["Ответ с dict переменными."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         # Обновляем variables с dict объектом (симулируем из metadata)
         flow.variables["user_config"] = {
@@ -1010,7 +983,7 @@ class TestExampleGraphE2E:
         }
 
         state = make_flow_state(flow_id="example_react", content="Тест")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert isinstance(result.variables["user_config"], dict)
         assert result.variables["user_config"]["name"] == "TestUser"
@@ -1021,36 +994,34 @@ class TestExampleFlowsEdgeCases:
     """Граничные случаи и ошибки."""
 
     @pytest.mark.asyncio
-    async def test_empty_content(self, app, mock_llm_with_queue):
+    async def test_empty_content(self, app, mock_llm_with_queue, di):
         """Пустой content обрабатывается."""
         mock_llm_with_queue(["Пожалуйста, уточните ваш вопрос."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
 
     @pytest.mark.asyncio
-    async def test_unknown_skill_uses_default(self, app, mock_llm_with_queue):
+    async def test_unknown_skill_uses_default(self, app, mock_llm_with_queue, di):
         """Неизвестный skill использует базовую конфигурацию."""
         mock_llm_with_queue(["Стандартный ответ."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react", branch_id="unknown_skill")
+        flow = await di.flow_factory.get_flow("example_react", branch_id="unknown_skill", tool_registry=di.tool_registry)
 
         # Используется базовый entry
         assert flow.entry == "main"
 
         state = make_flow_state(flow_id="example_react", content="Тест")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
 
     @pytest.mark.asyncio
-    async def test_multiple_tool_calls(self, app, mock_llm_with_queue, unique_id):
+    async def test_multiple_tool_calls(self, app, mock_llm_with_queue, unique_id, di):
         """Несколько вызовов tools подряд."""
         mock_llm_with_queue(
             [
@@ -1060,33 +1031,31 @@ class TestExampleFlowsEdgeCases:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(
             flow_id="example_react",
             unique_id=f"multi-tool-{unique_id}",
             content="Посчитай 10+5, потом умножь на 2",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         assert "response" in result
         assert "calculator" in result.tool_results
 
     @pytest.mark.asyncio
-    async def test_graph_preserves_state_through_nodes(self, app, mock_llm_with_queue):
+    async def test_graph_preserves_state_through_nodes(self, app, mock_llm_with_queue, di):
         """State сохраняется при переходе между нодами графа."""
         mock_llm_with_queue(["Заказ обработан."])
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_graph")
+        flow = await di.flow_factory.get_flow("example_graph", tool_registry=di.tool_registry)
 
         state = make_flow_state(
             flow_id="example_graph",
             content="Мой заказ",
             custom_field="preserved_value",
         )
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Custom field сохранен
         assert result.get("custom_field") == "preserved_value"
@@ -1112,8 +1081,8 @@ class TestSubagentInterruptResume:
 
     @pytest.mark.asyncio
     async def test_subagent_interrupt_saves_pending_tool_call(
-        self, app, mock_llm_with_queue, sync_tools
-    ):
+        self, app, mock_llm_with_queue, sync_tools,
+    di):
         """
         При interrupt от субагента сохраняется interrupt_path.
 
@@ -1131,11 +1100,10 @@ class TestSubagentInterruptResume:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="где купить цветы")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Agent возвращает state с interrupt
         assert result.interrupt is not None
@@ -1149,8 +1117,8 @@ class TestSubagentInterruptResume:
 
     @pytest.mark.asyncio
     async def test_subagent_resume_receives_user_answer_directly(
-        self, app, mock_llm_with_queue, sync_tools
-    ):
+        self, app, mock_llm_with_queue, sync_tools,
+    di):
         """
         При resume ответ пользователя идёт НАПРЯМУЮ в субагента, минуя главного.
 
@@ -1176,12 +1144,11 @@ class TestSubagentInterruptResume:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         # === ПЕРВЫЙ ЗАПРОС ===
         state = make_flow_state(flow_id="example_react", content="где купить цветы")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Проверяем состояние после interrupt
         assert result.interrupt is not None
@@ -1189,7 +1156,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME ===
         result.content = "москва"
-        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
+        final_result = await run_loaded_flow(di=di, flow=flow, state=result)
 
         # Проверяем что flow завершился с ответом
         assert final_result.get("response") is not None, "Должен быть финальный ответ"
@@ -1213,8 +1180,8 @@ class TestSubagentInterruptResume:
 
     @pytest.mark.asyncio
     async def test_subagent_multiple_interrupts_preserve_history(
-        self, app, mock_llm_with_queue, sync_tools
-    ):
+        self, app, mock_llm_with_queue, sync_tools,
+    di):
         """
         При нескольких interrupt подряд история субагента накапливается.
 
@@ -1237,18 +1204,17 @@ class TestSubagentInterruptResume:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         # === ПЕРВЫЙ ЗАПРОС ===
         state = make_flow_state(flow_id="example_react", content="где купить цветы")
-        result1 = await run_loaded_flow(container=container, flow=flow, state=state)
+        result1 = await run_loaded_flow(di=di, flow=flow, state=state)
         assert result1.interrupt is not None
         assert "город" in result1.interrupt.question.lower()
 
         # === RESUME 1 ===
         result1.content = "москва"
-        result2 = await run_loaded_flow(container=container, flow=flow, state=result1)
+        result2 = await run_loaded_flow(di=di, flow=flow, state=result1)
         assert result2.interrupt is not None
         assert "район" in result2.interrupt.question.lower()
 
@@ -1266,7 +1232,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME 2 ===
         result2.content = "раменки"
-        result3 = await run_loaded_flow(container=container, flow=flow, state=result2)
+        result3 = await run_loaded_flow(di=di, flow=flow, state=result2)
 
         # Финальная проверка истории через nested_states
         nested_states3 = result3.nested_states
@@ -1289,7 +1255,7 @@ class TestSubagentInterruptResume:
         assert "response" in result3
 
     @pytest.mark.asyncio
-    async def test_main_agent_does_not_see_user_answer_on_resume(self, app, mock_llm_with_queue):
+    async def test_main_agent_does_not_see_user_answer_on_resume(self, app, mock_llm_with_queue, di):
         """
         При resume главный агент НЕ видит ответ пользователя напрямую.
         Ответ идёт в субагента, главный видит только результат субагента.
@@ -1310,15 +1276,14 @@ class TestSubagentInterruptResume:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         state = make_flow_state(flow_id="example_react", content="где купить цветы")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # Resume
         result.content = "москва"
-        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
+        final_result = await run_loaded_flow(di=di, flow=flow, state=result)
 
         # Проверяем что messages главного агента НЕ содержат "москва" как user message
         # (ответ должен идти в субагента, не в главного)
@@ -1337,7 +1302,7 @@ class TestSubagentInterruptResume:
         assert "response" in final_result
 
     @pytest.mark.asyncio
-    async def test_interrupt_path_mechanism(self, app, mock_llm_with_queue, sync_tools):
+    async def test_interrupt_path_mechanism(self, app, mock_llm_with_queue, sync_tools, di):
         """
         КРИТИЧЕСКИЙ ТЕСТ: механизм InterruptManager с interrupt_path.
 
@@ -1367,12 +1332,11 @@ class TestSubagentInterruptResume:
             ]
         )
 
-        container = get_container()
-        flow = await container.flow_factory.get_flow("example_react")
+        flow = await di.flow_factory.get_flow("example_react", tool_registry=di.tool_registry)
 
         # === ПЕРВЫЙ ЗАПРОС ===
         state = make_flow_state(flow_id="example_react", content="найти цветочный магазин")
-        result = await run_loaded_flow(container=container, flow=flow, state=state)
+        result = await run_loaded_flow(di=di, flow=flow, state=state)
 
         # ПРОВЕРКА 1: interrupt_path сохранён
         assert len(result.interrupt_path) > 0, (
@@ -1392,7 +1356,7 @@ class TestSubagentInterruptResume:
 
         # === RESUME С ОТВЕТОМ "москва" ===
         result.content = "москва"
-        final_result = await run_loaded_flow(container=container, flow=flow, state=result)
+        final_result = await run_loaded_flow(di=di, flow=flow, state=result)
 
         # ПРОВЕРКА 4: interrupt_path очищен
         assert len(final_result.interrupt_path) == 0, (

@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import (
     FlowsFlowIdPayload,
     FlowsListPayload,
@@ -16,7 +17,6 @@ from apps.flows.realtime.operations import (
     op_flows_remove,
     op_flows_update,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.flow_api import FlowCreateRequest
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -57,7 +57,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_catalog_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -77,13 +77,13 @@ async def test_catalog_rest_and_op_share_payload(
         listed = await op_flows_list(
             FlowsListPayload(limit=500, offset=0),
             user=user,
-            container=container,
+            di=di,
         )
         assert any(item.flow_id == flow_id for item in listed.items)
         item = await op_flows_item(
             FlowsFlowIdPayload(flow_id=flow_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert item.flow_id == flow_id
         assert item.name == "Catalog Command"
@@ -103,7 +103,7 @@ async def test_catalog_rest_and_op_share_payload(
                 _create_body(flow_id, "Catalog Command Updated", "second")
             ),
             user=user,
-            container=container,
+            di=di,
         )
         assert updated.name == "Catalog Command Updated"
 
@@ -119,7 +119,7 @@ async def test_catalog_rest_and_op_share_payload(
         removed = await op_flows_remove(
             FlowsFlowIdPayload(flow_id=flow_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert removed.status == "deleted"
         assert removed.flow_id == flow_id

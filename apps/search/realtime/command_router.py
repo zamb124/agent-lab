@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.search.container import SearchContainer, get_search_container
+from apps.search.di import SearchDi
 from apps.search.realtime.operations import (
     CrawlDomainCreatePayload,
     CrawlDomainRefPayload,
@@ -57,7 +57,6 @@ from apps.search.realtime.operations import (
     op_query_serp_refine,
 )
 from core.crawl.models import CrawlJobCreateRequest, CrawlProfileCreateRequest, SeedImportRequest
-from core.logging import get_logger
 from core.search.index_models import SearchIndexBatchGetRequest, SearchIndexCreateRequest
 from core.search.models import (
     MetaSearchRefineRequest,
@@ -65,11 +64,9 @@ from core.search.models import (
     MetaSearchSerpMoreRequest,
     SerpClickEvent,
 )
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-SEARCH_OPERATIONS: dict[str, RegisteredOperation[SearchContainer]] = {
+SEARCH_OPERATIONS: dict[str, RegisteredOperation[SearchDi]] = {
     "search/crawl_profiles/list_requested": Operation(payload_model=SearchPagePayload, fn=op_crawl_profiles_list),
     "search/crawl_profiles/create_requested": Operation(
         payload_model=CrawlProfileCreateRequest, fn=op_crawl_profiles_create
@@ -125,8 +122,3 @@ SEARCH_OPERATIONS: dict[str, RegisteredOperation[SearchContainer]] = {
     ),
     "search/providers/reset_requested": Operation(payload_model=SearchProviderIdPayload, fn=op_providers_reset),
 }
-
-
-def register_search_ws_commands() -> None:
-    register_service_operations(SEARCH_OPERATIONS, get_search_container)
-    logger.info("command_router.registered", service="search", operations=len(SEARCH_OPERATIONS))

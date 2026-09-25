@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal
 
 from apps.office.authz.tuples import (
@@ -15,9 +16,6 @@ from apps.office.authz.tuples import (
     office_document_owner_tuple,
 )
 from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
-from apps.office.db.repositories.access_repository import OfficeAccessRepository
-from apps.office.db.repositories.catalog_repository import CatalogRepository
-from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
 from apps.office.models.api import (
     OfficeAccessMemberRelation,
     OfficePublicCatalogItem,
@@ -54,14 +52,8 @@ class PublicLinkTarget:
 class OfficeAccessService:
     def __init__(
         self,
-        catalog_repository: CatalogRepository,
-        document_binding_repository: DocumentBindingRepository,
-        access_repository: OfficeAccessRepository,
         authz: AuthzService,
     ) -> None:
-        self._catalog_repository: CatalogRepository = catalog_repository
-        self._binding_repository: DocumentBindingRepository = document_binding_repository
-        self._access_repository: OfficeAccessRepository = access_repository
         self._authz: AuthzService = authz
 
     @staticmethod
@@ -227,9 +219,9 @@ class OfficeAccessService:
         namespace: str,
         user_id: str,
     ) -> list[tuple[OfficeDocumentCatalog, int]]:
-        candidates = await self._catalog_repository.list_by_company_namespace(
-            company_id=company_id,
-            namespace=namespace,
+        candidates = await OfficeDocumentCatalog.catalogs_in_namespace(
+            company_id,
+            namespace,
         )
         if not candidates:
             return []
@@ -247,7 +239,7 @@ class OfficeAccessService:
         for catalog, is_allowed in zip(candidates, allowed, strict=True):
             if not is_allowed:
                 continue
-            count = await self._catalog_repository.count_documents(catalog.catalog_id)
+            count = await OfficeDocumentBinding.count_bindings_in_catalog(catalog.catalog_id)
             result.append((catalog, count))
         return result
 
@@ -264,7 +256,7 @@ class OfficeAccessService:
         if normalized == "":
             raise ValueError("token is required")
         token_hash = hash_token(normalized)
-        binding = await self._access_repository.get_binding_by_link_token_hash(token_hash)
+        binding = await OfficeDocumentBinding.binding_by_enabled_link_token(token_hash)
         if binding is not None:
             return PublicLinkTarget(
                 kind="binding",
@@ -272,7 +264,7 @@ class OfficeAccessService:
                 binding=binding,
                 token_hash=token_hash,
             )
-        catalog = await self._access_repository.get_catalog_by_link_token_hash(token_hash)
+        catalog = await OfficeDocumentCatalog.catalog_by_enabled_link_token(token_hash)
         if catalog is not None:
             return PublicLinkTarget(
                 kind="catalog",
@@ -309,7 +301,7 @@ class OfficeAccessService:
         company_id: str,
         namespace: str,
     ) -> OfficeResourceAccessResponse:
-        catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         members = await self._list_member_items(self._catalog_obj(catalog_id))
@@ -375,7 +367,7 @@ class OfficeAccessService:
         body: OfficeResourceAccessPatchRequest,
         origin: str,
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
-        catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         raw_token: str | None = None
@@ -398,16 +390,11 @@ class OfficeAccessService:
                 raw_token = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        updated_catalog = await self._access_repository.set_catalog_link(
-            catalog_id,
-            company_id,
-            namespace,
-            link_enabled=link_enabled,
-            link_token_hash=link_token_hash,
-            link_permission=link_permission,
-        )
-        if updated_catalog is None:
-            raise ValueError("Catalog not found")
+        catalog.link_enabled = link_enabled
+        catalog.link_token_hash = link_token_hash
+        catalog.link_permission = link_permission
+        catalog.link_updated_at = datetime.now(timezone.utc)
+        _ = await catalog.save()
         if body.members is not None:
             if await self.catalog_is_company_visible(catalog_id, company_id):
                 if body.members:
@@ -451,14 +438,12 @@ class OfficeAccessService:
                 link_token_hash = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        updated_binding = await self._access_repository.set_document_link(
-            binding.file_id,
-            link_enabled=link_enabled,
-            link_token_hash=link_token_hash,
-            link_permission=link_permission,
-        )
-        if updated_binding is None:
-            raise ValueError("Binding not found")
+        binding.link_enabled = link_enabled
+        binding.link_token_hash = link_token_hash
+        binding.link_permission = link_permission
+        binding.link_updated_at = datetime.now(timezone.utc)
+        _ = await binding.save()
+        updated_binding = binding
         if body.members is not None:
             await self._replace_members(
                 self._document_obj(binding.file_id),
@@ -481,7 +466,7 @@ class OfficeAccessService:
         user_id: str,
         relation: AuthzRelation = AuthzRelation.VIEWER,
     ) -> None:
-        catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         if await self.catalog_is_company_visible(catalog_id, company_id):
@@ -513,22 +498,16 @@ class OfficeAccessService:
         namespace: str,
         origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
-        catalog = await self._catalog_repository.get(catalog_id, company_id, namespace)
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         if not catalog.link_enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        updated = await self._access_repository.set_catalog_link(
-            catalog_id,
-            company_id,
-            namespace,
-            link_enabled=True,
-            link_token_hash=token_hash,
-            link_permission=catalog.link_permission,
-        )
-        if updated is None:
-            raise ValueError("Catalog not found")
+        catalog.link_enabled = True
+        catalog.link_token_hash = token_hash
+        catalog.link_updated_at = datetime.now(timezone.utc)
+        _ = await catalog.save()
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
@@ -541,14 +520,10 @@ class OfficeAccessService:
         if not binding.link_enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        updated = await self._access_repository.set_document_link(
-            binding.file_id,
-            link_enabled=True,
-            link_token_hash=token_hash,
-            link_permission=binding.link_permission,
-        )
-        if updated is None:
-            raise ValueError("Binding not found")
+        binding.link_enabled = True
+        binding.link_token_hash = token_hash
+        binding.link_updated_at = datetime.now(timezone.utc)
+        _ = await binding.save()
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
@@ -584,10 +559,10 @@ class OfficeAccessService:
         if target.kind != "catalog" or target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = target.catalog
-        bindings = await self._binding_repository.list_by_company_namespace_and_catalog(
-            catalog.company_id,
-            catalog.namespace,
-            catalog.catalog_id,
+        bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+            company_id=catalog.company_id,
+            namespace=catalog.namespace,
+            catalog_id=catalog.catalog_id,
         )
         items: list[OfficePublicCatalogItem] = []
         for binding in bindings:
@@ -616,7 +591,7 @@ class OfficeAccessService:
         if catalog_target.kind != "catalog" or catalog_target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = catalog_target.catalog
-        binding = await self._binding_repository.get(
+        binding = await OfficeDocumentBinding.binding_in_namespace(
             file_id,
             catalog.company_id,
             catalog.namespace,

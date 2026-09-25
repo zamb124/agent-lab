@@ -169,7 +169,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Анализ встречи",
             "description": "Сегодня встретился с Иваном. Обсудили проект X. Иван предложил нанять Петра.",
@@ -262,7 +262,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "План задач",
             "description": "Нужно подготовить отчет к 10 января (срочно, Иван). Также созвониться с клиентом до 8 января. Обновить документацию к 15 числу.",
@@ -334,7 +334,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Встреча команды (исходный)",
             "description": long_text,
@@ -364,7 +364,7 @@ class TestAIAnalysis:
     ):
         """AI учитывает явно упомянутые entities через @"""
         existing_name = f"Существующая задача {unique_id}"
-        existing_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        existing_entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": existing_name,
             "description": "Задача уже в CRM для проверки связи analyze по имени",
@@ -403,7 +403,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Звонок",
             "description": "Созвонился с клиентом. Обсудили условия.",
@@ -466,7 +466,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Встреча (типы)",
             "description": "Встретились с Иваном и Петром. Обсудили проект X.",
@@ -530,7 +530,7 @@ class TestAIAnalysis:
             })
         }]
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Распределение",
             "description": "Иван работает над проектом A.",
@@ -562,7 +562,7 @@ class TestAIAnalysis:
         self, crm_client: AsyncClient, auth_headers_system: dict[str, str]
     ):
         """404 при попытке создать entity в несуществующем namespace."""
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": "Заметка в несуществующем namespace",
             "description": "Текст для анализа",

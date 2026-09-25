@@ -87,8 +87,9 @@ async def crm_create_note(
     idempotency_key: str | None = None,
     *,
     state: ExecutionState,
+    lara_client: LaraClient,
 ) -> JsonObject:
-    client = LaraClient()
+    client = lara_client
     clean_note_date = str(note_date).strip() if note_date and str(note_date).strip() else None
 
     if mode == "propose":

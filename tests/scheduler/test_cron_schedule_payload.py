@@ -130,11 +130,6 @@ class _InMemorySchedulerService:
         raise AssertionError(f"task not found: {schedule_task_id}")
 
 
-class _Container:
-    def __init__(self, service: _InMemorySchedulerService) -> None:
-        self.scheduler_service = service
-
-
 def _task(
     schedule_task_id: str,
     *,
@@ -173,10 +168,8 @@ async def test_ensure_calendar_schedule_reconciles_legacy_scheduler_task_id_payl
             )
         ]
     )
-    container = _Container(service)
-
     await _ensure_calendar_schedule(
-        container=container,
+        scheduler_service=service,
         config_enabled=True,
         task_name=TASK_CALENDAR_SYNC_TICK.name,
         cron="0 * * * *",

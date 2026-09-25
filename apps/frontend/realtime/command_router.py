@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.frontend.container import FrontendContainer, get_frontend_container
+from apps.frontend.di import FrontendDi
 from apps.frontend.models import (
     ApiKeyCreate,
     ChangePlanRequest,
@@ -83,6 +83,23 @@ from apps.frontend.realtime.company_operations import (
     op_team_member_remove,
     op_team_member_roles_update,
 )
+from apps.frontend.realtime.company_storage_operations import (
+    CompanyStorageCreatePayload,
+    CompanyStorageIdPayload,
+    CompanyStorageMigrationIdPayload,
+    CompanyStorageMigrationStartPayload,
+    CompanyStorageRotatePayload,
+    CompanyStorageRoutePayload,
+    StorageConnectionPayload,
+    op_company_storage_migrations_get,
+    op_company_storage_migrations_start,
+    op_company_storage_routes_set,
+    op_company_storages_create,
+    op_company_storages_delete,
+    op_company_storages_list,
+    op_company_storages_probe,
+    op_company_storages_rotate,
+)
 from apps.frontend.realtime.embed_operations import (
     CreateEmbedConfigRequest,
     EmbedCodePayload,
@@ -152,14 +169,11 @@ from apps.frontend.realtime.platform_tracing_operations import (
     op_platform_tracing_trace_tree,
 )
 from core.authz.explorer import AuthzExplorerRevokeRequest
-from core.identity.team_operations import op_team_members_list
+from core.identity.team_operations import TEAM_MEMBERS_LIST_OPERATION
 from core.llm_context import LLMContextPatch
-from core.logging import get_logger
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendContainer]] = {
+FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendDi]] = {
     "frontend/dashboard/stats_requested": Operation(payload_model=EmptyPayload, fn=op_dashboard_stats),
     "frontend/company_settings/get_requested": Operation(
         payload_model=EmptyPayload, fn=op_company_settings_get
@@ -167,7 +181,31 @@ FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendContainer]] = {
     "frontend/company_settings/update_requested": Operation(
         payload_model=CompanySettingsUpdate, fn=op_company_settings_update
     ),
-    "frontend/team/list_requested": Operation(payload_model=EmptyPayload, fn=op_team_members_list),
+    "frontend/company_storages/list_requested": Operation(
+        payload_model=EmptyPayload, fn=op_company_storages_list
+    ),
+    "frontend/company_storages/create_requested": Operation(
+        payload_model=CompanyStorageCreatePayload, fn=op_company_storages_create
+    ),
+    "frontend/company_storages/probe_requested": Operation(
+        payload_model=StorageConnectionPayload, fn=op_company_storages_probe
+    ),
+    "frontend/company_storages/rotate_credentials_requested": Operation(
+        payload_model=CompanyStorageRotatePayload, fn=op_company_storages_rotate
+    ),
+    "frontend/company_storages/delete_requested": Operation(
+        payload_model=CompanyStorageIdPayload, fn=op_company_storages_delete
+    ),
+    "frontend/company_storage_routes/set_requested": Operation(
+        payload_model=CompanyStorageRoutePayload, fn=op_company_storage_routes_set
+    ),
+    "frontend/company_storage_migrations/start_requested": Operation(
+        payload_model=CompanyStorageMigrationStartPayload, fn=op_company_storage_migrations_start
+    ),
+    "frontend/company_storage_migrations/get_requested": Operation(
+        payload_model=CompanyStorageMigrationIdPayload, fn=op_company_storage_migrations_get
+    ),
+    "frontend/team/list_requested": TEAM_MEMBERS_LIST_OPERATION,
     "frontend/team/update_requested": Operation(
         payload_model=TeamMemberRolesUpdatePayload, fn=op_team_member_roles_update
     ),
@@ -349,8 +387,3 @@ FRONTEND_OPERATIONS: dict[str, RegisteredOperation[FrontendContainer]] = {
     ),
     "frontend/agent/audit_list_requested": Operation(payload_model=AgentAuditListPayload, fn=op_agent_audit_list),
 }
-
-
-def register_frontend_ws_commands() -> None:
-    register_service_operations(FRONTEND_OPERATIONS, get_frontend_container)
-    logger.info("command_router.registered", service="frontend", operations=len(FRONTEND_OPERATIONS))

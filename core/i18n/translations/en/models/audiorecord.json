@@ -4,9 +4,9 @@
       "title": "File ID",
       "description": "Unique file ID in system"
     },
-    "provider": {
-      "title": "Provider",
-      "description": "S3 provider (aws, yandex, minio, etc.)"
+    "storage_id": {
+      "title": "Storage",
+      "description": "Byte storage id (platform or company storage_id)"
     },
     "original_name": {
       "title": "Original Name",
@@ -15,14 +15,6 @@
     "s3_key": {
       "title": "S3 Key",
       "description": "Audio file key in S3"
-    },
-    "s3_bucket": {
-      "title": "S3 Bucket",
-      "description": "Bucket in S3"
-    },
-    "s3_endpoint": {
-      "title": "S3 Endpoint",
-      "description": "Provider endpoint URL"
     },
     "content_type": {
       "title": "Content Type",

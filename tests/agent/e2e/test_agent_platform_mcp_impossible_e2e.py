@@ -206,7 +206,7 @@ async def test_imp_platform_mcp_revoked_device_jwt_returns_401(
 async def test_imp_platform_mcp_revoked_device_token_denied_in_storage(
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     flows_service: None,
 ) -> None:
@@ -220,7 +220,7 @@ async def test_imp_platform_mcp_revoked_device_token_denied_in_storage(
         f"/frontend/api/agent/devices/{device_id}"
     )
     assert delete_response.status_code in {200, 204}
-    deny_raw = await frontend_container.shared_storage.get(
+    deny_raw = await frontend_di.shared_storage.get(
         f"{TOKEN_DENY_PREFIX}{device_id}",
         force_global=True,
     )

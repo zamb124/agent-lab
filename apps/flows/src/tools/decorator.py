@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from types import FunctionType
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, override
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, get_type_hints, override
 
 from pydantic import BaseModel
 
@@ -23,12 +23,26 @@ from apps.flows.src.tools.base import (
     ToolResult,
 )
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
+from core.state import ExecutionState
 from core.types import JsonObject, require_json_object, require_json_value
 
 if TYPE_CHECKING:
+    from apps.flows.src.tools.builtin_dependencies import BuiltinToolClient
     from core.state import ExecutionState
 
 Permission = str | list[str] | None
+
+
+def _parameter_names_with_defaults(func: FunctionType) -> set[str]:
+    names: set[str] = set()
+    kwdefaults = func.__kwdefaults__
+    if kwdefaults is not None:
+        names.update(kwdefaults)
+    positional_defaults = func.__defaults__
+    if positional_defaults is not None:
+        positional_names = func.__code__.co_varnames[: func.__code__.co_argcount]
+        names.update(positional_names[-len(positional_defaults) :])
+    return names
 
 ToolFunction: TypeAlias = Callable[..., ToolFunctionResult]
 F = TypeVar("F", bound=ToolFunction)
@@ -59,8 +73,10 @@ class FunctionTool(BaseTool):
         confirmation_floor: str = "none",
         idempotency: str = "none",
         argument_sources: dict[str, str] | None = None,
+        clients: Sequence[BuiltinToolClient] = (),
     ):
         self._func: ToolFunction = func
+        self._clients: tuple[BuiltinToolClient, ...] = tuple(clients)
         self.name: str = name
         self.description: str = description
         self.tags: list[str] = tags
@@ -98,10 +114,33 @@ class FunctionTool(BaseTool):
             f"tool.{self.name}.validated_args",
         )
 
+        injected: dict[str, BuiltinToolClient] = {}
+        missing: list[str] = []
+        names_with_defaults = _parameter_names_with_defaults(self.source_function)
+        for parameter_name, parameter in sig.parameters.items():
+            if parameter_name == "state" or parameter_name in call_kw:
+                continue
+            if parameter.kind in {
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            }:
+                continue
+            client = _client_of_type(
+                self._clients,
+                _declared_parameter_type(self.source_function, parameter_name),
+            )
+            if client is not None:
+                injected[parameter_name] = client
+                continue
+            if parameter_name not in names_with_defaults:
+                missing.append(parameter_name)
+        if missing:
+            joined = ", ".join(missing)
+            raise RuntimeError(f"Tool '{self.name}' requires dependencies: {joined}")
         if "state" in sig.parameters:
-            result = self._func(**call_kw, state=state)
+            result = self._func(**call_kw, state=state, **injected)
         else:
-            result = self._func(**call_kw)
+            result = self._func(**call_kw, **injected)
         if inspect.isawaitable(result):
             result = await result
         return require_json_value(result, f"tool.{self.name}.result")
@@ -110,12 +149,66 @@ class FunctionTool(BaseTool):
         """Возвращает исходный код функции."""
         return inspect.getsource(self._func)
 
+    def with_dependencies(
+        self,
+        clients: Sequence[BuiltinToolClient],
+    ) -> FunctionTool:
+        """Возвращает копию tool с клиентами, сопоставленными по типу параметра."""
+        if self.parameters_model is None:
+            raise RuntimeError(f"Tool '{self.name}' requires parameters_model")
+        by_type: dict[type[object], BuiltinToolClient] = {
+            type(client): client for client in self._clients
+        }
+        for client in clients:
+            by_type[type(client)] = client
+        return type(self)(
+            func=self._func,
+            name=self.name,
+            description=self.description,
+            tags=list(self.tags),
+            parameters_model=self.parameters_model,
+            permission=self.permission,
+            react_role=self.react_role,
+            cost=self.cost,
+            billing_name=self.billing_name,
+            free_for_plans=list(self.free_for_plans),
+            tariff_limits=dict(self.tariff_limits),
+            output_schema=self.output_schema,
+            effects=list(self.effects),
+            confirmation_floor=self.confirmation_floor,
+            idempotency=self.idempotency,
+            argument_sources=dict(self.argument_sources),
+            clients=tuple(by_type.values()),
+        )
+
     @property
     def source_function(self) -> FunctionType:
         """Оригинальная Python-функция для анализа исходного модуля."""
         if not isinstance(self._func, FunctionType):
             raise TypeError(f"Tool '{self.name}' source is not a Python function")
         return self._func
+
+
+def _declared_parameter_type(func: FunctionType, parameter_name: str) -> type[object] | None:
+    namespace = dict(func.__globals__)
+    namespace.setdefault("ExecutionState", ExecutionState)
+    hints: Mapping[str, object] = get_type_hints(func, globalns=namespace)
+    annotation = hints.get(parameter_name)
+    if isinstance(annotation, type):
+        return annotation
+    return None
+
+
+def _client_of_type(
+    clients: Sequence[BuiltinToolClient],
+    annotation: type[object] | None,
+) -> BuiltinToolClient | None:
+    if annotation is None:
+        return None
+    for client in clients:
+        if type(client) is annotation:
+            return client
+    return None
 
 
 def tool(

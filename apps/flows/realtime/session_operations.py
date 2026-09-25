@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.session_config import (
     SessionConfig,
     SessionDeletedResponse,
@@ -23,11 +23,11 @@ async def op_flows_sessions_list(
     payload: SessionListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[SessionConfig]:
     _ = user
-    _ = await require_company_member(container)
-    sessions, total = await container.workflow_runtime.search_sessions(
+    _ = await require_company_member(di)
+    sessions, total = await di.workflow_runtime.search_sessions(
         user_id=payload.user_id,
         flow_id=payload.flow_id,
         branch_id=payload.branch_id,
@@ -48,11 +48,11 @@ async def op_flows_sessions_remove(
     payload: SessionIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> SessionDeletedResponse:
     _ = user
-    _ = await require_company_member(container)
-    deleted = await container.workflow_runtime.delete_state(payload.session_id)
+    _ = await require_company_member(di)
+    deleted = await di.workflow_runtime.delete_state(payload.session_id)
     if not deleted:
         raise_not_found(LookupError("Session not found"))
     return SessionDeletedResponse(success=True, session_id=payload.session_id)

@@ -11,30 +11,25 @@ from apps.voice.providers.vad.mock import MockVADProvider
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_chunker import VoiceChunker
 from apps.voice.services.voice_session import VoiceSession
-from core.context import Context, reset_context, set_context
+from core.context import reset_context, set_context
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_database_before_tests():
-    """Переопределение корневой session-фикстуры: тесты voice не используют Postgres."""
-    yield
 
 
 @pytest.fixture(autouse=True)
 def voice_billing_context(unique_id: str) -> Iterator[None]:
     token = set_context(
         Context(
-            user=User(user_id=f"voice-user-{unique_id}", name="voice-test"),
+            user=User(user_id="system", name="System"),
             host="test",
             session_id=f"voice-test:{unique_id}",
             channel="test",
             language=Language.RU,
             active_company=Company(
-                company_id=f"voice-co-{unique_id}",
-                name="voice-test",
-                subdomain="voice-test",
+                company_id="system",
+                name="System",
+                subdomain="system",
             ),
             user_companies=[],
             trace_id=unique_id,

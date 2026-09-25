@@ -34,7 +34,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { resolveUiIconFile } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
-import { getNodeTypeMeta, getCategoryToken, datasourceIconName } from '../../constants/node-icons.js';
+import { getNodeTypeMeta, getCategoryToken, datasourceIconName } from '../../_helpers/node-icons.js';
 import { renderEdgeLabel } from './flows-edge-label.js';
 import './flows-canvas-context-menu.js';
 import './flows-sticky-note.js';

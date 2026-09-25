@@ -9,10 +9,10 @@ import uuid
 import pytest
 
 from tests.core.files.corpus.manifest import CORPUS_DIR
+from core.db.models.rag import VectorDocument
 from tests.rag.test_pgvector_provider import (
     _upload_metadata,
     _vector_chunk_count,
-    _vector_document_rows_ordered,
 )
 
 
@@ -51,19 +51,10 @@ async def test_pgvector_indexes_scanned_pdf_with_hybrid_ocr(
         os.unlink(tmp_path)
 
     assert doc.document_id == document_id
-    chunk_count = await _vector_chunk_count(
-        rag_provider_pgvector._session_factory,
-        ns_name,
-        rag_company_id,
-    )
+    chunk_count = await _vector_chunk_count(ns_name, rag_company_id)
     assert chunk_count > 0
 
-    rows = await _vector_document_rows_ordered(
-        rag_provider_pgvector._session_factory,
-        ns_name,
-        document_id,
-        rag_company_id,
-    )
+    rows = await VectorDocument.chunks_for_document(ns_name, document_id)
     assert len(rows) > 0
     joined = " ".join(row.content for row in rows)
     assert joined.strip()

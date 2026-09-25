@@ -10,9 +10,54 @@ from collections.abc import AsyncIterator
 from fastapi.responses import StreamingResponse
 
 from core.files.http_range import RangeNotSatisfiableError, normalize_s3_byte_range
-from core.files.s3_client import S3Client
+from core.files.object_store.gate import FileHandle
+from core.files.object_store.s3_client import S3Client
 
 _CHUNK_SIZE = 64 * 1024  # 64 KB
+
+
+async def stream_file_handle(
+    handle: FileHandle,
+    content_type: str,
+    range_header: str | None = None,
+) -> StreamingResponse:
+    """Стримит объект через FileHandle (пул клиентов не закрывается)."""
+    total_size, _ = await handle.head()
+    span = normalize_s3_byte_range(range_header, total_size)
+
+    if span is None:
+
+        async def _iterate_full() -> AsyncIterator[bytes]:
+            async for chunk in handle.stream(None):
+                yield chunk
+
+        return StreamingResponse(
+            _iterate_full(),
+            media_type=content_type,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(total_size),
+            },
+        )
+
+    start, end = span
+    byte_range = f"bytes={start}-{end}"
+    part_len = end - start + 1
+
+    async def _iterate_partial() -> AsyncIterator[bytes]:
+        async for chunk in handle.stream(byte_range):
+            yield chunk
+
+    return StreamingResponse(
+        _iterate_partial(),
+        status_code=206,
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(part_len),
+            "Content-Range": f"bytes {start}-{end}/{total_size}",
+        },
+    )
 
 
 async def stream_s3_file(

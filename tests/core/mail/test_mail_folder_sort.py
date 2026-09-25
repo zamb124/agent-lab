@@ -23,14 +23,14 @@ from tests.core.mail.fakes import RecordingMailServerPort
 async def test_folder_sort_index_bootstrap_and_preserve_on_refresh(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = recording_mail_port
     company_id = f"mailsort_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -84,14 +84,14 @@ async def test_folder_sort_index_bootstrap_and_preserve_on_refresh(
 async def test_persist_folder_cache_assigns_new_folder_after_max(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = recording_mail_port
     company_id = f"mailmerge_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -107,8 +107,7 @@ async def test_persist_folder_cache_assigns_new_folder_after_max(
         ),
         company_id=company_id,
     )
-    assert mail_service._folder_repository is not None
-    existing = await mail_service._folder_repository.list_for_binding(binding.mailbox_binding_id)
+    existing = await StoredMailboxFolder.list_for_binding(binding.mailbox_binding_id)
     assert existing
     now = datetime.now(timezone.utc)
     seeded = [
@@ -131,7 +130,7 @@ async def test_persist_folder_cache_assigns_new_folder_after_max(
             updated_at=now,
         ),
     ]
-    _ = await mail_service._folder_repository.replace_for_binding(
+    _ = await StoredMailboxFolder.replace_for_binding(
         binding.mailbox_binding_id,
         company_id=company_id,
         folders=seeded,
@@ -146,7 +145,7 @@ async def test_persist_folder_cache_assigns_new_folder_after_max(
             ],
         ),
     )
-    stored = await mail_service._folder_repository.list_for_binding(binding.mailbox_binding_id)
+    stored = await StoredMailboxFolder.list_for_binding(binding.mailbox_binding_id)
     by_name = {item.folder_name: item.sort_index for item in stored}
     assert by_name["INBOX"] == 0
     assert by_name["Sent"] == 5

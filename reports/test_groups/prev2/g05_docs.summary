@@ -1,0 +1,8 @@
+GROUP g05_docs rc=1
+ERROR tests/rag/test_pgvector_provider.py
+ERROR tests/rag/test_pgvector_scanned_pdf_indexing.py
+FAILED tests/rag/integration/test_reranker_client.py::test_rerank_reorders_by_scores
+FAILED tests/rag/integration/test_reranker_client.py::test_rerank_reorders_by_scores_gateway
+ERROR tests/rag/test_pgvector_provider.py - ImportError while importing test ...
+ERROR tests/rag/test_pgvector_scanned_pdf_indexing.py - ImportError while imp...
+======= 2 failed, 657 passed, 10 warnings, 2 errors in 78.81s (0:01:18) ========

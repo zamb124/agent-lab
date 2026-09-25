@@ -3,13 +3,13 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     FlowsBranchIdPayload,
     op_flows_branch_create,
     op_flows_branch_remove,
     op_flows_branch_update,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import (
     BranchCreateRequest,
     BranchMutationResponse,
@@ -24,12 +24,12 @@ router = APIRouter(tags=["branches"])
 async def create_branch(
     flow_id: str,
     body: BranchCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> JSONResponse:
     result = await op_flows_branch_create(
         body.model_copy(update={"flow_id": flow_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return JSONResponse(result.model_dump(), status_code=201)
 
@@ -39,21 +39,21 @@ async def update_branch(
     flow_id: str,
     branch_id: str,
     body: BranchUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> BranchMutationResponse:
     return await op_flows_branch_update(
         body.model_copy(update={"flow_id": flow_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{flow_id}/branches/{branch_id}", response_model=BranchMutationResponse)
 async def delete_branch(
-    flow_id: str, branch_id: str, container: ContainerDep
+    flow_id: str, branch_id: str, di: Di
 ) -> BranchMutationResponse:
     return await op_flows_branch_remove(
         FlowsBranchIdPayload(flow_id=flow_id, branch_id=branch_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

@@ -57,7 +57,7 @@ EXPECTED_DEPLOYMENTS=(
   flows-worker scheduler rag-worker sync-worker crm-worker crm-summary-worker idle-worker search-worker
   livekit livekit-egress onlyoffice grafana provider-litserve openfga centrifugo
 )
-EXPECTED_STATEFULSETS=(postgres redis redis-realtime loki tempo)
+EXPECTED_STATEFULSETS=(postgres redis redis-realtime loki tempo minio)
 EXPECTED_DAEMONSETS=(coturn alloy)
 
 log_section "Cluster Health Check"

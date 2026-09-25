@@ -247,7 +247,8 @@ class _GooseDeveloperAuth:
 
 @pytest_asyncio.fixture(scope="module")
 async def goose_developer_auth(
-    frontend_container,
+    frontend_di,
+    di,
     test_company_subdomains_initialized,
 ) -> _GooseDeveloperAuth:
     """Один company Host на модуль developer-тестов — без pairing storm на каждый тест."""
@@ -262,13 +263,11 @@ async def goose_developer_auth(
         owner_user_id=user_id,
         members={user_id: ["owner", "admin"]},
     )
-    await frontend_container.company_repository.set(company)
-    await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
+    await Company.set(company)
     from tests.fixtures.auth import set_test_company_member_roles
 
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],
@@ -280,19 +279,18 @@ async def goose_developer_auth(
         companies={company_id: ["owner", "admin"], "system": ["admin"]},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
-    system_company = await frontend_container.company_repository.get("system")
+    await User.set(user)
+    system_company = await Company.get("system")
     if system_company is None:
         raise RuntimeError("system company missing for goose developer auth")
     if user_id not in system_company.members:
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id="system",
             user_id=user_id,
             roles=["admin"],
         )
-    await ensure_company_public_flows(company_id)
+    await ensure_company_public_flows(company_id, di)
     token = get_token_service().create_token(user_id, company_id=company_id)
     return _GooseDeveloperAuth(
         auth_token=token,
@@ -302,6 +300,7 @@ async def goose_developer_auth(
 
 @pytest_asyncio.fixture(scope="module")
 async def goose_developer_runtime(
+    di,
     goose_developer_auth: _GooseDeveloperAuth,
     humanitec_desktop_install: HumanitecDesktopInstall,
     frontend_service: None,
@@ -339,6 +338,7 @@ async def goose_developer_runtime(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=goose_developer_auth.auth_token,
+                di=di,
             )
         yield GooseDeveloperRuntime(
             desktop=desktop,
@@ -424,6 +424,7 @@ class PairedDesktopSession:
 
 @pytest_asyncio.fixture
 async def paired_desktop_session(
+    di,
     humanitec_desktop_process_factory: Callable[[], HumanitecDesktopProcess],
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
@@ -444,7 +445,7 @@ async def paired_desktop_session(
             page,
             agent_frontend_http_client,
             auth_token,
-        )
+        di)
         yield PairedDesktopSession(desktop=desktop, page=page)
     finally:
         await playwright.stop()
@@ -461,6 +462,7 @@ class GoosedDeveloperOnlySession:
 
 @pytest_asyncio.fixture
 async def goosed_developer_only_session(
+    di,
     request: pytest.FixtureRequest,
     humanitec_desktop_process_factory: Callable[[], HumanitecDesktopProcess],
     agent_frontend_http_client: AsyncClient,
@@ -484,6 +486,7 @@ async def goosed_developer_only_session(
             desktop=desktop,
             agent_frontend_http_client=agent_frontend_http_client,
             auth_token=auth_token,
+            di=di,
         )
         yield GoosedDeveloperOnlySession(
             desktop=desktop,
@@ -540,13 +543,14 @@ async def paired_desktop_ui_session(
     humanitec_desktop_process_factory: Callable[[], HumanitecDesktopProcess],
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
+    di,
 ) -> AsyncIterator[PairedDesktopUiSession]:
     """Electron start + pairing + chat-ready main page.
 
     Bootstrap живёт в fixture setup, вне func_only(15s) теста — тело теста
     делает только MCP tool call(s) и/или проверку конкретного UI-элемента.
     """
-    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
     desktop = humanitec_desktop_process_factory()
     desktop.start()
     device_id, credentials = await pair_desktop_via_deep_link(
@@ -572,11 +576,6 @@ async def paired_desktop_ui_session(
 @pytest.fixture
 def flows_worker(taskiq_worker):
     return taskiq_worker
-
-
-@pytest.fixture
-def flows_container(container):
-    return container
 
 
 @pytest_asyncio.fixture

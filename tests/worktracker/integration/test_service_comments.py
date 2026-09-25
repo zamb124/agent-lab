@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from core.files.file_ref import FileRef
-from core.worktracker.models import SystemActor, UserActor, WorkItemCommentRole
+from core.worktracker.models import SystemActor, UserActor, WorkItemComment, WorkItemCommentRole
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,7 +31,7 @@ async def test_add_comment_and_list_ordered(worktracker_service, unique_id: str)
         role=WorkItemCommentRole.SYSTEM,
         text="second",
     )
-    comments = await worktracker_service.list_comments("system", item.work_item_id)
+    comments = await WorkItemComment.list_comments("system", item.work_item_id)
     assert len(comments) >= 2
     assert comments[0].comment_id == first.comment_id
     assert comments[1].comment_id == second.comment_id
@@ -57,5 +57,5 @@ async def test_comment_with_files_roundtrip(worktracker_service, unique_id: str)
         files=[file_ref],
     )
     assert saved.files[0].file_id == file_ref.file_id
-    listed = await worktracker_service.list_comments("system", item.work_item_id)
+    listed = await WorkItemComment.list_comments("system", item.work_item_id)
     assert listed[-1].files[0].original_name == "note.pdf"

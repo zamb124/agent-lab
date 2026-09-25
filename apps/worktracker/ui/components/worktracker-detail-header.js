@@ -5,7 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
-import { TERMINAL_STATES, queueUnclaimed } from '../utils/work-item-detail-shared.js';
+import { TERMINAL_STATES, queueUnclaimed } from '../_helpers/work-item-detail-shared.js';
 import './worktracker-icon-action.js';
 import '@platform/lib/components/platform-icon.js';
 

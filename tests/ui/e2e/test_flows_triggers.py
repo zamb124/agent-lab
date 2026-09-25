@@ -728,13 +728,13 @@ async def test_flows_email_orders_trigger(
     flows_ui: AppUI,
     ui_page_system: Page,
     auth_token_system: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     secrets_service,
     taskiq_worker,
 ) -> None:
     _ = secrets_service, taskiq_worker
-    binding = await flows_seed_ui_mail_mailbox(frontend_container, unique_id=unique_id)
+    binding = await flows_seed_ui_mail_mailbox(frontend_di, unique_id=unique_id)
     email_address = binding.email_address
 
     flow_id = flows_doc_flow_id("email_trig", unique_id)

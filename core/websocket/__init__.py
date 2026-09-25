@@ -30,7 +30,7 @@ from core.websocket.operation import (
     raise_not_found,
     raise_unavailable,
     raise_upstream,
-    register_service_operations,
+    register_operations,
     ws_command_error_status,
 )
 
@@ -54,7 +54,7 @@ __all__ = [
     "raise_not_found",
     "raise_unavailable",
     "raise_upstream",
-    "register_service_operations",
+    "register_operations",
     "register_ws_command_handler",
     "validate_ws_payload",
     "ws_command_error_status",

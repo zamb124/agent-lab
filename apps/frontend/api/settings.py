@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import (
     CompanySettingsResponse,
     CompanySettingsUpdate,
@@ -19,15 +19,15 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 @router.get("/company", response_model=CompanySettingsResponse)
-async def get_company_settings(container: ContainerDep) -> CompanySettingsResponse:
+async def get_company_settings(di: Di) -> CompanySettingsResponse:
     return await op_company_settings_get(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.patch("/company", response_model=CompanySettingsUpdateResponse)
 async def update_company_settings(
     update: CompanySettingsUpdate,
-    container: ContainerDep,
+    di: Di,
 ) -> CompanySettingsUpdateResponse:
-    return await op_company_settings_update(update, user=require_context().user, container=container)
+    return await op_company_settings_update(update, user=require_context().user, di=di)

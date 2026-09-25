@@ -1,12 +1,7 @@
 """
 Alembic env для sync БД.
 
-Управляет таблицами: sync_channels, sync_channel_members, sync_threads,
-sync_messages, sync_message_contents, sync_message_files, sync_files,
-sync_git_resource_refs, sync_calls, sync_call_participants, sync_call_links,
-sync_call_recordings, sync_call_speech_egress_tracks. Привязка к
-платформенному `namespace` — строковое поле `sync_channels.namespace`
-(1:1 с shared `NamespaceRepository`); отдельной таблицы пространств нет.
+Каталог пуст: таблицы Sync — Oxyde, autogenerate их не трогает.
 """
 
 import asyncio
@@ -21,22 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.sync.db.models import (  # noqa: F401
-    Base,
-    SyncCall,
-    SyncCallLink,
-    SyncCallParticipant,
-    SyncCallRecording,
-    SyncCallSpeechEgressTrack,
-    SyncChannel,
-    SyncChannelMember,
-    SyncFile,
-    SyncGitResourceRef,
-    SyncMessage,
-    SyncMessageContent,
-    SyncMessageFile,
-    SyncThread,
-)
+from core.db.models.base import Base  # noqa: F401
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -46,13 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "sync_channels", "sync_channel_members",
-    "sync_threads", "sync_messages", "sync_message_contents",
-    "sync_message_files", "sync_files", "sync_git_resource_refs",
-    "sync_calls", "sync_call_participants", "sync_call_links",
-    "sync_call_recordings", "sync_call_speech_egress_tracks",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

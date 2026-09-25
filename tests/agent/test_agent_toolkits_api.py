@@ -6,6 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from apps.flows.src.models.agent_toolkit import AgentToolkit
+from core.models.identity_models import User
 from core.platform_brand.resolver import platform_public_base_url
 from tests.agent._helpers import AGENT_API_PREFIX
 
@@ -14,15 +15,16 @@ from tests.agent._helpers import AGENT_API_PREFIX
 async def test_catalog_shape_and_mcp_url(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
     toolkit_id = f"tk_cat_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Catalog toolkit",
@@ -53,22 +55,23 @@ async def test_catalog_shape_and_mcp_url(
             positions = [item["position"] for item in items if isinstance(item, dict)]
             assert positions == sorted(positions)
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_catalog_mcp_url_linnex_host(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
     toolkit_id = f"tk_linnex_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Linnex host toolkit",
@@ -93,7 +96,7 @@ async def test_catalog_mcp_url_linnex_host(
                 f"https://linnex.io/flows/api/v1/agent/platform-mcp/{toolkit_id}"
             )
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
@@ -134,25 +137,24 @@ async def test_catalog_device_jwt_forces_lara_default_enabled(
     flows_client: AsyncClient,
     frontend_client_with_auth: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
     """LaraOnly: device catalog always enables lara even if company DB is stale."""
-    from apps.flows.src.services.agent_toolkit_service import ensure_agent_toolkits_bootstrapped
+    _ = di
     from core.context import get_context
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
-    async with _repository_context_for_auth(auth_headers, frontend_container):
+    async with _repository_context_for_auth(auth_headers, frontend_di):
         active_company = get_context().active_company
         assert active_company is not None
-        _ = await ensure_agent_toolkits_bootstrapped(
-            container.agent_toolkit_repository,
+        _ = await AgentToolkit.ensure_agent_toolkits_bootstrapped(
             company_id=active_company.company_id,
         )
-        existing_lara = await container.agent_toolkit_repository.get("lara")
+        existing_lara = await AgentToolkit.by_toolkit_id("lara")
         assert existing_lara is not None
-        await container.agent_toolkit_repository.set(
+        await AgentToolkit.set(
             existing_lara.model_copy(update={"default_enabled": False})
         )
 
@@ -223,17 +225,19 @@ async def test_catalog_revoked_device_returns_401(
 async def test_catalog_lazy_backfill_empty_company(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
-    from core.context import Context, clear_context, get_context, set_context
+    _ = di
+    from core.context import clear_context, get_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company
     from tests.agent._helpers import user_id_from_auth_token
 
     auth_token = auth_headers["Authorization"].removeprefix("Bearer ").strip()
     user_id = user_id_from_auth_token(auth_token)
-    user = await frontend_container.user_repository.get(user_id)
+    user = await User.get(user_id)
     assert user is not None
     company_id = f"empty_tk_company_{unique_id}"
     company = Company(
@@ -254,7 +258,7 @@ async def test_catalog_lazy_backfill_empty_company(
         )
     )
     try:
-        existing = await container.agent_toolkit_repository.list(limit=10)
+        existing = await AgentToolkit.list_agent_toolkits()
         for toolkit in existing:
             if toolkit.toolkit_id.startswith("tk_"):
                 continue
@@ -348,14 +352,15 @@ async def test_manage_crud_lifecycle(
 async def test_manage_delete_platform_toolkit_forbidden(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id="humanitec_core",
                 name="Humanitec",
@@ -380,16 +385,17 @@ async def test_manage_company_isolation(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
     auth_headers_company2: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
     toolkit_id = f"tk_iso_{unique_id}"
 
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Isolated",
@@ -411,5 +417,5 @@ async def test_manage_company_isolation(
         assert other_response.status_code == 404
         assert other_response.json()["error_code"] == "not_found"
     finally:
-        async with _repository_context_for_auth(auth_headers, frontend_container):
-            await container.agent_toolkit_repository.delete(toolkit_id)
+        async with _repository_context_for_auth(auth_headers, frontend_di):
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)

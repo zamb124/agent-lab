@@ -6,7 +6,7 @@ import {
     landDocumentsHeroUrl,
     landDocumentsShot2Url,
     landDocumentsShot3Url,
-} from '../../utils/land-product-images.js';
+} from '../../_helpers/land-product-images.js';
 
 export class ProductDocumentsPage extends ProductLandingPage {
     static productKey = 'documents';

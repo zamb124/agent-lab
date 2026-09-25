@@ -7,7 +7,6 @@ from typing import Never
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import ToolReference
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
@@ -45,44 +44,40 @@ def _mcp_tool_reference(server_id: str, tool_name: str) -> ToolReference:
 @pytest.mark.asyncio
 @pytest.mark.timeout(120)
 async def test_build_example_react_resolves_calculator_without_bulk_tool_list(
-    app, unique_id: str, monkeypatch: pytest.MonkeyPatch
+    app, unique_id: str, monkeypatch: pytest.MonkeyPatch,
+    di,
 ) -> None:
     """
-    Регрессия prod: сборка bundle не должна вызывать tool_repository.list;
+    Регрессия prod: сборка bundle не должна вызывать ToolReference.list;
     calculator резолвится через get_many по явным ID.
     """
     _ = app
-    container = get_container()
     _ = await load_tools_to_db(
-        container.tool_repository,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
 
-    calculator = await container.tool_repository.get("calculator")
+    calculator = await ToolReference.get(ToolReference.row_id("calculator"))
     assert calculator is not None
 
     server_id = f"loader_mcp_flood_{unique_id}"
     for index in range(250):
-        _ = await container.tool_repository.set(
+        _ = await ToolReference.set(
             _mcp_tool_reference(server_id, f"flood_tool_{index}")
         )
 
     async def _list_must_not_be_called(*_args: object, **_kwargs: object) -> Never:
         raise AssertionError(
-            "FlowsLoader must not bulk-load tools via tool_repository.list; use get_many by ID"
+            "FlowsLoader must not bulk-load tools via ToolReference.list; use get_many by ID"
         )
 
-    monkeypatch.setattr(container.tool_repository, "list", _list_must_not_be_called)
+    monkeypatch.setattr(ToolReference, "list", _list_must_not_be_called)
 
     bundles_dir = _repo_root() / "apps" / "flows" / "bundles"
     registry_path = _repo_root() / "apps" / "flows" / "registry.yaml"
     loader = FlowsLoader(
         bundles_dir=bundles_dir,
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=registry_path,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     loader._target_company_id = "system"
 

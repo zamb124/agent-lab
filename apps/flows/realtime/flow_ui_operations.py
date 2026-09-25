@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
     require_edit_flow,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.flow_ui_assist import (
     FlowUIAssistOutputError,
     FlowUIAssistRequest,
@@ -28,11 +28,11 @@ async def op_flows_flow_ui_schema(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> JsonObject:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return flow_ui_schema()
 
 
@@ -40,10 +40,10 @@ async def op_flows_flow_ui_templates(
     payload: FlowUITemplatesPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[FlowUITemplate]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     templates = flow_ui_templates(require_context().language)
     return OffsetPage[FlowUITemplate](
         items=templates[payload.offset : payload.offset + payload.limit],
@@ -57,11 +57,11 @@ async def op_flows_flow_ui_assist(
     payload: FlowUIAssistRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowUIAssistResult:
     _ = user
-    _ = await require_edit_flow(container, payload.flow_id)
+    _ = await require_edit_flow(di, payload.flow_id)
     try:
-        return await container.flow_ui_assist_service.assist(payload)
+        return await di.flow_ui_assist_service.assist(payload)
     except FlowUIAssistOutputError as exc:
         raise_upstream(exc)

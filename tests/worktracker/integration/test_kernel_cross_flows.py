@@ -3,10 +3,10 @@
 
 Без моков и monkeypatch: реальный Postgres (platform_worktracker), реальный Redis
 (publish events / notify_user), реальный CRM-репозиторий (platform_crm) и реальный
-flows-контейнер для HITL. Покрываются happy- и unhappy-сценарии и соседи HITL/CRM.
+FlowsDi для HITL. Покрываются happy- и unhappy-сценарии и соседи HITL/CRM.
 
-Уровни (testing_invariants.mdc): сервис из контейнера (`container.work_item_service`,
-`container.hitl_work_item_service`) и репозиторий-сосед CRM. Изоляция — `unique_id`.
+Уровни (testing.mdc): сервис из DI (`di.work_item_service`,
+`di.node_constructor.hitl_work_item_service`) и репозиторий-сосед CRM. Изоляция — `unique_id`.
 """
 
 from __future__ import annotations
@@ -15,8 +15,7 @@ import uuid
 
 import pytest
 
-from apps.crm.container import get_crm_container
-from apps.crm.db.models import CRMEntity
+from apps.crm.models.crm_entity import CRMEntity
 from apps.flows.src.models.hitl_conversation import ConversationTurnRole
 from apps.flows.src.models.hitl_schemas import HitlHandoffCommand
 from apps.flows.src.runtime.a2a_messages import build_user_message
@@ -40,6 +39,7 @@ from core.worktracker.models import (
     UnassignedAssignment,
     UserActor,
     UsersAssignment,
+    WorkItem,
     WorkItemCommentRole,
     WorkItemHook,
     WorkItemHookEvent,
@@ -60,8 +60,8 @@ pytestmark = pytest.mark.asyncio
 # ============================ Ядро: создание ============================
 
 
-async def test_create_work_item_persists_defaults(app, container, unique_id):
-    svc = container.work_item_service
+async def test_create_work_item_persists_defaults(app, di, unique_id):
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system",
         title=f"task-{unique_id}",
@@ -77,8 +77,8 @@ async def test_create_work_item_persists_defaults(app, container, unique_id):
     assert fetched.title == f"task-{unique_id}"
 
 
-async def test_create_manual_task_assigns_creator_and_generic_board(app, container, unique_id):
-    svc = container.work_item_service
+async def test_create_manual_task_assigns_creator_and_generic_board(app, di, unique_id):
+    svc = di.work_item_service
     user_id = f"user_{unique_id}"
     item = await svc.create_manual_task(
         company_id="system",
@@ -96,16 +96,16 @@ async def test_create_manual_task_assigns_creator_and_generic_board(app, contain
     assert item.board_id in {b.board_id for b in generic}
 
 
-async def test_get_unknown_work_item_raises(app, container, unique_id):
+async def test_get_unknown_work_item_raises(app, di, unique_id):
     with pytest.raises(ValueError):
-        await container.work_item_service.get("system", f"wi_missing_{unique_id}")
+        await WorkItem.require_in_company("system", f"wi_missing_{unique_id}")
 
 
 # ============================ Ядро: доска и переходы ============================
 
 
-async def _board_with_three_columns(container, unique_id):
-    return await container.work_item_service.create_board(
+async def _board_with_three_columns(di, unique_id):
+    return await di.work_item_service.create_board(
         company_id="system",
         name=f"board-{unique_id}",
         columns=[
@@ -118,9 +118,9 @@ async def _board_with_three_columns(container, unique_id):
     )
 
 
-async def test_create_on_board_uses_first_column_state(app, container, unique_id):
-    board = await _board_with_three_columns(container, unique_id)
-    item = await container.work_item_service.create(
+async def test_create_on_board_uses_first_column_state(app, di, unique_id):
+    board = await _board_with_three_columns(di, unique_id)
+    item = await di.work_item_service.create(
         company_id="system",
         title=f"board-task-{unique_id}",
         created_by=SystemActor(),
@@ -130,9 +130,9 @@ async def test_create_on_board_uses_first_column_state(app, container, unique_id
     assert item.state is WorkItemState.OPEN
 
 
-async def test_move_between_columns_changes_state(app, container, unique_id):
-    board = await _board_with_three_columns(container, unique_id)
-    svc = container.work_item_service
+async def test_move_between_columns_changes_state(app, di, unique_id):
+    board = await _board_with_three_columns(di, unique_id)
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system",
         title=f"mv-{unique_id}",
@@ -147,9 +147,9 @@ async def test_move_between_columns_changes_state(app, container, unique_id):
     assert moved.state is WorkItemState.IN_PROGRESS
 
 
-async def test_move_to_unknown_column_raises(app, container, unique_id):
-    board = await _board_with_three_columns(container, unique_id)
-    svc = container.work_item_service
+async def test_move_to_unknown_column_raises(app, di, unique_id):
+    board = await _board_with_three_columns(di, unique_id)
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system",
         title=f"badmv-{unique_id}",
@@ -163,8 +163,8 @@ async def test_move_to_unknown_column_raises(app, container, unique_id):
         )
 
 
-async def test_move_from_terminal_state_raises(app, container, unique_id):
-    svc = container.work_item_service
+async def test_move_from_terminal_state_raises(app, di, unique_id):
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system", title=f"term-{unique_id}", created_by=SystemActor()
     )
@@ -180,8 +180,8 @@ async def test_move_from_terminal_state_raises(app, container, unique_id):
 # ============================ Ядро: завершение (идемпотентность) ============================
 
 
-async def test_complete_is_idempotent(app, container, unique_id):
-    svc = container.work_item_service
+async def test_complete_is_idempotent(app, di, unique_id):
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system", title=f"done-{unique_id}", created_by=SystemActor()
     )
@@ -202,16 +202,16 @@ async def test_complete_is_idempotent(app, container, unique_id):
 # ============================ Ядро: очереди и claim ============================
 
 
-async def test_create_queue_duplicate_slug_raises(app, container, unique_id):
+async def test_create_queue_duplicate_slug_raises(app, di, unique_id):
     slug = f"q-{unique_id}"
-    svc = container.work_item_service
+    svc = di.work_item_service
     await svc.create_queue(company_id="system", name="Q", slug=slug)
     with pytest.raises(ValueError):
         await svc.create_queue(company_id="system", name="Q2", slug=slug)
 
 
-async def test_claim_non_queue_item_raises(app, container, unique_id):
-    svc = container.work_item_service
+async def test_claim_non_queue_item_raises(app, di, unique_id):
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system", title=f"noq-{unique_id}", created_by=SystemActor()
     )
@@ -219,8 +219,8 @@ async def test_claim_non_queue_item_raises(app, container, unique_id):
         await svc.claim(company_id="system", work_item_id=item.work_item_id, user_id="u1")
 
 
-async def test_claim_by_non_member_then_member(app, container, unique_id):
-    svc = container.work_item_service
+async def test_claim_by_non_member_then_member(app, di, unique_id):
+    svc = di.work_item_service
     queue = await svc.create_queue(company_id="system", name="Ops", slug=f"ops-{unique_id}")
     item = await svc.create(
         company_id="system",
@@ -249,8 +249,8 @@ async def test_claim_by_non_member_then_member(app, container, unique_id):
 # ============================ Ядро: фильтрация списка ============================
 
 
-async def test_list_filters_by_state_and_kind(app, container, unique_id):
-    svc = container.work_item_service
+async def test_list_filters_by_state_and_kind(app, di, unique_id):
+    svc = di.work_item_service
     ns = f"ns-{unique_id}"
     a = await svc.create(
         company_id="system", title=f"a-{unique_id}", created_by=SystemActor(), namespace=ns
@@ -296,15 +296,15 @@ def _hitl_state(unique_id: str) -> ExecutionState:
     )
 
 
-async def test_hitl_register_creates_operator_handoff_work_item(app, container, unique_id):
+async def test_hitl_register_creates_operator_handoff_work_item(app, di, unique_id):
     slug = f"hitl-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system", name="HITL", slug=slug
     )
     state = _hitl_state(unique_id)
     command = _hitl_command(unique_id)
 
-    cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="Нужна помощь оператора",
         task_title="Support",
@@ -314,7 +314,7 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     )
     assert str(cid) == str(command.correlation_id)
 
-    item = await container.work_item_service.get("system", work_item_id)
+    item = await WorkItem.require_in_company("system", work_item_id)
     assert item.kind is WorkItemKind.OPERATOR_HANDOFF
     assert item.blocking is True
     assert isinstance(item.assignment, QueueAssignment)
@@ -338,14 +338,14 @@ async def test_hitl_register_creates_operator_handoff_work_item(app, container, 
     assert link.branch_id == state.branch_id
 
 
-async def test_hitl_single_reply_complete_requires_resolution(app, container, unique_id):
+async def test_hitl_single_reply_complete_requires_resolution(app, di, unique_id):
     slug = f"hitl-sr-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system", name="HITL", slug=slug
     )
     state = _hitl_state(unique_id)
     command = _hitl_command(unique_id)
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="q",
         task_title="t",
@@ -354,12 +354,12 @@ async def test_hitl_single_reply_complete_requires_resolution(app, container, un
         command=command,
     )
     with pytest.raises(ValueError, match="single_reply"):
-        await container.work_item_service.complete(
+        await di.work_item_service.complete(
             company_id="system",
             work_item_id=work_item_id,
             resolution=WorkItemResolution(text=""),
         )
-    completed = await container.work_item_service.complete(
+    completed = await di.work_item_service.complete(
         company_id="system",
         work_item_id=work_item_id,
         resolution=WorkItemResolution(text="ответ оператора"),
@@ -367,17 +367,17 @@ async def test_hitl_single_reply_complete_requires_resolution(app, container, un
     assert completed.work_item.state is WorkItemState.DONE
 
 
-async def test_hitl_register_is_idempotent_by_correlation(app, container, unique_id):
+async def test_hitl_register_is_idempotent_by_correlation(app, di, unique_id):
     slug = f"hitl2-{unique_id}"
-    await container.work_item_service.create_queue(company_id="system", name="H", slug=slug)
+    await di.work_item_service.create_queue(company_id="system", name="H", slug=slug)
     state = _hitl_state(unique_id)
     command = _hitl_command(unique_id)
 
-    cid1, id1 = await container.hitl_work_item_service.register_handoff(
+    cid1, id1 = await di.node_constructor.hitl_work_item_service.register_handoff(
         state, question="q", task_title="t", assignee_queue_slug=slug,
         handoff_mode=HandoffMode.SINGLE_REPLY, command=command,
     )
-    cid2, id2 = await container.hitl_work_item_service.register_handoff(
+    cid2, id2 = await di.node_constructor.hitl_work_item_service.register_handoff(
         state, question="q", task_title="t", assignee_queue_slug=slug,
         handoff_mode=HandoffMode.SINGLE_REPLY, command=command,
     )
@@ -385,11 +385,11 @@ async def test_hitl_register_is_idempotent_by_correlation(app, container, unique
     assert str(cid1) == str(cid2)
 
 
-async def test_hitl_register_unknown_queue_raises(app, container, unique_id):
+async def test_hitl_register_unknown_queue_raises(app, di, unique_id):
     state = _hitl_state(unique_id)
     command = _hitl_command(unique_id)
     with pytest.raises(ValueError):
-        await container.hitl_work_item_service.register_handoff(
+        await di.node_constructor.hitl_work_item_service.register_handoff(
             state,
             question="q",
             task_title="t",
@@ -399,7 +399,7 @@ async def test_hitl_register_unknown_queue_raises(app, container, unique_id):
         )
 
 
-async def test_hitl_resume_with_invalid_binding_raises(app, container, unique_id):
+async def test_hitl_resume_with_invalid_binding_raises(app, di, unique_id):
     # binding без context_data_snapshot.channel — resume невозможен
     binding = {
         "session_id": f"flow_{unique_id}:ctx",
@@ -409,7 +409,7 @@ async def test_hitl_resume_with_invalid_binding_raises(app, container, unique_id
         "context_data_snapshot": {},
     }
     with pytest.raises(ValueError):
-        await container.hitl_work_item_service.resume_from_completion(
+        await di.node_constructor.hitl_work_item_service.resume_from_completion(
             work_item_id=f"wi_missing_{unique_id}",
             binding=binding,
             resolution=WorkItemResolution(text="done"),
@@ -419,14 +419,14 @@ async def test_hitl_resume_with_invalid_binding_raises(app, container, unique_id
 # ============================ HITL: встроенный чат карточки (тот же лог сессии) ============================
 
 
-async def test_hitl_operator_chat_shares_session_log_and_appends(app, container, unique_id):
+async def test_hitl_operator_chat_shares_session_log_and_appends(app, di, unique_id):
     """Оператор видит тот же лог сессии; takeover-ответ durable-append'ится и идемпотентен."""
     slug = f"hitlchat-{unique_id}"
-    queue = await container.work_item_service.create_queue(
+    queue = await di.work_item_service.create_queue(
         company_id="system", name="HITLChat", slug=slug
     )
     member = f"op_{unique_id}"
-    await container.work_item_service.add_queue_member(
+    await di.work_item_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=member),
@@ -440,10 +440,10 @@ async def test_hitl_operator_chat_shares_session_log_and_appends(app, container,
         task_id=state.task_id,
     )
     state.messages.append(user_msg)
-    await container.workflow_runtime.save_state(state.session_id, state)
+    await di.workflow_runtime.save_state(state.session_id, state)
 
     command = _hitl_command(unique_id)
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="q",
         task_title="t",
@@ -451,11 +451,11 @@ async def test_hitl_operator_chat_shares_session_log_and_appends(app, container,
         handoff_mode=HandoffMode.TAKEOVER,
         command=command,
     )
-    await container.work_item_service.claim(
+    await di.work_item_service.claim(
         company_id="system", work_item_id=work_item_id, user_id=member
     )
 
-    conv = container.hitl_conversation_service
+    conv = di.hitl_conversation_service
     snapshot = await conv.get_snapshot(
         company_id="system", work_item_id=work_item_id, operator_user_id=member
     )
@@ -491,15 +491,15 @@ async def test_hitl_operator_chat_shares_session_log_and_appends(app, container,
 
 
 async def test_hitl_operator_chat_materializes_state_content_without_messages(
-    app, container, unique_id
+    app, di, unique_id
 ):
     """Code-only путь: state.content без messages → оператор видит реплику пользователя."""
     slug = f"hitlchat3-{unique_id}"
-    queue = await container.work_item_service.create_queue(
+    queue = await di.work_item_service.create_queue(
         company_id="system", name="HITLChat3", slug=slug
     )
     member = f"op_{unique_id}"
-    await container.work_item_service.add_queue_member(
+    await di.work_item_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=member),
@@ -508,10 +508,10 @@ async def test_hitl_operator_chat_materializes_state_content_without_messages(
     state = _hitl_state(unique_id)
     user_text = "Нужен перехват диалога по спорному возврату"
     state.content = user_text
-    await container.workflow_runtime.save_state(state.session_id, state)
+    await di.workflow_runtime.save_state(state.session_id, state)
 
     command = _hitl_command(unique_id)
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="q",
         task_title="t",
@@ -519,17 +519,17 @@ async def test_hitl_operator_chat_materializes_state_content_without_messages(
         handoff_mode=HandoffMode.TAKEOVER,
         command=command,
     )
-    await container.hitl_conversation_service.materialize_triggering_user_content(
+    await di.hitl_conversation_service.materialize_triggering_user_content(
         company_id="system",
         work_item_id=work_item_id,
         state=state,
         node_id="hitl_takeover_demo",
     )
-    await container.work_item_service.claim(
+    await di.work_item_service.claim(
         company_id="system", work_item_id=work_item_id, user_id=member
     )
 
-    snapshot = await container.hitl_conversation_service.get_snapshot(
+    snapshot = await di.hitl_conversation_service.get_snapshot(
         company_id="system", work_item_id=work_item_id, operator_user_id=member
     )
     user_turns = [t for t in snapshot.turns if t.role == ConversationTurnRole.USER]
@@ -538,17 +538,17 @@ async def test_hitl_operator_chat_materializes_state_content_without_messages(
 
 
 async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
-    app, container, unique_id
+    app, di, unique_id
 ):
     """Не член очереди не пишет; single_reply запрещает ask-append (ответ через complete)."""
     slug = f"hitlchat2-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system", name="HITLChat2", slug=slug
     )
     state = _hitl_state(unique_id)
-    await container.workflow_runtime.save_state(state.session_id, state)
+    await di.workflow_runtime.save_state(state.session_id, state)
     command = _hitl_command(unique_id)
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="q",
         task_title="t",
@@ -557,7 +557,7 @@ async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
         command=command,
     )
 
-    conv = container.hitl_conversation_service
+    conv = di.hitl_conversation_service
     with pytest.raises(PermissionError):
         await conv.append_operator_message(
             company_id="system",
@@ -568,12 +568,12 @@ async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
         )
 
     member = f"op_{unique_id}"
-    await container.work_item_service.add_queue_member(
+    await di.work_item_service.add_queue_member(
         company_id="system",
-        work_queue_id=(await container.work_item_service.get("system", work_item_id)).assignment.work_queue_id,
+        work_queue_id=(await WorkItem.require_in_company("system", work_item_id)).assignment.work_queue_id,
         member=UserActor(user_id=member),
     )
-    await container.work_item_service.claim(
+    await di.work_item_service.claim(
         company_id="system", work_item_id=work_item_id, user_id=member
     )
     # single_reply: ask-append запрещён (ответ только через complete / closing reply)
@@ -590,7 +590,7 @@ async def test_hitl_operator_chat_rejects_unauthorized_and_non_takeover_send(
 # ============================ Агентские тулы (fire-and-forget / self) ============================
 
 
-async def test_agent_tool_creates_self_assigned_job(app, container, unique_id):
+async def test_agent_tool_creates_self_assigned_job(app, di, unique_id):
     flow_id = f"agent_{unique_id}"
     await provision_flow_employee_for_tests(
         flow_id=flow_id,
@@ -614,7 +614,7 @@ async def test_agent_tool_creates_self_assigned_job(app, container, unique_id):
             state,
         )
         work_item_id = created["work_item_id"]
-        item = await container.work_item_service.get("system", work_item_id)
+        item = await WorkItem.require_in_company("system", work_item_id)
         assert item.kind is WorkItemKind.AGENT_JOB
         assert item.blocking is False
         assert isinstance(item.assignment, UsersAssignment)
@@ -631,7 +631,7 @@ async def test_agent_tool_creates_self_assigned_job(app, container, unique_id):
         await cleanup_flow_employee_for_tests(flow_id=flow_id)
 
 
-async def test_agent_tool_queue_assignment_requires_existing_queue(app, container, unique_id):
+async def test_agent_tool_queue_assignment_requires_existing_queue(app, di, unique_id):
     flow_id = f"agent2_{unique_id}"
     state = ExecutionState(
         task_id=f"t2-{unique_id}",
@@ -654,7 +654,6 @@ async def test_agent_tool_queue_assignment_requires_existing_queue(app, containe
 
 
 async def _create_crm_task_entity(unique_id: str) -> CRMEntity:
-    crm = get_crm_container()
     entity = CRMEntity(
         entity_id=f"ent_{unique_id}",
         company_id="system",
@@ -664,12 +663,12 @@ async def _create_crm_task_entity(unique_id: str) -> CRMEntity:
         user_id="test_user",
         attributes={},
     )
-    return await crm.entity_repository.create(entity)
+    return await CRMEntity.create(entity)
 
 
-async def test_crm_task_pairs_with_work_item_and_kernel_owns_state(app, container, unique_id):
+async def test_crm_task_pairs_with_work_item_and_kernel_owns_state(app, di, unique_id):
     crm_entity = await _create_crm_task_entity(unique_id)
-    svc = container.work_item_service
+    svc = di.work_item_service
     work_item = await svc.create(
         company_id="system",
         title=crm_entity.name,
@@ -690,16 +689,15 @@ async def test_crm_task_pairs_with_work_item_and_kernel_owns_state(app, containe
     assert completion.work_item.state is WorkItemState.DONE
 
     # CRM-сущность остаётся графовым узлом, её статус (entity.status) не затронут
-    crm = get_crm_container()
-    refreshed = await crm.entity_repository.get(crm_entity.entity_id)
+    refreshed = await CRMEntity.get(crm_entity.entity_id)
     assert refreshed is not None
     assert refreshed.entity_type == "task"
     assert refreshed.status == "active"
 
 
-async def test_crm_task_work_item_visible_in_namespace_list(app, container, unique_id):
+async def test_crm_task_work_item_visible_in_namespace_list(app, di, unique_id):
     crm_entity = await _create_crm_task_entity(unique_id)
-    svc = container.work_item_service
+    svc = di.work_item_service
     work_item = await svc.create(
         company_id="system",
         title=crm_entity.name,
@@ -716,7 +714,7 @@ async def test_crm_task_work_item_visible_in_namespace_list(app, container, uniq
 # ============================ Гибкое переназначение (reassign) ============================
 
 
-async def test_reassign_between_user_agent_queue(app, container, unique_id):
+async def test_reassign_between_user_agent_queue(app, di, unique_id):
     """Любая задача переназначается на человека/агента/очередь в любой момент."""
     agent_flow_id = f"flow_{unique_id}"
     await provision_flow_employee_for_tests(
@@ -724,7 +722,7 @@ async def test_reassign_between_user_agent_queue(app, container, unique_id):
         curator_user_id=f"cur_{unique_id}",
     )
     try:
-        svc = container.work_item_service
+        svc = di.work_item_service
         queue = await svc.create_queue(company_id="system", name="Q", slug=f"reassign-{unique_id}")
         item = await svc.create(
             company_id="system", title=f"flex-{unique_id}", created_by=SystemActor()
@@ -755,8 +753,8 @@ async def test_reassign_between_user_agent_queue(app, container, unique_id):
         await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
 
-async def test_reassign_terminal_raises(app, container, unique_id):
-    svc = container.work_item_service
+async def test_reassign_terminal_raises(app, di, unique_id):
+    svc = di.work_item_service
     item = await svc.create(
         company_id="system", title=f"term-reassign-{unique_id}", created_by=SystemActor()
     )
@@ -769,8 +767,8 @@ async def test_reassign_terminal_raises(app, container, unique_id):
         )
 
 
-async def test_cancel_and_reject_terminal_states(app, container, unique_id):
-    svc = container.work_item_service
+async def test_cancel_and_reject_terminal_states(app, di, unique_id):
+    svc = di.work_item_service
     to_cancel = await svc.create(
         company_id="system", title=f"cancel-{unique_id}", created_by=SystemActor()
     )
@@ -789,7 +787,7 @@ async def test_cancel_and_reject_terminal_states(app, container, unique_id):
 # ============================ Единый механизм хуков ============================
 
 
-async def test_hooks_metadata_persisted_without_http_dispatch(app, container, unique_id):
+async def test_hooks_metadata_persisted_without_http_dispatch(app, di, unique_id):
     """hooks хранят binding для bus-потребителей; HTTP dispatcher удалён."""
     agent_flow_id = f"flow_{unique_id}"
     await provision_flow_employee_for_tests(
@@ -798,9 +796,9 @@ async def test_hooks_metadata_persisted_without_http_dispatch(app, container, un
     )
     try:
         svc = WorkItemService(
-            repository=container.worktracker_repository,
-            queue_access=WorkQueueAccessService(container.authz_service),
-            authz=container.authz_service,
+            repository=di.worktracker_repository,
+            queue_access=WorkQueueAccessService(di.authz_service),
+            authz=di.authz_service,
         )
         hooks = [
             WorkItemHook(
@@ -831,8 +829,8 @@ async def test_hooks_metadata_persisted_without_http_dispatch(app, container, un
         await cleanup_flow_employee_for_tests(flow_id=agent_flow_id)
 
 
-async def test_work_item_attachments_variables_comment_files_roundtrip(app, container, unique_id):
-    svc = container.work_item_service
+async def test_work_item_attachments_variables_comment_files_roundtrip(app, di, unique_id):
+    svc = di.work_item_service
     file_ref = FileRef(
         file_id=f"file_{unique_id}",
         original_name="spec.pdf",
@@ -874,7 +872,7 @@ async def test_work_item_attachments_variables_comment_files_roundtrip(app, cont
 
 
 async def test_reassign_publishes_assigned_bus_event(
-    app, container, platform_events_listener, unique_id
+    app, di, platform_events_listener, unique_id
 ):
     from core.worktracker.events import WORK_ITEM_ASSIGNED
 
@@ -884,7 +882,7 @@ async def test_reassign_publishes_assigned_bus_event(
         curator_user_id=f"cur_{unique_id}",
     )
     try:
-        svc = container.work_item_service
+        svc = di.work_item_service
         item = await svc.create(
             company_id="system",
             title=f"reassign-hook-{unique_id}",

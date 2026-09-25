@@ -1,0 +1,9 @@
+GROUP g08_misc rc=1
+FAILED tests/observability/test_billing_settlement_lag.py::test_billing_settlement_lag_emitted_for_pending_span
+FAILED tests/observability/test_flows_runtime_metrics.py::test_flow_react_completed_emitted_after_llm_node
+FAILED tests/observability/test_flows_runtime_metrics.py::test_tool_call_finished_emitted_for_builtin_tool
+FAILED tests/observability/test_taskiq_flow_metrics.py::test_flow_terminal_via_process_flow_task_in_worker_context
+FAILED tests/scripts/test_check_tool_contracts.py::test_check_tool_contracts_exits_zero_on_current_tree
+FAILED tests/observability/test_taskiq_flow_metrics.py::test_flow_terminal_via_process_flow_task_in_worker_context
+FAILED tests/scripts/test_check_tool_contracts.py::test_check_tool_contracts_exits_zero_on_current_tree
+============ 5 failed, 377 passed, 11 skipped, 9 warnings in 28.12s ============

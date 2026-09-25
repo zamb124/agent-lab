@@ -5,7 +5,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { navigateToWorkItemPage } from '@platform/lib/utils/work-item-deeplink.js';
-import { WorktrackerUiEvents } from '../events/worktracker-ui-events.js';
+import { WorktrackerUiEvents } from '../events/types.js';
 import '@platform/lib/components/platform-icon.js';
 import './work-item-detail-editor.js';
 

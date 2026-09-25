@@ -11,27 +11,27 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from apps.flows.di import FlowsDi
+from core.di import require_di
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 
 
-@pytest.fixture()
-def credential_repository(app) -> IntegrationCredentialRepository:
+@pytest.fixture(autouse=True)
+def credential_repository(app: object) -> None:
+    _ = app
     from core.config import get_settings
 
     settings = get_settings()
     shared_url = settings.database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для тестов integrations API")
-    return IntegrationCredentialRepository(db_url=shared_url)
 
 
 async def _insert_credential(
-    repo: IntegrationCredentialRepository,
     *,
     credential_id: str,
     company_id: str,
@@ -51,7 +51,7 @@ async def _insert_credential(
         created_at=now,
         updated_at=now,
     )
-    await repo.upsert(cred)
+    await IntegrationCredential.upsert_by_credential_id(cred)
     return cred
 
 
@@ -61,7 +61,6 @@ class TestListCredentials:
         self,
         flows_client,
         auth_headers_system,
-        credential_repository,
         system_user_id,
         unique_id,
     ) -> None:
@@ -69,7 +68,6 @@ class TestListCredentials:
         svc_b = f"svc-b-{unique_id}"
         for svc in (svc_a, svc_b):
             await _insert_credential(
-                credential_repository,
                 credential_id=f"cred-list-{unique_id}-{svc}",
                 company_id="system",
                 user_id=system_user_id,
@@ -118,13 +116,11 @@ class TestDeleteCredential:
         self,
         flows_client,
         auth_headers_system,
-        credential_repository,
         system_user_id,
         unique_id,
     ) -> None:
         svc = f"svc-del-{unique_id}"
         await _insert_credential(
-            credential_repository,
             credential_id=f"cred-del-{unique_id}",
             company_id="system",
             user_id=system_user_id,
@@ -139,11 +135,12 @@ class TestDeleteCredential:
         assert resp.status_code == 200
         assert resp.json()["deleted"] is True
 
-        loaded = await credential_repository.get_by_user_provider_service(
+        loaded = await IntegrationCredential.by_natural_key(
             company_id="system",
             user_id=system_user_id,
             provider=IntegrationProvider.GOOGLE,
             service=svc,
+            mailbox_binding_id=None,
         )
         assert loaded is None
 
@@ -218,7 +215,7 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
@@ -250,7 +247,7 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
@@ -285,7 +282,7 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
@@ -314,7 +311,7 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             with patch.object(
                 oauth,
@@ -353,7 +350,7 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
@@ -387,7 +384,7 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
@@ -407,7 +404,7 @@ class TestOAuthCallbackGuidedIntegrationError:
         flows_client,
         flows_app,
     ) -> None:
-        oauth = flows_app.state.container.oauth_service
+        oauth = require_di(flows_app, FlowsDi).oauth_service
         with patch.object(
             oauth,
             "complete_oauth",

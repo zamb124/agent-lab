@@ -1,12 +1,43 @@
-"""Модели Git-ресурсов для Sync API."""
+"""Git-ресурс Sync: таблица и тела команд."""
 
 from __future__ import annotations
 
 from enum import Enum
+from typing import ClassVar
 
+from oxyde import Field as DbField
+from oxyde import Index
 from pydantic import BaseModel, Field
 
+from core.models.platform_model import PlatformModel
 from core.types import JsonObject
+
+
+class GitResourceRef(PlatformModel):
+    """Строка ``sync_git_resource_refs``, алиас ``sync``, ``__global_model__``.
+
+    Ответ API — ``GitResourceRefRead``: там enum провайдера и вида, без ``company_id``.
+    """
+
+    __database_alias__: ClassVar[str | None] = "sync"
+    __global_model__: ClassVar[bool] = True
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "sync_git_resource_refs"
+        indexes: list[Index] = [
+            Index(["company_id"]),
+            Index(["provider", "kind"]),
+        ]
+
+    git_ref_id: str = DbField(db_pk=True, max_length=64)
+    company_id: str = DbField(max_length=100)
+    provider: str = DbField(max_length=32)
+    kind: str = DbField(max_length=32)
+    project_key: str = DbField(max_length=255)
+    external_id: str = DbField(max_length=255)
+    url: str = DbField(db_type="TEXT")
+    extra: JsonObject = DbField(default_factory=dict, db_type="JSONB")
 
 
 class GitProvider(str, Enum):

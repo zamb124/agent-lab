@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from core.clients.files_client import FilesClient
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileCreateSpec
 from tests.fixtures.auth import service_client_asgi_auth_context
 from tests.fixtures.s3 import require_s3_configured
@@ -56,9 +57,8 @@ async def test_files_client_register_s3(
     from core.config import get_settings
 
     settings = get_settings()
-    bucket = settings.s3.default_bucket
-    if bucket is None or bucket == "":
-        pytest.fail("S3 default_bucket is required")
+    if settings.s3.bucket_name == "":
+        pytest.fail("S3 bucket_name is required")
 
     s3_key = f"test/files-client/{unique_id}.bin"
     payload = b"files client register"
@@ -69,7 +69,7 @@ async def test_files_client_register_s3(
         response = await client.register_s3(
             _platform_auxiliary_spec(),
             s3_key=s3_key,
-            s3_bucket=bucket,
+            storage_id=PLATFORM_STORAGE_ID,
             original_name=f"{unique_id}.bin",
             content_type="application/octet-stream",
             file_size=len(payload),

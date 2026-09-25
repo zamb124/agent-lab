@@ -14,7 +14,7 @@ import hashlib
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, ClassVar, Protocol, TypeAlias, override
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, override
 
 from pydantic import BaseModel
 
@@ -60,10 +60,6 @@ ToolParametersSchema: TypeAlias = JsonObject
 OpenAIToolSchema: TypeAlias = JsonObject
 
 
-class ToolContainerRef(Protocol):
-    pass
-
-
 class BaseTool(ABC):
     """
     Базовый класс для всех инструментов.
@@ -89,7 +85,6 @@ class BaseTool(ABC):
     permission: Permission = None
     tags: list[str] = []  # Группы/категории: misc, math, docs, api, validation
     react_role: ReactToolRole = ReactToolRole.STANDARD
-    container: ToolContainerRef | None = None
     is_nested_flow_tool: bool = False
     output_schema: JsonObject | None = None
     effects: list[str] = []

@@ -58,6 +58,7 @@ from core.clients.tts_client import (
 from core.clients.tts_pronunciation.models import (
     CompiledPronunciation,
     NormalizationConfig,
+    PronunciationRule,
     PronunciationRuleSet,
 )
 from core.clients.tts_streaming import BaseTTSStreamer, BatchBackedTTSStreamer
@@ -68,47 +69,20 @@ from core.clients.vad_client import (
 from core.clients.voice_observability import ObservedSTTClient, ObservedTTSClient
 from core.config import get_settings
 from core.config.models import ProviderLitserveTTSModelEntry
-from core.db.repositories.company_voice_provider_repository import (
-    CompanyVoiceProviderRepository,
-    VoiceKind,
-)
-from core.db.repositories.pronunciation_rule_repository import (
-    CompanyPronunciationRuleRepository,
-    PlatformPronunciationRuleRepository,
-    pronunciation_rule,
-)
 from core.logging import get_logger
+from core.models.voice_models import CompanyVoiceProvider, VoiceKind
 
 logger = get_logger(__name__)
 
 
 _COMPANY_CACHE_TTL_S: float = 60.0
 _company_cache: dict[
-    tuple[str, VoiceKind], tuple[float, _CompanyOverrideRow | None]
+    tuple[str, VoiceKind], tuple[float, CompanyVoiceProvider | None]
 ] = {}
 
 _PRONUNCIATION_CACHE_TTL_S: float = 300.0
 _pronunciation_platform_cache: tuple[float, CompiledPronunciation] | None = None
 _pronunciation_company_cache: dict[str, tuple[float, CompiledPronunciation]] = {}
-
-
-_voice_provider_repo: CompanyVoiceProviderRepository | None = None
-_platform_pronunciation_repo: PlatformPronunciationRuleRepository | None = None
-_company_pronunciation_repo: CompanyPronunciationRuleRepository | None = None
-
-
-@dataclass(frozen=True)
-class _CompanyOverrideRow:
-    """In-memory представление одной строки `company_voice_providers`."""
-
-    provider: str
-    model: str | None
-    voice: str | None
-    language: str | None
-    sample_rate: int | None
-    threshold: float | None
-    response_format: str | None
-    secrets: dict[str, str] | None
 
 
 @dataclass(frozen=True)
@@ -138,29 +112,11 @@ def _value_source(
     return "settings"
 
 
-def _get_repo() -> CompanyVoiceProviderRepository:
-    """
-    Singleton-репозиторий per-process.
-
-    Раньше создавался на каждый вызов resolver-функции, что приводило к
-    лишним SQLAlchemy engine'ам на каждый STT/TTS request. Теперь один
-    экземпляр на процесс; сброс — `reset_voice_resolver_for_tests()`.
-    """
-    global _voice_provider_repo
-    if _voice_provider_repo is None:
-        settings = get_settings()
-        db_url = settings.database.shared_url
-        if not db_url:
-            raise ValueError(
-                "voice_resolver: settings.database.shared_url is not set — cannot read company_voice_providers."
-            )
-        _voice_provider_repo = CompanyVoiceProviderRepository(db_url=db_url)
-    return _voice_provider_repo
 
 
 async def _load_company_override(
     *, company_id: str, kind: Literal["stt", "tts"]
-) -> _CompanyOverrideRow | None:
+) -> CompanyVoiceProvider | None:
     """Прочитать запись `company_voice_providers` с TTL-кэшем."""
     cache_key = (company_id, kind)
     now = time.monotonic()
@@ -168,24 +124,9 @@ async def _load_company_override(
     if cached is not None and (now - cached[0]) < _COMPANY_CACHE_TTL_S:
         return cached[1]
 
-    repo = _get_repo()
-    record = await repo.get(company_id=company_id, kind=kind)
-    row: _CompanyOverrideRow | None
-    if record is None:
-        row = None
-    else:
-        row = _CompanyOverrideRow(
-            provider=record.provider,
-            model=record.model,
-            voice=record.voice,
-            language=record.language,
-            sample_rate=record.sample_rate,
-            threshold=record.threshold,
-            response_format=record.response_format,
-            secrets=dict(record.secrets) if record.secrets is not None else None,
-        )
-    _company_cache[cache_key] = (now, row)
-    return row
+    record = await CompanyVoiceProvider.by_kind(company_id=company_id, kind=kind)
+    _company_cache[cache_key] = (now, record)
+    return record
 
 
 def invalidate_company_overrides_cache(company_id: str) -> None:
@@ -207,14 +148,6 @@ def invalidate_platform_pronunciation_cache() -> None:
 def reset_voice_resolver_for_tests() -> None:
     """Полная очистка in-memory кэша и singleton-репозиториев. Только для тестов."""
     global _pronunciation_platform_cache
-    global _voice_provider_repo, _platform_pronunciation_repo, _company_pronunciation_repo
-    _company_cache.clear()
-    _pronunciation_company_cache.clear()
-    _pronunciation_platform_cache = None
-    _voice_provider_repo = None
-    _platform_pronunciation_repo = None
-    _company_pronunciation_repo = None
-
 
 def _validate_company_id(company_id: str) -> None:
     if company_id == "":
@@ -456,24 +389,11 @@ async def get_stt_client(
     )
 
 
-def _get_pronunciation_repo() -> tuple[PlatformPronunciationRuleRepository, CompanyPronunciationRuleRepository]:
-    """
-    Singleton-репозитории per-process.
-
-    Аналогично `_get_repo()`: один экземпляр каждого репозитория на процесс,
-    сброс — `reset_voice_resolver_for_tests()`.
-    """
-    global _platform_pronunciation_repo, _company_pronunciation_repo
-    if _platform_pronunciation_repo is None or _company_pronunciation_repo is None:
-        settings = get_settings()
-        db_url = settings.database.shared_url
-        if not db_url:
-            raise ValueError(
-                "voice_resolver: settings.database.shared_url is not set — cannot read pronunciation_rules."
-            )
-        _platform_pronunciation_repo = PlatformPronunciationRuleRepository(db_url=db_url)
-        _company_pronunciation_repo = CompanyPronunciationRuleRepository(db_url=db_url)
-    return _platform_pronunciation_repo, _company_pronunciation_repo
+def _require_pronunciation_database() -> None:
+    if get_settings().database.shared_url == "":
+        raise ValueError(
+            "voice_resolver: settings.database.shared_url is not set — cannot read pronunciation_rules."
+        )
 
 
 async def _load_platform_pronunciation() -> CompiledPronunciation:
@@ -485,10 +405,9 @@ async def _load_platform_pronunciation() -> CompiledPronunciation:
         if (now - ts) < _PRONUNCIATION_CACHE_TTL_S:
             return cached
 
-    platform_repo, _ = _get_pronunciation_repo()
-    rows = await platform_repo.list_enabled()
-    rules = [pronunciation_rule(r) for r in rows]
-    rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
+    _require_pronunciation_database()
+    rows = await PronunciationRule.all_enabled_for_company_scope(company_id=None)
+    rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(
         rule_set,
         ssml_subset_enabled=get_settings().voice.tts.pronunciation.ssml_subset_enabled,
@@ -504,10 +423,9 @@ async def _load_company_pronunciation(company_id: str) -> CompiledPronunciation:
     if cached is not None and (now - cached[0]) < _PRONUNCIATION_CACHE_TTL_S:
         return cached[1]
 
-    _, company_repo = _get_pronunciation_repo()
-    rows = await company_repo.list_enabled(company_id=company_id)
-    rules = [pronunciation_rule(r) for r in rows]
-    rule_set = PronunciationRuleSet(rules=rules, normalization=NormalizationConfig())
+    _require_pronunciation_database()
+    rows = await PronunciationRule.all_enabled_for_company_scope(company_id=company_id)
+    rule_set = PronunciationRuleSet(rules=rows, normalization=NormalizationConfig())
     compiled = CompiledPronunciation.from_rule_set(rule_set)
     _pronunciation_company_cache[company_id] = (now, compiled)
     return compiled

@@ -11,6 +11,8 @@ from a2a.types import (
 )
 from google.protobuf.json_format import MessageToDict
 
+import apps.idle_worker.a2a_push_broker
+import apps.idle_worker.broker
 from apps.idle_worker.tasks.task_names import (
     TASK_PUSH_CONFIG_DELETE,
     TASK_PUSH_CONFIG_GET,
@@ -34,6 +36,9 @@ from core.tasks.push_notifications import (
     send_webhook as core_send_webhook,
 )
 from core.types import JsonObject, require_json_object
+
+_ = apps.idle_worker.a2a_push_broker.broker
+_ = apps.idle_worker.broker.broker
 
 
 @platform_task(TASK_PUSH_CONFIG_SET)

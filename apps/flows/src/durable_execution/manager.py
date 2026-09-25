@@ -15,30 +15,30 @@ from apps.flows.src.durable_execution.models import (
     ActivityLifecyclePayload,
     ActivityRecord,
     ActivityStatus,
+    ActivityTask,
     ConversationMessageAppendedPayload,
     EmptyWorkflowEventPayload,
     ExecutionBranchReason,
     ExecutionStateDelta,
     NodeFailedPayload,
+    NonIdempotentActivityReplayBlockedError,
     RunTerminalPayload,
     SideEffectPolicy,
     WorkflowAppendResult,
     WorkflowBranchRecord,
     WorkflowBranchResult,
+    WorkflowConcurrencyError,
     WorkflowEventPayload,
     WorkflowEventRecord,
     WorkflowEventType,
     WorkflowExecutionPosition,
-    WorkflowStatus,
-)
-from apps.flows.src.durable_execution.repository import (
-    DurableWorkflowRepository,
-    NonIdempotentActivityReplayBlockedError,
-    WorkflowConcurrencyError,
+    WorkflowInstance,
     WorkflowProjectionMismatchError,
     WorkflowStateTransitionWrite,
+    WorkflowStatus,
+    apply_state_delta,
+    build_state_delta,
 )
-from apps.flows.src.durable_execution.state_delta import apply_state_delta, build_state_delta
 from apps.flows.src.models import SessionConfig
 from apps.flows.src.models.enums import SessionStatus
 from core.clients.redis_client import RedisClient
@@ -106,10 +106,8 @@ class DurableWorkflowRuntime:
     def __init__(
         self,
         *,
-        repository: DurableWorkflowRepository,
         redis_client: RedisClient,
     ) -> None:
-        self._repository: DurableWorkflowRepository = repository
         self._redis: RedisClient = redis_client
 
     def _company_id(self) -> str:
@@ -171,7 +169,7 @@ class DurableWorkflowRuntime:
                 cached.execution_branch_id,
                 cached.status,
             )
-        loaded = await self._repository.load_state_at_head(
+        loaded = await WorkflowInstance.load_state_at_head(
             company_id=company_id,
             session_id=session_id,
         )
@@ -211,7 +209,7 @@ class DurableWorkflowRuntime:
         if cached is not None:
             return cached.state
 
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=resolved_company_id,
             session_id=session_id,
         )
@@ -229,7 +227,7 @@ class DurableWorkflowRuntime:
                 data = require_json_object(payload.get("state_json"), "cached_state")
                 return ExecutionState.model_validate(data)
 
-        loaded = await self._repository.load_state_at_head(
+        loaded = await WorkflowInstance.load_state_at_head(
             company_id=resolved_company_id,
             session_id=session_id,
         )
@@ -272,7 +270,7 @@ class DurableWorkflowRuntime:
                 head_sequence=cached.head_sequence,
                 head_state_hash=cached.head_state_hash,
             )
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
@@ -309,7 +307,7 @@ class DurableWorkflowRuntime:
                 raise ValueError(f"Workflow instance not found: {session_id!r}")
             state_json = self._dump_state(state)
             try:
-                result = await self._repository.append_state_transition(
+                result = await WorkflowInstance.append_state_transition(
                     company_id=company_id,
                     session_id=session_id,
                     event_type=event_type,
@@ -368,7 +366,7 @@ class DurableWorkflowRuntime:
             after.messages.append(message)
             state_json = self._dump_state(after)
             try:
-                result = await self._repository.append_state_transition(
+                result = await WorkflowInstance.append_state_transition(
                     company_id=company_id,
                     session_id=session_id,
                     event_type=WorkflowEventType.conversation_message_appended,
@@ -455,7 +453,7 @@ class DurableWorkflowRuntime:
             status = workflow_status or current_status
             payload = payload_factory(before, after)
             try:
-                result = await self._repository.append_state_transition(
+                result = await WorkflowInstance.append_state_transition(
                     company_id=company_id,
                     session_id=session_id,
                     event_type=event_type,
@@ -509,7 +507,7 @@ class DurableWorkflowRuntime:
         )
         state_json = self._dump_state(st)
         delta = build_state_delta(before, st)
-        result = await self._repository.append_state_transition(
+        result = await WorkflowInstance.append_state_transition(
             company_id=company_id,
             session_id=session_id,
             event_type=event_type,
@@ -585,7 +583,7 @@ class DurableWorkflowRuntime:
                 1 if snapshot_head_sequence is None else snapshot_head_sequence + 1
             )
 
-        results = await self._repository.append_state_transitions(
+        results = await WorkflowInstance.append_state_transitions(
             company_id=company_id,
             session_id=session_id,
             transitions=transitions,
@@ -639,7 +637,7 @@ class DurableWorkflowRuntime:
         )
         state_json = self._dump_state(st)
         delta = build_state_delta(before, st)
-        result = await self._repository.append_state_transition(
+        result = await WorkflowInstance.append_state_transition(
             company_id=company_id,
             session_id=session_id,
             event_type=WorkflowEventType.run_terminal,
@@ -667,7 +665,7 @@ class DurableWorkflowRuntime:
 
     async def delete_state(self, session_id: str) -> bool:
         company_id = self._company_id()
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
@@ -688,7 +686,7 @@ class DurableWorkflowRuntime:
         offset: int = 0,
     ) -> tuple[list[SessionConfig], int]:
         company_id = self._company_id()
-        instances, total = await self._repository.list_instances(
+        instances, total = await WorkflowInstance.list_instances(
             company_id=company_id,
             flow_id=flow_id,
             user_id=user_id,
@@ -753,14 +751,14 @@ class DurableWorkflowRuntime:
         company_id = self._company_id()
         resolved_branch_id = execution_branch_id
         if resolved_branch_id is None:
-            instance = await self._repository.get_instance(
+            instance = await WorkflowInstance.get_instance(
                 company_id=company_id,
                 session_id=session_id,
             )
             if instance is None:
                 return [], 0
             resolved_branch_id = instance.active_execution_branch_id
-        records, total = await self._repository.list_events(
+        records, total = await WorkflowInstance.list_events(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -777,13 +775,13 @@ class DurableWorkflowRuntime:
         execution_branch_id: str | None = None,
     ) -> ExecutionState | None:
         company_id = self._company_id()
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             return None
-        return await self._repository.load_state_at(
+        return await WorkflowInstance.load_state_at(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=execution_branch_id or instance.active_execution_branch_id,
@@ -792,7 +790,7 @@ class DurableWorkflowRuntime:
 
     async def list_branches(self, session_id: str) -> list[WorkflowBranchRecord]:
         company_id = self._company_id()
-        records = await self._repository.list_branches(
+        records = await WorkflowInstance.list_branches(
             company_id=company_id,
             session_id=session_id,
         )
@@ -807,7 +805,7 @@ class DurableWorkflowRuntime:
         activate: bool = False,
     ) -> WorkflowBranchResult:
         company_id = self._company_id()
-        result = await self._repository.create_branch_transition(
+        result = await WorkflowInstance.create_branch_transition(
             company_id=company_id,
             session_id=session_id,
             source_execution_branch_id=execution_branch_id,
@@ -818,7 +816,7 @@ class DurableWorkflowRuntime:
             activate=activate,
         )
         if activate:
-            state = await self._repository.load_state_at(
+            state = await WorkflowInstance.load_state_at(
                 company_id=company_id,
                 session_id=session_id,
                 execution_branch_id=result.execution_branch_id,
@@ -843,7 +841,7 @@ class DurableWorkflowRuntime:
         execution_branch_id: str | None = None,
     ) -> WorkflowBranchResult:
         company_id = self._company_id()
-        result = await self._repository.create_branch_transition(
+        result = await WorkflowInstance.create_branch_transition(
             company_id=company_id,
             session_id=session_id,
             source_execution_branch_id=execution_branch_id,
@@ -853,7 +851,7 @@ class DurableWorkflowRuntime:
             target_state=None,
             activate=True,
         )
-        state = await self._repository.load_state_at(
+        state = await WorkflowInstance.load_state_at(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=result.execution_branch_id,
@@ -886,7 +884,7 @@ class DurableWorkflowRuntime:
             if isinstance(patched_state, dict)
             else patched_state
         )
-        result = await self._repository.create_branch_transition(
+        result = await WorkflowInstance.create_branch_transition(
             company_id=company_id,
             session_id=session_id,
             source_execution_branch_id=execution_branch_id,
@@ -915,14 +913,14 @@ class DurableWorkflowRuntime:
         execution_branch_id: str | None = None,
     ) -> WorkflowBranchResult:
         company_id = self._company_id()
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
         resolved_branch_id = execution_branch_id or instance.active_execution_branch_id
-        failed_event = await self._repository.get_event_by_type(
+        failed_event = await WorkflowInstance.get_event_by_type(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -937,7 +935,7 @@ class DurableWorkflowRuntime:
             raise TypeError("NodeFailed event must have NodeFailedPayload")
         recover_sequence = payload.recover_sequence
         failed_nodes = payload.failed_nodes
-        events, _ = await self._repository.list_events(
+        events, _ = await WorkflowInstance.list_events(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=resolved_branch_id,
@@ -981,7 +979,7 @@ class DurableWorkflowRuntime:
         retry_state.terminal_task_state = None
         retry_state.terminal_task_error = None
 
-        result = await self._repository.create_branch_transition(
+        result = await WorkflowInstance.create_branch_transition(
             company_id=company_id,
             session_id=session_id,
             source_execution_branch_id=execution_branch_id,
@@ -1017,13 +1015,13 @@ class DurableWorkflowRuntime:
     ) -> JsonObject | None:
         resolved_side_effect_policy = self._require_side_effect_policy(side_effect_policy)
         company_id = self._company_id()
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             raise ValueError(f"Workflow instance not found before activity schedule: {session_id!r}")
-        record = await self._repository.cache_activity(
+        record = await ActivityTask.cache_activity(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=instance.active_execution_branch_id,
@@ -1051,7 +1049,7 @@ class DurableWorkflowRuntime:
                 + f"status={record.status!r}"
             )
         if record.status in {ActivityStatus.failed, ActivityStatus.started}:
-            reschedule = await self._repository.reschedule_activity_attempt(
+            reschedule = await ActivityTask.reschedule_activity_attempt(
                 activity_id=record.activity_id,
             )
             if reschedule is None:
@@ -1086,13 +1084,13 @@ class DurableWorkflowRuntime:
         input_payload: JsonObject,
     ) -> JsonObject | None:
         company_id = self._company_id()
-        instance = await self._repository.get_instance(
+        instance = await WorkflowInstance.get_instance(
             company_id=company_id,
             session_id=session_id,
         )
         if instance is None:
             raise ValueError(f"Workflow instance not found: {session_id!r}")
-        return await self._repository.get_completed_activity_result(
+        return await ActivityTask.get_completed_activity_result(
             company_id=company_id,
             session_id=session_id,
             execution_branch_id=instance.active_execution_branch_id,
@@ -1108,7 +1106,7 @@ class DurableWorkflowRuntime:
         result_json: JsonObject | None = None,
         error: str | None = None,
     ) -> bool:
-        record = await self._repository.complete_activity(
+        record = await ActivityTask.complete_activity(
             activity_id=activity_id,
             result_json=result_json,
             error=error,
@@ -1122,7 +1120,7 @@ class DurableWorkflowRuntime:
         return True
 
     async def record_activity_started(self, *, activity_id: str) -> bool:
-        record = await self._repository.start_activity(activity_id=activity_id)
+        record = await ActivityTask.start_activity(activity_id=activity_id)
         if record is None:
             return False
         await self._record_activity_lifecycle_event(
@@ -1137,7 +1135,7 @@ class DurableWorkflowRuntime:
         lookup_id: str,
     ) -> str | None:
         company_id = self._company_id()
-        return await self._repository.resolve_session_id_by_flow_and_identifier(
+        return await WorkflowInstance.resolve_session_id_by_flow_and_identifier(
             company_id=company_id,
             flow_id=flow_id,
             lookup_id=lookup_id,
@@ -1159,7 +1157,7 @@ class DurableWorkflowRuntime:
                 return
             state_json = self._dump_state(state)
             try:
-                result = await self._repository.append_state_transition(
+                result = await WorkflowInstance.append_state_transition(
                     company_id=record.company_id,
                     session_id=record.session_id,
                     event_type=event_type,

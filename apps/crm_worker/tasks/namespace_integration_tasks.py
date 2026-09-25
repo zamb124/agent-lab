@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import core.tracing.attributes as trace_attributes
-from apps.crm.container import get_crm_container
+from apps.crm.models.task import CRMTask
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.knowledge_import_tasks import notify_task_user
 from apps.crm_worker.tasks.task_names import CRM_RUN_NAMESPACE_INTEGRATION_JOB
@@ -53,10 +54,10 @@ async def run_namespace_integration_job(
     company_id: str,
     auth_token: str | None,
     interface_language: str,
+    *,
+    di: Di,
 ) -> JsonObject:
-    container = get_crm_container()
-    repo = container.task_repository
-    row = await repo.get_for_worker(task_id, company_id)
+    row = await CRMTask.by_company_and_task_id(company_id, task_id)
     if row is None:
         raise ValueError(f"Task not found: {task_id}")
     if row.task_type != "namespace_integration_job":
@@ -84,11 +85,11 @@ async def run_namespace_integration_job(
         row.user_id,
         interface_language=interface_language,
     )
-    connector = container.integration_registry.get(provider_id)
+    connector = di.integration_registry.get(provider_id)
     label = connector.worker_short_label()
 
     async def _complete_cancel_if_requested() -> bool:
-        task_row = await repo.get_for_worker(task_id, company_id)
+        task_row = await CRMTask.by_company_and_task_id(company_id, task_id)
         if task_row is None:
             return False
         if task_row.status == "cancelled":
@@ -97,7 +98,7 @@ async def run_namespace_integration_job(
             return False
         pct = int(task_row.progress_pct)
         now = datetime.now(timezone.utc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="cancelled",
@@ -109,7 +110,6 @@ async def run_namespace_integration_job(
         title = _notification_cancelled_title(label, job=job)
         await notify_task_user(
             row.user_id,
-            repo,
             company_id,
             task_id=task_id,
             task_type="namespace_integration_job",
@@ -142,7 +142,7 @@ async def run_namespace_integration_job(
             async def on_progress(stage: str, pct: int) -> None:
                 if await _complete_cancel_if_requested():
                     raise NamespaceIntegrationCancelled()
-                await repo.patch_progress(
+                await CRMTask.patch_progress(
                     task_id,
                     company_id,
                     stage=stage,
@@ -157,11 +157,11 @@ async def run_namespace_integration_job(
                     on_progress=on_progress,
                 )
 
-        terminal = await repo.get_for_worker(task_id, company_id)
+        terminal = await CRMTask.by_company_and_task_id(company_id, task_id)
         if terminal is not None and terminal.status == "cancelled":
             return {"status": "cancelled", "task_id": task_id}
 
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="completed",
@@ -174,7 +174,6 @@ async def run_namespace_integration_job(
         msg = _stats_message(stats)
         await notify_task_user(
             row.user_id,
-            repo,
             company_id,
             task_id=task_id,
             task_type="namespace_integration_job",
@@ -190,7 +189,7 @@ async def run_namespace_integration_job(
         return {"status": "cancelled", "task_id": task_id}
     except Exception as exc:
         err_text = str(exc)
-        after_exc = await repo.get_for_worker(task_id, company_id)
+        after_exc = await CRMTask.by_company_and_task_id(company_id, task_id)
         if after_exc is not None and after_exc.status == "cancelled":
             return {"status": "cancelled", "task_id": task_id}
         logger.exception(
@@ -199,7 +198,7 @@ async def run_namespace_integration_job(
             provider=provider_id,
             job=job,
         )
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="failed",
@@ -211,7 +210,6 @@ async def run_namespace_integration_job(
         title = _notification_title(label, job=job, ok=False)
         await notify_task_user(
             row.user_id,
-            repo,
             company_id,
             task_id=task_id,
             task_type="namespace_integration_job",

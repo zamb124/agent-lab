@@ -6,8 +6,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from core.clients.payment.base_provider import (
     BasePaymentProvider,
     PaymentProviderConfig,
@@ -24,20 +22,21 @@ from core.models.identity_models import Company, User
 from core.models.payment_models import (
     BalanceGrantResult,
     CreatePaymentResponse,
-    ExternalPaymentClaim,
     PaymentNotification,
     PaymentProviderType,
     PaymentStatus,
     PaymentSyncOperation,
     TinkoffNotificationPayload,
     Transaction,
+    transaction_storage_key,
+    transaction_storage_key_by_id,
 )
 from core.short_links.service import require_platform_public_base_url
 from core.types import JsonObject
 from core.utils.domain import build_company_subdomain_absolute_url, get_protocol
 
 if TYPE_CHECKING:
-    from core.db.repositories.company_repository import CompanyRepository
+    pass
 
 logger = get_logger(__name__)
 
@@ -72,28 +71,6 @@ def _payment_provider_type(provider_name: str) -> PaymentProviderType:
     if provider_name == "grant":
         return PaymentProviderType.GRANT
     raise ValueError(f"Unknown provider: {provider_name}")
-
-
-def _transaction_key(transaction: Transaction) -> str:
-    return (
-        f"payment:{transaction.company_id}:"
-        + f"{transaction.payment_provider.value}:{transaction.transaction_id}"
-    )
-
-
-def _transaction_key_by_id(
-    *,
-    company_id: str,
-    payment_provider: PaymentProviderType,
-    transaction_id: str,
-) -> str:
-    return f"payment:{company_id}:{payment_provider.value}:{transaction_id}"
-
-
-def _external_payment_key(
-    *, payment_provider: PaymentProviderType, external_payment_id: str
-) -> str:
-    return f"payment_external:{payment_provider.value}:{external_payment_id}"
 
 
 def _customer_email(user: User) -> str | None:
@@ -132,8 +109,7 @@ def payment_browser_return_url(
 class PaymentService:
     """Сервис для работы с платежами"""
 
-    def __init__(self, *, company_repository: "CompanyRepository", storage: Storage) -> None:
-        self._company_repository: CompanyRepository = company_repository
+    def __init__(self, *, storage: Storage) -> None:
         self._storage: Storage = storage
 
     async def create_payment(
@@ -253,7 +229,7 @@ class PaymentService:
             metadata=meta,
         )
         _ = await self.finalize_successful_payment(transaction)
-        company = await self._company_repository.get(company_id)
+        company = await Company.get(company_id)
         if not company:
             raise ValueError(f"Company {company_id} not found after grant")
         logger.info(
@@ -392,7 +368,7 @@ class PaymentService:
         company_id = transaction_id.split(":", 1)[0]
 
         for provider_type in PaymentProviderType:
-            key = _transaction_key_by_id(
+            key = transaction_storage_key_by_id(
                 company_id=company_id,
                 payment_provider=provider_type,
                 transaction_id=transaction_id,
@@ -500,7 +476,7 @@ class PaymentService:
         raise ValueError(f"unexpected payment sync status: {operation.status.value}")
 
     async def _save_transaction(self, transaction: Transaction) -> None:
-        key = _transaction_key(transaction)
+        key = transaction_storage_key(transaction)
 
         logger.debug("payments.transaction.save", key=key)
 
@@ -518,93 +494,6 @@ class PaymentService:
             force_global=True,
         )
 
-    async def _get_transaction_in_session(
-        self,
-        transaction: Transaction,
-        session: AsyncSession,
-    ) -> Transaction | None:
-        data = await self._storage.get(
-            _transaction_key(transaction),
-            db_session=session,
-            force_global=True,
-            for_update=True,
-        )
-        if data is None:
-            return None
-        return Transaction.model_validate_json(data)
-
-    async def _save_transaction_in_session(
-        self,
-        transaction: Transaction,
-        session: AsyncSession,
-    ) -> None:
-        _ = await self._storage.set(
-            _transaction_key(transaction),
-            transaction.model_dump_json(),
-            db_session=session,
-            force_global=True,
-        )
-
-    async def _apply_company_balance_in_session(
-        self,
-        *,
-        company_id: str,
-        amount: float,
-        session: AsyncSession,
-    ) -> Company:
-        company_key = f"company:{company_id}"
-        raw_company = await self._storage.get(
-            company_key,
-            db_session=session,
-            force_global=True,
-            for_update=True,
-        )
-        if raw_company is None:
-            raise ValueError(f"Company {company_id} not found")
-        company = Company.model_validate_json(raw_company)
-        balance_before = company.balance
-        company.balance += amount
-        _ = await self._storage.set(
-            company_key,
-            company.model_dump_json(),
-            db_session=session,
-            force_global=True,
-        )
-        logger.info(
-            "payments.balance_updated",
-            company_id=company_id,
-            balance_before=round(balance_before, 2),
-            balance_after=round(company.balance, 2),
-            delta=round(amount, 2),
-        )
-        return company
-
-    async def _claim_external_payment_id(
-        self,
-        *,
-        transaction: Transaction,
-        session: AsyncSession,
-    ) -> None:
-        external_payment_id = transaction.external_payment_id
-        if external_payment_id is None:
-            return
-        if external_payment_id == "":
-            raise ValueError("external_payment_id must be non-empty")
-        claimed = await self._storage.insert_once(
-            _external_payment_key(
-                payment_provider=transaction.payment_provider,
-                external_payment_id=external_payment_id,
-            ),
-            ExternalPaymentClaim(transaction_id=transaction.transaction_id).model_dump_json(),
-            db_session=session,
-            force_global=True,
-        )
-        if not claimed:
-            raise ValueError(
-                "External payment operation is already linked to another transaction: "
-                + external_payment_id
-            )
-
     async def finalize_successful_payment(self, transaction: Transaction) -> bool:
         """
         Атомарно фиксирует успешную транзакцию и зачисляет средства.
@@ -613,7 +502,8 @@ class PaymentService:
         одной DB-транзакции. Повторные webhook/sync вызовы возвращают False после
         проверки Transaction.balance_applied под row lock.
         """
-        if transaction.balance_applied:
+        company = await Transaction.finalize_credit(self._storage, transaction)
+        if company is None:
             logger.warning(
                 "payments.balance_already_applied",
                 transaction_id=transaction.transaction_id,
@@ -621,31 +511,11 @@ class PaymentService:
                 amount=transaction.amount,
             )
             return False
-
-        async with self._storage.get_session() as session:
-            async with session.begin():
-                stored = await self._get_transaction_in_session(transaction, session)
-                if stored is not None and stored.balance_applied:
-                    logger.warning(
-                        "payments.balance_already_applied",
-                        transaction_id=stored.transaction_id,
-                        company_id=stored.company_id,
-                        amount=stored.amount,
-                    )
-                    return False
-                effective_transaction = stored if stored is not None else transaction
-                effective_transaction.status = PaymentStatus.SUCCESS
-                effective_transaction.external_payment_id = transaction.external_payment_id
-                effective_transaction.completed_at = transaction.completed_at
-                effective_transaction.balance_applied = True
-                await self._claim_external_payment_id(
-                    transaction=effective_transaction,
-                    session=session,
-                )
-                await self._save_transaction_in_session(effective_transaction, session)
-                _ = await self._apply_company_balance_in_session(
-                    company_id=effective_transaction.company_id,
-                    amount=effective_transaction.amount,
-                    session=session,
-                )
+        logger.info(
+            "payments.balance_updated",
+            company_id=transaction.company_id,
+            balance_before=round(company.balance - transaction.amount, 2),
+            balance_after=round(company.balance, 2),
+            delta=round(transaction.amount, 2),
+        )
         return True

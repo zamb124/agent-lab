@@ -137,11 +137,6 @@ class _InMemorySchedulerService:
         raise AssertionError(f"task not found: {schedule_task_id}")
 
 
-class _Container:
-    def __init__(self, service: _InMemorySchedulerService) -> None:
-        self.scheduler_service = service
-
-
 def _orchestrator_task(*, cron: str) -> PlatformScheduledTask:
     return PlatformScheduledTask(
         schedule_task_id="crawl-tick-old",
@@ -167,9 +162,8 @@ def _orchestrator_task(*, cron: str) -> PlatformScheduledTask:
 @pytest.mark.asyncio
 async def test_ensure_search_crawl_schedules_reconciles_legacy_orchestrator_cron() -> None:
     service = _InMemorySchedulerService([_orchestrator_task(cron="0 */6 * * *")])
-    container = _Container(service)
 
-    await ensure_search_crawl_schedules(container=container)
+    await ensure_search_crawl_schedules(scheduler_service=service)
 
     assert len(service.reconcile_cron_calls) == 1
     assert service.reconcile_cron_calls[0]["cron"] == CRAWL_ORCHESTRATOR_BACKUP_CRON

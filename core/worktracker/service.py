@@ -12,8 +12,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from oxyde.exceptions import IntegrityError
 from pydantic import Field
-from sqlalchemy.exc import IntegrityError
 
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
@@ -62,7 +62,6 @@ from core.worktracker.models import (
     build_generic_board_columns,
 )
 from core.worktracker.queue_access import WorkQueueAccessPort, WorkQueueMemberRelation
-from core.worktracker.repository import WorktrackerRepository
 
 logger = get_logger(__name__)
 
@@ -88,98 +87,29 @@ class WorkItemService:
 
     def __init__(
         self,
-        repository: WorktrackerRepository,
         queue_access: WorkQueueAccessPort,
         authz: AuthzService,
     ) -> None:
-        self._repo: WorktrackerRepository = repository
         self._queue_access: WorkQueueAccessPort = queue_access
         self._authz: AuthzService = authz
 
     # === Чтение ===
 
-    async def get(self, company_id: str, work_item_id: str) -> WorkItem:
-        item = await self._repo.get_work_item(company_id, work_item_id)
-        if item is None:
-            raise ValueError(f"WorkItem {work_item_id!r} not found")
-        return item
-
-    async def list(
-        self,
-        company_id: str,
-        *,
-        board_id: str | None = None,
-        namespace: str | None = None,
-        kind: WorkItemKind | None = None,
-        state: WorkItemState | None = None,
-        work_queue_id: str | None = None,
-        assignee_user_id: str | None = None,
-        assignee_flow_id: str | None = None,
-        exclude_terminal: bool = False,
-        queue_unclaimed_only: bool = False,
-        work_queue_ids: list[str] | None = None,
-        limit: int = 200,
-        offset: int = 0,
-    ) -> list[WorkItem]:
-        return await self._repo.list_work_items(
-            company_id,
-            board_id=board_id,
-            namespace=namespace,
-            kind=kind,
-            state=state,
-            work_queue_id=work_queue_id,
-            assignee_user_id=assignee_user_id,
-            assignee_flow_id=assignee_flow_id,
-            exclude_terminal=exclude_terminal,
-            queue_unclaimed_only=queue_unclaimed_only,
-            work_queue_ids=work_queue_ids,
-            limit=limit,
-            offset=offset,
-        )
-
-    async def count(
-        self,
-        company_id: str,
-        *,
-        board_id: str | None = None,
-        namespace: str | None = None,
-        kind: WorkItemKind | None = None,
-        state: WorkItemState | None = None,
-        work_queue_id: str | None = None,
-        assignee_user_id: str | None = None,
-        assignee_flow_id: str | None = None,
-        exclude_terminal: bool = False,
-        queue_unclaimed_only: bool = False,
-        work_queue_ids: list[str] | None = None,
-    ) -> int:
-        return await self._repo.count_work_items(
-            company_id,
-            board_id=board_id,
-            namespace=namespace,
-            kind=kind,
-            state=state,
-            work_queue_id=work_queue_id,
-            assignee_user_id=assignee_user_id,
-            assignee_flow_id=assignee_flow_id,
-            exclude_terminal=exclude_terminal,
-            queue_unclaimed_only=queue_unclaimed_only,
-            work_queue_ids=work_queue_ids,
-        )
-
     async def mine_summary(self, company_id: str, user_id: str) -> WorkItemMineSummary:
-        assigned_open_count = await self.count(
+        assigned_open_count = await WorkItem.count_work_items(
             company_id,
             assignee_user_id=user_id,
             exclude_terminal=True,
         )
         queue_ids = await self._queue_access.list_viewable_queue_ids(user_id=user_id)
         company_queue_ids = {
-            queue.work_queue_id for queue in await self._repo.list_queues(company_id)
+            queue.work_queue_id
+            for queue in await WorkQueue.list_for_company(company_id)
         }
         queue_ids = [qid for qid in queue_ids if qid in company_queue_ids]
         queue_inbox_count = 0
         if queue_ids:
-            queue_inbox_count = await self.count(
+            queue_inbox_count = await WorkItem.count_work_items(
                 company_id,
                 exclude_terminal=True,
                 queue_unclaimed_only=True,
@@ -190,24 +120,6 @@ class WorkItemService:
             queue_inbox_count=queue_inbox_count,
             work_queue_ids=queue_ids,
         )
-
-    async def map_work_item_ids_by_crm_entities(
-        self, company_id: str, entity_ids: list[str]
-    ) -> dict[str, str]:
-        return await self._repo.map_work_item_ids_by_crm_entities(company_id, entity_ids)
-
-    async def find_by_completion_correlation(
-        self, company_id: str, correlation_id: str
-    ) -> WorkItem | None:
-        """Поиск задачи по correlation_id в hook.binding (идемпотентность HITL)."""
-        return await self._repo.find_work_item_by_correlation(company_id, correlation_id)
-
-    async def find_by_crm_entity(self, company_id: str, entity_id: str) -> WorkItem | None:
-        """Парный WorkItem CRM-узла задачи (связь 1:1 через CrmEntityLink)."""
-        return await self._repo.find_work_item_by_crm_entity(company_id, entity_id)
-
-    async def delete(self, *, company_id: str, work_item_id: str) -> bool:
-        return await self._repo.delete_work_item(company_id, work_item_id)
 
     # === Создание ===
 
@@ -262,7 +174,7 @@ class WorkItemService:
             created_at=now,
             updated_at=now,
         )
-        saved = await self._repo.insert_work_item(item)
+        saved = await WorkItem.create(item)
         await self._publish(saved, WORK_ITEM_CREATED)
         await self._after_assignment_change(saved)
         logger.info(
@@ -339,7 +251,7 @@ class WorkItemService:
         variables: VariableMap | None = None,
         attachments: list[FileRef] | None = None,
     ) -> WorkItem:
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if title is not None:
             item.title = title
         if description is not None:
@@ -357,7 +269,8 @@ class WorkItemService:
         if attachments is not None:
             item.attachments = list(attachments)
         item.updated_at = utcnow()
-        saved = await self._repo.save_work_item(item)
+        _ = await WorkItem.set(item)
+        saved = item
         await self._publish(saved, WORK_ITEM_UPDATED)
         if title is not None or description is not None:
             await self._notify_assignees(saved, NotificationType.WORK_ITEM_UPDATED)
@@ -374,14 +287,15 @@ class WorkItemService:
 
         Работает для всех kind, включая operator_handoff (оператор -> flow и обратно).
         """
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(
                 f"WorkItem {work_item_id!r} is in terminal state {item.state.value!r}"
             )
         item.assignment = assignment
         item.updated_at = utcnow()
-        saved = await self._repo.save_work_item(item)
+        _ = await WorkItem.set(item)
+        saved = item
         await self._publish(saved, WORK_ITEM_UPDATED)
         await self._after_assignment_change(saved)
         return saved
@@ -394,7 +308,7 @@ class WorkItemService:
         board_column_id: str | None = None,
         state: WorkItemState | None = None,
     ) -> WorkItem:
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(
                 f"WorkItem {work_item_id!r} is in terminal state {item.state.value!r}"
@@ -408,7 +322,8 @@ class WorkItemService:
             self._assert_transition(item.state)
             item.state = target_state
         item.updated_at = utcnow()
-        saved = await self._repo.save_work_item(item)
+        _ = await WorkItem.set(item)
+        saved = item
         await self._publish(saved, WORK_ITEM_MOVED)
         return saved
 
@@ -419,7 +334,7 @@ class WorkItemService:
         work_item_id: str,
         user_id: str,
     ) -> WorkItem:
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if not isinstance(item.assignment, QueueAssignment):
             raise ValueError('claim is available only for queued tasks')
         if (
@@ -438,7 +353,8 @@ class WorkItemService:
         if item.state == WorkItemState.OPEN:
             item.state = WorkItemState.IN_PROGRESS
         item.updated_at = utcnow()
-        saved = await self._repo.save_work_item(item)
+        _ = await WorkItem.set(item)
+        saved = item
         await self._publish(saved, WORK_ITEM_UPDATED)
         return saved
 
@@ -452,7 +368,7 @@ class WorkItemService:
     ) -> WorkItemCompletion:
         if terminal_state not in TERMINAL_WORK_ITEM_STATES:
             raise ValueError(f"{terminal_state.value!r} is not a terminal state")
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if item.state in TERMINAL_WORK_ITEM_STATES:
             return WorkItemCompletion(item, newly_terminal=False)
         if (
@@ -474,7 +390,8 @@ class WorkItemService:
         if resolution is not None:
             item.resolution = resolution
         item.updated_at = utcnow()
-        saved = await self._repo.save_work_item(item)
+        _ = await WorkItem.set(item)
+        saved = item
         await self._publish(saved, WORK_ITEM_COMPLETED)
         logger.info(
             "worktracker.work_item.completed",
@@ -512,7 +429,7 @@ class WorkItemService:
         text: str = "",
         files: list[FileRef] | None = None,
     ) -> WorkItemComment:
-        item = await self.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         comment = WorkItemComment(
             comment_id=f"wic_{uuid.uuid4().hex}",
             work_item_id=work_item_id,
@@ -523,7 +440,7 @@ class WorkItemService:
             files=files or [],
             created_at=utcnow(),
         )
-        saved = await self._repo.append_comment(comment)
+        saved = await WorkItemComment.create(comment)
         await publish_work_item_events(
             [
                 work_item_platform_event(
@@ -546,9 +463,6 @@ class WorkItemService:
         )
         return saved
 
-    async def list_comments(self, company_id: str, work_item_id: str) -> list[WorkItemComment]:
-        return await self._repo.list_comments(company_id, work_item_id)
-
     # === Очереди ===
 
     async def create_queue(
@@ -560,7 +474,7 @@ class WorkItemService:
         description: str | None = None,
         creator: WorkActor | None = None,
     ) -> WorkQueue:
-        existing = await self._repo.get_queue_by_slug(company_id, slug)
+        existing = await WorkQueue.by_slug(company_id, slug)
         if existing is not None:
             raise ValueError(f"Queue with slug {slug!r} already exists")
         if creator is not None and not isinstance(creator, UserActor):
@@ -581,9 +495,9 @@ class WorkItemService:
             updated_at=now,
         )
         try:
-            saved = await self._repo.insert_queue(queue)
+            saved = await WorkQueue.create(queue)
         except IntegrityError as exc:
-            raced = await self._repo.get_queue_by_slug(company_id, slug)
+            raced = await WorkQueue.by_slug(company_id, slug)
             if raced is not None:
                 raise ValueError(f"Queue with slug {slug!r} already exists") from exc
             raise
@@ -595,7 +509,7 @@ class WorkItemService:
             )
         except Exception:
             await self._queue_access.sync_queue_deleted(saved.work_queue_id)
-            await self._repo.delete_queue(company_id, saved.work_queue_id)
+            _ = await WorkQueue.delete_for_company(company_id, saved.work_queue_id)
             raise
         return saved
 
@@ -609,11 +523,11 @@ class WorkItemService:
         await self._authz.require_can_admin(
             AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
         )
-        queue = await self._repo.get_queue(company_id, work_queue_id)
+        queue = await WorkQueue.by_id(company_id, work_queue_id)
         if queue is None:
             raise ValueError(f"Queue {work_queue_id!r} not found")
         await self._queue_access.sync_queue_deleted(work_queue_id)
-        await self._repo.delete_queue(company_id, work_queue_id)
+        _ = await WorkQueue.delete_for_company(company_id, work_queue_id)
 
     async def update_queue(
         self,
@@ -627,7 +541,7 @@ class WorkItemService:
         await self._authz.require_can_admin(
             AuthzObject.work_queue(work_queue_id), user_id=actor_user_id
         )
-        queue = await self._repo.get_queue(company_id, work_queue_id)
+        queue = await WorkQueue.by_id(company_id, work_queue_id)
         if queue is None:
             raise ValueError(f"Queue {work_queue_id!r} not found")
         if name is not None:
@@ -635,10 +549,11 @@ class WorkItemService:
         if description is not None:
             queue.description = description
         queue.updated_at = utcnow()
-        return await self._repo.save_queue(queue)
+        _ = await WorkQueue.set(queue)
+        return queue
 
     async def get_queue_by_slug(self, company_id: str, slug: str) -> WorkQueue:
-        queue = await self._repo.get_queue_by_slug(company_id, slug)
+        queue = await WorkQueue.by_slug(company_id, slug)
         if queue is None:
             raise ValueError(f"Queue with slug {slug!r} not found")
         return queue
@@ -647,7 +562,7 @@ class WorkItemService:
         viewable = set(await self._queue_access.list_viewable_queue_ids(user_id=user_id))
         return [
             queue
-            for queue in await self._repo.list_queues(company_id)
+            for queue in await WorkQueue.list_queues(company_id)
             if queue.work_queue_id in viewable
         ]
 
@@ -746,7 +661,7 @@ class WorkItemService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repo.insert_board(board)
+        return await Board.create(board)
 
     async def update_board(
         self,
@@ -756,22 +671,17 @@ class WorkItemService:
         name: str | None = None,
         columns: list[BoardColumn] | None = None,
     ) -> Board:
-        board = await self.get_board(company_id, board_id)
+        board = await Board.get_board(company_id, board_id)
         if name is not None:
             board.name = name
         if columns is not None:
             board.columns = columns
         board.updated_at = utcnow()
-        return await self._repo.save_board(board)
-
-    async def get_board(self, company_id: str, board_id: str) -> Board:
-        board = await self._repo.get_board(company_id, board_id)
-        if board is None:
-            raise ValueError(f"Board {board_id!r} not found")
+        _ = await Board.set(board)
         return board
 
     async def list_boards(self, company_id: str, *, namespace: str | None = None) -> list[Board]:
-        boards = await self._repo.list_boards(company_id, namespace=namespace)
+        boards = await Board.company_boards(company_id, namespace=namespace)
         if boards:
             return boards
         return [await self.ensure_generic_board(company_id=company_id, namespace=namespace)]
@@ -800,7 +710,7 @@ class WorkItemService:
         namespace: str | None = None,
     ) -> Board:
         """Найти доску по (namespace, board_key) или создать с дефолтными колонками."""
-        boards = await self._repo.list_boards(company_id, namespace=namespace)
+        boards = await Board.company_boards(company_id, namespace=namespace)
         for board in boards:
             if board.board_key == board_key:
                 return board
@@ -819,7 +729,7 @@ class WorkItemService:
     ) -> tuple[WorkItemState, str | None]:
         if board_id is None:
             return WorkItemState.OPEN, None
-        board = await self.get_board(company_id, board_id)
+        board = await Board.get_board(company_id, board_id)
         if not board.columns:
             return WorkItemState.OPEN, None
         if board_column_id is not None:
@@ -833,7 +743,7 @@ class WorkItemService:
     ) -> BoardColumn:
         if board_id is None:
             raise ValueError('A task without a board cannot have a column')
-        board = await self.get_board(company_id, board_id)
+        board = await Board.get_board(company_id, board_id)
         return self._find_column(board, board_column_id)
 
     @staticmethod

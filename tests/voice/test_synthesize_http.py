@@ -267,7 +267,7 @@ async def test_synthesize_upstream_connect_error_returns_503(
     )
 
     assert response.status_code == 503, response.text
-    assert "TTS-провайдер недоступен" in response.text
+    assert "TTS provider is unavailable" in response.text
 
 
 @pytest.mark.asyncio

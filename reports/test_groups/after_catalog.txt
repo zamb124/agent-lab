@@ -1,0 +1,9 @@
+== g03_crm (875s): ============ 2 failed, 1155 passed, 1 warning in 867.14s (0:14:27) =============
+== g04_sync (50s): ============================= 252 passed in 43.30s =============================
+== g05_docs (158s): ================= 703 passed, 3 warnings in 151.26s (0:02:31) ==================
+== g06_frontend (48s): ================= 359 passed, 4 skipped, 4 warnings in 40.56s ==================
+== g07_services (123s): = 1 failed, 570 passed, 3 skipped, 1 xfailed, 6 warnings in 115.68s (0:01:55) ==
+== g08_misc (49s): ================= 381 passed, 4 skipped, 2 warnings in 41.50s ==================
+== g09_flows (367s): ====== 1 failed, 1983 passed, 1 skipped, 6 warnings in 358.14s (0:05:58) =======
+== g10_realtime (224s): ================== 2 failed, 656 passed in 217.47s (0:03:37) ===================
+AFTER_CATALOG_DONE

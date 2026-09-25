@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from apps.scheduler.container import SchedulerContainer
 from apps.search_worker.tasks.task_names import (
     CRAWL_ORCHESTRATOR_TICK,
     CRAWL_RECLAIM_STALE_FETCHING,
@@ -20,6 +19,7 @@ from core.logging.attributes import (
     LOG_SCHEDULE_TASK_ID,
     LOG_TASK_NAME,
 )
+from core.scheduler import SchedulerService
 from core.scheduler.models import (
     PlatformRedisScheduleSnapshot,
     PlatformScheduleCreateRequest,
@@ -62,7 +62,7 @@ def _is_redis_cron_snapshot_current(
 
 async def _reconcile_crawl_cron_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     task: PlatformScheduledTask,
     task_name: str,
     cron: str,
@@ -72,7 +72,7 @@ async def _reconcile_crawl_cron_schedule(
     expected_payload = _canonical_crawl_task_payload(task.schedule_task_id, payload)
     recreate_schedule = False
     if task.status == ScheduledTaskStatus.PENDING:
-        snapshot = await container.scheduler_service.get_redis_snapshot(
+        snapshot = await scheduler_service.get_redis_snapshot(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=task.schedule_task_id,
         )
@@ -85,7 +85,7 @@ async def _reconcile_crawl_cron_schedule(
     if task.cron == cron and task.payload == expected_payload and not recreate_schedule:
         return task
 
-    repaired = await container.scheduler_service.reconcile_cron(
+    repaired = await scheduler_service.reconcile_cron(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         schedule_task_id=task.schedule_task_id,
         cron=cron,
@@ -109,14 +109,14 @@ def _match_all_crawl_schedules(_task: PlatformScheduledTask) -> bool:
 
 async def _ensure_crawl_cron_schedule(
     *,
-    container: SchedulerContainer,
+    scheduler_service: SchedulerService,
     task_name: str,
     cron: str,
     payload: JsonObject,
     log_label: str,
     pending_match: Callable[[PlatformScheduledTask], bool] | None = None,
 ) -> None:
-    tasks = await container.scheduler_service.list(
+    tasks = await scheduler_service.list(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         filters=PlatformScheduleFilter(
             task_name=task_name,
@@ -137,7 +137,7 @@ async def _ensure_crawl_cron_schedule(
             **{LOG_TASK_NAME: task_name},
         )
         _ = await _reconcile_crawl_cron_schedule(
-            container=container,
+            scheduler_service=scheduler_service,
             task=pending_tasks[0],
             task_name=task_name,
             cron=cron,
@@ -152,7 +152,7 @@ async def _ensure_crawl_cron_schedule(
         if task.status == ScheduledTaskStatus.PAUSED and match_task(task)
     ]
     if paused_tasks:
-        resumed = await container.scheduler_service.resume(
+        resumed = await scheduler_service.resume(
             company_id=SYSTEM_SCHEDULER_COMPANY_ID,
             schedule_task_id=paused_tasks[0].schedule_task_id,
         )
@@ -165,7 +165,7 @@ async def _ensure_crawl_cron_schedule(
             },
         )
         _ = await _reconcile_crawl_cron_schedule(
-            container=container,
+            scheduler_service=scheduler_service,
             task=resumed,
             task_name=task_name,
             cron=cron,
@@ -174,7 +174,7 @@ async def _ensure_crawl_cron_schedule(
         )
         return
 
-    created = await container.scheduler_service.create(
+    created = await scheduler_service.create(
         company_id=SYSTEM_SCHEDULER_COMPANY_ID,
         user_id=None,
         request=PlatformScheduleCreateRequest(
@@ -197,9 +197,9 @@ async def _ensure_crawl_cron_schedule(
     )
 
 
-async def ensure_search_crawl_schedules(*, container: SchedulerContainer) -> None:
+async def ensure_search_crawl_schedules(*, scheduler_service: SchedulerService) -> None:
     await _ensure_crawl_cron_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         task_name=CRAWL_ORCHESTRATOR_TICK.name,
         cron=CRAWL_ORCHESTRATOR_BACKUP_CRON,
         payload={"crawl_profile_id": CRAWL_ORCHESTRATOR_DEFAULT_PROFILE_ID},
@@ -209,7 +209,7 @@ async def ensure_search_crawl_schedules(*, container: SchedulerContainer) -> Non
         ),
     )
     await _ensure_crawl_cron_schedule(
-        container=container,
+        scheduler_service=scheduler_service,
         task_name=CRAWL_RECLAIM_STALE_FETCHING.name,
         cron=CRAWL_RECLAIM_STALE_FETCHING_CRON,
         payload={},

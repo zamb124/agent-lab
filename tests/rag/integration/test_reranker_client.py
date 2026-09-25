@@ -21,8 +21,9 @@ from core.models.identity_models import Company, User
 from core.rag.models import RAGSearchResult
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
+from core.tracing.models import Span
 from core.tracing.provider import set_tracing_enabled
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.tracing.tracer import set_tracing_service_name
 
 from .rerank_v1_rerank_stub import create_v1_rerank_stub_app, get_rerank_upstream
 
@@ -205,7 +206,7 @@ async def test_rerank_scores_length_mismatch(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.asyncio
 async def test_rerank_billing_span_pending_settlement(
-    monkeypatch: pytest.MonkeyPatch, container, unique_id: str
+    monkeypatch: pytest.MonkeyPatch, di, unique_id: str
 ) -> None:
     """При контексте user/company реранк пишет span rerank.{model} с pending_settlement."""
     setup_tracing(
@@ -217,7 +218,6 @@ async def test_rerank_billing_span_pending_settlement(
         )
     )
     set_tracing_service_name("platform-test")
-    set_span_repository(container.span_repository)
     set_tracing_enabled(True)
 
     class _MockUpstream:
@@ -251,7 +251,7 @@ async def test_rerank_billing_span_pending_settlement(
     finally:
         clear_context()
 
-    spans = await container.span_repository.get_spans_by_user(user_id)
+    spans = await Span.list_by_user_id(user_id)
     rerank_spans = [span for span in spans if span.operation_name == "rerank.bge-test"]
     assert len(rerank_spans) == 1, [span.operation_name for span in spans]
     attributes = rerank_spans[0].attributes

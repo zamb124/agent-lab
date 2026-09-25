@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
 from core.files.retention import FileRetentionKind
@@ -15,10 +16,9 @@ from core.files.retention_promote import promote_file_retention_record
 def _sample_record(**updates: object) -> FileRecord:
     base = FileRecord(
         file_id="file_test123",
-        provider="minio",
-        original_name="doc.txt",
+                original_name="doc.txt",
         s3_key="files/file_test123_ab.txt",
-        s3_bucket="default",
+        storage_id=PLATFORM_STORAGE_ID,
         content_type="text/plain",
         file_size=10,
         company_id="company_test",
@@ -59,14 +59,12 @@ def test_promote_office_document_idempotent():
 
 
 @pytest.mark.asyncio
-async def test_files_service_promote_retention_persists(app, unique_id: str):
+async def test_files_service_promote_retention_persists(app, unique_id: str, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     from core.files.create_spec import FileCreateSpec
     from tests.fixtures.s3 import require_s3_configured
 
     require_s3_configured()
-    container = get_frontend_container()
     spec = FileCreateSpec.model_validate(
         {
             "source_kind": "platform_auxiliary",
@@ -74,7 +72,7 @@ async def test_files_service_promote_retention_persists(app, unique_id: str):
             "retention": {"kind": "platform_default"},
         }
     )
-    record = await container.files_service.create(
+    record = await frontend_di.files_service.create(
         spec,
         f"promote-{unique_id}".encode("utf-8"),
         original_name=f"promote-{unique_id}.txt",
@@ -82,7 +80,7 @@ async def test_files_service_promote_retention_persists(app, unique_id: str):
     )
     assert record.expires_at is not None
 
-    promoted = await container.files_service.promote_retention(
+    promoted = await frontend_di.files_service.promote_retention(
         record.file_id,
         retention_kind=FileRetentionKind.OFFICE_DOCUMENT,
         source_kind=FileSourceKind.OFFICE_DOCUMENT,
@@ -90,6 +88,6 @@ async def test_files_service_promote_retention_persists(app, unique_id: str):
     assert promoted.expires_at is None
     assert promoted.retention_kind == FileRetentionKind.OFFICE_DOCUMENT.value
 
-    loaded = await container.files_service.get(record.file_id)
+    loaded = await frontend_di.files_service.get(record.file_id)
     assert loaded.expires_at is None
     assert loaded.retention_kind == FileRetentionKind.OFFICE_DOCUMENT.value

@@ -33,7 +33,7 @@ async def test_fill_docx_template_no_files() -> None:
         session_id="flow:c1",
         files=[],
     )
-    with pytest.raises(ValueError, match="state.files пуст"):
+    with pytest.raises(ValueError, match="state.files is empty"):
         _ = await fill_docx_template.run(
             {"variables": {}, "output_original_name": "out.docx"},
             state,

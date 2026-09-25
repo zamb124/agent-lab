@@ -2,6 +2,7 @@
 Google Workspace auth resolver + company credential API hitting the API emulator.
 """
 
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -9,8 +10,8 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
-from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.authz.errors import AuthzDenied
 from core.authz.service import AuthzService
@@ -28,12 +29,18 @@ from core.integrations.constants import (
     TOKEN_TYPE_SERVICE_ACCOUNT,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 from core.models import Company, Context, User
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 from tests.fixtures.google_api_emulator import GoogleApiEmulatorHandle
+
+
+def _google_workspace_client(di: FlowsDi) -> GoogleWorkspaceClient:
+    return GoogleWorkspaceClient(
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
+    )
 
 
 class _StubAuthz:
@@ -68,18 +75,14 @@ def _as_authz(stub: _StubAuthz) -> AuthzService:
     return stub  # type: ignore[return-value]
 
 
-@pytest.fixture()
-def credential_repository(app: object) -> IntegrationCredentialRepository:
+@pytest.fixture(autouse=True)
+def credential_repository(app: object) -> None:
     _ = app
-    return IntegrationCredentialRepository(db_url=get_settings().database.shared_url)
 
 
 @pytest.fixture()
-def company_cred_service(
-    credential_repository: IntegrationCredentialRepository,
-) -> CompanyIntegrationCredentialService:
+def company_cred_service() -> CompanyIntegrationCredentialService:
     return CompanyIntegrationCredentialService(
-        repository=credential_repository,
         google_workspace_config=get_settings().google_workspace,
         authz=_as_authz(_StubAuthz()),
     )
@@ -111,12 +114,11 @@ def _make_state(user_id: str) -> ExecutionState:
 
 
 async def _cleanup_google(
-    repository: IntegrationCredentialRepository,
     company_id: str,
     user_id: str,
 ) -> None:
     for service in ("workspace", "docs", "sheets"):
-        await repository.delete_by_user_provider_service(
+        await IntegrationCredential.delete_by_user_provider_service(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider.GOOGLE,
@@ -174,17 +176,17 @@ async def test_variables_sa_creates_spreadsheet_on_emulator(
 @pytest.mark.asyncio
 async def test_resolve_user_workspace_then_create(
     google_api_emulator: GoogleApiEmulatorHandle,
-    credential_repository: IntegrationCredentialRepository,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+        di: FlowsDi,
+    ) -> None:
     company_id = f"co-ws-{unique_id}"
     user_id = f"user-ws-{unique_id}"
-    await _cleanup_google(credential_repository, company_id, user_id)
+    await _cleanup_google(company_id, user_id)
     _enable_google_oauth(monkeypatch)
-    _ = get_container()
+    runtime = di
     now = datetime.now(timezone.utc)
-    await credential_repository.upsert(
+    await IntegrationCredential.upsert_by_credential_id(
         IntegrationCredential(
             credential_id=f"cred-ws-{unique_id}",
             company_id=company_id,
@@ -203,30 +205,30 @@ async def test_resolve_user_workspace_then_create(
     )
     set_context(_admin_context(company_id, user_id))
     try:
-        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
+        material = await _google_workspace_client(runtime).resolve_auth(_make_state(user_id))
         assert material.access_token == google_api_emulator.oauth_token
         client = GoogleSheetsClient(access_token=material.access_token)
         created = await client.create_spreadsheet(f"ws-cred-{unique_id}")
         assert created.spreadsheet_id.startswith("ss_")
     finally:
         clear_context()
-        await _cleanup_google(credential_repository, company_id, user_id)
+        await _cleanup_google(company_id, user_id)
 
 
 @pytest.mark.asyncio
 async def test_resolve_prior_docs_then_create(
     google_api_emulator: GoogleApiEmulatorHandle,
-    credential_repository: IntegrationCredentialRepository,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+        di: FlowsDi,
+    ) -> None:
     company_id = f"co-docs-{unique_id}"
     user_id = f"user-docs-{unique_id}"
-    await _cleanup_google(credential_repository, company_id, user_id)
+    await _cleanup_google(company_id, user_id)
     _enable_google_oauth(monkeypatch)
-    _ = get_container()
+    runtime = di
     now = datetime.now(timezone.utc)
-    await credential_repository.upsert(
+    await IntegrationCredential.upsert_by_credential_id(
         IntegrationCredential(
             credential_id=f"cred-docs-{unique_id}",
             company_id=company_id,
@@ -245,32 +247,30 @@ async def test_resolve_prior_docs_then_create(
     )
     set_context(_admin_context(company_id, user_id))
     try:
-        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
+        material = await _google_workspace_client(runtime).resolve_auth(_make_state(user_id))
         assert material.access_token == google_api_emulator.oauth_token
         client = GoogleSheetsClient(access_token=material.access_token)
         created = await client.create_spreadsheet(f"docs-prior-{unique_id}")
         assert created.spreadsheet_id.startswith("ss_")
     finally:
         clear_context()
-        await _cleanup_google(credential_repository, company_id, user_id)
+        await _cleanup_google(company_id, user_id)
 
 
 @pytest.mark.asyncio
 async def test_resolve_company_sa_then_create(
     google_api_emulator: GoogleApiEmulatorHandle,
-    credential_repository: IntegrationCredentialRepository,
     company_cred_service: CompanyIntegrationCredentialService,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+        di: FlowsDi,
+    ) -> None:
     company_id = f"co-sa-{unique_id}"
     user_id = f"user-sa-{unique_id}"
-    await _cleanup_google(credential_repository, company_id, user_id)
-    await _cleanup_google(
-        credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-    )
+    await _cleanup_google(company_id, user_id)
+    await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
     _enable_google_oauth(monkeypatch)
-    _ = get_container()
+    runtime = di
     set_context(_admin_context(company_id, user_id))
     try:
         _ = await company_cred_service.upsert_google_workspace_service_account(
@@ -280,7 +280,7 @@ async def test_resolve_company_sa_then_create(
                 impersonate_email="user@example.com",
             ),
         )
-        material = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
+        material = await _google_workspace_client(runtime).resolve_auth(_make_state(user_id))
         assert material.credentials_json is not None
         assert material.subject == "user@example.com"
         assert material.access_token is None
@@ -292,32 +292,28 @@ async def test_resolve_company_sa_then_create(
         assert created.spreadsheet_id.startswith("ss_")
     finally:
         clear_context()
-        await _cleanup_google(credential_repository, company_id, user_id)
-        await _cleanup_google(
-            credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(company_id, user_id)
+        await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
 
 @pytest.mark.asyncio
 async def test_resolve_empty_raises_oauth_interrupt(
     google_api_emulator: GoogleApiEmulatorHandle,
-    credential_repository: IntegrationCredentialRepository,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+        di: FlowsDi,
+    ) -> None:
     _ = google_api_emulator
     company_id = f"co-empty-{unique_id}"
     user_id = f"user-empty-{unique_id}"
-    await _cleanup_google(credential_repository, company_id, user_id)
-    await _cleanup_google(
-        credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-    )
+    await _cleanup_google(company_id, user_id)
+    await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
     _enable_google_oauth(monkeypatch)
-    _ = get_container()
+    runtime = di
     set_context(_admin_context(company_id, user_id))
     try:
         with pytest.raises(FlowInterrupt) as exc_info:
-            _ = await GoogleWorkspaceClient().resolve_auth(_make_state(user_id))
+            _ = await _google_workspace_client(runtime).resolve_auth(_make_state(user_id))
         body = exc_info.value.body
         assert body.kind == InterruptKind.OAUTH_REQUIRED
         assert isinstance(body, OAuthInterrupt)
@@ -364,7 +360,6 @@ async def test_company_api_put_get_delete_and_system_put_forbidden(
     flows_client: httpx.AsyncClient,
     auth_headers_system: dict[str, str],
     google_api_emulator: GoogleApiEmulatorHandle,
-    credential_repository: IntegrationCredentialRepository,
     unique_id: str,
 ) -> None:
     put_system = await flows_client.put(
@@ -385,11 +380,8 @@ async def test_company_api_put_get_delete_and_system_put_forbidden(
     assert "configured" in get_system.json()
 
     company_id = f"co-api-{unique_id}"
-    await _cleanup_google(
-        credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-    )
+    await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
     service = CompanyIntegrationCredentialService(
-        repository=credential_repository,
         google_workspace_config=get_settings().google_workspace,
         authz=_as_authz(_StubAuthz()),
     )
@@ -408,9 +400,7 @@ async def test_company_api_put_get_delete_and_system_put_forbidden(
         assert deleted is True
     finally:
         clear_context()
-        await _cleanup_google(
-            credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
     reconcile = await flows_client.post(
         "/flows/api/v1/integrations/google/workspace/system/reconcile",

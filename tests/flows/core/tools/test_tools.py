@@ -1,7 +1,10 @@
 """Тесты для tools."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
+from apps.flows.src.models import ToolReference
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import BaseTool
 from apps.flows.tools.misc.agent_session_tools import ask_user
@@ -85,19 +88,17 @@ class TestAskUserTool:
         assert exc_info.value.question == "Как вас зовут?"
 
     @pytest.mark.asyncio
-    async def test_registry_builtin_ids_use_repository_templates(self, app):
+    async def test_registry_builtin_ids_use_repository_templates(self, app, di):
         """Builtin ids resolve to registered platform tools unless explicit inline code is supplied."""
-        from apps.flows.src.container import get_container
         from apps.flows.src.tools.code_tool import CodeTool
         from apps.flows.src.tools.decorator import FunctionTool
 
-        container = get_container()
         for tool_id in ("ask_user", "calculator"):
-            tool = await container.tool_registry.create_tool({"tool_id": tool_id})
+            tool = await di.tool_registry.create_tool({"tool_id": tool_id})
             assert isinstance(tool, FunctionTool)
             assert tool.name == tool_id
 
-            legacy_inline = await container.tool_registry.create_tool(
+            legacy_inline = await di.tool_registry.create_tool(
                 {
                     "tool_id": tool_id,
                     "code": f"async def {tool_id}(args, state) -> JsonDict:\n"
@@ -109,22 +110,19 @@ class TestAskUserTool:
             assert legacy_inline.name == tool_id
 
     @pytest.mark.asyncio
-    async def test_registry_create_tool_from_repository_without_builtin(self, app, unique_id):
+    async def test_registry_create_tool_from_repository_without_builtin(self, app, unique_id, di):
         """Если tool_id не зарегистрирован как builtin, подтягивается шаблон из tool_repository → CodeTool."""
-        from apps.flows.src.container import get_container
-        from apps.flows.src.models import ToolReference
         from apps.flows.src.tools.code_tool import CodeTool
 
-        container = get_container()
         tid = f"repo_only_{unique_id}"
-        await container.tool_repository.set(
+        await ToolReference.set(
             ToolReference(
                 tool_id=tid,
                 code="async def run(args, state):\n    return 'from_repo'",
                 parameters_schema=EMPTY_PARAMETERS_SCHEMA,
             )
         )
-        tool = await container.tool_registry.create_tool({"tool_id": tid})
+        tool = await di.tool_registry.create_tool({"tool_id": tid})
         assert isinstance(tool, CodeTool)
         assert tool.name == tid
 
@@ -136,7 +134,7 @@ class TestToolRegistryPolicy:
         from apps.flows.src.tools.code_tool import CodeTool
         from apps.flows.src.tools.registry import ToolRegistry
 
-        reg = ToolRegistry()
+        reg = ToolRegistry(flow_factory=MagicMock())
         ct = CodeTool(
             tool_id="ephemeral",
             code="async def run(args, state):\n    return {}",

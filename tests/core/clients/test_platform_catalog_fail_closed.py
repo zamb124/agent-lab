@@ -110,7 +110,7 @@ async def test_list_models_unconfigured_raises(provider: str) -> None:
     else:
         adapter = OpenAICompatibleModelCatalogAdapter(provider, settings)
     assert adapter.is_configured() is False
-    with pytest.raises(ValueError, match="не настроен"):
+    with pytest.raises(ValueError, match="model provider is not configured"):
         await adapter.list_models(probe_embeddings=False)
 
 
@@ -144,7 +144,7 @@ def test_nvidia_adapter_is_configured_with_api_keys_only() -> None:
 
 def test_configured_llm_provider_unknown_raises() -> None:
     adapter = _UnknownProviderAdapter(_unconfigured_settings())
-    with pytest.raises(ValueError, match="не поддержан для OpenAI-совместимого API"):
+    with pytest.raises(ValueError, match="is not supported for the OpenAI-compatible API"):
         adapter._configured_llm_provider()
 
 
@@ -195,7 +195,7 @@ async def test_list_models_http_error_raises_adapter_error(status: int) -> None:
 
 @pytest.mark.asyncio
 async def test_sync_empty_catalog_does_not_delete_existing_records(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     server = _JsonGetServer(status=200, payload={"data": []})
@@ -209,7 +209,7 @@ async def test_sync_empty_catalog_does_not_delete_existing_records(
         input_modalities=("text",),
         output_modalities=("text",),
     )
-    await container.ai_model_catalog_repository.set(existing)
+    await AIModelRecord.set(existing)
     try:
         flows_set_settings(
             old_settings.model_copy(
@@ -226,9 +226,9 @@ async def test_sync_empty_catalog_does_not_delete_existing_records(
                 }
             )
         )
-        with pytest.raises(RuntimeError, match="не вернул моделей"):
-            await container.llm_models_service.sync_models_by_provider("groq")
-        stored = await container.ai_model_catalog_repository.get_provider_model("groq", model_id)
+        with pytest.raises(RuntimeError, match="did not return models"):
+            await di.llm_models_service.sync_models_by_provider("groq")
+        stored = await AIModelRecord.get_provider_model("groq", model_id)
         assert stored is not None
         assert stored.model_id == model_id
     finally:
@@ -238,7 +238,7 @@ async def test_sync_empty_catalog_does_not_delete_existing_records(
 
 @pytest.mark.asyncio
 async def test_sync_http_500_does_not_empty_catalog(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     server = _JsonGetServer(status=500, payload={"error": "fail"})
@@ -252,7 +252,7 @@ async def test_sync_http_500_does_not_empty_catalog(
         input_modalities=("text",),
         output_modalities=("text",),
     )
-    await container.ai_model_catalog_repository.set(existing)
+    await AIModelRecord.set(existing)
     try:
         flows_set_settings(
             old_settings.model_copy(
@@ -270,8 +270,8 @@ async def test_sync_http_500_does_not_empty_catalog(
             )
         )
         with pytest.raises(AIProviderAdapterError, match="HTTP 500"):
-            await container.llm_models_service.sync_models_by_provider("groq")
-        stored = await container.ai_model_catalog_repository.get_provider_model("groq", model_id)
+            await di.llm_models_service.sync_models_by_provider("groq")
+        stored = await AIModelRecord.get_provider_model("groq", model_id)
         assert stored is not None
         assert stored.model_id == model_id
     finally:

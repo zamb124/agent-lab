@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextvars
 from typing import TYPE_CHECKING
 
+from core.context.scope import set_active_company_id
 from core.types import RuntimeChannel
 
 if TYPE_CHECKING:
@@ -31,6 +32,8 @@ def set_context(context: "Context") -> contextvars.Token["Context | None"]:
     Возвращает token для ``reset_context``: HTTP/временный scope не затирает
     внешний Context (in-process вызов после ASGI).
     """
+    company = context.active_company
+    set_active_company_id(company.company_id if company is not None else None)
     return _context.set(context)
 
 
@@ -100,6 +103,9 @@ def clear_context() -> None:
 def reset_context(token: contextvars.Token["Context | None"]) -> None:
     """Восстанавливает Context, который был до соответствующего ``set_context``."""
     _context.reset(token)
+    context = _context.get()
+    company = context.active_company if context is not None else None
+    set_active_company_id(company.company_id if company is not None else None)
 
 
 def set_current_channel(channel: RuntimeChannel) -> None:

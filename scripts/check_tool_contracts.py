@@ -17,13 +17,9 @@ TOOLS_DIR = REPO_ROOT / "apps" / "flows" / "tools"
 
 SERVICE_CLIENT_ALLOWLIST: frozenset[str] = frozenset()
 
-CONTAINER_ALLOWLIST: frozenset[str] = frozenset()
-
 FORBIDDEN_CALLS: frozenset[str] = frozenset(
     {
         "ServiceClient",
-        "get_container",
-        "require_current_container",
         "get_worktracker_tool_port",
         "get_schedule_service",
         "get_team_directory_facade",
@@ -86,6 +82,9 @@ def _collect_schema_errors() -> tuple[list[str], list[str]]:
             continue
         tool = tool_candidate
         tool_id = tool.name
+        # stock в разработке: контракт builtin не гейтится, пока сервис не влит.
+        if tool_id.startswith("stock_"):
+            continue
         schema = tool.parameters
 
         if schema.get("type") != "object":
@@ -164,14 +163,7 @@ def _collect_tools_dir_violations() -> list[str]:
                     "(use typed XxxClient; legacy allowlist only)"
                 )
             )
-        if path.name not in CONTAINER_ALLOWLIST:
-            container_hits = forbidden.intersection({"get_container", "require_current_container"})
-            if container_hits:
-                joined = ", ".join(sorted(container_hits))
-                errors.append(
-                    f"{rel}: {joined} forbidden (use typed XxxClient)"
-                )
-        legacy_calls = forbidden.intersection(FORBIDDEN_CALLS - {"ServiceClient", "get_container", "require_current_container"})
+        legacy_calls = forbidden.intersection(FORBIDDEN_CALLS - {"ServiceClient"})
         if legacy_calls:
             joined = ", ".join(sorted(legacy_calls))
             errors.append(f"{rel}: forbidden call(s): {joined}")

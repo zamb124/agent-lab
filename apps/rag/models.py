@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pydantic import Field
 
+from core.db.models.rag import DocumentProcessingStatus
 from core.models import StrictBaseModel
 from core.pagination import ListResponse
-from core.rag.models import DocumentProcessingStatus, RAGMetadata, RAGSearchResult
+from core.rag.models import RAGMetadata, RAGSearchResult
 
 
 class NamespaceCreateRequest(StrictBaseModel):

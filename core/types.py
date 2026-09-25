@@ -18,7 +18,7 @@ from typing import (
 )
 
 from pydantic import JsonValue as PydanticJsonValue
-from pydantic import TypeAdapter, ValidationError
+from pydantic import SerializerFunctionWrapHandler, TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     JsonScalar: TypeAlias = str | int | float | bool | None
@@ -135,6 +135,7 @@ MigrationDatabaseUrlKey: TypeAlias = Literal[
     "secrets_url",
     "wiki_url",
     "realtime_url",
+    "stock_url",
 ]
 PushSubscriptionKeys: TypeAlias = dict[str, str]
 TaskLabelMap: TypeAlias = dict[str, str]
@@ -271,6 +272,15 @@ def require_json_object(value: object, field_name: str = "value") -> JsonObject:
         return cast(JsonObject, _JSON_OBJECT_ADAPTER.validate_python(value))
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON object") from exc
+
+
+def require_serializer_json_object(
+    handler: SerializerFunctionWrapHandler,
+    instance: object,
+    field_name: str,
+) -> JsonObject:
+    """JSON object из wrap-сериализатора Pydantic."""
+    return require_json_object(cast(object, handler(instance)), field_name)
 
 
 def parse_json_object(data: str | bytes, field_name: str = "value") -> JsonObject:

@@ -14,8 +14,8 @@ from core.authz.types import AuthzObjectType, AuthzRelation
 
 
 @pytest.mark.asyncio
-async def test_platform_admin_views_restricted_flow_via_fga(container, unique_id) -> None:
-    authz = container.authz_service
+async def test_platform_admin_views_restricted_flow_via_fga(di, unique_id) -> None:
+    authz = di.authz_service
     access = FlowAccessService(authz)
     admin_id = f"admin_{unique_id}"
     owner_id = f"owner_{unique_id}"
@@ -59,8 +59,8 @@ async def test_platform_admin_views_restricted_flow_via_fga(container, unique_id
 
 
 @pytest.mark.asyncio
-async def test_group_viewer_can_view_flow(container, unique_id) -> None:
-    authz = container.authz_service
+async def test_group_viewer_can_view_flow(di, unique_id) -> None:
+    authz = di.authz_service
     access = FlowAccessService(authz)
     user_id = f"mgr_{unique_id}"
     flow_id = f"flow_{unique_id}"
@@ -100,9 +100,9 @@ async def test_group_viewer_can_view_flow(container, unique_id) -> None:
 
 @pytest.mark.asyncio
 async def test_cross_company_group_does_not_view_foreign_flow(
-    container, unique_id
+    di, unique_id
 ) -> None:
-    authz = container.authz_service
+    authz = di.authz_service
     access = FlowAccessService(authz)
     company_a = f"co_a_{unique_id}"
     company_b = f"co_b_{unique_id}"
@@ -160,13 +160,13 @@ async def test_cross_company_group_does_not_view_foreign_flow(
 
 
 @pytest.mark.asyncio
-async def test_empty_permission_company_visible(container, unique_id) -> None:
-    access = FlowAccessService(container.authz_service)
+async def test_empty_permission_company_visible(di, unique_id) -> None:
+    access = FlowAccessService(di.authz_service)
     flow_id = f"flow_{unique_id}"
     company_id = f"co_{unique_id}"
     member_id = f"member_{unique_id}"
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=member_id,
         roles=["member"],
@@ -187,14 +187,14 @@ async def test_empty_permission_company_visible(container, unique_id) -> None:
     await access.sync_flow_saved(
         config, company_id=company_id, owner_user_id=f"owner_{unique_id}"
     )
-    assert await container.authz_service.can_view(
+    assert await di.authz_service.can_view(
         AuthzObject.flow(flow_id, company_id=company_id), user_id=member_id
     )
 
 
 @pytest.mark.asyncio
-async def test_sync_flow_saved_admin_group_is_unscoped(container, unique_id) -> None:
-    authz = container.authz_service
+async def test_sync_flow_saved_admin_group_is_unscoped(di, unique_id) -> None:
+    authz = di.authz_service
     access = FlowAccessService(authz)
     flow_id = f"flow_{unique_id}"
     company_id = f"co_{unique_id}"
@@ -226,9 +226,9 @@ async def test_sync_flow_saved_admin_group_is_unscoped(container, unique_id) -> 
 
 @pytest.mark.asyncio
 async def test_same_flow_id_two_companies_keep_independent_tuples(
-    container, unique_id
+    di, unique_id
 ) -> None:
-    authz = container.authz_service
+    authz = di.authz_service
     access = FlowAccessService(authz)
     company_a = f"co_a_{unique_id}"
     company_b = f"co_b_{unique_id}"
@@ -284,9 +284,9 @@ async def test_same_flow_id_two_companies_keep_independent_tuples(
 
 @pytest.mark.asyncio
 async def test_list_viewable_flow_ids_rejects_unscoped_object_keys(
-    container, unique_id
+    di, unique_id
 ) -> None:
-    authz = container.authz_service
+    authz = di.authz_service
     access = FlowAccessService(authz)
     company_id = f"co_{unique_id}"
     member_id = f"mem_{unique_id}"

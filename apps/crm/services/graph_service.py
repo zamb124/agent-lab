@@ -12,10 +12,7 @@ import heapq
 from datetime import UTC, datetime
 from typing import TypedDict
 
-from apps.crm.db.models import CRMEntity, Relationship
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.relationship_type_repository import RelationshipTypeRepository
+from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.models.graph import (
     GraphEdge,
     GraphNode,
@@ -23,10 +20,12 @@ from apps.crm.models.graph import (
     RelatedEntitiesResponse,
     ShortestPathResponse,
 )
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
-from core.context import get_context
+from core.context import get_context, require_active_company
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 
@@ -88,15 +87,9 @@ class GraphService:
 
     def __init__(
         self,
-        relationship_repo: RelationshipRepository,
-        relationship_type_repo: RelationshipTypeRepository,
-        entity_repo: EntityRepository,
         entity_access: CrmEntityAccessService,
         authz: AuthzService,
     ) -> None:
-        self._relationship_repo: RelationshipRepository = relationship_repo
-        self._relationship_type_repo: RelationshipTypeRepository = relationship_type_repo
-        self._entity_repo: EntityRepository = entity_repo
         self._entity_access: CrmEntityAccessService = entity_access
         self._authz: AuthzService = authz
 
@@ -131,7 +124,7 @@ class GraphService:
         if created_at_from is None and created_at_to is None:
             return
         filters = self._timeline_filters_for_count(created_at_from, created_at_to)
-        count = await self._entity_repo.count_all(
+        count = await CRMEntity.count_for_filter(
             namespace=namespace,
             filters=filters,
             filter_field_types=_TIMELINE_ENTITY_COUNT_FILTER_FIELD_TYPES,
@@ -154,7 +147,7 @@ class GraphService:
         await self._authz.require_can_view(
             AuthzObject.crm_entity(entity_id), user_id=user_id
         )
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if entity is None:
             raise ValueError(f"Entity not found: {entity_id}")
         return entity
@@ -253,7 +246,7 @@ class GraphService:
                 logger.warning("crm.influence.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
-            batch_edges = await self._relationship_repo.get_neighbors(
+            batch_edges = await Relationship.neighbors_for_entities(
                 current_wave,
                 cross_company=True,
                 relationship_namespace=rel_namespace,
@@ -284,7 +277,7 @@ class GraphService:
             if not candidate_ids:
                 break
 
-            loaded_entities = await self._entity_repo.get_by_ids(list(candidate_ids))
+            loaded_entities = await CRMEntity.list_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
 
             next_wave: list[str] = []
@@ -359,7 +352,7 @@ class GraphService:
         entities_dict: dict[str, CRMEntity] = {}
         edges_dict: dict[str, Relationship] = {}
 
-        seed_entities = await self._entity_repo.get_by_ids(entity_ids)
+        seed_entities = await CRMEntity.list_by_ids(entity_ids)
         readable_seeds = await self._entity_access.batch_filter_readable(
             seed_entities,
             user_id,
@@ -394,7 +387,7 @@ class GraphService:
                 logger.warning("crm.overview.graph.expansion.stopped.visited", visited=len(visited), cap=INFLUENCE_GRAPH_MAX_NODES)
                 break
 
-            batch_edges = await self._relationship_repo.get_neighbors(
+            batch_edges = await Relationship.neighbors_for_entities(
                 current_wave,
                 cross_company=True,
                 relationship_namespace=rel_namespace,
@@ -422,7 +415,7 @@ class GraphService:
             if not candidate_ids:
                 break
 
-            loaded_entities = await self._entity_repo.get_by_ids(list(candidate_ids))
+            loaded_entities = await CRMEntity.list_by_ids(list(candidate_ids))
             entities_by_id = {e.entity_id: e for e in loaded_entities}
 
             next_wave: list[str] = []
@@ -598,11 +591,10 @@ class GraphService:
         _ = await self._require_viewable_entity(entity_id, user_id)
 
         direction_map = await self._build_direction_map()
-        relationships = await self._relationship_repo.get_by_entity_for_graph(
-            entity_id,
-            cross_company=True,
-            relationship_namespace=rel_namespace,
-        )
+        touching = Relationship.touching(entity_id)
+        if rel_namespace is not None and rel_namespace.strip() != "":
+            touching = touching.filter(namespace=rel_namespace)
+        relationships = await touching.all()
 
         if relationship_type:
             relationships = [r for r in relationships if r.relationship_type == relationship_type]
@@ -636,7 +628,7 @@ class GraphService:
 
         all_neighbor_ids = incoming_ids | outgoing_ids | undirected_ids
 
-        loaded_entities = await self._entity_repo.get_by_ids(list(all_neighbor_ids))
+        loaded_entities = await CRMEntity.list_by_ids(list(all_neighbor_ids))
         neighbors_dict: dict[str, CRMEntity] = {}
         for neighbor in loaded_entities:
             if self._is_entity_in_time_window(neighbor, timeline_from, timeline_to):
@@ -675,9 +667,10 @@ class GraphService:
 
     async def _build_direction_map(self) -> _RelationshipDirectionMap:
         """Строит карту направленности для быстрого доступа."""
-        relationship_types = await self._relationship_type_repo.list_all_by_company(
-            include_system=True
-        )
+        relationship_types = await RelationshipType.in_company(
+            require_active_company().company_id,
+            include_system=True,
+        ).order_by("type_id").all()
 
         direction_map: _RelationshipDirectionMap = {}
         for rt in relationship_types:
@@ -897,7 +890,7 @@ class GraphService:
                         prefetch_ids.add(nid)
                         if len(prefetch_ids) >= DIJKSTRA_PREFETCH_BATCH:
                             break
-                batch = await self._relationship_repo.get_neighbors(
+                batch = await Relationship.neighbors_for_entities(
                     list(prefetch_ids),
                     cross_company=True,
                     relationship_namespace=relationship_namespace,
@@ -921,7 +914,7 @@ class GraphService:
                     unknown_neighbors.add(neighbor_id)
 
             if unknown_neighbors:
-                loaded = await self._entity_repo.get_by_ids(list(unknown_neighbors))
+                loaded = await CRMEntity.list_by_ids(list(unknown_neighbors))
                 for e in loaded:
                     entities_cache[e.entity_id] = e
                 for nid in unknown_neighbors:

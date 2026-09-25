@@ -61,7 +61,7 @@ class TestDailySummary:
         today = f"2096-05-{hash(unique_id) % 28 + 1:02d}"
 
         for i in range(3):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": "note",
                 "entity_subtype": "meeting",
                 "name": f"Событие {i} {unique_id}",
@@ -258,7 +258,7 @@ class TestDailySummary:
             f"/crm/api/v1/entities/{entity_id}",
             headers=auth_headers_system,
         )
-        assert delete_response.status_code == 200
+        assert delete_response.status_code == 204
 
         stale_response = await crm_client.post(
             "/crm/api/v1/entities/daily-summary",

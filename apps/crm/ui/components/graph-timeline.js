@@ -8,7 +8,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { clampTimelinePercents } from '../utils/crm-timeline-range.js';
+import { clampTimelinePercents } from '../_helpers/crm-timeline-range.js';
 
 export class CRMGraphTimeline extends PlatformElement {
     static i18nNamespace = 'crm';

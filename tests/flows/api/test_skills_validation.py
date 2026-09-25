@@ -12,12 +12,14 @@
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
+
 
 @pytest.mark.asyncio
 class TestBranchValidationAndPersistence:
     """Тесты валидации и сохранения веток."""
 
-    async def test_create_branch_saves_variables(self, client, container, unique_id):
+    async def test_create_branch_saves_variables(self, client, di, unique_id):
         """Создание branch сохраняет переменные."""
         flow_id = f"test_agent_vars_{unique_id}"
         base_agent = {
@@ -41,18 +43,18 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201, resp.text
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         assert agent is not None
         assert branch_id in agent.branches
         branch = agent.branches[branch_id]
         assert branch.variables["branch_var"].value == "branch_value"
         assert branch.variables["shared_var"].value == "from_branch"
-        effective = container.flow_factory.apply_branch(agent, branch_id)
+        effective = di.flow_factory.apply_branch(agent, branch_id)
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["branch_var"] == "branch_value"
         assert effective["variables"]["shared_var"] == "from_branch"
 
-    async def test_create_branch_allows_company_variable_aliases(self, client, container, unique_id):
+    async def test_create_branch_allows_company_variable_aliases(self, client, di, unique_id):
         """Создание ветки не падает на variables.*.value = @var:company_secret."""
         flow_id = f"test_agent_company_alias_{unique_id}"
         base_agent = {
@@ -86,11 +88,11 @@ class TestBranchValidationAndPersistence:
             },
         )
         assert resp.status_code == 201, resp.text
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         assert agent is not None
         assert branch_id in agent.branches
 
-    async def test_create_branch_saves_node_properties(self, client, container, unique_id):
+    async def test_create_branch_saves_node_properties(self, client, di, unique_id):
         """Создание branch сохраняет свойства нод."""
         flow_id = f"test_agent_props_{unique_id}"
         base_agent = {
@@ -124,17 +126,17 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert branch.nodes["main"]["prompt"] == "Branch prompt"
         assert branch.nodes["main"]["llm"]["temperature"] == 0.1
         assert branch.nodes["main"]["llm"]["max_tokens"] == 1000
-        effective = container.flow_factory.apply_branch(agent, branch_id)
+        effective = di.flow_factory.apply_branch(agent, branch_id)
         assert effective["nodes"]["main"]["prompt"] == "Branch prompt"
         assert effective["nodes"]["main"]["llm"]["temperature"] == 0.1
         assert effective["nodes"]["main"]["llm"]["max_tokens"] == 1000
 
-    async def test_create_branch_saves_nodes(self, client, container, unique_id):
+    async def test_create_branch_saves_nodes(self, client, di, unique_id):
         """Создание branch сохраняет ноды."""
         flow_id = f"test_agent_nodes_{unique_id}"
         base_agent = {
@@ -173,20 +175,20 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert branch.entry == "branch_main"
         assert "branch_main" in branch.nodes
         assert "branch_helper" in branch.nodes
         assert branch.nodes["branch_main"]["type"] == "code"
         assert "state['path'] = 'branch'" in branch.nodes["branch_main"]["code"]
-        effective = container.flow_factory.apply_branch(agent, branch_id)
+        effective = di.flow_factory.apply_branch(agent, branch_id)
         assert effective["entry"] == "branch_main"
         assert "branch_main" in effective["nodes"]
         assert "branch_helper" in effective["nodes"]
         assert "main" not in effective["nodes"]
 
-    async def test_create_branch_saves_conditions(self, client, container, unique_id):
+    async def test_create_branch_saves_conditions(self, client, di, unique_id):
         """Создание branch сохраняет условия (conditions) в edges."""
         flow_id = f"test_agent_cond_{unique_id}"
         base_agent = {
@@ -245,7 +247,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert len(branch.edges) == 4
         conditional_edges = [e for e in branch.edges if e.condition is not None]
@@ -266,14 +268,14 @@ class TestBranchValidationAndPersistence:
         assert edge_to_b.condition.variable == "value"
         assert edge_to_b.condition.operator == "<="
         assert edge_to_b.condition.value == 5
-        effective = container.flow_factory.apply_branch(agent, branch_id)
+        effective = di.flow_factory.apply_branch(agent, branch_id)
         effective_edge_to_a = next(
             (e for e in effective["edges"] if e.from_node == "main" and e.to_node == "branch_a")
         )
         assert effective_edge_to_a.condition is not None
         assert effective_edge_to_a.condition.type == "simple"
 
-    async def test_update_branch_updates_variables(self, client, container, unique_id):
+    async def test_update_branch_updates_variables(self, client, di, unique_id):
         """Обновление branch обновляет переменные."""
         flow_id = f"test_agent_update_vars_{unique_id}"
         base_agent = {
@@ -304,13 +306,13 @@ class TestBranchValidationAndPersistence:
             f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data
         )
         assert update_resp.status_code == 200
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Updated Branch"
         assert branch.variables["branch_var"].value == "updated"
         assert branch.variables["new_var"].value == "new_value"
 
-    async def test_create_branch_saves_full_variable_config(self, client, container, unique_id):
+    async def test_create_branch_saves_full_variable_config(self, client, di, unique_id):
         """Создание branch сохраняет полную конфигурацию переменных."""
         flow_id = f"test_agent_full_vars_{unique_id}"
         base_agent = {
@@ -359,7 +361,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         api_key = branch.variables["api_key"]
         assert api_key.value == "branch_secret_key"
@@ -371,12 +373,12 @@ class TestBranchValidationAndPersistence:
         assert max_retries.public
         assert max_retries.title == "Max Retries"
         assert max_retries.description == "Maximum number of retry attempts"
-        effective = container.flow_factory.apply_branch(agent, branch_id)
+        effective = di.flow_factory.apply_branch(agent, branch_id)
         assert effective["variables"]["api_key"] == "branch_secret_key"
         assert effective["variables"]["timeout"] == "30"
         assert effective["variables"]["max_retries"] == "5"
 
-    async def test_update_branch_updates_full_variable_config(self, client, container, unique_id):
+    async def test_update_branch_updates_full_variable_config(self, client, di, unique_id):
         """Обновление branch обновляет полную конфигурацию переменных."""
         flow_id = f"test_agent_update_full_vars_{unique_id}"
         base_agent = {
@@ -427,7 +429,7 @@ class TestBranchValidationAndPersistence:
             f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data
         )
         assert update_resp.status_code == 200
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Updated Branch"
         branch_var = branch.variables["branch_var"]
@@ -469,7 +471,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 400
-        assert "валидации ветки" in resp.json()["detail"].lower()
+        assert "branch validation failed" in resp.json()["detail"].lower()
 
     async def test_create_branch_validates_edge_references(self, client, unique_id):
         """Создание branch валидирует ссылки в edges."""
@@ -499,9 +501,9 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 400
-        assert "валидации ветки" in resp.json()["detail"].lower()
+        assert "branch validation failed" in resp.json()["detail"].lower()
 
-    async def test_update_branch_validates_result(self, client, container, unique_id):
+    async def test_update_branch_validates_result(self, client, di, unique_id):
         """Обновление branch валидирует результат."""
         flow_id = f"test_agent_update_invalid_{unique_id}"
         base_agent = {
@@ -544,13 +546,13 @@ class TestBranchValidationAndPersistence:
             f"/flows/api/v1/{flow_id}/branches/{branch_id}", json=update_data
         )
         assert update_resp.status_code == 400
-        assert "валидации ветки" in update_resp.json()["detail"].lower()
-        agent = await container.flow_repository.get(flow_id)
+        assert "branch validation failed" in update_resp.json()["detail"].lower()
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert branch.name == "Valid Branch"
         assert branch.entry == "branch_node"
 
-    async def test_create_branch_with_inline_code(self, client, container, unique_id):
+    async def test_create_branch_with_inline_code(self, client, di, unique_id):
         """Создание branch с inline code в нодах."""
         flow_id = f"test_agent_inline_{unique_id}"
         base_agent = {
@@ -579,13 +581,13 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert "code_node" in branch.nodes
         assert "state['result']" in branch.nodes["code_node"]["code"]
         assert "state.get('a', 0)" in branch.nodes["code_node"]["code"]
 
-    async def test_create_branch_with_llm_node_and_tools(self, client, container, unique_id):
+    async def test_create_branch_with_llm_node_and_tools(self, client, di, unique_id):
         """Создание branch с llm_node и tools."""
         flow_id = f"test_agent_react_{unique_id}"
         base_agent = {
@@ -630,7 +632,7 @@ class TestBranchValidationAndPersistence:
         }
         resp = await client.post(f"/flows/api/v1/{flow_id}/branches", json=branch_data)
         assert resp.status_code == 201
-        agent = await container.flow_repository.get(flow_id)
+        agent = await FlowConfig.get_latest(flow_id)
         branch = agent.branches[branch_id]
         assert "react_main" in branch.nodes
         llm_node = branch.nodes["react_main"]

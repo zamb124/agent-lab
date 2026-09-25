@@ -50,11 +50,9 @@ if TYPE_CHECKING:
     )
     from .providers import AgentsetRAGProvider, PgVectorProvider
     from .rag_resource import RAGResource
-    from .repository import RAGRepository
     type _LazyExportValue = (
         type[BaseRAGProvider]
         | type[RAGResource]
-        | type[RAGRepository]
         | type[RAGLLMContextSource]
         | type[RAGLLMContextMemoryStore]
         | type[AgentsetRAGProvider]
@@ -70,7 +68,6 @@ _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "split_file_extract": ("core.rag.chunking", "split_file_extract"),
     "split_plain_text_fixed_tokens": ("core.rag.chunking", "split_plain_text_fixed_tokens"),
     "get_rag_provider": ("core.rag.factory", "get_rag_provider"),
-    "RAGRepository": ("core.rag.repository", "RAGRepository"),
     "RAGLLMContextSource": ("core.rag.llm_context_source", "RAGLLMContextSource"),
     "RAGLLMContextMemoryStore": (
         "core.rag.llm_context_memory_store",
@@ -120,7 +117,6 @@ __all__ = [
     "split_file_extract",
     "split_plain_text_fixed_tokens",
     "get_rag_provider",
-    "RAGRepository",
     "RAGLLMContextSource",
     "RAGLLMContextMemoryStore",
     "llm_context_memory_namespace_id",

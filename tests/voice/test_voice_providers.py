@@ -139,7 +139,7 @@ async def test_streaming_stt_peek_then_flush_returns_full_segment(
 @pytest.mark.asyncio
 async def test_streaming_tts_synthesize_raises_when_not_initialized(unique_id: str) -> None:
     provider = StreamingTTSProvider(tts_client=MockTTSClient())
-    with pytest.raises(RuntimeError, match="не инициализирован"):
+    with pytest.raises(RuntimeError, match="is not initialized"):
         await provider.synthesize("Привет")
 
 
@@ -156,7 +156,7 @@ async def test_streaming_tts_synthesize_returns_bytes(unique_id: str) -> None:
 async def test_streaming_tts_synthesize_rejects_empty_text(unique_id: str) -> None:
     provider = StreamingTTSProvider(tts_client=MockTTSClient())
     await provider.init()
-    with pytest.raises(ValueError, match="пустой text"):
+    with pytest.raises(ValueError, match="empty text"):
         await provider.synthesize("")
 
 

@@ -336,6 +336,8 @@ ROUTE_RULES: list[RouteRule] = [
     # API фронтенда для настроек
     RouteRule("/api/settings/*", context_type="api", auth_required=True),
     RouteRule("/frontend/api/settings/*", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/company-storages", context_type="api", auth_required=True),
+    RouteRule("/frontend/api/company-storages/*", context_type="api", auth_required=True),
 
 
     # Заявки с лендинга (список; доступ system проверяется в обработчике)

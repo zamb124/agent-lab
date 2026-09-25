@@ -8,7 +8,6 @@ BaseTriggerHandler - абстрактный базовый класс для о�
 from abc import ABC, abstractmethod
 
 from apps.flows.config import get_settings
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models import TriggerConfig, TriggerType
 from core.logging import get_logger
 from core.platform_brand.resolver import resolve_flows_webhook_public_base_url_from_context
@@ -29,13 +28,12 @@ class BaseTriggerHandler(ABC):
 
     trigger_type: TriggerType
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
+    def __init__(self, base_url: str) -> None:
         """
         Аргументы:
             base_url: Базовый URL сервиса для формирования webhook URL
         """
         self.base_url: str = base_url
-        self.container: FlowRuntimeContainer = container
 
     @abstractmethod
     async def register(

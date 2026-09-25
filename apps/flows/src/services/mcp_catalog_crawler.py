@@ -14,7 +14,6 @@ from pydantic import ValidationError
 
 from apps.flows.config import get_settings
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.models.mcp_catalog import (
     MCPAuthPolicy,
@@ -252,7 +251,6 @@ async def _verify_catalog_entry(
 
 async def _upsert_allowlist_seed_entries(
     *,
-    container: FlowRuntimeContainer,
     allowlist: dict[str, MCPCatalogAllowlistEntry],
     crawled_at: datetime,
     seen_catalog_ids: set[str],
@@ -306,7 +304,7 @@ async def _upsert_allowlist_seed_entries(
             last_verified_at=None,
         )
         seen_catalog_ids.add(entry.catalog_id)
-        existing = await container.mcp_catalog_repository.get(entry.catalog_id)
+        existing = await MCPCatalogEntry.get(entry.catalog_id)
         if existing is not None:
             entry.verify_status = existing.verify_status
             entry.tool_count_snapshot = existing.tool_count_snapshot
@@ -335,7 +333,7 @@ async def _upsert_allowlist_seed_entries(
             else:
                 verified += 1
         entry.catalog_snapshot_hash = entry.recompute_snapshot_hash()
-        _ = await container.mcp_catalog_repository.set(entry)
+        _ = await MCPCatalogEntry.set(entry)
         upserted += 1
     return upserted, verified, verify_failed, budget
 
@@ -415,7 +413,6 @@ class MCPCatalogSeedStats:
 
 async def upsert_allowlist_seed_entries_only(
     *,
-    container: FlowRuntimeContainer,
     allowlist: dict[str, MCPCatalogAllowlistEntry] | None = None,
 ) -> MCPCatalogSeedStats:
     """Только curated seeds из allowlist yaml (без paginate registry)."""
@@ -425,7 +422,6 @@ async def upsert_allowlist_seed_entries_only(
     crawled_at = datetime.now(tz=timezone.utc)
     seen_catalog_ids: set[str] = set()
     upserted, verified, verify_failed, _budget = await _upsert_allowlist_seed_entries(
-        container=container,
         allowlist=resolved_allowlist,
         crawled_at=crawled_at,
         seen_catalog_ids=seen_catalog_ids,
@@ -439,7 +435,7 @@ async def upsert_allowlist_seed_entries_only(
     )
 
 
-async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCrawlStats:
+async def crawl_mcp_registry() -> MCPCatalogCrawlStats:
     settings = get_settings()
     catalog_cfg = settings.mcp_catalog
     if not catalog_cfg.enabled:
@@ -458,7 +454,6 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
     cursor: str | None = None
 
     seed_upserted, seed_verified, seed_verify_failed, verify_budget = await _upsert_allowlist_seed_entries(
-        container=container,
         allowlist=allowlist,
         crawled_at=crawled_at,
         seen_catalog_ids=seen_catalog_ids,
@@ -492,7 +487,7 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
                 continue
             fetched += 1
             seen_catalog_ids.add(entry.catalog_id)
-            existing = await container.mcp_catalog_repository.get(entry.catalog_id)
+            existing = await MCPCatalogEntry.get(entry.catalog_id)
             if existing is not None:
                 entry.verify_status = existing.verify_status
                 entry.tool_count_snapshot = existing.tool_count_snapshot
@@ -524,7 +519,7 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
                 else:
                     verified += 1
             entry.catalog_snapshot_hash = entry.recompute_snapshot_hash()
-            _ = await container.mcp_catalog_repository.set(entry)
+            _ = await MCPCatalogEntry.set(entry)
             upserted += 1
 
         metadata = page.get("metadata")
@@ -538,7 +533,7 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
         cursor = next_cursor
 
     deprecated = 0
-    existing_entries = await container.mcp_catalog_repository.list(limit=20_000)
+    existing_entries = await MCPCatalogEntry.list(limit=20_000)
     for existing in existing_entries:
         if existing.catalog_id in seen_catalog_ids:
             continue
@@ -551,7 +546,7 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
             }
         )
         deprecated_entry.catalog_snapshot_hash = deprecated_entry.recompute_snapshot_hash()
-        _ = await container.mcp_catalog_repository.set(deprecated_entry)
+        _ = await MCPCatalogEntry.set(deprecated_entry)
         deprecated += 1
 
     logger.info(
@@ -572,13 +567,11 @@ async def crawl_mcp_registry(*, container: FlowRuntimeContainer) -> MCPCatalogCr
 
 
 async def upsert_catalog_entry_for_tests(
-    *,
-    container: FlowRuntimeContainer,
     entry: MCPCatalogEntry,
 ) -> MCPCatalogEntry:
     """Тестовый helper: upsert catalog entry без registry crawl."""
     stored = entry.model_copy(
         update={"catalog_snapshot_hash": entry.recompute_snapshot_hash()}
     )
-    _ = await container.mcp_catalog_repository.set(stored)
+    _ = await MCPCatalogEntry.set(stored)
     return stored

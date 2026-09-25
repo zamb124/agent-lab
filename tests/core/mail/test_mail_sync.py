@@ -13,10 +13,10 @@ from core.mail.models import (
     MailboxBindingCreatePayload,
     MailboxBindingKind,
     MailboxSecret,
+    MailboxSyncCursor,
     MailProvider,
     MailSyncErrorKind,
 )
-from core.mail.repositories import MailboxSyncCursorRepository
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from tests.core.mail.fakes import RecordingMailServerPort
@@ -28,7 +28,6 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -79,11 +78,11 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
     first = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     assert first.bootstrap is True
     assert first.new_messages == []
-    cursor = await mailbox_sync_cursor_repository.get(binding.mailbox_binding_id)
+    cursor = await MailboxSyncCursor.by_binding_folder(binding.mailbox_binding_id)
     assert cursor is not None
     assert cursor.uidvalidity == 42
     assert cursor.last_uid == 11
-    sent_cursor = await mailbox_sync_cursor_repository.get(
+    sent_cursor = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder="Sent"
     )
     assert sent_cursor is not None
@@ -103,7 +102,7 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
     assert second.new_messages[0].uid == "12"
     assert second.new_messages[0].subject == "New mail"
 
-    cursor2 = await mailbox_sync_cursor_repository.get(binding.mailbox_binding_id)
+    cursor2 = await MailboxSyncCursor.by_binding_folder(binding.mailbox_binding_id)
     assert cursor2 is not None
     assert cursor2.last_uid == 12
 
@@ -112,7 +111,6 @@ async def test_sync_user_inbox_bootstrap_then_incremental_notify_payload(
 async def test_sync_user_inbox_uidvalidity_reset_no_notify(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -171,7 +169,7 @@ async def test_sync_user_inbox_uidvalidity_reset_no_notify(
     result = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     assert result.bootstrap is True
     assert result.new_messages == []
-    cursor = await mailbox_sync_cursor_repository.get(binding.mailbox_binding_id)
+    cursor = await MailboxSyncCursor.by_binding_folder(binding.mailbox_binding_id)
     assert cursor is not None
     assert cursor.uidvalidity == 99
     assert cursor.last_uid == 2
@@ -204,7 +202,6 @@ async def test_recording_port_fetch_uids_since_bootstrap_empty_messages(
 async def test_sync_sent_folder_incremental_does_not_notify(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -245,7 +242,7 @@ async def test_sync_sent_folder_incremental_does_not_notify(
     ]
     first = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     assert first.bootstrap is True
-    sent_cursor = await mailbox_sync_cursor_repository.get(
+    sent_cursor = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder="Sent"
     )
     assert sent_cursor is not None
@@ -262,7 +259,7 @@ async def test_sync_sent_folder_incremental_does_not_notify(
     second = await mail_service.sync_user_inbox(binding, max_new_messages=20)
     assert second.bootstrap is False
     assert second.new_messages == []
-    sent_cursor2 = await mailbox_sync_cursor_repository.get(
+    sent_cursor2 = await MailboxSyncCursor.by_binding_folder(
         binding.mailbox_binding_id, folder="Sent"
     )
     assert sent_cursor2 is not None
@@ -272,7 +269,6 @@ async def test_sync_sent_folder_incremental_does_not_notify(
 @pytest.mark.asyncio
 async def test_record_sync_failure_sets_auth_kind(
     mail_service: MailService,
-    mailbox_sync_cursor_repository: MailboxSyncCursorRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -307,7 +303,7 @@ async def test_record_sync_failure_sets_auth_kind(
         error_kind=MailSyncErrorKind.AUTH,
         error_message="IMAP login failed",
     )
-    cursor = await mailbox_sync_cursor_repository.get(binding.mailbox_binding_id)
+    cursor = await MailboxSyncCursor.by_binding_folder(binding.mailbox_binding_id)
     assert cursor is not None
     assert cursor.last_error_kind == MailSyncErrorKind.AUTH
     assert cursor.last_error_at is not None

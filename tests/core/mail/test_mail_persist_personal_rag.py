@@ -13,8 +13,8 @@ from core.mail.models import (
     MailboxBindingKind,
     MailMessageFlagPayload,
     MailProvider,
+    StoredMailMessage,
 )
-from core.mail.repositories import MailMessageRepository
 from core.mail.service import MailService
 from core.models.identity_models import Company, NamespaceKind, User
 from core.namespace import personal_namespace_name
@@ -27,9 +27,8 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 async def test_sync_bootstrap_persists_inbox_into_mail_messages_and_personal_ns(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"mailpersist_{unique_id}"
@@ -87,7 +86,7 @@ async def test_sync_bootstrap_persists_inbox_into_mail_messages_and_personal_ns(
     assert result.bootstrap is True
     assert result.new_messages == []
 
-    stored = await mail_message_repository.list_folder(
+    stored = await StoredMailMessage.list_folder(
         binding.mailbox_binding_id,
         folder="INBOX",
         limit=50,
@@ -102,7 +101,7 @@ async def test_sync_bootstrap_persists_inbox_into_mail_messages_and_personal_ns(
     assert by_uid[22].subject == "Persist B"
     assert by_uid[22].unread is False
 
-    personal = await container.namespace_service.get(personal_namespace_name(user_id))
+    personal = await di.namespace_service.get(personal_namespace_name(user_id))
     assert personal is not None
     assert personal.kind == NamespaceKind.PERSONAL
     assert personal.owner_user_id == user_id
@@ -113,7 +112,6 @@ async def test_sync_bootstrap_persists_inbox_into_mail_messages_and_personal_ns(
 async def test_sync_incremental_persists_new_inbox_message(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -167,7 +165,7 @@ async def test_sync_incremental_persists_new_inbox_message(
     assert second.bootstrap is False
     assert len(second.new_messages) == 1
 
-    stored = await mail_message_repository.list_folder(
+    stored = await StoredMailMessage.list_folder(
         binding.mailbox_binding_id,
         folder="INBOX",
         limit=50,
@@ -184,7 +182,6 @@ async def test_sync_incremental_persists_new_inbox_message(
 async def test_sync_sent_persists_without_inbox_notify(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -227,7 +224,7 @@ async def test_sync_sent_persists_without_inbox_notify(
     assert first.bootstrap is True
     assert first.new_messages == []
 
-    sent_rows = await mail_message_repository.list_folder(
+    sent_rows = await StoredMailMessage.list_folder(
         binding.mailbox_binding_id,
         folder="Sent",
         limit=20,
@@ -241,7 +238,6 @@ async def test_sync_sent_persists_without_inbox_notify(
 async def test_mark_seen_unseen_updates_local_mail_messages(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
 ) -> None:
@@ -293,7 +289,7 @@ async def test_mark_seen_unseen_updates_local_mail_messages(
     )
     assert seen.unread is False
     assert len(recording_mail_port.mark_seen_calls) == 1
-    row_seen = await mail_message_repository.get_by_uid(
+    row_seen = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=9
     )
     assert row_seen is not None
@@ -309,7 +305,7 @@ async def test_mark_seen_unseen_updates_local_mail_messages(
     )
     assert unseen.unread is True
     assert len(recording_mail_port.mark_unseen_calls) == 1
-    row_unseen = await mail_message_repository.get_by_uid(
+    row_unseen = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=9
     )
     assert row_unseen is not None

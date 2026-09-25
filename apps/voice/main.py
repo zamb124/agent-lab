@@ -1,7 +1,5 @@
 """FastAPI entrypoint для voice сервиса."""
 
-from fastapi import FastAPI
-
 from apps.voice.api.company_pronunciation_rules import router as company_pronunciation_rules_router
 from apps.voice.api.company_voice_providers import router as company_voice_providers_router
 from apps.voice.api.health import health_router
@@ -13,22 +11,16 @@ from apps.voice.api.synthesize import synthesize_router
 from apps.voice.api.transcribe import transcribe_router
 from apps.voice.api.voice_providers_catalog import router as voice_providers_catalog_router
 from apps.voice.config import VoiceServiceSettings, get_voice_settings
-from apps.voice.container import VoiceContainer, get_voice_container
-from core.app import create_service_app
+from apps.voice.di import VoiceDi
+from core.app.factory import create_service_app
+from core.di import recipe
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-async def on_startup(
-    app: FastAPI, container: VoiceContainer, settings: VoiceServiceSettings
-) -> None:
-    """Инициализация voice-сервиса при старте.
-
-    Streaming-провайдеры создаются per-session через voice_resolver.
-    Здесь — только инициализация контейнера и логирование.
-    """
-    _ = app, container
+async def log_voice_startup(settings: VoiceServiceSettings) -> None:
+    """Deployment-default провайдеры речи на старте процесса."""
     logger.info(
         "voice.service.startup.stt.tts",
         stt=settings.voice.stt.provider,
@@ -38,9 +30,11 @@ async def on_startup(
 
 
 app = create_service_app(
-    service_name="voice",
-    settings_class=VoiceServiceSettings,
-    get_container=get_voice_container,
+    "voice",
+    VoiceServiceSettings,
+    VoiceDi,
+    database="shared_url",
+    lifecycle=(recipe(log_voice_startup),),
     pages_routers=[
         health_router,
         voice_session_router,
@@ -51,13 +45,11 @@ app = create_service_app(
         platform_pronunciation_rules_router,
         voice_providers_catalog_router,
     ],
-    on_startup=on_startup,
     cors_origins=["*"],
     title="Platform Voice Gateway",
     description="Акустический шлюз: STT/TTS, VAD, barge-in",
     version="1.0.0",
     api_version="v1",
-    include_crud_routers=False,
     documentation_gateway_prefix="voice",
 )
 

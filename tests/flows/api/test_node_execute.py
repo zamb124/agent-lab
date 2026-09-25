@@ -517,7 +517,7 @@ async def run(args, state):
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="code, tool_id или function обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="code, tool_id or function is required")
 
     @pytest.mark.asyncio
     async def test_function_whitespace_code(self, client, app):
@@ -529,7 +529,7 @@ async def run(args, state):
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="code, tool_id или function обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="code, tool_id or function is required")
 
     @pytest.mark.asyncio
     async def test_function_syntax_error(self, client, app):
@@ -914,7 +914,9 @@ class TestExternalAPINode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="url обязателен")
+        assert_execute_response(
+            data, expected_success=False, expected_error="url is required"
+        )
 
     @pytest.mark.asyncio
     async def test_external_api_error_response(self, client, app, external_api_server):
@@ -1202,7 +1204,9 @@ class TestRemoteFlowNode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="url обязателен")
+        assert_execute_response(
+            data, expected_success=False, expected_error="url is required"
+        )
 
     @pytest.mark.asyncio
     async def test_remote_flow_registry_flow_id_rejected(self, client, app):
@@ -1221,7 +1225,7 @@ class TestRemoteFlowNode:
         assert_execute_response(
             data,
             expected_success=False,
-            expected_error="не поддерживает registry flow_id",
+            expected_error="does not support registry flow_id",
         )
     @pytest.mark.asyncio
     async def test_remote_flow_connection_error(self, client, app):
@@ -1247,7 +1251,7 @@ class TestFlowNode:
     """Тесты FlowNode (node_type: 'flow')."""
 
     @pytest.mark.asyncio
-    async def test_subflow_basic_execution(self, client, app, container):
+    async def test_subflow_basic_execution(self, client, app, di):
         """Вызов example_graph."""
         state = {"content": "заказ на iPhone"}
 
@@ -1266,7 +1270,7 @@ class TestFlowNode:
         assert "response" in data["output_state"] or "route" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_subflow_with_skill_id(self, client, app, container):
+    async def test_subflow_with_skill_id(self, client, app, di):
         """branch_id='fast_track'."""
         state = {"content": "заказ"}
 
@@ -1287,7 +1291,7 @@ class TestFlowNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_subflow_input_mapping_full_state(self, client, app, container):
+    async def test_subflow_input_mapping_full_state(self, client, app, di):
         """Без mapping - весь state."""
         state = {"content": "test", "user_name": "John"}
 
@@ -1305,7 +1309,7 @@ class TestFlowNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_subflow_input_mapping_constant(self, client, app, container):
+    async def test_subflow_input_mapping_constant(self, client, app, di):
         """Константа передаётся."""
         state = {"other_field": "value"}
 
@@ -1328,7 +1332,7 @@ class TestFlowNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_subflow_input_mapping_state_path(self, client, app, container):
+    async def test_subflow_input_mapping_state_path(self, client, app, di):
         """@state:user.name резолвится."""
         state = {"user": {"name": "Alice"}, "other": "data"}
 
@@ -1351,7 +1355,7 @@ class TestFlowNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_subflow_input_mapping_multiple(self, client, app, container):
+    async def test_subflow_input_mapping_multiple(self, client, app, di):
         """Несколько полей."""
         state = {"user_query": "query", "user_name": "Bob"}
 
@@ -1375,7 +1379,7 @@ class TestFlowNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_subflow_preserves_variables(self, client, app, container):
+    async def test_subflow_preserves_variables(self, client, app, di):
         """variables сохраняется."""
         state = {
             "variables": {"company_name": "TestCorp"},
@@ -1398,7 +1402,7 @@ class TestFlowNode:
         assert data["output_state"]["variables"]["company_name"] == "TestCorp"
 
     @pytest.mark.asyncio
-    async def test_subflow_preserves_user(self, client, app, container):
+    async def test_subflow_preserves_user(self, client, app, di):
         """__user__ сохраняется."""
         state = {
             "__user__": {"user_id": "test_user", "email": "test@example.com"},
@@ -1433,7 +1437,9 @@ class TestFlowNode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="flow_id обязателен")
+        assert_execute_response(
+            data, expected_success=False, expected_error="flow_id is required"
+        )
 
     @pytest.mark.asyncio
     async def test_subflow_nonexistent_flow(self, client, app):
@@ -1460,7 +1466,7 @@ class TestLlmNode:
 
     @pytest.mark.asyncio
     async def test_llm_node_execute_accepts_canvas_position_fields(
-        self, client, app, container, mock_llm_redis
+        self, client, app, di, mock_llm_redis
     ):
         """pos_x/pos_y — метаданные canvas редактора, не влияют на runtime."""
         await mock_llm_redis([{"type": "text", "content": "Canvas ok"}])
@@ -1486,7 +1492,7 @@ class TestLlmNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_llm_node_basic_execution(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_basic_execution(self, client, app, di, mock_llm_redis):
         """prompt + tools + llm."""
         await mock_llm_redis([
             {"type": "text", "content": "Agent response: Hello"}
@@ -1514,7 +1520,7 @@ class TestLlmNode:
         assert "messages" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_llm_node_with_tools(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_with_tools(self, client, app, di, mock_llm_redis):
         """tools передаются."""
         await mock_llm_redis([
             {"type": "text", "content": "Using calculator tool"}
@@ -1550,7 +1556,7 @@ class TestLlmNode:
         assert "response" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_llm_node_llm_config(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_llm_config(self, client, app, di, mock_llm_redis):
         """model, temperature применяются."""
         await mock_llm_redis([
             {"type": "text", "content": "Response with custom LLM config"}
@@ -1576,7 +1582,7 @@ class TestLlmNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_llm_node_input_mapping_content(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_input_mapping_content(self, client, app, di, mock_llm_redis):
         """@state:user_query -> content."""
         await mock_llm_redis([
             {"type": "text", "content": "Response to mapped query"}
@@ -1606,7 +1612,7 @@ class TestLlmNode:
         assert "response" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_llm_node_input_mapping_nested(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_input_mapping_nested(self, client, app, di, mock_llm_redis):
         """@state:user.name резолвится."""
         await mock_llm_redis([
             {"type": "text", "content": "Hello user"}
@@ -1635,7 +1641,7 @@ class TestLlmNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_llm_node_input_mapping_constant(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_input_mapping_constant(self, client, app, di, mock_llm_redis):
         """Константа передаётся."""
         await mock_llm_redis([
             {"type": "text", "content": "Response"}
@@ -1664,7 +1670,7 @@ class TestLlmNode:
         assert_execute_response(data, expected_success=True)
 
     @pytest.mark.asyncio
-    async def test_llm_node_input_mapping_preserves_service(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_input_mapping_preserves_service(self, client, app, di, mock_llm_redis):
         """variables сохраняются."""
         await mock_llm_redis([
             {"type": "text", "content": "Response"}
@@ -1697,7 +1703,7 @@ class TestLlmNode:
         assert "variables" in data["output_state"]
 
     @pytest.mark.asyncio
-    async def test_llm_node_response_in_state(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_response_in_state(self, client, app, di, mock_llm_redis):
         """response записан."""
         await mock_llm_redis([
             {"type": "text", "content": "Agent final response"}
@@ -1726,7 +1732,7 @@ class TestLlmNode:
         assert len(data["output_state"]["response"]) > 0
 
     @pytest.mark.asyncio
-    async def test_llm_node_messages_updated(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_messages_updated(self, client, app, di, mock_llm_redis):
         """messages обновлены."""
         await mock_llm_redis([
             {"type": "text", "content": "Agent response"}
@@ -1753,7 +1759,7 @@ class TestLlmNode:
         assert len(data["output_state"]["messages"]) > 0
 
     @pytest.mark.asyncio
-    async def test_llm_node_tool_call(self, client, app, container, mock_llm_redis):
+    async def test_llm_node_tool_call(self, client, app, di, mock_llm_redis):
         """LLM вызывает tool."""
         await mock_llm_redis([
             {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
@@ -1803,7 +1809,7 @@ class TestLlmNode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="prompt обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="prompt is required")
 
     @pytest.mark.asyncio
     async def test_llm_node_missing_prompt(self, client, app):
@@ -1823,7 +1829,7 @@ class TestLlmNode:
         assert response.status_code == 200
 
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="prompt обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="prompt is required")
 
 
 class TestE2EIntegration:
@@ -1854,7 +1860,7 @@ async def run(args, state):
         assert data["output_state"]["validated"] is True
 
     @pytest.mark.asyncio
-    async def test_e2e_function_then_llm_node(self, client, app, container, mock_llm_redis):
+    async def test_e2e_function_then_llm_node(self, client, app, di, mock_llm_redis):
         """function модифицирует state, llm_node использует."""
         await mock_llm_redis([
             {"type": "text", "content": "Processed query: processed"}
@@ -1893,7 +1899,7 @@ async def run(args, state):
         assert "response" in agent_resp.json()["output_state"]
 
     @pytest.mark.asyncio
-    async def test_e2e_subflow_with_function_nodes(self, client, app, container):
+    async def test_e2e_subflow_with_function_nodes(self, client, app, di):
         """subflow example_graph с function classifier."""
         state = {"content": "заказ на iPhone"}
 

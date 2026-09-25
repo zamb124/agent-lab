@@ -58,6 +58,13 @@ class FileRef(StrictBaseModel):
     created_at: datetime | None = None
     capabilities: FileCapabilities = Field(default_factory=FileCapabilities)
 
+    @model_validator(mode="before")
+    @classmethod
+    def accept_stored_record(cls, value: object) -> object:
+        if isinstance(value, FileRecord):
+            return stored_file_ref(value).model_dump()
+        return value
+
     @model_validator(mode="after")
     def require_resolvable_source(self) -> "FileRef":
         if self.file_id is None and self.url is None:

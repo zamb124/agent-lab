@@ -9,6 +9,7 @@ from core.worktracker.models import (
     UnassignedAssignment,
     UserActor,
     UsersAssignment,
+    WorkItem,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -50,7 +51,7 @@ async def test_mine_summary_assigned_and_queue_inbox(
     assert summary.queue_inbox_count >= 1
     assert queue.work_queue_id in summary.work_queue_ids
 
-    total_assigned = await worktracker_service.count(
+    total_assigned = await WorkItem.count_work_items(
         company_id,
         assignee_user_id=user_id,
         exclude_terminal=True,
@@ -91,7 +92,7 @@ async def test_count_respects_work_queue_filter(worktracker_service, unique_id: 
         assignment=QueueAssignment(work_queue_id=queue_b.work_queue_id),
     )
 
-    count_a = await worktracker_service.count(
+    count_a = await WorkItem.count_work_items(
         company_id,
         work_queue_id=queue_a.work_queue_id,
         exclude_terminal=True,

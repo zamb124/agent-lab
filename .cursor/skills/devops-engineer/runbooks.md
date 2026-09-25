@@ -74,13 +74,13 @@ make k8s-backup
 # → backups/dump-<ts>.sql.gz
 ```
 
-### Локально + S3 (Selectel)
+### Локальный дамп
 
 ```bash
 export AWS_ENDPOINT_URL=https://s3.ru-3.storage.selcloud.ru
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-make k8s-backup S3=s3://shvedzilla/backups/
+make k8s-backup
 ```
 
 ### Cron на master (ежедневно)
@@ -210,10 +210,10 @@ spec:
                       key: postgres-password
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
-                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: selectel-access-key }
+                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: minio-root-user }
                 - name: AWS_SECRET_ACCESS_KEY
                   valueFrom:
-                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: selectel-secret-key }
+                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: minio-root-password }
               command:
                 - sh
                 - -c
@@ -221,8 +221,8 @@ spec:
                   ts=$(date -u +%Y%m%dT%H%M%SZ)
                   pg_dumpall -h postgres -U platform_user --clean --if-exists | gzip > /tmp/dump-$ts.sql.gz
                   apk add --no-cache aws-cli
-                  aws --endpoint-url https://s3.ru-3.storage.selcloud.ru \
-                    s3 cp /tmp/dump-$ts.sql.gz s3://shvedzilla/backups/dump-$ts.sql.gz
+                  aws --endpoint-url http://minio:9000 \
+                    s3 cp /tmp/dump-$ts.sql.gz s3://platform/backups/dump-$ts.sql.gz
 ```
 
 Затем `make k8s-deploy` — CronJob применится без рестарта остальных подов.
@@ -242,7 +242,7 @@ Postgres / Loki / Tempo — PVC c `microk8s-hostpath`. Чтобы расшири
 
 ```bash
 # 1. Backup
-make k8s-backup S3=s3://shvedzilla/backups/
+make k8s-backup
 
 # 2. helm uninstall (PVC сохраняются)
 make k8s-uninstall
@@ -255,7 +255,7 @@ kubectl delete pvc -n platform --all   # ОПАСНО
 make k8s-deploy IMAGE_TAG=latest
 
 # 5. Restore
-make k8s-restore FILE=backups/dump-...sql.gz S3=s3://shvedzilla/backups/dump-...sql.gz
+make k8s-restore FILE=backups/dump-...sql.gz
 ```
 
 ## 12. Breaking change в Kubernetes версии

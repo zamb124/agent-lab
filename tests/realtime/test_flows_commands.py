@@ -32,7 +32,7 @@ from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
 
 _API = "/flows/api/v1"
 _PATH_PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
-_TRANSPORT_MARKER = re.compile(r"(?:-|\s)(?:ws|rest)-")
+_TRANSPORT_MARKER = re.compile(r"(?:-|\s)(?:ws|rest)-|(?:ws|rest)(?=[0-9a-f]{8,})")
 _VOLATILE_KEYS = frozenset(
     {
         "flow_id",
@@ -87,6 +87,7 @@ _VOLATILE_KEYS = frozenset(
         "revoked_at",
         "started_at",
         "finished_at",
+        "sampled_at",
         "queued_at",
         "checksum",
         "file_size",
@@ -120,6 +121,7 @@ class OpCase:
     compare: CompareMode
     expect: ExpectMode = "succeeded"
     marker_field: str = "name"
+    list_key: str = "items"
 
 
 @dataclass
@@ -292,8 +294,17 @@ async def _limit(_ctx: LiveCtx) -> JsonObject:
     return {"limit": 50, "offset": 0}
 
 
+async def _setup_flows_list(ctx: LiveCtx) -> JsonObject:
+    _ = await _create_flow(ctx)
+    return {"limit": 50, "offset": 0}
+
+
+async def _setup_sessions_list(ctx: LiveCtx) -> JsonObject:
+    return {"limit": 50, "offset": 0, "flow_id": f"live-sessions-{ctx.unique_id}"}
+
+
 async def _limit_tools_all(_ctx: LiveCtx) -> JsonObject:
-    return {"limit": 20, "offset": 0}
+    return {"limit": 20, "offset": 0, "q": "agent_plan_write"}
 
 
 async def _setup_flow_create(ctx: LiveCtx) -> JsonObject:
@@ -1228,7 +1239,16 @@ async def _setup_monitor_cycle(ctx: LiveCtx) -> JsonObject:
     }
 
 
-async def _setup_monitor_cycles_active(_ctx: LiveCtx) -> JsonObject:
+async def _setup_monitor_cycles_active(ctx: LiveCtx) -> JsonObject:
+    payload = await _setup_monitor_create(ctx)
+    payload["filter"] = {"session_id": f"missing-monitor-{ctx.unique_id}"}
+    created = await ctx.client.post(
+        f"{_API}/evaluation/monitors",
+        headers=ctx.headers,
+        json=payload,
+    )
+    body = await _expect_json(created, ok=(200, 201), label="monitor_create")
+    ctx.marker = _str_field(body, "monitor_id")
     return {
         "limit_per_monitor": 10,
         "enqueue_gate_runs": False,
@@ -1350,8 +1370,8 @@ async def _setup_logs_user(ctx: LiveCtx) -> JsonObject:
     return {"user_id": ctx.system_user2_id, "limit": 20}
 
 
-async def _setup_traces_search(_ctx: LiveCtx) -> JsonObject:
-    return {"limit": 10, "offset": 0}
+async def _setup_traces_search(ctx: LiveCtx) -> JsonObject:
+    return {"flow_id": f"trace-search-{ctx.unique_id}", "limit": 10, "offset": 0}
 
 
 async def _setup_traces_session(_ctx: LiveCtx) -> JsonObject:
@@ -1506,6 +1526,7 @@ def _op(
     compare: CompareMode | None = None,
     query_keys: tuple[str, ...] = (),
     marker_field: str = "name",
+    list_key: str = "items",
 ) -> OpCase:
     resolved: CompareMode
     if compare is not None:
@@ -1526,11 +1547,14 @@ def _op(
         compare=resolved,
         expect=expect,
         marker_field=marker_field,
+        list_key=list_key,
     )
 
 
 _CASES: dict[str, OpCase] = {
-    "flows/flows/list_requested": _op("GET", f"{_API}/flows/", "query", _limit, same=True),
+    "flows/flows/list_requested": _op(
+        "GET", f"{_API}/flows/", "query", _setup_flows_list, same=True, compare="marker_row",
+    ),
     "flows/flows/item_requested": _op("GET", f"{_API}/flows/{{flow_id}}", "none", _setup_flow_id, same=True),
     "flows/flows/create_requested": _op("POST", f"{_API}/flows/", "body", _setup_flow_create, same=False),
     "flows/flows/update_requested": _op(
@@ -1867,7 +1891,9 @@ _CASES: dict[str, OpCase] = {
     "flows/resources/remove_requested": _op(
         "DELETE", f"{_API}/resources/{{resource_id}}", "none", _setup_resource_item, same=False,
     ),
-    "flows/sessions/list_requested": _op("GET", f"{_API}/sessions/", "query", _limit, same=True),
+    "flows/sessions/list_requested": _op(
+        "GET", f"{_API}/sessions/", "query", _setup_sessions_list, same=True,
+    ),
     "flows/sessions/remove_requested": _op(
         "DELETE",
         f"{_API}/sessions/{{session_id}}",
@@ -2511,6 +2537,9 @@ _CASES: dict[str, OpCase] = {
         "body",
         _setup_monitor_cycles_active,
         same=True,
+        compare="marker_row",
+        marker_field="monitor.monitor_id",
+        list_key="cycles",
     ),
     "flows/evaluation/monitor_observations_requested": _op(
         "GET",
@@ -2909,15 +2938,30 @@ async def _rest_command(
     )
 
 
-def _row_by_marker(payload: JsonObject, field: str, marker: str) -> JsonObject:
-    items = payload.get("items")
+def _marker_value(row: JsonObject, field: str) -> JsonValue | None:
+    current: JsonValue | None = row
+    for part in field.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _row_by_marker(
+    payload: JsonObject,
+    field: str,
+    marker: str,
+    *,
+    list_key: str,
+) -> JsonObject:
+    items = payload.get(list_key)
     if not isinstance(items, list):
-        raise AssertionError("list payload must have items[]")
+        raise AssertionError(f"list payload must have {list_key}[]")
     matched: list[JsonObject] = []
     for item in items:
         if not isinstance(item, dict):
             continue
-        if item.get(field) == marker:
+        if _marker_value(require_json_object(item, "list.row"), field) == marker:
             matched.append(require_json_object(item, "list.row"))
     if len(matched) != 1:
         raise AssertionError(f"expected one row {field}={marker!r}, got {len(matched)}")
@@ -2996,8 +3040,10 @@ async def test_flows_op_ws_rest_identical(
     if case.compare == "marker_row":
         if ws_marker is None or rest_marker is None:
             raise AssertionError("marker_row compare requires marker")
-        assert _normalize(_row_by_marker(ws_result, case.marker_field, ws_marker)) == _normalize(
-            _row_by_marker(rest_result, case.marker_field, rest_marker)
+        assert _normalize(
+            _row_by_marker(ws_result, case.marker_field, ws_marker, list_key=case.list_key)
+        ) == _normalize(
+            _row_by_marker(rest_result, case.marker_field, rest_marker, list_key=case.list_key)
         ), f"WS != REST row для {canonical_type}"
         return
     if case.compare == "error_code":

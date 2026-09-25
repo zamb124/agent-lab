@@ -75,7 +75,7 @@ async def test_e2e_tunnel_revoke_blocks_reconnect(
 @pytest.mark.asyncio
 async def test_e2e_tunnel_policy_blocks_connection(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -85,7 +85,7 @@ async def test_e2e_tunnel_policy_blocks_connection(
         unique_id=unique_id,
     )
     device_key = f"{DEVICE_KEY_PREFIX}{device_id}"
-    raw_device = await frontend_container.shared_storage.get(device_key, force_global=True)
+    raw_device = await frontend_di.shared_storage.get(device_key, force_global=True)
     assert raw_device is not None
     device_payload = json.loads(raw_device)
     device_payload["policy"] = DevicePolicy(
@@ -93,7 +93,7 @@ async def test_e2e_tunnel_policy_blocks_connection(
         browser_enabled=False,
         allowed_roots=[],
     ).model_dump()
-    await frontend_container.shared_storage.set(device_key, json.dumps(device_payload), force_global=True)
+    await frontend_di.shared_storage.set(device_key, json.dumps(device_payload), force_global=True)
 
     ws_uri = f"ws://127.0.0.1:9004/frontend/api/agent/tunnel?token={device_token}"
     close_code = await expect_tunnel_rejected(ws_uri, expected_codes={4403})
@@ -103,7 +103,7 @@ async def test_e2e_tunnel_policy_blocks_connection(
 @pytest.mark.asyncio
 async def test_e2e_tunnel_mcp_roundtrip(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
     agent_tunnel_bus_pod_b: None,
@@ -139,7 +139,7 @@ async def test_e2e_tunnel_mcp_roundtrip(
 
         responder_task = asyncio.create_task(responder())
         result = await send_mcp_request_to_device(
-            frontend_container.redis_client,
+            frontend_di.redis_client,
             device_id,
             method="tools/list",
             params={},
@@ -180,7 +180,7 @@ async def test_e2e_tunnel_pending_device_id_token(
 @pytest.mark.asyncio
 async def test_e2e_tunnel_inactive_device(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -190,11 +190,11 @@ async def test_e2e_tunnel_inactive_device(
         unique_id=unique_id,
     )
     device_key = f"{DEVICE_KEY_PREFIX}{device_id}"
-    raw_device = await frontend_container.shared_storage.get(device_key, force_global=True)
+    raw_device = await frontend_di.shared_storage.get(device_key, force_global=True)
     assert raw_device is not None
     device_payload = json.loads(raw_device)
     device_payload["is_active"] = False
-    await frontend_container.shared_storage.set(device_key, json.dumps(device_payload), force_global=True)
+    await frontend_di.shared_storage.set(device_key, json.dumps(device_payload), force_global=True)
 
     ws_uri = f"{FRONTEND_WS_BASE}{AGENT_TUNNEL_WS_PATH}?token={device_token}"
     close_code = await expect_tunnel_rejected(ws_uri, expected_codes={4403})
@@ -204,7 +204,7 @@ async def test_e2e_tunnel_inactive_device(
 @pytest.mark.asyncio
 async def test_e2e_tunnel_mcp_timeout(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
     agent_tunnel_bus_pod_b: None,
@@ -220,7 +220,7 @@ async def test_e2e_tunnel_mcp_timeout(
         await wait_tunnel_json(websocket, expected_type="policy", timeout=5.0)
         with pytest.raises(ValueError, match="Device tunnel offline"):
             _ = await send_mcp_request_to_device(
-                frontend_container.redis_client,
+                frontend_di.redis_client,
                 device_id,
                 method="tools/list",
                 params={},
@@ -283,7 +283,7 @@ async def test_e2e_tunnel_mcp_response_unknown_request_id(
 @pytest.mark.asyncio
 async def test_e2e_tunnel_online_ttl_refresh_after_ping(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
 ) -> None:
@@ -304,7 +304,7 @@ async def test_e2e_tunnel_online_ttl_refresh_after_ping(
     async with connect_agent_tunnel_ws(device_token) as websocket:
         await wait_tunnel_json(websocket, expected_type="policy", timeout=5.0)
         assert await _is_tunnel_online_via_api() is True
-        await frontend_container.shared_storage.delete(tunnel_online_key, force_global=True)
+        await frontend_di.shared_storage.delete(tunnel_online_key, force_global=True)
         assert await _is_tunnel_online_via_api() is False
         await websocket.send(json.dumps({"type": "ping"}))
         await wait_tunnel_json(websocket, expected_type="pong", timeout=5.0)

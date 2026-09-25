@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from apps.flows.tools.files.files import read_file
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.extract_cache import (
@@ -38,13 +37,13 @@ _IMAGE = "img/example.jpg"
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_files_to_envelope_from_persisted_file(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _TEXT)
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     args = ReadFileArgs(names=[file_ref.original_name], budget=180_000)
 
     envelope = await read_files_to_envelope([file_ref], args, tool_name="read_file")
@@ -61,13 +60,13 @@ async def test_read_files_to_envelope_from_persisted_file(
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_extract_cache_hit_on_drilldown(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "book-war-and-peace-1225p.txt")
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     assert file_ref.file_id is not None
 
     first_args = ReadFileArgs(names=[file_ref.original_name], budget=2_000)
@@ -92,13 +91,13 @@ async def test_extract_cache_hit_on_drilldown(
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_extract_cache_miss_reextracts_without_crash(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _CSV)
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     assert file_ref.file_id is not None
 
     args = ReadFileArgs(names=[file_ref.original_name], budget=180_000)
@@ -122,7 +121,7 @@ async def test_extract_cache_miss_reextracts_without_crash(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_multi_file_batch_mixed_lanes(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
@@ -130,8 +129,8 @@ async def test_multi_file_batch_mixed_lanes(
     mock_llm_with_queue(["MOCK_VISION"])
     pdf_entry = next(e for e in POSITIVE if e.relative_path == _PDF)
     image_entry = next(e for e in POSITIVE if e.relative_path == _IMAGE)
-    pdf_ref = await store_corpus_in_files_service(frontend_container, pdf_entry, unique_id=unique_id)
-    image_ref = await store_corpus_in_files_service(frontend_container, image_entry, unique_id=unique_id)
+    pdf_ref = await store_corpus_in_files_service(frontend_di, pdf_entry, unique_id=unique_id)
+    image_ref = await store_corpus_in_files_service(frontend_di, image_entry, unique_id=unique_id)
 
     args = ReadFileArgs(names=[pdf_ref.original_name, image_ref.original_name], budget=180_000)
     envelope = await read_files_to_envelope([pdf_ref, image_ref], args, tool_name="read_file")
@@ -146,12 +145,12 @@ async def test_multi_file_batch_mixed_lanes(
 @pytest.mark.timeout(120)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_tool_missing_name_returns_error_result(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _TEXT)
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = execution_state_for_files(files=[file_ref], user_id="test_user")
     payload = require_json_object(
         await read_file.run({"names": ["definitely-missing.txt", file_ref.original_name]}, state),
@@ -167,7 +166,8 @@ async def test_read_file_tool_missing_name_returns_error_result(
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_capability_files_read_returns_single_file_result(
-    frontend_container,
+    capability_gateway_di,
+    frontend_di,
     system_user_id: str,
     unique_id: str,
     mock_llm_with_queue,
@@ -175,10 +175,10 @@ async def test_capability_files_read_returns_single_file_result(
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == _XLSX)
     raw = require_corpus_bytes(entry)
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     assert file_ref.file_id is not None
 
-    registry = get_capability_gateway_container().capability_registry
+    registry = capability_gateway_di.capability_registry
     response = await registry.call(
         capability_files_read_request(user_id=system_user_id, file_id=file_ref.file_id, page_end=-1)
     )

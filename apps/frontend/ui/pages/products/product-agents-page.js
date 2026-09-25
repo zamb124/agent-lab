@@ -2,7 +2,7 @@
  * Страница продукта Agents — AI Studio
  */
 import { ProductLandingPage } from '../../components/product-landing/product-landing-page.js';
-import { landFlowsAbilityUrl } from '../../utils/land-product-images.js';
+import { landFlowsAbilityUrl } from '../../_helpers/land-product-images.js';
 
 export class ProductAgentsPage extends ProductLandingPage {
     static productKey = 'agents';

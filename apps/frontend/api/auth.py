@@ -5,11 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.config import get_settings
 from core.identity.auth_service import AuthService
 from core.logging import get_logger
-from core.models.identity_models import AuthProvider, AuthRequest
+from core.models.identity_models import AuthProvider, AuthRequest, Company
 from core.utils.domain import build_url, get_cookie_domain, is_local
 from core.utils.tokens import TokenService
 
@@ -20,14 +20,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.get("/callback")
 async def auth_callback(
     request: Request,
-    container: ContainerDep,
+    di: Di,
     code: Annotated[str, Query()],
     state: Annotated[str, Query()],
     provider: Annotated[str | None, Query()] = None,
     apple_oauth_user_json: Annotated[str | None, Query(alias="user")] = None,
 ) -> RedirectResponse:
     """Callback после OAuth авторизации"""
-    auth_service: AuthService = container.auth_service
+    auth_service: AuthService = di.auth_service
 
     auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
@@ -81,7 +81,7 @@ async def auth_callback(
         redirect_url = build_url(target_host, "/select-company?action=create")
     elif len(user.companies) == 1:
         company_id = list(user.companies.keys())[0]
-        company = await container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         if not company or not company.subdomain:
             redirect_url = build_url(target_host, "/select-company?action=create")
         else:
@@ -89,7 +89,7 @@ async def auth_callback(
     else:
         active_id = user.active_company_id
         if active_id and active_id in user.companies:
-            company = await container.company_repository.get(active_id)
+            company = await Company.get(active_id)
             if company and company.subdomain:
                 redirect_url = build_url(target_host, "/dashboard", company.subdomain)
             else:

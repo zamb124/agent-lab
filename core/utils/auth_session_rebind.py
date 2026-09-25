@@ -8,7 +8,6 @@ from fastapi import Request
 from starlette.responses import Response
 
 from core.config import get_settings
-from core.container import BaseContainer
 from core.models.identity_models import Company, User
 from core.utils.domain import get_cookie_domain
 from core.utils.tokens import TokenData, TokenService, get_token_service
@@ -33,7 +32,6 @@ def attach_session_auth_cookie(response: Response, request: Request, token: str)
 
 async def rebind_session_to_company(
     *,
-    container: BaseContainer,
     user: User,
     company: Company,
     roles: list[str] | None = None,
@@ -53,7 +51,7 @@ async def rebind_session_to_company(
         raise ValueError("rebind_session_to_company: roles must be non-empty")
 
     user.active_company_id = cid
-    _ = await container.user_repository.set(user)
+    _ = await User.set(user)
 
     token_service = get_token_service()
     raw = token_service.create_token(user.user_id, cid, roles=roles, email=user.email)

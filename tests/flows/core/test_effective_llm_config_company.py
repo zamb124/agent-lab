@@ -131,5 +131,5 @@ def test_byok_company_primary_rejects_platform_cost_fallback() -> None:
     )
     node = _node(NodeLLMConfig(provider=HUMANITEC_LLM_PROVIDER, model="auto"))
 
-    with pytest.raises(ValueError, match="смешивает"):
+    with pytest.raises(ValueError, match="mixes company-cost and platform-cost"):
         resolve_effective_llm_config_for_node(node)

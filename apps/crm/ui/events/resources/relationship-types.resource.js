@@ -2,8 +2,8 @@
  * Relationship Types — типы связей между сущностями.
  *
  * Backend (`/crm/api/v1/relationships/types`):
- *   GET  /  → OffsetPage[RelationshipTypeResponse]
- *   POST /  → RelationshipTypeResponse
+ *   GET  /  → OffsetPage[RelationshipType]
+ *   POST /  → RelationshipType
  */
 
 import { createResourceCollection } from '@platform/lib/events/index.js';

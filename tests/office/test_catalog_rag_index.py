@@ -15,7 +15,6 @@ import jwt
 import pytest
 
 from apps.office.config import get_office_settings
-from apps.office.container import get_office_container
 from apps.office.models.api import (
     OfficeCatalogRagIndexStatusTotals,
     OfficeCatalogSemanticSearchResponse,
@@ -23,6 +22,7 @@ from apps.office.models.api import (
 from apps.office.services.callback_token import encode_callback_context_token
 from apps.office.services.catalog_rag_index_service import OFFICE_CATALOG_RAG_NAMESPACE_PREFIX
 from core.config import get_settings
+from core.files.models import FileRecord
 from core.rag.search_options_resolver import resolve_platform_search_options
 from tests.fixtures.aiohttp_ephemeral import tcp_site_assigned_port
 from tests.office.helpers import upload_office_file_bytes
@@ -223,8 +223,7 @@ async def _assert_rag_namespace_absent(
 
 
 async def _assert_file_record_preserved(file_id: str) -> None:
-    container = get_office_container()
-    file_record = await container.file_repository.get(file_id)
+    file_record = await FileRecord.get(file_id)
     assert file_record is not None
     assert file_record.file_id == file_id
 
@@ -1168,7 +1167,7 @@ async def test_rebuild_when_rag_disabled_returns_409(
         headers=auth_headers_system,
     )
     assert rebuild_response.status_code == 409
-    assert rebuild_response.json()["detail"] == "RAG-индекс для каталога не включён"
+    assert rebuild_response.json()["detail"] == "RAG index is not enabled for the catalog"
 
 
 @pytest.mark.asyncio
@@ -1262,6 +1261,7 @@ async def test_signature_sidecar_skipped_from_catalog_rag_index(
 @pytest.mark.asyncio
 async def test_onlyoffice_callback_save_reindexes_document(
     office_client,
+    office_di,
     rag_client,
     rag_service,
     rag_worker,
@@ -1323,8 +1323,7 @@ async def test_onlyoffice_callback_save_reindexes_document(
     assert callback_response.status_code == 200
     assert callback_response.json()["error"] == 0
 
-    container = get_office_container()
-    meta = await container.files_service.get(file_id)
+    meta = await office_di.files_service.get(file_id)
     assert meta is not None
     assert meta.checksum == hashlib.sha256(new_body).hexdigest()
 
@@ -1483,6 +1482,7 @@ async def test_patch_rag_settings_persists_search_options(
 @pytest.mark.asyncio
 async def test_catalog_semantic_search_applies_catalog_search_options(
     office_client,
+    office_di,
     auth_headers_system,
     unique_id,
     monkeypatch,
@@ -1522,8 +1522,7 @@ async def test_catalog_semantic_search_applies_catalog_search_options(
         captured["freshness_weight"] = freshness_weight
         return {"results": []}
 
-    container = get_office_container()
-    monkeypatch.setattr(container.rag_client, "search", _capture_search)
+    monkeypatch.setattr(office_di.catalog_rag_index_service._rag_client, "search", _capture_search)
 
     search_response = await office_client.post(
         f"/documents/api/v1/catalogs/{catalog_id}/rag-index/search",

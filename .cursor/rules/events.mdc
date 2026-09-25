@@ -1,294 +1,59 @@
 ---
-description: Единая шина событий платформы (core/events, Redis Stream platform:events, bus realtime → Centrifugo) + контракт события для backend и UI. Любое доменное/UI-событие backend'а — PlatformEvent на шине; UI получает publication через Centrifugo; durable-потребители (триггеры flows, inbox) читают те же события at-least-once через consumer groups
+description: "Шина platform:events: PlatformEvent, publisher, каталог типов, consumer groups, bus realtime → Centrifugo, notify_user и offline push. Читать при публикации и подписке"
+globs:
+  - "core/events/**"
+  - "core/realtime/**"
+  - "core/push/**"
+  - "core/websocket/publisher.py"
+  - "apps/realtime/**"
+  - "apps/*/events.py"
+  - "apps/flows/src/events.py"
 alwaysApply: false
 ---
-# События платформы: единая шина + event-driven UI
 
-Два слоя одного канона:
+# События
 
-1. **Backend — шина `platform:events`** (`core/events/`): один Redis Stream,
-   один publisher API (`submit_platform_event`: persist лог + XADD + Centrifugo publish),
-   consumer groups для durable-потребителей.
-2. **Frontend — EventBus**: любое действие (клик, ответ HTTP, WS-фрейм,
-   таймер, смена URL) — Event; state меняют только reducers фабрик.
+Изменение мира — `PlatformEvent` на одном Redis Stream `platform:events` (`core/events/`). UI получает его через bus `realtime` → Centrifugo, durable-потребители — через consumer groups. Команды UI и их исходы → `architecture.mdc`; реакция UI на push → `ui_factories.mdc`.
 
-НИКАКИХ ОТКЛОНЕНИЙ. ZERO-FALLBACK ВЕЗДЕ.
+## Канон
 
-См. также: `ui_factories.mdc` (контракт фабрик), `frontend.mdc` (структура
-`apps/<svc>/ui/`), `ui_components.mdc` (core UI Kit), `flows.mdc` (триггер
-`platform_event`), `flow_employee.mdc` (employee routing).
+1. `PlatformEvent` (`core/events/contract.py`): `event_id`, `type` (`<scope>/<entity>/<verb>`, lowercase snake_case, ≥ 3 сегмента), `company_id` (обязателен, `system` для платформенных), `payload`, `meta` (`ts`, `source`, `actor_user_id`, `causation_id`, `correlation_id`, `trace_id`, `request_id`), `delivery`.
+2. `delivery: EventDelivery | None` — ровно одно из `user_ids`, `company_id`, `broadcast`; `None` — доменное событие без UI-доставки.
+3. Публикация — только хелперы `core/events/publisher.py`: `publish_event_to_user`, `publish_event_to_users`, `publish_event_to_company`, `publish_event_broadcast`, `publish_domain_event`; все идут через `submit_platform_event` (`core/realtime/submit.py`: persist `platform_event_log` → XADD → Centrifugo publish). `trace_id`, `request_id`, `company_id` наследуются из контекста; bus недоступен — публикация падает.
+4. Один доменный факт — одна запись стрима при любом числе получателей (`user_ids` — список).
+5. Тип, который публикуется или слушается триггером, зарегистрирован `register_platform_event(type, payload_model, description=...)` (`core/events/registry.py`) в `apps/<svc>/events.py`, `apps/flows/src/events.py`, `core/worktracker/events.py` или `core/mail/events.py`; один тип — одна модель payload.
+6. Каталог: каждый процесс на старте пишет регистрации в Redis HASH `platform:event_catalog` (`store_registered_platform_events`); полный каталог — `load_platform_event_catalog` (`GET /flows/api/v1/platform-events/catalog`). `filter_fields` записи выводит `derive_filter_fields` из JSON Schema payload; UI schema не парсит.
+7. Redis-клиент шины — `events_redis_client()` (`core/events/redis_client.py`), один на running event loop; при смене loop пересоздаётся.
+8. WS-фрейм push — сериализованный `PlatformEvent` без `delivery`.
 
-## Шина `platform:events` (backend)
+### Потребители
 
-Один Redis Stream `platform:events` — хребет всех событий платформы
-(`XADD` с approximate MAXLEN из `settings.events.stream_maxlen`).
+1. Tail — `PlatformEventTailReader` (`XREAD`, at-most-once, resume с последнего id); group — `PlatformEventGroupConsumer` (`XREADGROUP` + `XACK` + `XAUTOCLAIM`, at-least-once, poison-запись логируется и ACK'ается); user WS — Centrifugo publish из bus (гарантия — лог и `GET /realtime/api/v1/events/{event_id}`).
+2. Consumer group называется именем сервиса; идемпотентность — у потребителя по `event_id` (+ id сущности).
+3. Единственная группа — `flows` во `flows_worker`: `PlatformEventConsumerService` маршрутизирует employee inbox (→ `flow_employee.mdc`), HITL resume `worktracker/work_item/completed` (→ `worktracker.mdc`) и `dispatch_platform_event_triggers` (→ `flows.mdc` § Триггеры); новая группа — только под продуктовую потребность.
+4. Фильтр триггера `platform_event` — только leaf-пути `filter_fields` (string, int, number, bool, enum, nested object, discriminated union, `contains` по массиву скаляров, глубина ≤ 6); неизвестный путь или op — 400.
 
-### Контракт `PlatformEvent` (`core/events/contract.py`)
+### Вне шины
 
-- `event_id`, `type` (`<scope>/<entity>/<verb>`, lowercase snake_case,
-  >= 3 сегмента — общий контракт с фронтендом), `company_id`
-  (обязателен; `system` для платформенных событий), `payload: JsonValue`,
-  `meta` (`ts`, `source`, `actor_user_id?`, `causation_id`,
-  `correlation_id`, `trace_id`, `request_id`).
-- `delivery: EventDelivery | None` — UI-адресация: ровно одно из
-  `user_ids: list[str]` / `company_id` / `broadcast`. `None` — чисто
-  доменное событие, WS-форвардер его пропускает.
-- **Одно доменное событие = одна запись стрима**, сколько бы получателей
-  ни было (`user_ids` — список, не N публикаций).
-- Toast / notification-center — **другой факт** (`notify/<svc>/<kind>_received`
-  через `notify_user`). N× `notify_user` в цикле допустим; N×
-  `publish_event_to_user` одного доменного типа — нет
-  (`publish_event_to_users`).
+Свои каналы, а не `platform:events`: A2A/LLM `stream:{task_id}` и `ui-action` (→ `a2a.mdc`), tunnel LinnexAgent, lock-release документа Office, ledger `workflow_events`, TaskIQ-задачи, voice WS и LiveKit, HTTP poll отчёта crawl и pairing агента, команда `company_init`. Доменное следствие `ui-action` после durable commit — обычный зарегистрированный `PlatformEvent` с собственным `event_id`.
 
-### Publisher (`core/events/publisher.py`)
+### Уведомления
 
-Единственный способ опубликовать событие из любого процесса (HTTP-сервис,
-TaskIQ worker):
+1. Toast и центр уведомлений — отдельный факт `notify/<svc>/<kind>_received`, публикуется только `notify_user` (`core/websocket/publisher.py`, модель `Notification`, `NotificationType`); N вызовов `notify_user` в цикле допустимы.
+2. Уведомления в БД не хранятся; dedup фоновых источников (`mail_sync_tick`, `calendar_sync_tick`) — `shared_storage`.
+3. Offline: нет соединения Centrifugo (`presence_stats`) — bus вызывает `deliver_offline_push` (`core/push/delivery.py`): `web_vapid` → `WebPushService`, endpoint `apns:<hex>` → `ApnsPushService` при полном `resolve_apns_credentials` (`push.apns_bundle_id` обязателен). Подписка — `POST .../api/push/subscribe`.
+4. UI: `<platform-notification-manager>` рендерит `PlatformApp` один раз; локальный toast — helper `this.toast(...)`; слой toast — `nextModalLayerZIndex()` (`core/frontend/static/lib/utils/modal-z-stack.js`); события браузера — `notification-received` (компонент) и `platform-notification-received` (`window`).
 
-```python
-from core.events import publish_event_to_users, publish_domain_event
+## Запреты
 
-await publish_event_to_users(recipient_user_ids, "sync/message/created", payload, company_id=company_id)
-await publish_domain_event("crm/entity/created", payload, company_id=company_id, actor_user_id=uid)
-```
+1. Вторая шина, свой Redis-канал или Redis Pub/Sub для доменных и UI-событий; XADD/PUBLISH в `platform:events` вне `core/events/`.
+2. N× `publish_event_to_user` одного факта в цикле.
+3. HTTP «сервис → flows» для запуска flow или resume по событию.
+4. Envelope `UIEvent` вместо `PlatformEvent`; дубль одного события Flow UI в `platform:events` и A2A.
+5. Broadcast уведомлений всем пользователям; свой toast-механизм в `apps/*/ui`; хардкод WS URL.
 
-Хелперы: `publish_event_to_user` / `publish_event_to_users` /
-`publish_event_to_company` / `publish_event_broadcast` (UI-доставка) и
-`publish_domain_event` (`delivery=None`). `trace_id`/`request_id`/`company_id`
-наследуются из контекста, если не заданы явно. Bus `realtime` недоступен —
-публикация падает (Zero-Guess). `publish_event` зовёт `submit_platform_event`
-(persist лог + XADD + Centrifugo).
+## Гейты
 
-User-сокет — только Centrifugo `/realtime`. SESSION JWT (`cookie auth_token`)
-= connection JWT (`iss=platform.session`, claim `channels`, `meta.company_id`).
-Команда UI — `PlatformEvent` `…/_requested` через Centrifugo RPC `platform.event`
-→ bus → `POST /{owner}/api/internal/realtime/command` → тот же `op_*`.
-Каталог команд: `register_ws_command_handler` (Sync — `SYNC_OPERATIONS`;
-остальные сервисы регистрируют `op_*` тем же хелпером). Connect-proxy и
-`connection_token` запрещены.
-
-Redis-клиент шины — `events_redis_client()` (`core/events/redis_client.py`):
-один на **текущий running event loop**. Starlette `TestClient` поднимает
-свой loop на каждый `with`-блок; клиент с закрытого loop даёт
-`Event loop is closed` на XADD/HSET. При смене loop синглтон пересоздаётся;
-в testing shutdown `create_service_app` вызывает `close_publisher_client()`.
-
-### Потребители (`core/events/consumer.py`)
-
-| Режим | Примитив | Кто | Семантика |
-|---|---|---|---|
-| tail | `PlatformEventTailReader` (`XREAD`) | durable-потребители, которым нужен live-хвост стрима (не user WS) | at-most-once, resume с последнего id |
-| group | `PlatformEventGroupConsumer` (`XREADGROUP` + `XACK` + `XAUTOCLAIM`) | durable-потребители; первый — группа `flows` в `flows_worker` (триггеры `platform_event` + employee inbox) | at-least-once; poison-записи логируются и ACK'аются |
-| user WS | HTTP API Centrifugo (`publish`) | процесс `realtime` после persist лога | at-most-once на сокет; гарантия — лог bus + `GET /realtime/api/v1/events/{event_id}` |
-
-Тестовый `platform_events_listener`: курсор = id последней записи стрима, на пустом стриме `0-0`. `XREAD $` запрещён — Redis `$` пропускает publish между open и первым `XREAD` (пустой стрим после FLUSHDB / старт сессии). WS-хвост `$` остаётся live-only, это другой контракт.
-
-Любой сервис может завести свою consumer group и перехватить любое
-событие платформы. Идемпотентность обязана обеспечиваться потребителем
-(flows: детерминированный `task_id` из `event_id + trigger_id`).
-
-### Каталог событий (`core/events/catalog.py`)
-
-- `register_platform_event(type, payload_model, description=...)` — сервис
-  регистрирует свои типы при импорте своего events-модуля
-  (`apps/<svc>/events.py` — crm, sync, wiki, office, rag; `apps/flows/src/events.py`;
-  `core/worktracker/events.py`, `core/mail/events.py`).
-- Один тип = один контракт payload (конфликт моделей — ошибка).
-- На старте каждый процесс публикует регистрации в Redis HASH
-  `platform:event_catalog` (`store_registered_platform_events` в
-  `core/app/factory.py` и `core/tasks/worker_bootstrap.py`); полный каталог
-  платформы — `load_platform_event_catalog` (endpoint
-  `GET /flows/api/v1/platform-events/catalog` для UI триггеров).
-- Запись каталога: `event_type`, `description`, `payload_schema`,
-  **`filter_fields`** (leaf dot-path + `value_kind` + `ops` + `enum_values`) —
-  SSOT для autocomplete фильтров триггера `platform_event`. Derive —
-  `core/events/payload_filter_fields.derive_filter_fields` из JSON Schema
-  Pydantic; UI **не** парсит schema. Новый event в коде → после store в
-  Redis UI/валидация подхватывают сами.
-- Save/register `platform_event`: filters только по `filter_fields`
-  (неизвестный path / запрещённый op → ошибка).
-- Событие, на которое можно подписаться триггером, обязано быть в каталоге.
-
-### Что НЕ на шине (whitelist транспортов / poll / commands)
-
-Не маскировать доменные collaboration-события этими каналами — и наоборот.
-
-| Канал | Почему не `platform:events` |
-|---|---|
-| A2A/LLM Redis `stream:{task_id}` | per-task media stream, не доменный факт |
-| Agent tunnel Pub/Sub | device/control plane |
-| Office document lock-release Pub/Sub | ephemeral lock UX |
-| `workflow_events` ledger | durable execution history, не UI bus |
-| TaskIQ heavy jobs | indexing, STT, mail sync ticks — очередь работ |
-| Voice session WS + LiveKit | media realtime |
-| HTTP poll: search crawl report, agent pairing | операционный UX (явный whitelist) |
-| HTTP command: `company_init` | команда bootstrap, не event |
-
-Всё остальное доменное/UI realtime — только `platform:events`.
-
-### Durable consumer groups
-
-Prod group сегодня: `flows` (`PlatformEventGroupConsumer`, имя = сервис).
-Handler — тонкий router в `PlatformEventConsumerService`: employee inbox,
-HITL resume (`worktracker/work_item/completed`), `dispatch_platform_event_triggers`.
-Новые группы не плодить без продукта; шаблон: group name = service name,
-идемпотентность по `event_id` (+ entity id) обязательна.
-
-### Запреты (backend)
-
-- Вторая шина / собственный Redis-канал для доменных или UI-событий.
-- Redis Pub/Sub для событий платформы (только Stream).
-- N публикаций одного доменного факта «по получателю» — используйте
-  `user_ids` в delivery.
-- Точечные HTTP-вызовы «сервис → flows» для запуска flow по событию —
-  только шина + consumer group `flows`.
-- Мониторинг длины стрима — `core/redis_inventory` (не отключать).
-
-## Контракт события (frontend)
-
-```js
-{
-  id:    string,                   // монотонный, формат e_<ts36>_<seq36>_<rnd36>
-  type:  '<scope>/<entity>/<verb>', // lowercase, snake_case, >= 3 сегмента
-  payload: unknown,                // тело
-  meta: {
-    ts:             number,        // epoch ms
-    source:         'local'|'ws'|'http'|'router'|'storage'|'timer'|'system',
-    causation_id:   string|null,   // id события, породившего это
-    correlation_id: string|null,   // id запроса/потока для связки
-    trace_id:       string|null,   // OTEL trace id (если есть)
-  },
-}
-```
-
-Имена строго `lowercase` snake_case. Примеры:
-`auth/session/login_requested`, `crm/note/created`, `ui/toast/show`,
-`flows/run/step_emitted`, `notify/sync/sync_new_message_received`,
-`frontend/api_keys/list_loaded`. Валидация — `assertEventType` в
-`@platform/lib/events/contract.js`.
-
-WS-фрейм push с бэка — сериализованный `PlatformEvent` **без** `delivery`
-(`event_id`/`type`/`company_id`/`payload`/`meta`); фронт читает `type`,
-`payload`, `meta.*`.
-
-**WS-команды** (фрейм клиент → сервер) дополнительно обязаны
-заканчиваться на `_requested` (`sync/calls/invite_requested`,
-`crm/entity/create_requested`). `core.websocket.command_router` бросает
-`ValueError` при регистрации handler'а с типом без этого суффикса.
-Reply-типы выводятся механически: `<type без _requested>_succeeded` /
-`_failed`.
-
-Поток `dispatch → EventLog → reducer slice фабрики → state → Lit` и `effect фабрики → новые события`, шесть фабрик, транспорт `transport`/`restMirror`/`wsTimeoutMs`, сериализованный `create` — **`ui_factories.mdc`**. Базовые классы, helpers `PlatformElement`, структура `apps/<svc>/ui/`, zero-import и CI-запреты — **`frontend.mdc`**.
-
-## Где живёт код
-
-- **Ядро (frontend):** `core/frontend/static/lib/events/`
-  - `bus.js`, `log.js`, `contract.js`, `selectors.js`, `select-controller.js`,
-    `bootstrap.js`, `index.js`.
-  - `factories/` — `async-op.js`, `resource-collection.js`, `cursor-list.js`,
-    `facets.js`, `form.js`, `slice.js`, `register.js`. Контракт — в `ui_factories.mdc`.
-  - `factory-registry.js` — singleton lookup (`registerFactory`,
-    `getFactory(name, expectedKind?)`, `hasFactory`, `clearFactoryRegistry`).
-  - `reducers/` — core slices; `effects/` — core effects (в т.ч. `ws`).
-- **Базовые классы Lit:** `PlatformElement` / `PlatformApp` / `PlatformPage`
-  (см. `frontend.mdc`).
-- **Backend:** `core/events/`
-  - `contract.py` — `PlatformEvent`, `PlatformEventMeta`, `EventDelivery`,
-    `CoreFrontendEventTypes`, валидатор имён, `PLATFORM_EVENTS_STREAM`.
-  - `publisher.py` — `publish_event` + хелперы.
-  - `catalog.py` — реестр типов + Redis-каталог.
-  - `consumer.py` — tail/group примитивы.
-- **WS-инфраструктура:** user-сокет — Centrifugo `/realtime`. Bus `apps/realtime`
-  persist лог `PlatformEvent`, XADD `platform:events`, HTTP API Centrifugo `publish`.
-
-## CoreEvents — реестр платформенных типов
-
-`@platform/lib/events/contract.js` экспортирует `CoreEvents` —
-единственный источник правды платформенных UI-типов (`auth`, `theme`,
-`i18n`, `router`, `network`, `ui`, `notify`, `pwa`, `storage`, `http`,
-`ws`). Сервисные типы (`crm/...`, `flows/...`) порождаются фабриками
-сервиса в `apps/<svc>/ui/events/resources/*.resource.js`.
-
-Исходящий `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|I18N_*|THEME_*|COMPANIES_*)`
-в `apps/<svc>/ui/{pages,modals,components}/**` — **запрещён**
-(`scripts/check_ui_canon.sh`): только helpers `PlatformElement`
-(таблица helper → CoreEvent — **`frontend.mdc`** § «API компонента»).
-Подписка `useEvent` на CoreEvents допустима.
-
-## Backend → UI
-
-«Нажать кнопку из бэка» = бэк публикует событие с `delivery`, на которое
-подписан UI-компонент. Никаких отдельных RPC, никаких command-bus.
-
-```python
-from core.events import publish_event_to_user
-
-await publish_event_to_user(
-    ctx.user.user_id,
-    "crm/note/updated",
-    {
-        "company_id": note.company_id,
-        "namespace": note.namespace,
-        "note_id": note.entity_id,
-        "note_date": note.note_date.isoformat() if note.note_date else None,
-        "action": "updated",
-        "note": EntityResponse.model_validate(note).model_dump(mode="json"),
-    },
-    correlation_id=trace_id,
-)
-```
-
-На фронте подписанный компонент получает это событие в bus и реагирует
-через **resource factory** (`extraReducer` / `extraEffect`), а не page-level
-HTTP reload:
-
-```js
-// apps/crm/ui/events/resources/notes.resource.js
-export const notesListResource = createCursorList({
-    name: 'crm/notes_list',
-    // …
-    extraReducer: (state, event) => {
-        if (event.type !== 'crm/note/updated') {
-            return state;
-        }
-        const note = event.payload && event.payload.note;
-        if (!note || typeof note.entity_id !== 'string') {
-            return state;
-        }
-        // merge/remove по note_id — не LOAD_REQUESTED и не page._reload()
-        return mergeNoteIntoListState(state, event.payload);
-    },
-});
-```
-
-Запрещено: `useEvent('crm/note/updated', () => this._notes.load())` на странице —
-коллекция обновляется только reducer/effect фабрики.
-
-## Backend → flows (триггеры)
-
-Любой flow подписывается на любое событие платформы триггером
-`platform_event` (`event_type` + `filters` из `filter_fields` каталога) —
-канон и runtime в `flows.mdc`. Leaf-поля: string/int/number/bool/enum,
-nested objects, discriminated unions (`oneOf` + discriminator),
-array скаляров (`contains`). Не фильтруются: array объектов, free-form
-`additionalProperties`, envelope (`actor_user_id` вне payload), depth > 6.
-Save/create trigger с неизвестным path/op → HTTP 400. Wake-up
-flow-сотрудника (worktracker assigned, sync DM/@mention) — системный
-маршрут той же consumer group `flows` (`flow_employee.mdc`).
-
-## A2A / Flow UI не являются второй platform event bus
-
-`platform:events` доставляет доменные push-события между сервисами/UI factories. A2A Task lifecycle, Artifact updates (включая артефакты Flow UI `state`/`ui`) и `ui-action` относятся к durable flow execution и идут через A2A projection/stream. Они не публикуются как `PlatformEvent` ради рендера и не получают отдельную Redis event bus.
-
-Запрещены `UIEvent`, `artifact.name="ui_event"` и дублирование одного Flow UI события в `platform:events` + A2A. Доменные последствия `ui-action` могут после durable commit публиковать обычный catalogued `PlatformEvent`; это другой факт с собственным `event_id`/causation.
-
-## Тестирование
-
-- **Шина** — Pytest на реальном Redis; листенер тестов —
-  `tests/fixtures/platform_events.py::platform_events_listener` (чтение
-  стрима с момента открытия; фильтр по `type` и `delivery.user_ids`).
-- **Live WS = REST identity** — `tests/realtime/**` (Centrifugo `:19000` +
-  bus `:9025`, `no_test_doubles`).
-- **E2E** — Playwright: backend publish → UI обновляется.
-- Reducers / effects / контроллеры фабрик и сброс реестров между тестами —
-  **`ui_factories.mdc`** § «Тестирование».
+- `scripts/check_platform_events_canon.py` (`make check-events-canon`) — прямой XADD, регистрация publish-литералов, fan-out в цикле, orphan-типы, HTTP wake, reload страницы на push, запрещённые имена в коде и правилах.
+- `scripts/check_realtime_canon.py` (`make check-events-canon`) — user WS только Centrifugo `/realtime`, HTTP к Centrifugo только из bus, без connect-proxy и `connection_token`.
+- `tests/fixtures/platform_events.py::platform_events_listener` — чтение стрима с id последней записи (на пустом стриме `0-0`); `tests/realtime/**` — живой Centrifugo + bus.

@@ -302,7 +302,7 @@ describe('mailReducer', () => {
     it('failed events store errorMessage', () => {
         const next = mailReducer(
             { ...initialMailState, loading: true },
-            ev(MAIL_EVENTS.MESSAGES_LOAD_FAILED, { message: 'boom' }),
+            ev(MAIL_EVENTS.MESSAGES_LOAD_FAILED, { error_code: 'boom' }),
         );
         expect(next.loading).toBe(false);
         expect(next.errorMessage).toBe('boom');
@@ -449,9 +449,9 @@ describe('mailReducer', () => {
         expect(ok.errorMessage).toBeNull();
         const failed = mailReducer(
             { ...initialMailState, loading: true },
-            ev(MAIL_EVENTS.MESSAGE_SEND_FAILED, { message: 'smtp down' }),
+            ev(MAIL_EVENTS.MESSAGE_SEND_FAILED, { error_code: 'smtp_down' }),
         );
-        expect(failed.errorMessage).toBe('smtp down');
+        expect(failed.errorMessage).toBe('smtp_down');
     });
 
     it('BINDING_MEMBERS_LOADED / ADDED / REMOVED update bindingMembers map', () => {

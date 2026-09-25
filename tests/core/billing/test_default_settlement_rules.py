@@ -4,18 +4,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import core.tracing.attributes as trace_attr
 from core.billing.default_settlement_rules import default_settlement_rules_document
 from core.billing.settlement_rules import resolve_matched_rules
-from core.tracing.models import BillingSettlementSpan
+from core.tracing.models import Span
 from core.types import JsonObject
 
 
-def _span(operation_name: str, attrs: JsonObject | None = None) -> BillingSettlementSpan:
-    return BillingSettlementSpan(
+def _span(operation_name: str, attrs: JsonObject | None = None) -> Span:
+    return Span(
         span_id="s1",
         trace_id="t1",
         operation_name=operation_name,
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
         service_name="flows",
         attributes=attrs if attrs is not None else {},
     )

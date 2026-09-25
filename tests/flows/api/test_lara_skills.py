@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.models.agent_skill import AgentSkill
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     agent_skill_runtime_host_scope,
@@ -36,9 +37,9 @@ def _assert_tools_include(payload: JsonObject, expected_tool_ids: set[str]) -> N
 
 
 @pytest.mark.asyncio
-async def test_lara_flow_attaches_full_skill_roots(container, unique_id: str) -> None:
+async def test_lara_flow_attaches_full_skill_roots(di, unique_id: str) -> None:
     _ = unique_id
-    flow = await ensure_lara_flow(container)
+    flow = await ensure_lara_flow(di)
     assert_lara_attach(flow)
     assert "reflection_node_helper" in (flow.branches or {})
     main = flow.nodes["main"] if flow.nodes is not None else None
@@ -49,11 +50,11 @@ async def test_lara_flow_attaches_full_skill_roots(container, unique_id: str) ->
 
 @pytest.mark.asyncio
 async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = unique_id
-    flow = await ensure_lara_flow(container)
+    flow = await ensure_lara_flow(di)
     branches = flow.branches
     assert branches is not None
     assert {
@@ -74,7 +75,7 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
     assert any(
         edge.from_node == "docs_lookup" and edge.to_node == "main" for edge in docs_branch.edges
     )
-    factory = container.flow_factory
+    factory = di.flow_factory
     for branch_id in sorted(branches):
         effective = factory.apply_branch(flow, branch_id)
         main = effective["nodes"]["main"]
@@ -90,21 +91,20 @@ async def test_lara_every_effective_branch_keeps_full_roots_and_device_tools(
 
 @pytest.mark.asyncio
 async def test_lara_cross_domain_skill_loads_from_any_root(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     """Flows entry can load networkle; CRM entry path can load flows-editor via chain."""
     company_id = f"company_{unique_id}"
-    async with company_scope(company_id, unique_id):
+    async with company_scope(company_id, unique_id, di=di):
         await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             company_id,
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset(LARA_PLATFORM_SKILL_ROOTS),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index(list(LARA_PLATFORM_SKILL_ROOTS))
+                await AgentSkill.resolve_index(list(LARA_PLATFORM_SKILL_ROOTS))
             ),
         )
         state = make_skill_state(flow_id="lara", unique_id=unique_id)

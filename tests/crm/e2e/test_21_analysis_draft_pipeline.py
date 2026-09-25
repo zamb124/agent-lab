@@ -16,7 +16,6 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm.container import CRMContainer
 from apps.crm.models.api import AIAnalysisDraftStored, AIExtractedEntity
 from apps.crm.services.entity_service import ApplyAnalysisDraftEntityFailuresError, EntityService
 from core.types import JsonObject
@@ -173,7 +172,7 @@ class TestAnalysisDraftPipeline:
     ) -> None:
         note_name = f"Черновик-тест {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -272,7 +271,7 @@ class TestAnalysisDraftPipeline:
     ) -> None:
         note_name = f"Патч-конфликт {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -336,7 +335,7 @@ class TestAnalysisDraftPipeline:
     ) -> None:
         note_name = f"Патч-удаление {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -425,7 +424,7 @@ class TestAnalysisDraftPipeline:
     ) -> None:
         note_name = f"Apply-тест {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -520,7 +519,7 @@ class TestAnalysisDraftPipeline:
     ) -> None:
         note_name = f"Двойной-apply {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -579,12 +578,12 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
         crm_client: AsyncClient,
         unique_id: str,
         auth_headers_system: dict[str, str],
-        crm_container: CRMContainer,
+        crm_di,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         note_name = f"Компенсация-apply {unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": note_name,
@@ -621,7 +620,7 @@ class TestAnalysisDraftApplyPartialFailureCompensation:
             relationships=[],
         )
 
-        entity_service = crm_container.entity_service
+        entity_service = crm_di.entity_service
         note_row = await entity_service.get_entity(note_id)
         if not note_row:
             raise AssertionError(f"note {note_id} not found")

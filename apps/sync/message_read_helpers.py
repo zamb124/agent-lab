@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from apps.sync.db.models import SyncMessage
 from apps.sync.models.common import UserBrief
+from apps.sync.models.message import SyncMessage
 from apps.sync.models.messages import (
     ForwardedFromChannel,
     MessageContentModel,

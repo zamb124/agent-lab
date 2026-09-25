@@ -16,7 +16,7 @@ from core.clients.service_client import ServiceClientError
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import ensure_flow_employee, flow_employee_user_id
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.sync.api._helpers import seed_namespace_via_repo
@@ -58,14 +58,14 @@ def _employee_context(employee_user: User, company):
 
 
 async def test_sync_send_and_list_as_member(
-    flows_service, sync_service, frontend_container, auth_token_system, unique_id
+    flows_service, sync_service, frontend_di, auth_token_system, unique_id
 ):
     _ = flows_service, sync_service, auth_token_system
     flow_id = f"synctool_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di,
         flow_id=flow_id,
         company_id="system",
         name="Sync Tool Worker",
@@ -75,7 +75,7 @@ async def test_sync_send_and_list_as_member(
     emp_id = flow_employee_user_id(flow_id)
     assert emp_id == employee.user_id
     namespace = f"ns_{unique_id}_st"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
 
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:
@@ -107,12 +107,12 @@ async def test_sync_send_and_list_as_member(
 
 
 async def test_sync_send_non_member_denied(
-    flows_service, sync_service, auth_token_system, unique_id
+    flows_service, sync_service, auth_token_system, unique_id, frontend_di
 ):
     _ = flows_service, sync_service
     emp_id = f"flow_employee_denied_{unique_id}"
     namespace = f"ns_{unique_id}_dn"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
 
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:

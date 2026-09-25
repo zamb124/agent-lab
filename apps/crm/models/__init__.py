@@ -2,7 +2,6 @@
 CRM Models.
 """
 
-from apps.crm.db.models import CRMEntity
 from apps.crm.models.api import (
     AIAnalyzeRequest,
     AIAnalyzeResponse,
@@ -12,10 +11,9 @@ from apps.crm.models.api import (
     EntityTypeResponse,
     EntityUpdate,
     RelationshipCreate,
-    RelationshipResponse,
     RelationshipTypeCreate,
-    RelationshipTypeResponse,
 )
+from apps.crm.models.crm_entity import CRMEntity
 
 __all__ = [
     "CRMEntity",
@@ -25,9 +23,7 @@ __all__ = [
     "EntityTypeCreate",
     "EntityTypeResponse",
     "RelationshipTypeCreate",
-    "RelationshipTypeResponse",
     "RelationshipCreate",
-    "RelationshipResponse",
     "AIAnalyzeRequest",
     "AIAnalyzeResponse",
 ]

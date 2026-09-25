@@ -54,7 +54,7 @@ async def test_wiki_page_parent_ttu_viewer_editor_inheritance(
 async def test_wiki_page_company_direct_can_view_not_edit(
     authz_service: AuthzService,
     unique_id: str,
-    frontend_container,
+    frontend_di,
 ) -> None:
     company_id = f"co-wiki-{unique_id}"
     owner_id = f"owner-{unique_id}"
@@ -62,27 +62,21 @@ async def test_wiki_page_company_direct_can_view_not_edit(
     stranger_id = f"stranger-{unique_id}"
     page_id = f"page-company-{unique_id}"
 
-    company_repository = frontend_container.company_repository
-    user_repository = frontend_container.user_repository
     company = Company(company_id=company_id, name="Wiki", subdomain=f"w-{unique_id}")
     owner = User(user_id=owner_id, name="Owner", companies={})
     member = User(user_id=member_id, name="Member", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(owner)
-    _ = await user_repository.set(member)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
+    _ = await User.set(member)
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=owner,
         roles=["owner"],
     )
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=member,
@@ -107,7 +101,7 @@ async def test_wiki_page_company_direct_can_view_not_edit(
 async def test_wiki_private_child_under_public_parent_does_not_inherit_company(
     authz_service: AuthzService,
     unique_id: str,
-    frontend_container,
+    frontend_di,
 ) -> None:
     company_id = f"co-wiki-priv-{unique_id}"
     owner_id = f"owner-{unique_id}"
@@ -115,27 +109,21 @@ async def test_wiki_private_child_under_public_parent_does_not_inherit_company(
     parent_id = f"page-pub-parent-{unique_id}"
     child_id = f"page-priv-child-{unique_id}"
 
-    company_repository = frontend_container.company_repository
-    user_repository = frontend_container.user_repository
     company = Company(company_id=company_id, name="Wiki Private", subdomain=f"wp-{unique_id}")
     owner = User(user_id=owner_id, name="Owner", companies={})
     member = User(user_id=member_id, name="Member", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(owner)
-    _ = await user_repository.set(member)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
+    _ = await User.set(member)
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=owner,
         roles=["owner"],
     )
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=member,

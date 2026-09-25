@@ -45,14 +45,14 @@ def test_collect_flow_node_files_skips_empty() -> None:
 
 
 def test_validate_node_files_list_rejects_bad_shape() -> None:
-    with pytest.raises(ValueError, match="списком"):
+    with pytest.raises(ValueError, match="must be a list"):
         validate_node_files_list({}, node_id="n1")
     with pytest.raises(ValueError, match="original_name"):
         validate_node_files_list(
             [{"url": "/x", "content_type": "text/plain", "file_size": 1}],
             node_id="n1",
         )
-    with pytest.raises(ValueError, match="file_id или url"):
+    with pytest.raises(ValueError, match="file_id"):
         validate_node_files_list(
             [{"original_name": "a", "content_type": "text/plain", "file_size": 1}],
             node_id="n1",
@@ -61,7 +61,7 @@ def test_validate_node_files_list_rejects_bad_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_flow_validator_invalid_node_files() -> None:
-    v = FlowValidator(flow_repository=None, tool_repository=None, node_repository=None)
+    v = FlowValidator()
     nodes: dict[str, JsonObject] = {
         "main": {
             "type": "llm_node",

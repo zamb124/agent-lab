@@ -145,6 +145,15 @@ SERVICES = {
             ("/wiki/ui/static", "apps/wiki/ui"),
         ],
     },
+    "stock": {
+        "type": "granian",
+        "app": "apps.stock.main:app",
+        "port": "8026",
+        "static": [
+            CORE_FRONTEND_STATIC,
+            ("/stock/ui/static", "apps/stock/ui"),
+        ],
+    },
     "guest_runtime": {
         "type": "granian",
         "app": "apps.guest_runtime.main:app",
@@ -251,6 +260,11 @@ SERVICES = {
     "idle_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.idle_worker.worker:worker_app",
+        "workers": "1",
+    },
+    "a2a_push_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.idle_worker.a2a_push_worker:worker_app",
         "workers": "1",
     },
 

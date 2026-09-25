@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.llm_context_api import (
     LlmContextResolveParentRequest,
     LlmContextResolveParentResponse,
@@ -44,10 +44,10 @@ async def op_flows_llm_context_resolve_parent(
     payload: LlmContextResolveParentRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> LlmContextResolveParentResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     settings = get_settings().llm_context
     company_patch = resolve_company_llm_context_patch()
     resource_patch: LLMContextPatch | None = None
@@ -59,7 +59,6 @@ async def op_flows_llm_context_resolve_parent(
                 flow_resources=payload.flow_resources,
                 skill_resources=None,
                 node_resources_raw=payload.node_resources,
-                repository=container.resource_repository,
             )
         except ValueError as exc:
             raise_invalid(exc)

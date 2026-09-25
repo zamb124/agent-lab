@@ -124,6 +124,13 @@ class AuthzObject:
             format_namespace_key(company_id, datasource_id),
         )
 
+    @classmethod
+    def stock_warehouse(cls, warehouse_id: str, *, company_id: str) -> "AuthzObject":
+        return cls(
+            AuthzObjectType.STOCK_WAREHOUSE,
+            format_namespace_key(company_id, warehouse_id),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class AuthzSubject:

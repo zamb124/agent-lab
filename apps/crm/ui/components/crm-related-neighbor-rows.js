@@ -6,7 +6,7 @@ import {
     entityDisplayIconName,
     relatedSubtitle,
     relatedTone,
-} from '../utils/related-entity-presenter.js';
+} from '../_helpers/related-entity-presenter.js';
 
 export class CRMRelatedNeighborRows extends PlatformElement {
     static i18nNamespace = 'crm';

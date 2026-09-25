@@ -1,59 +1,49 @@
-"""Единый lifecycle TaskIQ-воркера.
+"""Единый lifecycle TaskIQ-воркера на Service Kit.
 
-``build_worker`` инкапсулирует то, что раньше копипастилось в каждом
-``apps/<svc>_worker/worker.py``: регистрацию startup/shutdown событий и recovery
-зависших задач. Доменная инициализация (billing, redis, file processors,
-tracing) — явными типизированными вызовами хелперов внутри
-``on_startup`` конкретного воркера.
+``build_worker`` — единственный вход worker-процесса: recovery зависших задач, tracing,
+file processors, eager-сборка ``<Svc>Di`` через ``open_di`` в ``TaskiqState.di`` и
+закрытие на shutdown. Процессные действия воркера — ``lifecycle`` recipes.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from typing import Protocol, cast
+from contextlib import AsyncExitStack
+from typing import Protocol
 
 from taskiq import TaskiqState
 from taskiq_redis import RedisStreamBroker
 
+from core.billing import set_billing_service
 from core.clients.llm.mock import configure_mock_llm_redis, get_or_create_global_mock_llm
 from core.clients.redis_client import RedisClient
-from core.config import get_settings
+from core.config import BaseSettings, get_settings
 from core.config.testing import is_testing
+from core.di.kit import ProcessIdentity, Recipe, ServiceDi
+from core.di.platform import PlatformDi
+from core.di.process import open_di
+from core.di.state import clear_task_di, set_task_di
 from core.events import store_registered_platform_events
+from core.files.processors import initialize_default_processors
+from core.files.urls import resolve_files_route_segment
 from core.logging import get_logger
 from core.tasks.broker import create_stale_tasks_recovery, register_worker_events
 from core.tracing import setup_tracing
-from core.tracing.repository import SpanRepository
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.types import MigrationDatabaseUrlKey
 
 logger = get_logger(__name__)
-
-WorkerHook = Callable[[TaskiqState], Awaitable[None]]
-
-
-class _SpanRepoContainer(Protocol):
-    @property
-    def span_repository(self) -> SpanRepository: ...
 
 
 class _RedisConnectClient(Protocol):
     async def connect(self) -> None: ...
 
 
-def init_worker_tracing(service_name: str, container: object) -> None:
+def init_worker_tracing(service_name: str) -> None:
     """Единый tracing-блок воркера (был байт-в-байт скопирован в 5 воркерах)."""
     settings = get_settings()
     if not settings.tracing.enabled:
         return
     setup_tracing(settings.tracing)
-    if settings.tracing.postgres_enabled and hasattr(container, "span_repository"):
-        if not settings.database.tracing_url:
-            raise ValueError(
-                'tracing.postgres_enabled requires database.tracing_url (DATABASE__TRACING_URL)'
-            )
-        set_tracing_service_name(service_name)
-        set_span_repository(cast(_SpanRepoContainer, container).span_repository)
     logger.info("worker.tracing_initialized", service=service_name)
 
 
@@ -101,26 +91,40 @@ def build_worker(
     *,
     service_name: str,
     queue: str,
-    on_startup: WorkerHook | None = None,
-    on_shutdown: WorkerHook | None = None,
+    settings: BaseSettings,
+    di_class: type[ServiceDi],
+    database: MigrationDatabaseUrlKey,
+    lifecycle: tuple[Recipe, ...] = (),
 ) -> RedisStreamBroker:
-    """Зарегистрировать единый lifecycle воркера и вернуть broker (worker_app).
+    """Зарегистрировать lifecycle воркера и вернуть broker (worker_app).
 
-    Startup: recovery зависших задач → доменный ``on_startup``.
-    Shutdown: доменный ``on_shutdown``.
+    Startup: recovery → tracing → file processors → ``open_di`` в ``TaskiqState.di``
+    (включая ``lifecycle``) → каталог событий. Shutdown закрывает DI в обратном порядке.
     """
     recovery_handler = create_stale_tasks_recovery(queue_name=queue)
+    identity = ProcessIdentity(
+        service_name=service_name,
+        files_route_segment=resolve_files_route_segment(service_name),
+    )
+    stack = AsyncExitStack()
 
     async def _startup(state: TaskiqState) -> None:
         await recovery_handler()
-        if on_startup is not None:
-            await on_startup(state)
+        init_worker_tracing(service_name)
+        initialize_default_processors()
+        di = await stack.enter_async_context(
+            open_di(di_class, settings=settings, identity=identity, database=database, lifecycle=lifecycle)
+        )
+        if isinstance(di, PlatformDi):
+            set_billing_service(di.billing_service)
+            init_worker_testing_mock_llm(di.redis_client, service_name=service_name)
+        set_task_di(state, di)
         await store_registered_platform_events()
         logger.info("worker.started", service=service_name, queue=queue)
 
     async def _shutdown(state: TaskiqState) -> None:
-        if on_shutdown is not None:
-            await on_shutdown(state)
+        clear_task_di(state)
+        await stack.aclose()
         logger.info("worker.stopped", service=service_name, queue=queue)
 
     register_worker_events(broker, _startup, _shutdown, service_name=service_name)
@@ -128,7 +132,6 @@ def build_worker(
 
 
 __all__ = [
-    "WorkerHook",
     "build_worker",
     "connect_redis_with_backoff",
     "init_worker_testing_mock_llm",

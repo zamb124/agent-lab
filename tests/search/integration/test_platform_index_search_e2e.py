@@ -276,11 +276,7 @@ async def test_auto_falls_back_when_index_empty(
     provider_litserve_service,
     auth_headers_system,
     unique_id,
-    monkeypatch,
 ):
-    from apps.search.config import reset_search_settings
-    from apps.search.container import reset_search_container
-
     _ = rag_worker, provider_litserve_service
     search_index_id = make_search_index_slug(f"auto_{unique_id}")
     rag_namespace_id = f"{search_index_id}:ns"
@@ -303,16 +299,13 @@ async def test_auto_falls_back_when_index_empty(
     )
     assert namespace_response.status_code in {201, 400}
 
-    monkeypatch.setenv("SEARCH__INDEX__DEFAULT_INDEX_IDS", f'["{search_index_id}"]')
-    reset_search_settings()
-    reset_search_container()
-
     response = await search_client.post(
         "/search/api/v1/search",
         json={
             "query": f"Tavily Search API official documentation {unique_id}",
             "limit": 5,
             "providers": ["auto"],
+            "index_ids": [search_index_id],
             "provider_strategy": "first_available",
         },
     )
@@ -323,7 +316,12 @@ async def test_auto_falls_back_when_index_empty(
     assert index_status["ok"] is False
     assert index_status["error"] == "index returned no results"
     serp_provider_ids = ("tinyfish", "linkup", "serper", "tavily")
-    assert any(payload["providers"][provider_id]["ok"] is True for provider_id in serp_provider_ids)
+    attempted = [
+        provider_id
+        for provider_id in serp_provider_ids
+        if provider_id in payload["providers"]
+    ]
+    assert any(payload["providers"][provider_id]["ok"] is True for provider_id in attempted)
     assert payload["results"]
 
 

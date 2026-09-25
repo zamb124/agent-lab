@@ -1,0 +1,5 @@
+GROUP g07_services rc=1
+FAILED tests/secrets/test_api.py::test_secret_masked_in_api_responses
+=========================== short test summary info ============================
+FAILED tests/secrets/test_api.py::test_secret_masked_in_api_responses - Runti...
+= 1 failed, 570 passed, 3 skipped, 1 xfailed, 6 warnings in 115.68s (0:01:55) ==

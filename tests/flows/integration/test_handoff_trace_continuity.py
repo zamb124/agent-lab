@@ -17,11 +17,11 @@ pytestmark = [pytest.mark.timeout(120, func_only=True)]
 class TestHandoffTraceContinuity:
     @pytest.mark.asyncio
     async def test_handoff_sets_handoff_trace_id_on_parent(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-trace-{unique_id}"
@@ -40,12 +40,12 @@ class TestHandoffTraceContinuity:
         _validate_jsonrpc_response(data)
 
         parent_session = f"{parent_fid}:{context_id}"
-        parent_state = await container.workflow_runtime.get_state(parent_session)
+        parent_state = await di.workflow_runtime.get_state(parent_session)
         assert parent_state is not None
         assert parent_state.handoff_depth == 1
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert child_state is not None
 
         if parent_state.handoff_trace_id is not None:
@@ -53,7 +53,7 @@ class TestHandoffTraceContinuity:
 
     @pytest.mark.asyncio
     async def test_flownode_handoff_uses_handoff_session_scheme(
-        self, container, unique_id
+        self, di, unique_id
     ):
         from tests.flows.integration.test_handoff_e2e import _run
         from tests.flows.integration.test_handoff_e2e import _save_flow as save_flow
@@ -61,12 +61,12 @@ class TestHandoffTraceContinuity:
         parent_fid = f"ht-tr-{unique_id}"
         child_fid = f"ht-tr-child-{unique_id}"
         ctx = f"ctx-tr-{unique_id}"
-        await save_flow(container, {
+        await save_flow(di, {
             "flow_id": child_fid, "name": "Child", "entry": "main",
             "nodes": {"main": {"type": "llm_node", "node_id": "c", "prompt": "c", "llm": {"model": "mock-gpt-4"}}},
             "edges": [{"from_node": "main", "to_node": None}],
         })
-        await save_flow(container, {
+        await save_flow(di, {
             "flow_id": parent_fid, "name": "Parent", "entry": "call_child",
             "nodes": {
                 "call_child": {"type": "flow", "flow_id": child_fid, "call_type": "handoff"},
@@ -76,9 +76,9 @@ class TestHandoffTraceContinuity:
         from core.clients.llm import setup_mock_responses
 
         setup_mock_responses(response_queue=["child done"])
-        result = await _run(container, parent_fid, ctx, "go", ["child done"])
+        result = await _run(di, parent_fid, ctx, "go", ["child done"])
         parent_context_id = f"context-{ctx}"
         child_session = f"{child_fid}:{parent_context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert child_state is not None
         assert result.interrupt is None

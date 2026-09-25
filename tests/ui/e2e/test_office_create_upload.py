@@ -40,7 +40,7 @@ async def test_office_create_and_upload_documents(
     ui_page_system: Page,
     auth_token_system: str,
     unique_id: str,
-    tmp_path: Path,
+    tmp_path: Path, frontend_di,
 ) -> None:
     catalog_title = f"files-{unique_id}"
     word_title = f"Word {unique_id}"
@@ -49,7 +49,7 @@ async def test_office_create_and_upload_documents(
     upload_name = f"upload-{unique_id}.png"
 
     namespace = await office_e2e_open_with_namespace(
-        office_ui, ui_page_system, unique_id, suffix="doc"
+        office_ui, ui_page_system, unique_id, suffix="doc", di=frontend_di
     )
     catalog_id = await office_api_create_catalog(
         office_ui.origin,

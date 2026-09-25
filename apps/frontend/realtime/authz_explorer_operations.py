@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from core.authz.explorer import (
     AuthzExplorerByObjectResponse,
     AuthzExplorerByUserResponse,
@@ -38,29 +38,29 @@ class AuthzExplorerObjectsPayload(StrictBaseModel):
 
 
 async def op_authz_explorer_by_user(
-    payload: AuthzExplorerByUserPayload, *, user: User, container: FrontendContainer
+    payload: AuthzExplorerByUserPayload, *, user: User, di: Di
 ) -> AuthzExplorerByUserResponse:
     _ = user
-    scope = await require_company_admin(container.authz_service)
-    return await container.authz_explorer_service.by_user(user_id=payload.user_id, company_id=scope.company_id)
+    scope = await require_company_admin(di.authz_service)
+    return await di.authz_explorer_service.by_user(user_id=payload.user_id, company_id=scope.company_id)
 
 
 async def op_authz_explorer_by_object(
-    payload: AuthzExplorerByObjectPayload, *, user: User, container: FrontendContainer
+    payload: AuthzExplorerByObjectPayload, *, user: User, di: Di
 ) -> AuthzExplorerByObjectResponse:
     _ = user
-    scope = await require_company_admin(container.authz_service)
-    return await container.authz_explorer_service.by_object(
+    scope = await require_company_admin(di.authz_service)
+    return await di.authz_explorer_service.by_object(
         object_type=AuthzObjectType(payload.object_type), object_key=payload.object_key, company_id=scope.company_id
     )
 
 
 async def op_authz_explorer_why(
-    payload: AuthzExplorerWhyPayload, *, user: User, container: FrontendContainer
+    payload: AuthzExplorerWhyPayload, *, user: User, di: Di
 ) -> AuthzExplorerWhyResponse:
     _ = user
-    scope = await require_company_admin(container.authz_service)
-    return await container.authz_explorer_service.why(
+    scope = await require_company_admin(di.authz_service)
+    return await di.authz_explorer_service.why(
         user_id=payload.user_id,
         object_type=AuthzObjectType(payload.object_type),
         object_key=payload.object_key,
@@ -69,11 +69,11 @@ async def op_authz_explorer_why(
 
 
 async def op_authz_explorer_objects(
-    payload: AuthzExplorerObjectsPayload, *, user: User, container: FrontendContainer
+    payload: AuthzExplorerObjectsPayload, *, user: User, di: Di
 ) -> AuthzExplorerObjectsResponse:
     _ = user
-    scope = await require_company_admin(container.authz_service)
-    items = await container.authz_explorer_service.search_objects(
+    scope = await require_company_admin(di.authz_service)
+    items = await di.authz_explorer_service.search_objects(
         company_id=scope.company_id,
         query=payload.q,
         object_type=AuthzObjectType(payload.object_type) if payload.object_type is not None else None,
@@ -82,8 +82,8 @@ async def op_authz_explorer_objects(
 
 
 async def op_authz_explorer_revoke(
-    payload: AuthzExplorerRevokeRequest, *, user: User, container: FrontendContainer
+    payload: AuthzExplorerRevokeRequest, *, user: User, di: Di
 ) -> AuthzExplorerRevokeResponse:
     _ = user
-    scope = await require_company_admin(container.authz_service)
-    return await container.authz_explorer_service.revoke(payload, company_id=scope.company_id)
+    scope = await require_company_admin(di.authz_service)
+    return await di.authz_explorer_service.revoke(payload, company_id=scope.company_id)

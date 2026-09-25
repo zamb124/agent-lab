@@ -10,7 +10,6 @@ Reason tool добавляется при сборке агента (FlowsLoader
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType, ReactToolRole
 from apps.flows.src.models.node_config import NodeLLMConfig
@@ -27,10 +26,11 @@ async def run_agent_to_completion(
     runner: LlmNodeRunner,
     input_data: JsonObject,
     state: ExecutionState,
+    di,
 ) -> tuple[list[JsonObject], ExecutionState]:
     """Helper: запускает агента до завершения, собирает события."""
     await ensure_workflow_started(
-        container=get_container(),
+        di=di,
         state=state,
         flow_id=state.session_flow_id,
         branch_id=state.branch_id,
@@ -68,40 +68,40 @@ class TestReasonToolInTools:
             llm=NodeLLMConfig(provider="mock", model="mock-gpt-4", temperature=0.0),
         )
 
-    def test_reason_tool_available_when_added(self, agent_config_with_reason):
+    def test_reason_tool_available_when_added(self, agent_config_with_reason, di):
         """Reason tool доступен если добавлен в tools."""
         runner = LlmNodeRunner(
             node_config=agent_config_with_reason,
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
         tool_names = [t.name for t in runner.tools]
         assert "reason" in tool_names
 
-    def test_reason_tool_not_present_when_not_added(self, agent_config_without_reason):
+    def test_reason_tool_not_present_when_not_added(self, agent_config_without_reason, di):
         """Reason tool отсутствует если не добавлен в tools."""
         runner = LlmNodeRunner(
             node_config=agent_config_without_reason,
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
         tool_names = [t.name for t in runner.tools]
         assert "reason" not in tool_names
 
-    def test_reason_tool_has_correct_type(self, agent_config_with_reason):
+    def test_reason_tool_has_correct_type(self, agent_config_with_reason, di):
         """Reason tool имеет тип REASON."""
         runner = LlmNodeRunner(
             node_config=agent_config_with_reason,
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
         reason_tool = next(t for t in runner.tools if t.name == "reason")
@@ -123,18 +123,18 @@ class TestReasonToolExecution:
         )
 
     @pytest.fixture
-    def runner(self, flow_config) -> LlmNodeRunner:
+    def runner(self, flow_config, di) -> LlmNodeRunner:
         """LlmNodeRunner с reason tool."""
         return LlmNodeRunner(
             node_config=flow_config,
             tools=[reason, calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
     @pytest.mark.asyncio
-    async def test_reasoning_saved_to_history(self, runner, mock_llm_with_queue, unique_id):
+    async def test_reasoning_saved_to_history(self, runner, mock_llm_with_queue, unique_id, di):
         """Reasoning сохраняется в state.reasoning_history."""
         mock_llm_with_queue([
             {
@@ -164,7 +164,7 @@ class TestReasonToolExecution:
         )
         input_data = {"content": "Сколько будет 2+2?"}
 
-        events, state = await run_agent_to_completion(runner, input_data, state)
+        events, state = await run_agent_to_completion(runner, input_data, state, di=di)
 
         assert len(state.reasoning_history) >= 1
 
@@ -190,18 +190,18 @@ class TestAgentWithoutReasonWorks:
         )
 
     @pytest.fixture
-    def runner(self, flow_config) -> LlmNodeRunner:
+    def runner(self, flow_config, di) -> LlmNodeRunner:
         """Обычный runner."""
         return LlmNodeRunner(
             node_config=flow_config,
             tools=[calculator],
             llm=None,
             prompt="You are a helpful assistant.",
-            container=get_container(),
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
 
     @pytest.mark.asyncio
-    async def test_normal_agent_works(self, runner, mock_llm_with_queue, unique_id):
+    async def test_normal_agent_works(self, runner, mock_llm_with_queue, unique_id, di):
         """Агент без reason tool работает нормально."""
         mock_llm_with_queue([
             {
@@ -221,7 +221,7 @@ class TestAgentWithoutReasonWorks:
         )
         input_data = {"content": "Сколько 5+5?"}
 
-        events, state = await run_agent_to_completion(runner, input_data, state)
+        events, state = await run_agent_to_completion(runner, input_data, state, di=di)
 
         assert state.response == "Результат: 10"
         assert len(state.reasoning_history) == 0

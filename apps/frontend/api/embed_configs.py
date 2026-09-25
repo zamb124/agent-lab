@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.embed_operations import (
     CreateEmbedConfigRequest,
     EmbedCodePayload,
@@ -55,54 +55,54 @@ class EmbedSessionTokenResponse(BaseModel):
 
 
 @router.post("", response_model=EmbedConfig)
-async def create_embed_config(request_data: CreateEmbedConfigRequest, container: ContainerDep) -> EmbedConfig:
-    return await op_embed_configs_create(request_data, user=require_context().user, container=container)
+async def create_embed_config(request_data: CreateEmbedConfigRequest, di: Di) -> EmbedConfig:
+    return await op_embed_configs_create(request_data, user=require_context().user, di=di)
 
 
 @router.get("", response_model=OffsetPage[EmbedConfig])
 async def list_embed_configs(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[EmbedConfig]:
     return await op_embed_configs_list(
-        EmbedConfigsListPayload(limit=limit, offset=offset), user=require_context().user, container=container
+        EmbedConfigsListPayload(limit=limit, offset=offset), user=require_context().user, di=di
     )
 
 
 @router.get("/{embed_id}", response_model=EmbedConfig)
-async def get_embed_config(embed_id: str, container: ContainerDep) -> EmbedConfig:
+async def get_embed_config(embed_id: str, di: Di) -> EmbedConfig:
     return await op_embed_configs_item(
-        EmbedIdPayload(embed_id=embed_id), user=require_context().user, container=container
+        EmbedIdPayload(embed_id=embed_id), user=require_context().user, di=di
     )
 
 
 @router.patch("/{embed_id}", response_model=EmbedConfig)
 async def update_embed_config(
-    embed_id: str, request_data: UpdateEmbedConfigRequest, container: ContainerDep
+    embed_id: str, request_data: UpdateEmbedConfigRequest, di: Di
 ) -> EmbedConfig:
     return await op_embed_configs_update(
         EmbedConfigUpdatePayload.model_validate(
             {"embed_id": embed_id, **request_data.model_dump(exclude_unset=True)}
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{embed_id}", response_model=EmbedConfigDeleted)
-async def delete_embed_config(embed_id: str, container: ContainerDep) -> EmbedConfigDeleted:
+async def delete_embed_config(embed_id: str, di: Di) -> EmbedConfigDeleted:
     return await op_embed_configs_remove(
-        EmbedIdPayload(embed_id=embed_id), user=require_context().user, container=container
+        EmbedIdPayload(embed_id=embed_id), user=require_context().user, di=di
     )
 
 
 @router.get("/{embed_id}/code", response_model=EmbedCodeResponse)
-async def get_embed_code(embed_id: str, request: Request, container: ContainerDep) -> EmbedCodeResponse:
+async def get_embed_code(embed_id: str, request: Request, di: Di) -> EmbedCodeResponse:
     return await op_embed_configs_code(
         EmbedCodePayload(embed_id=embed_id, public_origin=build_service_base_url(request)),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -110,13 +110,13 @@ async def get_embed_code(embed_id: str, request: Request, container: ContainerDe
 async def issue_embed_session_token(
     embed_id: str,
     request_data: EmbedSessionTokenRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> EmbedSessionTokenResponse:
     """Short-lived embed-session токен для канонического A2A embed-пути (протокол интеграции)."""
     user = require_context().user
     company = require_active_company()
-    await container.authz_service.require_can_view(AuthzObject.company(company.company_id), user_id=user.user_id)
-    config = await container.embed_config_repository.get(embed_id)
+    await di.authz_service.require_can_view(AuthzObject.company(company.company_id), user_id=user.user_id)
+    config = await EmbedConfig.embed_for_company(embed_id, company.company_id)
     if not config or config.preview_share_link:
         raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:

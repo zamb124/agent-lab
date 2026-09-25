@@ -12,9 +12,8 @@ NodeAsToolWrapper - обёртка ноды для использования к
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, cast, override
+from typing import TYPE_CHECKING, ClassVar, override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
 from apps.flows.src.durable_execution import (
     NodeCompletedPayload,
     NodeScheduledPayload,
@@ -37,13 +36,11 @@ from apps.flows.src.runtime.nodes import (
     MCPNode,
     RemoteFlowNode,
     ResourceNode,
-    create_node,
 )
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tools.base import (
     BaseTool,
     ToolArguments,
-    ToolContainerRef,
     ToolParametersSchema,
     ToolResult,
     sanitize_tool_name,
@@ -109,7 +106,6 @@ class NodeAsToolWrapper(BaseTool):
         self,
         node_config: NodeConfig | JsonObject,
         *,
-        container: FlowRuntimeContainer | None = None,
         call_type: NodeToolCallType = NodeToolCallType.CALL,
     ):
         self.node_config: NodeConfig = (
@@ -126,7 +122,6 @@ class NodeAsToolWrapper(BaseTool):
         self.call_type: NodeToolCallType = NodeToolCallType(call_type)
         self._node: BaseNode | None = None
         self._bound_node: BaseNode | None = None
-        self.container: ToolContainerRef | None = container
 
     @property
     @override
@@ -177,35 +172,19 @@ class NodeAsToolWrapper(BaseTool):
                 parameters_schema=cls._DEFAULT_LLM_TOOL_PARAMETERS_SCHEMA,
             )
         wrapper = cls(node_config)
-        wrapper._bound_node = node
-        wrapper.container = node.container
+        wrapper.bind_node(node)
         wrapper.name = sanitize_tool_name(tool_name or node.node_id)
         return wrapper
 
+    def bind_node(self, node: BaseNode) -> None:
+        self._bound_node = node
+
     async def _get_node(self) -> BaseNode:
-        """Lazy создание ноды."""
         if self._bound_node is not None:
             return self._bound_node
-        if self._node is None:
-            container = self._require_container()
-            node_dict = cast(
-                JsonObject,
-                self.node_config.model_dump(mode="json", exclude_none=True),
-            )
-            _ = node_dict.pop("tool_id", None)
-
-            self._node = await create_node(
-                self.node_config.node_id,
-                node_dict,
-                container=container,
-            )
-
-        return self._node
-
-    def _require_container(self) -> FlowRuntimeContainer:
-        if self.container is None:
-            raise RuntimeError(f"Node tool '{self.name}' requires FlowRuntimeContainer")
-        return as_flow_runtime_container(self.container)
+        if self._node is not None:
+            return self._node
+        raise RuntimeError(f"Node tool '{self.name}' is not bound")
 
     async def _execute_node_with_durable_context(
         self,
@@ -214,17 +193,15 @@ class NodeAsToolWrapper(BaseTool):
         node_type: NodeType,
         state: ExecutionState,
     ) -> ExecutionState:
-        container = self._require_container()
-        runtime = container.workflow_runtime
-
+        execution = node.execution
         state.current_nodes = [node_id]
-        superstep_event = await runtime.record_state_event(
+        superstep_event = await execution.record_state(
             state.session_id,
             state,
             event_type=WorkflowEventType.superstep_started,
             payload=SuperstepStartedPayload(current_nodes=[node_id]),
         )
-        scheduled_event = await runtime.record_state_event(
+        scheduled_event = await execution.record_state(
             state.session_id,
             state,
             event_type=WorkflowEventType.node_scheduled,
@@ -244,7 +221,7 @@ class NodeAsToolWrapper(BaseTool):
             state.model_dump(mode="python", exclude_none=False)
         )
         result_state = await node.execute(state)
-        _ = await runtime.record_state_event(
+        _ = await execution.record_state(
             result_state.session_id,
             result_state,
             event_type=WorkflowEventType.node_write_recorded,
@@ -254,7 +231,7 @@ class NodeAsToolWrapper(BaseTool):
                 state_delta=build_state_delta(before_state, result_state),
             ),
         )
-        _ = await runtime.record_state_event(
+        _ = await execution.record_state(
             result_state.session_id,
             result_state,
             event_type=WorkflowEventType.node_completed,

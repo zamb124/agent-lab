@@ -215,7 +215,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_used, type_unused],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_used,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -252,7 +252,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_used, type_unused],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_used,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -280,7 +280,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_used, type_unused],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_used,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -314,7 +314,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_existing],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_existing,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -355,7 +355,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_a],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_a,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -388,7 +388,7 @@ class TestNamespaceEditabilityWithEntities:
         )
 
         for type_id in (type_a, type_b):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": type_id,
                 "name": f"Entity {type_id}",
                 "namespace": namespace_name,
@@ -415,7 +415,7 @@ class TestNamespaceEditabilityWithEntities:
             crm_client, auth_headers_system, unique_id, [type_used, type_removable],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_used,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -583,7 +583,7 @@ class TestEntityTypeImmutability:
             "prompt": "Старый промпт",
         }, headers=auth_headers_system)
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_id,
             "name": f"Entity {unique_id}",
         }, headers=auth_headers_system)
@@ -645,7 +645,7 @@ class TestNamespaceEditabilityEdgeCases:
         )
 
         for type_id in (type_a, type_c):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": type_id,
                 "name": f"Entity {type_id}",
                 "namespace": namespace_name,
@@ -676,7 +676,7 @@ class TestNamespaceEditabilityEdgeCases:
             crm_client, auth_headers_system, unique_id, [type_locked],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_locked,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,
@@ -748,7 +748,7 @@ class TestNamespaceEditabilityEdgeCases:
             crm_client, auth_headers_system, unique_id, [type_a, type_b],
         )
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": type_a,
             "name": f"Entity {unique_id}",
             "namespace": namespace_name,

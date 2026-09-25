@@ -1,8 +1,7 @@
 """
-Alembic env для БД platform_wiki (база знаний).
+Alembic env для БД platform_wiki.
 
-Управляет таблицами: wiki_pages, wiki_revisions,
-wiki_page_links, wiki_comments.
+Wiki больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -17,13 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.wiki.db.models import (  # noqa: F401
-    WikiCommentRow,
-    WikiPageLinkRow,
-    WikiPageRow,
-    WikiRevisionRow,
-)
-from core.db.models import Base
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -33,12 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "wiki_pages",
-    "wiki_revisions",
-    "wiki_page_links",
-    "wiki_comments",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

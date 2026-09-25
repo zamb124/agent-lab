@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from apps.sync.container import get_sync_container
+from apps.sync.models.channel import SyncChannelMember
 from apps.sync.realtime.task_names import (
     DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
     DELIVER_SYNC_MENTION_NOTIFICATION,
@@ -32,8 +32,7 @@ async def deliver_channel_message_notification(
         logger.debug("sync.notify.skipped.user.connected", user=recipient_user_id, channel=channel_id)
         return
 
-    container = get_sync_container()
-    muted = await container.channel_repository.get_member_notifications_muted(
+    muted = await SyncChannelMember.channel_member_notifications_muted(
         channel_id,
         recipient_user_id,
         company_id=company_id,
@@ -75,8 +74,7 @@ async def deliver_sync_mention_notification(
     body_preview: str,
 ) -> None:
     """Упоминание: без проверки Centrifugo presence, только mute канала."""
-    container = get_sync_container()
-    muted = await container.channel_repository.get_member_notifications_muted(
+    muted = await SyncChannelMember.channel_member_notifications_muted(
         channel_id,
         recipient_user_id,
         company_id=company_id,

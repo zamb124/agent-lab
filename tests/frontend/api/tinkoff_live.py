@@ -11,7 +11,6 @@ import pytest_asyncio
 from httpx import AsyncClient
 from playwright.async_api import Locator, Page, async_playwright
 
-from apps.frontend.container import FrontendContainer
 from core.clients.payment.base_provider import PaymentRequest
 from core.clients.payment.factory import PaymentProviderFactory
 from core.clients.payment.tinkoff_provider import (
@@ -179,10 +178,10 @@ async def create_billing_topup(
 
 
 async def require_external_payment_id(
-    frontend_container: FrontendContainer,
+    frontend_di,
     transaction_id: str,
 ) -> str:
-    transaction = await frontend_container.payment_service.get_transaction(transaction_id)
+    transaction = await frontend_di.payment_service.get_transaction(transaction_id)
     if transaction is None:
         raise AssertionError(f"transaction not found: {transaction_id}")
     if transaction.external_payment_id is None or transaction.external_payment_id.strip() == "":
@@ -191,12 +190,12 @@ async def require_external_payment_id(
 
 
 async def sync_company_payments(
-    frontend_container: FrontendContainer,
+    frontend_di,
     company_id: str,
 ) -> PaymentSyncStats:
     sync_service = PaymentSyncService(
-        payment_service=frontend_container.payment_service,
-        storage=frontend_container.shared_storage,
+        payment_service=frontend_di.payment_service,
+        storage=frontend_di.shared_storage,
     )
     return await sync_service.sync_pending_transactions(company_id)
 
@@ -362,8 +361,8 @@ async def pay_tinkoff_demo_card(
 
 
 @pytest.fixture
-def tinkoff_live_provider(frontend_container: FrontendContainer) -> TinkoffProvider:
-    _ = frontend_container
+def tinkoff_live_provider(frontend_di) -> TinkoffProvider:
+    _ = frontend_di
     return require_tinkoff_live_provider()
 
 
@@ -385,7 +384,7 @@ def tinkoff_unreachable_provider(tinkoff_live_provider: TinkoffProvider) -> Tink
 
 @pytest_asyncio.fixture
 async def tinkoff_pay_company(
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
 ) -> TinkoffLiveCompany:
     company_id = f"tf{unique_id}"
@@ -401,7 +400,7 @@ async def tinkoff_pay_company(
         members={user_id: ["owner", "admin"]},
         balance=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     user = User(
         user_id=user_id,
         name=f"Tinkoff live {unique_id}",
@@ -409,10 +408,9 @@ async def tinkoff_pay_company(
         companies={company_id: ["owner", "admin"]},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],

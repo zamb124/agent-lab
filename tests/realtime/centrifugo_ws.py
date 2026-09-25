@@ -54,7 +54,7 @@ class CentrifugoWsClient:
         future: asyncio.Future[JsonObject] = asyncio.get_running_loop().create_future()
         self._pending[command_id] = future
         await self._send({"id": command_id, "rpc": {"method": method, "data": data}})
-        return await asyncio.wait_for(future, timeout=15.0)
+        return await asyncio.wait_for(future, timeout=60.0)
 
     async def recv_platform_event(self, *, timeout: float = 10.0) -> JsonObject:
         return await asyncio.wait_for(self._publications.get(), timeout=timeout)
@@ -69,27 +69,43 @@ class CentrifugoWsClient:
 
     async def pump_until_closed(self) -> None:
         async for raw in self._connection:
-            frame = _parse_frame(raw)
-            if _maybe_pong(frame):
-                await self._send({"pong": {}})
-                continue
-            reply_id = frame.get("id")
-            if isinstance(reply_id, int) and reply_id in self._pending:
-                self._resolve_reply(reply_id, frame)
-                continue
-            publication = _publication_data(frame)
-            if publication is not None:
-                await self._publications.put(publication)
+            for frame in _parse_frames(raw):
+                if _maybe_pong(frame):
+                    await self._send({"pong": {}})
+                    continue
+                reply_id = frame.get("id")
+                if isinstance(reply_id, int) and reply_id in self._pending:
+                    self._resolve_reply(reply_id, frame)
+                    continue
+                publication = _publication_data(frame)
+                if publication is not None:
+                    await self._publications.put(publication)
 
 
-def _parse_frame(raw: str | bytes) -> JsonObject:
+def _parse_frames(raw: str | bytes) -> list[JsonObject]:
     text = raw.decode() if isinstance(raw, bytes) else raw
-    parsed: Any = json.loads(text)
+    stripped = text.strip()
+    if stripped == "":
+        raise AssertionError("empty Centrifugo frame")
+    if "\n" not in stripped:
+        return _frames_from_parsed(json.loads(stripped))
+    frames: list[JsonObject] = []
+    for line in stripped.splitlines():
+        line_stripped = line.strip()
+        if line_stripped == "":
+            continue
+        frames.extend(_frames_from_parsed(json.loads(line_stripped)))
+    if not frames:
+        raise AssertionError("empty Centrifugo frame")
+    return frames
+
+
+def _frames_from_parsed(parsed: Any) -> list[JsonObject]:
     if isinstance(parsed, list):
         if not parsed:
             raise AssertionError("empty Centrifugo frame list")
-        parsed = parsed[0]
-    return require_json_object(parsed, "centrifugo.ws.frame")
+        return [require_json_object(item, "centrifugo.ws.frame") for item in parsed]
+    return [require_json_object(parsed, "centrifugo.ws.frame")]
 
 
 def _maybe_pong(frame: JsonObject) -> bool:
@@ -118,7 +134,7 @@ def _publication_data(frame: JsonObject) -> JsonObject | None:
 async def connect_centrifugo(token: str) -> AsyncIterator[CentrifugoWsClient]:
     if not token:
         raise ValueError("SESSION JWT is required for Centrifugo connect")
-    async with websockets.connect(CENTRIFUGO_WS_URL) as connection:
+    async with websockets.connect(CENTRIFUGO_WS_URL, max_size=8 * 1024 * 1024) as connection:
         client = CentrifugoWsClient(connection)
         pump = asyncio.create_task(client.pump_until_closed(), name="centrifugo.pump")
         try:

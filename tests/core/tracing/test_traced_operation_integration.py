@@ -9,14 +9,15 @@ import pytest
 import core.tracing.attributes as trace_attributes
 from core.tracing import setup_tracing
 from core.tracing.config import TracingConfig
+from core.tracing.models import Span
 from core.tracing.operation_span import traced_operation
 from core.tracing.provider import set_tracing_enabled
-from core.tracing.tracer import set_span_repository, set_tracing_service_name
+from core.tracing.tracer import set_tracing_service_name
 
 
 @pytest.mark.asyncio
 async def test_traced_operation_persists_company_id_from_span_attributes(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     svc = f"trace_op_test_{unique_id}"
@@ -31,7 +32,6 @@ async def test_traced_operation_persists_company_id_from_span_attributes(
     )
     setup_tracing(config)
     set_tracing_service_name(svc)
-    set_span_repository(container.span_repository)
     set_tracing_enabled(True)
 
     async with traced_operation(
@@ -45,7 +45,7 @@ async def test_traced_operation_persists_company_id_from_span_attributes(
     ):
         pass
 
-    rows, _ = await container.span_repository.list_spans_for_service(
+    rows, _ = await Span.list_spans_for_service(
         service_name=svc,
         operation_name=op,
         limit=10,

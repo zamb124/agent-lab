@@ -6,19 +6,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pytest
+from pydantic import ValidationError
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
     AgentSkillUpdatePayload,
-    parse_stored_agent_skill,
+    parse_skill_md,
 )
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     agent_skill_runtime_host_scope,
 )
-from apps.flows.src.services.agent_skill_service import parse_skill_md
 from apps.flows.src.services.platform_assistant_skills import PLATFORM_ASSISTANT_SEED_SKILL_IDS
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
 from core.authz.company_sync import sync_company_member_roles
@@ -47,14 +46,13 @@ def _company_context(company_id: str, unique_id: str) -> Context:
 
 
 @asynccontextmanager
-async def _company_scope(unique_id: str) -> AsyncIterator[None]:
+async def _company_scope(unique_id: str, di) -> AsyncIterator[None]:
     previous = get_context()
     company_id = f"company_{unique_id}"
     ctx = _company_context(company_id, unique_id)
     set_context(ctx)
-    container = get_container()
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=ctx.user.user_id,
         roles=["owner", "admin"],
@@ -89,16 +87,20 @@ activation: explicit
     assert "activation" not in skill.model_dump()
 
 
-def test_parse_stored_agent_skill_strips_obsolete_activation() -> None:
-    raw = (
-        '{"agent_skill_id":"legacy-skill","name":"legacy-skill",'
-        '"description":"Stored row with activation",'
-        '"body_markdown":"## Body","tool_refs":[],"depends_on":[],'
-        '"references":[],"assets":[],"activation":"auto"}'
-    )
-    skill = parse_stored_agent_skill(raw)
-    assert skill.agent_skill_id == "legacy-skill"
-    assert "activation" not in skill.model_dump()
+def test_stored_agent_skill_rejects_obsolete_activation() -> None:
+    raw = {
+        "agent_skill_id": "legacy-skill",
+        "name": "legacy-skill",
+        "description": "Stored row with activation",
+        "body_markdown": "## Body",
+        "tool_refs": [],
+        "depends_on": [],
+        "references": [],
+        "assets": [],
+        "activation": "auto",
+    }
+    with pytest.raises(ValidationError):
+        _ = AgentSkill.model_validate(raw)
 
 
 def test_parse_skill_md_rejects_missing_frontmatter() -> None:
@@ -107,10 +109,10 @@ def test_parse_skill_md_rejects_missing_frontmatter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_agent_skill_service_crud(container, unique_id: str) -> None:
+async def test_agent_skill_crud(di, unique_id: str) -> None:
     skill_id = f"skill-crud-{unique_id}"
-    async with _company_scope(unique_id):
-        created = await container.agent_skill_service.create(
+    async with _company_scope(unique_id, di=di):
+        created = await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -130,18 +132,18 @@ async def test_agent_skill_service_crud(container, unique_id: str) -> None:
             )
         )
         assert created.agent_skill_id == skill_id
-        loaded = await container.agent_skill_service.get(skill_id)
+        loaded = await AgentSkill.require_by_agent_skill_id(skill_id)
         assert loaded.body_markdown.startswith("## Body")
-        index = await container.agent_skill_service.resolve_index([skill_id])
+        index = await AgentSkill.resolve_index([skill_id])
         assert len(index) == 1
         assert index[0].agent_skill_id == skill_id
-        await container.agent_skill_service.delete(skill_id)
+        await AgentSkill.delete_by_agent_skill_id(skill_id)
         with pytest.raises(LookupError):
-            await container.agent_skill_service.get(skill_id)
+            await AgentSkill.require_by_agent_skill_id(skill_id)
 
 
 @pytest.mark.asyncio
-async def test_agent_skill_import_md_persists(container, unique_id: str) -> None:
+async def test_agent_skill_import_md_persists(di, unique_id: str) -> None:
     skill_id = f"skill-import-{unique_id}"
     markdown = f"""---
 name: {skill_id}
@@ -151,11 +153,11 @@ allowed-tools: calculator
 
 Imported body for {unique_id}
 """
-    async with _company_scope(unique_id):
-        imported = await container.agent_skill_service.import_skill_md(markdown)
+    async with _company_scope(unique_id, di=di):
+        imported = await AgentSkill.import_skill_md(markdown)
         assert imported.agent_skill_id == skill_id
         assert imported.tool_refs[0].tool_id == "calculator"
-        await container.agent_skill_service.delete(skill_id)
+        await AgentSkill.delete_by_agent_skill_id(skill_id)
 
 
 @pytest.mark.asyncio
@@ -183,7 +185,7 @@ async def test_agent_skills_api_crud(client, unique_id: str) -> None:
     assert get_resp.status_code == 200
     assert get_resp.json()["body_markdown"] == "API body"
 
-    list_resp = await client.get("/flows/api/v1/agent-skills", params={"limit": 50})
+    list_resp = await client.get("/flows/api/v1/agent-skills", params={"limit": 200})
     assert list_resp.status_code == 200
     ids = {item["agent_skill_id"] for item in list_resp.json()["items"]}
     assert skill_id in ids
@@ -237,13 +239,13 @@ async def test_agent_skills_api_ensure_seed_idempotent(client, unique_id: str) -
 
 @pytest.mark.asyncio
 async def test_load_agent_skill_tool_injects_body_and_tools(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     root_id = f"skill-root-{unique_id}"
     dep_id = f"skill-dep-{unique_id}"
-    async with _company_scope(unique_id):
-        await container.agent_skill_service.create(
+    async with _company_scope(unique_id, di=di):
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=dep_id,
                 name=dep_id,
@@ -251,7 +253,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
                 body_markdown="Dep body",
             )
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=root_id,
                 name=root_id,
@@ -273,7 +275,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({root_id}),
-            index_entries=tuple(await container.agent_skill_service.resolve_index([root_id])),
+            index_entries=tuple(await AgentSkill.resolve_index([root_id])),
         )
         host.ensure_index_block()
         assert any(b.stable_key == "agent_skills.index" for b in host.context_blocks)
@@ -314,7 +316,7 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
         assert len(conversation_blocks(state, block_type="skill_activity")) == 2
 
         foreign_id = f"skill-foreign-{unique_id}"
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=foreign_id,
                 name=foreign_id,
@@ -326,19 +328,19 @@ async def test_load_agent_skill_tool_injects_body_and_tools(
             with pytest.raises(ValueError, match="not attached"):
                 await load_agent_skill.run({"agent_skill_id": foreign_id}, state)
 
-        await container.agent_skill_service.delete(root_id)
-        await container.agent_skill_service.delete(dep_id)
-        await container.agent_skill_service.delete(foreign_id)
+        await AgentSkill.delete_by_agent_skill_id(root_id)
+        await AgentSkill.delete_by_agent_skill_id(dep_id)
+        await AgentSkill.delete_by_agent_skill_id(foreign_id)
 
 
 @pytest.mark.asyncio
-async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) -> None:
+async def test_depends_on_arbitrary_depth_and_cycles(di, unique_id: str) -> None:
     a_id = f"skill-a-{unique_id}"
     b_id = f"skill-b-{unique_id}"
     c_id = f"skill-c-{unique_id}"
     d_id = f"skill-d-{unique_id}"
-    async with _company_scope(unique_id):
-        await container.agent_skill_service.create(
+    async with _company_scope(unique_id, di=di):
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=d_id,
                 name=d_id,
@@ -346,7 +348,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
                 body_markdown="D body",
             )
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=c_id,
                 name=c_id,
@@ -355,7 +357,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
                 depends_on=[d_id],
             )
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=b_id,
                 name=b_id,
@@ -364,7 +366,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
                 depends_on=[c_id],
             )
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=a_id,
                 name=a_id,
@@ -373,7 +375,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
                 depends_on=[b_id],
             )
         )
-        await container.agent_skill_service.update(
+        await AgentSkill.update(
             AgentSkillUpdatePayload(
                 agent_skill_id=b_id,
                 name=b_id,
@@ -384,7 +386,7 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({a_id}),
-            index_entries=tuple(await container.agent_skill_service.resolve_index([a_id])),
+            index_entries=tuple(await AgentSkill.resolve_index([a_id])),
         )
         state = ExecutionState(
             task_id=f"task_{unique_id}",
@@ -406,10 +408,10 @@ async def test_depends_on_arbitrary_depth_and_cycles(container, unique_id: str) 
         assert cycle_a["already_loaded"] is True
         assert cycle_a["depth"] == 0
 
-        await container.agent_skill_service.delete(a_id)
-        await container.agent_skill_service.delete(b_id)
-        await container.agent_skill_service.delete(c_id)
-        await container.agent_skill_service.delete(d_id)
+        await AgentSkill.delete_by_agent_skill_id(a_id)
+        await AgentSkill.delete_by_agent_skill_id(b_id)
+        await AgentSkill.delete_by_agent_skill_id(c_id)
+        await AgentSkill.delete_by_agent_skill_id(d_id)
 
 
 def test_agent_skill_model_rejects_self_dependency() -> None:
@@ -425,13 +427,13 @@ def test_agent_skill_model_rejects_self_dependency() -> None:
 
 @pytest.mark.asyncio
 async def test_read_agent_skill_reference_returns_utf8(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     skill_id = f"skill-ref-{unique_id}"
     content = f"reference body {unique_id}"
-    async with _company_scope(unique_id):
-        record = await container.files_service.create(
+    async with _company_scope(unique_id, di=di):
+        record = await di.files_service.create(
             FileCreateSpec.model_validate(
                 {
                     "source_kind": "platform_auxiliary",
@@ -444,7 +446,7 @@ async def test_read_agent_skill_reference_returns_utf8(
             original_name=f"skill-ref-{unique_id}.md",
             content_type="text/markdown",
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -463,7 +465,7 @@ async def test_read_agent_skill_reference_returns_utf8(
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({skill_id}),
-            index_entries=tuple(await container.agent_skill_service.resolve_index([skill_id])),
+            index_entries=tuple(await AgentSkill.resolve_index([skill_id])),
         )
         state = ExecutionState(
             task_id=f"task_{unique_id}",
@@ -483,21 +485,21 @@ async def test_read_agent_skill_reference_returns_utf8(
         assert result["success"] is True
         assert result["content"] == content
         assert result["original_name"] == record.original_name
-        await container.agent_skill_service.delete(skill_id)
+        await AgentSkill.delete_by_agent_skill_id(skill_id)
 
 
 @pytest.mark.asyncio
 async def test_agent_skills_company_isolation_http(
     client,
     unique_id: str,
-    container,
+    di,
 ) -> None:
     """Skill компании A не виден HTTP-клиенту компании system."""
     company_a = f"company_skill_iso_a_{unique_id}"
     skill_id = f"iso-http-{unique_id}"
 
-    async with company_scope(company_a, unique_id):
-        await container.agent_skill_service.create(
+    async with company_scope(company_a, unique_id, di=di):
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,

@@ -9,8 +9,8 @@ import pytest
 
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
-from core.crawl.models import CrawlProfile, CrawlProfileWithIndex
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.crawl.models import CrawlProfile, CrawlProfileWithIndex, CrawlUrl
+from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
 
 
@@ -50,27 +50,23 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytes
         rag_collection_id="runet",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
     profile_bundle = CrawlProfileWithIndex(profile=profile, search_index=search_index)
 
-    class _ProfileRepo:
-        async def get_with_index(self, crawl_profile_id: str) -> CrawlProfileWithIndex:
-            assert crawl_profile_id == "cr_test"
-            return profile_bundle
+    async def _get_with_index(crawl_profile_id: str) -> CrawlProfileWithIndex:
+        assert crawl_profile_id == "cr_test"
+        return profile_bundle
 
-    class _UrlRepo:
-        async def count_pending(self, crawl_domain_id: str) -> int:
-            assert crawl_domain_id == "dom-1"
-            return 10
+    async def _count_pending(crawl_domain_id: str) -> int:
+        assert crawl_domain_id == "dom-1"
+        return 10
+
+    monkeypatch.setattr(CrawlProfile, "get_with_index", _get_with_index)
+    monkeypatch.setattr(CrawlUrl, "count_pending", _count_pending)
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=_ProfileRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_domain_repository=AsyncMock(),
-        crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=AsyncMock(),
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(

@@ -6,17 +6,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncChannel, SyncThread
-from apps.sync.db.repositories.channel_repository import ChannelRepository
-from apps.sync.db.repositories.message_repository import MessageRepository
-from apps.sync.db.repositories.thread_repository import ThreadRepository
+from apps.sync.models.channel import SyncChannel, SyncChannelMember
+from apps.sync.models.message import SyncMessage, SyncMessageContent
 from apps.sync.models.messages import MessageContentModel, MessageContentType, TextPlainContent
+from apps.sync.models.threads import SyncThread
 
 
 @pytest.mark.asyncio
 async def test_message_create_and_list(
-    channel_repo: ChannelRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -35,7 +32,7 @@ async def test_message_create_and_list(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    _ = await channel_repo.create(ch)
+    _ = await SyncChannel.objects.create(instance=ch)
 
     contents = [
         MessageContentModel(
@@ -45,7 +42,7 @@ async def test_message_create_and_list(
         ),
     ]
 
-    msg = await message_repo.create_message(
+    msg = await SyncMessage.create_with_contents(
         message_id=msg_1,
         company_id=company_id,
         channel_id=ch_msg,
@@ -58,11 +55,11 @@ async def test_message_create_and_list(
     )
     assert msg.message_id == msg_1
 
-    listed = await message_repo.list_by_channel(ch_msg, company_id=company_id)
+    listed = await SyncMessage.list_root_lane(ch_msg, company_id=company_id)
     assert len(listed) == 1
     assert listed[0].message_id == msg_1
 
-    listed_contents = await message_repo.list_contents(msg_1)
+    listed_contents = await SyncMessageContent.list_for_message(msg_1)
     assert len(listed_contents) == 1
     assert listed_contents[0].type == MessageContentType.TEXT_PLAIN
     assert isinstance(listed_contents[0].data, TextPlainContent)
@@ -71,9 +68,6 @@ async def test_message_create_and_list(
 
 @pytest.mark.asyncio
 async def test_message_list_by_thread(
-    channel_repo: ChannelRepository,
-    thread_repo: ThreadRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -94,7 +88,7 @@ async def test_message_list_by_thread(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    _ = await channel_repo.create(ch)
+    _ = await SyncChannel.objects.create(instance=ch)
 
     thread = SyncThread(
         thread_id=thr_1,
@@ -105,9 +99,9 @@ async def test_message_list_by_thread(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    _ = await thread_repo.create(thread)
+    _ = await SyncThread.objects.create(instance=thread)
 
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=msg_root,
         company_id=company_id,
         channel_id=ch_thr,
@@ -121,7 +115,7 @@ async def test_message_list_by_thread(
         ],
     )
 
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=msg_reply,
         company_id=company_id,
         channel_id=ch_thr,
@@ -135,14 +129,12 @@ async def test_message_list_by_thread(
         ],
     )
 
-    thread_msgs = await message_repo.list_by_thread(thr_1, company_id=company_id)
+    thread_msgs = await SyncMessage.list_by_thread(thr_1, company_id=company_id)
     assert [m.message_id for m in thread_msgs] == [msg_root, msg_reply]
 
 
 @pytest.mark.asyncio
 async def test_main_channel_feed_includes_reply_with_parent(
-    channel_repo: ChannelRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -162,9 +154,9 @@ async def test_main_channel_feed_includes_reply_with_parent(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    _ = await channel_repo.create(ch)
+    _ = await SyncChannel.objects.create(instance=ch)
 
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=root_a,
         company_id=company_id,
         channel_id=ch_main,
@@ -177,7 +169,7 @@ async def test_main_channel_feed_includes_reply_with_parent(
             MessageContentModel(type=MessageContentType.TEXT_PLAIN, data=TextPlainContent(body="root"), order=0),
         ],
     )
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=reply_b,
         company_id=company_id,
         channel_id=ch_main,
@@ -191,15 +183,13 @@ async def test_main_channel_feed_includes_reply_with_parent(
         ],
     )
 
-    listed = await message_repo.list_by_channel(ch_main, company_id=company_id, limit=50)
+    listed = await SyncMessage.list_root_lane(ch_main, company_id=company_id, limit=50)
     ids = {m.message_id for m in listed}
     assert ids == {root_a, reply_b}
 
 
 @pytest.mark.asyncio
 async def test_channel_lane_summaries_batch_unread_and_preview(
-    channel_repo: ChannelRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -218,11 +208,12 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u_viewer",
     )
-    _ = await channel_repo.create(ch)
-    await channel_repo.ensure_member_row(ch_lane, "u_viewer", company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    await SyncChannelMember.ensure_channel_member_row(ch_lane, "u_viewer", company_id=company_id
+    )
 
     t_msg = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=m1,
         company_id=company_id,
         channel_id=ch_lane,
@@ -240,7 +231,7 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
         ],
     )
 
-    batch = await message_repo.channel_lane_summaries_batch(
+    batch = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=[ch_lane],
         viewer_user_id="u_viewer",
@@ -251,13 +242,13 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
     assert summ.last_message_preview == "hello lane"
     assert summ.last_message_at is not None
 
-    await channel_repo.set_member_last_read_at(
+    await SyncChannelMember.set_channel_member_last_read_at(
         ch_lane,
         "u_viewer",
         datetime(2026, 3, 1, 13, 0, 0, tzinfo=UTC),
         company_id=company_id,
     )
-    batch2 = await message_repo.channel_lane_summaries_batch(
+    batch2 = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=[ch_lane],
         viewer_user_id="u_viewer",
@@ -268,8 +259,6 @@ async def test_channel_lane_summaries_batch_unread_and_preview(
 
 @pytest.mark.asyncio
 async def test_channel_lane_summaries_batch_mention_unread_count(
-    channel_repo: ChannelRepository,
-    message_repo: MessageRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -287,11 +276,13 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u_viewer",
     )
-    _ = await channel_repo.create(ch)
-    await channel_repo.ensure_member_row(ch_men, "u_viewer", company_id=company_id)
-    await channel_repo.ensure_member_row(ch_men, "u_other", company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    await SyncChannelMember.ensure_channel_member_row(ch_men, "u_viewer", company_id=company_id
+    )
+    await SyncChannelMember.ensure_channel_member_row(ch_men, "u_other", company_id=company_id
+    )
     t_msg = datetime(2026, 3, 2, 12, 0, 0, tzinfo=UTC)
-    _ = await message_repo.create_message(
+    _ = await SyncMessage.create_with_contents(
         message_id=m_men,
         company_id=company_id,
         channel_id=ch_men,
@@ -308,7 +299,7 @@ async def test_channel_lane_summaries_batch_mention_unread_count(
             ),
         ],
     )
-    batch = await message_repo.channel_lane_summaries_batch(
+    batch = await SyncMessage.channel_lane_summaries(
         company_id=company_id,
         channel_ids=[ch_men],
         viewer_user_id="u_viewer",

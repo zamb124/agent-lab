@@ -152,12 +152,12 @@ def _file_document(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 async def _state_file(
-    container, *, flow_id: str, context_id: str, file_name: str, require_document: bool = False
+    di, *, flow_id: str, context_id: str, file_name: str, require_document: bool = False
 ) -> dict[str, Any]:
     session_id = f"{flow_id}:{context_id}"
     fallback: dict[str, Any] | None = None
     for _ in range(30):
-        state = await container.workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         if state:
             files_raw = (
                 state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
@@ -208,7 +208,7 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
     office_service,
     mock_llm_redis,
     auth_headers_system,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = office_service
@@ -256,7 +256,7 @@ async def test_agent_edits_uploaded_docx_with_documents_tools(
             file_bytes=_docx_bytes("Before ORIGINAL_TOKEN", "Second paragraph"),
         )
         file_item = await _state_file(
-            container,
+            di,
             flow_id=flow_id,
             context_id=context_id,
             file_name=file_name,
@@ -282,7 +282,7 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
     office_service,
     mock_llm_redis,
     auth_headers_system,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = office_service
@@ -321,7 +321,7 @@ async def test_agent_updates_uploaded_xlsx_with_documents_tool(
             file_bytes=_xlsx_bytes(),
         )
         file_item = await _state_file(
-            container,
+            di,
             flow_id=flow_id,
             context_id=context_id,
             file_name=file_name,

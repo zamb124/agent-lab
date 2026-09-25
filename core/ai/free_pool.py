@@ -6,12 +6,10 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Protocol
 
 from core.ai.adapters.model_catalog import create_model_catalog_adapter_registry
 from core.ai.adapters.openrouter import OpenRouterModelCatalogAdapter
-from core.ai.model_catalog_repository import AIModelCatalogRepository
-from core.ai.models import AIModelRecord, ArtificialAnalysisIndices
+from core.ai.models import AIModelRecord, ArtificialAnalysisIndices, LLMModelScore
 from core.ai.providers import (
     ACCOUNT_FREE_TIER_LLM_PROVIDER_SLUGS,
     HUMANITEC_LLM_AUTO_MODEL,
@@ -24,6 +22,7 @@ from core.ai.scoring import (
     PlatformModelScoreOverlay,
     attach_artificial_analysis,
     compute_platform_model_score,
+    platform_model_score_overlays,
 )
 from core.clients.redis_client import RedisClient
 from core.config.base import BaseSettings
@@ -67,13 +66,6 @@ class PlatformFreeModelRecord:
     created: int | None = None
     max_tokens: int | None = None
     free_reason: str = "verified_zero_price"
-
-
-class PlatformModelScoreProvider(Protocol):
-    async def list_overlays(
-        self,
-        capability: AICapability,
-    ) -> Mapping[tuple[str, str], PlatformModelScoreOverlay]: ...
 
 
 def _json_str(value: JsonValue | None) -> str | None:
@@ -299,45 +291,35 @@ async def fetch_artificial_analysis_indices(
 
 
 async def persist_catalog_artificial_analysis(
-    repository: AIModelCatalogRepository,
     records: Sequence[AIModelRecord],
 ) -> None:
     for record in records:
         if record.artificial_analysis is None:
             continue
-        _ = await repository.set(record)
+        _ = await AIModelRecord.set(record)
 
 
 async def fetch_platform_free_model_records(
     settings: BaseSettings,
-    model_catalog_repository: AIModelCatalogRepository,
     *,
-    model_score_provider: PlatformModelScoreProvider | None = None,
+    overlays: Mapping[tuple[str, str], PlatformModelScoreOverlay] | None = None,
     artificial_analysis: Mapping[str, ArtificialAnalysisIndices] | None = None,
     persist_artificial_analysis: bool = False,
 ) -> list[PlatformFreeModelRecord]:
     pool_config = settings.llm.platform_free_pool
-    overlays = (
-        await model_score_provider.list_overlays(AICapability.LLM_CHAT)
-        if model_score_provider is not None
-        else None
-    )
     all_records: list[PlatformFreeModelRecord] = []
     for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
         if not provider_is_configured_for_free_pool(settings, provider_slug):
             logger.info("platform_free_models.provider_unconfigured", provider=provider_slug)
             continue
-        catalog_records = await model_catalog_repository.list_by_provider_capability(
+        catalog_records = await AIModelRecord.list_by_provider_capability(
             provider_slug,
             AICapability.LLM_CHAT,
         )
         if artificial_analysis:
             catalog_records = attach_artificial_analysis(catalog_records, artificial_analysis)
             if persist_artificial_analysis:
-                await persist_catalog_artificial_analysis(
-                    model_catalog_repository,
-                    catalog_records,
-                )
+                await persist_catalog_artificial_analysis(catalog_records)
         provider_records = platform_free_records_from_model_records(
             catalog_records,
             settings=settings,
@@ -544,22 +526,18 @@ def _cache_result_payload(
 async def refresh_platform_free_models_cache(
     redis_client: RedisClient,
     settings: BaseSettings,
-    model_catalog_repository: AIModelCatalogRepository,
-    *,
-    model_score_provider: PlatformModelScoreProvider | None = None,
 ) -> JsonObject:
+    overlays = platform_model_score_overlays(
+        await LLMModelScore.rows_for_capability(AICapability.LLM_CHAT),
+    )
     artificial_analysis = await fetch_artificial_analysis_indices(settings)
     records = await fetch_platform_free_model_records(
         settings,
-        model_catalog_repository,
-        model_score_provider=model_score_provider,
+        overlays=overlays,
         artificial_analysis=artificial_analysis,
         persist_artificial_analysis=True,
     )
-    overlay_count = 0
-    if model_score_provider is not None:
-        overlays = await model_score_provider.list_overlays(AICapability.LLM_CHAT)
-        overlay_count = len(overlays)
+    overlay_count = len(overlays)
     await _write_platform_free_models_cache(redis_client, settings, records)
     logger.info(
         "platform_free_models.cache_refreshed",
@@ -574,24 +552,28 @@ async def refresh_platform_free_models_cache(
 async def rescore_cached_platform_free_models(
     redis_client: RedisClient,
     settings: BaseSettings,
-    model_catalog_repository: AIModelCatalogRepository,
     *,
-    model_score_provider: PlatformModelScoreProvider,
+    overlays: Mapping[tuple[str, str], PlatformModelScoreOverlay] | None = None,
 ) -> JsonObject:
+    resolved_overlays = (
+        overlays
+        if overlays is not None
+        else platform_model_score_overlays(
+            await LLMModelScore.rows_for_capability(AICapability.LLM_CHAT),
+        )
+    )
     records = await fetch_platform_free_model_records(
         settings,
-        model_catalog_repository,
-        model_score_provider=model_score_provider,
+        overlays=resolved_overlays,
     )
-    overlays = await model_score_provider.list_overlays(AICapability.LLM_CHAT)
     await _write_platform_free_models_cache(redis_client, settings, records)
     logger.info(
         "platform_free_models.cache_rescored",
         count=len(records),
         providers=sorted({record.provider for record in records}),
-        overlay_count=len(overlays),
+        overlay_count=len(resolved_overlays),
     )
-    return _cache_result_payload(records, overlay_count=len(overlays))
+    return _cache_result_payload(records, overlay_count=len(resolved_overlays))
 
 
 __all__ = [

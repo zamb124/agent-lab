@@ -119,6 +119,24 @@ services:
     networks:
       - test-net
 
+  minio-test-ext:
+    platform: "linux/amd64"
+    image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
+    container_name: agentlab_minio_ext_test
+    ports:
+      - "19003:9000"
+    environment:
+      - MINIO_ROOT_USER=extadmin
+      - MINIO_ROOT_PASSWORD=extadminsecret
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - test-net
+
   openfga-migrate-test:
     platform: "linux/amd64"
     image: openfga/openfga:v1.18.1
@@ -315,8 +333,13 @@ services:
       - EXTERNAL_TEST_A2A_AGENT_URL=http://test-a2a-agent:8005
       - EXTERNAL_TEST_A2A_AGENT_API_KEY=test-api-key-12345
       - PYTEST_WORKERS=${PYTEST_WORKERS:-4}
-      - S3__DEFAULT_BUCKET=test-bucket
-      - S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL=http://minio-test:9000
+      - S3__ENABLED=true
+      - S3__ENDPOINT_URL=http://minio-test:9000
+      - S3__BUCKET_NAME=test-bucket
+      - S3__ACCESS_KEY_ID=minioadmin
+      - S3__SECRET_ACCESS_KEY=minioadmin
+      - S3__PROVIDER=minio
+      - S3__PATH_STYLE=true
       - CALLS__LIVEKIT_URL=ws://livekit-test:7880
       - CALLS__LIVEKIT_API_KEY=devkey
       - CALLS__LIVEKIT_API_SECRET=platform-test-livekit-secret-32b!

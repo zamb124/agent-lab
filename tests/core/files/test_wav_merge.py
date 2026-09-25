@@ -21,5 +21,5 @@ def test_merge_wav_s16le_mono_files_concatenates_frames(unique_id: str) -> None:
 
 
 def test_merge_wav_s16le_mono_files_rejects_empty(unique_id: str) -> None:
-    with pytest.raises(ValueError, match="пуст"):
+    with pytest.raises(ValueError, match="wav_chunks is empty"):
         merge_wav_s16le_mono_files([])

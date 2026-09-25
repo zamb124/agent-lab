@@ -18,13 +18,14 @@ from typing import TYPE_CHECKING
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import Span as SDKSpan
-from opentelemetry.trace import Span, SpanKind, Status, StatusCode, Tracer
+from opentelemetry.trace import Span as OtelSpan
+from opentelemetry.trace import SpanKind, Status, StatusCode, Tracer
 
 import core.tracing.attributes as attr
 from core.config import get_settings
 from core.context import get_context
 from core.logging import get_logger
-from core.tracing.models import TraceSpanEvent, TraceSpanWrite
+from core.tracing.models import Span, TraceSpanEvent
 from core.types import (
     JsonObject,
     JsonValue,
@@ -40,9 +41,6 @@ from .context import TraceContext
 from .operation_log_mirror import log_operation_finished, log_tool_call_finished
 from .provider import ensure_tracer_provider
 
-if TYPE_CHECKING:
-    from .repository import SpanRepository
-
 logger = get_logger(__name__)
 
 def _span_event_timestamp(timestamp: int | None) -> str | None:
@@ -51,7 +49,7 @@ def _span_event_timestamp(timestamp: int | None) -> str | None:
     return datetime.fromtimestamp(timestamp / 1_000_000_000, tz=timezone.utc).isoformat()
 
 
-def _sdk_span(span: Span) -> SDKSpan:
+def _sdk_span(span: OtelSpan) -> SDKSpan:
     if not isinstance(span, SDKSpan):
         raise TypeError("OpenTelemetry SDK span is required for platform tracing persistence")
     return span
@@ -91,11 +89,10 @@ logging.getLogger("opentelemetry.sdk.trace").addFilter(
 )
 
 _tracer: PlatformTracer | None = None
-_span_repository: SpanRepository | None = None
 _process_tracing_service_name: str | None = None
 
 
-def _span_attribute(span: Span, key: str) -> OtelAttributeValue | None:
+def _span_attribute(span: OtelSpan, key: str) -> OtelAttributeValue | None:
     span_attrs = _sdk_span(span).attributes
     if span_attrs is None:
         return None
@@ -111,7 +108,7 @@ def _optional_json_string(attributes: JsonObject, key: str) -> str | None:
     return value
 
 
-def _llm_operation_name(span: Span, fallback_model: str) -> str:
+def _llm_operation_name(span: OtelSpan, fallback_model: str) -> str:
     model = _span_attribute(span, attr.ATTR_LLM_MODEL)
     if isinstance(model, str) and model.strip():
         return f"llm.{model.strip()}"
@@ -128,12 +125,6 @@ def _resolve_tracing_service_name() -> str:
     if _process_tracing_service_name:
         return _process_tracing_service_name
     return get_settings().server.name
-
-
-def set_span_repository(repository: "SpanRepository") -> None:
-    """Устанавливает репозиторий для сохранения spans в PostgreSQL."""
-    global _span_repository
-    _span_repository = repository
 
 
 def get_tracer() -> "PlatformTracer":
@@ -163,7 +154,7 @@ class PlatformTracer:
 
     async def _save_span(
         self,
-        span: Span,
+        span: OtelSpan,
         operation_name: str,
         kind: str,
         start_time: datetime,
@@ -171,7 +162,7 @@ class PlatformTracer:
         extra_attrs: OtelAttributes | None = None,
     ) -> None:
         """Сохраняет span в PostgreSQL."""
-        if _span_repository is None:
+        if not get_settings().tracing.postgres_enabled:
             logger.debug("tracing.span_not_persisted", operation_name=operation_name)
             return
 
@@ -246,7 +237,7 @@ class PlatformTracer:
 
         channel_val = trace_ctx.channel if trace_ctx else _optional_json_string(all_attrs, attr.ATTR_CHANNEL)
 
-        span_data = TraceSpanWrite(
+        span_data = Span(
             span_id=span_id,
             trace_id=trace_id,
             parent_span_id=parent_span_id,
@@ -273,7 +264,7 @@ class PlatformTracer:
             events=_serialize_span_events(readable_span),
         )
 
-        await _span_repository.save_span(span_data)
+        await Span.insert_once(span_data)
 
         log_operation_finished(
             operation_name=operation_name,
@@ -404,7 +395,7 @@ class PlatformTracer:
         self,
         method: str,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для HTTP-запроса (SendMessage, SendStreamingMessage)."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -431,7 +422,7 @@ class PlatformTracer:
         flow_id: str,
         entry_node: str,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для выполнения flow."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -462,7 +453,7 @@ class PlatformTracer:
         resource_id: str,
         event_type: str = "resource.session",
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """
         Корневой span сущности (чат, сессия flow, заметка): дочерние spans через вложенные
         context manager'ы PlatformTracer получают parent_span_id и общий trace_id (дерево OTEL).
@@ -499,7 +490,7 @@ class PlatformTracer:
         resource_id: str | None = None,
         trace_ctx: TraceContext | None = None,
         extra_attributes: OtelAttributes | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """
         Универсальный span значимой операции сервиса (RAG, Sync, CRM, …).
         operation_name: стабильный идентификатор вида service.area.action.
@@ -536,7 +527,7 @@ class PlatformTracer:
         node_id: str,
         node_type: str,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для выполнения ноды."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -567,7 +558,7 @@ class PlatformTracer:
         flow_id: str | None = None,
         model: str | None = None,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span на весь ReAct-цикл llm_node (LLM + tools)."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -600,7 +591,7 @@ class PlatformTracer:
         iteration: int,
         node_label: str,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для одной итерации ReAct цикла."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -632,7 +623,7 @@ class PlatformTracer:
         tools_count: int,
         trace_ctx: TraceContext | None = None,
         llm_provider: str | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для вызова LLM."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -667,7 +658,7 @@ class PlatformTracer:
 
     def record_llm_request(
         self,
-        span: Span,
+        span: OtelSpan,
         messages: list[JsonObject],
         tools: list[JsonObject] | None = None,
         response_format: JsonObject | None = None,
@@ -692,7 +683,7 @@ class PlatformTracer:
 
     def record_llm_response(
         self,
-        span: Span,
+        span: OtelSpan,
         input_tokens: int,
         output_tokens: int,
         has_tool_calls: bool,
@@ -784,7 +775,7 @@ class PlatformTracer:
             response_str = json.dumps(response_data, ensure_ascii=False, default=str)
             span.set_attribute(attr.ATTR_LLM_RESPONSE, response_str)
 
-    def _record_llm_context(self, span: Span, llm_context: JsonObject) -> None:
+    def _record_llm_context(self, span: OtelSpan, llm_context: JsonObject) -> None:
         span.set_attribute(attr.ATTR_LLM_CONTEXT_ENABLED, True)
         usage = llm_context.get("usage")
         if isinstance(usage, dict):
@@ -819,7 +810,7 @@ class PlatformTracer:
         args: JsonObject,
         nested_flow_tool: bool = False,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для вызова tool."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -847,7 +838,7 @@ class PlatformTracer:
 
     def record_tool_result(
         self,
-        span: Span,
+        span: OtelSpan,
         result: JsonValue | None,
         duration_ms: float,
         error: str | None = None,
@@ -879,7 +870,7 @@ class PlatformTracer:
             span_attributes=span_attributes,
         )
 
-    def record_state_snapshot(self, span: Span, state: "ExecutionState") -> None:
+    def record_state_snapshot(self, span: OtelSpan, state: "ExecutionState") -> None:
         """Записывает projection snapshot в span."""
         # Конвертируем ExecutionState в dict для JSON сериализации
         state_dict = require_json_object(
@@ -901,7 +892,7 @@ class PlatformTracer:
         tool_name: str,
         path_depth: int = 0,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для interrupt (ask_user)."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -931,7 +922,7 @@ class PlatformTracer:
         template: str,
         variables: JsonObject,
         trace_ctx: TraceContext | None = None,
-    ) -> AsyncGenerator[Span, None]:
+    ) -> AsyncGenerator[OtelSpan, None]:
         """Span для сборки системного промпта."""
         start_time = datetime.now(timezone.utc)
         attributes = self._base_attributes(trace_ctx)
@@ -967,7 +958,7 @@ class PlatformTracer:
 
     def record_prompt_result(
         self,
-        span: Span,
+        span: OtelSpan,
         rendered_prompt: str,
     ) -> None:
         """Записывает результат сборки промпта в span."""
@@ -991,7 +982,7 @@ class PlatformTracer:
             span_id=format(ctx.span_id, "016x"),
         )
 
-    def set_error(self, span: Span, error: Exception) -> None:
+    def set_error(self, span: OtelSpan, error: Exception) -> None:
         """Помечает span как ошибку."""
         if _is_control_flow_exception(error):
             return

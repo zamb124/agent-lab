@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.mcp_operations import (
     op_flows_mcp_branding_list,
     op_flows_mcp_branding_remove,
@@ -21,7 +22,6 @@ from apps.flows.realtime.mcp_operations import (
     op_flows_mcp_servers_test,
     op_flows_mcp_servers_update,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.mcp import (
     MCPServerConfig,
     MCPServerDeletedResponse,
@@ -56,7 +56,7 @@ router = APIRouter(tags=["mcp"])
 
 @router.get("/servers", response_model=OffsetPage[MCPServerConfig])
 async def list_servers(
-    container: ContainerDep,
+    di: Di,
     search: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -64,31 +64,31 @@ async def list_servers(
     return await op_flows_mcp_servers_list(
         MCPServerListPayload(search=search, limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/servers", response_model=MCPServerConfig)
 async def create_server(
     payload: MCPServerConfig,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerConfig:
     return await op_flows_mcp_servers_create(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/servers/{server_id}", response_model=MCPServerConfig)
 async def get_server(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerConfig:
     return await op_flows_mcp_servers_item(
         MCPServerIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -96,68 +96,68 @@ async def get_server(
 async def update_server(
     server_id: str,
     body: MCPServerUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerConfig:
     return await op_flows_mcp_servers_update(
         MCPServerUpdatePayload.model_validate(
             {"server_id": server_id, **body.model_dump()}
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/servers/{server_id}", response_model=MCPServerDeletedResponse)
 async def delete_server(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerDeletedResponse:
     return await op_flows_mcp_servers_remove(
         MCPServerIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/servers/{server_id}/sync", response_model=MCPSyncResponse)
 async def sync_server_tools(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPSyncResponse:
     return await op_flows_mcp_servers_sync(
         MCPServerIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/servers/{server_id}/test", response_model=MCPTestResponse)
 async def test_server_connection(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPTestResponse:
     return await op_flows_mcp_servers_test(
         MCPServerIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/servers/{server_id}/reset_catalog_defaults", response_model=MCPServerConfig)
 async def reset_catalog_defaults(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerConfig:
     return await op_flows_mcp_servers_reset_catalog_defaults(
         MCPServerIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/catalog", response_model=OffsetPage[MCPCatalogStoreItem])
 async def list_mcp_catalog(
-    container: ContainerDep,
+    di: Di,
     tier: Annotated[str, Query()] = "store",
     search: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -166,37 +166,37 @@ async def list_mcp_catalog(
     return await op_flows_mcp_catalog_list(
         MCPCatalogListPayload(search=search, limit=limit, offset=offset, tier=tier),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/catalog/{catalog_id}/install", response_model=MCPServerConfig)
 async def install_mcp_catalog_entry(
     catalog_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerConfig:
     return await op_flows_mcp_catalog_install(
         MCPCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/catalog/{catalog_id}/install", response_model=MCPCatalogUninstalledResponse)
 async def uninstall_mcp_catalog_entry(
     catalog_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPCatalogUninstalledResponse:
     return await op_flows_mcp_catalog_uninstall(
         MCPCatalogIdPayload(catalog_id=catalog_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/branding", response_model=OffsetPage[MCPServerBrandingResolved])
 async def list_mcp_branding(
-    container: ContainerDep,
+    di: Di,
     search: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 40,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -204,20 +204,20 @@ async def list_mcp_branding(
     return await op_flows_mcp_branding_list(
         MCPServerBrandingListPayload(search=search, limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/branding/slug-suggest", response_model=MCPServerBrandingSlugSuggestResponse)
 async def suggest_mcp_branding_slugs(
-    container: ContainerDep,
+    di: Di,
     search: Annotated[str, Query()] = "",
     limit: Annotated[int, Query(ge=1, le=50)] = 15,
 ) -> MCPServerBrandingSlugSuggestResponse:
     return await op_flows_mcp_branding_slug_suggest(
         MCPServerBrandingSlugSuggestPayload(search=search, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -225,24 +225,24 @@ async def suggest_mcp_branding_slugs(
 async def upsert_mcp_branding(
     server_id: str,
     body: MCPServerBrandingUpsertRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerBrandingResolved:
     return await op_flows_mcp_branding_upsert(
         MCPServerBrandingUpsertPayload.model_validate(
             {"server_id": server_id, **body.model_dump()}
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/branding/{server_id}", response_model=MCPServerBrandingDeletedResponse)
 async def delete_mcp_branding(
     server_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> MCPServerBrandingDeletedResponse:
     return await op_flows_mcp_branding_remove(
         MCPServerBrandingIdPayload(server_id=server_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

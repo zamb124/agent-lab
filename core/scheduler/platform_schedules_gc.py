@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
-from core.scheduler.repository import SchedulerTaskRepository
+from core.scheduler.models import PlatformScheduledTask
 
 logger = get_logger(__name__)
 
@@ -27,10 +27,8 @@ class PlatformSchedulesGcService:
         self,
         *,
         broker_redis_client: RedisClient,
-        scheduler_task_repository: SchedulerTaskRepository,
     ) -> None:
         self._broker_redis: RedisClient = broker_redis_client
-        self._scheduler_task_repository: SchedulerTaskRepository = scheduler_task_repository
 
     @staticmethod
     def _schedule_id_from_key(redis_key: str) -> str | None:
@@ -42,7 +40,7 @@ class PlatformSchedulesGcService:
         return schedule_id
 
     async def run_gc(self, *, dry_run: bool = False) -> PlatformSchedulesGcResult:
-        known_schedule_ids = await self._scheduler_task_repository.list_all_schedule_ids()
+        known_schedule_ids = await PlatformScheduledTask.list_all_schedule_ids()
         redis_keys = await self._broker_redis.scan_keys(f"{PLATFORM_SCHEDULES_DATA_PREFIX}*")
         orphan_keys: list[str] = []
         for redis_key in redis_keys:

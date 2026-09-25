@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Never, TypeVar
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.evaluation_lab import (
     EvaluationActiveMonitorCyclesRequest,
     EvaluationActiveMonitorCyclesResult,
@@ -119,11 +119,11 @@ def _require_id(value: str, field: str) -> str:
     return value
 
 
-async def _enqueue_evaluation_run_job(run_id: str, container: FlowContainer) -> None:
-    job = await container.evaluation_lab_service.get_run_job(run_id)
+async def _enqueue_evaluation_run_job(run_id: str, di: Di) -> None:
+    job = await di.evaluation_lab_service.get_run_job(run_id)
     if job.state == EvaluationRunJobState.ENQUEUED:
         return
-    _ = await container.evaluation_lab_service.mark_run_job_enqueued(run_id)
+    _ = await di.evaluation_lab_service.mark_run_job_enqueued(run_id)
     try:
         _ = await enqueue(
             TASK_EXECUTE_EVALUATION_RUN,
@@ -135,33 +135,33 @@ async def _enqueue_evaluation_run_job(run_id: str, container: FlowContainer) -> 
             taskiq_task_id=job.taskiq_task_id,
         )
     except Exception as enqueue_exc:
-        _ = await container.evaluation_lab_service.mark_run_job_failed(run_id, str(enqueue_exc))
-        _ = await container.evaluation_lab_service.mark_run_enqueue_failed(
+        _ = await di.evaluation_lab_service.mark_run_job_failed(run_id, str(enqueue_exc))
+        _ = await di.evaluation_lab_service.mark_run_enqueue_failed(
             run_id,
             str(enqueue_exc),
         )
         raise
 
 
-async def _create_run_job_and_enqueue(run_id: str, container: FlowContainer) -> None:
+async def _create_run_job_and_enqueue(run_id: str, di: Di) -> None:
     context = get_context()
     if context is None:
         raise_invalid(ValueError("Context is required to enqueue evaluation run"))
-    _ = await container.evaluation_lab_service.create_run_job(
+    _ = await di.evaluation_lab_service.create_run_job(
         run_id,
         context_data=context.to_dict(),
         trace_context=get_current_trace_context(),
     )
-    await _enqueue_evaluation_run_job(run_id, container)
+    await _enqueue_evaluation_run_job(run_id, di)
 
 
 async def _enqueue_run_from_cycle(
     cycle: EvaluationMonitorCycleResult,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitorCycleResult:
     if cycle.run is not None and cycle.run.state == EvaluationRunState.QUEUED:
-        await _create_run_job_and_enqueue(cycle.run.run_id, container)
-        run_with_cases = await _lab(container.evaluation_lab_service.get_run(cycle.run.run_id))
+        await _create_run_job_and_enqueue(cycle.run.run_id, di)
+        run_with_cases = await _lab(di.evaluation_lab_service.get_run(cycle.run.run_id))
         return cycle.model_copy(update={"run": run_with_cases.run})
     return cycle
 
@@ -170,35 +170,35 @@ async def op_flows_evaluation_evaluator_catalog(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationBuiltinEvaluatorCatalog:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
-    return container.evaluation_lab_service.list_builtin_evaluators()
+    _ = await require_company_member(di)
+    return di.evaluation_lab_service.list_builtin_evaluators()
 
 
 async def op_flows_evaluation_suite_create(
     payload: EvaluationSuiteCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationSuite:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.create_suite(payload))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.create_suite(payload))
 
 
 async def op_flows_evaluation_suites_list(
     payload: EvaluationFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationSuite]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_suites(payload.flow_id))
+        items=await _lab(di.evaluation_lab_service.list_suites(payload.flow_id))
     )
 
 
@@ -206,58 +206,58 @@ async def op_flows_evaluation_suite_item(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationSuite:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_suite(payload.suite_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_suite(payload.suite_id))
 
 
 async def op_flows_evaluation_suite_update(
     payload: EvaluationSuiteUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationSuite:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
-    return await _lab(container.evaluation_lab_service.update_suite(suite_id, payload))
+    return await _lab(di.evaluation_lab_service.update_suite(suite_id, payload))
 
 
 async def op_flows_evaluation_suite_archive(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationSuite:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.archive_suite(payload.suite_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.archive_suite(payload.suite_id))
 
 
 async def op_flows_evaluation_case_create(
     payload: EvaluationCaseCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
-    return await _lab(container.evaluation_lab_service.create_case(suite_id, payload))
+    return await _lab(di.evaluation_lab_service.create_case(suite_id, payload))
 
 
 async def op_flows_evaluation_cases_list(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationCase]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_cases(payload.suite_id))
+        items=await _lab(di.evaluation_lab_service.list_cases(payload.suite_id))
     )
 
 
@@ -265,12 +265,12 @@ async def op_flows_evaluation_case_item(
     payload: EvaluationSuiteCaseIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.get_case(payload.suite_id, payload.case_id)
+        di.evaluation_lab_service.get_case(payload.suite_id, payload.case_id)
     )
 
 
@@ -278,14 +278,14 @@ async def op_flows_evaluation_case_update(
     payload: EvaluationCaseUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
     case_id = _require_id(payload.case_id, "case_id")
     return await _lab(
-        container.evaluation_lab_service.update_case(suite_id, case_id, payload)
+        di.evaluation_lab_service.update_case(suite_id, case_id, payload)
     )
 
 
@@ -293,11 +293,11 @@ async def op_flows_evaluation_case_delete(
     payload: EvaluationSuiteCaseIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationDeletedResponse:
     _ = user
-    _ = await require_company_member(container)
-    await _lab(container.evaluation_lab_service.delete_case(payload.suite_id, payload.case_id))
+    _ = await require_company_member(di)
+    await _lab(di.evaluation_lab_service.delete_case(payload.suite_id, payload.case_id))
     return EvaluationDeletedResponse()
 
 
@@ -305,25 +305,25 @@ async def op_flows_evaluation_case_import(
     payload: EvaluationCaseImportRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCaseImportResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
-    return await _lab(container.evaluation_lab_service.import_cases(suite_id, payload))
+    return await _lab(di.evaluation_lab_service.import_cases(suite_id, payload))
 
 
 async def op_flows_evaluation_case_from_dialog(
     payload: EvaluationDialogCaseCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
     return await _lab(
-        container.evaluation_lab_service.create_case_from_dialog(suite_id, payload)
+        di.evaluation_lab_service.create_case_from_dialog(suite_id, payload)
     )
 
 
@@ -331,13 +331,13 @@ async def op_flows_evaluation_case_from_case_run(
     payload: EvaluationCaseRunCaseCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
     return await _lab(
-        container.evaluation_lab_service.create_case_from_case_run(suite_id, payload)
+        di.evaluation_lab_service.create_case_from_case_run(suite_id, payload)
     )
 
 
@@ -345,13 +345,13 @@ async def op_flows_evaluation_case_from_trace(
     payload: EvaluationTraceCaseCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCase:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
     return await _lab(
-        container.evaluation_lab_service.create_case_from_trace(suite_id, payload)
+        di.evaluation_lab_service.create_case_from_trace(suite_id, payload)
     )
 
 
@@ -359,12 +359,12 @@ async def op_flows_evaluation_rubric_create(
     payload: EvaluationRubricCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRubricWithVersion:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
-        rubric, version = await container.evaluation_lab_service.create_rubric(payload)
+        rubric, version = await di.evaluation_lab_service.create_rubric(payload)
     except (ValueError, PlatformNotFoundError) as exc:
         raise_evaluation(exc)
     return EvaluationRubricWithVersion(rubric=rubric, version=version)
@@ -374,12 +374,12 @@ async def op_flows_evaluation_rubrics_list(
     payload: EvaluationFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationRubric]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_rubrics(payload.flow_id))
+        items=await _lab(di.evaluation_lab_service.list_rubrics(payload.flow_id))
     )
 
 
@@ -387,47 +387,47 @@ async def op_flows_evaluation_rubric_item(
     payload: EvaluationRubricIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRubric:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_rubric(payload.rubric_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_rubric(payload.rubric_id))
 
 
 async def op_flows_evaluation_rubric_update(
     payload: EvaluationRubricUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRubric:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     rubric_id = _require_id(payload.rubric_id, "rubric_id")
-    return await _lab(container.evaluation_lab_service.update_rubric(rubric_id, payload))
+    return await _lab(di.evaluation_lab_service.update_rubric(rubric_id, payload))
 
 
 async def op_flows_evaluation_rubric_archive(
     payload: EvaluationRubricIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRubric:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.archive_rubric(payload.rubric_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.archive_rubric(payload.rubric_id))
 
 
 async def op_flows_evaluation_rubric_version_create(
     payload: EvaluationRubricVersionCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRubricVersion:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     rubric_id = _require_id(payload.rubric_id, "rubric_id")
     return await _lab(
-        container.evaluation_lab_service.create_rubric_version(rubric_id, payload)
+        di.evaluation_lab_service.create_rubric_version(rubric_id, payload)
     )
 
 
@@ -435,13 +435,13 @@ async def op_flows_evaluation_rubric_versions_list(
     payload: EvaluationRubricIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationRubricVersion]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
         items=await _lab(
-            container.evaluation_lab_service.list_rubric_versions(payload.rubric_id)
+            di.evaluation_lab_service.list_rubric_versions(payload.rubric_id)
         )
     )
 
@@ -450,26 +450,26 @@ async def op_flows_evaluation_run_create(
     payload: EvaluationRunCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunWithCases:
     _ = user
-    _ = await require_company_member(container)
-    created = await _lab(container.evaluation_lab_service.create_run(payload))
+    _ = await require_company_member(di)
+    created = await _lab(di.evaluation_lab_service.create_run(payload))
     if created.run.state == EvaluationRunState.QUEUED:
-        await _create_run_job_and_enqueue(created.run.run_id, container)
-    return await _lab(container.evaluation_lab_service.get_run(created.run.run_id))
+        await _create_run_job_and_enqueue(created.run.run_id, di)
+    return await _lab(di.evaluation_lab_service.get_run(created.run.run_id))
 
 
 async def op_flows_evaluation_compare_runs(
     payload: EvaluationCompareRunsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunComparison:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.compare_runs(
+        di.evaluation_lab_service.compare_runs(
             payload.left_run_id,
             payload.right_run_id,
         )
@@ -480,16 +480,16 @@ async def op_flows_evaluation_run_jobs_enqueue_pending(
     payload: EvaluationPendingJobsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationPendingRunJobsEnqueueResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     enqueued_run_ids: list[str] = []
     failed_run_ids: list[str] = []
-    jobs = await _lab(container.evaluation_lab_service.list_pending_run_jobs(payload.limit))
+    jobs = await _lab(di.evaluation_lab_service.list_pending_run_jobs(payload.limit))
     for job in jobs:
         try:
-            await _enqueue_evaluation_run_job(job.run_id, container)
+            await _enqueue_evaluation_run_job(job.run_id, di)
         except Exception:
             failed_run_ids.append(job.run_id)
             continue
@@ -504,34 +504,34 @@ async def op_flows_evaluation_run_get(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunWithCases:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_run(payload.run_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_run(payload.run_id))
 
 
 async def op_flows_evaluation_run_cancel(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunWithCases:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.cancel_run(payload.run_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.cancel_run(payload.run_id))
 
 
 async def op_flows_evaluation_run_cases(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationCaseRun]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_case_runs(payload.run_id))
+        items=await _lab(di.evaluation_lab_service.list_case_runs(payload.run_id))
     )
 
 
@@ -539,12 +539,12 @@ async def op_flows_evaluation_run_events(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationRunEvent]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_events(payload.run_id))
+        items=await _lab(di.evaluation_lab_service.list_events(payload.run_id))
     )
 
 
@@ -552,12 +552,12 @@ async def op_flows_evaluation_run_events_page(
     payload: EvaluationEventsPagePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunEventsPage:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.list_events_page(
+        di.evaluation_lab_service.list_events_page(
             payload.run_id,
             after_sequence=payload.after_sequence,
             limit=payload.limit,
@@ -569,12 +569,12 @@ async def op_flows_evaluation_case_run_trace(
     payload: EvaluationCaseRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationCaseRunTrace:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.get_case_run_trace(payload.case_run_id)
+        di.evaluation_lab_service.get_case_run_trace(payload.case_run_id)
     )
 
 
@@ -582,24 +582,24 @@ async def op_flows_evaluation_pairwise_judgment_create(
     payload: EvaluationPairwiseJudgeRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationPairwiseJudgment:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.create_pairwise_judgment(payload))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.create_pairwise_judgment(payload))
 
 
 async def op_flows_evaluation_pairwise_judgments_list(
     payload: EvaluationCaseRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationPairwiseJudgment]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
         items=await _lab(
-            container.evaluation_lab_service.list_pairwise_judgments_for_case_run(
+            di.evaluation_lab_service.list_pairwise_judgments_for_case_run(
                 payload.case_run_id,
             )
         )
@@ -610,24 +610,24 @@ async def op_flows_evaluation_annotation_create(
     payload: EvaluationAnnotationCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationAnnotation:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     run_id = _require_id(payload.run_id, "run_id")
-    return await _lab(container.evaluation_lab_service.create_annotation(run_id, payload))
+    return await _lab(di.evaluation_lab_service.create_annotation(run_id, payload))
 
 
 async def op_flows_evaluation_annotations_list(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationAnnotation]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_annotations(payload.run_id))
+        items=await _lab(di.evaluation_lab_service.list_annotations(payload.run_id))
     )
 
 
@@ -635,13 +635,13 @@ async def op_flows_evaluation_annotation_update(
     payload: EvaluationAnnotationUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationAnnotation:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     annotation_id = _require_id(payload.annotation_id, "annotation_id")
     return await _lab(
-        container.evaluation_lab_service.update_annotation(annotation_id, payload)
+        di.evaluation_lab_service.update_annotation(annotation_id, payload)
     )
 
 
@@ -649,11 +649,11 @@ async def op_flows_evaluation_annotation_delete(
     payload: EvaluationAnnotationIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationDeletedResponse:
     _ = user
-    _ = await require_company_member(container)
-    await _lab(container.evaluation_lab_service.delete_annotation(payload.annotation_id))
+    _ = await require_company_member(di)
+    await _lab(di.evaluation_lab_service.delete_annotation(payload.annotation_id))
     return EvaluationDeletedResponse()
 
 
@@ -661,13 +661,13 @@ async def op_flows_evaluation_runs_list(
     payload: EvaluationRunsListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationRun]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
         items=await _lab(
-            container.evaluation_lab_service.list_runs(payload.suite_id, payload.limit)
+            di.evaluation_lab_service.list_runs(payload.suite_id, payload.limit)
         )
     )
 
@@ -676,12 +676,12 @@ async def op_flows_evaluation_matrix_get(
     payload: EvaluationMatrixPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationResultsMatrix:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.get_results_matrix(
+        di.evaluation_lab_service.get_results_matrix(
             payload.suite_id,
             payload.branch_id,
             payload.limit,
@@ -693,14 +693,14 @@ async def op_flows_evaluation_baseline_set(
     payload: EvaluationBaselineSetRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationBaseline:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
     branch_id = _require_id(payload.branch_id, "branch_id")
     return await _lab(
-        container.evaluation_lab_service.set_baseline(suite_id, branch_id, payload)
+        di.evaluation_lab_service.set_baseline(suite_id, branch_id, payload)
     )
 
 
@@ -708,12 +708,12 @@ async def op_flows_evaluation_baselines_list(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationBaseline]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_baselines(payload.suite_id))
+        items=await _lab(di.evaluation_lab_service.list_baselines(payload.suite_id))
     )
 
 
@@ -721,12 +721,12 @@ async def op_flows_evaluation_baseline_item(
     payload: EvaluationBaselineItemPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationBaseline:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.get_baseline(payload.suite_id, payload.branch_id)
+        di.evaluation_lab_service.get_baseline(payload.suite_id, payload.branch_id)
     )
 
 
@@ -734,12 +734,12 @@ async def op_flows_evaluation_baseline_compare(
     payload: EvaluationBaselineComparePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationBaselineComparison:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.compare_with_baseline(
+        di.evaluation_lab_service.compare_with_baseline(
             payload.suite_id,
             payload.branch_id,
             payload.run_id,
@@ -751,25 +751,25 @@ async def op_flows_evaluation_gate_policy_create(
     payload: EvaluationGatePolicyCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationGatePolicy:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     suite_id = _require_id(payload.suite_id, "suite_id")
-    return await _lab(container.evaluation_lab_service.create_gate_policy(suite_id, payload))
+    return await _lab(di.evaluation_lab_service.create_gate_policy(suite_id, payload))
 
 
 async def op_flows_evaluation_gate_policies_list(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationGatePolicy]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
         items=await _lab(
-            container.evaluation_lab_service.list_gate_policies(payload.suite_id)
+            di.evaluation_lab_service.list_gate_policies(payload.suite_id)
         )
     )
 
@@ -778,24 +778,24 @@ async def op_flows_evaluation_gate_policy_item(
     payload: EvaluationGatePolicyIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationGatePolicy:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_gate_policy(payload.gate_policy_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_gate_policy(payload.gate_policy_id))
 
 
 async def op_flows_evaluation_gate_policy_update(
     payload: EvaluationGatePolicyUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationGatePolicy:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     gate_policy_id = _require_id(payload.gate_policy_id, "gate_policy_id")
     return await _lab(
-        container.evaluation_lab_service.update_gate_policy(gate_policy_id, payload)
+        di.evaluation_lab_service.update_gate_policy(gate_policy_id, payload)
     )
 
 
@@ -803,12 +803,12 @@ async def op_flows_evaluation_gate_policy_archive(
     payload: EvaluationGatePolicyIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationGatePolicy:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _lab(
-        container.evaluation_lab_service.archive_gate_policy(payload.gate_policy_id)
+        di.evaluation_lab_service.archive_gate_policy(payload.gate_policy_id)
     )
 
 
@@ -816,51 +816,51 @@ async def op_flows_evaluation_gate_policy_run(
     payload: EvaluationGatePolicyRunRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationRunWithCases:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     gate_policy_id = _require_id(payload.gate_policy_id, "gate_policy_id")
     created = await _lab(
-        container.evaluation_lab_service.create_gate_policy_run(gate_policy_id, payload)
+        di.evaluation_lab_service.create_gate_policy_run(gate_policy_id, payload)
     )
     if created.run.state == EvaluationRunState.QUEUED:
-        await _create_run_job_and_enqueue(created.run.run_id, container)
-    return await _lab(container.evaluation_lab_service.get_run(created.run.run_id))
+        await _create_run_job_and_enqueue(created.run.run_id, di)
+    return await _lab(di.evaluation_lab_service.get_run(created.run.run_id))
 
 
 async def op_flows_evaluation_gate_result(
     payload: EvaluationRunIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationGateResult:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_gate_result(payload.run_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_gate_result(payload.run_id))
 
 
 async def op_flows_evaluation_monitor_create(
     payload: EvaluationMonitorCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitor:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.create_monitor(payload))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.create_monitor(payload))
 
 
 async def op_flows_evaluation_monitor_cycles_run_active(
     payload: EvaluationActiveMonitorCyclesRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationActiveMonitorCyclesResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     cycles = await _lab(
-        container.evaluation_lab_service.run_active_monitor_cycles(
+        di.evaluation_lab_service.run_active_monitor_cycles(
             limit_per_monitor=payload.limit_per_monitor,
             enqueue_gate_runs=payload.enqueue_gate_runs,
             trials=payload.trials,
@@ -869,7 +869,7 @@ async def op_flows_evaluation_monitor_cycles_run_active(
     )
     enqueued_cycles: list[EvaluationMonitorCycleResult] = []
     for cycle in cycles:
-        enqueued_cycles.append(await _enqueue_run_from_cycle(cycle, container))
+        enqueued_cycles.append(await _enqueue_run_from_cycle(cycle, di))
     return EvaluationActiveMonitorCyclesResult(cycles=enqueued_cycles)
 
 
@@ -877,12 +877,12 @@ async def op_flows_evaluation_monitors_list(
     payload: EvaluationSuiteIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationMonitor]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
-        items=await _lab(container.evaluation_lab_service.list_monitors(payload.suite_id))
+        items=await _lab(di.evaluation_lab_service.list_monitors(payload.suite_id))
     )
 
 
@@ -890,73 +890,73 @@ async def op_flows_evaluation_monitor_item(
     payload: EvaluationMonitorIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitor:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.get_monitor(payload.monitor_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.get_monitor(payload.monitor_id))
 
 
 async def op_flows_evaluation_monitor_update(
     payload: EvaluationMonitorUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitor:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     monitor_id = _require_id(payload.monitor_id, "monitor_id")
-    return await _lab(container.evaluation_lab_service.update_monitor(monitor_id, payload))
+    return await _lab(di.evaluation_lab_service.update_monitor(monitor_id, payload))
 
 
 async def op_flows_evaluation_monitor_archive(
     payload: EvaluationMonitorIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitor:
     _ = user
-    _ = await require_company_member(container)
-    return await _lab(container.evaluation_lab_service.archive_monitor(payload.monitor_id))
+    _ = await require_company_member(di)
+    return await _lab(di.evaluation_lab_service.archive_monitor(payload.monitor_id))
 
 
 async def op_flows_evaluation_monitor_sample(
     payload: EvaluationMonitorSampleRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitorSampleResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     monitor_id = _require_id(payload.monitor_id, "monitor_id")
-    return await _lab(container.evaluation_lab_service.sample_monitor(monitor_id, payload))
+    return await _lab(di.evaluation_lab_service.sample_monitor(monitor_id, payload))
 
 
 async def op_flows_evaluation_monitor_run_cycle(
     payload: EvaluationMonitorCycleRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitorCycleResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     monitor_id = _require_id(payload.monitor_id, "monitor_id")
-    cycle = await _lab(container.evaluation_lab_service.run_monitor_cycle(monitor_id, payload))
-    return await _enqueue_run_from_cycle(cycle, container)
+    cycle = await _lab(di.evaluation_lab_service.run_monitor_cycle(monitor_id, payload))
+    return await _enqueue_run_from_cycle(cycle, di)
 
 
 async def op_flows_evaluation_monitor_observation_case_create(
     payload: EvaluationMonitorObservationCaseCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> EvaluationMonitorObservationCurationResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     monitor_id = _require_id(payload.monitor_id, "monitor_id")
     trace_id = _require_id(payload.trace_id, "trace_id")
     return await _lab(
-        container.evaluation_lab_service.create_case_from_monitor_observation(
+        di.evaluation_lab_service.create_case_from_monitor_observation(
             monitor_id,
             trace_id,
             payload,
@@ -968,13 +968,13 @@ async def op_flows_evaluation_monitor_observations(
     payload: EvaluationMonitorObservationsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[EvaluationMonitorObservation]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(
         items=await _lab(
-            container.evaluation_lab_service.list_monitor_observations(
+            di.evaluation_lab_service.list_monitor_observations(
                 payload.monitor_id,
                 payload.limit,
             )

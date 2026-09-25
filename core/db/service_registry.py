@@ -1,7 +1,7 @@
 """
 Реестр сервисов для миграций.
 
-Каждый сервис регистрирует свои модели, функцию получения URL и путь к Alembic-дереву.
+Каждый сервис регистрирует свои модели, функцию получения URL и каталог миграции.
 """
 
 from collections.abc import Callable
@@ -17,7 +17,7 @@ class ServiceDBConfig:
     name: str
     get_db_url: Callable[[], str]
     models_module: str
-    alembic_script_location: str   # путь к папке с env.py и versions/
+    migrations_dir: str
 
 _registry: list[ServiceDBConfig] = []
 
@@ -25,22 +25,22 @@ def register_service(
     name: str,
     get_db_url: Callable[[], str],
     models_module: str,
-    alembic_script_location: str = "",
+    migrations_dir: str = "",
 ) -> None:
     """
     Регистрирует сервис в реестре.
 
     Аргументы:
-        name: Имя сервиса (shared, agents, crm, sync, rag)
+        name: Имя сервиса (shared, flows, crm, sync, rag)
         get_db_url: Функция, возвращающая URL БД из конфига сервиса
         models_module: Путь к модулю с моделями
-        alembic_script_location: Путь к папке Alembic-дерева (migrations/<name>)
+        migrations_dir: Каталог ``migrations/<name>`` с файлом миграции
     """
     for svc in _registry:
         if svc.name == name:
             return
 
-    location = alembic_script_location or f"migrations/{name}"
+    location = migrations_dir or f"migrations/{name}"
     _registry.append(ServiceDBConfig(name, get_db_url, models_module, location))
     logger.debug("db.service_registered", name=name, location=str(location))
 

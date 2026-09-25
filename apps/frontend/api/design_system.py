@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.services.design_system_catalog import (
     catalog_allows_component,
     load_catalog,
@@ -20,8 +20,8 @@ router = APIRouter(tags=["design-system"])
 
 
 @router.get("/api/design-system/catalog")
-async def get_design_system_catalog(container: ContainerDep) -> JSONResponse:
-    _ = container
+async def get_design_system_catalog(di: Di) -> JSONResponse:
+    _ = di
     entries = load_catalog()
     payload = {
         "components": [
@@ -41,11 +41,11 @@ async def get_design_system_catalog(container: ContainerDep) -> JSONResponse:
 @router.get("/design-system/preview", response_class=HTMLResponse)
 @router.get("/frontend/design-system/preview", response_class=HTMLResponse)
 async def design_system_preview(
-    container: ContainerDep,
+    di: Di,
     component: Annotated[str, Query(min_length=1)],
     variant: Annotated[str, Query(min_length=1)] = "default",
 ) -> HTMLResponse:
-    _ = container
+    _ = di
     trimmed = component.strip()
     variant_id = variant.strip()
     if not catalog_allows_component(trimmed):

@@ -2,7 +2,7 @@
 Единый конвейер обработки заметки: analyze (AI-извлечение) + apply (создание entities/relationships).
 
 Заметка — единственный источник данных: текст берётся из note.description + attachment_ids.
-Вызывается из воркера; статусы публикуются через TaskRepository.
+Вызывается из воркера; статусы пишутся через ``patch_crm_task_progress``.
 """
 
 from __future__ import annotations

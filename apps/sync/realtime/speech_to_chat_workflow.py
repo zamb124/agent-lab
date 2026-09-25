@@ -22,13 +22,15 @@ from livekit.protocol.models import TrackSource, TrackType
 from livekit.protocol.room import ListParticipantsRequest
 from redis.asyncio.client import Redis
 
-from apps.sync.container import get_sync_container
-from apps.sync.db.models import SyncCallSpeechEgressTrack
+from apps.sync.di import Di
+from apps.sync.models.call import SyncCall
+from apps.sync.models.channel import SyncChannel
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,
     MessageCreate,
 )
+from apps.sync.models.speech_egress import SyncCallSpeechEgressTrack
 from apps.sync.realtime.handlers import send_message_with_side_effects
 from apps.sync.realtime.livekit_sdk_boundary import (
     read_livekit_participant_identity,
@@ -48,13 +50,13 @@ from core.files.audio_transcode import transcode_audio_bytes_to_m4a_aac
 from core.files.create_spec import FileSourceKind
 from core.files.default_storage import get_default_storage
 from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
+from core.files.object_store.gate import EgressTarget, FileGate
 from core.files.registry import default_retention_for_source
-from core.files.s3_client import S3ClientFactory
 from core.files.storage import retention_fields_from_spec
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
 
@@ -218,6 +220,7 @@ def _file_entries_from_egress_info(egress_info: EgressInfo) -> list[tuple[str, s
 
 async def _audio_segment_entries_from_s3_prefix(
     *,
+    storage_id: str,
     prefix: str,
     start_after_key: str | None,
     max_keys: int,
@@ -226,10 +229,10 @@ async def _audio_segment_entries_from_s3_prefix(
     settings = get_settings()
     if not settings.s3.enabled:
         return []
-    default_key = settings.s3.default_bucket
-    if default_key == "" or default_key not in settings.s3.buckets:
-        raise ValueError("s3.default_bucket is not set for speech-to-chat.")
-    client = S3ClientFactory.create_client_for_bucket(default_key)
+    from core.files.object_store.pool import client_for
+    from core.files.object_store.resolver import resolve_storage_id
+
+    client = await client_for(await resolve_storage_id(storage_id))
     listed = await client.list_objects(
         prefix=prefix,
         max_keys=max_keys,
@@ -276,29 +279,26 @@ async def _http_get_segment_bytes(url: str) -> bytes:
     return body
 
 
-async def _fetch_segment_bytes(*, storage_url: str) -> bytes:
+async def _fetch_segment_bytes(*, storage_id: str, storage_url: str) -> bytes:
     """
-    Сегменты лежат в default S3 bucket; публичный URL часто без анонимного чтения (403).
-    Сначала path-style URL `{endpoint}/{bucket}/{key}` — чтение через SDK с ключами из конфига.
+    Сегменты лежат в object storage компании; публичный URL часто без анонимного чтения (403).
+    Сначала path-style URL `{endpoint}/{bucket}/{key}` — чтение через SDK.
     """
     settings = get_settings()
     parsed = urlparse(storage_url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Invalid speech-to-chat segment URL: {storage_url}")
     path = parsed.path.lstrip("/")
-    if "/" in path and settings.s3.enabled and settings.s3.default_bucket != "":
+    if "/" in path and settings.s3.enabled and settings.s3.bucket_name != "":
         bucket_part, _, object_key = path.partition("/")
         if object_key != "":
-            default_key = settings.s3.default_bucket
-            if default_key in settings.s3.buckets:
-                bconf = settings.s3.buckets[default_key]
-                physical = bconf.bucket_name or default_key
-                if bucket_part == physical or bucket_part == default_key:
-                    client = S3ClientFactory.create_client_for_bucket(default_key)
-                    try:
-                        return await client.download_bytes(object_key)
-                    finally:
-                        await client.close()
+            from core.files.object_store.pool import client_for
+            from core.files.object_store.resolver import resolve_storage_id
+
+            resolved = await resolve_storage_id(storage_id)
+            client = await client_for(resolved)
+            if bucket_part == resolved.bucket_name or bucket_part == resolved.storage_id:
+                return await client.download_bytes(object_key)
     return await _http_get_segment_bytes(storage_url)
 
 
@@ -338,16 +338,17 @@ async def _post_segment_file_as_message(
     file_size: int,
     content_type: str,
     call_id: str,
+    di: Di,
 ) -> None:
     settings = get_settings()
-    if not settings.s3.enabled or settings.s3.default_bucket == "":
+    if not settings.s3.enabled or settings.s3.bucket_name == "":
         raise ValueError("S3 is not configured: speech-to-chat cannot store the segment as a channel file.")
 
     normalized_url = _normalize_storage_url_for_worker(
         storage_url=storage_url,
         testing=settings.testing,
     )
-    raw = await _fetch_segment_bytes(storage_url=normalized_url)
+    raw = await _fetch_segment_bytes(storage_id=row.storage_id, storage_url=normalized_url)
     if file_size > 0 and len(raw) != file_size:
         raise ValueError(
             f"Segment size does not match expected: got={len(raw)} expected={file_size} url={normalized_url}"
@@ -413,6 +414,7 @@ async def _post_segment_file_as_message(
         ttl_seconds=ttl_seconds,
         metadata={"source_kind": FileSourceKind.SYNC_SPEECH_SEGMENT.value},
         content_sha256_hex=checksum,
+        source_kind=FileSourceKind.SYNC_SPEECH_SEGMENT,
     )
     sync_download_url = f"{download_url_prefix}/{file_record.file_id}"
     if file_record.download_url != sync_download_url:
@@ -443,12 +445,11 @@ async def _post_segment_file_as_message(
         mentioned_user_ids=None,
         call_id=call_id,
     )
-    container = get_sync_container()
-    company = await container.company_repository.get(row.company_id)
+    company = await Company.get(row.company_id)
     if company is None:
         raise ValueError(f"company not found: {row.company_id}")
     # Гость звонка по ссылке не хранится в реестре пользователей — сообщение идёт от его identity.
-    participant = await container.user_repository.get(row.participant_identity)
+    participant = await User.get(row.participant_identity)
     if participant is None:
         participant = User(
             user_id=row.participant_identity,
@@ -471,7 +472,7 @@ async def _post_segment_file_as_message(
             channel_id=row.channel_id,
             body=body,
             user=participant,
-            container=container,
+            di=di,
         )
     finally:
         if previous is not None:
@@ -485,15 +486,14 @@ async def process_new_files_for_egress_row(
     row: SyncCallSpeechEgressTrack,
     egress_info: EgressInfo | None,
     call_id: str,
+    di: Di,
 ) -> None:
-    container = get_sync_container()
-    repo = container.call_speech_egress_track_repository
     budget = get_settings().calls.speech_to_chat.max_segments_per_poll_per_track
 
     livekit_entries = _file_entries_from_egress_info(egress_info) if egress_info is not None else []
     if len(livekit_entries) > 0:
         while budget > 0:
-            fresh = await repo.get_by_call_and_track(call_id, row.track_sid)
+            fresh = await SyncCallSpeechEgressTrack.get_for_track(call_id, row.track_sid)
             if fresh is None:
                 return
             if fresh.segments_posted >= len(livekit_entries):
@@ -508,12 +508,13 @@ async def process_new_files_for_egress_row(
                 file_size=sz,
                 content_type=content_type,
                 call_id=call_id,
+                di=di,
             )
             segment_s3_key = f"{_speech_egress_s3_prefix(fresh)}{fn}"
-            await repo.set_segments_posted(
+            await SyncCallSpeechEgressTrack.mark_speech_egress_segments(
                 fresh.row_id,
                 idx + 1,
-                last_segment_s3_key=segment_s3_key,
+                segment_s3_key,
             )
             budget -= 1
         return
@@ -521,10 +522,11 @@ async def process_new_files_for_egress_row(
     prefix = _speech_egress_s3_prefix(row)
     page_size = get_settings().calls.speech_to_chat.s3_segment_list_page_size
     while budget > 0:
-        fresh = await repo.get_by_call_and_track(call_id, row.track_sid)
+        fresh = await SyncCallSpeechEgressTrack.get_for_track(call_id, row.track_sid)
         if fresh is None:
             return
         page = await _audio_segment_entries_from_s3_prefix(
+            storage_id=fresh.storage_id,
             prefix=prefix,
             start_after_key=fresh.last_segment_s3_key,
             max_keys=page_size,
@@ -544,44 +546,24 @@ async def process_new_files_for_egress_row(
                 file_size=sz,
                 content_type=content_type,
                 call_id=call_id,
+                di=di,
             )
             n += 1
             last_obj_key = obj_key
             budget -= 1
         if last_obj_key is None:
             return
-        await repo.set_segments_posted(
-            fresh.row_id, n, last_segment_s3_key=last_obj_key
+        await SyncCallSpeechEgressTrack.mark_speech_egress_segments(
+            fresh.row_id, n, last_obj_key
         )
         if len(page) < page_size:
             return
 
 
-def _s3_params_from_settings() -> tuple[str, str, str, str, str | None]:
-    settings = get_settings()
-    if not settings.s3.enabled:
-        raise ValueError("S3 is disabled: speech-to-chat egress to S3 is unavailable.")
-    default_bucket_key = settings.s3.default_bucket
-    if default_bucket_key == "":
-        raise ValueError("s3.default_bucket is not set.")
-    if default_bucket_key not in settings.s3.buckets:
-        raise ValueError(f"S3 bucket config '{default_bucket_key}' not found.")
-    bucket_config = settings.s3.buckets[default_bucket_key]
-    if not bucket_config.enabled:
-        raise ValueError(f"S3 bucket '{default_bucket_key}' is disabled.")
-    if not bucket_config.access_key_id:
-        raise ValueError(f"S3 access_key_id is not set for bucket '{default_bucket_key}'.")
-    if not bucket_config.secret_access_key:
-        raise ValueError(f"S3 secret_access_key is not set for bucket '{default_bucket_key}'.")
-    if not bucket_config.region_name:
-        raise ValueError(f"S3 region_name is not set for bucket '{default_bucket_key}'.")
-    real_bucket_name = bucket_config.bucket_name or default_bucket_key
-    if real_bucket_name == "":
-        raise ValueError("S3 bucket name for egress must not be empty.")
-
-    endpoint_raw = bucket_config.endpoint_url
+def _s3_params_from_egress_target(target: EgressTarget) -> tuple[str, str, str, str, str | None]:
+    endpoint_raw = target.endpoint_url
     ep: str | None = None
-    if endpoint_raw is not None and endpoint_raw.strip() != "":
+    if endpoint_raw.strip() != "":
         trimmed = endpoint_raw.strip()
         parsed = urlparse(trimmed)
         if parsed.scheme == "":
@@ -599,22 +581,29 @@ def _s3_params_from_settings() -> tuple[str, str, str, str, str | None]:
             else:
                 netloc = f"{hostname}:{parsed.port}"
             ep = f"{parsed.scheme}://{netloc}"
+    if target.bucket_name == "":
+        raise ValueError("S3 bucket name for egress must not be empty.")
+    if target.access_key_id == "":
+        raise ValueError("S3 access_key_id is not set for speech-to-chat egress.")
+    if target.secret_access_key == "":
+        raise ValueError("S3 secret_access_key is not set for speech-to-chat egress.")
+    if target.region_name == "":
+        raise ValueError("S3 region_name is not set for speech-to-chat egress.")
     return (
-        bucket_config.access_key_id,
-        bucket_config.secret_access_key,
-        bucket_config.region_name,
-        real_bucket_name,
+        target.access_key_id,
+        target.secret_access_key,
+        target.region_name,
+        target.bucket_name,
         ep,
     )
 
 
 async def run_speech_to_chat_poll_cycle(
-    *, call_id: str, company_id: str
+    *, call_id: str, company_id: str, di: Di
 ) -> SpeechToChatPollOutcome:
     """Определяет, ставить ли следующий тик TaskIQ и с обычной или увеличенной задержкой."""
-    container = get_sync_container()
     try:
-        call = await container.call_repository.get_call(call_id, company_id)
+        call = await SyncCall.require_company_call(call_id, company_id)
     except PlatformNotFoundError:
         return SpeechToChatPollOutcome(schedule_next=False)
 
@@ -623,7 +612,7 @@ async def run_speech_to_chat_poll_cycle(
     if call.livekit_room_name is None or call.livekit_room_name == "":
         return SpeechToChatPollOutcome(schedule_next=False)
 
-    channel_entity = await container.channel_repository.get(call.channel_id)
+    channel_entity = await SyncChannel.get(call.channel_id)
     if channel_entity is None:
         raise ValueError(f"Channel {call.channel_id} not found.")
     if channel_entity.company_id != company_id:
@@ -664,7 +653,7 @@ async def run_speech_to_chat_poll_cycle(
             ),
         )
         inner_continue = await _run_speech_to_chat_poll_cycle_inner(
-            call_id=call_id, company_id=company_id
+            call_id=call_id, company_id=company_id, di=di
         )
         return SpeechToChatPollOutcome(
             schedule_next=inner_continue,
@@ -679,15 +668,14 @@ async def run_speech_to_chat_poll_cycle(
         await r.aclose()
 
 
-async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str) -> bool:
-    container = get_sync_container()
-    call = await container.call_repository.get_call(call_id, company_id)
+async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str, di: Di) -> bool:
+    call = await SyncCall.require_company_call(call_id, company_id)
     if call.status != "active":
         return False
     if call.livekit_room_name is None or call.livekit_room_name == "":
         return False
 
-    channel_entity = await container.channel_repository.get(call.channel_id)
+    channel_entity = await SyncChannel.get(call.channel_id)
     if channel_entity is None:
         raise ValueError(f"Channel {call.channel_id} not found.")
     if channel_entity.company_id != company_id:
@@ -697,7 +685,13 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
 
     settings = get_settings()
     try:
-        ak, sk, region, bucket, endpoint = _s3_params_from_settings()
+        if not settings.s3.enabled:
+            raise ValueError("S3 is disabled: speech-to-chat egress to S3 is unavailable.")
+        egress_target = await FileGate().egress_target(
+            company_id,
+            FileSourceKind.SYNC_SPEECH_SEGMENT,
+        )
+        ak, sk, region, bucket, endpoint = _s3_params_from_egress_target(egress_target)
     except ValueError as exc:
         logger.error("sync.speech_to_chat", exc=str(exc))
         return False
@@ -726,7 +720,6 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                     return True
                 participants = list(res.participants)
 
-                speech_repo = container.call_speech_egress_track_repository
                 for participant in participants:
                     identity = read_livekit_participant_identity(participant)
                     if identity is None:
@@ -739,7 +732,9 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                         track_sid = read_livekit_track_sid(track)
                         if track_sid is None:
                             continue
-                        existing = await speech_repo.get_by_call_and_track(call_id, track_sid)
+                        existing = await SyncCallSpeechEgressTrack.get_for_track(
+                            call_id, track_sid
+                        )
                         if existing is not None:
                             continue
                         prefix = f"sync-speech/{company_id}/{call_id}/{identity}/{track_sid}/"
@@ -777,9 +772,10 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                             participant_identity=identity,
                             track_sid=track_sid,
                             egress_id=egress_id,
+                            storage_id=egress_target.storage_id,
                             segments_posted=0,
                         )
-                        _ = await speech_repo.create(row)
+                        _ = await SyncCallSpeechEgressTrack.set(row)
                         logger.info(
                             "sync.speech_to_chat",
                             call_id=call_id,
@@ -788,10 +784,10 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str)
                             egress_id=egress_id,
                         )
 
-                rows = await speech_repo.list_for_call(call_id, company_id)
+                rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
                 for row in rows:
                     await process_new_files_for_egress_row(
-                        row=row, egress_info=None, call_id=call_id
+                        row=row, egress_info=None, call_id=call_id, di=di
                     )
     except TimeoutError:
         logger.warning("sync.speech_to_chat", room=room_name)
@@ -806,10 +802,9 @@ async def stop_speech_egresses_for_call_room(
     company_id: str,
     room_name: str,
     actor_user_id: str,
+    di: Di,
 ) -> None:
-    container = get_sync_container()
-    repo = container.call_speech_egress_track_repository
-    rows = await repo.list_for_call(call_id, company_id)
+    rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
     if len(rows) == 0:
         return
     if actor_user_id.strip() == "":
@@ -851,7 +846,7 @@ async def stop_speech_egresses_for_call_room(
                     )
                 if info is not None:
                     await process_new_files_for_egress_row(
-                        row=row, egress_info=info, call_id=call_id
+                        row=row, egress_info=info, call_id=call_id, di=di
                     )
 
     now = datetime.now(UTC)
@@ -861,7 +856,7 @@ async def stop_speech_egresses_for_call_room(
         if secs > 0:
             total_track_minutes += max(1, int(math.ceil(secs / 60.0)))
     if total_track_minutes > 0:
-        call_entity = await container.call_repository.get_call(call_id, company_id)
+        call_entity = await SyncCall.require_company_call(call_id, company_id)
         await trace_livekit_egress_segmented_usage(
             company_id=company_id,
             user_id=call_entity.created_by_user_id,
@@ -870,7 +865,7 @@ async def stop_speech_egresses_for_call_room(
             billed_minutes=total_track_minutes,
         )
 
-    await repo.delete_for_call(call_id, company_id)
+    await SyncCallSpeechEgressTrack.delete_for_call(call_id, company_id)
     logger.info(
         "sync.speech_to_chat",
         call_id=call_id,

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.authz_explorer_operations import (
     AuthzExplorerByObjectPayload,
     AuthzExplorerByUserPayload,
@@ -32,30 +32,30 @@ router = APIRouter(prefix="/api/authz/explorer", tags=["authz-explorer"])
 
 @router.get("/by-user", response_model=AuthzExplorerByUserResponse)
 async def explorer_by_user(
-    container: ContainerDep,
+    di: Di,
     user_id: Annotated[str, Query(min_length=1)],
 ) -> AuthzExplorerByUserResponse:
     return await op_authz_explorer_by_user(
-        AuthzExplorerByUserPayload(user_id=user_id), user=require_context().user, container=container
+        AuthzExplorerByUserPayload(user_id=user_id), user=require_context().user, di=di
     )
 
 
 @router.get("/by-object", response_model=AuthzExplorerByObjectResponse)
 async def explorer_by_object(
-    container: ContainerDep,
+    di: Di,
     object_type: AuthzObjectType,
     object_key: Annotated[str, Query(min_length=1)],
 ) -> AuthzExplorerByObjectResponse:
     return await op_authz_explorer_by_object(
         AuthzExplorerByObjectPayload(object_type=object_type, object_key=object_key),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/why", response_model=AuthzExplorerWhyResponse)
 async def explorer_why(
-    container: ContainerDep,
+    di: Di,
     user_id: Annotated[str, Query(min_length=1)],
     object_type: AuthzObjectType,
     object_key: Annotated[str, Query(min_length=1)],
@@ -63,23 +63,23 @@ async def explorer_why(
     return await op_authz_explorer_why(
         AuthzExplorerWhyPayload(user_id=user_id, object_type=object_type, object_key=object_key),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/objects", response_model=AuthzExplorerObjectsResponse)
 async def explorer_objects(
-    container: ContainerDep,
+    di: Di,
     q: Annotated[str, Query()] = "",
     object_type: AuthzObjectType | None = None,
 ) -> AuthzExplorerObjectsResponse:
     return await op_authz_explorer_objects(
         AuthzExplorerObjectsPayload(q=q, object_type=object_type),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/revoke", response_model=AuthzExplorerRevokeResponse)
-async def explorer_revoke(request_body: AuthzExplorerRevokeRequest, container: ContainerDep) -> AuthzExplorerRevokeResponse:
-    return await op_authz_explorer_revoke(request_body, user=require_context().user, container=container)
+async def explorer_revoke(request_body: AuthzExplorerRevokeRequest, di: Di) -> AuthzExplorerRevokeResponse:
+    return await op_authz_explorer_revoke(request_body, user=require_context().user, di=di)

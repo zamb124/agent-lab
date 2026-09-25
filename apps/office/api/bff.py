@@ -18,7 +18,7 @@ from apps.office.api.data_tables import router as office_data_tables_router
 from apps.office.api.viewer_routes import router as office_viewer_router
 from apps.office.config import get_office_settings
 from apps.office.db.models import OfficeDocumentBinding
-from apps.office.dependencies import ContainerDep
+from apps.office.di import Di
 from apps.office.events import OFFICE_DOCUMENT_SAVED
 from apps.office.models.api import (
     OfficeDocumentEditorSessionResponse,
@@ -57,7 +57,8 @@ from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import require_context
 from core.events import publish_event_to_user
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SignedFileGrant
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
@@ -97,20 +98,20 @@ def _onlyoffice_request_payload(token_payload: JsonObject, body: JsonObject) -> 
 @router.get("/files/{file_id}/editor-config", response_model=OfficeEditorConfigResponse)
 async def file_editor_config(
     file_id: str,
-    container: ContainerDep,
+    di: Di,
     request: Request,
 ) -> OfficeEditorConfigResponse:
     return await op_editor_file_config(
         OfficeEditorConfigPayload(file_id=file_id, public_origin=build_service_base_url(request)),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/files/{file_id}/sync", response_model=OfficeFileEditorSyncResponse)
 async def sync_file_editor_state(
     file_id: str,
-    container: ContainerDep,
+    di: Di,
     body: OfficeDocumentSyncRequest | None = None,
 ) -> OfficeFileEditorSyncResponse:
     sync_options = body if body is not None else OfficeDocumentSyncRequest()
@@ -122,7 +123,7 @@ async def sync_file_editor_state(
             dirty=sync_options.dirty,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -132,7 +133,7 @@ async def sync_file_editor_state(
 )
 async def sync_document_editor_state(
     file_id: str,
-    container: ContainerDep,
+    di: Di,
     body: OfficeDocumentSyncRequest | None = None,
 ) -> OfficeDocumentEditorSessionResponse:
     sync_options = body if body is not None else OfficeDocumentSyncRequest()
@@ -144,7 +145,7 @@ async def sync_document_editor_state(
             dirty=sync_options.dirty,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -154,55 +155,55 @@ async def sync_document_editor_state(
 )
 async def editor_config(
     file_id: str,
-    container: ContainerDep,
+    di: Di,
     request: Request,
 ) -> OfficeEditorConfigResponse:
     return await op_editor_document_config(
         OfficeEditorConfigPayload(file_id=file_id, public_origin=build_service_base_url(request)),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/shares/{token}", response_model=OfficeDocumentShareResolveResponse)
 async def resolve_document_share(
-    token: str, container: ContainerDep
+    token: str, di: Di
 ) -> OfficeDocumentShareResolveResponse:
     return await op_document_share_resolve(
         OfficeDocumentShareResolvePayload(token=token),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/public/resolve/{token}", response_model=OfficePublicResolveResponse)
-async def public_resolve(token: str, container: ContainerDep) -> OfficePublicResolveResponse:
+async def public_resolve(token: str, di: Di) -> OfficePublicResolveResponse:
     try:
-        target = await container.office_access_service.resolve_public_token(token)
+        target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return await container.office_access_service.build_public_resolve(target)
+    return await di.office_access_service.build_public_resolve(target)
 
 
 @router.get("/public/open/{token}", response_model=OfficeEditorConfigResponse)
 async def public_open(
     token: str,
-    container: ContainerDep,
+    di: Di,
     request: Request,
 ) -> OfficeEditorConfigResponse:
     try:
-        target = await container.office_access_service.resolve_public_token(token)
+        target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if target.kind != "binding" or target.binding is None:
         raise HTTPException(status_code=400, detail="Open the file via a direct link")
-    meta = await container.files_service.get_optional(target.binding.file_id)
+    meta = await di.files_service.get_optional(target.binding.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != target.binding.company_id:
         raise HTTPException(status_code=403, detail="Access denied")
     try:
-        return await container.viewer_service.open_config_for_public_link(
+        return await di.viewer_service.open_config_for_public_link(
             public_origin=build_service_base_url(request),
             target=target,
             file_record=meta,
@@ -213,14 +214,14 @@ async def public_open(
 
 @router.get("/public/catalog/{token}/items", response_model=OfficePublicCatalogItemsResponse)
 async def public_catalog_items(
-    token: str, container: ContainerDep
+    token: str, di: Di
 ) -> OfficePublicCatalogItemsResponse:
     try:
-        target = await container.office_access_service.resolve_public_token(token)
+        target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     try:
-        return await container.office_access_service.list_public_catalog_items(target)
+        return await di.office_access_service.list_public_catalog_items(target)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -232,12 +233,12 @@ async def public_catalog_items(
 async def public_catalog_binding_open(
     token: str,
     file_id: str,
-    container: ContainerDep,
+    di: Di,
     request: Request,
 ) -> OfficeEditorConfigResponse:
     try:
-        catalog_target = await container.office_access_service.resolve_public_token(token)
-        binding = await container.office_access_service.resolve_public_catalog_binding_open(
+        catalog_target = await di.office_access_service.resolve_public_token(token)
+        binding = await di.office_access_service.resolve_public_catalog_binding_open(
             catalog_target,
             file_id,
         )
@@ -251,11 +252,11 @@ async def public_catalog_binding_open(
     )
     if binding.link_token_hash is None:
         raise HTTPException(status_code=403, detail="File public link is not configured")
-    meta = await container.files_service.get_optional(binding.file_id)
+    meta = await di.files_service.get_optional(binding.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     try:
-        return await container.viewer_service.open_config_for_public_link(
+        return await di.viewer_service.open_config_for_public_link(
             public_origin=build_service_base_url(request),
             target=binding_target,
             file_record=meta,
@@ -266,7 +267,7 @@ async def public_catalog_binding_open(
 
 @router.get("/office-download")
 async def office_download(
-    container: ContainerDep,
+    di: Di,
     token: Annotated[str, Query(description="JWT office_dl")],
 ) -> Response:
     integ = get_office_settings().office
@@ -280,7 +281,7 @@ async def office_download(
     company_id = claims.company_id
     viewer_scope = claims.viewer_scope
     if viewer_scope == "catalog":
-        binding_row = await container.document_binding_repository.get_by_file_and_company(
+        binding_row = await OfficeDocumentBinding.binding_for_company(
             file_id,
             company_id,
         )
@@ -288,30 +289,30 @@ async def office_download(
             raise HTTPException(status_code=403, detail="Access denied")
     elif viewer_scope != "file":
         raise HTTPException(status_code=403, detail="Access denied")
-    meta = await container.files_service.get_optional(file_id)
+    meta = await di.files_service.get_optional(file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != company_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
     try:
-        try:
-            body = await s3.download_bytes(meta.s3_key)
-        except ClientError as e:
-            code = e.response["Error"]["Code"]
-            logger.warning(
-                "office.download.s3.error.file_id",
-                file_id=file_id,
-                bucket=meta.s3_bucket,
-                key=meta.s3_key,
-                code=code,
-            )
-            raise HTTPException(
-                status_code=502,
-                detail=f"S3 did not return the object: {code}",
-            ) from e
-    finally:
-        await s3.close()
+        handle = await FileGate().open_record(
+            meta,
+            SignedFileGrant(file_id=file_id, company_id=company_id),
+        )
+        body = await handle.read_bytes()
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        logger.warning(
+            "office.download.s3.error.file_id",
+            file_id=file_id,
+            storage_id=meta.storage_id,
+            key=meta.s3_key,
+            code=code,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"S3 did not return the object: {code}",
+        ) from e
     ct = meta.content_type or "application/octet-stream"
     return Response(
         content=body,
@@ -326,7 +327,7 @@ async def office_download(
 )
 async def onlyoffice_callback(
     request: Request,
-    container: ContainerDep,
+    di: Di,
     token: Annotated[str, Query(description="JWT office_cb")],
 ) -> OnlyOfficeCallbackResponse:
     integ = get_office_settings().office
@@ -407,7 +408,7 @@ async def onlyoffice_callback(
         document_binding: OfficeDocumentBinding | None = None
 
         if viewer_scope == "catalog":
-            document_binding = await container.document_binding_repository.get_by_file_and_company(
+            document_binding = await OfficeDocumentBinding.binding_for_company(
                 file_id,
                 company_id,
             )
@@ -421,7 +422,7 @@ async def onlyoffice_callback(
         elif viewer_scope != "file":
             raise HTTPException(status_code=400, detail="Invalid OnlyOffice viewer_scope")
 
-        meta = await container.files_service.get_optional(file_id)
+        meta = await di.files_service.get_optional(file_id)
         if meta is None:
             raise HTTPException(status_code=404, detail="File not found")
         if meta.company_id != company_id:
@@ -433,25 +434,23 @@ async def onlyoffice_callback(
             new_bytes = r.content
         previous_size = meta.file_size
         previous_checksum = meta.checksum
-        s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
-        try:
-            _ = await s3.upload_bytes(
-                data=new_bytes,
-                key=meta.s3_key,
-                content_type=meta.content_type or "application/octet-stream",
-                public=meta.is_public,
-            )
-        finally:
-            await s3.close()
-        digest = hashlib.sha256(new_bytes).hexdigest()
-        updated = meta.model_copy(
-            update={"file_size": len(new_bytes), "checksum": digest},
+        s3 = await FileGate().client_for_storage_id(meta.storage_id, record=meta)
+        _ = await s3.upload_bytes(
+            data=new_bytes,
+            key=meta.s3_key,
+            content_type=meta.content_type or "application/octet-stream",
+            public=meta.is_public,
         )
-        _ = await container.files_service.save(updated)
+        digest = hashlib.sha256(new_bytes).hexdigest()
+        _ = await di.files_service.save_file_size_checksum(
+            meta,
+            file_size=len(new_bytes),
+            checksum=digest,
+        )
         if document_binding is not None:
             try:
                 await index_binding_if_catalog_enabled_with_job_context(
-                    container,
+                    di,
                     document_binding,
                     company_id=company_id,
                     workspace_namespace=namespace,

@@ -12,11 +12,11 @@ from core.types import require_json_object
 from tests.flows.conftest import persist_owned_flow
 
 
-async def _await_completed_state(container, session_id: str, *, timeout_sec: float = 20.0):
+async def _await_completed_state(di, session_id: str, *, timeout_sec: float = 20.0):
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if last_state is not None and last_state.terminal_task_state == "completed":
             return last_state
         await asyncio.sleep(0.1)
@@ -27,7 +27,7 @@ async def _await_completed_state(container, session_id: str, *, timeout_sec: flo
 
 
 @pytest.mark.asyncio
-async def test_generic_webhook_requires_secret_header(app, client, container, unique_id):
+async def test_generic_webhook_requires_secret_header(app, client, di, unique_id):
     """Без секрета / wrong → 403; верный X-Trigger-Secret → 202."""
     flow_id = f"wh_sec_{unique_id}"
     trigger = TriggerConfig(
@@ -45,7 +45,7 @@ async def test_generic_webhook_requires_secret_header(app, client, container, un
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"gh": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     r1 = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/gh",
@@ -72,12 +72,12 @@ async def test_generic_webhook_requires_secret_header(app, client, container, un
     assert isinstance(body["session_id"], str) and body["session_id"].startswith(f"{flow_id}:")
     assert isinstance(body["context_id"], str) and body["context_id"].strip()
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_custom_secret_header_and_query(
-    app, client, container, unique_id
+    app, client, di, unique_id
 ):
     """Кастомный secret_header и fallback ?secret=."""
     flow_id = f"wh_hdr_{unique_id}"
@@ -100,7 +100,7 @@ async def test_generic_webhook_custom_secret_header_and_query(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"wh": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     denied = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/wh",
@@ -122,11 +122,11 @@ async def test_generic_webhook_custom_secret_header_and_query(
     )
     assert ok_query.status_code == 202
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
-async def test_generic_webhook_allowed_ips_deny(app, client, container, unique_id):
+async def test_generic_webhook_allowed_ips_deny(app, client, di, unique_id):
     """Непустой allowed_ips отклоняет host TestClient (не IP)."""
     flow_id = f"wh_ip_{unique_id}"
     trigger = TriggerConfig(
@@ -144,7 +144,7 @@ async def test_generic_webhook_allowed_ips_deny(app, client, container, unique_i
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"wh": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/wh",
@@ -153,12 +153,12 @@ async def test_generic_webhook_allowed_ips_deny(app, client, container, unique_i
     assert response.status_code == 403
     assert "IP" in response.json()["detail"]
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_persists_secret_header_and_ips(
-    app, client, container, unique_id
+    app, client, di, unique_id
 ):
     """API create сохраняет secret_header и allowed_ips как list."""
     flow_id = f"wh_persist_{unique_id}"
@@ -168,7 +168,7 @@ async def test_generic_webhook_persists_secret_header_and_ips(
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Test"}},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     create = await client.post(
         f"/flows/api/v1/flows/{flow_id}/triggers",
@@ -191,19 +191,19 @@ async def test_generic_webhook_persists_secret_header_and_ips(
     assert created["status"] == "active"
     assert created["webhook_url"] is not None
 
-    saved = await container.flow_repository.get(flow_id)
+    saved = await FlowConfig.get_latest(flow_id)
     assert saved is not None
     trigger = saved.triggers["wh_persist"]
     assert trigger.config["secret_header"] == "Authorization"
     assert trigger.config["allowed_ips"] == ["127.0.0.1", "10.0.0.0/8"]
     assert trigger.webhook_url is not None
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_e2e_envelope_and_mapping(
-    app, client, container, unique_id, mock_llm_with_queue
+    app, client, di, unique_id, mock_llm_with_queue
 ):
     """POST → 202 → flow: envelope body/headers/query + content из mapping."""
     mock_llm_with_queue(["Webhook ok"])
@@ -232,7 +232,7 @@ async def test_generic_webhook_e2e_envelope_and_mapping(
         },
         triggers={"warehouse": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/warehouse?ref=order-42",
@@ -292,12 +292,12 @@ async def test_generic_webhook_e2e_envelope_and_mapping(
     direct_ctx = require_json_object(direct_snap["context"], "direct context")
     assert direct_ctx["event"] == "inventory.changed"
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_awaits_completed_state(
-    app, client, container, unique_id, mock_llm_with_queue
+    app, client, di, unique_id, mock_llm_with_queue
 ):
     """POST → 202 session_id → workflow_runtime.get_state → completed + mapping snapshot."""
     mock_llm_with_queue(["Webhook completed"])
@@ -322,7 +322,7 @@ async def test_generic_webhook_awaits_completed_state(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"done": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
 
     response = await client.post(
         f"/flows/api/v1/triggers/webhook/{flow_id}/done?ref=abc",
@@ -334,18 +334,18 @@ async def test_generic_webhook_awaits_completed_state(
     session_id = body["session_id"]
     assert isinstance(session_id, str)
 
-    state = await _await_completed_state(container, session_id)
+    state = await _await_completed_state(di, session_id)
     assert state.content == "payload-text"
     snap = state.triggers["done"]
     assert snap.context["ref"] == "abc"
     assert state.response == "Webhook completed"
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
 
 
 @pytest.mark.asyncio
 async def test_generic_webhook_output_action_callback(
-    app, client, container, unique_id, mock_llm_with_queue, notification_server
+    app, client, di, unique_id, mock_llm_with_queue, notification_server
 ):
     """Inbound webhook → completed → output_actions webhook callback на NotificationServer."""
     (server, base_url) = notification_server
@@ -377,7 +377,7 @@ async def test_generic_webhook_output_action_callback(
         nodes={"main": {"type": "llm_node", "prompt": "Echo: {content}"}},
         triggers={"cb": trigger},
     )
-    await persist_owned_flow(container, agent)
+    await persist_owned_flow(di, agent)
     server.clear()
 
     response = await client.post(
@@ -390,7 +390,7 @@ async def test_generic_webhook_output_action_callback(
     session_id = body["session_id"]
     assert isinstance(session_id, str)
 
-    state = await _await_completed_state(container, session_id)
+    state = await _await_completed_state(di, session_id)
     assert state.terminal_task_state == "completed"
     assert state.response == "Callback ready"
 
@@ -405,4 +405,4 @@ async def test_generic_webhook_output_action_callback(
     assert isinstance(last, dict)
     assert last["data"]["text"] == "Callback ready"
 
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)

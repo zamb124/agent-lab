@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import FlowsFlowIdPayload
 from apps.flows.realtime.trigger_operations import (
     op_flows_triggers_create,
@@ -18,9 +19,8 @@ from apps.flows.realtime.trigger_operations import (
     op_flows_triggers_update,
     op_flows_triggers_verify,
 )
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import TelegramUpdate, TriggerType
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.trigger_config import (
     TriggerCreatePayload,
     TriggerCreateRequest,
@@ -68,7 +68,6 @@ def _webhook_secret_header_from_config(config: JsonObject) -> str:
 
 
 async def _resolve_company_from_flow_storage_identifier(
-    container: ContainerDep,
     company_identifier: str,
 ) -> Company:
     """
@@ -79,15 +78,13 @@ async def _resolve_company_from_flow_storage_identifier(
     и subdomain. В контекст нужно класть persisted Company целиком: metadata
     содержит AI provider overrides и другие per-company настройки.
     """
-    company = await container.company_repository.get(company_identifier)
+    company = await Company.get(company_identifier)
     if company is not None:
         return company
 
-    company_id = await container.subdomain_repository.get_company_id(company_identifier)
-    if company_id:
-        company = await container.company_repository.get(company_id)
-        if company is not None:
-            return company
+    company = await Company.by_subdomain(company_identifier)
+    if company is not None:
+        return company
 
     raise RuntimeError(
         f"Flow storage company identifier has no persisted Company: {company_identifier!r}"
@@ -97,42 +94,42 @@ router = APIRouter(tags=["triggers"])
 
 
 @router.get("/flows/{flow_id}/triggers", response_model=ListResponse[TriggerResponse])
-async def list_triggers(flow_id: str, container: ContainerDep) -> ListResponse[TriggerResponse]:
+async def list_triggers(flow_id: str, di: Di) -> ListResponse[TriggerResponse]:
     return await op_flows_triggers_list(
         FlowsFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/flows/{flow_id}/triggers/{trigger_id}", response_model=TriggerResponse)
-async def get_trigger(flow_id: str, trigger_id: str, container: ContainerDep) -> TriggerResponse:
+async def get_trigger(flow_id: str, trigger_id: str, di: Di) -> TriggerResponse:
     return await op_flows_triggers_item(
         TriggerFlowIdPayload(flow_id=flow_id, trigger_id=trigger_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/flows/{flow_id}/triggers/verify", response_model=TriggerVerifyResponse)
 async def verify_trigger_draft(
-    flow_id: str, request: TriggerVerifyRequest, container: ContainerDep
+    flow_id: str, request: TriggerVerifyRequest, di: Di
 ) -> TriggerVerifyResponse:
     return await op_flows_triggers_verify(
         TriggerVerifyPayload.model_validate({"flow_id": flow_id, **request.model_dump()}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/flows/{flow_id}/triggers", response_model=TriggerResponse)
 async def create_trigger(
-    flow_id: str, request: TriggerCreateRequest, container: ContainerDep
+    flow_id: str, request: TriggerCreateRequest, di: Di
 ) -> TriggerResponse:
     return await op_flows_triggers_create(
         TriggerCreatePayload.model_validate({"flow_id": flow_id, **request.model_dump()}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -141,14 +138,14 @@ async def update_trigger(
     flow_id: str,
     trigger_id: str,
     request: TriggerUpdateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> TriggerResponse:
     return await op_flows_triggers_update(
         TriggerUpdatePayload.model_validate(
             {"flow_id": flow_id, "trigger_id": trigger_id, **request.model_dump(exclude_unset=True)}
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -157,23 +154,23 @@ async def update_trigger(
     response_model=TriggerResponse,
 )
 async def reregister_flow_trigger(
-    flow_id: str, trigger_id: str, container: ContainerDep
+    flow_id: str, trigger_id: str, di: Di
 ) -> TriggerResponse:
     return await op_flows_triggers_reregister(
         TriggerFlowIdPayload(flow_id=flow_id, trigger_id=trigger_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/flows/{flow_id}/triggers/{trigger_id}", response_model=TriggerDeletedResponse)
 async def delete_trigger(
-    flow_id: str, trigger_id: str, container: ContainerDep
+    flow_id: str, trigger_id: str, di: Di
 ) -> TriggerDeletedResponse:
     return await op_flows_triggers_remove(
         TriggerFlowIdPayload(flow_id=flow_id, trigger_id=trigger_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -182,7 +179,7 @@ async def test_trigger(
     flow_id: str,
     trigger_id: str,
     payload: TriggerTestRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> TriggerTestResponse:
     if payload.flow_id != flow_id or payload.trigger_id != trigger_id:
         raise WsCommandError(
@@ -193,7 +190,7 @@ async def test_trigger(
     return await op_flows_triggers_test(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -204,7 +201,7 @@ async def telegram_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     x_telegram_bot_api_secret_token: Annotated[str | None, Header()] = None,
 ) -> dict[str, str]:
     """
@@ -214,15 +211,14 @@ async def telegram_webhook(
     """
     ctx = get_context()
     if ctx and ctx.active_company:
-        flow_config = await container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
     else:
-        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
         if not unscoped:
             flow_config = None
         else:
             flow_config, company_identifier = unscoped
             company = await _resolve_company_from_flow_storage_identifier(
-                container,
                 company_identifier,
             )
             inbound_user = User(
@@ -257,9 +253,10 @@ async def telegram_webhook(
     if trigger.type != TriggerType.TELEGRAM:
         raise HTTPException(status_code=400, detail="Not a Telegram trigger")
 
+    runtime = di
     telegram_handler = TelegramTriggerHandler(
         base_url="",
-        container=as_flow_runtime_container(container),
+        flow_factory=runtime.flow_factory,
     )
 
     if not trigger.config.get("_secret_token"):
@@ -314,7 +311,7 @@ async def generic_webhook(
     flow_id: str,
     trigger_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> JSONResponse:
     """
     Generic webhook endpoint для внешних сервисов.
@@ -323,15 +320,14 @@ async def generic_webhook(
     """
     ctx = get_context()
     if ctx and ctx.active_company:
-        flow_config = await container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
     else:
-        unscoped = await container.flow_repository.get_latest_by_flow_id_unscoped(flow_id)
+        unscoped = await FlowConfig.get_latest_by_flow_id_unscoped(flow_id)
         if not unscoped:
             flow_config = None
         else:
             flow_config, company_identifier = unscoped
             company = await _resolve_company_from_flow_storage_identifier(
-                container,
                 company_identifier,
             )
             inbound_user = User(
@@ -379,7 +375,7 @@ async def generic_webhook(
     if raw_secret is not None and str(raw_secret).strip() != "":
         try:
             expected = await resolve_at_var_for_flow(
-                container.flow_factory,
+                di.flow_factory,
                 flow_id,
                 str(raw_secret),
                 branch_id=trigger.branch_id,
@@ -412,10 +408,7 @@ async def generic_webhook(
         top_keys=body_keys,
     )
 
-    webhook_handler = WebhookTriggerHandler(
-        base_url="",
-        container=as_flow_runtime_container(container),
-    )
+    webhook_handler = WebhookTriggerHandler(base_url="")
     try:
         result = await webhook_handler.handle(flow_id, trigger_id, payload)
     except Exception as e:

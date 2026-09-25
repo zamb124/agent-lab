@@ -27,8 +27,8 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
-import { crmNamespaceForOptionalQuery } from '../utils/crm-namespace-select.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
+import { crmNamespaceForOptionalQuery } from '../_helpers/crm-namespace-select.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/platform-icon.js';
@@ -38,8 +38,8 @@ import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-work-item-badge.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
-import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
-import { readCrmListViewMode, writeCrmListViewMode } from '../utils/crm-list-view-mode-preference.js';
+import { openCrmLaraAssistant } from '../_helpers/open-crm-lara-assistant.js';
+import { readCrmListViewMode, writeCrmListViewMode } from '../_helpers/crm-list-view-mode-preference.js';
 import '../pages/entity-detail-page.js';
 
 const MERGE_DRAG_MIME = 'application/x-crm-entity-merge';

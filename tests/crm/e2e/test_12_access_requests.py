@@ -40,7 +40,7 @@ class TestAccessRequests:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Запрос доступа к скрытой entity"""
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Private note {unique_id}",
         }, headers=auth_headers_system)
@@ -68,7 +68,7 @@ class TestAccessRequests:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Владелец одобряет запрос доступа"""
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
@@ -105,7 +105,7 @@ class TestAccessRequests:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Владелец отклоняет запрос"""
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
@@ -135,7 +135,7 @@ class TestAccessRequests:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Список запросов на рассмотрении"""
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)

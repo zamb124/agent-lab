@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models import BranchConfig, Edge, FlowConfig
 from apps.flows.src.models.enums import MergeMode
 from core.llm_context.memory import LLMContextMemoryEpisode
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.asyncio
 async def test_context_layer_merges_branch_resources_and_recalls_memory(
     app,
     rag_app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -115,27 +115,27 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
         },
     )
     await store_context_resource(
-        container=container,
+        di=di,
         resource_id=shared_ctx_id,
         config=context_config(rag_tokens=900),
     )
-    await container.flow_repository.set(flow_config)
+    await FlowConfig.create_version(flow_config)
     indexed_namespaces = [*namespaces.values(), shared_namespace]
     try:
         for branch in ("default", "node_override", "retrieval_off"):
             await index_rag_document(
-                container=container,
+                di=di,
                 namespace=namespaces[branch],
                 collection_id=collections[branch],
                 marker=markers[branch],
             )
         await index_rag_document(
-            container=container,
+            di=di,
             namespace=shared_namespace,
             collection_id=shared_collection,
             marker=markers["shared_resource"],
         )
-        await container.llm_context_memory_store.write_episode(
+        await di.node_constructor.llm_context_memory_store.write_episode(
             LLMContextMemoryEpisode(
                 memory_id=f"memory-{unique_id}",
                 scope="session",
@@ -152,7 +152,7 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
         for branch in branches:
             query = f"QUERY_{branch}_{unique_id}"
             call, state = await run_context_flow(
-                container=container,
+                di=di,
                 flow_id=flow_id,
                 branch_id=branch,
                 query=query,
@@ -168,7 +168,7 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
                 ),
             )
             await wait_for_compacted_memory(
-                container=container, flow_id=flow_id, session_id=state.session_id
+                di=di, flow_id=flow_id, session_id=state.session_id
             )
             prompts[branch] = call_text(call)
             assert query in prompts[branch]
@@ -185,7 +185,7 @@ async def test_context_layer_merges_branch_resources_and_recalls_memory(
         assert "SYSTEM_SHARED_" in prompts["shared_resource"]
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=indexed_namespaces,
             auth_headers_system=auth_headers_system,

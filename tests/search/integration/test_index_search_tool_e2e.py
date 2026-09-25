@@ -11,17 +11,18 @@ pytestmark = pytest.mark.timeout(120, func_only=True)
 
 @pytest.mark.asyncio
 async def test_index_search_tool_calls_real_search_service(
+    app,
     search_client,
     rag_client,
     rag_worker,
     provider_litserve_service,
-    search_container,
+    search_di,
     search_system_context,
     auth_headers_system,
     make_test_state,
     unique_id,
 ):
-    _ = rag_worker, provider_litserve_service
+    _ = app, rag_worker, provider_litserve_service
     search_index_id = make_search_index_slug(unique_id)
     rag_namespace_id = f"{search_index_id}:ns"
     marker = f"index_search_tool_marker_{unique_id}"
@@ -77,6 +78,7 @@ async def test_index_search_tool_calls_real_search_service(
 
 @pytest.mark.asyncio
 async def test_index_search_tool_fail_closed_empty_index(
+    app,
     search_client,
     rag_client,
     rag_worker,
@@ -86,7 +88,7 @@ async def test_index_search_tool_fail_closed_empty_index(
     auth_headers_system,
     unique_id,
 ):
-    _ = rag_worker, provider_litserve_service, search_system_context
+    _ = app, rag_worker, provider_litserve_service, search_system_context
     search_index_id = make_search_index_slug(unique_id)
     rag_namespace_id = f"{search_index_id}:ns"
 

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.api import ActivityTaskCreateRequest, ActivityTaskResponse
 from apps.crm.realtime.operations import (
     CrmActivityTasksListPayload,
@@ -21,16 +21,16 @@ router = APIRouter(prefix="/activity-tasks", tags=["activity-tasks"])
 @router.post("", response_model=ActivityTaskResponse)
 async def create_activity_task(
     body: ActivityTaskCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> ActivityTaskResponse:
     return await op_activity_tasks_create(
-        body, user=require_context().user, container=container
+        body, user=require_context().user, di=di
     )
 
 
 @router.get("", response_model=OffsetPage[WorkItem])
 async def list_activity_tasks(
-    container: ContainerDep,
+    di: Di,
     namespace: str | None = None,
     state: WorkItemState | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -44,5 +44,5 @@ async def list_activity_tasks(
             offset=offset,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

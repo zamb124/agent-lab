@@ -1,38 +1,13 @@
 """
 RAG провайдер на базе pgvector (PostgreSQL).
-Хранит векторные документы в таблице vector_documents через SQLAlchemy 2+.
+Чанки лежат в ``vector_documents``. Косинус и FTS читаются сырым SQL.
 """
 
 import math
 import os
 import uuid
-from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Literal, override
-
-from sqlalchemy import (
-    Boolean,
-    Float,
-    Integer,
-    String,
-    and_,
-    case,
-    delete,
-    func,
-    or_,
-    select,
-    text,
-    tuple_,
-    update,
-)
-from sqlalchemy import cast as sql_cast
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.sql.elements import ColumnElement
 
 from core.ai.embedding_client import AIEmbeddingClient
 from core.ai.runtime import create_embedding_client_from_runtime
@@ -43,9 +18,7 @@ from core.config.llm_openai_compat import (
 )
 from core.config.models import RAGProviderConfig, YandexLLMProviderConfig
 from core.config.testing import is_testing
-from core.db.models import VectorDocument
-from core.db.sqlalchemy_pool import sqlalchemy_async_engine_pool_kwargs
-from core.db.utils import get_rowcount
+from core.db.models.rag import VectorDocument
 from core.files.file_ref import FileRef
 from core.files.reader import FileReader, ReadFileArgs
 from core.files.reader.models import (
@@ -95,6 +68,98 @@ TS_HEADLINE_OPTIONS = (
 )
 # Для evergreen-контента freshness decay ослабляется: half-life растягивается.
 FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR = 4.0
+
+_SqlParam = str | int | float | bool | datetime | None
+
+class _Binder:
+    """Нумерация параметров сырого SQL с уже занятым префиксом."""
+
+    def __init__(self, start: int) -> None:
+        self.params: list[_SqlParam] = []
+        self._next: int = start
+
+    def add(self, value: _SqlParam) -> str:
+        self._next += 1
+        self.params.append(value)
+        return f"${self._next}"
+
+    def next_index(self) -> int:
+        return self._next + 1
+
+
+def _metadata_cast(placeholder: str, value: JsonValue) -> str:
+    if isinstance(value, bool):
+        return f"(metadata->>{placeholder})::boolean"
+    if isinstance(value, int):
+        return f"(metadata->>{placeholder})::integer"
+    if isinstance(value, float):
+        return f"(metadata->>{placeholder})::double precision"
+    return f"(metadata->>{placeholder})::text"
+
+
+def _metadata_compare(binder: _Binder, key: str, value: JsonValue, operator: str) -> str:
+    if not isinstance(value, (str, int, float, bool)) and value is not None:
+        raise ValueError("RAG filters: compared value must be a scalar")
+    key_placeholder = binder.add(key)
+    expression = _metadata_cast(key_placeholder, value)
+    value_placeholder = binder.add(value)
+    return f"{expression} {operator} {value_placeholder}"
+
+
+def _metadata_filter_sql(binder: _Binder, node: RAGMetadataFilter) -> str:
+    if "$and" in node:
+        and_items = node["$and"]
+        if not isinstance(and_items, list):
+            raise ValueError("RAG filters: $and must be an array of conditions")
+        parts = [
+            _metadata_filter_sql(binder, require_json_object(item, "RAG filters $and item"))
+            for item in and_items
+        ]
+        return "(" + " AND ".join(parts) + ")"
+    if "$or" in node:
+        or_items = node["$or"]
+        if not isinstance(or_items, list):
+            raise ValueError("RAG filters: $or must be an array of conditions")
+        parts = [
+            _metadata_filter_sql(binder, require_json_object(item, "RAG filters $or item"))
+            for item in or_items
+        ]
+        return "(" + " OR ".join(parts) + ")"
+    parts: list[str] = []
+    for key, value in node.items():
+        if isinstance(value, dict):
+            operator, op_value = next(iter(value.items()))
+            parts.append(_metadata_operator_sql(binder, key, str(operator), op_value))
+            continue
+        parts.append(_metadata_compare(binder, key, value, "="))
+    if not parts:
+        raise ValueError("RAG filters: empty condition")
+    return "(" + " AND ".join(parts) + ")"
+
+
+def _metadata_operator_sql(binder: _Binder, key: str, operator: str, op_value: JsonValue) -> str:
+    if operator == "$eq":
+        return _metadata_compare(binder, key, op_value, "=")
+    if operator == "$ne":
+        return _metadata_compare(binder, key, op_value, "<>")
+    if operator in {"$in", "$nin"}:
+        if not isinstance(op_value, list) or len(op_value) == 0:
+            raise ValueError(f"RAG filters: {operator} requires a non-empty value list for key {key!r}")
+        joiner = " OR " if operator == "$in" else " AND "
+        comparator = "=" if operator == "$in" else "<>"
+        return (
+            "("
+            + joiner.join(_metadata_compare(binder, key, item, comparator) for item in op_value)
+            + ")"
+        )
+    if operator not in {"$gt", "$gte", "$lt", "$lte"}:
+        raise ValueError(f"RAG filters: unsupported operator {operator}")
+    if isinstance(op_value, bool) or not isinstance(op_value, (int, float)):
+        raise ValueError(f"RAG filters: {key}.{operator} supports only number")
+    symbol = {"$gt": ">", "$gte": ">=", "$lt": "<", "$lte": "<="}[operator]
+    number = int(op_value) if isinstance(op_value, int) else float(op_value)
+    return _metadata_compare(binder, key, number, symbol)
+
 
 _SEARCH_ATTRIBUTE_SKIP_KEYS: frozenset[str] = frozenset(
     {
@@ -212,7 +277,7 @@ def _rag_search_result_from_document(
     namespace_id: str,
     provenance: RAGMetadata,
 ) -> RAGSearchResult:
-    metadata = doc.metadata_ or {}
+    metadata = doc.metadata
     return RAGSearchResult(
         content=doc.content,
         document_id=doc.document_id,
@@ -253,7 +318,7 @@ def _document_freshness_age_days(doc: VectorDocument, *, now: datetime) -> tuple
     Приоритет: ``metadata.date_modified`` → ``metadata.date_published`` →
     ``vector_documents.created_at`` (дата индексации, есть всегда).
     """
-    metadata = doc.metadata_ or {}
+    metadata = doc.metadata
     for key in ("date_modified", "date_published"):
         parsed = _parse_metadata_document_date(metadata, key)
         if parsed is not None:
@@ -281,7 +346,7 @@ def _freshness_score_and_provenance(
     """Итоговый score с freshness decay и provenance-поля — единый расчёт для всех каналов."""
     age_days, age_source = _document_freshness_age_days(doc, now=now)
     effective_half_life = half_life_days
-    metadata = doc.metadata_ or {}
+    metadata = doc.metadata
     if metadata.get("freshness_relevance") == "evergreen":
         effective_half_life *= FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR
     multiplier = _freshness_multiplier(
@@ -319,23 +384,11 @@ class PgVectorProvider(BaseRAGProvider):
     ) -> None:
         super().__init__(config)
 
-        db_url = config.db_url
-        if not db_url:
-            settings = get_settings()
-            if not settings.database.rag_url:
-                raise ValueError('DATABASE__RAG_URL is not configured')
-            db_url = settings.database.rag_url
-
-        self._engine: AsyncEngine = create_async_engine(
-            db_url,
-            echo=False,
-            **sqlalchemy_async_engine_pool_kwargs(),
-        )
-        self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
-            bind=self._engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+        rag_url = config.db_url
+        if rag_url is None or rag_url == "":
+            rag_url = get_settings().database.rag_url
+        if rag_url is None or rag_url == "":
+            raise ValueError("DATABASE__RAG_URL is not configured")
 
         if embedding_runtime is None:
             raise ValueError('embedding runtime is required for pgvector')
@@ -404,7 +457,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def close(self) -> None:
-        await self._engine.dispose()
+        return
 
     @property
     def embedding_client(self) -> AIEmbeddingClient:
@@ -434,15 +487,7 @@ class PgVectorProvider(BaseRAGProvider):
         self, name: str, description: str | None = None
     ) -> RAGNamespace:
         """Namespace -- логическое понятие, фильтр по namespace_id."""
-        async with self._session_factory() as session:
-            stmt = (
-                select(func.count())
-                .select_from(VectorDocument)
-                .where(VectorDocument.namespace_id == name)
-            )
-            result = await session.execute(stmt)
-            count = result.scalar() or 0
-
+        count = await VectorDocument.count_in_namespace(name)
         return RAGNamespace(
             namespace_id=name,
             name=name,
@@ -452,15 +497,7 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def get_namespace(self, namespace_id: str) -> RAGNamespace | None:
-        async with self._session_factory() as session:
-            stmt = (
-                select(func.count())
-                .select_from(VectorDocument)
-                .where(VectorDocument.namespace_id == namespace_id)
-            )
-            result = await session.execute(stmt)
-            count = result.scalar() or 0
-
+        count = await VectorDocument.count_in_namespace(namespace_id)
         if count == 0:
             return None
 
@@ -472,30 +509,20 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def list_namespaces(self) -> list[RAGNamespace]:
-        async with self._session_factory() as session:
-            stmt = select(
-                VectorDocument.namespace_id,
-                func.count().label("doc_count"),
-            ).group_by(VectorDocument.namespace_id)
-            result = await session.execute(stmt)
-            rows: Sequence[tuple[str, int]] = result.tuples().all()
-
-        return [
-            RAGNamespace(
-                namespace_id=row_namespace_id,
-                name=row_namespace_id,
-                document_count=doc_count,
+        namespaces: list[RAGNamespace] = []
+        for row_namespace_id, doc_count in await VectorDocument.namespace_document_counts():
+            namespaces.append(
+                RAGNamespace(
+                    namespace_id=row_namespace_id,
+                    name=row_namespace_id,
+                    document_count=doc_count,
+                )
             )
-            for row_namespace_id, doc_count in rows
-        ]
+        return namespaces
 
     @override
     async def delete_namespace(self, namespace_id: str) -> bool:
-        async with self._session_factory() as session:
-            stmt = delete(VectorDocument).where(VectorDocument.namespace_id == namespace_id)
-            result = await session.execute(stmt)
-            await session.commit()
-            deleted = get_rowcount(result)
+        deleted = await VectorDocument.delete_namespace_chunks(namespace_id)
 
         logger.info("rag.pgvector.namespace_deleted", namespace_id=namespace_id, deleted=deleted)
         return deleted > 0
@@ -510,9 +537,8 @@ class PgVectorProvider(BaseRAGProvider):
         document_name: str | None = None,
         metadata: RAGMetadata | None = None,
     ) -> RAGDocument:
-        s3_key, bucket_name, original_filename = await self._upload_file_to_s3(
-            file_path, namespace_id, public=False
-        )
+        stored = await self._upload_file_to_s3(file_path, namespace_id, public=False)
+        original_filename = stored.original_name
 
         doc_name = document_name or original_filename
 
@@ -527,8 +553,7 @@ class PgVectorProvider(BaseRAGProvider):
             file_id=document_id,
         )
         doc_metadata["file_type"] = extract.kind.value
-        doc_metadata["s3_key"] = s3_key
-        doc_metadata["s3_bucket"] = bucket_name
+        doc_metadata["file_id"] = stored.file_id
         doc_metadata["original_filename"] = original_filename
         if extract.source_checksum:
             doc_metadata["source_checksum"] = extract.source_checksum
@@ -551,9 +576,9 @@ class PgVectorProvider(BaseRAGProvider):
         upload_profile: UploadProfileBinding | None = None,
     ) -> RAGDocument:
         doc_metadata = dict(metadata) if metadata is not None else {}
-        bucket_key = doc_metadata.get("s3_bucket")
+        bucket_key = doc_metadata.get("storage_id")
         if bucket_key is not None and not isinstance(bucket_key, str):
-            raise ValueError('metadata.s3_bucket must be a string')
+            raise ValueError('metadata.storage_id must be a string')
         file_data, bucket_name, original_filename = await self._download_file_from_s3(
             s3_key, bucket_config_key=bucket_key
         )
@@ -572,7 +597,7 @@ class PgVectorProvider(BaseRAGProvider):
         )
         doc_metadata["file_type"] = extract.kind.value
         doc_metadata["s3_key"] = s3_key
-        doc_metadata["s3_bucket"] = bucket_name
+        doc_metadata["storage_id"] = bucket_name
         doc_metadata["original_filename"] = original_filename
         if extract.source_checksum:
             doc_metadata["source_checksum"] = extract.source_checksum
@@ -684,6 +709,7 @@ class PgVectorProvider(BaseRAGProvider):
         if company_id_value is not None and not isinstance(company_id_value, str):
             raise ValueError('metadata.company_id must be a string')
 
+        now = datetime.now(timezone.utc)
         rows: list[VectorDocument] = []
         for i, (chunk, emb) in enumerate(zip(rag_chunks, embeddings)):
             chunk_row_id = uuid.uuid5(
@@ -702,29 +728,23 @@ class PgVectorProvider(BaseRAGProvider):
                     embedding_model=embedding_model,
                     chunk_index=chunk.chunk_index,
                     total_chunks=chunk.total_chunks,
-                    metadata_=_chunk_storage_metadata(
+                    metadata=_chunk_storage_metadata(
                         ingest=metadata,
                         chunk=chunk,
                         indexing_runtime=indexing_runtime,
                     ),
+                    created_at=now,
+                    updated_at=now,
                 )
             )
 
-        async with self._session_factory() as session:
-            _ = await session.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-                {"lock_key": f"{namespace_id}:{document_id}"},
+        deleted_count = await VectorDocument.replace_document_chunks(rows)
+        if deleted_count:
+            logger.info(
+                "rag.pgvector.stale_chunks_deleted",
+                document_name=document_name,
+                deleted_count=deleted_count,
             )
-            delete_stmt = delete(VectorDocument).where(
-                VectorDocument.namespace_id == namespace_id,
-                VectorDocument.document_id == document_id,
-            )
-            delete_result = await session.execute(delete_stmt)
-            deleted_count = get_rowcount(delete_result)
-            if deleted_count:
-                logger.info("rag.pgvector.stale_chunks_deleted", document_name=document_name, deleted_count=deleted_count)
-            session.add_all(rows)
-            await session.commit()
 
         logger.info("rag.pgvector.document_uploaded", document_name=document_name, namespace_id=namespace_id, chunk_count=len(chunks))
         merged_doc_meta = {
@@ -776,27 +796,16 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def get_document(self, namespace_id: str, document_id: str) -> RAGDocument | None:
-        async with self._session_factory() as session:
-            stmt = (
-                select(VectorDocument)
-                .where(
-                    VectorDocument.namespace_id == namespace_id,
-                    VectorDocument.document_id == document_id,
-                )
-                .limit(1)
-            )
-            result = await session.execute(stmt)
-            row = result.scalar_one_or_none()
-
-        if not row:
+        loaded = await VectorDocument.chunks_for_document(namespace_id, document_id, limit=1)
+        if len(loaded) == 0:
             return None
-
+        row = loaded[0]
         return RAGDocument(
             document_id=document_id,
             name=row.document_name or "",
             namespace=namespace_id,
             status="completed",
-            metadata=row.metadata_ or {},
+            metadata=row.metadata,
         )
 
     @override
@@ -805,21 +814,12 @@ class PgVectorProvider(BaseRAGProvider):
         namespace_id: str,
         document_id: str,
     ) -> RAGDocumentContent | None:
-        async with self._session_factory() as session:
-            stmt = (
-                select(VectorDocument)
-                .where(
-                    VectorDocument.namespace_id == namespace_id,
-                    VectorDocument.document_id == document_id,
-                )
-                .order_by(VectorDocument.chunk_index.asc())
-            )
-            rows = list((await session.execute(stmt)).scalars().all())
+        rows = await VectorDocument.chunks_for_document(namespace_id, document_id)
         if not rows:
             return None
         first_row = rows[0]
         document_name = first_row.document_name or ""
-        metadata = dict(first_row.metadata_ or {})
+        metadata = dict(first_row.metadata)
         for key in ("document_id", "document_name", "chunk_index", "total_chunks"):
             if key in metadata:
                 del metadata[key]
@@ -842,19 +842,10 @@ class PgVectorProvider(BaseRAGProvider):
 
     @override
     async def list_documents(self, namespace_id: str, limit: int = 100) -> list[RAGDocument]:
-        async with self._session_factory() as session:
-            stmt = (
-                select(VectorDocument)
-                .where(VectorDocument.namespace_id == namespace_id)
-                .distinct(VectorDocument.document_id)
-                .limit(limit)
-            )
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
-
+        rows = await VectorDocument.distinct_documents(namespace_id, limit=limit)
         docs: list[RAGDocument] = []
         for row in rows:
-            meta = row.metadata_
+            meta = row.metadata
             docs.append(
                 RAGDocument(
                     document_id=row.document_id,
@@ -874,23 +865,21 @@ class PgVectorProvider(BaseRAGProvider):
     async def list_documents_with_filters(
         self, namespace_id: str, where: RAGMetadataFilter | None = None, limit: int = 100
     ) -> list[RAGDocument]:
-        async with self._session_factory() as session:
-            stmt = (
-                select(VectorDocument)
-                .where(VectorDocument.namespace_id == namespace_id)
-                .distinct(VectorDocument.document_id)
-            )
-
-            if where:
-                stmt = stmt.where(self._build_metadata_filter_expression(where))
-
-            stmt = stmt.limit(limit)
-            result = await session.execute(stmt)
-            rows = result.scalars().all()
-
+        binder = _Binder(1)
+        filter_sql = ""
+        if where is not None:
+            validate_metadata_filters(where)
+            filter_sql = " AND " + _metadata_filter_sql(binder, where)
+        loaded = await VectorDocument.distinct_documents_where(
+            namespace_id,
+            filter_sql=filter_sql,
+            filter_params=binder.params,
+            limit=limit,
+            limit_placeholder=binder.next_index(),
+        )
         docs: list[RAGDocument] = []
-        for row in rows:
-            meta = row.metadata_
+        for row in loaded:
+            meta = row.metadata
             docs.append(
                 RAGDocument(
                     document_id=row.document_id,
@@ -898,139 +887,18 @@ class PgVectorProvider(BaseRAGProvider):
                     namespace=namespace_id,
                     status="completed",
                     metadata={
-                        k: v
-                        for k, v in meta.items()
-                        if k not in ("document_id", "document_name", "chunk_index", "total_chunks")
+                        key: value
+                        for key, value in meta.items()
+                        if key not in ("document_id", "document_name", "chunk_index", "total_chunks")
                     },
                 )
             )
-
         logger.info("rag.pgvector.documents_listed", namespace_id=namespace_id, count=len(docs))
         return docs
 
-    def _metadata_expr_for_scalar(
-        self,
-        key: str,
-        value: JsonValue,
-    ) -> ColumnElement[bool] | ColumnElement[int] | ColumnElement[float] | ColumnElement[str]:
-        metadata_value = VectorDocument.metadata_.op("->>")(key)
-        if isinstance(value, bool):
-            return sql_cast(metadata_value, Boolean)
-        if isinstance(value, int) and not isinstance(value, bool):
-            return sql_cast(metadata_value, Integer)
-        if isinstance(value, float):
-            return sql_cast(metadata_value, Float)
-        return sql_cast(metadata_value, String)
-
-    def _build_field_operator_expression(
-        self, key: str, operator: str, op_value: JsonValue
-    ) -> ColumnElement[bool]:
-        if operator == "$eq":
-            return self._metadata_expr_for_scalar(key, op_value) == op_value
-        if operator == "$ne":
-            return self._metadata_expr_for_scalar(key, op_value) != op_value
-
-        if operator == "$in":
-            if not isinstance(op_value, list) or len(op_value) == 0:
-                raise ValueError(
-                    f"RAG filters: $in requires a non-empty value list for key {key!r}",
-                )
-            vals = op_value
-            if len(vals) == 1:
-                v0 = vals[0]
-                return self._metadata_expr_for_scalar(key, v0) == v0
-            in_expressions: list[ColumnElement[bool]] = [
-                self._metadata_expr_for_scalar(key, value) == value for value in vals
-            ]
-            return or_(*in_expressions)
-        if operator == "$nin":
-            if not isinstance(op_value, list) or len(op_value) == 0:
-                raise ValueError(
-                    f"RAG filters: $nin requires a non-empty value list for key {key!r}",
-                )
-            vals = op_value
-            if len(vals) == 1:
-                v0 = vals[0]
-                return self._metadata_expr_for_scalar(key, v0) != v0
-            nin_expressions: list[ColumnElement[bool]] = [
-                self._metadata_expr_for_scalar(key, value) != value for value in vals
-            ]
-            return and_(*nin_expressions)
-
-        if isinstance(op_value, int) and not isinstance(op_value, bool):
-            col_int = sql_cast(VectorDocument.metadata_.op("->>")(key), Integer)
-            if operator == "$gt":
-                return col_int > op_value
-            if operator == "$gte":
-                return col_int >= op_value
-            if operator == "$lt":
-                return col_int < op_value
-            if operator == "$lte":
-                return col_int <= op_value
-        if not isinstance(op_value, (int, float)) or isinstance(op_value, bool):
-            raise ValueError(
-                f"RAG filters: {key}.{operator} supports only number"
-            )
-        fv = float(op_value)
-        if operator == "$gt":
-            return self._metadata_expr_for_scalar(key, fv) > fv
-        if operator == "$gte":
-            return self._metadata_expr_for_scalar(key, fv) >= fv
-        if operator == "$lt":
-            return self._metadata_expr_for_scalar(key, fv) < fv
-        if operator == "$lte":
-            return self._metadata_expr_for_scalar(key, fv) <= fv
-
-        raise ValueError(f"RAG filters: unsupported operator {operator}")
-
-    def _build_metadata_filter_expression(self, filters: RAGMetadataFilter) -> ColumnElement[bool]:
-        validate_metadata_filters(filters)
-        return self._build_metadata_filter_node(filters)
-
-    def _build_metadata_filter_node(self, node: RAGMetadataFilter) -> ColumnElement[bool]:
-        if "$and" in node:
-            and_items = node["$and"]
-            if not isinstance(and_items, list):
-                raise ValueError('RAG filters: $and must be an array of conditions')
-            and_expressions: list[ColumnElement[bool]] = [
-                self._build_metadata_filter_node(
-                    require_json_object(item, "RAG filters $and item")
-                )
-                for item in and_items
-            ]
-            return and_(*and_expressions)
-        if "$or" in node:
-            or_items = node["$or"]
-            if not isinstance(or_items, list):
-                raise ValueError('RAG filters: $or must be an array of conditions')
-            or_expressions: list[ColumnElement[bool]] = [
-                self._build_metadata_filter_node(
-                    require_json_object(item, "RAG filters $or item")
-                )
-                for item in or_items
-            ]
-            return or_(*or_expressions)
-
-        expressions: list[ColumnElement[bool]] = []
-        for key, value in node.items():
-            if isinstance(value, dict):
-                op, op_value = next(iter(value.items()))
-                expressions.append(self._build_field_operator_expression(key, op, op_value))
-                continue
-            expressions.append(self._metadata_expr_for_scalar(key, value) == value)
-        return and_(*expressions)
-
     @override
     async def delete_document(self, namespace_id: str, document_id: str) -> bool:
-        async with self._session_factory() as session:
-            stmt = delete(VectorDocument).where(
-                VectorDocument.namespace_id == namespace_id,
-                VectorDocument.document_id == document_id,
-            )
-            result = await session.execute(stmt)
-            await session.commit()
-            deleted = get_rowcount(result)
-
+        deleted = await VectorDocument.delete_document_chunks(namespace_id, document_id)
         if deleted:
             logger.info("rag.pgvector.document_deleted", document_id=document_id, deleted=deleted)
         return deleted > 0
@@ -1039,67 +907,22 @@ class PgVectorProvider(BaseRAGProvider):
         self,
         keys: list[tuple[str, str, str]],
     ) -> dict[tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]]:
-        """
-        Агрегат по chunk-ам vector_documents для троек ``(namespace_id, document_id, company_id)``.
-
-        - ``absent`` — нет строк.
-        - ``pending_embedding`` — есть строка с ``embedding IS NULL``.
-        - ``ready`` — есть строки, все с непустым ``embedding``.
-        """
+        """Агрегат чанков по тройкам (namespace_id, document_id, company_id)."""
         if not keys:
             return {}
         unique_keys = list(dict.fromkeys(keys))
         out: dict[tuple[str, str, str], Literal["absent", "pending_embedding", "ready"]] = {
-            k: "absent" for k in unique_keys
+            key: "absent" for key in unique_keys
         }
-
-        null_chunks_expr = func.coalesce(
-            func.sum(case((VectorDocument.embedding.is_(None), 1), else_=0)),
-            0,
-        ).label("null_chunks")
-        chunk_count = func.count().label("chunk_count")
-
-        stmt = (
-            select(
-                VectorDocument.namespace_id,
-                VectorDocument.document_id,
-                VectorDocument.company_id,
-                chunk_count,
-                null_chunks_expr,
-            )
-            .where(
-                tuple_(
-                    VectorDocument.namespace_id,
-                    VectorDocument.document_id,
-                    VectorDocument.company_id,
-                ).in_(unique_keys)
-            )
-            .group_by(
-                VectorDocument.namespace_id,
-                VectorDocument.document_id,
-                VectorDocument.company_id,
-            )
-        )
-
-        async with self._session_factory() as session:
-            result = await session.execute(stmt)
-            rows: Sequence[tuple[str, str, str | None, int, int | None]] = result.tuples().all()
-
-        for ns, doc_id, cid, cnt, null_chunks in rows:
-            if cid is None:
-                continue
-            key = (ns, doc_id, cid)
+        counted = await VectorDocument.semantic_index_counts(unique_keys)
+        for namespace_id, document_id, company_id, chunk_count, null_chunks in counted:
+            key = (namespace_id, document_id, company_id)
             if key not in out:
                 continue
-            null_int = int(null_chunks or 0)
-            total = int(cnt)
-            if null_int > 0:
+            if null_chunks > 0:
                 out[key] = "pending_embedding"
-            elif total > 0:
+            elif chunk_count > 0:
                 out[key] = "ready"
-            else:
-                out[key] = "absent"
-
         return out
 
     async def fetch_stale_chunks_for_reembed(
@@ -1108,93 +931,27 @@ class PgVectorProvider(BaseRAGProvider):
         limit: int,
         target_embedding_model: str,
     ) -> list[tuple[str, str, str]]:
-        """
-        Кандидаты на перевекторизацию: ``(id, content, company_id)``.
-
-        Возвращает только строки с непустым ``company_id`` (NULL/'' разбираются
-        отдельным maintenance-тиком ``rag_cleanup_orphan_company_chunks_tick``).
-        Стабильный порядок по ``company_id``/``id`` — для группировки по компании.
-        """
-        if limit <= 0:
-            raise ValueError("fetch_stale_chunks_for_reembed: limit must be positive")
-        stale_where = or_(
-            VectorDocument.embedding_model.is_(None),
-            VectorDocument.embedding_model != target_embedding_model,
+        """Кандидаты на перевекторизацию: (id, content, company_id)."""
+        return await VectorDocument.stale_chunks_for_reembed(
+            limit=limit,
+            target_embedding_model=target_embedding_model,
         )
-        async with self._session_factory() as session:
-            stmt = (
-                select(VectorDocument.id, VectorDocument.content, VectorDocument.company_id)
-                .where(stale_where)
-                .where(VectorDocument.content.isnot(None))
-                .where(VectorDocument.content != "")
-                .where(VectorDocument.company_id.isnot(None))
-                .where(VectorDocument.company_id != "")
-                .order_by(VectorDocument.company_id.asc(), VectorDocument.id.asc())
-                .limit(limit)
-            )
-            result = await session.execute(stmt)
-            rows: Sequence[tuple[str, str, str | None]] = result.tuples().all()
-        stale_chunks: list[tuple[str, str, str]] = []
-        for chunk_id, content, company_id in rows:
-            if company_id is None:
-                raise ValueError("fetch_stale_chunks_for_reembed returned chunk without company_id")
-            stale_chunks.append((chunk_id, content, company_id))
-        return stale_chunks
 
     async def write_reembed_chunk_embeddings(
         self,
         doc_embeddings: list[tuple[str, list[float]]],
         target_embedding_model: str,
     ) -> int:
-        """Записывает векторы для списка ``(chunk_id, embedding)``."""
-        if not doc_embeddings:
-            return 0
-        updated = 0
-        async with self._session_factory() as session:
-            for doc_id, emb in doc_embeddings:
-                upd = (
-                    update(VectorDocument)
-                    .where(VectorDocument.id == doc_id)
-                    .values(
-                        embedding=emb,
-                        embedding_model=target_embedding_model,
-                    )
-                )
-                upd_result = await session.execute(upd)
-                updated += get_rowcount(upd_result)
-            await session.commit()
-        return updated
+        """Записывает векторы для списка (chunk_id, embedding)."""
+        return await VectorDocument.write_reembed_embeddings(
+            doc_embeddings,
+            target_embedding_model,
+        )
 
     @override
     async def delete_orphan_company_chunks(self, *, limit: int) -> int:
-        """
-        Батчевое удаление чанков ``vector_documents`` без ``company_id``.
-
-        У таких строк нет владельца — биллинг и поиск по тенанту невозможны.
-        Зовётся отдельным maintenance-тиком, не reembed.
-        """
-        if limit <= 0:
-            raise ValueError("delete_orphan_company_chunks: limit must be positive")
-        async with self._session_factory() as session:
-            ids_stmt = (
-                select(VectorDocument.id)
-                .where(
-                    or_(
-                        VectorDocument.company_id.is_(None),
-                        VectorDocument.company_id == "",
-                    )
-                )
-                .order_by(VectorDocument.id.asc())
-                .limit(limit)
-            )
-            result = await session.execute(ids_stmt)
-            ids = [row[0] for row in result.all()]
-            if not ids:
-                return 0
-            del_stmt = delete(VectorDocument).where(VectorDocument.id.in_(ids))
-            del_result = await session.execute(del_stmt)
-            await session.commit()
-        return get_rowcount(del_result)
+        """Удаляет чанки без company_id."""
+        return await VectorDocument.delete_orphan_company_chunks(limit=limit)
 
     # — Поиск —
 
@@ -1247,32 +1004,27 @@ class PgVectorProvider(BaseRAGProvider):
         # тот же контракт, что в _hybrid_search_rrf.
         fetch_limit = limit * 3 if freshness_enabled else limit
 
-        async with self._session_factory() as session:
-            _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
-            distance_expr = sql_cast(VectorDocument.embedding.op("<=>")(query_embedding), Float())
-            similarity_expr = (1 - distance_expr).label("similarity")
-
-            stmt = (
-                select(VectorDocument, similarity_expr)
-                .where(VectorDocument.namespace_id == namespace_id)
-                .where(VectorDocument.embedding.isnot(None))
-                .where(VectorDocument.embedding_model == embedding_model)
-                .order_by(distance_expr)
-                .limit(fetch_limit)
-            )
-
-            if filters:
-                stmt = stmt.where(self._build_metadata_filter_expression(filters))
-
-            result = await session.execute(stmt)
-            rows: Sequence[tuple[VectorDocument, float | None]] = result.tuples().all()
-
+        binder = _Binder(3)
+        filter_sql = ""
+        if filters is not None:
+            validate_metadata_filters(filters)
+            filter_sql = " AND " + _metadata_filter_sql(binder, filters)
+        limit_placeholder = binder.next_index()
+        rows = await VectorDocument.semantic_hits(
+            namespace_id=namespace_id,
+            embedding_model=embedding_model,
+            query_embedding=query_embedding,
+            filter_sql=filter_sql,
+            filter_params=binder.params,
+            limit=fetch_limit,
+            limit_placeholder=limit_placeholder,
+        )
         results = self._build_search_results(rows, namespace_id)
         if not freshness_enabled or freshness_weight is None or freshness_half_life_days is None:
             return results
 
         now = datetime.now(timezone.utc)
-        docs_by_chunk_id = {doc.id: doc for doc, _similarity in rows}
+        docs_by_chunk_id = {doc.id: doc for doc, _similarity_score in rows}
         rescored: list[RAGSearchResult] = []
         for item in results:
             doc = docs_by_chunk_id[item.chunk_id]
@@ -1307,16 +1059,10 @@ class PgVectorProvider(BaseRAGProvider):
         freshness_weight: float | None = None,
         freshness_half_life_days: float | None = None,
     ) -> list[RAGSearchResult]:
-        """
-        Двухканальный поиск: семантический (cosine) + лексический (websearch tsquery,
-        ``ts_rank_cd``), слияние RRF. При заданных ``freshness_weight``/``freshness_half_life_days``
-        итоговый score = RRF * мультипликативный экспоненциальный decay возраста документа,
-        применённый к полному fused-пулу кандидатов до среза ``limit``.
-        """
+        """Семантический cosine и лексический ts_rank_cd, слияние RRF."""
         query_embedding = await self._embedding_client.generate_embedding(
             self._query_embedding_text(query)
         )
-
         rrf_k_int = 60 if rrf_k is None else int(rrf_k)
         per_channel = limit * 3 if per_channel_top_k is None else int(per_channel_top_k)
         freshness_enabled = (
@@ -1324,93 +1070,67 @@ class PgVectorProvider(BaseRAGProvider):
             and freshness_weight > 0.0
             and freshness_half_life_days is not None
         )
-
-        async with self._session_factory() as session:
-            _ = await session.execute(text("SET hnsw.iterative_scan = relaxed_order"))
-
-            # Семантический канал
-            distance_expr = sql_cast(VectorDocument.embedding.op("<=>")(query_embedding), Float())
-            similarity_expr = (1 - distance_expr).label("similarity")
-
-            semantic_stmt = (
-                select(VectorDocument.id, similarity_expr)
-                .where(VectorDocument.namespace_id == namespace_id)
-                .where(VectorDocument.embedding.isnot(None))
-                .where(VectorDocument.embedding_model == embedding_model)
-            )
-            if filters:
-                semantic_stmt = semantic_stmt.where(self._build_metadata_filter_expression(filters))
-            semantic_stmt = semantic_stmt.order_by(distance_expr).limit(per_channel)
-
-            # Лексический канал: websearch-синтаксис + русская морфология (Snowball),
-            # ранг с учётом плотности/близости терминов (ts_rank_cd).
-            tsquery_expr = func.websearch_to_tsquery(LEXICAL_TS_CONFIG, query)
-            rank_expr = func.ts_rank_cd(VectorDocument.content_tsv, tsquery_expr).label("lexical_rank")
-
-            lexical_stmt = (
-                select(VectorDocument.id, rank_expr)
-                .where(VectorDocument.namespace_id == namespace_id)
-                .where(VectorDocument.content_tsv.op("@@")(tsquery_expr))
-            )
-            if filters:
-                lexical_stmt = lexical_stmt.where(self._build_metadata_filter_expression(filters))
-            lexical_stmt = lexical_stmt.order_by(rank_expr.desc()).limit(per_channel)
-
-            semantic_result = await session.execute(semantic_stmt)
-            semantic_rows: Sequence[tuple[str, float | None]] = semantic_result.tuples().all()
-            lexical_result = await session.execute(lexical_stmt)
-            lexical_rows: Sequence[tuple[str, float | None]] = lexical_result.tuples().all()
-
-            # RRF-слияние
-            semantic_ids = [row[0] for row in semantic_rows]
-            lexical_ids = [row[0] for row in lexical_rows]
-
-            fused = reciprocal_rank_fusion([semantic_ids, lexical_ids], k=rrf_k_int)
-            if not fused:
-                return []
-
-            # Freshness переранжирует полный fused-пул, поэтому документы
-            # загружаются для всех кандидатов, а не только для top-limit.
-            candidate_pairs = fused if freshness_enabled else fused[:limit]
-            candidate_ids = [doc_id for doc_id, _score in candidate_pairs]
-
-            docs_stmt = select(VectorDocument).where(VectorDocument.id.in_(candidate_ids))
-            docs_rows = list((await session.execute(docs_stmt)).scalars().all())
-            by_id = {doc.id: doc for doc in docs_rows}
-
-            scored: list[tuple[str, float, RAGMetadata]] = []
-            now = datetime.now(timezone.utc)
-            freshness_provenance: dict[str, RAGMetadata] = {}
-            for doc_id, rrf_score in candidate_pairs:
-                doc = by_id.get(doc_id)
-                if doc is None:
-                    continue
-                final_score = float(rrf_score)
-                if freshness_enabled and freshness_weight is not None and freshness_half_life_days is not None:
-                    final_score, freshness_provenance[doc_id] = _freshness_score_and_provenance(
-                        doc,
-                        final_score,
-                        weight=freshness_weight,
-                        half_life_days=freshness_half_life_days,
-                        now=now,
-                    )
-                scored.append((doc_id, final_score, doc.metadata_ or {}))
-
-            scored.sort(key=lambda item: item[1], reverse=True)
-            top = scored[:limit]
-            top_ids = [doc_id for doc_id, _score, _metadata in top]
-            if not top_ids:
-                return []
-
-            headline_by_id = await self._lexical_headlines(
-                session,
-                doc_ids=top_ids,
-                query=query,
-            )
-
-        score_by_id = {doc_id: final_score for doc_id, final_score, _metadata in top}
+        binder = _Binder(3)
+        filter_sql = ""
+        if filters is not None:
+            validate_metadata_filters(filters)
+            filter_sql = " AND " + _metadata_filter_sql(binder, filters)
+        limit_placeholder = binder.next_index()
+        lexical_binder = _Binder(3)
+        lexical_filter = ""
+        if filters is not None:
+            lexical_filter = " AND " + _metadata_filter_sql(lexical_binder, filters)
+        lexical_limit = lexical_binder.next_index()
+        semantic_ids, lexical_ids = await VectorDocument.hybrid_channel_ids(
+            namespace_id=namespace_id,
+            embedding_model=embedding_model,
+            query_embedding=query_embedding,
+            query=query,
+            lexical_config=LEXICAL_TS_CONFIG,
+            semantic_filter_sql=filter_sql,
+            semantic_params=binder.params,
+            semantic_limit_placeholder=limit_placeholder,
+            lexical_filter_sql=lexical_filter,
+            lexical_params=lexical_binder.params,
+            lexical_limit_placeholder=lexical_limit,
+            per_channel=per_channel,
+        )
+        fused = reciprocal_rank_fusion([semantic_ids, lexical_ids], k=rrf_k_int)
+        if not fused:
+            return []
+        candidate_pairs = fused if freshness_enabled else fused[:limit]
+        candidate_ids = [doc_id for doc_id, _score in candidate_pairs]
+        by_id = await VectorDocument.chunks_by_ids(candidate_ids)
+        scored: list[tuple[str, float]] = []
+        now = datetime.now(timezone.utc)
+        freshness_provenance: dict[str, RAGMetadata] = {}
+        for doc_id, rrf_score in candidate_pairs:
+            doc = by_id.get(doc_id)
+            if doc is None:
+                continue
+            final_score = float(rrf_score)
+            if freshness_enabled and freshness_weight is not None and freshness_half_life_days is not None:
+                final_score, freshness_provenance[doc_id] = _freshness_score_and_provenance(
+                    doc,
+                    final_score,
+                    weight=freshness_weight,
+                    half_life_days=freshness_half_life_days,
+                    now=now,
+                )
+            scored.append((doc_id, final_score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        top = scored[:limit]
+        top_ids = [doc_id for doc_id, _score in top]
+        if not top_ids:
+            return []
+        headline_by_id = await VectorDocument.lexical_headlines(
+            doc_ids=top_ids,
+            query=query,
+            lexical_config=LEXICAL_TS_CONFIG,
+            headline_options=TS_HEADLINE_OPTIONS,
+        )
         ordered: list[RAGSearchResult] = []
-        for doc_id in top_ids:
+        for doc_id, final_score in top:
             doc = by_id.get(doc_id)
             if doc is None:
                 continue
@@ -1418,59 +1138,29 @@ class PgVectorProvider(BaseRAGProvider):
             if doc_id in freshness_provenance:
                 provenance.update(freshness_provenance[doc_id])
             headline = headline_by_id.get(doc_id)
-            if headline:
+            if headline is not None:
                 provenance["headline"] = headline
             ordered.append(
                 _rag_search_result_from_document(
                     doc,
-                    score=score_by_id[doc_id],
+                    score=final_score,
                     namespace_id=namespace_id,
                     provenance=provenance,
                 )
             )
         return ordered
 
-    async def _lexical_headlines(
-        self,
-        session: AsyncSession,
-        *,
-        doc_ids: list[str],
-        query: str,
-    ) -> dict[str, str]:
-        """Сниппеты ``ts_headline`` с подсветкой терминов запроса для финальной выдачи."""
-        tsquery_expr = func.websearch_to_tsquery(LEXICAL_TS_CONFIG, query)
-        headline_expr = func.ts_headline(
-            LEXICAL_TS_CONFIG,
-            VectorDocument.content,
-            tsquery_expr,
-            TS_HEADLINE_OPTIONS,
-        )
-        stmt = select(VectorDocument.id, headline_expr).where(VectorDocument.id.in_(doc_ids))
-        rows: Sequence[tuple[str, str | None]] = (await session.execute(stmt)).tuples().all()
-        headlines: dict[str, str] = {}
-        for doc_id, headline in rows:
-            if headline is None:
-                continue
-            normalized = headline.strip()
-            if normalized:
-                headlines[doc_id] = normalized
-        return headlines
-
     def _build_search_results(
         self,
-        rows: Sequence[tuple[VectorDocument, float | None]],
+        rows: list[tuple[VectorDocument, float]],
         namespace_id: str,
     ) -> list[RAGSearchResult]:
-        search_results: list[RAGSearchResult] = []
-        for row in rows:
-            doc = row[0]
-            score = float(row[1]) if row[1] is not None else 0.0
-            search_results.append(
-                _rag_search_result_from_document(
-                    doc,
-                    score=score,
-                    namespace_id=namespace_id,
-                    provenance={},
-                )
+        return [
+            _rag_search_result_from_document(
+                doc,
+                score=score,
+                namespace_id=namespace_id,
+                provenance={},
             )
-        return search_results
+            for doc, score in rows
+        ]

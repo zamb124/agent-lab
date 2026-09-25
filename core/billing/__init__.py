@@ -31,7 +31,7 @@ _billing_service: BillingService | None = None
 def set_billing_service(service: BillingService) -> None:
     """
     Устанавливает глобальный BillingService.
-    Вызывается при старте сервиса из контейнера.
+    Вызывается при старте сервиса из recipe платформенного DI.
     """
     global _billing_service
     _billing_service = service

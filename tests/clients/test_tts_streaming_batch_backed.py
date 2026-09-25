@@ -37,7 +37,7 @@ async def test_batch_backed_raises_when_upstream_audio_empty() -> None:
         provider_name="empty_fixture",
         content_type="audio/wav",
     )
-    with pytest.raises(ValueError, match="пустой audio_bytes"):
+    with pytest.raises(ValueError, match="empty audio_bytes"):
         await streamer.synthesize_chunk("непустой текст")
 
 

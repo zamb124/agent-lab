@@ -2,7 +2,7 @@
  * Страница продукта Sync — инженерный чат
  */
 import { ProductLandingPage } from '../../components/product-landing/product-landing-page.js';
-import { landSyncAbilityUrl } from '../../utils/land-product-images.js';
+import { landSyncAbilityUrl } from '../../_helpers/land-product-images.js';
 
 export class ProductSyncPage extends ProductLandingPage {
     static productKey = 'sync';

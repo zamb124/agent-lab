@@ -8,23 +8,15 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Literal, Never
 
+from oxyde.exceptions import UniqueViolationError
 from pydantic import Field
-from sqlalchemy.exc import IntegrityError
 
 from apps.crm.color_palette import assign_color_from_palette
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import (
-    CRMEntity,
-    EntityType,
-    NamespaceTemplate,
-    NamespaceTemplateType,
-    Relationship,
-    RelationshipType,
-)
-from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
+from apps.crm.di import Di
 from apps.crm.entity_type_list_filter import resolve_list_entity_query_pair
 from apps.crm.integrations.protocol import NamespaceIntegrationConnector
+from apps.crm.models.access_request import AccessRequest
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestResponse,
@@ -82,18 +74,16 @@ from apps.crm.models.api import (
     NoteProcessingConfig,
     PeriodSummaryRequest,
     RelationshipCreate,
-    RelationshipResponse,
     RelationshipTypeCreate,
-    RelationshipTypeResponse,
     SearchMentionsRequest,
     StartDailySummaryRequest,
     StartKnowledgeImportRequest,
     StartNoteAnalyzeRequest,
     StartPeriodSummaryRequest,
-    SuggestResponse,
     TaskCreatedEntitiesResponse,
-    TaskResponse,
 )
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.entity_type import EntityType, EntityTypeFieldUpdate
 from apps.crm.models.grant_models import (
     AccessGrantResponse,
     GrantResourceType,
@@ -105,14 +95,21 @@ from apps.crm.models.graph import (
     RelatedEntitiesResponse,
     ShortestPathResponse,
 )
+from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.relationship_type import RelationshipType
+from apps.crm.models.suggest import CRMSuggest
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.entity_export import CrmEntitiesExportPayload, export_entities_to_file
-from apps.crm.services.entity_response_enrichment import build_entity_responses_with_semantic_index
+from apps.crm.services.entity_response_enrichment import (
+    build_entity_responses_with_semantic_index,
+    semantic_text_index_status_by_entity,
+)
 from apps.crm.services.entity_service import SchemaValidationError
 from apps.crm.services.graph_service import GraphEntityLimitExceededError
-from apps.crm.services.task_service import ActiveTaskExistsError
+from apps.crm.services.note_markdown_format_schedule import ActiveTaskExistsError
 from apps.crm.system_templates import REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS
-from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
 from core.api.integration_oauth_error_html import resolve_oauth_integration_locale
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
@@ -124,12 +121,12 @@ from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.models.identity_models import Namespace, NamespaceCRMSettings, NamespaceKind, User
 from core.pagination import CursorPage, ListResponse, OffsetPage
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.request_scope import CompanyScope, require_company
-from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
 from core.types import JsonObject
 from core.websocket import (
     EmptyPayload,
-    WsCommandError,
     raise_conflict,
     raise_forbidden,
     raise_invalid,
@@ -253,11 +250,11 @@ def _template_type_response(item: NamespaceTemplateType) -> NamespaceTemplateTyp
 
 
 async def _namespace_response(
-    container: CRMContainer,
+    di: Di,
     ns: Namespace,
     scope: CompanyScope,
 ) -> NamespaceResponse:
-    integration_badges = await container.integration_registry.build_manifest(
+    integration_badges = await di.integration_registry.build_manifest(
         namespace_name=ns.name,
         company_id=ns.company_id,
         user_id=scope.user_id,
@@ -286,8 +283,9 @@ def _normalize_allowed_type_ids(raw_value: list[str]) -> list[str]:
     return normalized
 
 
-async def _collect_company_type_ids(container: CRMContainer) -> set[str]:
-    rows = await container.entity_type_repository.load_all_entity_types_for_company()
+async def _collect_company_type_ids(di: Di) -> set[str]:
+    _ = di
+    rows = await EntityType.catalog()
     return {item.type_id for item in rows}
 
 
@@ -321,7 +319,7 @@ async def op_crm_company_init(
     payload: CrmCompanyInitPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> CrmCompanyInitResponse:
     """Insert-only инициализация типов, шаблонов и personal namespace новой компании.
 
@@ -336,7 +334,7 @@ async def op_crm_company_init(
                 f"company_id {payload.company_id!r} does not match active company {scope.company_id!r}"
             )
         )
-    result = await container.company_init_service.initialize_company(payload.company_id)
+    result = await di.company_init_service.initialize_company(payload.company_id)
     return CrmCompanyInitResponse(result=result)
 
 
@@ -344,18 +342,18 @@ async def op_namespaces_list(
     payload: CrmOffsetPagePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[NamespaceResponse]:
     _ = user
     scope = _company_scope()
     namespaces, total = await asyncio.gather(
-        container.namespace_service.list_company_workspaces(
+        di.namespace_service.list_company_workspaces(
             limit=payload.limit, offset=payload.offset
         ),
-        container.namespace_service.count(kinds=frozenset({NamespaceKind.COMPANY_WORKSPACE})),
+        di.namespace_service.count(kinds=frozenset({NamespaceKind.COMPANY_WORKSPACE})),
     )
     responses = await asyncio.gather(
-        *[_namespace_response(container, ns, scope) for ns in namespaces],
+        *[_namespace_response(di, ns, scope) for ns in namespaces],
     )
     return OffsetPage[NamespaceResponse](
         items=list(responses),
@@ -369,12 +367,12 @@ async def op_namespaces_create(
     payload: NamespaceCreateRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceResponse:
     _ = user
     scope = _company_scope()
     try:
-        namespace = await container.namespace_template_service.create_namespace_from_template(
+        namespace = await di.namespace_template_service.create_namespace_from_template(
             namespace_name=payload.name,
             namespace_description=payload.description,
             template_id=payload.template_id,
@@ -382,38 +380,38 @@ async def op_namespaces_create(
     except ValueError as error:
         _raise_service_error(error)
     logger.info("crm.namespace_created", namespace=payload.name)
-    return await _namespace_response(container, namespace, scope)
+    return await _namespace_response(di, namespace, scope)
 
 
 async def op_namespaces_editability(
     payload: CrmNamespaceNamePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceEditabilityResponse:
     _ = user
     _ = _company_scope()
     name = payload.name.strip()
     if not name:
         raise_invalid(ValueError("Namespace name is required"))
-    existing = await container.namespace_service.get(name)
+    existing = await di.namespace_service.get(name)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Namespace {name} not found"))
-    return await container.namespace_template_service.get_namespace_editability(name)
+    return await di.namespace_template_service.get_namespace_editability(name)
 
 
 async def op_namespaces_update(
     payload: CrmNamespaceUpdatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceResponse:
     _ = user
     scope = _company_scope()
     name = payload.name.strip()
     if not name:
         raise_invalid(ValueError("Namespace name is required"))
-    existing = await container.namespace_service.get(name)
+    existing = await di.namespace_service.get(name)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Namespace {name} not found"))
 
@@ -423,13 +421,13 @@ async def op_namespaces_update(
             allowed_type_ids = _normalize_allowed_type_ids(payload.allowed_type_ids)
         except ValueError as exc:
             raise_invalid(exc)
-        all_type_ids = await _collect_company_type_ids(container)
+        all_type_ids = await _collect_company_type_ids(di)
         unknown_type_ids = [item for item in allowed_type_ids if item not in all_type_ids]
         if unknown_type_ids:
             raise_invalid(ValueError(f"Unknown type_id values: {', '.join(unknown_type_ids)}"))
 
     try:
-        updated = await container.namespace_template_service.update_existing_namespace(
+        updated = await di.namespace_template_service.update_existing_namespace(
             namespace_name=name,
             description_is_set="description" in payload.model_fields_set,
             description=payload.description,
@@ -441,64 +439,39 @@ async def op_namespaces_update(
         raise_not_found(PlatformNotFoundError(str(exc)))
 
     if payload.crm_settings is None:
-        return await _namespace_response(container, updated, scope)
+        return await _namespace_response(di, updated, scope)
 
-    ns = await container.namespace_service.get(name)
-    if ns is None:
-        raise_not_found(PlatformNotFoundError(f"Namespace {name} not found"))
-    prev = ns.crm_settings or NamespaceCRMSettings()
-    incoming = payload.crm_settings
-    data = prev.model_dump()
-    for field_name in incoming.model_fields_set:
-        data[field_name] = getattr(incoming, field_name)
-    new_settings = NamespaceCRMSettings.model_validate(data)
-
-    if "suggests" in incoming.model_fields_set:
-        if prev.suggests.schedule_task_id:
-            _ = await container.scheduler_client.cancel_schedule(prev.suggests.schedule_task_id)
-        new_settings.suggests.schedule_task_id = None
-        if new_settings.suggests.enabled:
-            created = await container.scheduler_client.create_schedule(
-                PlatformScheduleCreateRequest(
-                    target_service="crm",
-                    task_name=CRM_GENERATE_NAMESPACE_SUGGESTS.name,
-                    queue_name="crm",
-                    schedule_type=PlatformScheduleType.CRON,
-                    cron=new_settings.suggests.cron,
-                    payload={"company_id": ns.company_id, "namespace": name},
-                )
-            )
-            new_settings.suggests.schedule_task_id = created.schedule_task_id
-
-    ns.crm_settings = new_settings
-    _ = await container.namespace_service.save(ns)
-    return await _namespace_response(container, ns, scope)
+    ns = await di.namespace_template_service.apply_namespace_crm_settings(
+        name, payload.crm_settings
+    )
+    return await _namespace_response(di, ns, scope)
 
 
 async def op_templates_list(
     payload: CrmOffsetPagePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[NamespaceTemplateResponse]:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    templates, total = await asyncio.gather(
-        template_repo.list_by_company(limit=payload.limit, offset=payload.offset),
-        template_repo.count_all(),
+    _ = di
+    company_id = _company_scope().company_id
+    page = await NamespaceTemplate.page_for_company(
+        company_id,
+        limit=payload.limit,
+        offset=payload.offset,
     )
     responses: list[NamespaceTemplateResponse] = []
-    for template in templates:
-        template_types = await template_repo.list_types(template.template_key)
+    for template in page.items:
+        template_types = await NamespaceTemplateType.list_for_template(template.template_key)
         responses.append(
             _template_response(template, [item.type_id for item in template_types])
         )
     return OffsetPage[NamespaceTemplateResponse](
         items=responses,
-        total=total,
-        limit=payload.limit,
-        offset=payload.offset,
+        total=page.total,
+        limit=page.limit,
+        offset=page.offset,
     )
 
 
@@ -506,9 +479,9 @@ async def op_templates_schema_options(
     payload: EmptyPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceTemplateSchemaOptionsResponse:
-    _ = payload, user, container
+    _ = payload, user, di
     _ = _company_scope()
     return SCHEMA_OPTIONS_RESPONSE
 
@@ -517,21 +490,28 @@ async def op_templates_create(
     payload: NamespaceTemplateCreateRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceTemplateResponse:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    existing = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    existing = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if existing is not None:
         raise_conflict(PlatformConflictError(f"Template {payload.template_id} already exists"))
-    created = await template_repo.create_template(
-        template_id=payload.template_id,
-        name=payload.name,
-        description=payload.description,
-        icon=payload.icon,
-        is_system=False,
-    )
+    try:
+        created = await NamespaceTemplate.create(
+            NamespaceTemplate(
+                template_key=str(uuid.uuid4()),
+                company_id=company_id,
+                template_id=payload.template_id,
+                name=payload.name,
+                description=payload.description,
+                icon=payload.icon,
+                is_system=False,
+            )
+        )
+    except UniqueViolationError:
+        raise_conflict(PlatformConflictError(f"Template {payload.template_id} already exists"))
     return _template_response(created, [])
 
 
@@ -539,15 +519,15 @@ async def op_templates_item(
     payload: CrmTemplateIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceTemplateDetailsResponse:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    template = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    template_types = await template_repo.list_types(template.template_key)
+    template_types = await NamespaceTemplateType.list_for_template(template.template_key)
     crm_detail: NamespaceCRMSettings | None = None
     raw_crm = template.crm_settings
     if raw_crm is not None and len(raw_crm) > 0:
@@ -568,20 +548,15 @@ async def op_templates_update(
     payload: CrmTemplateUpdatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceTemplateResponse:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    template = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    if payload.name is not None:
-        template.name = payload.name
-    if payload.description is not None:
-        template.description = payload.description
-    if payload.icon is not None:
-        template.icon = payload.icon
+    crm_settings: JsonObject | None = None
     if payload.crm_settings is not None:
         prev = NamespaceCRMSettings()
         raw_existing = template.crm_settings
@@ -591,9 +566,16 @@ async def op_templates_update(
         data = prev.model_dump()
         for field_name in incoming.model_fields_set:
             data[field_name] = getattr(incoming, field_name)
-        template.crm_settings = NamespaceCRMSettings.model_validate(data).model_dump(mode="json")
-    updated = await template_repo.update(template)
-    template_types = await template_repo.list_types(updated.template_key)
+        crm_settings = NamespaceCRMSettings.model_validate(data).model_dump(mode="json")
+    updated = await NamespaceTemplate.update_fields(
+        template,
+        name=payload.name,
+        description=payload.description,
+        icon=payload.icon,
+        crm_settings=crm_settings,
+        crm_settings_is_set=payload.crm_settings is not None,
+    )
+    template_types = await NamespaceTemplateType.list_for_template(updated.template_key)
     return _template_response(updated, [item.type_id for item in template_types])
 
 
@@ -601,32 +583,33 @@ async def op_templates_remove(
     payload: CrmTemplateIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    template = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
     if template.is_system:
         raise_invalid(ValueError("System template cannot be deleted"))
-    _ = await template_repo.delete_template_with_types(template.template_key)
+    _ = await NamespaceTemplateType.delete_by_template_key(template.template_key)
+    _ = await NamespaceTemplate.delete_by_id(template.template_key)
 
 
 async def op_templates_type_upsert(
     payload: CrmTemplateTypeUpsertPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NamespaceTemplateTypeResponse:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    template = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    item = await template_repo.upsert_type(
+    item = await NamespaceTemplateType.upsert_by_template_key_and_type_id(
         template_key=template.template_key,
         type_id=payload.type_id,
         parent_type_id=payload.parent_type_id,
@@ -651,15 +634,15 @@ async def op_templates_type_remove(
     payload: CrmTemplateTypeRemovePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
-    _ = _company_scope()
-    template_repo = container.namespace_template_repository
-    template = await template_repo.get_by_template_id(payload.template_id)
+    _ = di
+    company_id = _company_scope().company_id
+    template = await NamespaceTemplate.by_template_id(company_id, payload.template_id)
     if template is None:
         raise_not_found(PlatformNotFoundError(f"Template {payload.template_id} not found"))
-    current_ids = {t.type_id for t in await template_repo.list_types(template.template_key)}
+    current_ids = {t.type_id for t in await NamespaceTemplateType.list_for_template(template.template_key)}
     after_remove = current_ids - {payload.type_id}
     if not REQUIRED_NAMESPACE_TEMPLATE_TYPE_IDS <= after_remove:
         raise_invalid(
@@ -667,8 +650,11 @@ async def op_templates_type_remove(
                 "cannot delete type: namespace template must always keep note and task"
             )
         )
-    deleted = await template_repo.delete_type(template.template_key, payload.type_id)
-    if not deleted:
+    deleted = await NamespaceTemplateType.delete_by_template_key_and_type_id(
+        template.template_key,
+        payload.type_id,
+    )
+    if deleted != 1:
         raise_not_found(PlatformNotFoundError(f"Template type {payload.type_id} not found"))
 
 
@@ -739,57 +725,62 @@ def _entity_type_to_response(
 
 
 async def _parent_maps_for_types(
-    repo: EntityTypeRepository,
-    types: list[EntityType],
+    rows: list[EntityType],
 ) -> dict[str, dict[str, str | None]]:
-    namespaces = {item.namespace for item in types if item.namespace.strip()}
+    namespaces = {item.namespace for item in rows if item.namespace.strip()}
     out: dict[str, dict[str, str | None]] = {}
     for namespace in sorted(namespaces):
-        out[namespace] = await repo.get_parent_type_id_map_for_namespace(namespace)
+        catalog = await EntityType.catalog(
+            namespace=namespace,
+        )
+        out[namespace] = {row.type_id: row.parent_type_id for row in catalog}
     return out
 
 
 async def _backfill_missing_colors(
-    types: list[EntityType],
-    repo: EntityTypeRepository,
+    rows: list[EntityType],
 ) -> None:
-    used_colors = _used_type_colors(types)
-    for entity_type in types:
+    used_colors = _used_type_colors(rows)
+    for entity_type in rows:
         color = entity_type.color
         if color is not None and color.strip():
             continue
         assigned_color = assign_color_from_palette(used_colors)
         used_colors.add(assigned_color)
-        await repo.update_color(
+        await EntityType.update_fields(
             entity_type.type_id,
-            entity_type.namespace,
-            assigned_color,
+            namespace=entity_type.namespace,
+            patch={"color": assigned_color},
         )
         entity_type.color = assigned_color
 
 
 async def _list_entity_types_page(
-    repo: EntityTypeRepository,
     *,
     namespace: str | None,
     limit: int,
     offset: int,
 ) -> OffsetPage[EntityTypeResponse]:
-    types, total = await asyncio.gather(
-        repo.list_by_company(namespace=namespace, limit=limit, offset=offset),
-        repo.count_all_for_company(namespace=namespace),
+    company_id = _company_scope().company_id
+    listed = (
+        EntityType.in_company(company_id, namespace=namespace)
+        .order_by("-is_system", "type_id")
+        .limit(limit)
+        .offset(offset)
     )
-    if not types:
+    total_rows = EntityType.in_company(company_id, namespace=namespace)
+    page, total = await asyncio.gather(listed.all(), total_rows.count())
+    if len(page) == 0:
         return OffsetPage[EntityTypeResponse](
             items=[],
             total=total,
             limit=limit,
             offset=offset,
         )
-    parent_maps = await _parent_maps_for_types(repo, types)
-    await _backfill_missing_colors(types, repo)
+    parent_maps = await _parent_maps_for_types(page)
+    await _backfill_missing_colors(page)
     return OffsetPage[EntityTypeResponse](
-        items=[_entity_type_to_response(item, parent_maps[item.namespace]) for item in types],
+        items=[_entity_type_to_response(item, parent_maps[item.namespace]) for item in page],
         total=total,
         limit=limit,
         offset=offset,
@@ -797,12 +788,15 @@ async def _list_entity_types_page(
 
 
 async def _require_entity_type(
-    repo: EntityTypeRepository,
     *,
     type_id: str,
     namespace: str,
 ) -> EntityType:
-    entity_type = await repo.get_by_type_id(type_id, namespace=namespace)
+    entity_type = await EntityType.by_company_namespace_and_type_id(
+        company_id=_company_scope().company_id,
+        namespace=namespace,
+        type_id=type_id,
+    ).get_or_none()
     if entity_type is None:
         raise_not_found(PlatformNotFoundError("EntityType not found"))
     return entity_type
@@ -819,15 +813,15 @@ async def op_entity_types_list(
     payload: CrmEntityTypesListPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[EntityTypeResponse]:
     _ = user
+    _ = di
     _ = _company_scope()
     namespace = payload.namespace
     if namespace is not None:
         namespace = _normalize_namespace(namespace)
     return await _list_entity_types_page(
-        container.entity_type_repository,
         namespace=namespace,
         limit=payload.limit,
         offset=payload.offset,
@@ -838,19 +832,25 @@ async def op_entity_types_item(
     payload: CrmEntityTypeKeyPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityTypeResponse:
     _ = user
+    _ = di
     _ = _company_scope()
     namespace = _normalize_namespace(payload.namespace)
-    repo = container.entity_type_repository
-    entity_type = await _require_entity_type(repo, type_id=payload.type_id, namespace=namespace)
+    entity_type = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
     color = entity_type.color
     if color is None or not color.strip():
         assigned_color = assign_color_from_palette(set())
-        await repo.update_color(payload.type_id, namespace, assigned_color)
+        await EntityType.update_fields(
+            payload.type_id,
+            namespace=namespace,
+            patch={"color": assigned_color},
+        )
         entity_type.color = assigned_color
-    parent_map = await repo.get_parent_type_id_map_for_namespace(namespace)
+    parent_rows = await EntityType.catalog(
+        namespace=namespace)
+    parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(entity_type, parent_map)
 
 
@@ -858,22 +858,24 @@ async def op_entity_types_create(
     payload: EntityTypeCreate,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityTypeResponse:
     _ = user
     scope = _company_scope()
+    _ = di
     namespace = _normalize_namespace(payload.namespace)
-    repo = container.entity_type_repository
-    existing = await repo.get_by_type_id(
-        payload.type_id, namespace=namespace, company_id=scope.company_id
-    )
+    existing = await EntityType.by_company_namespace_and_type_id(
+        company_id=scope.company_id,
+        namespace=namespace,
+        type_id=payload.type_id,
+    ).get_or_none()
     if existing is not None:
         raise_conflict(
             PlatformConflictError(
                 f"EntityType {payload.type_id!r} already exists in namespace {namespace!r}"
             )
         )
-    existing_types = await repo.load_all_entity_types_for_company()
+    existing_types = await EntityType.catalog()
     used_colors = _used_type_colors(existing_types)
     resolved_color = payload.color
     if resolved_color is None or not resolved_color.strip():
@@ -903,11 +905,10 @@ async def op_entity_types_create(
         is_voice_target=payload.is_voice_target,
         auto_resolve_suggests=payload.auto_resolve_suggests,
     )
-    _ = await repo.create_custom_type(created, scope.company_id)
-    refreshed = await repo.get_by_type_id(payload.type_id, namespace=namespace)
-    if refreshed is None:
-        raise WsCommandError("internal", "EntityType not found after create", error_code='internal')
-    parent_map = await repo.get_parent_type_id_map_for_namespace(namespace)
+    refreshed = await EntityType.create(created)
+    parent_rows = await EntityType.catalog(
+        namespace=namespace)
+    parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
 
 
@@ -915,14 +916,14 @@ async def op_entity_types_update(
     payload: CrmEntityTypeUpdatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityTypeResponse:
     _ = user
+    _ = di
     _ = _company_scope()
     namespace = _normalize_namespace(payload.namespace)
-    repo = container.entity_type_repository
-    entity_type = await _require_entity_type(repo, type_id=payload.type_id, namespace=namespace)
-    fields: dict[str, str | JsonObject | bool | None] = {}
+    entity_type = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
+    fields: EntityTypeFieldUpdate = {}
     if payload.name is not None:
         fields["name"] = payload.name
     if payload.description is not None:
@@ -949,12 +950,14 @@ async def op_entity_types_update(
     resolved_color = raw_color if isinstance(raw_color, str) else entity_type.color
     if resolved_color is None or not resolved_color.strip():
         fields["color"] = assign_color_from_palette(set())
-    if fields:
-        await repo.update_metadata_fields(
-            payload.type_id, namespace=namespace, fields=fields
+    if len(fields) > 0:
+        await EntityType.update_fields(
+            payload.type_id, namespace=namespace, patch=fields
         )
-    refreshed = await _require_entity_type(repo, type_id=payload.type_id, namespace=namespace)
-    parent_map = await repo.get_parent_type_id_map_for_namespace(namespace)
+    refreshed = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
+    parent_rows = await EntityType.catalog(
+        namespace=namespace)
+    parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
 
 
@@ -962,18 +965,22 @@ async def op_entity_types_public_fields(
     payload: CrmEntityTypePublicFieldsPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityTypeResponse:
     _ = user
     _ = _company_scope()
+    _ = di
     namespace = _normalize_namespace(payload.namespace)
-    repo = container.entity_type_repository
-    _ = await _require_entity_type(repo, type_id=payload.type_id, namespace=namespace)
-    await repo.update_metadata(
-        payload.type_id, namespace=namespace, public_fields=payload.public_fields
+    _ = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
+    await EntityType.update_fields(
+        payload.type_id,
+        namespace=namespace,
+        patch={"public_fields": payload.public_fields},
     )
-    refreshed = await _require_entity_type(repo, type_id=payload.type_id, namespace=namespace)
-    parent_map = await repo.get_parent_type_id_map_for_namespace(namespace)
+    refreshed = await _require_entity_type(type_id=payload.type_id, namespace=namespace)
+    parent_rows = await EntityType.catalog(
+        namespace=namespace)
+    parent_map = {row.type_id: row.parent_type_id for row in parent_rows}
     return _entity_type_to_response(refreshed, parent_map)
 
 
@@ -1001,7 +1008,7 @@ async def op_grants_list(
     payload: CrmGrantsListPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[AccessGrantResponse]:
     _ = user
     scope = _company_scope()
@@ -1012,7 +1019,7 @@ async def op_grants_list(
     if payload.resource_type == "namespace":
         company_id = scope.company_id
     try:
-        grants = await container.access_grant_service.list_grants(
+        grants = await di.access_grant_service.list_grants(
             payload.resource_type, resource_id, company_id
         )
     except (AuthzDenied, ValueError) as exc:
@@ -1030,14 +1037,14 @@ async def op_grants_create(
     payload: CrmGrantCreatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AccessGrantResponse:
     _ = user
     scope = _company_scope()
     resource_id = payload.resource_id.strip()
     if not resource_id:
         raise_invalid(ValueError("resource_id is required"))
-    service = container.access_grant_service
+    service = di.access_grant_service
     try:
         if payload.resource_type == "entity":
             if payload.subject == "public":
@@ -1098,12 +1105,12 @@ async def op_grants_item(
     payload: CrmGrantIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AccessGrantResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.access_grant_service.get_grant(payload.grant_id)
+        return await di.access_grant_service.get_grant(payload.grant_id)
     except (AuthzDenied, ValueError) as exc:
         _raise_service_error(exc)
 
@@ -1112,12 +1119,12 @@ async def op_grants_remove(
     payload: CrmGrantIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
     scope = _company_scope()
     try:
-        await container.access_grant_service.revoke_grant(payload.grant_id, scope.user_id)
+        await di.access_grant_service.revoke_grant(payload.grant_id, scope.user_id)
     except (AuthzDenied, ValueError) as exc:
         _raise_service_error(exc)
 
@@ -1134,17 +1141,17 @@ class CrmEntitiesAggregatePayload(StrictBaseModel):
     namespace: str | None = None
 
 
-async def build_entity_response(container: CRMContainer, entity: CRMEntity) -> EntityResponse:
+async def build_entity_response(di: Di, entity: CRMEntity) -> EntityResponse:
     items = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
         [entity],
-        crm_work_item_service=container.crm_work_item_service,
+        crm_work_item_service=di.crm_work_item_service,
     )
     return items[0]
 
 
-async def _require_entity(container: CRMContainer, entity_id: str) -> CRMEntity:
-    entity = await container.entity_service.get_entity(entity_id)
+async def _require_entity(di: Di, entity_id: str) -> CRMEntity:
+    entity = await di.entity_service.get_entity(entity_id)
     if entity is None:
         raise_not_found(PlatformNotFoundError("Entity not found"))
     return entity
@@ -1154,12 +1161,12 @@ async def op_entities_create(
     payload: EntityCreate,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityResponse:
     _ = user
     _ = _company_scope()
     try:
-        entity = await container.entity_service.create_entity(
+        entity = await di.entity_service.create_entity(
             entity_type=payload.entity_type,
             name=payload.name,
             description=payload.description,
@@ -1179,29 +1186,29 @@ async def op_entities_create(
         raise_invalid(exc)
     except ValueError as exc:
         _raise_service_error(exc)
-    return await build_entity_response(container, entity)
+    return await build_entity_response(di, entity)
 
 
 async def op_entities_item(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityResponse | JsonObject:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
-        filtered = await container.crm_entity_access_service.filter_fields(
+        filtered = await di.crm_entity_access_service.filter_fields(
             entity, scope.user_id, scope.company_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
     if isinstance(filtered, CRMEntity):
-        return await build_entity_response(container, filtered)
+        return await build_entity_response(di, filtered)
     return filtered
 
 
@@ -1209,13 +1216,13 @@ async def op_entities_update(
     payload: CrmEntityUpdatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityResponse:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
@@ -1227,7 +1234,7 @@ async def op_entities_update(
     if "entity_subtype" in payload.model_fields_set:
         updates["entity_subtype"] = payload.entity_subtype
     try:
-        updated = await container.entity_service.update_entity(
+        updated = await di.entity_service.update_entity(
             payload.entity_id,
             updates,
             voice_entity_id=payload.voice_entity_id,
@@ -1239,25 +1246,25 @@ async def op_entities_update(
         raise_invalid(exc)
     except ValueError as exc:
         _raise_service_error(exc)
-    return await build_entity_response(container, updated)
+    return await build_entity_response(di, updated)
 
 
 async def op_entities_remove(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    deleted = await container.entity_service.delete_entity(payload.entity_id)
+    deleted = await di.entity_service.delete_entity(payload.entity_id)
     if not deleted:
         raise_not_found(PlatformNotFoundError("Entity not found"))
 
@@ -1266,7 +1273,7 @@ async def op_entities_query(
     payload: EntitySearchQueryRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> CursorPage[EntityResponse]:
     _ = user
     _ = _company_scope()
@@ -1277,14 +1284,14 @@ async def op_entities_query(
     )
     try:
         namespace_name = resolve_namespace_or_raise(payload.namespace)
-        filter_field_types = await container.entity_service.resolve_filter_field_types(
+        filter_field_types = await di.entity_service.resolve_filter_field_types(
             namespace=namespace_name,
             entity_type=payload.entity_type,
             entity_subtype=payload.entity_subtype,
             filters=filters_dict,
         )
         if payload.query is None or payload.query.strip() == "":
-            entities, next_cursor, has_more = await container.entity_service.list_entities(
+            entities, next_cursor, has_more = await di.entity_service.list_entities(
                 entity_type=payload.entity_type,
                 entity_subtype=payload.entity_subtype,
                 namespace=payload.namespace,
@@ -1294,9 +1301,9 @@ async def op_entities_query(
                 cursor=payload.cursor,
             )
             items = await build_entity_responses_with_semantic_index(
-                container.entity_repository,
+                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
                 entities,
-                crm_work_item_service=container.crm_work_item_service,
+                crm_work_item_service=di.crm_work_item_service,
             )
             return CursorPage[EntityResponse](
                 items=items,
@@ -1307,7 +1314,7 @@ async def op_entities_query(
             raise_invalid(ValueError("cursor is not supported for search query mode"))
         query = payload.query.strip()
         if payload.search_mode == "hybrid":
-            hybrid_rows = await container.entity_service.hybrid_search(
+            hybrid_rows = await di.entity_service.hybrid_search(
                 query=query,
                 entity_type=payload.entity_type,
                 entity_subtype=payload.entity_subtype,
@@ -1317,16 +1324,16 @@ async def op_entities_query(
                 limit=payload.limit,
             )
             items = await build_entity_responses_with_semantic_index(
-                container.entity_repository,
+                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
                 [row[0] for row in hybrid_rows],
-                crm_work_item_service=container.crm_work_item_service,
+                crm_work_item_service=di.crm_work_item_service,
             )
             for resp, row in zip(items, hybrid_rows, strict=True):
                 resp.score = row[1]
                 resp.match_type = row[2]
             return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
         if payload.search_mode == "text":
-            text_rows = await container.entity_service.text_search(
+            text_rows = await di.entity_service.text_search(
                 query=query,
                 entity_type=payload.entity_type,
                 entity_subtype=payload.entity_subtype,
@@ -1336,15 +1343,15 @@ async def op_entities_query(
                 limit=payload.limit,
             )
             items = await build_entity_responses_with_semantic_index(
-                container.entity_repository,
+                get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
                 [row[0] for row in text_rows],
-                crm_work_item_service=container.crm_work_item_service,
+                crm_work_item_service=di.crm_work_item_service,
             )
             for resp, row in zip(items, text_rows, strict=True):
                 resp.score = row[1]
                 resp.match_type = "text"
             return CursorPage[EntityResponse](items=items, next_cursor=None, has_more=False)
-        semantic_rows = await container.entity_service.search_entities(
+        semantic_rows = await di.entity_service.search_entities(
             query=query,
             entity_type=payload.entity_type,
             entity_subtype=payload.entity_subtype,
@@ -1354,9 +1361,9 @@ async def op_entities_query(
             limit=payload.limit,
         )
         items = await build_entity_responses_with_semantic_index(
-            container.entity_repository,
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
             [row[0] for row in semantic_rows],
-            crm_work_item_service=container.crm_work_item_service,
+            crm_work_item_service=di.crm_work_item_service,
         )
         for resp, row in zip(items, semantic_rows, strict=True):
             resp.score = row[1]
@@ -1370,12 +1377,12 @@ async def op_entities_mentions_search(
     payload: SearchMentionsRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> ListResponse[EntityResponse]:
     _ = user
     _ = _company_scope()
     try:
-        entities = await container.entity_service.search_mentions(
+        entities = await di.entity_service.search_mentions(
             payload.text,
             namespace=payload.namespace,
             limit=20,
@@ -1383,9 +1390,9 @@ async def op_entities_mentions_search(
     except ValueError as exc:
         _raise_service_error(exc)
     items = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
         entities,
-        crm_work_item_service=container.crm_work_item_service,
+        crm_work_item_service=di.crm_work_item_service,
     )
     return ListResponse[EntityResponse](items=items)
 
@@ -1394,32 +1401,35 @@ async def op_entities_merge(
     payload: EntityMergeRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityMergeResponse:
     _ = user
     scope = _company_scope()
-    survivor = await container.entity_service.get_entity(payload.survivor_entity_id.strip())
-    source = await container.entity_service.get_entity(payload.source_entity_id.strip())
+    survivor = await di.entity_service.get_entity(payload.survivor_entity_id.strip())
+    source = await di.entity_service.get_entity(payload.source_entity_id.strip())
     if survivor is None:
         raise_not_found(PlatformNotFoundError("Survivor entity not found"))
     if source is None:
         raise_not_found(PlatformNotFoundError("Source entity not found"))
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(survivor.entity_id), user_id=scope.user_id
         )
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(source.entity_id), user_id=scope.user_id
         )
-        merged, merged_from_id = await container.entity_service.merge_entities(payload)
-        filtered = await container.crm_entity_access_service.filter_fields(
+        merged, merged_from_id = await di.entity_service.merge_entities(payload)
+        filtered = await di.crm_entity_access_service.filter_fields(
             merged, scope.user_id, scope.company_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except ValueError as exc:
         _raise_service_error(exc)
-    status_by_id = await container.entity_repository.batch_semantic_text_index_status([merged])
+    status_by_id = await semantic_text_index_status_by_entity(
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        [merged],
+    )
     merge_entity_resp = EntityResponse.model_validate(filtered).model_copy(
         update={"semantic_text_index_status": status_by_id.get(merged.entity_id)},
     )
@@ -1430,7 +1440,7 @@ async def op_entities_bulk_create(
     payload: BulkCreateRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> BulkCreateResponse:
     _ = user
     _ = _company_scope()
@@ -1440,7 +1450,7 @@ async def op_entities_bulk_create(
     errors: list[BulkErrorItem] = []
     for idx, item in enumerate(payload.items):
         try:
-            entity = await container.entity_service.create_entity(
+            entity = await di.entity_service.create_entity(
                 entity_type=item.entity_type,
                 name=item.name,
                 description=item.description,
@@ -1455,9 +1465,9 @@ async def op_entities_bulk_create(
         except (ValueError, SchemaValidationError) as exc:
             errors.append(BulkErrorItem(index=idx, error=str(exc)))
     created = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
         created_entities,
-        crm_work_item_service=container.crm_work_item_service,
+        crm_work_item_service=di.crm_work_item_service,
     )
     return BulkCreateResponse(created=created, errors=errors)
 
@@ -1466,7 +1476,7 @@ async def op_entities_bulk_update(
     payload: BulkUpdateRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> BulkUpdateResponse:
     _ = user
     _ = _company_scope()
@@ -1476,14 +1486,14 @@ async def op_entities_bulk_update(
     errors: list[BulkErrorItem] = []
     for idx, item in enumerate(payload.items):
         try:
-            entity = await container.entity_service.update_entity(item.entity_id, item.updates)
+            entity = await di.entity_service.update_entity(item.entity_id, item.updates)
             updated_entities.append(entity)
         except ValueError as exc:
             errors.append(BulkErrorItem(index=idx, entity_id=item.entity_id, error=str(exc)))
     updated = await build_entity_responses_with_semantic_index(
-        container.entity_repository,
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
         updated_entities,
-        crm_work_item_service=container.crm_work_item_service,
+        crm_work_item_service=di.crm_work_item_service,
     )
     return BulkUpdateResponse(updated=updated, errors=errors)
 
@@ -1492,7 +1502,7 @@ async def op_entities_bulk_delete(
     payload: BulkDeleteRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> BulkDeleteResponse:
     _ = user
     _ = _company_scope()
@@ -1502,7 +1512,7 @@ async def op_entities_bulk_delete(
     errors: list[BulkErrorItem] = []
     for idx, entity_id in enumerate(payload.entity_ids):
         try:
-            success = await container.entity_service.delete_entity(entity_id)
+            success = await di.entity_service.delete_entity(entity_id)
             if success:
                 deleted.append(entity_id)
             else:
@@ -1518,16 +1528,16 @@ async def op_entities_card(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> JsonObject:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
-        return await container.entity_service.get_entity_card(payload.entity_id)
+        return await di.entity_service.get_entity_card(payload.entity_id)
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except ValueError as exc:
@@ -1538,23 +1548,28 @@ async def op_entities_aggregate(
     payload: CrmEntitiesAggregatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> JsonObject:
     _ = user
     _ = _company_scope()
-    return await container.entity_service.aggregate_facets(namespace=payload.namespace)
+    return await di.entity_service.aggregate_facets(namespace=payload.namespace)
 
 
 async def op_entities_export(
     payload: CrmEntitiesExportPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> FileRecord:
     """Выгрузка сущностей в CSV/JSON; клиент скачивает файл по `download_url`."""
     _ = user
     _ = _company_scope()
-    return await export_entities_to_file(container, payload)
+    return await export_entities_to_file(
+        di.entity_service,
+        di.crm_work_item_service,
+        di.files_service,
+        payload,
+    )
 
 
 class CrmNoteIdPayload(StrictBaseModel):
@@ -1569,16 +1584,16 @@ async def op_notes_analysis_draft_save(
     payload: CrmNoteAnalysisDraftSavePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AIAnalysisDraftStored:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
-        return await container.entity_service.patch_analysis_draft(payload.note_id, payload)
+        return await di.entity_service.patch_analysis_draft(payload.note_id, payload)
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except PlatformConflictError as exc:
@@ -1591,16 +1606,16 @@ async def op_notes_analysis_draft_discard(
     payload: CrmNoteIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
-        await container.entity_service.discard_note_analysis_draft(payload.note_id)
+        await di.entity_service.discard_note_analysis_draft(payload.note_id)
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except ValueError as exc:
@@ -1611,16 +1626,16 @@ async def op_notes_analysis_error_dismiss(
     payload: CrmNoteIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
-        await container.entity_service.clear_note_analysis_error(payload.note_id)
+        await di.entity_service.clear_note_analysis_error(payload.note_id)
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except ValueError as exc:
@@ -1631,13 +1646,13 @@ async def op_notes_analysis_draft_repair(
     payload: CrmNoteIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NoteAnalysisDraftRepairQueuedResponse:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
@@ -1660,12 +1675,12 @@ async def op_notes_analysis_draft_repair(
         note_date_iso=note_date_iso,
         action="updated",
         note=note,
-        authz=container.authz_service,
+        authz=di.authz_service,
         skip_notification_center=True,
         draft_repair={"phase": "started"},
     )
     try:
-        row = await container.task_service.start_note_analysis_draft_repair(
+        row = await di.task_service.start_note_analysis_draft_repair(
             note_id=payload.note_id
         )
     except ActiveTaskExistsError as exc:
@@ -1683,16 +1698,16 @@ async def op_notes_markdown_format(
     payload: CrmNoteIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> NoteMarkdownFormatQueuedResponse:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
-        row = await container.task_service.start_note_markdown_format(note_id=payload.note_id)
+        row = await di.task_service.start_note_markdown_format(note_id=payload.note_id)
     except AuthzDenied as exc:
         raise_forbidden(exc)
     except ActiveTaskExistsError as exc:
@@ -1706,11 +1721,11 @@ async def op_notes_analyze(
     payload: StartNoteAnalyzeRequest,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     scope = _company_scope()
-    note = await _require_entity(container, payload.note_id)
+    note = await _require_entity(di, payload.note_id)
     config = NoteProcessingConfig(
         include_attachments=payload.include_attachments,
         attachment_chars_limit_per_file=payload.attachment_chars_limit_per_file,
@@ -1721,10 +1736,10 @@ async def op_notes_analyze(
     )
     ns = resolve_namespace_or_raise(note.namespace)
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(note.entity_id), user_id=scope.user_id
         )
-        row = await container.task_service.start_note_analyze(
+        row = await di.task_service.start_note_analyze(
             note_id=payload.note_id,
             note_name=note.name,
             namespace=ns,
@@ -1737,18 +1752,18 @@ async def op_notes_analyze(
         raise_conflict(exc)
     except ValueError as exc:
         _raise_service_error(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_entities_cards_bulk(
     payload: BulkCardsRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> dict[str, JsonObject]:
     _ = user
     _ = _company_scope()
-    return await container.entity_service.get_bulk_entity_cards(payload.entity_ids)
+    return await di.entity_service.get_bulk_entity_cards(payload.entity_ids)
 
 
 def _raise_graph_error(exc: Exception) -> Never:
@@ -1808,7 +1823,7 @@ class CrmRelationshipsPathPayload(StrictBaseModel):
 
 
 class CrmEntityRelationshipsResponse(StrictBaseModel):
-    relationships: list[RelationshipResponse]
+    relationships: list[Relationship]
 
 
 class CrmExclusiveRelatedResponse(StrictBaseModel):
@@ -1819,29 +1834,29 @@ async def op_entities_person_self(
     payload: EmptyPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityResponse:
     _ = payload
     scope = _company_scope()
-    person_id = await container.user_person_service.get_or_create_person_entity_id(
+    person_id = await di.user_person_service.get_or_create_person_entity_id(
         user.user_id,
         scope.company_id,
     )
-    entity = await container.entity_repository.get(person_id)
+    entity = await CRMEntity.get(person_id)
     if entity is None:
         raise_not_found(PlatformNotFoundError("Person entity not found"))
-    return await build_entity_response(container, entity)
+    return await build_entity_response(di, entity)
 
 
 async def op_entities_timeline_bounds(
     payload: CrmEntitiesTimelineBoundsPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> EntityTimelineBoundsResponse:
     _ = user
     _ = _company_scope()
-    bounds = await container.entity_service.get_timeline_bounds(
+    bounds = await di.entity_service.get_timeline_bounds(
         entity_type=payload.entity_type,
         entity_subtype=payload.entity_subtype,
         namespace=payload.namespace,
@@ -1853,14 +1868,14 @@ async def op_entities_overview_graph(
     payload: CrmOverviewGraphPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> InfluenceGraphResponse:
     _ = user
     _ = _company_scope()
     if len(payload.entity_ids) == 0:
         raise_invalid(ValueError("entity_ids must not be empty"))
     try:
-        return await container.graph_service.build_overview_graph(
+        return await di.graph_service.build_overview_graph(
             entity_ids=payload.entity_ids,
             max_depth=payload.max_depth,
             relationship_types=payload.relationship_types,
@@ -1877,12 +1892,12 @@ async def op_entities_influence_graph(
     payload: CrmEntitiesInfluenceGraphPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> InfluenceGraphResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.graph_service.build_influence_graph(
+        return await di.graph_service.build_influence_graph(
             entity_id=payload.entity_id,
             max_depth=payload.max_depth,
             relationship_types=payload.relationship_types,
@@ -1899,12 +1914,12 @@ async def op_entities_related(
     payload: CrmEntitiesRelatedPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> RelatedEntitiesResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.graph_service.get_related_entities(
+        return await di.graph_service.get_related_entities(
             entity_id=payload.entity_id,
             direction=payload.direction,
             relationship_type=payload.relationship_type,
@@ -1921,41 +1936,42 @@ async def op_entities_relationships(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> CrmEntityRelationshipsResponse:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    rows = await container.relationship_repository.get_by_entity(payload.entity_id)
-    return CrmEntityRelationshipsResponse(
-        relationships=[RelationshipResponse.model_validate(row) for row in rows]
-    )
+    rows = await Relationship.touching_in_company(
+        payload.entity_id,
+        scope.company_id,
+    ).all()
+    return CrmEntityRelationshipsResponse(relationships=rows)
 
 
 async def op_entities_exclusive_related(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> CrmExclusiveRelatedResponse:
     _ = user
     scope = _company_scope()
-    entity = await _require_entity(container, payload.entity_id)
+    entity = await _require_entity(di, payload.entity_id)
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         raise_invalid(ValueError("Only notes have exclusive related entities"))
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_entity(entity.entity_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    entities = await container.entity_service.get_exclusive_related_entities_for_note(
+    entities = await di.entity_service.get_exclusive_related_entities_for_note(
         payload.entity_id
     )
     return CrmExclusiveRelatedResponse(entities=entities)
@@ -1965,12 +1981,12 @@ async def op_relationships_path(
     payload: CrmRelationshipsPathPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> ShortestPathResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.graph_service.find_shortest_path(
+        return await di.graph_service.find_shortest_path(
             from_entity_id=payload.source_entity_id,
             to_entity_id=payload.target_entity_id,
             max_depth=payload.max_depth,
@@ -1998,31 +2014,36 @@ async def op_relationships_list(
     payload: CrmRelationshipsListPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> CursorPage[RelationshipResponse]:
+    di: Di,
+) -> CursorPage[Relationship]:
     _ = user
+    _ = di
     _ = _company_scope()
     if payload.namespace is not None and payload.namespace.strip() == "":
         raise_invalid(ValueError("namespace must not be empty"))
-    repo = container.relationship_repository
-    if payload.entity_id:
-        relationships = await repo.get_by_entity(payload.entity_id)
+    if payload.entity_id is not None and payload.entity_id != "":
+        relationships = await Relationship.touching_in_company(
+            payload.entity_id,
+            _company_scope().company_id,
+        ).all()
         if payload.namespace is not None:
             relationships = [row for row in relationships if row.namespace == payload.namespace]
-        return CursorPage[RelationshipResponse](
-            items=[RelationshipResponse.model_validate(row) for row in relationships],
+        return CursorPage[Relationship](
+            items=relationships,
             next_cursor=None,
             has_more=False,
         )
-    batch, next_cursor, has_more = await repo.get_all_for_graph(
-        limit=payload.limit, cursor=payload.cursor
+    page = await Relationship.graph_page(
+        limit=payload.limit,
+        cursor=payload.cursor,
     )
+    batch = page.items
     if payload.namespace is not None:
         batch = [row for row in batch if row.namespace == payload.namespace]
-    return CursorPage[RelationshipResponse](
-        items=[RelationshipResponse.model_validate(row) for row in batch],
-        next_cursor=next_cursor,
-        has_more=has_more,
+    return CursorPage[Relationship](
+        items=batch,
+        next_cursor=page.next_cursor,
+        has_more=page.has_more,
     )
 
 
@@ -2030,27 +2051,30 @@ async def op_relationships_item(
     payload: CrmRelationshipIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> RelationshipResponse:
+    di: Di,
+) -> Relationship:
     _ = user
     _ = _company_scope()
-    relationship = await container.relationship_repository.get(payload.relationship_id)
+    _ = di
+    relationship = await Relationship.get(payload.relationship_id)
     if relationship is None:
         raise_not_found(PlatformNotFoundError("Relationship not found"))
-    return RelationshipResponse.model_validate(relationship)
+    return relationship
 
 
 async def op_relationships_create(
     payload: RelationshipCreate,
     *,
     user: User,
-    container: CRMContainer,
-) -> RelationshipResponse:
+    di: Di,
+) -> Relationship:
     _ = user
+    _ = di
     scope = _company_scope()
-    all_types = await container.relationship_type_repository.list_all_by_company(
-        include_system=True
-    )
+    all_types = await RelationshipType.in_company(
+        scope.company_id,
+        include_system=True,
+    ).all()
     valid_type_ids = {row.type_id for row in all_types}
     if payload.relationship_type not in valid_type_ids:
         raise_invalid(ValueError(f"Unknown relationship_type: {payload.relationship_type}"))
@@ -2069,23 +2093,22 @@ async def op_relationships_create(
         updated_at=now,
     )
     try:
-        created = await container.relationship_repository.create(relationship)
-    except IntegrityError as exc:
-        if "uq_relationships_unique_edge" not in str(exc):
-            raise
+        created = await Relationship.create(relationship)
+    except UniqueViolationError:
         raise_conflict(PlatformConflictError("Relationship already exists"))
-    return RelationshipResponse.model_validate(created)
+    return created
 
 
 async def op_relationships_remove(
     payload: CrmRelationshipIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
+    _ = di
     _ = _company_scope()
-    deleted = await container.relationship_repository.delete(payload.relationship_id)
+    deleted = await Relationship.delete_by_id(payload.relationship_id)
     if not deleted:
         raise_not_found(PlatformNotFoundError("Relationship not found"))
 
@@ -2094,17 +2117,19 @@ async def op_relationship_types_list(
     payload: CrmOffsetPagePayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> OffsetPage[RelationshipTypeResponse]:
+    di: Di,
+) -> OffsetPage[RelationshipType]:
     _ = user
-    _ = _company_scope()
-    repo = container.relationship_type_repository
-    types, total = await asyncio.gather(
-        repo.list_by_company(include_system=True, limit=payload.limit, offset=payload.offset),
-        repo.count_all_for_company(include_system=True),
+    _ = di
+    company_id = _company_scope().company_id
+    rows = RelationshipType.in_company(
+        company_id,
+        include_system=True,
     )
-    return OffsetPage[RelationshipTypeResponse](
-        items=[RelationshipTypeResponse.model_validate(row) for row in types],
+    total = await rows.count()
+    types = await rows.order_by("type_id").limit(payload.limit).offset(payload.offset).all()
+    return OffsetPage[RelationshipType](
+        items=types,
         total=total,
         limit=payload.limit,
         offset=payload.offset,
@@ -2115,11 +2140,13 @@ async def op_relationship_types_create(
     payload: RelationshipTypeCreate,
     *,
     user: User,
-    container: CRMContainer,
-) -> RelationshipTypeResponse:
+    di: Di,
+) -> RelationshipType:
     _ = user
-    _ = _company_scope()
+    _ = di
+    scope = _company_scope()
     rel_type = RelationshipType(
+        company_id=scope.company_id,
         type_id=payload.type_id,
         name=payload.name,
         description=payload.description,
@@ -2132,12 +2159,10 @@ async def op_relationship_types_create(
         is_system=False,
     )
     try:
-        created = await container.relationship_type_repository.create_custom_type(rel_type)
-    except ValueError as exc:
-        raise_invalid(exc)
-    except IntegrityError as exc:
-        raise_conflict(exc)
-    return RelationshipTypeResponse.model_validate(created)
+        created = await RelationshipType.create(rel_type)
+    except UniqueViolationError:
+        raise_conflict(PlatformConflictError(f"Relationship type {payload.type_id} already exists"))
+    return created
 
 
 class CrmSuggestsListPayload(StrictBaseModel):
@@ -2156,11 +2181,11 @@ async def op_suggests_list(
     payload: CrmSuggestsListPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> OffsetPage[SuggestResponse]:
+    di: Di,
+) -> OffsetPage[CRMSuggest]:
     _ = user
     _ = _company_scope()
-    return await container.suggest_service.list_suggests(
+    return await di.suggest_service.list_suggests(
         payload.namespace, payload.status, payload.limit, payload.offset
     )
 
@@ -2169,34 +2194,32 @@ async def op_suggests_resolve(
     payload: CrmSuggestKeyPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> SuggestResponse:
+    di: Di,
+) -> CRMSuggest:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.suggest_service.resolve_suggest(
+        return await di.suggest_service.resolve_suggest(
             payload.suggest_id, namespace=payload.namespace
         )
     except ValueError as exc:
         raise_invalid(exc)
-    return SuggestResponse.model_validate(row)
 
 
 async def op_suggests_dismiss(
     payload: CrmSuggestKeyPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> SuggestResponse:
+    di: Di,
+) -> CRMSuggest:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.suggest_service.dismiss_suggest(
+        return await di.suggest_service.dismiss_suggest(
             payload.suggest_id, namespace=payload.namespace
         )
     except ValueError as exc:
         raise_invalid(exc)
-    return SuggestResponse.model_validate(row)
 
 
 class CrmAccessRequestIdPayload(StrictBaseModel):
@@ -2217,12 +2240,12 @@ async def op_access_requests_create(
     payload: AccessRequestCreate,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AccessRequestResponse:
     scope = _company_scope()
     _ = user
     try:
-        row = await container.access_request_service.create_access_request(
+        row = await di.access_request_service.create_access_request(
             entity_id=payload.resource_id,
             requester_user_id=scope.user_id,
             requester_company_id=scope.company_id,
@@ -2241,11 +2264,12 @@ async def op_access_requests_item(
     payload: CrmAccessRequestIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AccessRequestResponse:
     _ = user
+    _ = di
     _ = _company_scope()
-    row = await container.access_request_service.get_access_request(payload.access_request_id)
+    row = await AccessRequest.get(payload.access_request_id)
     if row is None:
         raise_not_found(PlatformNotFoundError("Request not found"))
     return AccessRequestResponse.model_validate(row)
@@ -2255,17 +2279,17 @@ async def op_access_requests_update(
     payload: CrmAccessRequestUpdatePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AccessRequestResponse:
     scope = _company_scope()
     _ = user
     try:
         if payload.status == AccessRequestStatus.APPROVED:
-            row = await container.access_request_service.approve_access_request(
+            row = await di.access_request_service.approve_access_request(
                 payload.access_request_id, scope.user_id
             )
         elif payload.status == AccessRequestStatus.REJECTED:
-            row = await container.access_request_service.reject_access_request(
+            row = await di.access_request_service.reject_access_request(
                 payload.access_request_id, scope.user_id
             )
         else:
@@ -2283,18 +2307,18 @@ async def op_access_requests_list(
     payload: CrmAccessRequestListPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[AccessRequestResponse]:
     _ = user
     scope = _company_scope()
     rows, total = await asyncio.gather(
-        container.access_request_service.list_access_requests(
+        di.access_request_service.list_access_requests(
             company_id=scope.company_id,
             status=payload.status,
             limit=payload.limit,
             offset=payload.offset,
         ),
-        container.access_request_service.count_access_requests(
+        di.access_request_service.count_access_requests(
             company_id=scope.company_id, status=payload.status
         ),
     )
@@ -2314,11 +2338,11 @@ async def op_entities_daily_summary(
     payload: DailySummaryRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> JsonObject:
     _ = user
     _ = _company_scope()
-    return await container.entity_service.get_daily_summary_cached(
+    return await di.entity_service.get_daily_summary_cached(
         date_str=payload.date,
         namespace=payload.namespace,
         force_rebuild=payload.force_rebuild,
@@ -2329,11 +2353,11 @@ async def op_entities_period_summary(
     payload: PeriodSummaryRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> JsonObject:
     scope = _company_scope()
     _ = user
-    summary = await container.entity_service.get_period_summary_cached(
+    summary = await di.entity_service.get_period_summary_cached(
         date_from=payload.date_from,
         date_to=payload.date_to,
         namespace=payload.namespace,
@@ -2382,12 +2406,12 @@ async def op_namespaces_lara_summary(
     payload: CrmLaraSummaryPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> LaraNamespaceSummaryResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.lara_namespace_service.get_summary(payload.namespace)
+        return await di.lara_namespace_service.get_summary(payload.namespace)
     except ValueError as exc:
         raise_invalid(exc)
 
@@ -2396,12 +2420,12 @@ async def op_tasks_daily_summary_start(
     payload: StartDailySummaryRequest,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.start_daily_summary(
+        row = await di.task_service.start_daily_summary(
             namespace=payload.namespace,
             date_str=payload.date_str,
             reason=payload.reason,
@@ -2410,19 +2434,19 @@ async def op_tasks_daily_summary_start(
         raise_conflict(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_period_summary_start(
     payload: StartPeriodSummaryRequest,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.start_period_summary(
+        row = await di.task_service.start_period_summary(
             namespace=payload.namespace,
             date_from=payload.date_from,
             date_to=payload.date_to,
@@ -2432,7 +2456,7 @@ async def op_tasks_period_summary_start(
         raise_conflict(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 class CrmTaskIdPayload(StrictBaseModel):
@@ -2451,24 +2475,24 @@ async def op_tasks_list(
     payload: CrmTasksListPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> OffsetPage[TaskResponse]:
+    di: Di,
+) -> OffsetPage[CRMTask]:
     _ = user
     _ = _company_scope()
     rows, total = await asyncio.gather(
-        container.task_service.list_tasks(
+        di.task_service.list_tasks(
             payload.namespace,
             task_type=payload.task_type,
             note_id=payload.note_id,
             limit=payload.limit,
             offset=payload.offset,
         ),
-        container.task_service.count_tasks(
+        di.task_service.count_tasks(
             payload.namespace, task_type=payload.task_type, note_id=payload.note_id
         ),
     )
-    return OffsetPage[TaskResponse](
-        items=[TaskResponse.model_validate(row) for row in rows],
+    return OffsetPage[CRMTask](
+        items=[CRMTask.model_validate(row) for row in rows],
         total=total,
         limit=payload.limit,
         offset=payload.offset,
@@ -2479,36 +2503,36 @@ async def op_tasks_item(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     scope = _company_scope()
-    row = await container.task_service.get_task(payload.task_id)
+    row = await di.task_service.get_task(payload.task_id)
     try:
         if row is None:
-            await container.authz_service.require_can_view(
+            await di.authz_service.require_can_view(
                 AuthzObject.company(scope.company_id), user_id=scope.user_id
             )
             raise_not_found(PlatformNotFoundError("task not found"))
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.crm_namespace(scope.company_id, row.namespace),
             user_id=scope.user_id,
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_created_entities(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> TaskCreatedEntitiesResponse:
     _ = user
     _ = _company_scope()
     try:
-        return await container.task_service.get_task_created_entities(payload.task_id)
+        return await di.task_service.get_task_created_entities(payload.task_id)
     except LookupError:
         raise_not_found(PlatformNotFoundError("task not found"))
     except ValueError as exc:
@@ -2519,16 +2543,16 @@ async def op_tasks_knowledge_import_start(
     payload: StartKnowledgeImportRequest,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     scope = _company_scope()
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             AuthzObject.crm_namespace(scope.company_id, payload.namespace.strip()),
             user_id=scope.user_id,
         )
-        row = await container.task_service.start_knowledge_import(
+        row = await di.task_service.start_knowledge_import(
             namespace=payload.namespace,
             mode=payload.mode,
             source_file_ids=payload.source_file_ids,
@@ -2543,73 +2567,73 @@ async def op_tasks_knowledge_import_start(
         raise_conflict(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_review_complete(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.complete_task_review(payload.task_id)
+        row = await di.task_service.complete_task_review(payload.task_id)
     except LookupError:
         raise_not_found(PlatformNotFoundError("task not found"))
     except ValueError as exc:
         raise_invalid(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_cancel(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.request_cancel(payload.task_id)
+        row = await di.task_service.request_cancel(payload.task_id)
     except ValueError as exc:
         _raise_service_error(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_rollback(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.rollback_task(payload.task_id)
+        row = await di.task_service.rollback_task(payload.task_id)
     except ValueError as exc:
         _raise_service_error(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 async def op_tasks_retry(
     payload: CrmTaskIdPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse:
+    di: Di,
+) -> CRMTask:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.task_service.retry_task(payload.task_id)
+        row = await di.task_service.retry_task(payload.task_id)
     except LookupError:
         raise_not_found(PlatformNotFoundError("task not found"))
     except ActiveTaskExistsError as exc:
         raise_conflict(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    return TaskResponse.model_validate(row)
+    return CRMTask.model_validate(row)
 
 
 class CrmActivityTasksListPayload(WorktrackerModel):
@@ -2623,12 +2647,12 @@ async def op_activity_tasks_create(
     payload: ActivityTaskCreateRequest,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> ActivityTaskResponse:
     _ = user
     scope = _company_scope()
     try:
-        entity = await container.entity_service.create_entity(
+        entity = await di.entity_service.create_entity(
             entity_type="task",
             name=payload.title,
             description=payload.description,
@@ -2644,14 +2668,14 @@ async def op_activity_tasks_create(
         raise_invalid(exc)
     except ValueError as exc:
         _raise_service_error(exc)
-    work_item = await container.crm_work_item_service.get_for_task(
+    work_item = await di.crm_work_item_service.get_for_task(
         company_id=entity.company_id,
         entity_id=entity.entity_id,
     )
     if work_item is None:
         raise RuntimeError("Paired WorkItem was not created for the CRM task")
     return ActivityTaskResponse(
-        entity=await build_entity_response(container, entity),
+        entity=await build_entity_response(di, entity),
         work_item=work_item,
     )
 
@@ -2660,18 +2684,18 @@ async def op_activity_tasks_list(
     payload: CrmActivityTasksListPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> OffsetPage[WorkItem]:
     _ = user
     scope = _company_scope()
-    items = await container.crm_work_item_service.list_crm_activity_work_items(
+    items = await di.crm_work_item_service.list_crm_activity_work_items(
         company_id=scope.company_id,
         namespace=payload.namespace,
         state=payload.state,
         limit=payload.limit,
         offset=payload.offset,
     )
-    total = await container.work_item_service.count(
+    total = await WorkItem.count_work_items(
         scope.company_id,
         namespace=payload.namespace,
         kind=WorkItemKind.CRM_ACTIVITY,
@@ -2699,12 +2723,12 @@ async def op_attachments_list(
     payload: CrmEntityIdPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> ListResponse[EntityAttachment]:
     _ = user
     _ = _company_scope()
     try:
-        rows = await container.attachment_service.get_attachments(entity_id=payload.entity_id)
+        rows = await di.attachment_service.get_attachments(entity_id=payload.entity_id)
     except ValueError as exc:
         _raise_service_error(exc)
     return ListResponse[EntityAttachment](
@@ -2716,12 +2740,12 @@ async def op_attachments_attach(
     payload: CrmAttachmentsAttachPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> AttachmentAttachResponse:
     _ = user
     _ = _company_scope()
     try:
-        row = await container.attachment_service.add_attachment(
+        row = await di.attachment_service.add_attachment(
             entity_id=payload.entity_id,
             file_id=payload.file_id,
         )
@@ -2734,12 +2758,12 @@ async def op_attachments_remove(
     payload: CrmAttachmentsRemovePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> None:
     _ = user
     _ = _company_scope()
     try:
-        await container.attachment_service.remove_attachment(
+        await di.attachment_service.remove_attachment(
             entity_id=payload.entity_id,
             document_id=payload.attachment_id,
         )
@@ -2789,34 +2813,34 @@ def _optional_header_value(value: str | None, field: str) -> str | None:
 
 
 async def _require_integration_namespace(
-    container: CRMContainer,
+    di: Di,
     scope: CompanyScope,
     namespace_name: str,
 ) -> Namespace:
-    ns = await container.namespace_service.get(namespace_name.strip())
+    ns = await di.namespace_service.get(namespace_name.strip())
     if ns is None or ns.company_id != scope.company_id:
         raise_not_found(PlatformNotFoundError("namespace not found"))
     return ns
 
 
 def _integration_connector(
-    container: CRMContainer, provider_id: str
+    di: Di, provider_id: str
 ) -> NamespaceIntegrationConnector:
     try:
-        return container.integration_registry.get(provider_id.strip())
+        return di.integration_registry.get(provider_id.strip())
     except KeyError as exc:
         raise_invalid(exc)
 
 
 async def _refreshed_manifest_item(
-    container: CRMContainer,
+    di: Di,
     connector: NamespaceIntegrationConnector,
     *,
     namespace_name: str,
     company_id: str,
     user_id: str,
 ) -> IntegrationManifestItem:
-    refreshed = await container.namespace_service.get(namespace_name)
+    refreshed = await di.namespace_service.get(namespace_name)
     if refreshed is None:
         raise_not_found(PlatformNotFoundError("namespace not found"))
     return await connector.manifest_item(
@@ -2831,12 +2855,12 @@ async def op_namespace_integrations_list(
     payload: CrmIntegrationNamespacePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> ListResponse[IntegrationManifestItem]:
     _ = user
     scope = _company_scope()
-    ns = await _require_integration_namespace(container, scope, payload.namespace_name)
-    items = await container.integration_registry.build_manifest(
+    ns = await _require_integration_namespace(di, scope, payload.namespace_name)
+    items = await di.integration_registry.build_manifest(
         namespace_name=ns.name,
         company_id=scope.company_id,
         user_id=scope.user_id,
@@ -2849,12 +2873,12 @@ async def op_namespace_integrations_authorize(
     payload: CrmIntegrationAuthorizePayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> IntegrationAuthorizeResponse:
     _ = user
     scope = _company_scope()
-    _ = await _require_integration_namespace(container, scope, payload.namespace_name)
-    connector = _integration_connector(container, payload.provider_id)
+    _ = await _require_integration_namespace(di, scope, payload.namespace_name)
+    connector = _integration_connector(di, payload.provider_id)
     if not payload.return_path.startswith("/") or payload.return_path.startswith("//"):
         raise_invalid(ValueError("return_path must be a single-segment path"))
     return_origin = _optional_header_value(payload.return_origin, "return_origin")
@@ -2883,14 +2907,14 @@ async def op_namespace_integrations_auto_sync(
     payload: CrmIntegrationAutoSyncPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> IntegrationManifestItem:
     _ = user
     scope = _company_scope()
-    ns = await _require_integration_namespace(container, scope, payload.namespace_name)
-    connector = _integration_connector(container, payload.provider_id)
+    ns = await _require_integration_namespace(di, scope, payload.namespace_name)
+    connector = _integration_connector(di, payload.provider_id)
     try:
-        _ = await container.integration_auto_sync_service.apply_integration_auto_sync(
+        _ = await di.integration_auto_sync_service.apply_integration_auto_sync(
             company_id=scope.company_id,
             acting_user_id=scope.user_id,
             namespace_name=ns.name,
@@ -2902,7 +2926,7 @@ async def op_namespace_integrations_auto_sync(
     except ValueError as exc:
         _raise_service_error(exc)
     return await _refreshed_manifest_item(
-        container,
+        di,
         connector,
         namespace_name=ns.name,
         company_id=scope.company_id,
@@ -2914,14 +2938,14 @@ async def op_namespace_integrations_auto_note_ai(
     payload: CrmIntegrationAutoNoteAiPayload,
     *,
     user: User,
-    container: CRMContainer,
+    di: Di,
 ) -> IntegrationManifestItem:
     _ = user
     scope = _company_scope()
-    ns = await _require_integration_namespace(container, scope, payload.namespace_name)
-    connector = _integration_connector(container, payload.provider_id)
+    ns = await _require_integration_namespace(di, scope, payload.namespace_name)
+    connector = _integration_connector(di, payload.provider_id)
     try:
-        _ = await container.integration_auto_sync_service.apply_auto_note_ai_analyze(
+        _ = await di.integration_auto_sync_service.apply_auto_note_ai_analyze(
             company_id=scope.company_id,
             namespace_name=ns.name,
             provider_id=payload.provider_id.strip(),
@@ -2930,7 +2954,7 @@ async def op_namespace_integrations_auto_note_ai(
     except ValueError as exc:
         _raise_service_error(exc)
     return await _refreshed_manifest_item(
-        container,
+        di,
         connector,
         namespace_name=ns.name,
         company_id=scope.company_id,
@@ -2942,16 +2966,16 @@ async def op_namespace_integrations_sync(
     payload: CrmIntegrationProviderPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse | IntegrationSyncStats:
+    di: Di,
+) -> CRMTask | IntegrationSyncStats:
     _ = user
     _ = _company_scope()
-    connector = _integration_connector(container, payload.provider_id)
+    connector = _integration_connector(di, payload.provider_id)
     ns = payload.namespace_name.strip()
     pid = payload.provider_id.strip()
     if connector.entities_sync_runs_in_worker():
         try:
-            row = await container.task_service.start_namespace_integration_job(
+            row = await di.task_service.start_namespace_integration_job(
                 namespace=ns,
                 provider_id=pid,
                 job="entities",
@@ -2960,7 +2984,7 @@ async def op_namespace_integrations_sync(
             raise_conflict(exc)
         except ValueError as exc:
             raise_invalid(exc)
-        return TaskResponse.model_validate(row)
+        return CRMTask.model_validate(row)
     try:
         stats = await connector.sync_entities(ns)
     except ValueError as exc:
@@ -2972,16 +2996,16 @@ async def op_namespace_integrations_custom_fields_sync(
     payload: CrmIntegrationProviderPayload,
     *,
     user: User,
-    container: CRMContainer,
-) -> TaskResponse | IntegrationSyncStats:
+    di: Di,
+) -> CRMTask | IntegrationSyncStats:
     _ = user
     _ = _company_scope()
-    connector = _integration_connector(container, payload.provider_id)
+    connector = _integration_connector(di, payload.provider_id)
     ns = payload.namespace_name.strip()
     pid = payload.provider_id.strip()
     if connector.custom_fields_sync_runs_in_worker():
         try:
-            row = await container.task_service.start_namespace_integration_job(
+            row = await di.task_service.start_namespace_integration_job(
                 namespace=ns,
                 provider_id=pid,
                 job="custom_fields",
@@ -2990,7 +3014,7 @@ async def op_namespace_integrations_custom_fields_sync(
             raise_conflict(exc)
         except ValueError as exc:
             raise_invalid(exc)
-        return TaskResponse.model_validate(row)
+        return CRMTask.model_validate(row)
     try:
         stats = await connector.sync_custom_field_catalog(ns)
     except ValueError as exc:

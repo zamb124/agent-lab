@@ -8,12 +8,12 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.flow_ui_share_operations import (
     op_flows_flow_ui_shares_create,
     op_flows_flow_ui_shares_list,
     op_flows_flow_ui_shares_remove,
 )
-from apps.flows.src.container import FlowContainer
 from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.flow_ui_share import (
@@ -62,7 +62,7 @@ async def _open_session(client: AsyncClient, *, flow_id: str, context_id: str) -
 
 async def test_flow_ui_shares_create_list_remove_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
@@ -89,7 +89,7 @@ async def test_flow_ui_shares_create_list_remove_rest_match_op(
         assert listed.status_code == 200, listed.text
         with _system_scope(system_user_id) as user:
             op_listed = await op_flows_flow_ui_shares_list(
-                list_payload, user=user, container=container
+                list_payload, user=user, di=di
             )
         assert listed.json() == op_listed.model_dump(mode="json")
         assert listed.json()["items"][0]["grant_id"] == grant_id
@@ -103,7 +103,7 @@ async def test_flow_ui_shares_create_list_remove_rest_match_op(
                 await op_flows_flow_ui_shares_remove(
                     FlowUIShareGrantIdPayload(grant_id=grant_id),
                     user=user,
-                    container=container,
+                    di=di,
                 )
         assert raised.value.code == "not_found"
     finally:
@@ -112,7 +112,7 @@ async def test_flow_ui_shares_create_list_remove_rest_match_op(
 
 async def test_flow_ui_shares_create_missing_session_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
@@ -136,7 +136,7 @@ async def test_flow_ui_shares_create_missing_session_rest_match_op(
                         public_host="linnex.io",
                     ),
                     user=user,
-                    container=container,
+                    di=di,
                 )
         assert raised.value.code == "conflict"
     finally:
@@ -145,7 +145,7 @@ async def test_flow_ui_shares_create_missing_session_rest_match_op(
 
 async def test_flow_ui_shares_create_without_host_is_invalid(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
@@ -162,7 +162,7 @@ async def test_flow_ui_shares_create_without_host_is_invalid(
                         public_host="",
                     ),
                     user=user,
-                    container=container,
+                    di=di,
                 )
         assert raised.value.code == "ws_invalid_payload"
     finally:

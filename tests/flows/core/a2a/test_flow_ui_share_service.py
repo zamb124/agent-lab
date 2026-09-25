@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
 from core.models.flow_ui_share import FlowUIShareCreateRequest, FlowUIShareGrant
 from core.utils.tokens import TokenType, get_token_service
 from tests.flows._flow_ui_session import (
@@ -44,9 +43,9 @@ def _owner_scope(auth_token: str) -> tuple[str, str]:
     return token_data.user_id, token_data.company_id
 
 
-async def _start_session(client: AsyncClient, *, flow_id: str, context_id: str) -> str:
+async def _start_session(client: AsyncClient, di, *, flow_id: str, context_id: str) -> str:
     """Один текстовый ход создаёт durable-сессию; возвращает session_id."""
-    _ = await ensure_flow(flow_id=flow_id)
+    _ = await ensure_flow(flow_id=flow_id, di=di)
     task = await a2a_send(
         client,
         flow_id=flow_id,
@@ -62,13 +61,14 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
     app: object,
     auth_token_system: str,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     owner_user_id, company_id = _owner_scope(auth_token_system)
     flow_id = f"share-svc-{unique_id}"
     context_id = f"ctx-{unique_id}"
-    session_id = await _start_session(client, flow_id=flow_id, context_id=context_id)
-    service = get_container().flow_ui_share_service
+    session_id = await _start_session(client, di, flow_id=flow_id, context_id=context_id)
+    service = di.flow_ui_share_service
     tokens = get_token_service()
 
     created = await service.create(
@@ -129,7 +129,7 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
     assert exchanged.redacted_paths == ["/secret"]
 
     code = created.share_url.rstrip("/").split("/l/")[-1]
-    redirect = await get_container().short_link_service.resolve_absolute_redirect_url(
+    redirect = await di.short_link_service.resolve_absolute_redirect_url(
         code, host="linnex.io"
     )
     assert redirect is not None
@@ -146,7 +146,7 @@ async def test_live_share_is_exact_scoped_revocable_and_read_only_by_default(
             flow_id=flow_id,
             context_id=context_id,
         )
-    reloaded = await load_flow_ui_state(session_id)
+    reloaded = await load_flow_ui_state(session_id, di)
     assert reloaded.branch_id == "default"
 
 
@@ -156,13 +156,14 @@ async def test_share_requires_owner_and_tracks_durable_scope_drift(
     app: object,
     auth_token_system: str,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     owner_user_id, company_id = _owner_scope(auth_token_system)
     flow_id = f"share-scope-{unique_id}"
     context_id = f"ctx-scope-{unique_id}"
-    session_id = await _start_session(client, flow_id=flow_id, context_id=context_id)
-    service = get_container().flow_ui_share_service
+    session_id = await _start_session(client, di, flow_id=flow_id, context_id=context_id)
+    service = di.flow_ui_share_service
 
     with pytest.raises(ValueError, match="does not exist"):
         _ = await service.create(
@@ -202,9 +203,9 @@ async def test_share_requires_owner_and_tracks_durable_scope_drift(
         require_editor=True,
     )
 
-    state = await load_flow_ui_state(session_id)
+    state = await load_flow_ui_state(session_id, di)
     drifted = state.model_copy(update={"branch_id": "other-branch"})
-    await get_container().workflow_runtime.save_state(session_id, drifted)
+    await di.workflow_runtime.save_state(session_id, drifted)
     with pytest.raises(PermissionError, match="durable identity"):
         _ = await service.authorize(
             grant_id=created.grant.grant_id,
@@ -220,14 +221,14 @@ async def test_expired_grant_is_inactive_via_repository(
     app: object,
     auth_token_system: str,
     unique_id: str,
+    di,
 ) -> None:
     _ = app
     owner_user_id, company_id = _owner_scope(auth_token_system)
     flow_id = f"share-exp-{unique_id}"
     context_id = f"ctx-exp-{unique_id}"
-    _ = await _start_session(client, flow_id=flow_id, context_id=context_id)
-    repository = get_container().flow_ui_share_repository
-    service = get_container().flow_ui_share_service
+    _ = await _start_session(client, di, flow_id=flow_id, context_id=context_id)
+    service = di.flow_ui_share_service
     expired = FlowUIShareGrant(
         grant_id=f"expired-grant-{unique_id}-pad-to-24chars",
         company_id=company_id,
@@ -239,7 +240,7 @@ async def test_expired_grant_is_inactive_via_repository(
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
         created_at=datetime.now(UTC) - timedelta(minutes=10),
     )
-    _ = await repository.create(expired)
+    _ = await FlowUIShareGrant.set(expired)
     with pytest.raises(PermissionError, match="expired or revoked"):
         _ = await service.authorize(
             grant_id=expired.grant_id,
@@ -247,4 +248,4 @@ async def test_expired_grant_is_inactive_via_repository(
             flow_id=flow_id,
             context_id=context_id,
         )
-    assert await repository.get_active(expired.grant_id) is None
+    assert await FlowUIShareGrant.get_active(expired.grant_id) is None

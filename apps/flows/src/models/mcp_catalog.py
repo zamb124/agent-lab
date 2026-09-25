@@ -8,7 +8,10 @@ from datetime import datetime
 from enum import Enum
 from typing import ClassVar, Literal, Self, cast
 
+from oxyde import Field as DbField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from core.models.platform_model import PlatformModel
 
 __all__ = [
     "MCPAuthPolicy",
@@ -65,30 +68,36 @@ def compute_catalog_snapshot_hash(
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-class MCPCatalogEntry(BaseModel):
-    """Запись глобального MCP catalog (не per-company)."""
+class MCPCatalogEntry(PlatformModel):
+    """Глобальный каталог MCP. Таблица ``mcp_catalog`` в базе flows."""
 
+    __database_alias__: ClassVar[str | None] = "flows"
+    __global_model__: ClassVar[bool] = True
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    catalog_id: str = Field(..., min_length=2, max_length=64)
-    registry_name: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    description: str | None = Field(default=None)
-    version: str | None = Field(default=None)
-    upstream_url: str = Field(..., min_length=8)
-    transport_type: Literal["http", "sse"] = Field(default="http")
-    deployment_class: Literal["remote_https"] = Field(default="remote_https")
-    host_class: MCPCatalogHostClass = Field(default=MCPCatalogHostClass.DIRECT)
-    auth_policy: MCPAuthPolicy = Field(default=MCPAuthPolicy.UNKNOWN)
-    auth_template: dict[str, str] = Field(default_factory=dict)
-    required_variables: list[str] = Field(default_factory=list)
-    verify_status: MCPCatalogVerifyStatus = Field(default=MCPCatalogVerifyStatus.PENDING)
-    tool_count_snapshot: int = Field(default=0, ge=0)
-    catalog_snapshot_hash: str = Field(..., min_length=64, max_length=64)
-    platform_approved: bool = Field(default=False)
-    is_deprecated: bool = Field(default=False)
-    last_crawled_at: datetime | None = Field(default=None)
-    last_verified_at: datetime | None = Field(default=None)
+    class Meta:
+        is_table: bool = True
+        table_name: str = "mcp_catalog"
+
+    catalog_id: str = DbField(db_pk=True, min_length=2, max_length=64)
+    registry_name: str = DbField(min_length=1)
+    title: str = DbField(min_length=1)
+    upstream_url: str = DbField(min_length=8)
+    catalog_snapshot_hash: str = DbField(min_length=64, max_length=64)
+    description: str | None = DbField(default=None)
+    version: str | None = DbField(default=None)
+    transport_type: Literal["http", "sse"] = DbField(default="http", db_type="TEXT")
+    deployment_class: Literal["remote_https"] = DbField(default="remote_https", db_type="TEXT")
+    host_class: MCPCatalogHostClass = DbField(default=MCPCatalogHostClass.DIRECT)
+    auth_policy: MCPAuthPolicy = DbField(default=MCPAuthPolicy.UNKNOWN)
+    auth_template: dict[str, str] = DbField(default_factory=dict)
+    required_variables: list[str] = DbField(default_factory=list)
+    verify_status: MCPCatalogVerifyStatus = DbField(default=MCPCatalogVerifyStatus.PENDING)
+    tool_count_snapshot: int = DbField(default=0, ge=0)
+    platform_approved: bool = DbField(default=False)
+    is_deprecated: bool = DbField(default=False)
+    last_crawled_at: datetime | None = DbField(default=None)
+    last_verified_at: datetime | None = DbField(default=None)
 
     def recompute_snapshot_hash(self) -> str:
         return compute_catalog_snapshot_hash(

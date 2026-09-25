@@ -15,6 +15,7 @@ from core.identity.flow_employee import (
     ensure_flow_employee,
     flow_employee_user_id,
 )
+from core.models.identity_models import User
 from core.worktracker.models import (
     ActorKind,
     SystemActor,
@@ -29,11 +30,9 @@ pytestmark = pytest.mark.asyncio
 _NOTIFY_ASSIGNED = "notify/worktracker/work_item_assigned_received"
 
 
-async def _provision_employee(flow_id: str, curator_id: str) -> str:
+async def _provision_employee(flow_id: str, curator_id: str, di) -> str:
     """Сидит flow + сотрудника-агента в shared/flows БД, чтобы inbox-диспатч прошёл."""
-    from apps.flows.src.container import get_container
 
-    container = get_container()
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=f"Dispatch flow {flow_id}",
@@ -49,9 +48,9 @@ async def _provision_employee(flow_id: str, curator_id: str) -> str:
             enabled=True, roles=["member"], curator_user_ids=[curator_id]
         ),
     )
-    await container.flow_repository.set(flow_config)
+    await FlowConfig.create_version(flow_config)
     await ensure_flow_employee(
-        container,
+        di,
         flow_id=flow_id,
         company_id="system",
         name=f"AI Worker {flow_id}",
@@ -61,12 +60,10 @@ async def _provision_employee(flow_id: str, curator_id: str) -> str:
     return flow_employee_user_id(flow_id)
 
 
-async def _cleanup_employee(flow_id: str) -> None:
-    from apps.flows.src.container import get_container
+async def _cleanup_employee(flow_id: str, di) -> None:
 
-    container = get_container()
-    await deactivate_flow_employee(container, flow_id=flow_id, company_id="system")
-    await container.user_repository.delete(flow_employee_user_id(flow_id))
+    await deactivate_flow_employee(di, flow_id=flow_id, company_id="system")
+    await User.delete_by_id(flow_employee_user_id(flow_id))
 
 
 async def test_human_assignment_notifies(
@@ -85,11 +82,11 @@ async def test_human_assignment_notifies(
 
 
 async def test_employee_assignment_not_notified(
-    app, flows_service, worktracker_service, platform_events_listener, unique_id
+    app, flows_service, worktracker_service, platform_events_listener, unique_id, di
 ):
     _ = app, flows_service
     flow_id = f"disp_emp_{unique_id}"
-    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}")
+    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}", di=di)
     try:
         item = await worktracker_service.create(
             company_id="system",
@@ -105,15 +102,15 @@ async def test_employee_assignment_not_notified(
         assert isinstance(fetched.assignment, UsersAssignment)
         assert fetched.assignment.user_ids == [emp_id]
     finally:
-        await _cleanup_employee(flow_id)
+        await _cleanup_employee(flow_id, di=di)
 
 
 async def test_mixed_assignment_notifies_only_human(
-    app, flows_service, worktracker_service, platform_events_listener, unique_id
+    app, flows_service, worktracker_service, platform_events_listener, unique_id, di
 ):
     _ = app, flows_service
     flow_id = f"disp_mix_{unique_id}"
-    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}")
+    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}", di=di)
     human_id = f"human_mix_{unique_id}"
     try:
         await worktracker_service.create(
@@ -127,15 +124,15 @@ async def test_mixed_assignment_notifies_only_human(
         emp_events = await platform_events_listener(_NOTIFY_ASSIGNED, emp_id, 1.0)
         assert emp_events == []
     finally:
-        await _cleanup_employee(flow_id)
+        await _cleanup_employee(flow_id, di=di)
 
 
 async def test_reassign_human_to_employee(
-    app, flows_service, worktracker_service, unique_id
+    app, flows_service, worktracker_service, unique_id, di
 ):
     _ = app, flows_service
     flow_id = f"disp_re_{unique_id}"
-    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}")
+    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}", di=di)
     try:
         item = await worktracker_service.create(
             company_id="system",
@@ -151,15 +148,15 @@ async def test_reassign_human_to_employee(
         assert isinstance(reassigned.assignment, UsersAssignment)
         assert reassigned.assignment.user_ids == [emp_id]
     finally:
-        await _cleanup_employee(flow_id)
+        await _cleanup_employee(flow_id, di=di)
 
 
 async def test_repository_assignee_flow_id_filter(
-    app, flows_service, worktracker_service, unique_id
+    app, flows_service, worktracker_service, unique_id, di
 ):
     _ = app, flows_service
     flow_id = f"filter_flow_{unique_id}"
-    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}")
+    emp_id = await _provision_employee(flow_id, curator_id=f"cur_{unique_id}", di=di)
     try:
         target = await worktracker_service.create(
             company_id="system",
@@ -179,7 +176,7 @@ async def test_repository_assignee_flow_id_filter(
         assert target.work_item_id in ids
         assert other.work_item_id not in ids
     finally:
-        await _cleanup_employee(flow_id)
+        await _cleanup_employee(flow_id, di=di)
 
 
 async def test_queue_member_is_user_actor(app, worktracker_service, unique_id):

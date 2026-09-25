@@ -28,5 +28,5 @@ def test_silero_ru_latin_does_not_use_sch_digraph_for_school() -> None:
 
 
 def test_apply_tts_input_steps_unknown_id_raises() -> None:
-    with pytest.raises(ValueError, match="Неизвестный"):
+    with pytest.raises(ValueError, match="Unknown tts_input_steps"):
         apply_tts_input_steps("x", ("no_such_step",))

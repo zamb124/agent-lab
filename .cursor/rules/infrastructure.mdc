@@ -1,258 +1,41 @@
 ---
-description: "Инфраструктура: MicroK8s, Helm-чарт, ingress, observability, GPU-нода"
+description: "Инфраструктура: Helm-чарт в MicroK8s, образы и Python runtime, Granian, секреты, миграции, ingress, observability, деплой. Читать при правке deploy/ и Dockerfile"
+globs:
+  - "deploy/**"
+  - "Dockerfile*"
+  - ".github/workflows/**"
+  - "docker-compose-*.yaml"
 alwaysApply: false
 ---
+
 # Инфраструктура
 
-Платформа разворачивается единым **Helm-чартом** в **MicroK8s** на одной ноде. Один источник правды — `deploy/helm/agent-lab/`. Никаких Docker Compose в проде, никаких ручных `ufw`-правил.
-
-## Кластер
-
-| Роль | IP | Лейблы | Что бежит |
-|---|---|---|---|
-| Master + GPU | `31.192.111.33` | `kubernetes.io/hostname=master`, `accelerator=nvidia-gpu` | Postgres, Redis, Loki, Tempo, Grafana, все приложения и воркеры, LiveKit, Coturn, OnlyOffice, ingress, `provider_litserve`, NVIDIA device plugin. Control plane `guest-runtime` (порт 8024) — здесь. Docker-слоты `code_agent` запускаются через hostPath `/var/run/docker.sock` на этой же ноде. |
-| Guest farm | нет отдельной машины | — | Kubernetes-слоты, taint `dedicated=guest-runtime` и `join-guest-node.sh` не используются. Executor фермы — `docker` (прод) или `inprocess` (тесты). |
-
-Taint `dedicated=gpu` не ставится. `ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, не трогать.
-
-Связь внутри кластера — через CNI. Postgres и Redis — ClusterIP `postgres.platform.svc.cluster.local:5432` / `redis.platform.svc.cluster.local:6379`.
-
-**OpenFGA:** deploy/config (store, model, API URL, credentials, probes) — **`authorization.mdc`** + Helm/`conf.json` секция `openfga`. Helm `/healthz`: `timeoutSeconds: 5`, liveness `failureThreshold: 6`; `checkQueryCacheEnabled` off. Не дублировать ACL-логику в приложении.
-
-Домены apex (multi-brand): **primary** `linnex.io`, **legacy** `humanitec.ru` (и другие из `platform_brands`). DNS `@` и `*` на оба apex → `31.192.111.33`. Smoke: [`deploy/docs/multi-brand-prod-smoke.md`](../../deploy/docs/multi-brand-prod-smoke.md).
-
-Одноразовая настройка ноды — `deploy/cluster-setup.md` (`bootstrap-master.sh` + `bootstrap-nvidia.sh`, лейбл `accelerator=nvidia-gpu`).
-
-## Helm-чарт
-
-`deploy/helm/agent-lab/` — единственный источник манифестов:
-
-```
-Chart.yaml, values.yaml, values-prod.yaml
-templates/
-  01-platform-secrets.yaml      # Secret platform-secrets при platformSecrets.create=true
-  02-configmap-app-conf.yaml
-  10-postgres/                  # StatefulSet + Service + ConfigMap init
-  11-redis/                     # StatefulSet + Service
-  30-apps/                      # application Deployments + Services через range; initContainer db-migrate
-  40-workers/                   # worker Deployments через range; тот же db-migrate initContainer
-  50-gpu/litserve.yaml          # nodeSelector: accelerator=nvidia-gpu
-  60-external/                  # livekit, livekit-egress, coturn DaemonSet, onlyoffice
-  61-centrifugo/                # Centrifugo v6 + redis-realtime (noeviction)
-  70-observability/             # loki, tempo, grafana, alloy DaemonSet
-  80-ingress/                   # cluster-issuer + 4 Ingress
-files/                          # ConfigMap источники (loki, tempo, alloy, dashboards)
-```
-
-`values.yaml`:
-
-- образ `image.repository=ghcr.io/zamb124/agent-lab`; production deploy задаёт уникальный immutable `image.tag` (CI: `--set image.tag=$SHA`). `latest` для production запрещён: он ломает `SERVER__DEPLOYMENT_VERSION` и PWA-инвалидацию статики;
-- `masterNodeName: master` — куда прибиваются Postgres/Redis/Loki/Tempo;
-- `gpuNodeSelectorKey/Value: accelerator=nvidia-gpu` — куда прибивается LitServe;
-- `applications.<name>` (flows/frontend/crm/rag/sync/worktracker/wiki/office/scheduler-api/voice/browser/search/secrets/capability-gateway/code-runner-*) — порт, реплики, command;
-- `workers.<name>` (flows-worker, scheduler, rag-worker, sync-worker, crm-worker, crm-summary-worker, idle-worker, search-worker) — реплики и command для TaskIQ;
-- `litserve`, `livekit`, `livekitEgress`, `coturn`, `onlyoffice`, `observability.{loki,tempo,grafana,alloy}`, `ingress.*`;
-- `platformSecrets` + `platformSecretName: platform-secrets` — Helm создаёт Secret из `templates/01-platform-secrets.yaml` при `platformSecrets.create=true`. Значения через `--set-json platformSecrets=...` из `deploy/scripts/helm_platform_secrets_json.sh` и CI. Namespace релиза создаётся `helm upgrade --install ... --create-namespace`.
-
-`templates/_helpers.tpl::agentlab.appEnv` — общий блок env: URL баз через ClusterIP `postgres`/`redis`, OAuth, LLM, S3, push, OnlyOffice, OTLP. Все секреты — `valueFrom.secretKeyRef` на `platformSecretName`.
-
-## HTTP-сервер и Python runtime
-
-Все HTTP-сервисы запускаются через **Granian** (Rust ASGI поверх Hyper/Tokio), `--interface asgi --http auto --ws`. Один free-threaded Python-процесс на pod (shared interpreter), внутри — `GRANIAN_WORKERS` потоков-воркеров (каждый со своим asyncio loop) + `GRANIAN_RUNTIME_THREADS` Rust IO-потоков. Scaling между подами — `replicas:`. `import uvicorn` в `core/` и `apps/` запрещён — проверяется **`make check-no-uvicorn`** (входит в `make check-events-canon`).
-
-**Топология воркеров:**
-- `GRANIAN_WORKERS = 1` (фиксированно через `agentlab.appEnv` в `_helpers.tpl`). Для async-ASGI workers>1 запускают N независимых event loops, каждый отдельно вызывает ASGI lifespan startup → дублирующая инициализация global state (asyncpg/SQLAlchemy/Redis pools локальны к loop) → `RuntimeError: got Future attached to a different loop`. Scaling между подами — `replicas:`.
-- `GRANIAN_RUNTIME_THREADS = 2` (Rust IO threads per worker; для HTTP/2 и WebSocket).
-- Granian CLI читает эти ENV нативно, в `command` Helm/Docker `--workers` НЕ передаётся.
-- В `core/app/server.py` (программный запуск из `apps/<svc>/main.py`) — `_resolve_workers()` читает `GRANIAN_WORKERS` ENV, при отсутствии — 1.
-
-Free-threaded build (cp314t) даёт shared interpreter без fork-копирования (lower memory footprint) и параллельное исполнение background threads (`asyncio.to_thread`, ThreadPoolExecutor). Multi-worker внутри одного пода для ASGI **не подходит** даже на free-threaded — каждый worker всё равно = независимый event loop с локальными connection pools.
-
-Базовый docker-образ — `ghcr.io/astral-sh/uv:bookworm-slim` + `uv python install 3.14t` + `uv python pin 3.14t` + `ENV PYTHON_GIL=0`. Версия CPython — **3.14 free-threaded (PEP 779, cp314t ABI)**. Локальный `__main__` каждого `apps/<svc>/main.py` использует `core.app.server.serve(<service>, "apps.<svc>.main:app", settings)`, который сам поднимает `granian.Granian(...)` и пишет `service.python_runtime` (с `gil_enabled`) + `service.granian_topology` (с `workers`/`runtime_threads`/`cpu_count`) на старте.
-
-Статика отдаётся Granian-ом нативно через `--static-path-route` / `--static-path-mount` (см. `command:` в `values.yaml`). FastAPI `StaticFiles` оставлен только для in-process `httpx.ASGITransport` в тестах.
-
-**ML known limitation:** в `apps/provider_litserve` и `apps/rag_worker` импорт HuggingFace стека (`transformers`, `sentence-transformers`, `flagembedding`, `tokenizers`, `pyannote-audio`) автоматически включает GIL внутри их процесса. Эти сервисы перечислены в `core.app.server.ML_GIL_RESURRECTION_SERVICES` и помечены в `check_ft_wheels.sh` allowlist.
-
-**`provider_litserve` собирается из отдельного GPU-образа** на **Python 3.14 GIL build** (`Dockerfile.gpu` → `ghcr.io/<owner>/agent-lab-gpu:<sha>`, base — `Dockerfile.base.gpu` → `ghcr.io/<owner>/agent-lab-base-gpu:latest`). Причина: `silero_vad` тянет `torchaudio`, а его `_torchaudio.abi3.so` собран для GIL CPython и физически не загружается в free-threaded interpreter — `OSError: Could not load this library` (PEP 703: stable ABI несовместим с no-GIL ABI; upstream pytorch/audio не публикует cp314t wheels). Helm подключает GPU-образ через `litserve.image` (см. `templates/50-gpu/litserve.yaml` и `--set litserve.image=...` в `.github/workflows/deploy.yml`). Env — `agentlab.appEnvGilBuild` (`PYTHON_GIL=1` + shared platform env), не `agentlab.appEnv` (`PYTHON_GIL=0`); дублировать `PYTHON_GIL` в одном container spec нельзя — strategic-merge patch падает. Workflow сборки — `.github/workflows/build-base-gpu.yml`. Когда pytorch/audio выпустит cp314t wheels — оба GPU-файла можно удалить, вернув `provider_litserve` на общий 3.14t-образ.
-
-Остальные сервисы работают полноценно free-threaded.
-
-Совместимость зависимостей под cp314t — `make check-ft-wheels` (smoke-install в эфемерный venv с `--only-binary=:all:`).
-
-## Сервисы
-
-| Сервис | Порт | Реплики | Command (CMD заголовок) |
-|---|---|---|---|
-| flows | 8001 | 1 | `granian --interface asgi apps.flows.main:app …` |
-| frontend | 8002 | 1 | `granian --interface asgi apps.frontend.main:app …` |
-| crm | 8003 | 1 | `granian --interface asgi apps.crm.main:app …` |
-| rag | 8004 | 1 | `granian --interface asgi apps.rag.main:app …` |
-| sync | 8005 | 1 | `granian --interface asgi apps.sync.main:app …` |
-| worktracker | 8021 | 1 | `granian --interface asgi apps.worktracker.main:app …` |
-| wiki | 8023 | 1 | `granian --interface asgi apps.wiki.main:app …` |
-| scheduler-api | 8006 | 1 | `granian --interface asgi apps.scheduler.main:app …` |
-| office | 8008 | 1 | `granian --interface asgi apps.office.main:app …` |
-| voice | 8015 | 1 | `granian --interface asgi apps.voice.main:app …` |
-| browser | 8009 | 1 | `granian --interface asgi apps.browser.main:app …` + sidecar `zenika/alpine-chrome` (CDP 9222 в Pod) |
-| search | 8010 | 1 | `granian --interface asgi apps.search.main:app …` |
-| secrets | 8022 | 1 | `granian --interface asgi apps.secrets.main:app …` |
-| capability-gateway | 8016 | 1 | `granian --interface asgi apps.capability_gateway.main:app …` |
-| code-runner-python | 8017 | 1 | isolated Python runner |
-| code-runner-node | 8018 | 1 | isolated Node runner |
-| code-runner-go | 8019 | 1 | isolated Go runner |
-| code-runner-csharp | 8020 | 1 | isolated C# runner |
-| guest-runtime | 8024 | 1 | ферма `code_agent`: `granian … apps.guest_runtime.main:app`; ClusterIP, не Ingress; host docker.sock |
-| provider-litserve (GPU) | 8014 | 1 | `granian --interface asgi apps.provider_litserve.main:app …` (nodeSelector; ML GIL resurrection) |
-| flows-worker | — | 2 | `taskiq worker apps.flows_worker.worker:worker_app --workers 4` |
-| scheduler | — | 1 | `taskiq scheduler apps.scheduler.scheduler:scheduler` |
-| rag-worker | — | 1 | `taskiq worker apps.rag_worker.worker:worker_app --workers 2` (ML GIL resurrection) |
-| sync-worker | — | 1 | `taskiq worker apps.sync_worker.worker:worker_app --workers 2` |
-| crm-worker | — | 1 | `taskiq worker apps.crm_worker.worker:worker_app --workers 2` |
-| crm-summary-worker | — | 1 | `taskiq worker apps.crm_worker.summary_worker:worker_app --workers 2` |
-| idle-worker | — | 1 | `taskiq worker apps.idle_worker.worker:worker_app --workers 2` |
-| search-worker | — | 1 | `taskiq worker apps.search_worker.worker:worker_app --workers 1` |
-
-Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>`, разные `command:` (полная строка granian с `--static-path-route`/`--static-path-mount`) через `values.yaml`.
-
-**Frontend:** Deployment добавляет `initContainer` `extract-static`, копирует `/app/static/` в `emptyDir` `shared-static`. Frontend сам обслуживает статику.
-
-**Browser Runtime:** контейнер `chromium-cdp` даёт CDP `http://127.0.0.1:9222` внутри Pod, приложение подключается через Playwright `connect_over_cdp`. Публичного Ingress нет; flows/workers ходят на ClusterIP `http://browser:8009` через `SERVER__BROWSER_SERVICE_URL`. Локально `DevInterServiceProxy` не регистрирует префикс `browser` — только межсервисные вызовы по `SERVER__BROWSER_SERVICE_URL` / порту 8009.
-
-**CRM vendor (three.js, 3d-force-graph):** в Docker-образ запекается `node_modules/three/build` и `node_modules/3d-force-graph/dist` (стадия `js-vendor`); CRM Deployment отдаёт `/crm/ui/vendor/...` напрямую из `/app/node_modules/...`.
-
-## БД и миграции
-
-`postgres` — StatefulSet с PVC 50Gi на master (`storageClassName: microk8s-hostpath`). Args: `max_connections` и `shared_buffers` из `values.yaml` (`postgres.maxConnections`, `postgres.sharedBuffers`). Все сервисные БД создаются через `ConfigMap postgres-init-scripts` (mounted в `/docker-entrypoint-initdb.d/01-init-databases.sql` при первом старте; источник — `migrations/postgres/init.sql`).
-
-`redis` — StatefulSet с PVC 10Gi на master, AOF включён.
-
-Alembic миграции — **Helm hook Job** `migrations` (`post-install`, `post-upgrade`). InitContainer `wait-postgres` ждёт `pg_isready`, затем `python -m scripts.db_migrate upgrade`. Ничего вручную через psql не нужно.
-
-## Ingress
-
-`ingress-nginx` (MicroK8s `enable ingress`) + `cert-manager` (Let's Encrypt HTTP-01).
-
-| Хост | TLS Secret | Маршруты |
-|---|---|---|
-| `linnex.io` + `*.linnex.io` | `platform-tls` | `platform-services`: префиксы `/flows`, `/crm`, … — `router.priority: "10"`; `platform-frontend`: catch-all `/` — `router.priority: "-100"`. Низкий приоритет у frontend обязателен: иначе Traefik отдаёт wildcard `*.linnex.io` выше точного host (`grafana.linnex.io` и т.д.) и на поддоменах сервисов открывается SPA вместо целевого backend (см. traefik/traefik#4161). |
-| `livekit.linnex.io` | `platform-tls` | `/` → livekit:7880; `router.priority: "1000"` |
-| `onlyoffice.linnex.io` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "1000"` |
-| `grafana.linnex.io` | `platform-tls` | `/` → grafana:3000; `router.priority: "1000"` |
-| `humanitec.ru` + `*.humanitec.ru` | `platform-tls` | те же правила (legacy brand, regression) |
-| `livekit.humanitec.ru` | `platform-tls` | `/` → livekit:7880; `router.priority: "1000"` |
-| `onlyoffice.humanitec.ru` | `platform-tls` | `/` → onlyoffice:80; `router.priority: "1000"` |
-| `grafana.humanitec.ru` | `platform-tls` | `/` → grafana:3000; `router.priority: "1000"` |
-
-Отдельные Ingress (livekit, onlyoffice, grafana): `traefik.ingress.kubernetes.io/router.priority: "1000"` — выше `platform-services` (`10`) и `platform-frontend` (`-100`).
-
-`Deployment/livekit` использует `hostNetwork` и занятые порты на ноде — **strategy `Recreate`**, не `RollingUpdate`: иначе новый под зависает в `Pending`, пока жив старый.
-
-`platform` Ingress генерирует одинаковые правила для apex и wildcard через `range`. Аннотации: `proxy-body-size: 100m`, `proxy-read-timeout: 300s` (для `/documents` и WebSocket).
-
-**Traefik → Granian backend-hop:** app Service (`templates/30-apps/services.yaml`, `50-gpu/litserve.yaml`) **не** используют `traefik.ingress.kubernetes.io/service.serversscheme: h2c`. WebSocket-upgrade (и SSE) требуют HTTP/1.1 hop Traefik→backend; h2c (HTTP/2 cleartext) ломает Upgrade — Traefik отвечает `500`, UI WS-команды падают с `ws_timeout`. Granian `--http auto` обслуживает REST/WS/SSE по HTTP/1.1-hop; проверка — `deploy/scripts/cluster-health.sh` секция WebSocket upgrade.
-
-`ClusterIssuer letsencrypt-prod` создаётся чартом (`templates/80-ingress/cluster-issuer.yaml`); email — `values.certManager.email`. cert-manager должен быть установлен (`microk8s enable cert-manager`).
-
-**Wildcard TLS:** при HTTP-01 доступен только apex. Для `*.linnex.io` и `*.humanitec.ru` нужен DNS-01 — отдельный webhook (например `cert-manager-webhook-regru`) и `Certificate`-объект, монтируемый в тот же Secret `platform-tls`. Конфигурация webhook вне чарта (одноразовая, см. `deploy/cluster-setup.md`, `deploy/docs/multi-brand-prod-smoke.md`).
-
-`AuthMiddleware` каждого сервиса читает `Host` и резолвит `company_id` для поддоменов.
-
-PWA-маршруты (`/manifest.json`, `/sw.js`, `/offline.html`, `/.well-known/apple-app-site-association`, `/.well-known/assetlinks.json`) отдаёт frontend через `register_platform_pwa_routes` (`core/frontend/pwa/`).
-
-**Cluster health:** списки ожидаемых Deployments/StatefulSets/DaemonSets в `deploy/scripts/cluster-health.sh::EXPECTED_*` должны соответствовать включённым компонентам Helm values; при отключении сервиса править этот скрипт. См. `deploy/README.md`.
-
-## DNS
-
-A-записи у регистратора на `31.192.111.33` для каждого apex: `@`, `*` (и отдельные `livekit`, `onlyoffice`, `grafana`, `cdn`, `api` при multi-brand setup). Скрипт: `deploy/scripts/setup-brand-dns.sh`. Primary apex — `linnex.io`; `humanitec.ru` — legacy regression.
-
-## GPU (provider_litserve на master)
-
-LitServe на `master` через `litserve.nodeName: master` + `gpuNodeNames: [master]` → `nvidia.com/gpu: 1`. Манифест: `templates/50-gpu/litserve.yaml`. Taint `dedicated=gpu` не используется.
-
-- Образ: **отдельный** `ghcr.io/zamb124/agent-lab-gpu:<image.tag>` (Python 3.14 GIL — `Dockerfile.gpu` + `Dockerfile.base.gpu`). Не общий 3.14t-стек, так как `torchaudio` (через `silero_vad`) не имеет cp314t wheels — см. секцию "HTTP-сервер и Python runtime". Helm подключает через `litserve.image`, deploy workflow передаёт `--set litserve.image="${IMAGE_GPU}:${tag}"`. Command: `granian --interface asgi apps.provider_litserve.main:app ...` (см. `templates/50-gpu/litserve.yaml`).
-- ENV: `PROVIDER_LITSERVE__INFRA__BACKEND=flagllm`, `PROVIDER_LITSERVE__INFRA__ACCELERATOR=cuda`, `MODEL_ID=Qwen/Qwen3-Reranker-0.6B`, `EMBEDDING_MODEL_ID=Qwen/Qwen3-Embedding-0.6B`, `HF_TOKEN` из `platform-secrets`.
-- Ресурсы: `nvidia.com/gpu: 1` (request + limit).
-- Кэш моделей: PVC `litserve-model-cache` (50Gi).
-- Доступ к Postgres/Redis: ClusterIP `postgres:5432` / `redis:6379`.
-- Доступ от других сервисов: ClusterIP `provider-litserve.platform.svc.cluster.local:8014` (env `PROVIDER_LITSERVE__API__BASE_URL=http://provider-litserve:8014/v1` — задано в `agentlab.appEnv`).
-- Внешний URL: `https://linnex.io/litserve/*` (primary); `https://humanitec.ru/litserve/*` (legacy).
-
-NVIDIA driver и `nvidia-container-toolkit` ставит `deploy/scripts/bootstrap-nvidia.sh` (из `bootstrap-master.sh`). Device Plugin пробрасывает `/dev/nvidia*` при request `nvidia.com/gpu`.
-
-### Smoke-тест GPU
-
-```bash
-kubectl get pods -n platform -o wide | grep provider-litserve   # на master
-kubectl exec -n platform deployment/provider-litserve -- nvidia-smi
-curl -fsS https://linnex.io/litserve/health
-# legacy regression:
-curl -fsS https://humanitec.ru/litserve/health
-```
-
-## Деплой
-
-CI (`.github/workflows/deploy.yml`, `workflow_dispatch` или push в `main`):
-
-1. `build` job: `docker build --target full` → push в GHCR (`ghcr.io/zamb124/agent-lab:<sha>` + `:latest`).
-2. `deploy` job: `helm upgrade --install agent-lab ./deploy/helm/agent-lab --namespace platform --create-namespace --set image.tag=<sha> ...`; секреты из GitHub Actions передаются через `deploy/scripts/helm_platform_secrets_json.sh` и `--set-json platformSecrets=...` (`create: true` внутри JSON).
-3. Verification: `kubectl get pods -n platform`.
-
-Никаких SSH/SCP/`docker compose` в CI. Доступ к кластеру — секрет `KUBECONFIG_B64` из `deploy/scripts/kubeconfig-for-github-actions.sh` (`https://31.192.111.33:16443`, не `127.0.0.1` из `microk8s config`).
-
-Локально: `make k8s-lint`, `make k8s-template`, `make k8s-deploy IMAGE_TAG=<sha>`, `make k8s-status`, `make k8s-logs SVC=frontend`, `make k8s-rollback`, `make k8s-uninstall` (PVC сохраняются). Полный список секретов и переменных — `deploy/README.md`.
-
-## Observability
-
-Стек — часть Helm-чарта (`templates/70-observability/`):
-
-| Компонент | Тип | PVC | Роль |
-|---|---|---|---|
-| **Loki** | StatefulSet (master) | 100Gi | Логи (14 дней, `files/loki.yaml`) |
-| **Tempo** | StatefulSet (master) | 50Gi | Трейсы (`files/tempo.yaml`) |
-| **Grafana** | Deployment (master) | 10Gi | UI, дашборды, Explore. `https://grafana.linnex.io` (primary), `https://grafana.humanitec.ru` (legacy) |
-| **Alloy** | DaemonSet (все ноды) | — | Сбор pod-логов через kubelet API + OTLP relay в Tempo |
-
-**Сбор логов:** Alloy DaemonSet с `ServiceAccount` + `ClusterRole` на чтение pods/namespaces/nodes. Конфиг `files/alloy.config`: `discovery.kubernetes role=pod`, фильтр `spec.nodeName=$HOSTNAME`, метки потока `namespace`, `pod`, `container`, `service` (из лейбла `app=<name>`), `node`. JSON-парсер вытаскивает `level` как Loki label; остальные поля (`trace_id`, `request_id`, `user_id`, …) остаются в теле, достаются `| json | field = "value"`.
-
-**Сбор трейсов:** OTLP gRPC `alloy:4317` (`OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в `agentlab.appEnv`); Alloy форвардит в Tempo через `tempo.platform.svc.cluster.local:4317`.
-
-**Авторизация Grafana:** `auth.proxy` в Grafana (`GF_AUTH_PROXY_HEADER_NAME=X-Auth-User`). Traefik `Middleware` `forwardAuth` на Ingress `grafana` вызывает `http://frontend.<namespace>.svc.cluster.local:<port>/frontend/api/auth/grafana-check`; тот же JWT cookie, что у платформы; только `company_id == "system"`. Ответ 200 с заголовком `X-Auth-User` Traefik пробрасывает в Grafana. **Traefik v3.x:** аннотация `traefik.ingress.kubernetes.io/router.middlewares` для CRD Middleware — **`<k8s-namespace>-grafana-forward-auth@kubernetescrd`** (например `platform-grafana-forward-auth@kubernetescrd`). Вид `grafana-forward-auth@kubernetescrd` без префикса namespace даёт в логах Traefik `middleware ... does not exist`, роут Grafana не создаётся, трафик уходит на catch-all frontend для `*.linnex.io` / `*.humanitec.ru` → главная landing. Хост `grafana.<domain>` не является company subdomain: `core.utils.domain.extract_company_subdomain` исключает субдомен `grafana`, иначе в production `CompanyResolver` отдавал бы 404 до handler. Шаблоны: [`deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-forward-auth-middleware.yaml), [`grafana-ingress.yaml`](deploy/helm/agent-lab/templates/80-ingress/grafana-ingress.yaml) (внутри же второй Ingress **`grafana-health`**: `path: /api/health`, `pathType: Exact`, `router.priority: "1001"`, без middleware — иначе forwardAuth даёт 401 без JWT и падает `cluster-health.sh` §13 / внешние пробы). При `applications.frontend.enabled=false` middleware не создаётся и аннотация не ставится.
-
-**Корреляция:** `trace_id` в логах (Loki) → Derived Field → Tempo waterfall. Поиск:
-
-```
-{service="crm"} | json | level="ERROR"
-{service="flows"} | json | trace_id="abc123..."
-{namespace="platform", service=~"flows|crm"} | json | request_id="..."
-```
-
-### Дашборды и алерты
-
-Дашборды provisioned как код (`deploy/helm/agent-lab/files/dashboards/`, ConfigMap `grafana-dashboards`): Platform Overview, HTTP Requests, Errors & Exceptions, TaskIQ Workers, LLM Usage, Traces, Log Volume, WebSocket / Realtime, Database, Security, **Crawl / RuNet Indexing** (`11-crawl-indexing.json`, uid `crawl-indexing`). Добавление: положить JSON в `files/dashboards/`, `make k8s-deploy` подхватит автоматически (новая ревизия ConfigMap → Grafana sidecar reload).
-
-Alert rules — `deploy/helm/agent-lab/files/grafana-alerts/` (ConfigMap `grafana-alerts`). Unified alerting на LogQL: High Error Rate (>5%/5 мин, critical), Service Down (нет логов >2 мин, critical), High 5xx Rate (>1%/5 мин, warning), TaskIQ High Failure Rate (>5%/10 мин, warning), LLM Errors (>10/5 мин, warning), Log Contract Violations (>0/1 мин, critical), Slow HTTP P99 (>5000 мс/5 мин, warning), High DB Latency (P95 >1000 мс/5 мин, warning). Contact points (email/webhook) — placeholder; production настраивается через Grafana UI или `files/grafana-alerts/contact-points.yaml`.
-
-## Локальная разработка
-
-Никакого Kubernetes на dev-машине. Postgres/Redis/MinIO — `docker-compose-dev.yaml`:
-
-```bash
-make dev-up          # postgres :54321, redis :63791, MinIO :19001/19011
-make app             # все Python сервисы локально через scripts/run.py
-```
-
-Тесты — `docker-compose-test.yaml` (`make test`, `make test-up/down`).
-
-## Что не покрывает чарт (одноразовая настройка)
-
-- SSH: pubkey в `/root/.ssh/authorized_keys`, затем `deploy/scripts/harden-ssh.sh` (из `bootstrap-master.sh`).
-- `bootstrap-master.sh`: NVIDIA, MicroK8s, аддоны `dns hostpath-storage ingress cert-manager`, лейбл `accelerator=nvidia-gpu`, **Docker Engine** (`bootstrap-host-docker.sh`) рядом с MicroK8s для `/var/run/docker.sock` (`guest-runtime`). Device plugin — в чарте, не addon `gpu`. Второй ноды нет (`join-cluster.sh` не в happy path). Не snap `docker`.
-- Whitelist Reg.ru API = `31.192.111.33`. DNS и TLS: `setup-brand-dns.sh` / `setup-wildcard-tls.sh` (в CI — с egress master).
-- `KUBECONFIG_B64`: `bash deploy/scripts/kubeconfig-for-github-actions.sh` + `gh secret set`.
-
-Все шаги — `deploy/cluster-setup.md`.
-
-## Параллельный сервис
-
-`ytai.tech` живёт на `84.38.184.105`, не namespace `platform`, не трогать.
+Прод — один Helm-чарт `deploy/helm/agent-lab/` в MicroK8s на одной ноде `master` (`31.192.111.33`, GPU, namespace `platform`). Операции, справочник кластера и runbooks — скил `.cursor/skills/devops-engineer/`.
+
+## Канон
+
+1. Манифесты — только чарт; Docker Compose — только локальный стек (`docker-compose-dev.yaml` — `make dev-up`, `docker-compose-test.yaml` — `make test-up`).
+2. Один immutable образ `ghcr.io/zamb124/agent-lab:<image.tag>` с разными `command:` в `values.yaml`; `latest` в prod запрещён (ломает `SERVER__DEPLOYMENT_VERSION` и инвалидацию PWA).
+3. Runtime — CPython 3.14t (`PYTHON_GIL=0`); совместимость колёс — `make check-ft-wheels`. `provider_litserve` — отдельный GIL-образ `agent-lab-gpu` (`Dockerfile.gpu`, env `agentlab.appEnvGilBuild`); ML-сервисы, включающие GIL, перечислены в `core.app.server.ML_GIL_RESURRECTION_SERVICES`.
+4. HTTP — Granian (`--interface asgi --http auto --ws`), `GRANIAN_WORKERS=1` (несколько workers — несколько event loop с дублированным глобальным состоянием), `GRANIAN_RUNTIME_THREADS=2`; масштабирование — `replicas`. Статика — `--static-path-route`/`--static-path-mount`.
+5. Секреты — Secret `platform-secrets` (`valueFrom.secretKeyRef`), значения из CI через `deploy/scripts/helm_platform_secrets_json.sh`; в `conf.json` — только плейсхолдеры → `configuration.mdc`.
+6. Миграции — init-контейнеры каждого pod: `wait-postgres`, затем `db-migrate` (`python -m scripts.db_migrate upgrade`); отдельного Job нет; базы создаёт `migrations/postgres/init.sql` → `database.mdc`.
+7. Ingress (Traefik): `platform-services` — priority `10`, catch-all frontend — `-100`, `livekit`/`onlyoffice`/`grafana` — `1000`; hop Traefik → Granian — HTTP/1.1 (h2c ломает WebSocket и SSE).
+8. Grafana — forwardAuth через `frontend` `/frontend/api/auth/grafana-check` (только компания `system`); субдомен `grafana` исключён из company subdomain (`extract_company_subdomain`).
+9. Observability: логи stdout → Alloy → Loki (14 дней), OTLP → Alloy → Tempo (7 дней); дашборды и алерты — код в `deploy/helm/agent-lab/files/`.
+10. `Deployment/livekit` (hostNetwork) — strategy `Recreate`.
+11. Списки `EXPECTED_*` в `deploy/scripts/cluster-health.sh` совпадают с включёнными компонентами values.
+12. Деплой — `.github/workflows/deploy.yml` (`helm upgrade --install` с `image.tag=<sha>`), доступ — секрет `KUBECONFIG_B64`; SSH, SCP и `docker compose` в CI запрещены.
+
+## Запреты
+
+1. Ручные манифесты и `ufw`-правила мимо чарта.
+2. `uvicorn` в `core/` и `apps/`.
+3. `ytai.tech` (`84.38.184.105`) — вне платформы, не трогать.
+
+## Гейты
+
+- `make check-no-uvicorn` (в `make check-events-canon`) — Granian only.
+- `make check-ft-wheels` — колёса под cp314t.
+- `make k8s-lint`, `make k8s-template` — валидность чарта.
+- `deploy/scripts/cluster-health.sh` — состав кластера, WebSocket upgrade, health Grafana.

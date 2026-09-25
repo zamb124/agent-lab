@@ -2,11 +2,13 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self, override
 
-from pydantic import BaseModel, ConfigDict, Field
+from oxyde import Field as DbField
+from pydantic import BaseModel, Field
 
 from core.flow_ui.document import FlowUIConversationSettings, FlowUIPageId
+from core.models.platform_model import PlatformModel
 
 
 class EmbedStatus(str, Enum):
@@ -21,29 +23,34 @@ EmbedPosition = Literal["bottom-right", "bottom-left"]
 DEFAULT_EMBED_INPUT_PLACEHOLDER = "Введите сообщение..."
 
 
-class EmbedConfig(BaseModel):
+class EmbedConfig(PlatformModel):
+    """Виджет. Глобальная таблица ``embed_configs`` в ``platform_shared``.
+
+    Публичный адрес и первичный ключ — ``embed_id``. ``company_id`` — колонка владельца.
+    Список консоли фильтрует ``company_id``.
     """
-    Конфигурация встраиваемого виджета чата.
-    Хранится с префиксом embed_config: в storage компании.
 
-    is_global=False - изоляция по компаниям через префикс company:{company_id}:
-    """
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(
-        json_schema_extra={"storage_prefix": "embed_config"}
-    )
-
-    embed_id: str = Field(
+    embed_id: str = DbField(
+        db_pk=True,
         title="ID виджета",
         description="Публичный идентификатор виджета",
         json_schema_extra={"readonly": True},
     )
-    name: str = Field(
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "embed_configs"
+
+    company_id: str = DbField(db_index=True, title="ID компании")
+    name: str = DbField(
         title="Название",
         description="Человекочитаемое название виджета",
         json_schema_extra={"placeholder": "Чат на главной странице"},
     )
-    flow_id: str = Field(
+    flow_id: str = DbField(db_index=True,
         title="ID агента",
         description="Агент, который будет отвечать в этом виджете",
     )
@@ -161,8 +168,9 @@ class EmbedConfig(BaseModel):
         title="Служебный виджет для одноразовой гостевой ссылки из редактора flow",
         description="Не показывается в списке embed configs консоли; создаётся только через preview-share API.",
     )
-    conversation: FlowUIConversationSettings | None = Field(
+    conversation: FlowUIConversationSettings | None = DbField(
         default=None,
+        db_type="JSONB",
         title="Настройки беседы для embed",
         description="Полные настройки блока conversation; None — как у flow",
     )
@@ -193,7 +201,7 @@ class EmbedConfig(BaseModel):
         description="Время создания виджета",
         json_schema_extra={"readonly": True},
     )
-    created_by: str = Field(
+    created_by: str = DbField(
         title="Создал",
         description="user_id создателя виджета",
         json_schema_extra={"readonly": True},
@@ -204,6 +212,38 @@ class EmbedConfig(BaseModel):
         description="Время последнего обновления",
         json_schema_extra={"readonly": True},
     )
+
+    @classmethod
+    async def embed_for_company(
+        cls,
+        embed_id: str,
+        company_id: str,
+    ) -> Self | None:
+        return await cls.objects.filter(
+            embed_id=embed_id,
+            company_id=company_id,
+        ).get_or_none()
+
+    @classmethod
+    async def list_for_company(
+        cls,
+        company_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[Self]:
+        return await (
+            cls.objects.filter(company_id=company_id)
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = is_create, update_fields
+        self.updated_at = datetime.now(timezone.utc)
+
 
 class EmbedInterfaceLook(BaseModel):
     """
@@ -241,27 +281,3 @@ class EmbedInterfaceLook(BaseModel):
             voice_default_on=config.voice_default_on,
             session_share_enabled=config.session_share_enabled,
         )
-
-
-class EmbedMapping(BaseModel):
-    """
-    Глобальный маппинг embed_id -> company_id.
-    Хранится с префиксом embed_mapping: глобально (is_global=True).
-
-    Необходим для публичного API, который не знает company_id заранее.
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(
-        json_schema_extra={"storage_prefix": "embed_mapping"}
-    )
-
-    embed_id: str = Field(
-        title="ID виджета",
-        description="Публичный идентификатор виджета",
-        json_schema_extra={"readonly": True},
-    )
-    company_id: str = Field(
-        title="ID компании",
-        description="ID компании, которой принадлежит виджет",
-        json_schema_extra={"readonly": True},
-    )

@@ -7,22 +7,24 @@
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
+
 
 @pytest.mark.asyncio
-async def test_reload_from_bundle_restores_config_from_disk(client, container, auth_headers_system):
+async def test_reload_from_bundle_restores_config_from_disk(client, di, auth_headers_system):
     """
     После порчи имени flow в БД reload подтягивает данные из bundle с диска обратно.
     """
     flow_id = "example_react"
-    cfg = await container.flow_repository.get(flow_id)
+    cfg = await FlowConfig.get_latest(flow_id)
     if cfg is None:
         pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
     assert cfg.source == "file"
     original_name = cfg.name
     corrupted = "__CORRUPTED_BY_TEST_RELOAD__"
     cfg.name = corrupted
-    await container.flow_repository.set(cfg)
-    after_corrupt = await container.flow_repository.get(flow_id)
+    await FlowConfig.create_version(cfg)
+    after_corrupt = await FlowConfig.get_latest(flow_id)
     assert after_corrupt is not None
     assert after_corrupt.name == corrupted
     response = await client.post(
@@ -32,7 +34,7 @@ async def test_reload_from_bundle_restores_config_from_disk(client, container, a
     payload = response.json()
     assert payload["flow_id"] == flow_id
     assert flow_id in payload.get("message", "")
-    restored = await container.flow_repository.get(flow_id)
+    restored = await FlowConfig.get_latest(flow_id)
     assert restored is not None
     assert restored.name == original_name
     assert restored.source == "file"
@@ -59,7 +61,7 @@ async def test_get_flow_has_no_bundle_update_after_reload_matches_disk(client, a
 
 @pytest.mark.asyncio
 async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
-    client, container, unique_id: str, auth_headers_system
+    client, di, unique_id: str, auth_headers_system
 ) -> None:
     _ = unique_id
     "\n    Метаданные редактора не участвуют в сравнении с disk-bundle: индикатор не зажигается.\n\n    Перед проверкой выполняем reload-from-bundle: в общей БД тестов ``example_react``\n    мог быть изменён другими кейсами — без синхронизации с диском семантика уже\n    расходится с bundle и флаг ложноположительный не из‑за metadata.\n    "
@@ -68,7 +70,7 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
         f"/flows/api/v1/flows/{flow_id}/reload-from-bundle", headers=auth_headers_system
     )
     assert reload_resp.status_code == 200, reload_resp.text
-    cfg = await container.flow_repository.get(flow_id)
+    cfg = await FlowConfig.get_latest(flow_id)
     if cfg is None:
         pytest.fail(f"Ожидался загруженный при старте flow {flow_id} (registry / lifespan)")
     assert (getattr(cfg, "source", None) or "manual") == "file"
@@ -77,7 +79,7 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
         cfg.metadata = {
             "sticky_notes": [{"id": "test-note-only-metadata", "x": 0, "y": 0, "text": "n"}]
         }
-        await container.flow_repository.set(cfg)
+        await FlowConfig.create_version(cfg)
         get_response = await client.get(
             f"/flows/api/v1/flows/{flow_id}", headers=auth_headers_system
         )
@@ -85,7 +87,7 @@ async def test_has_bundle_update_false_when_only_metadata_differs_from_bundle(
         assert get_response.json().get("has_bundle_update") is False
     finally:
         cfg.metadata = original_meta
-        await container.flow_repository.set(cfg)
+        await FlowConfig.create_version(cfg)
 
 
 @pytest.mark.asyncio

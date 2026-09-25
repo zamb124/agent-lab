@@ -233,12 +233,32 @@ async def test_concurrent_operations(rag_client, unique_id, auth_headers_system)
     assert len(results) == 3
     assert all("name" in r for r in results)
 
-    # Проверяем что все namespace созданы
-    list_response = await rag_client.get("/rag/api/v1/namespaces", headers=auth_headers_system)
-    namespaces = list_response.json()["items"]
+    found: set[str] = set()
+    offset = 0
+    while True:
+        list_response = await rag_client.get(
+            "/rag/api/v1/namespaces",
+            headers=auth_headers_system,
+            params={"limit": 200, "offset": offset},
+        )
+        assert list_response.status_code == 200, list_response.text
+        page = list_response.json()
+        items = page["items"]
+        if not isinstance(items, list):
+            raise AssertionError("namespaces items must be a list")
+        for item in items:
+            item_name = item["name"]
+            if isinstance(item_name, str):
+                found.add(item_name)
+        total = page["total"]
+        if not isinstance(total, int):
+            raise AssertionError("namespaces total must be an int")
+        offset += len(items)
+        if len(items) == 0 or offset >= total:
+            break
 
     for name in names:
-        assert any(ns["name"] == name for ns in namespaces)
+        assert name in found
 
 
 @pytest.mark.asyncio

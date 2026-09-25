@@ -152,6 +152,21 @@ tuples:
   - user: platform:global
     relation: platform
     object: datasource:acme/ds-public
+  - user: company:acme
+    relation: company
+    object: stock_warehouse:acme/wh1
+  - user: company:acme#member
+    relation: viewer
+    object: stock_warehouse:acme/wh1
+  - user: company:acme#member
+    relation: editor
+    object: stock_warehouse:acme/wh1
+  - user: user:anne
+    relation: owner
+    object: stock_warehouse:acme/wh-restricted
+  - user: company:acme
+    relation: company
+    object: stock_warehouse:acme/wh-restricted
   - user: flow:acme/flow1
     relation: flow
     object: flow_branch:acme/flow1/main
@@ -415,6 +430,30 @@ tests:
         assertions:
           can_view: false
           can_admin: false
+
+  - name: stock-warehouse-viewer-editor
+    check:
+      - user: user:bob
+        object: stock_warehouse:acme/wh1
+        assertions:
+          can_view: true
+          can_edit: true
+      - user: user:stranger
+        object: stock_warehouse:acme/wh1
+        assertions:
+          can_view: false
+          can_edit: false
+      - user: user:bob
+        object: stock_warehouse:acme/wh-restricted
+        assertions:
+          can_view: false
+          can_edit: false
+      - user: user:anne
+        object: stock_warehouse:acme/wh-restricted
+        assertions:
+          can_view: true
+          can_edit: true
+          can_admin: true
 
   - name: platform-namespace-company-and-personal
     check:

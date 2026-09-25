@@ -4,12 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.flow_ui_operations import (
     op_flows_flow_ui_assist,
     op_flows_flow_ui_schema,
     op_flows_flow_ui_templates,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.flow_ui_assist import FlowUIAssistRequest, FlowUIAssistResult
 from core.context import require_context
 from core.flow_ui.templates import FlowUITemplate, FlowUITemplatesPayload
@@ -21,31 +21,31 @@ router = APIRouter(prefix="/flow-ui", tags=["flows", "flow-ui"])
 
 
 @router.get("/schema")
-async def get_flow_ui_schema(container: ContainerDep) -> JsonObject:
+async def get_flow_ui_schema(di: Di) -> JsonObject:
     return await op_flows_flow_ui_schema(
         EmptyPayload(),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/templates", response_model=OffsetPage[FlowUITemplate])
 async def list_flow_ui_templates(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[FlowUITemplate]:
     return await op_flows_flow_ui_templates(
         FlowUITemplatesPayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/assist", response_model=FlowUIAssistResult)
 async def assist_flow_ui(
-    container: ContainerDep, request: FlowUIAssistRequest
+    di: Di, request: FlowUIAssistRequest
 ) -> FlowUIAssistResult:
     return await op_flows_flow_ui_assist(
-        request, user=require_context().user, container=container
+        request, user=require_context().user, di=di
     )

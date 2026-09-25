@@ -1,0 +1,6 @@
+GROUP g03_crm rc=1
+FAILED tests/crm/api/test_crm_namespaces_kind_filter.py::test_crm_list_namespaces_excludes_personal_and_technical
+FAILED tests/crm/e2e/test_25_new_features.py::TestSearchModes::test_text_search_mode
+FAILED tests/crm/api/test_crm_namespaces_kind_filter.py::test_crm_list_namespaces_excludes_personal_and_technical
+FAILED tests/crm/e2e/test_25_new_features.py::TestSearchModes::test_text_search_mode
+============ 2 failed, 1155 passed, 1 warning in 867.14s (0:14:27) =============

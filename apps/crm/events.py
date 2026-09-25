@@ -6,8 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from apps.crm.db.models import CRMEntity
-from apps.crm.models.api import EntityResponse, TaskResponse
+from apps.crm.models.api import EntityResponse
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.task import CRMTask
 from core.events import publish_domain_event, register_platform_event
 from core.types import JsonObject
 
@@ -88,7 +89,7 @@ class CrmNoteUpdatedEventPayload(BaseModel):
 class CrmTaskUpdatedEventPayload(BaseModel):
     """Payload `crm/task/updated`."""
 
-    task: TaskResponse
+    task: CRMTask
 
 
 class CrmDailySummaryUpdatedEventPayload(BaseModel):

@@ -11,7 +11,7 @@ import uuid
 
 from pydantic import Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from apps.idle_worker.tasks.task_names import TASK_INIT_NEW_COMPANY
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.identity.company_membership import (
@@ -81,19 +81,20 @@ def _require_system_member(user: User) -> None:
 
 
 async def op_companies_slug_check(
-    payload: CompanySlugCheckPayload, *, user: User, container: FrontendContainer
+    payload: CompanySlugCheckPayload, *, user: User, di: Di
 ) -> CompanySlugCheckResult:
     _ = user
+    _ = di
     slug = payload.slug.lower().strip()
     is_valid, _ = validate_slug(slug)
     if not is_valid:
         return CompanySlugCheckResult(available=False, slug=slug)
-    company_id = await container.subdomain_repository.get_company_id(slug)
-    return CompanySlugCheckResult(available=company_id is None, slug=slug)
+    existing = await Company.by_subdomain(slug)
+    return CompanySlugCheckResult(available=existing is None, slug=slug)
 
 
 async def op_companies_create(
-    payload: CompanyCreatePayload, *, user: User, container: FrontendContainer
+    payload: CompanyCreatePayload, *, user: User, di: Di
 ) -> CompanyCreated:
     name = payload.name.strip()
     slug = payload.slug.lower().strip()
@@ -102,7 +103,7 @@ async def op_companies_create(
     is_valid, error = validate_slug(slug)
     if not is_valid:
         raise_invalid(ValueError(error))
-    if await container.subdomain_repository.get_company_id(slug):
+    if await Company.by_subdomain(slug) is not None:
         raise_invalid(ValueError("this address is already taken"))
 
     company = Company(
@@ -114,19 +115,16 @@ async def op_companies_create(
         members={user.user_id: ["owner"]},
         metadata={"initialization_status": "pending"},
     )
-    _ = await container.company_repository.set(company)
+    _ = await Company.set(company)
     user.companies[company.company_id] = ["owner"]
     user.active_company_id = company.company_id
     _ = await set_company_member_roles(
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
+        authz=di.authz_service,
         company=company,
         user=user,
         roles=["owner"],
     )
-    _ = await container.subdomain_repository.set_mapping(slug, company.company_id)
-    await ensure_personal_namespace_for_user(container.namespace_service, user, company=company)
+    await ensure_personal_namespace_for_user(di.namespace_service, user, company=company)
     init_task = await enqueue(
         TASK_INIT_NEW_COMPANY,
         company_id=company.company_id,
@@ -149,58 +147,54 @@ async def op_companies_create(
     )
 
 
-async def _require_target_company(container: FrontendContainer, company_id: str) -> Company:
+async def _require_target_company(company_id: str) -> Company:
     target_company_id = company_id.strip()
     if not target_company_id:
         raise_invalid(ValueError("company_id must not be empty"))
     if target_company_id == SYSTEM_COMPANY_ID:
         raise_invalid(ValueError("cannot change access to the system company through this endpoint"))
-    target_company = await container.company_repository.get(target_company_id)
+    target_company = await Company.get(target_company_id)
     if target_company is None:
         raise PlatformNotFoundError("Company not found", error_code='not_found')
     return target_company
 
 
 async def op_companies_system_access_grant(
-    payload: SystemAccessGrantPayload, *, user: User, container: FrontendContainer
+    payload: SystemAccessGrantPayload, *, user: User, di: Di
 ) -> SystemAccessGranted:
     """Участник компании system входит в чужую компанию с ролью admin/developer/viewer."""
     _require_system_member(user)
     role = payload.role.strip()
     if role not in SYSTEM_ASSIGNABLE_ROLES:
         raise_invalid(ValueError(f"invalid role: {role}. allowed: {', '.join(SYSTEM_ASSIGNABLE_ROLES)}"))
-    target_company = await _require_target_company(container, payload.company_id)
+    target_company = await _require_target_company(payload.company_id)
     existing_roles = target_company.members.get(user.user_id, [])
     merged_roles = list(dict.fromkeys([*existing_roles, role]))
     _ = await set_company_member_roles(
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
+        authz=di.authz_service,
         company=target_company,
         user=user,
         roles=merged_roles,
     )
-    await ensure_personal_namespace_for_user(container.namespace_service, user, company=target_company)
+    await ensure_personal_namespace_for_user(di.namespace_service, user, company=target_company)
     return SystemAccessGranted(company_id=target_company.company_id, roles=merged_roles)
 
 
 async def op_companies_system_access_revoke(
-    payload: SystemAccessRevokePayload, *, user: User, container: FrontendContainer
+    payload: SystemAccessRevokePayload, *, user: User, di: Di
 ) -> SystemAccessRevoked:
     """Выход из чужой компании; если она была активной — активная снова `system`."""
     _require_system_member(user)
-    target_company = await _require_target_company(container, payload.company_id)
+    target_company = await _require_target_company(payload.company_id)
     if user.user_id not in target_company.members or target_company.company_id not in user.companies:
         raise PlatformNotFoundError("User is not a member of the selected company", error_code='not_found')
     switched_to_system = user.active_company_id == target_company.company_id
     await remove_company_membership(
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
+        authz=di.authz_service,
         company=target_company,
         user=user,
     )
     if switched_to_system:
         user.active_company_id = SYSTEM_COMPANY_ID
-        _ = await container.user_repository.set(user)
+        _ = await User.set(user)
     return SystemAccessRevoked(company_id=target_company.company_id, switched_to_system=switched_to_system)

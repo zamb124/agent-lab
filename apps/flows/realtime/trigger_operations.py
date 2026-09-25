@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     FlowsFlowIdPayload,
     require_company_member,
     require_edit_flow,
     require_view_flow,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import FlowConfig, TriggerConfig
 from apps.flows.src.models.channel_config import default_output_actions_for_trigger
 from apps.flows.src.models.enums import TriggerType
@@ -92,17 +92,17 @@ def _trigger_response(trigger: TriggerConfig) -> TriggerResponse:
     )
 
 
-async def _flow_for_view(container: FlowContainer, flow_id: str) -> FlowConfig:
-    _ = await require_view_flow(container, flow_id)
-    flow_config = await container.flow_repository.get(flow_id)
+async def _flow_for_view(di: Di, flow_id: str) -> FlowConfig:
+    _ = await require_view_flow(di, flow_id)
+    flow_config = await FlowConfig.get_latest(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
 
 
-async def _flow_for_edit(container: FlowContainer, flow_id: str) -> FlowConfig:
-    _ = await require_edit_flow(container, flow_id)
-    flow_config = await container.flow_repository.get(flow_id)
+async def _flow_for_edit(di: Di, flow_id: str) -> FlowConfig:
+    _ = await require_edit_flow(di, flow_id)
+    flow_config = await FlowConfig.get_latest(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {flow_id}"))
     return flow_config
@@ -122,10 +122,10 @@ async def op_flows_triggers_list(
     payload: FlowsFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[TriggerResponse]:
     _ = user
-    flow_config = await _flow_for_view(container, payload.flow_id)
+    flow_config = await _flow_for_view(di, payload.flow_id)
     return ListResponse(
         items=[_trigger_response(trigger) for trigger in flow_config.triggers.values()]
     )
@@ -135,10 +135,10 @@ async def op_flows_triggers_item(
     payload: TriggerFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerResponse:
     _ = user
-    flow_config = await _flow_for_view(container, payload.flow_id)
+    flow_config = await _flow_for_view(di, payload.flow_id)
     trigger = flow_config.triggers.get(payload.trigger_id)
     if trigger is None:
         raise_not_found(LookupError(f"Trigger not found: {payload.trigger_id}"))
@@ -149,11 +149,11 @@ async def op_flows_triggers_verify(
     payload: TriggerVerifyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerVerifyResponse:
     _ = user
-    scope = await require_edit_flow(container, payload.flow_id)
-    flow_config = await container.flow_repository.get(payload.flow_id)
+    scope = await require_edit_flow(di, payload.flow_id)
+    flow_config = await FlowConfig.get_latest(payload.flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow not found: {payload.flow_id}"))
 
@@ -182,7 +182,7 @@ async def op_flows_triggers_verify(
         if isinstance(raw_token, str) and raw_token.startswith("@var:"):
             try:
                 cfg["bot_token"] = await resolve_at_var_for_flow(
-                    container.flow_factory,
+                    di.flow_factory,
                     payload.flow_id,
                     raw_token,
                     branch_id=payload.branch_id,
@@ -200,7 +200,7 @@ async def op_flows_triggers_verify(
         cfg,
         payload.flow_id,
         payload.trigger_id,
-        mail_service=container.mail_service,
+        mail_service=di.mail_service,
         company_id=scope.company_id,
     )
     return TriggerVerifyResponse(
@@ -215,10 +215,10 @@ async def op_flows_triggers_create(
     payload: TriggerCreatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerResponse:
     _ = user
-    flow_config = await _flow_for_edit(container, payload.flow_id)
+    flow_config = await _flow_for_edit(di, payload.flow_id)
     if payload.trigger_id in flow_config.triggers:
         raise_conflict(ValueError(f"Trigger already exists: {payload.trigger_id}"))
 
@@ -247,12 +247,12 @@ async def op_flows_triggers_create(
     )
     old_config = flow_config.model_copy(deep=True)
     flow_config.triggers[payload.trigger_id] = trigger
-    flow_config = await container.trigger_registry.sync_triggers(
+    flow_config = await di.trigger_registry.sync_triggers(
         flow_id=payload.flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    _ = await container.flow_repository.set(flow_config)
+    _ = await FlowConfig.create_version(flow_config)
     updated_trigger = flow_config.triggers.get(payload.trigger_id)
     if updated_trigger is None:
         raise RuntimeError(f"Trigger '{payload.trigger_id}' missing after sync")
@@ -264,10 +264,10 @@ async def op_flows_triggers_update(
     payload: TriggerUpdatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerResponse:
     _ = user
-    old_config = await _flow_for_edit(container, payload.flow_id)
+    old_config = await _flow_for_edit(di, payload.flow_id)
     trigger = old_config.triggers.get(payload.trigger_id)
     if trigger is None:
         raise_not_found(LookupError(f"Trigger not found: {payload.trigger_id}"))
@@ -300,12 +300,12 @@ async def op_flows_triggers_update(
             flow_config.triggers[payload.trigger_id].config
         )
 
-    flow_config = await container.trigger_registry.sync_triggers(
+    flow_config = await di.trigger_registry.sync_triggers(
         flow_id=payload.flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    _ = await container.flow_repository.set(flow_config)
+    _ = await FlowConfig.create_version(flow_config)
     updated_trigger = flow_config.triggers.get(payload.trigger_id)
     if updated_trigger is None:
         raise RuntimeError(f"Trigger '{payload.trigger_id}' missing after sync")
@@ -317,17 +317,17 @@ async def op_flows_triggers_reregister(
     payload: TriggerFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerResponse:
     _ = user
-    old_config = await _flow_for_edit(container, payload.flow_id)
+    old_config = await _flow_for_edit(di, payload.flow_id)
     if payload.trigger_id not in old_config.triggers:
         raise_not_found(LookupError(f"Trigger not found: {payload.trigger_id}"))
 
     flow_config = old_config.model_copy(deep=True)
     trigger = flow_config.triggers[payload.trigger_id]
     try:
-        updated = await container.trigger_registry.reregister_trigger(
+        updated = await di.trigger_registry.reregister_trigger(
             payload.flow_id, trigger
         )
     except TriggerReregisterDisabledError:
@@ -341,7 +341,7 @@ async def op_flows_triggers_reregister(
         )
 
     flow_config.triggers[payload.trigger_id] = updated
-    _ = await container.flow_repository.set(flow_config)
+    _ = await FlowConfig.create_version(flow_config)
     out = flow_config.triggers[payload.trigger_id]
     logger.info("flows.trigger.reregistered.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return _trigger_response(out)
@@ -351,21 +351,21 @@ async def op_flows_triggers_remove(
     payload: TriggerFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerDeletedResponse:
     _ = user
-    old_config = await _flow_for_edit(container, payload.flow_id)
+    old_config = await _flow_for_edit(di, payload.flow_id)
     if payload.trigger_id not in old_config.triggers:
         raise_not_found(LookupError(f"Trigger not found: {payload.trigger_id}"))
 
     flow_config = old_config.model_copy(deep=True)
     del flow_config.triggers[payload.trigger_id]
-    flow_config = await container.trigger_registry.sync_triggers(
+    flow_config = await di.trigger_registry.sync_triggers(
         flow_id=payload.flow_id,
         old_config=old_config,
         new_config=flow_config,
     )
-    _ = await container.flow_repository.set(flow_config)
+    _ = await FlowConfig.create_version(flow_config)
     logger.info("flows.trigger.deleted.flow_id.trigger", flow_id=payload.flow_id, trigger=payload.trigger_id)
     return TriggerDeletedResponse(status="deleted", trigger_id=payload.trigger_id)
 
@@ -374,10 +374,10 @@ async def op_flows_triggers_test(
     payload: TriggerTestRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> TriggerTestResponse:
     _ = user
-    flow_config = await _flow_for_edit(container, payload.flow_id)
+    flow_config = await _flow_for_edit(di, payload.flow_id)
     trigger = flow_config.triggers.get(payload.trigger_id)
     if trigger is None:
         raise_not_found(LookupError(f"Trigger not found: {payload.trigger_id}"))
@@ -398,10 +398,10 @@ async def op_flows_platform_events_catalog(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> PlatformEventCatalogResponse:
     _ = user
     _ = payload
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     entries = await load_platform_event_catalog()
     return PlatformEventCatalogResponse(items=entries)

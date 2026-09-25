@@ -96,6 +96,18 @@ redis:
       cpu: "1"
       memory: 4Gi
 
+minio:
+  nodeName: master
+  image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
+  storage: 50Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
 # ConfigMap app-conf собирается make render-helm-app-conf из conf.json + overlay.
 # Межсервисные URL в кластере выставляются ENV SERVER__*_SERVICE_URL в templates/_helpers.tpl.
 appConfigConfigMap: app-conf
@@ -352,6 +364,39 @@ applications:
       - /wiki/ui/static
       - --static-path-mount
       - apps/wiki/ui
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  stock:
+    nodeName: master
+    enabled: true
+    port: 8026
+    replicas: 1
+    serviceName: stock
+    command:
+      - granian
+      - --interface
+      - asgi
+      - apps.stock.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8026"
+      - --http
+      - auto
+      - --ws
+      - --static-path-route
+      - /static/core
+      - --static-path-mount
+      - core/frontend/static
+      - --static-path-route
+      - /stock/ui/static
+      - --static-path-mount
+      - apps/stock/ui
     resources:
       requests:
         cpu: 100m
@@ -838,6 +883,25 @@ workers:
       limits:
         cpu: "1"
         memory: 6Gi
+  a2a-push-worker:
+    nodeName: master
+    enabled: true
+    replicas: 1
+    command:
+      [
+        "taskiq",
+        "worker",
+        "apps.idle_worker.a2a_push_worker:worker_app",
+        "--workers",
+        "1",
+      ]
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
   search-worker:
     nodeName: master
     enabled: true
@@ -1048,8 +1112,8 @@ platformSecrets:
   pushApnsPrivateKey: ""
   pushFcmCredentialsJson: ""
   pushFcmProjectId: ""
-  selectelAccessKey: ""
-  selectelSecretKey: ""
+  minioRootUser: ""
+  minioRootPassword: ""
   livekitApiKey: ""
   livekitApiSecret: ""
   centrifugoApiKey: ""

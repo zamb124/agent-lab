@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.agent_skill_operations import (
     op_flows_agent_skills_create,
     op_flows_agent_skills_ensure_seed,
@@ -274,7 +275,6 @@ from apps.flows.realtime.trigger_operations import (
     op_flows_triggers_update,
     op_flows_triggers_verify,
 )
-from apps.flows.src.container import FlowContainer, get_container
 from apps.flows.src.models import BranchCreateRequest, BranchUpdateRequest
 from apps.flows.src.models.agent_skill import (
     AgentSkill,
@@ -435,16 +435,12 @@ from core.guest_runtime.models import (
     CodeAgentNodeRefPayload,
     CodeAgentRebuildRequest,
 )
-from core.integrations.company_credentials import GoogleWorkspaceCompanyCredentialPut
-from core.integrations.models import (
-    IntegrationCredentialRefPayload,
-)
 from core.integrations.operations import (
-    op_integrations_credentials_list,
-    op_integrations_credentials_remove,
-    op_integrations_workspace_company_delete,
-    op_integrations_workspace_company_get,
-    op_integrations_workspace_company_put,
+    INTEGRATIONS_CREDENTIALS_LIST_OPERATION,
+    INTEGRATIONS_CREDENTIALS_REMOVE_OPERATION,
+    INTEGRATIONS_WORKSPACE_COMPANY_DELETE_OPERATION,
+    INTEGRATIONS_WORKSPACE_COMPANY_GET_OPERATION,
+    INTEGRATIONS_WORKSPACE_COMPANY_PUT_OPERATION,
 )
 from core.logging import get_logger
 from core.models.flow_ui_share import (
@@ -452,15 +448,14 @@ from core.models.flow_ui_share import (
     FlowUIShareGrantIdPayload,
     FlowUIShareListPayload,
 )
-from core.models.voice_providers_catalog import (
-    VoiceProvidersCatalogPayload,
-    op_voice_providers_catalog,
-)
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.models.voice_providers_catalog import VoiceProvidersCatalogPayload
+from core.voice.operations import op_voice_providers_catalog
+from core.websocket import EmptyPayload
+from core.websocket.operation import Operation, RegisteredOperation
 
 logger = get_logger(__name__)
 
-FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
+FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowsDi]] = {
     "flows/flows/list_requested": Operation(payload_model=FlowsListPayload, fn=op_flows_list),
     "flows/flows/item_requested": Operation(payload_model=FlowsFlowIdPayload, fn=op_flows_item),
     "flows/flows/create_requested": Operation(payload_model=FlowCreateRequest, fn=op_flows_create),
@@ -1114,28 +1109,10 @@ FLOWS_OPERATIONS: dict[str, RegisteredOperation[FlowContainer]] = {
         payload_model=CompanyInitPayload,
         fn=op_flows_company_init,
     ),
-    "flows/integrations/credentials_list_requested": Operation(
-        payload_model=EmptyPayload, fn=op_integrations_credentials_list
-    ),
-    "flows/integrations/credentials_remove_requested": Operation(
-        payload_model=IntegrationCredentialRefPayload,
-        fn=op_integrations_credentials_remove,
-    ),
-    "flows/integrations/workspace_company_get_requested": Operation(
-        payload_model=EmptyPayload,
-        fn=op_integrations_workspace_company_get,
-    ),
-    "flows/integrations/workspace_company_put_requested": Operation(
-        payload_model=GoogleWorkspaceCompanyCredentialPut,
-        fn=op_integrations_workspace_company_put,
-    ),
-    "flows/integrations/workspace_company_delete_requested": Operation(
-        payload_model=EmptyPayload,
-        fn=op_integrations_workspace_company_delete,
-    ),
+    "flows/integrations/credentials_list_requested": INTEGRATIONS_CREDENTIALS_LIST_OPERATION,
+    "flows/integrations/credentials_remove_requested": INTEGRATIONS_CREDENTIALS_REMOVE_OPERATION,
+    "flows/integrations/workspace_company_get_requested": INTEGRATIONS_WORKSPACE_COMPANY_GET_OPERATION,
+    "flows/integrations/workspace_company_put_requested": INTEGRATIONS_WORKSPACE_COMPANY_PUT_OPERATION,
+    "flows/integrations/workspace_company_delete_requested": INTEGRATIONS_WORKSPACE_COMPANY_DELETE_OPERATION,
 }
 
-
-def register_flows_ws_commands() -> None:
-    register_service_operations(FLOWS_OPERATIONS, get_container)
-    logger.info("flows.ws.command.handlers", FLOWS_OPERATIONS_count=len(FLOWS_OPERATIONS))

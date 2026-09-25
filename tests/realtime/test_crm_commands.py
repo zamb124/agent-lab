@@ -168,9 +168,10 @@ async def _create_template(ctx: LiveCtx) -> JsonObject:
     return body
 
 
-async def _create_namespace(ctx: LiveCtx) -> JsonObject:
+async def _create_namespace(ctx: LiveCtx, *, name: str | None = None) -> JsonObject:
     template = await _create_template(ctx)
-    name = f"n-{_token(ctx)}"
+    if name is None:
+        name = f"n-{_token(ctx)}"
     response = await ctx.client.post(
         f"{_API}/namespaces",
         headers=ctx.headers,
@@ -282,7 +283,7 @@ async def _setup_offset_page(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_namespaces_list(ctx: LiveCtx) -> JsonObject:
-    created = await _create_namespace(ctx)
+    created = await _create_namespace(ctx, name=f"0n-{_token(ctx)}")
     ctx.marker = _str_field(created, "name")
     return {"limit": 200, "offset": 0}
 
@@ -561,8 +562,8 @@ async def _setup_company_init(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_timeline(ctx: LiveCtx) -> JsonObject:
-    _ = ctx
-    return {"namespace": _NAMESPACE}
+    created = await _create_namespace(ctx)
+    return {"namespace": _str_field(created, "name")}
 
 
 async def _setup_overview_graph(ctx: LiveCtx) -> JsonObject:
@@ -764,6 +765,10 @@ async def _setup_task_item(ctx: LiveCtx) -> JsonObject:
     created = await _create_namespace(ctx)
     task = await _start_knowledge_import(ctx, _str_field(created, "name"))
     return {"task_id": _str_field(task, "task_id")}
+
+
+async def _setup_task_missing(ctx: LiveCtx) -> JsonObject:
+    return {"task_id": f"missing-{ctx.unique_id}"}
 
 
 async def _setup_knowledge_import(ctx: LiveCtx) -> JsonObject:
@@ -1259,7 +1264,7 @@ _CASES: dict[str, OpCase] = {
         "POST",
         f"{_API}/tasks/{{task_id}}/rollback",
         "none",
-        _setup_task_item,
+        _setup_task_missing,
         same=True,
         compare="error_code",
         expect="failed",

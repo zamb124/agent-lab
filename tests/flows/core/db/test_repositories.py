@@ -7,7 +7,6 @@
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import WorkflowEventType
 from apps.flows.src.models import (
     CodeMode,
@@ -23,10 +22,8 @@ class TestNodeRepository:
     """Тесты NodeRepository."""
 
     @pytest.mark.asyncio
-    async def test_set_and_get_node(self, app):
+    async def test_set_and_get_node(self, app, di):
         """Сохранение и получение ноды."""
-        container = get_container()
-        repo = container.node_repository
 
         node = NodeConfig(
             node_id="test_node_repo",
@@ -36,40 +33,36 @@ class TestNodeRepository:
             prompt="Test prompt",
         )
 
-        await repo.set(node)
-        loaded = await repo.get("test_node_repo")
+        await NodeConfig.set(node)
+        loaded = await NodeConfig.get(NodeConfig.row_id("test_node_repo"))
 
         assert loaded is not None
         assert loaded.node_id == "test_node_repo"
         assert loaded.name == "Test Node"
 
         # Cleanup
-        await repo.delete("test_node_repo")
+        await NodeConfig.delete_by_id(NodeConfig.row_id("test_node_repo"))
 
     @pytest.mark.asyncio
-    async def test_get_nonexistent_node(self, app):
+    async def test_get_nonexistent_node(self, app, di):
         """Получение несуществующей ноды возвращает None."""
-        container = get_container()
-        repo = container.node_repository
 
-        result = await repo.get("nonexistent_node_xyz")
+        result = await NodeConfig.get(NodeConfig.row_id("nonexistent_node_xyz"))
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_delete_node(self, app):
+    async def test_delete_node(self, app, di):
         """Удаление ноды."""
-        container = get_container()
-        repo = container.node_repository
 
         node = NodeConfig(
             node_id="node_to_delete",
             type=NodeType.LLM_NODE,
             name="Delete Me",
         )
-        await repo.set(node)
-        await repo.delete("node_to_delete")
+        await NodeConfig.set(node)
+        await NodeConfig.delete_by_id(NodeConfig.row_id("node_to_delete"))
 
-        result = await repo.get("node_to_delete")
+        result = await NodeConfig.get(NodeConfig.row_id("node_to_delete"))
         assert result is None
 
 
@@ -77,10 +70,8 @@ class TestFlowRepository:
     """Тесты FlowRepository."""
 
     @pytest.mark.asyncio
-    async def test_set_and_get_flow(self, app):
+    async def test_set_and_get_flow(self, app, di):
         """Сохранение и получение flow."""
-        container = get_container()
-        repo = container.flow_repository
 
         flow = FlowConfig(
             flow_id="test_flow_repo",
@@ -96,8 +87,8 @@ class TestFlowRepository:
             },
         )
 
-        await repo.set(flow)
-        loaded = await repo.get("test_flow_repo")
+        await FlowConfig.create_version(flow)
+        loaded = await FlowConfig.get_latest("test_flow_repo")
 
         assert loaded is not None
         assert loaded.flow_id == "test_flow_repo"
@@ -105,15 +96,13 @@ class TestFlowRepository:
         assert nodes is not None
         assert "main" in nodes
 
-        await repo.delete("test_flow_repo")
+        await FlowConfig.delete_by_flow_id("test_flow_repo")
 
     @pytest.mark.asyncio
-    async def test_list_all_flows(self, app):
+    async def test_list_all_flows(self, app, di):
         """Получение списка всех flows."""
-        container = get_container()
-        repo = container.flow_repository
 
-        flows = await repo.list(limit=1000)
+        flows = await FlowConfig.list(limit=1000)
         assert isinstance(flows, list)
 
 
@@ -121,10 +110,8 @@ class TestToolRepository:
     """Тесты ToolRepository."""
 
     @pytest.mark.asyncio
-    async def test_set_and_get_tool(self, app):
+    async def test_set_and_get_tool(self, app, di):
         """Сохранение и получение tool."""
-        container = get_container()
-        repo = container.tool_repository
 
         tool = ToolReference(
             tool_id="test_tool_repo",
@@ -134,23 +121,22 @@ class TestToolRepository:
             code="async def run(args, state):\n    return args.get('x', 0) + 1",
         )
 
-        await repo.set(tool)
-        loaded = await repo.get("test_tool_repo")
+        await ToolReference.set(tool)
+        loaded = await ToolReference.get(ToolReference.row_id("test_tool_repo"))
 
         assert loaded is not None
         assert loaded.tool_id == "test_tool_repo"
 
-        await repo.delete("test_tool_repo")
+        await ToolReference.delete_by_id(ToolReference.row_id("test_tool_repo"))
 
 
 class TestDurableWorkflowRuntime:
     """Тесты durable projection read/write."""
 
     @pytest.mark.asyncio
-    async def test_set_and_get_state(self, app, unique_id):
+    async def test_set_and_get_state(self, app, unique_id, di):
         """Сохранение и получение state."""
-        container = get_container()
-        runtime = container.workflow_runtime
+        runtime = di.workflow_runtime
 
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",

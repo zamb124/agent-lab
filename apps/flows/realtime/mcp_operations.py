@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.models.mcp import (
     MCPServerConfig,
     MCPServerDeletedResponse,
@@ -28,11 +27,13 @@ from apps.flows.src.models.mcp_branding import (
     MCPServerBrandingUpsertPayload,
 )
 from apps.flows.src.models.mcp_catalog import (
+    MCPCatalogEntry,
     MCPCatalogIdPayload,
     MCPCatalogListPayload,
     MCPCatalogStoreItem,
     MCPCatalogUninstalledResponse,
 )
+from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_catalog_provisioner import (
     apply_catalog_entry_to_server,
@@ -60,14 +61,14 @@ from core.websocket import (
 
 
 async def attach_mcp_server_icon(
-    container: FlowContainer,
+    di: Di,
     server: MCPServerConfig,
     *,
     icon_url_map: dict[str, str] | None = None,
 ) -> MCPServerConfig:
     try:
         if icon_url_map is None:
-            icon_url = await container.mcp_branding_service.get_icon_url(server.server_id)
+            icon_url = await di.mcp_branding_service.get_icon_url(server.server_id)
         else:
             icon_url = icon_url_map.get(server.server_id)
     except ValueError as exc:
@@ -75,16 +76,18 @@ async def attach_mcp_server_icon(
     return server.model_copy(update={"icon_url": icon_url})
 
 
-async def persist_mcp_server(container: FlowContainer, server: MCPServerConfig) -> None:
-    _ = await container.mcp_server_repository.set(
+async def persist_mcp_server(di: Di, server: MCPServerConfig) -> None:
+    _ = di
+    _ = await MCPServerConfig.set(
         server.model_copy(update={"icon_url": None})
     )
 
 
 async def _require_server(
-    container: FlowContainer, server_id: str
+    di: Di, server_id: str
 ) -> MCPServerConfig:
-    server = await container.mcp_server_repository.get(server_id)
+    _ = di
+    server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     if server is None:
         raise_not_found(LookupError("Server not found"))
     return server
@@ -94,23 +97,23 @@ async def op_flows_mcp_servers_list(
     payload: MCPServerListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[MCPServerConfig]:
     _ = user
-    _ = await require_company_member(container)
-    servers = await container.mcp_server_repository.list(limit=5000, offset=0)
+    _ = await require_company_member(di)
+    servers = await MCPServerConfig.list(limit=5000, offset=0)
     filtered_servers = filter_mcp_servers_by_search(servers, payload.search)
     ordered_servers = sort_mcp_servers_for_display(filtered_servers)
     total = len(ordered_servers)
     page_servers = ordered_servers[payload.offset : payload.offset + payload.limit]
     try:
-        icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
+        icon_url_map = await di.mcp_branding_service.build_icon_url_map_for_server_ids(
             [server.server_id for server in page_servers]
         )
     except ValueError as exc:
         raise_invalid(exc)
     items = [
-        await attach_mcp_server_icon(container, server, icon_url_map=icon_url_map)
+        await attach_mcp_server_icon(di, server, icon_url_map=icon_url_map)
         for server in page_servers
     ]
     return OffsetPage[MCPServerConfig](
@@ -125,23 +128,23 @@ async def op_flows_mcp_servers_item(
     payload: MCPServerIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerConfig:
     _ = user
-    _ = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
-    return await attach_mcp_server_icon(container, server)
+    _ = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
+    return await attach_mcp_server_icon(di, server)
 
 
 async def op_flows_mcp_servers_create(
     payload: MCPServerConfig,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerConfig:
     _ = user
-    _ = await require_company_member(container)
-    existing = await container.mcp_server_repository.get(payload.server_id)
+    _ = await require_company_member(di)
+    existing = await MCPServerConfig.get(MCPServerConfig.row_id(payload.server_id))
     if existing is not None:
         raise_conflict(ValueError(f"Server {payload.server_id} already exists"))
     server = MCPServerConfig(
@@ -153,18 +156,18 @@ async def op_flows_mcp_servers_create(
         description=payload.description,
         source=MCPServerSource.MANUAL,
     )
-    await persist_mcp_server(container, server)
-    return await attach_mcp_server_icon(container, server)
+    await persist_mcp_server(di, server)
+    return await attach_mcp_server_icon(di, server)
 
 
 async def op_flows_mcp_servers_update(
     payload: MCPServerUpdatePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerConfig:
-    _ = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
+    _ = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
     triggers_override = mcp_server_update_triggers_override(
         server=server,
         name=payload.name,
@@ -191,26 +194,26 @@ async def op_flows_mcp_servers_update(
         if not user_id:
             raise_forbidden(ValueError("Authentication required"))
         server = mark_server_override_locked(server=server, user_id=user_id)
-    await persist_mcp_server(container, server)
-    return await attach_mcp_server_icon(container, server)
+    await persist_mcp_server(di, server)
+    return await attach_mcp_server_icon(di, server)
 
 
 async def op_flows_mcp_servers_remove(
     payload: MCPServerIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerDeletedResponse:
     _ = user
-    scope = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
+    scope = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
     for tool_id in server.cached_tools:
         require_not_builtin_tool_id(tool_id, source="mcp cached_tools")
-        _ = await container.tool_repository.delete(tool_id)
-        await container.flow_access_service.sync_tool_deleted(
+        _ = await ToolReference.delete_by_id(ToolReference.row_id(tool_id))
+        await di.flow_access_service.sync_tool_deleted(
             tool_id, company_id=scope.company_id
         )
-    _ = await container.mcp_server_repository.delete(payload.server_id)
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(payload.server_id))
     return MCPServerDeletedResponse(status="deleted", server_id=payload.server_id)
 
 
@@ -218,14 +221,15 @@ async def op_flows_mcp_servers_sync(
     payload: MCPServerIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPSyncResponse:
     _ = user
-    _ = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
+    _ = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
     try:
         _tool_ids, tools = await sync_mcp_server_tools(
-            container=as_flow_runtime_container(container),
+            variables_service=di.variables_service,
+            flow_access_service=di.flow_access_service,
             server_config=server,
         )
     except MCPClientError as exc:
@@ -239,14 +243,14 @@ async def op_flows_mcp_servers_test(
     payload: MCPServerIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPTestResponse:
     _ = user
-    _ = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
-    runtime = as_flow_runtime_container(container)
+    _ = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
+    runtime = di
     try:
-        variables = await resolve_mcp_client_variables(runtime, server)
+        variables = await resolve_mcp_client_variables(runtime.variables_service, server)
         client = MCPClient(server, variables)
         _ = await client.initialize()
         tools = await client.list_tools()
@@ -265,48 +269,49 @@ async def op_flows_mcp_servers_reset_catalog_defaults(
     payload: MCPServerIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerConfig:
     _ = user
-    _ = await require_company_member(container)
-    server = await _require_server(container, payload.server_id)
+    _ = await require_company_member(di)
+    server = await _require_server(di, payload.server_id)
     if server.source != MCPServerSource.CATALOG:
         raise_invalid(ValueError("reset_catalog_defaults requires source=catalog"))
     if server.catalog_id is None:
         raise_invalid(ValueError("catalog_id is required for reset"))
-    entry = await container.mcp_catalog_repository.get(server.catalog_id)
+    entry = await MCPCatalogEntry.get(server.catalog_id)
     if entry is None:
         raise_not_found(LookupError("Catalog entry not found"))
     try:
         reset_server = apply_catalog_entry_to_server(server=server, entry=entry)
     except ValueError as exc:
         raise_invalid(exc)
-    await persist_mcp_server(container, reset_server)
+    await persist_mcp_server(di, reset_server)
     try:
         _ = await sync_mcp_server_tools(
-            container=as_flow_runtime_container(container),
+            variables_service=di.variables_service,
+            flow_access_service=di.flow_access_service,
             server_config=reset_server,
         )
     except MCPClientError as exc:
         raise_upstream(exc)
     except ValueError as exc:
         raise_invalid(exc)
-    stored = await container.mcp_server_repository.get(payload.server_id)
+    stored = await MCPServerConfig.get(MCPServerConfig.row_id(payload.server_id))
     if stored is None:
         raise_not_found(LookupError("Server not found after reset"))
-    return await attach_mcp_server_icon(container, stored)
+    return await attach_mcp_server_icon(di, stored)
 
 
 async def op_flows_mcp_branding_list(
     payload: MCPServerBrandingListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[MCPServerBrandingResolved]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
-        items, total = await container.mcp_branding_service.list_branding(
+        items, total = await di.mcp_branding_service.list_branding(
             search=payload.search,
             limit=payload.limit,
             offset=payload.offset,
@@ -325,11 +330,11 @@ async def op_flows_mcp_branding_slug_suggest(
     payload: MCPServerBrandingSlugSuggestPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerBrandingSlugSuggestResponse:
     _ = user
-    _ = await require_company_member(container)
-    slugs = await container.mcp_branding_service.suggest_branding_slugs(
+    _ = await require_company_member(di)
+    slugs = await di.mcp_branding_service.suggest_branding_slugs(
         search=payload.search,
         limit=payload.limit,
     )
@@ -340,12 +345,12 @@ async def op_flows_mcp_branding_upsert(
     payload: MCPServerBrandingUpsertPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerBrandingResolved:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
-        return await container.mcp_branding_service.upsert_branding(
+        return await di.mcp_branding_service.upsert_branding(
             payload.server_id,
             payload.icon_file_id,
         )
@@ -359,12 +364,12 @@ async def op_flows_mcp_branding_remove(
     payload: MCPServerBrandingIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerBrandingDeletedResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
-        await container.mcp_branding_service.delete_branding(payload.server_id)
+        await di.mcp_branding_service.delete_branding(payload.server_id)
     except PermissionError as exc:
         raise_forbidden(exc)
     except ValueError as exc:
@@ -378,21 +383,19 @@ async def op_flows_mcp_catalog_list(
     payload: MCPCatalogListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[MCPCatalogStoreItem]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     if payload.tier != "store":
         raise_invalid(ValueError("Only tier=store is supported"))
-    runtime = as_flow_runtime_container(container)
     page_entries, total = await list_store_catalog_entries(
-        container=runtime,
         search=payload.search,
         limit=payload.limit,
         offset=payload.offset,
     )
     try:
-        icon_url_map = await container.mcp_branding_service.build_icon_url_map_for_server_ids(
+        icon_url_map = await di.mcp_branding_service.build_icon_url_map_for_server_ids(
             [
                 server_id_from_catalog_id(entry.catalog_id)
                 for entry, _installed, _platform_curated in page_entries
@@ -429,35 +432,34 @@ async def op_flows_mcp_catalog_install(
     payload: MCPCatalogIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPServerConfig:
     _ = user
-    _ = await require_company_member(container)
-    runtime = as_flow_runtime_container(container)
+    _ = await require_company_member(di)
     try:
         server = await install_catalog_entry_for_company(
-            container=runtime,
+            variables_service=di.variables_service,
+            flow_access_service=di.flow_access_service,
             catalog_id=payload.catalog_id,
         )
     except ValueError as exc:
         raise_invalid(exc)
     except MCPClientError as exc:
         raise_upstream(exc)
-    return await attach_mcp_server_icon(container, server)
+    return await attach_mcp_server_icon(di, server)
 
 
 async def op_flows_mcp_catalog_uninstall(
     payload: MCPCatalogIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> MCPCatalogUninstalledResponse:
     _ = user
-    _ = await require_company_member(container)
-    runtime = as_flow_runtime_container(container)
+    _ = await require_company_member(di)
     try:
         await uninstall_catalog_entry_from_company(
-            container=runtime,
+            flow_access_service=di.flow_access_service,
             catalog_id=payload.catalog_id,
         )
     except ValueError as exc:

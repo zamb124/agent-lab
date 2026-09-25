@@ -14,35 +14,24 @@ from core.tasks.logging_init import setup_worker_logging_early
 _crm_worker_settings = CRMSettings.model_validate(load_merged_config(service_name="crm", silent=True))
 setup_worker_logging_early("crm_worker", logging_config=_crm_worker_settings.logging)
 set_settings(_crm_worker_settings)
-_segment = resolve_files_route_segment("crm_worker")
-set_files_route_segment(_segment)
+set_files_route_segment(resolve_files_route_segment("crm_worker"))
 
 import importlib
 
-from taskiq import TaskiqState
-
-from apps.crm.container import get_crm_container
-from apps.platform_tasks.wiring import wire_worker
-from core.billing import set_billing_service
-from core.files.processors import initialize_default_processors
+from apps.crm.services.task_service import TaskService
+from apps.crm_worker.di import CrmWorkerDi
+from apps.worker_manifest import wire_worker
+from core.di import recipe
 from core.logging import get_logger
-from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
+from core.tasks.worker_bootstrap import build_worker
 
 logger = get_logger(__name__)
 
-# side-effect: register CRM platform event catalog types for this process
-_ = importlib.import_module("apps.crm.events")
 _ = importlib.import_module("apps.crm.events")
 
-broker = wire_worker("crm")
 
-
-async def _startup(state: TaskiqState) -> None:
-    container = get_crm_container()
-    container.bind_files_route_segment(_segment)
-    state.container = container
-
-    reconciled = await container.task_service.reconcile_stale_worker_tasks()
+async def reconcile_crm_worker_tasks(task_service: TaskService) -> None:
+    reconciled = await task_service.reconcile_stale_worker_tasks()
     if reconciled:
         logger.warning(
             "worker.reconcile_stale_crm_tasks",
@@ -50,21 +39,16 @@ async def _startup(state: TaskiqState) -> None:
             reconciled=reconciled,
         )
 
-    initialize_default_processors(container.file_repository)
-    set_billing_service(container.billing_service)
-    init_worker_tracing("crm_worker", container)
 
-
-async def _shutdown(state: TaskiqState) -> None:
-    _ = state
-
-
+broker = wire_worker("crm")
 worker_app = build_worker(
     broker,
     service_name="crm_worker",
     queue="crm",
-    on_startup=_startup,
-    on_shutdown=_shutdown,
+    settings=_crm_worker_settings,
+    di_class=CrmWorkerDi,
+    database="crm_url",
+    lifecycle=(recipe(reconcile_crm_worker_tasks),),
 )
 
 __all__ = ["worker_app"]

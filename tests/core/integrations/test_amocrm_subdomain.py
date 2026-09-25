@@ -21,5 +21,5 @@ def test_normalize_amocrm_subdomain_query_ok(raw: str, expected: str) -> None:
 
 
 def test_normalize_amocrm_subdomain_query_empty_raises() -> None:
-    with pytest.raises(ValueError, match="пустой"):
+    with pytest.raises(ValueError, match="Amo subdomain is empty"):
         normalize_amocrm_subdomain_query("   ")

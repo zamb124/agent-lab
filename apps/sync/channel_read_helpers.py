@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from apps.sync.channel_lane_preview import ChannelLaneSummary
-from apps.sync.db.models import SyncChannel
-from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.models.channel import SyncChannel, SyncChannelMember
 from apps.sync.models.channels import ChannelRead, ChannelType
 from apps.sync.models.common import UserBrief
+from apps.sync.models.lane_preview import ChannelLaneSummary
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
-from core.db.repositories.user_repository import UserRepository
+from core.models.identity_models import User
 
 
-async def _user_brief(user_repository: UserRepository | None, user_id: str) -> UserBrief:
+async def _user_brief(user_id: str, *, resolve_user: bool) -> UserBrief:
     display_name = user_id
     avatar_url = None
-    if user_repository is not None:
-        u = await user_repository.get(user_id)
+    if resolve_user:
+        u = await User.get(user_id)
         if u is not None:
             display_name = u.name
             avatar_url = u.avatar_url
@@ -26,9 +25,8 @@ async def channel_read_from_entity(
     entity: SyncChannel,
     *,
     viewer_user_id: str,
-    channel_repository: ChannelRepository,
     channel_access: SyncChannelAccessService,
-    user_repository: UserRepository | None,
+    resolve_user: bool,
     company_id: str,
     lane_summary: ChannelLaneSummary | None = None,
 ) -> ChannelRead:
@@ -46,13 +44,13 @@ async def channel_read_from_entity(
         member_ids = await channel_access.list_member_user_ids(entity.channel_id)
         others = [uid for uid in member_ids if uid != viewer_user_id]
         if len(others) >= 1:
-            peer = await _user_brief(user_repository, others[0])
-            peer_last_read_at = await channel_repository.get_peer_last_read_at(
+            peer = await _user_brief(others[0], resolve_user=resolve_user)
+            peer_last_read_at = await SyncChannelMember.peer_channel_member_last_read_at(
                 entity.channel_id,
                 viewer_user_id,
                 company_id=company_id,
             )
-    notifications_muted = await channel_repository.get_member_notifications_muted(
+    notifications_muted = await SyncChannelMember.channel_member_notifications_muted(
         entity.channel_id,
         viewer_user_id,
         company_id=company_id,

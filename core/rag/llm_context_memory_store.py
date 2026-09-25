@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 
+from core.clients.rag_client import RagClient
 from core.context import get_context
 from core.llm_context.memory import (
     LLMContextMemoryEpisode,
@@ -15,9 +16,9 @@ from core.llm_context.memory_compaction import LLM_CONTEXT_MEMORY_RECALL_CONTENT
 from core.llm_context.models import LLMContextMemoryScope
 from core.models.identity_models import NamespaceKind
 from core.namespace import NamespaceService
+from core.rag.base_provider import BaseRAGProvider
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchResult
 from core.rag.rag_resource_bind import RagResourceBindParams
-from core.rag.repository import RAGRepository
 from core.types import JsonObject, JsonValue, require_json_object
 
 _DEFAULT_NAMESPACE_PREFIX = "llm-memory"
@@ -29,22 +30,24 @@ class RAGLLMContextMemoryStore:
     def __init__(
         self,
         *,
-        repository: RAGRepository,
+        rag_provider: BaseRAGProvider,
         namespace_service: NamespaceService | None = None,
         namespace_id: str | None = None,
         provider: str = "pgvector",
+        rag_client: RagClient | None = None,
     ) -> None:
-        self.repository: RAGRepository = repository
+        self.rag_provider: BaseRAGProvider = rag_provider
         self.namespace_service: NamespaceService | None = namespace_service
         self.namespace_id: str | None = namespace_id
         self.provider: str = provider
+        self.rag_client: RagClient = rag_client if rag_client is not None else RagClient()
 
     async def write_episode(self, episode: LLMContextMemoryEpisode) -> str:
         company_id = _active_company_id()
         namespace_id = self._namespace_id(company_id)
         await self._ensure_namespace(namespace_id)
         metadata = _episode_metadata(episode, company_id)
-        _ = await self.repository.upload_text(
+        _ = await self.rag_provider.upload_document_from_text(
             namespace_id=namespace_id,
             text=episode.content,
             document_name=episode.title or episode.memory_id,
@@ -65,10 +68,21 @@ class RAGLLMContextMemoryStore:
             filters=_recall_filters(request, company_id),
             search_options=request.search_options,
         )
-        response = await self.repository.search_namespace(
+        opts = bind.search_options
+        response = await self.rag_client.search(
+            namespace_id=bind.namespace,
             query=request.query,
             limit=request.top_k,
-            bind=bind,
+            filters=bind.filters,
+            provider=bind.provider,
+            channels=opts.channels if opts is not None else None,
+            rrf_k=opts.rrf_k if opts is not None else None,
+            per_channel_top_k=opts.per_channel_top_k if opts is not None else None,
+            rerank=opts.rerank if opts is not None else None,
+            rerank_max_candidates=opts.rerank_max_candidates if opts is not None else None,
+            retrieval=opts.retrieval if opts is not None else None,
+            freshness_weight=opts.freshness_weight if opts is not None else None,
+            freshness_half_life_days=opts.freshness_half_life_days if opts is not None else None,
         )
         return [_result_to_record(result) for result in _coerce_results(response)]
 

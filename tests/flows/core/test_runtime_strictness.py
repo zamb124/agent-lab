@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, CodeNode, NodeInputs, NodeRunResult, create_node
+from apps.flows.src.streaming.emitter import EmitterFactory
+from core.clients.redis_client import RedisClient
 from core.flow_ui.templates import default_chat_document
 from core.state import ExecutionState
 
@@ -17,23 +17,11 @@ class _NoWorkflowRuntime:
         return None
 
 
-class _StrictRuntimeContainer:
-    workflow_runtime = _NoWorkflowRuntime()
-    redis_client = object()
-
-    def get_code_runner(self, language: str) -> object:
-        raise AssertionError(f"runner must not be requested before durable context: {language}")
-
-
 class _PureNode(BaseNode):
     async def _run_impl(self, state: ExecutionState, inputs: NodeInputs) -> NodeRunResult:
         _ = state
         _ = inputs
         return None
-
-
-def _container() -> FlowRuntimeContainer:
-    return cast(FlowRuntimeContainer, _StrictRuntimeContainer())
 
 
 def _state() -> ExecutionState:
@@ -46,8 +34,8 @@ def _state() -> ExecutionState:
 
 
 @pytest.mark.asyncio
-async def test_flow_from_config_requires_runtime_container() -> None:
-    with pytest.raises(TypeError, match="container"):
+async def test_flow_from_config_requires_node_constructor() -> None:
+    with pytest.raises(TypeError, match="node_constructor"):
         _ = await Flow.from_config(
             {
                 "flow_id": "strict_flow",
@@ -60,27 +48,30 @@ async def test_flow_from_config_requires_runtime_container() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_node_requires_runtime_container() -> None:
-    with pytest.raises(TypeError, match="container"):
+async def test_create_node_requires_node_constructor() -> None:
+    with pytest.raises(TypeError, match="node_constructor"):
         _ = await create_node("n", {"type": "resource"})
 
 
-def test_side_effect_node_constructor_requires_runtime_container() -> None:
-    with pytest.raises(TypeError, match="container"):
+def test_side_effect_node_constructor_requires_execution() -> None:
+    with pytest.raises(TypeError, match="execution"):
         _ = CodeNode("code", config={"type": "code", "code": "def execute(args, state): pass"})
 
 
 @pytest.mark.asyncio
 async def test_flow_run_requires_existing_workflow_instance() -> None:
-    container = _container()
+    runtime = _NoWorkflowRuntime()
+    execution = execution_context_for(runtime)
+    redis_client = RedisClient.__new__(RedisClient)
     flow = Flow(
         flow_id="strict_flow",
         name="Strict",
         entry="n",
-        nodes={"n": _PureNode("n", {"type": "resource"}, container=container)},
+        nodes={"n": _PureNode("n", {"type": "resource"}, execution=execution, redis_client=redis_client)},
         edges=[],
         interface=default_chat_document(),
-        container=container,
+        execution=execution,
+        emitter_factory=EmitterFactory.__new__(EmitterFactory),
     )
 
     with pytest.raises(RuntimeError, match="requires durable workflow instance"):
@@ -89,10 +80,12 @@ async def test_flow_run_requires_existing_workflow_instance() -> None:
 
 @pytest.mark.asyncio
 async def test_side_effect_node_run_requires_existing_workflow_instance() -> None:
+    runtime = _NoWorkflowRuntime()
     node = CodeNode(
         "code",
         config={"type": "code", "code": "def execute(args, state): return {}"},
-        container=_container(),
+        execution=execution_context_for(runtime),
+        redis_client=RedisClient.__new__(RedisClient),
     )
 
     with pytest.raises(RuntimeError, match="requires durable workflow instance"):

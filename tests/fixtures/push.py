@@ -2,7 +2,7 @@
 Фикстуры для тестирования Push Notifications.
 
 Используют существующую тестовую инфраструктуру:
-- frontend_container для репозитория
+- frontend_di для репозитория
 - auth_token для авторизации
 - frontend_service для E2E тестов
 
@@ -14,6 +14,8 @@
 
 import pytest
 import pytest_asyncio
+
+from core.push.models import PushSubscription
 
 
 @pytest.fixture
@@ -73,15 +75,6 @@ def push_subscription_android_data():
 
 
 @pytest.fixture
-def push_repository(frontend_container):
-    """
-    Репозиторий для работы с push подписками.
-    Использует container как все остальные репозитории.
-    """
-    return frontend_container.push_subscription_repository
-
-
-@pytest.fixture
 def web_push_service(vapid_keys):
     """
     WebPushService с тестовыми VAPID ключами.
@@ -96,15 +89,16 @@ def web_push_service(vapid_keys):
 
 
 @pytest_asyncio.fixture
-async def test_push_subscription(push_repository, push_subscription_data, unique_id):
+async def test_push_subscription(frontend_di, push_subscription_data, unique_id):
     """
     Создает тестовую push подписку в реальной БД.
     Автоматически удаляется после теста.
     """
+    _ = frontend_di
     user_id = f"test_user_{unique_id}"
     endpoint = f"{push_subscription_data['endpoint']}_{unique_id}"
 
-    subscription = await push_repository.upsert_subscription(
+    subscription = await PushSubscription.upsert_by_endpoint(
         user_id=user_id,
         endpoint=endpoint,
         keys=push_subscription_data["keys"],
@@ -116,16 +110,17 @@ async def test_push_subscription(push_repository, push_subscription_data, unique
 
     # Очистка
     try:
-        await push_repository.delete_subscription(user_id, endpoint)
+        _ = await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
     except Exception:
         pass
 
 
 @pytest_asyncio.fixture
-async def test_push_subscriptions_multi_device(push_repository, unique_id):
+async def test_push_subscriptions_multi_device(frontend_di, unique_id):
     """
     Создает подписки для 3 устройств одного пользователя.
     """
+    _ = frontend_di
     user_id = f"test_user_multi_{unique_id}"
 
     devices = [
@@ -134,12 +129,12 @@ async def test_push_subscriptions_multi_device(push_repository, unique_id):
         ("android", f"https://fcm.googleapis.com/android-{unique_id}"),
     ]
 
-    subscriptions = []
-    endpoints = []
+    subscriptions: list[PushSubscription] = []
+    endpoints: list[str] = []
 
     for platform, endpoint in devices:
         endpoints.append(endpoint)
-        sub = await push_repository.upsert_subscription(
+        sub = await PushSubscription.upsert_by_endpoint(
             user_id=user_id,
             endpoint=endpoint,
             keys={"p256dh": f"key_{platform}", "auth": f"auth_{platform}"},
@@ -152,7 +147,7 @@ async def test_push_subscriptions_multi_device(push_repository, unique_id):
     # Очистка
     for endpoint in endpoints:
         try:
-            await push_repository.delete_subscription(user_id, endpoint)
+            _ = await PushSubscription.delete_by_user_and_endpoint(user_id, endpoint)
         except Exception:
             pass
 

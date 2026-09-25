@@ -4,8 +4,9 @@
 
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode
 from core.clients.llm import LLMToolCall
@@ -43,27 +44,27 @@ class _BumpNode(BaseNode):
 def _bump_node(
     node_id: str,
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     incoming_policy: str | None = None,
 ) -> _BumpNode:
     config = {"type": "test"}
     if incoming_policy is not None:
         config["incoming_policy"] = incoming_policy
-    return _BumpNode(node_id, config, container=container)
+    return _BumpNode(node_id, config, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client)
 
 
 @pytest.mark.asyncio
 async def test_incoming_policy_all_waits_all_predecessors(
-    container: FlowRuntimeContainer, unique_id: str
+    di: FlowsDi, unique_id: str
 ) -> None:
     """
     0 -> 1 -> 2 -> 3 и 0 -> 3: короткая ветка не должна запускать 3 до прихода с 2.
     """
     nodes = {
-        "0": _bump_node("0", container=container),
-        "1": _bump_node("1", container=container),
-        "2": _bump_node("2", container=container),
-        "3": _bump_node("3", container=container, incoming_policy="all"),
+        "0": _bump_node("0", di=di),
+        "1": _bump_node("1", di=di),
+        "2": _bump_node("2", di=di),
+        "3": _bump_node("3", di=di, incoming_policy="all"),
     }
     flow = Flow(
         flow_id="join_all",
@@ -78,22 +79,22 @@ async def test_incoming_policy_all_waits_all_predecessors(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
     hits = out.variables.get("hits") or {}
     assert hits.get("3") == 1, f"expected node 3 once, got {hits!r}"
 
 
 @pytest.mark.asyncio
 async def test_parallel_wave_interrupt_keeps_completed_sibling_state(
-    container: FlowRuntimeContainer, unique_id: str
+    di: FlowsDi, unique_id: str
 ) -> None:
     nodes = {
-        "start": _SetVariableNode("start", {"type": "test"}, container=container),
-        "left": _SetVariableNode("left", {"type": "test"}, container=container),
-        "right": _InterruptNode("right", {"type": "test"}, container=container),
+        "start": _SetVariableNode("start", {"type": "test"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client),
+        "left": _SetVariableNode("left", {"type": "test"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client),
+        "right": _InterruptNode("right", {"type": "test"}, execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client),
     }
     flow = Flow(
         flow_id="parallel_interrupt",
@@ -107,11 +108,11 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(
             {"from_node": "right", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
 
     out = await run_flow(
-        container=container,
+        di=di,
         flow=flow,
         state=workflow_state(flow_id=flow.flow_id, unique_id=unique_id),
     )
@@ -123,14 +124,14 @@ async def test_parallel_wave_interrupt_keeps_completed_sibling_state(
 
 @pytest.mark.asyncio
 async def test_incoming_policy_any_allows_double_join_when_waves_split(
-    container: FlowRuntimeContainer, unique_id: str
+    di: FlowsDi, unique_id: str
 ) -> None:
     """Без incoming_policy (any) нода 3 может выполниться дважды при разнесённых волнах."""
     nodes = {
-        "0": _bump_node("0", container=container),
-        "1": _bump_node("1", container=container),
-        "2": _bump_node("2", container=container),
-        "3": _bump_node("3", container=container),
+        "0": _bump_node("0", di=di),
+        "1": _bump_node("1", di=di),
+        "2": _bump_node("2", di=di),
+        "3": _bump_node("3", di=di),
     }
     flow = Flow(
         flow_id="join_any",
@@ -145,10 +146,10 @@ async def test_incoming_policy_any_allows_double_join_when_waves_split(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
     n3_calls = len((out.node_history.get("3") or {}).get("calls") or [])
     assert n3_calls == 2, (
         f"expected node 3 executed twice with any policy, node_history calls={n3_calls}"
@@ -157,17 +158,17 @@ async def test_incoming_policy_any_allows_double_join_when_waves_split(
 
 @pytest.mark.asyncio
 async def test_premature_completion_on_incomplete_and_join(
-    container: FlowRuntimeContainer, unique_id: str
+    di: FlowsDi, unique_id: str
 ) -> None:
     """
     Нода join (all) не собрала всех предков, других переходов нет — FlowPrematureCompletionError.
     Предок «2» в графе есть, но с entry недостижим.
     """
     nodes = {
-        "0": _bump_node("0", container=container),
-        "1": _bump_node("1", container=container),
-        "2": _bump_node("2", container=container),
-        "3": _bump_node("3", container=container, incoming_policy="all"),
+        "0": _bump_node("0", di=di),
+        "1": _bump_node("1", di=di),
+        "2": _bump_node("2", di=di),
+        "3": _bump_node("3", di=di, incoming_policy="all"),
     }
     flow = Flow(
         flow_id="join_stuck",
@@ -182,24 +183,24 @@ async def test_premature_completion_on_incomplete_and_join(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
     with pytest.raises(FlowPrematureCompletionError) as exc_info:
-        await run_flow(container=container, flow=flow, state=state)
+        await run_flow(di=di, flow=flow, state=state)
     assert exc_info.value.payload.get("reason") == "incomplete_and_join"
 
 
 @pytest.mark.asyncio
 async def test_all_conditional_outgoing_false_raises_no_conditional_match(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
 ) -> None:
     """Все исходы с to!=null с условием, ни одно не выполнилось — FlowPrematureCompletionError."""
     nodes = {
-        "0": _bump_node("0", container=container),
-        "1": _bump_node("1", container=container),
-        "2": _bump_node("2", container=container),
+        "0": _bump_node("0", di=di),
+        "1": _bump_node("1", di=di),
+        "2": _bump_node("2", di=di),
     }
     flow = Flow(
         flow_id="no_route",
@@ -221,24 +222,24 @@ async def test_all_conditional_outgoing_false_raises_no_conditional_match(
             {"from_node": "2", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
     with pytest.raises(FlowPrematureCompletionError) as exc_info:
-        await run_flow(container=container, flow=flow, state=state)
+        await run_flow(di=di, flow=flow, state=state)
     assert exc_info.value.payload.get("reason") == "no_conditional_match"
 
 
 @pytest.mark.asyncio
 async def test_router_with_second_branch_reaches_end(
-    container: FlowRuntimeContainer, unique_id: str
+    di: FlowsDi, unique_id: str
 ) -> None:
     """Покрытие альтернативной ветки: маршрут ведёт в 3, затем END (to: null)."""
     nodes = {
-        "0": _bump_node("0", container=container),
-        "1": _bump_node("1", container=container),
-        "2": _bump_node("2", container=container),
-        "3": _bump_node("3", container=container),
+        "0": _bump_node("0", di=di),
+        "1": _bump_node("1", di=di),
+        "2": _bump_node("2", di=di),
+        "3": _bump_node("3", di=di),
     }
     flow = Flow(
         flow_id="router_ok",
@@ -271,10 +272,10 @@ async def test_router_with_second_branch_reaches_end(
             {"from_node": "3", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, variables={"route": "stop"})
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
     hits = out.variables.get("hits") or {}
     assert hits.get("0") == 1
     assert hits.get("1") == 1
@@ -283,13 +284,13 @@ async def test_router_with_second_branch_reaches_end(
 
 
 def test_join_required_skips_edge_with_contributes_to_join_false(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
 ) -> None:
     """Ребро с contributes_to_join=false не попадает в AND-множество предков."""
     nodes = {
-        "4": _bump_node("4", container=container),
-        "5": _bump_node("5", container=container),
-        "6": _bump_node("6", container=container),
+        "4": _bump_node("4", di=di),
+        "5": _bump_node("5", di=di),
+        "6": _bump_node("6", di=di),
     }
     flow = Flow(
         flow_id="join_req",
@@ -302,7 +303,7 @@ def test_join_required_skips_edge_with_contributes_to_join_false(
             {"from_node": "5", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     assert flow._join_required["5"] == frozenset({"4"})
 

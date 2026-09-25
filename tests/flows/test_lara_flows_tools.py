@@ -5,6 +5,9 @@ import json
 import pytest
 import pytest_asyncio
 
+from apps.flows.di import FlowsDi
+from apps.flows.src.clients.flows_client import FlowsClient
+from apps.flows.src.services.tool_approval import ToolApprovalStore
 from apps.flows.tools.flows.flows_editor_tools import (
     flows_get_node,
     flows_list_nodes,
@@ -35,6 +38,17 @@ async def lara_flows_tool_context(auth_token_system, system_user_id):
     )
     set_context(ctx)
     return ctx
+
+
+def _bound(tool, di: FlowsDi):
+    return tool.with_dependencies(
+        [
+            FlowsClient(
+                lara_facade=di.lara_facade,
+                tool_approval_store=ToolApprovalStore(di.node_constructor.redis_client),
+            )
+        ]
+    )
 
 
 def _tool_state(*, unique_id: str, system_user_id: str) -> ExecutionState:
@@ -83,10 +97,11 @@ async def test_flows_read_context_returns_selected_node(
     lara_flows_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    raw = await flows_read_context._run_impl(
+    raw = await _bound(flows_read_context, di)._run_impl(
         {"flow_id": flow_id, "branch_id": "base", "node_id": "main"}, state
     )
     data = json.loads(raw)
@@ -114,10 +129,11 @@ async def test_flows_get_node_returns_single_node_without_graph(
     lara_flows_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    raw = await flows_get_node._run_impl(
+    raw = await _bound(flows_get_node, di)._run_impl(
         {"flow_id": flow_id, "branch_id": "base", "node_id": "main"}, state
     )
     data = json.loads(raw)
@@ -138,10 +154,13 @@ async def test_flows_list_nodes_returns_index_without_prompt_bodies(
     lara_flows_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    raw = await flows_list_nodes._run_impl({"flow_id": flow_id, "branch_id": "base"}, state)
+    raw = await _bound(flows_list_nodes, di)._run_impl(
+        {"flow_id": flow_id, "branch_id": "base"}, state
+    )
     data = json.loads(raw)
     assert data["success"] is True
     assert data["flow_id"] == flow_id
@@ -162,11 +181,13 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     lara_flows_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     new_prompt = f"Updated prompt {unique_id}"
-    propose_raw = await flows_patch_node._run_impl(
+    patch_node = _bound(flows_patch_node, di)
+    propose_raw = await patch_node._run_impl(
         {
             "flow_id": flow_id,
             "branch_id": "base",
@@ -187,7 +208,7 @@ async def test_flows_patch_node_confirm_first_apply_persists_flow(
     assert apply_button.action is not None
     assert apply_button.action.name == "apply_pending_action"
     assert apply_button.action.payload["pending_action_id"] == pending_action_id
-    apply_raw = await flows_patch_node._run_impl(
+    apply_raw = await patch_node._run_impl(
         {"mode": "apply", "pending_action_id": pending_action_id}, state
     )
     data = json.loads(apply_raw)
@@ -212,11 +233,12 @@ async def test_flows_patch_flow_propose_does_not_persist(
     lara_flows_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     flow_id = await _create_test_flow(flows_client, unique_id, auth_headers_system)
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
     proposed_name = f"Proposed {unique_id}"
-    raw = await flows_patch_flow._run_impl(
+    raw = await _bound(flows_patch_flow, di)._run_impl(
         {"flow_id": flow_id, "patch_json": json.dumps({"name": proposed_name}), "mode": "propose"},
         state,
     )

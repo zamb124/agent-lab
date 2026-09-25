@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 import apps.idle_worker.tasks.calendar_sync_tasks as calendar_sync_tasks
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.tasks.flow_tasks import process_flow_task
 from apps.flows.src.tasks.tool_tasks import execute_tool
 from apps.flows_worker.broker import broker
@@ -57,7 +58,7 @@ async def test_calendar_sync_tick_returns_zero_when_disabled(monkeypatch):
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
 
-    result = await calendar_sync_tasks.calendar_sync_tick()
+    result = await calendar_sync_tasks.calendar_sync_tick(di=object())
     assert result["integrations_total"] == 0
     assert result["notifications_sent"] == 0
 
@@ -102,12 +103,6 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         updated_at=now,
     )
 
-    async def _list_by_provider_service(self, provider, service, *, limit):
-        _ = (self, service, limit)
-        if provider == IntegrationProvider.GOOGLE:
-            return [credential]
-        return []
-
     class _FakeEvent:
         def __init__(self, event_id: str):
             self.event_id = event_id
@@ -146,26 +141,31 @@ async def test_calendar_sync_tick_detects_new_events_and_sends_notification(monk
         _ = (user_id, notification)
         sent_notifications["count"] += 1
 
-    class _FakeCredentialRepo:
-        async def list_by_provider_service(self, provider, service, *, limit):
-            return await _list_by_provider_service(self, provider, service, limit=limit)
+    async def _list_credentials(cls, provider, service, *, limit):
+        _ = (cls, service, limit)
+        if provider == IntegrationProvider.GOOGLE:
+            return [credential]
+        return []
 
-    fake_container = type(
-        "Container",
+    task_di = type(
+        "TaskDi",
         (),
         {
             "calendar_service": _FakeCalendarService(),
             "shared_storage": _FakeStorage(),
-            "integration_credential_repository": _FakeCredentialRepo(),
         },
     )()
 
     monkeypatch.setattr(calendar_sync_tasks, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(calendar_sync_tasks, "get_container", lambda: fake_container)
+    monkeypatch.setattr(
+        IntegrationCredential,
+        "list_by_provider_service",
+        classmethod(_list_credentials),
+    )
     monkeypatch.setattr(calendar_sync_tasks, "notify_user", _notify_user)
 
-    first = await calendar_sync_tasks.calendar_sync_tick()
-    second = await calendar_sync_tasks.calendar_sync_tick()
+    first = await calendar_sync_tasks.calendar_sync_tick(di=task_di)
+    second = await calendar_sync_tasks.calendar_sync_tick(di=task_di)
 
     assert first["integrations_total"] == 1
     assert first["events_new"] == 1
@@ -178,9 +178,8 @@ class TestProcessAgentTask:
     """Тесты process_flow_task."""
 
     @pytest.fixture
-    async def setup_flow(self, app, container):
+    async def setup_flow(self, app, di):
         """Создает flow для тестов."""
-        from apps.flows.src.models import FlowConfig
 
         flow_config = FlowConfig(
             flow_id="task_test_flow",
@@ -194,10 +193,10 @@ class TestProcessAgentTask:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
 
     @pytest.mark.asyncio
-    async def test_process_flow_task_executes_flow(self, app, container, setup_flow, unique_id, mock_context):
+    async def test_process_flow_task_executes_flow(self, app, di, setup_flow, unique_id, mock_context):
         """process_flow_task выполняет flow."""
         session_id = f"task_test_flow:test-session-{unique_id}"
         mock_context.session_id = session_id
@@ -209,6 +208,7 @@ class TestProcessAgentTask:
             user_id="test-user-1",
             content="Test message",
             context_data=mock_context.model_dump(),
+            di=di,
         )
 
         assert result is not None
@@ -217,7 +217,7 @@ class TestProcessAgentTask:
 
     @pytest.mark.asyncio
     async def test_process_flow_task_returns_completed_task_state(
-        self, app, container, setup_flow, unique_id, mock_context
+        self, app, di, setup_flow, unique_id, mock_context
     ):
         """process_flow_task возвращает task_state=completed."""
         session_id = f"task_test_flow:test-session-{unique_id}"
@@ -230,16 +230,17 @@ class TestProcessAgentTask:
             user_id="test-user-1",
             content="Hello",
             context_data=mock_context.model_dump(),
+            di=di,
         )
 
         assert result["task_state"] == "completed"
         set_context(mock_context)
-        persisted = await container.workflow_runtime.get_state(session_id)
+        persisted = await di.workflow_runtime.get_state(session_id)
         assert persisted is not None
         assert persisted.terminal_task_state == "completed"
 
     @pytest.mark.asyncio
-    async def test_process_flow_task_raises_on_unknown_flow(self, app, container, unique_id, mock_context):
+    async def test_process_flow_task_raises_on_unknown_flow(self, app, di, unique_id, mock_context):
         """process_flow_task выбрасывает ошибку для несуществующего flow."""
         session_id = f"nonexistent_flow:test-session-{unique_id}"
         mock_context.session_id = session_id
@@ -251,19 +252,19 @@ class TestProcessAgentTask:
                 user_id="test-user",
                 content="Test",
                 context_data=mock_context.model_dump(),
+                di=di,
             )
 
         set_context(mock_context)
         # Flow отсутствует — durable session не создаётся до materialize UI / run.
-        persisted = await container.workflow_runtime.get_state(session_id)
+        persisted = await di.workflow_runtime.get_state(session_id)
         assert persisted is None
 
     @pytest.mark.asyncio
     async def test_process_flow_task_persists_failed_terminal_state(
-        self, app, container, unique_id, mock_context
+        self, app, di, unique_id, mock_context
     ):
         """При падении runtime фиксируется terminal failed event."""
-        from apps.flows.src.models import FlowConfig
 
         flow_id = f"failed_terminal_flow_{unique_id}"
         session_id = f"{flow_id}:ctx-{unique_id}"
@@ -279,7 +280,7 @@ class TestProcessAgentTask:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_context.session_id = session_id
         mock_context.flow_id = flow_id
         mock_context.user.user_id = "test-user-1"
@@ -292,27 +293,26 @@ class TestProcessAgentTask:
                     user_id="test-user-1",
                     content="Test",
                     context_data=mock_context.model_dump(),
+                    di=di,
                 )
 
             set_context(mock_context)
-            persisted = await container.workflow_runtime.get_state(session_id)
+            persisted = await di.workflow_runtime.get_state(session_id)
             assert persisted is not None
             assert persisted.terminal_task_state == "failed"
             assert "flow_id required" in (persisted.terminal_task_error or "")
         finally:
             set_context(mock_context)
-            await container.workflow_runtime.delete_state(session_id)
-            await container.flow_repository.delete(flow_id)
+            await di.workflow_runtime.delete_state(session_id)
+            await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestProcessAgentTaskResume:
     """Тесты resume через process_flow_task."""
 
     @pytest.fixture
-    async def setup_flow_with_state(self, app, container, unique_id):
+    async def setup_flow_with_state(self, app, di, unique_id):
         """Создает flow и state для тестов resume."""
-        from apps.flows.src.container import get_container
-        from apps.flows.src.models import FlowConfig
         from core.state.interrupt import InterruptData, InterruptSystemContext, UserMessageInterrupt
 
         flow_config = FlowConfig(
@@ -327,10 +327,10 @@ class TestProcessAgentTaskResume:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
 
         session_id = f"interrupt_test_flow:interrupt-session-{unique_id}"
-        workflow_runtime = get_container().workflow_runtime
+        workflow_runtime = di.workflow_runtime
         await workflow_runtime.save_state(
             session_id,
             {
@@ -354,7 +354,7 @@ class TestProcessAgentTaskResume:
 
     @pytest.mark.asyncio
     async def test_process_flow_task_resumes_flow(
-        self, app, container, setup_flow_with_state, mock_context
+        self, app, di, setup_flow_with_state, mock_context
     ):
         """process_flow_task с is_resume=True продолжает flow."""
         session_id = setup_flow_with_state
@@ -367,6 +367,7 @@ class TestProcessAgentTaskResume:
             content="My name is Test",
             is_resume=True,
             context_data=mock_context.model_dump(),
+            di=di,
         )
 
         assert result is not None
@@ -374,7 +375,7 @@ class TestProcessAgentTaskResume:
 
     @pytest.mark.asyncio
     async def test_process_flow_task_resume_raises_on_unknown_flow(
-        self, app, container, unique_id, mock_context
+        self, app, di, unique_id, mock_context
     ):
         """process_flow_task с is_resume выбрасывает ошибку для несуществующего flow."""
         session_id = f"nonexistent_flow:test-session-{unique_id}"
@@ -388,6 +389,7 @@ class TestProcessAgentTaskResume:
                 content="Test answer",
                 is_resume=True,
                 context_data=mock_context.model_dump(),
+                di=di,
             )
 
 
@@ -395,8 +397,7 @@ class TestProcessFlowTaskSequentialLlmNodes:
     """process_flow_task обходит граф: несколько llm_node подряд по рёбрам."""
 
     @pytest.fixture
-    async def two_llm_flow_id(self, app, container, unique_id):
-        from apps.flows.src.models import FlowConfig
+    async def two_llm_flow_id(self, app, di, unique_id):
 
         flow_id = f"two_llm_seq_{unique_id}"
         flow_config = FlowConfig(
@@ -417,14 +418,14 @@ class TestProcessFlowTaskSequentialLlmNodes:
             },
             edges=[{"from_node": "first", "to_node": "second"}],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_both_llm_nodes_run_via_process_task(
         self,
         app,
-        container,
+        di,
         two_llm_flow_id,
         unique_id,
         mock_context,
@@ -444,13 +445,14 @@ class TestProcessFlowTaskSequentialLlmNodes:
             user_id="test-user-1",
             content="hello",
             context_data=mock_context.model_dump(),
+            di=di,
         )
 
         assert result["task_state"] == "completed"
         assert result["response"] == "SECOND_OK"
 
         set_context(mock_context)
-        saved = await container.workflow_runtime.get_state(session_id)
+        saved = await di.workflow_runtime.get_state(session_id)
         assert saved is not None
         assert "first" in saved.node_history
         assert "second" in saved.node_history
@@ -510,7 +512,7 @@ async def run(args, state):
         }
 
     @pytest.mark.asyncio
-    async def test_execute_tool_calculator(self, app, calculator_config):
+    async def test_execute_tool_calculator(self, app, calculator_config, di):
         """execute_tool выполняет calculator tool."""
         from core.state import ExecutionState
 
@@ -524,14 +526,14 @@ async def run(args, state):
         result = await execute_tool(
             calculator_config,
             {"expression": "2 + 2"},
-            state.model_dump(exclude_none=False)
+            state.model_dump(exclude_none=False), di=di
         )
 
         assert result["tool_id"] == "test_calculator"
         assert "4" in result["result"]
 
     @pytest.mark.asyncio
-    async def test_execute_tool_returns_result_structure(self, app, calculator_config):
+    async def test_execute_tool_returns_result_structure(self, app, calculator_config, di):
         """execute_tool возвращает структуру с tool_id и result."""
         from core.state import ExecutionState
 
@@ -545,7 +547,7 @@ async def run(args, state):
         result = await execute_tool(
             calculator_config,
             {"expression": "10 * 5"},
-            state.model_dump(exclude_none=False)
+            state.model_dump(exclude_none=False), di=di
         )
 
         assert "tool_id" in result
@@ -554,7 +556,7 @@ async def run(args, state):
         assert "50" in result["result"]
 
     @pytest.mark.asyncio
-    async def test_execute_tool_with_state(self, app, calculator_config):
+    async def test_execute_tool_with_state(self, app, calculator_config, di):
         """execute_tool получает state."""
         from core.state import ExecutionState
 
@@ -569,13 +571,13 @@ async def run(args, state):
         result = await execute_tool(
             calculator_config,
             {"expression": "7 - 3"},
-            state.model_dump(exclude_none=False)
+            state.model_dump(exclude_none=False), di=di
         )
 
         assert "4" in result["result"]
 
     @pytest.mark.asyncio
-    async def test_execute_tool_raises_on_unknown_tool(self, app):
+    async def test_execute_tool_raises_on_unknown_tool(self, app, di):
         """execute_tool выбрасывает ошибку для tool без code."""
         from core.state import ExecutionState
 
@@ -590,11 +592,11 @@ async def run(args, state):
             await execute_tool(
                 {"tool_id": "no_code_tool"},
                 {},
-                state.model_dump(exclude_none=False)
+                state.model_dump(exclude_none=False), di=di
             )
 
     @pytest.mark.asyncio
-    async def test_execute_tool_handles_interrupt(self, app):
+    async def test_execute_tool_handles_interrupt(self, app, di):
         """execute_tool обрабатывает FlowInterrupt."""
         from core.state import ExecutionState
 
@@ -618,7 +620,7 @@ async def run(args, state):
         result = await execute_tool(
             ask_user_config,
             {"question": "What is your name?"},
-            state.model_dump(exclude_none=False)
+            state.model_dump(exclude_none=False), di=di
         )
 
         assert result["tool_id"] == "test_ask_user"
@@ -627,7 +629,7 @@ async def run(args, state):
         assert result["interrupt"]["body"]["question"] == "What is your name?"
 
     @pytest.mark.asyncio
-    async def test_execute_tool_complex_expression(self, app, calculator_config):
+    async def test_execute_tool_complex_expression(self, app, calculator_config, di):
         """execute_tool с комплексным выражением."""
         from core.state import ExecutionState
 
@@ -641,7 +643,7 @@ async def run(args, state):
         result = await execute_tool(
             calculator_config,
             {"expression": "(10 + 5) * 2 - 8 / 4"},
-            state.model_dump(exclude_none=False)
+            state.model_dump(exclude_none=False), di=di
         )
 
         assert result["tool_id"] == "test_calculator"

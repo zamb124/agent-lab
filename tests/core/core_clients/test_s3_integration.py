@@ -2,7 +2,6 @@
 Интеграционные тесты S3 клиента.
 Работают с реальным S3 хранилищем и БД.
 """
-import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -10,16 +9,14 @@ from urllib.parse import urlparse
 
 import pytest
 
-from core.files.file_repository import file_record_storage_json
 from core.files.models import FileRecord, FileStatus
-from core.files.s3_client import S3ClientFactory
+from core.files.object_storage import PLATFORM_STORAGE_ID
+from core.files.object_store.s3_client import S3ClientFactory
 
 
 def get_test_bucket_name():
-    """Получить имя тестового bucket в зависимости от окружения"""
-    if os.getenv("TESTING") == "true":
-        return "test-bucket"
-    return "test-bucket"
+    """Ключ platform storage для тестов (create_client_for_bucket принимает platform id или bucket_name)."""
+    return PLATFORM_STORAGE_ID
 
 
 def skip_if_s3_disabled():
@@ -72,16 +69,14 @@ class TestS3Integration:
         skip_if_s3_disabled()
         from core.config import get_settings
 
-        bucket_name = get_test_bucket_name()
-        client = S3ClientFactory.create_client_for_bucket(bucket_name)
-        bucket_config = get_settings().s3.buckets[bucket_name]
-        expected_physical = bucket_config.bucket_name or bucket_name
+        s3 = get_settings().s3
+        client = S3ClientFactory.create_platform_client()
 
-        assert client.bucket_name == expected_physical
-        assert client.require_bucket_config_key() == bucket_name
-        assert client.provider_name == bucket_config.provider
-        assert client.endpoint_url == bucket_config.endpoint_url
-        assert client.access_key_id == bucket_config.access_key_id
+        assert client.bucket_name == s3.bucket_name
+        assert client.require_bucket_config_key() == PLATFORM_STORAGE_ID
+        assert client.provider_name == s3.provider
+        assert client.endpoint_url == s3.endpoint_url
+        assert client.access_key_id == s3.access_key_id
         assert client.track_files
 
         await client.close()
@@ -89,16 +84,15 @@ class TestS3Integration:
     async def test_s3_client_creation_invalid_bucket(self):
         """Тест создания клиента для несуществующего бакета"""
         skip_if_s3_disabled()
-        with pytest.raises(ValueError, match="не найден в конфигурации"):
+        with pytest.raises(ValueError, match="is not the platform storage"):
             S3ClientFactory.create_client_for_bucket('nonexistent-bucket')
 
     async def test_bucket_config_key_on_factory_client(self):
-        """FileRecord.s3_bucket = ключ конфига; клиент знает физическое имя и ключ."""
+        """FileRecord.storage_id = platform; клиент знает физическое имя и ключ."""
         skip_if_s3_disabled()
-        cfg_key = get_test_bucket_name()
-        client = S3ClientFactory.create_client_for_bucket(cfg_key)
+        client = S3ClientFactory.create_platform_client()
         try:
-            assert client.require_bucket_config_key() == cfg_key
+            assert client.require_bucket_config_key() == PLATFORM_STORAGE_ID
         finally:
             await client.close()
 
@@ -313,20 +307,17 @@ class TestS3Integration:
 class TestS3WithDatabase:
     """Тесты S3 с сохранением записей в БД"""
 
-    async def test_file_record_creation_and_storage(self, storage, minio_bucket):
+    async def test_file_record_creation_and_storage(self, di, minio_bucket):
         """Тест создания и сохранения записи о файле в БД"""
 
-        bucket_name = get_test_bucket_name()
-        client = minio_bucket
+        _ = minio_bucket
 
         # Создаем запись о файле
         file_record = FileRecord(
             file_id=f"test_{uuid.uuid4().hex[:8]}",
-            provider="minio",
             original_name="test-db-file.txt",
             s3_key="test/db-file.txt",
-            s3_bucket=bucket_name,
-            s3_endpoint=client.endpoint_url,
+            storage_id=PLATFORM_STORAGE_ID,
             content_type="text/plain",
             file_size=1024,
             uploaded_by="test_user",
@@ -334,37 +325,20 @@ class TestS3WithDatabase:
             metadata={"source": "pytest", "test_type": "integration"}
         )
 
-        # Сохраняем в БД
-        save_success = await storage.set(file_record.key, file_record_storage_json(file_record), force_global=True)
-        assert save_success
-        print(f"✅ Запись о файле сохранена в БД: {file_record.key}")
-
-        # Проверяем что запись сохранена сразу после set
-
-        # Получаем из БД
-        stored_data = await storage.get(file_record.key, force_global=True)
-        assert stored_data is not None, f"Запись должна быть найдена, ключ={file_record.key}"
-
-        # Восстанавливаем объект
-        stored_record = FileRecord.model_validate_json(stored_data)
-
+        _ = di
+        assert await FileRecord.set(file_record)
+        stored_record = await FileRecord.get(file_record.file_id)
+        assert stored_record is not None
         assert stored_record.file_id == file_record.file_id
-        assert stored_record.provider == file_record.provider
         assert stored_record.original_name == file_record.original_name
         assert stored_record.s3_key == file_record.s3_key
         assert stored_record.url == file_record.url
-        print("✅ Запись восстановлена из БД корректно")
 
-        # Обновляем статус
         stored_record.status = FileStatus.UPLOADED
-        update_success = await storage.set(stored_record.key, file_record_storage_json(stored_record), force_global=True)
-        assert update_success
-        print("✅ Статус файла обновлен в БД")
+        assert await FileRecord.set(stored_record)
+        assert await FileRecord.delete_by_id(file_record.file_id)
 
-        # Очистка
-        await storage.delete(file_record.key, force_global=True)
-
-    async def test_full_s3_workflow_with_db(self, storage, minio_bucket):
+    async def test_full_s3_workflow_with_db(self, di, minio_bucket):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
         client = minio_bucket
 
@@ -376,11 +350,9 @@ class TestS3WithDatabase:
         # 1. Создаем запись в БД (статус UPLOADING)
         file_record = FileRecord(
             file_id=file_id,
-            provider=client.provider_name,
             original_name=f"{file_id}.txt",
             s3_key=s3_key,
-            s3_bucket=client.require_bucket_config_key(),
-            s3_endpoint=client.endpoint_url,
+            storage_id=PLATFORM_STORAGE_ID,
             content_type="text/plain",
             file_size=len(test_data),
             uploaded_by="integration_test",
@@ -388,12 +360,10 @@ class TestS3WithDatabase:
             status=FileStatus.UPLOADING
         )
 
-        db_save_success = await storage.set(file_record.key, file_record_storage_json(file_record))
-        assert db_save_success
-        print(f"✅ 1. Запись создана в БД: {file_record.key}")
+        _ = di
+        assert await FileRecord.set(file_record)
 
         try:
-            # 2. Загружаем файл в S3
             s3_upload_success = await client.upload_bytes(
                 data=test_data,
                 key=s3_key,
@@ -403,15 +373,11 @@ class TestS3WithDatabase:
 
             if not s3_upload_success:
                 file_record.status = FileStatus.FAILED
-                await storage.set(file_record.key, file_record_storage_json(file_record))
+                assert await FileRecord.set(file_record)
             assert s3_upload_success, "S3 upload_bytes вернул False в сценарии FileRecord"
-            print(f"✅ 2. Файл загружен в S3: {s3_key}")
 
-            # 3. Обновляем статус в БД
             file_record.status = FileStatus.UPLOADED
-            db_update_success = await storage.set(file_record.key, file_record_storage_json(file_record))
-            assert db_update_success
-            print("✅ 3. Статус обновлен в БД: UPLOADED")
+            assert await FileRecord.set(file_record)
 
             # 4. Проверяем что файл доступен
             exists = await client.file_exists(s3_key)
@@ -438,53 +404,20 @@ class TestS3WithDatabase:
         finally:
             # 8. Очистка: удаляем из S3 и БД
             await client.delete_file(s3_key)
-            file_record.status = FileStatus.DELETED
-            await storage.set(file_record.key, file_record_storage_json(file_record))
-            print("✅ 7. Очистка завершена")
+            assert await FileRecord.delete_by_id(file_id)
 
             await client.close()
 
-
-    async def test_file_record_key_format(self):
-        """Тест формата ключей файлов в БД"""
-        # Тестируем разные провайдеры
-        providers_and_ids = [
-            ("yandex", "yandex_file_123"),
-            ("aws", "aws_file_456"),
-            ("minio", "minio_file_789"),
-            ("custom-provider", "custom_file_000")
-        ]
-
-        for provider, file_id in providers_and_ids:
-            file_record = FileRecord(
-                file_id=file_id,
-                provider=provider,
-                original_name="test.txt",
-                s3_key="test/test.txt",
-                s3_bucket="test-bucket",
-                s3_endpoint="https://example.com",
-                content_type="text/plain",
-                file_size=100
-            )
-
-            expected_key = f"s3:{provider}:{file_id}"
-            assert file_record.key == expected_key
-            print(f"✅ Ключ для {provider}: {file_record.key}")
-
     async def test_default_s3_client(self):
         """Тест дефолтного S3 клиента"""
-        default_client = S3ClientFactory.create_default_client()
+        default_client = S3ClientFactory.create_platform_client()
         from core.config import get_settings
 
         s = get_settings()
-        key = s.s3.default_bucket
-        cfg = s.s3.buckets[key]
-        expected_physical = cfg.bucket_name or key
-
         assert default_client is not None
-        assert default_client.bucket_name == expected_physical
-        assert default_client.require_bucket_config_key() == key
-        assert default_client.provider_name == "minio"
+        assert default_client.bucket_name == s.s3.bucket_name
+        assert default_client.require_bucket_config_key() == PLATFORM_STORAGE_ID
+        assert default_client.provider_name == s.s3.provider
         print(f"✅ Дефолтный клиент: {default_client.provider_name}/{default_client.bucket_name}")
 
         # Тестируем простую операцию
@@ -513,19 +446,12 @@ class TestS3Configuration:
 
         assert hasattr(settings, 's3')
         assert settings.s3.enabled
-        assert settings.s3.default_bucket == "test-bucket"
-        assert isinstance(settings.s3.buckets, dict)
-        assert len(settings.s3.buckets) >= 1
-
-        # Проверяем структуру бакетов
-        for bucket_name, bucket_config in settings.s3.buckets.items():
-            assert hasattr(bucket_config, 'provider')
-            assert hasattr(bucket_config, 'access_key_id')
-            assert hasattr(bucket_config, 'secret_access_key')
-            assert hasattr(bucket_config, 'region_name')
-            assert hasattr(bucket_config, 'endpoint_url')
-            assert hasattr(bucket_config, 'enabled')
-            print(f"✅ Бакет {bucket_name}: provider={bucket_config.provider}, enabled={bucket_config.enabled}")
+        assert settings.s3.bucket_name != ""
+        assert settings.s3.access_key_id != ""
+        assert settings.s3.secret_access_key != ""
+        assert settings.s3.region_name != ""
+        assert settings.s3.provider != ""
+        print(f"S3 platform bucket={settings.s3.bucket_name} provider={settings.s3.provider}")
 
     def test_file_record_url_generation(self):
         """Тест генерации URL для файлов через платформу"""
@@ -534,11 +460,9 @@ class TestS3Configuration:
 
         yandex_file = FileRecord(
             file_id="yandex_test",
-            provider="yandex",
             original_name="test.txt",
             s3_key="files/test.txt",
-            s3_bucket="my-bucket",
-            s3_endpoint="https://storage.yandexcloud.net",
+            storage_id=PLATFORM_STORAGE_ID,
             content_type="text/plain",
             file_size=100
         )
@@ -550,11 +474,9 @@ class TestS3Configuration:
 
         aws_file = FileRecord(
             file_id="aws_test",
-            provider="aws",
             original_name="test.txt",
             s3_key="files/test.txt",
-            s3_bucket="my-aws-bucket",
-            s3_endpoint="https://s3.amazonaws.com",
+            storage_id=PLATFORM_STORAGE_ID,
             content_type="text/plain",
             file_size=100
         )
@@ -566,11 +488,9 @@ class TestS3Configuration:
 
         minio_file = FileRecord(
             file_id="minio_test",
-            provider="minio",
             original_name="test.txt",
             s3_key="files/test.txt",
-            s3_bucket="my-minio-bucket",
-            s3_endpoint="http://localhost:9000",
+            storage_id=PLATFORM_STORAGE_ID,
             content_type="text/plain",
             file_size=100
         )

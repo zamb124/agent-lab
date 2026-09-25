@@ -3,51 +3,240 @@
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal
+from datetime import datetime, timezone
+from typing import ClassVar, Literal, Self, override
 
+from oxyde import Field as DbField
+from oxyde import Index
 from pydantic import BaseModel, ConfigDict, Field
+
+from core.models.platform_model import PlatformModel
 
 PronunciationRuleKind = Literal["alias", "regex", "stress"]
 
 
-class PronunciationRule(BaseModel):
-    """Одно правило подмены/нормализации текста перед TTS.
+def _company_scope(company_id: str | None) -> str | None:
+    if company_id is None:
+        return None
+    if company_id == "":
+        raise ValueError("company_id cannot be empty.")
+    return company_id
 
-    Три вида:
-    * ``alias``  — точная подстрока (word-boundary опционален), longest-match.
-    * ``regex``  — произвольный ``re.Pattern``; replacement может содержать
-      группы ``\\1``, ``\\2``.
-    * ``stress`` — alias с символом ``+`` перед ударной гласной в ``replacement``
-      (например, ``Хуманитик`` → ``хум+анитэк``); применяется только для
-      провайдеров из ``STRESS_CAPABLE_PROVIDERS``.
+
+def _rule_id(rule_id: str) -> str:
+    if rule_id == "":
+        raise ValueError("rule_id cannot be empty.")
+    return rule_id
+
+
+class PronunciationRule(PlatformModel):
+    """Одно правило подмены текста перед TTS. Таблица ``pronunciation_rules`` в ``platform_shared``.
+
+    ``company_id is None`` — правило платформы. Иначе правило компании.
+    Per-call правила в ``SpeechOverride`` — тот же класс и не сохраняются.
+
+    * ``alias`` — точная подстрока (word-boundary опционален), longest-match.
+    * ``regex`` — ``re.Pattern``; replacement может содержать группы ``\\1``, ``\\2``.
+    * ``stress`` — alias с ``+`` перед ударной гласной в ``replacement``.
     """
+
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    pronunciation_rule_id: str = DbField(default="", db_pk=True, max_length=36)
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "pronunciation_rules"
+        indexes: list[Index] = [
+            Index(("company_id", "enabled")),
+            Index(("enabled",)),
+            Index(("language",)),
+            Index(("created_at",)),
+        ]
+
+    company_id: str | None = DbField(default=None, db_index=True, max_length=255)
+    kind: PronunciationRuleKind = DbField(max_length=16)
+    pattern: str = DbField(min_length=1, db_type="TEXT")
+    replacement: str = DbField(db_type="TEXT")
+    language: str | None = DbField(default=None, max_length=16)
+    case_sensitive: bool = DbField(default=False)
+    word_boundary: bool = DbField(default=True)
+    providers: list[str] | None = DbField(default=None, db_type="JSONB")
+    voices: list[str] | None = DbField(default=None, db_type="JSONB")
+    enabled: bool = DbField(default=True)
+    note: str | None = DbField(default=None, db_type="TEXT")
+    created_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = update_fields
+        if self.pattern == "":
+            raise ValueError("pattern cannot be empty.")
+        if self.pronunciation_rule_id == "":
+            self.pronunciation_rule_id = str(uuid.uuid4())
+        if is_create and "created_at" not in self.model_fields_set:
+            self.created_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
+
+    @classmethod
+    async def all_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+        return await cls.objects.filter(
+            company_id=_company_scope(company_id),
+        ).order_by("created_at").all()
+
+    @classmethod
+    async def all_enabled_for_company_scope(cls, *, company_id: str | None) -> list[Self]:
+        return await cls.objects.filter(
+            company_id=_company_scope(company_id),
+            enabled=True,
+        ).order_by("created_at").all()
+
+    @classmethod
+    async def by_company_scope_and_rule_id(
+        cls,
+        *,
+        company_id: str | None,
+        rule_id: str,
+    ) -> Self | None:
+        return await cls.objects.filter(
+            company_id=_company_scope(company_id),
+            pronunciation_rule_id=_rule_id(rule_id),
+        ).get_or_none()
+
+    @classmethod
+    async def create_for_company_scope(
+        cls,
+        *,
+        company_id: str | None,
+        rule: PronunciationRuleWrite,
+        max_rules: int | None = None,
+    ) -> Self:
+        scoped_company_id = _company_scope(company_id)
+        if scoped_company_id is not None:
+            if max_rules is None:
+                raise ValueError("max_rules is required for a company pronunciation rule.")
+            current_count = await cls.objects.filter(company_id=scoped_company_id).count()
+            if current_count >= max_rules:
+                raise ValueError(
+                    f"Pronunciation rule limit reached for company {scoped_company_id!r}: {current_count}/{max_rules}. Remove some rules before adding more."
+                )
+        now = datetime.now(timezone.utc)
+        row = cls(
+            company_id=scoped_company_id,
+            kind=rule.kind,
+            pattern=rule.pattern,
+            replacement=rule.replacement,
+            language=rule.language,
+            case_sensitive=rule.case_sensitive,
+            word_boundary=rule.word_boundary,
+            providers=rule.providers,
+            voices=rule.voices,
+            enabled=rule.enabled,
+            note=rule.note,
+            created_at=now,
+            updated_at=now,
+        )
+        return await cls.objects.create(instance=row)
+
+    @classmethod
+    async def update_by_company_scope_and_rule_id(
+        cls,
+        *,
+        company_id: str | None,
+        rule_id: str,
+        patch: PronunciationRulePatch,
+    ) -> Self | None:
+        row = await cls.by_company_scope_and_rule_id(company_id=company_id, rule_id=rule_id)
+        if row is None:
+            return None
+        fields = patch.model_fields_set
+        if "kind" in fields:
+            if patch.kind is None:
+                raise ValueError("kind cannot be empty.")
+            row.kind = patch.kind
+        if "pattern" in fields:
+            if patch.pattern is None or patch.pattern == "":
+                raise ValueError("pattern cannot be empty.")
+            row.pattern = patch.pattern
+        if "replacement" in fields:
+            if patch.replacement is None:
+                raise ValueError("replacement cannot be empty.")
+            row.replacement = patch.replacement
+        if "language" in fields:
+            row.language = patch.language
+        if "case_sensitive" in fields:
+            if patch.case_sensitive is None:
+                raise ValueError("case_sensitive cannot be empty.")
+            row.case_sensitive = patch.case_sensitive
+        if "word_boundary" in fields:
+            if patch.word_boundary is None:
+                raise ValueError("word_boundary cannot be empty.")
+            row.word_boundary = patch.word_boundary
+        if "providers" in fields:
+            row.providers = patch.providers
+        if "voices" in fields:
+            row.voices = patch.voices
+        if "enabled" in fields:
+            if patch.enabled is None:
+                raise ValueError("enabled cannot be empty.")
+            row.enabled = patch.enabled
+        if "note" in fields:
+            row.note = patch.note
+        row.updated_at = datetime.now(timezone.utc)
+        _ = await row.save()
+        return row
+
+    @classmethod
+    async def delete_by_company_scope_and_rule_id(
+        cls,
+        *,
+        company_id: str | None,
+        rule_id: str,
+    ) -> bool:
+        deleted = await cls.objects.filter(
+            company_id=_company_scope(company_id),
+            pronunciation_rule_id=_rule_id(rule_id),
+        ).delete()
+        return deleted > 0
+
+
+class PronunciationRuleWrite(BaseModel):
+    """Тело создания правила. Компания берётся из пути, не из тела."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    id: str = Field(description="UUID правила.")
-    kind: PronunciationRuleKind = Field(description="Тип правила.")
-    pattern: str = Field(min_length=1, description="Искомое слово / regex-паттерн.")
-    replacement: str = Field(description="Замена; для stress — с символом '+' перед ударной гласной.")
-    language: str | None = Field(
-        default=None,
-        description="BCP-47 язык (только ISO 639-1, например 'ru'); None — любой.",
-    )
-    case_sensitive: bool = Field(default=False)
-    word_boundary: bool = Field(
-        default=True,
-        description="Только для alias/stress: совпадение только на границах слова.",
-    )
-    providers: list[str] | None = Field(
-        default=None,
-        description="Whitelist провайдеров; None — все совместимые.",
-    )
-    voices: list[str] | None = Field(
-        default=None,
-        description="Whitelist голосов (имён); None — любые.",
-    )
-    enabled: bool = Field(default=True)
-    note: str | None = Field(default=None, description="Комментарий для администратора.")
+    kind: PronunciationRuleKind
+    pattern: str = Field(min_length=1)
+    replacement: str
+    language: str | None = None
+    case_sensitive: bool = False
+    word_boundary: bool = True
+    providers: list[str] | None = None
+    voices: list[str] | None = None
+    enabled: bool = True
+    note: str | None = None
+
+
+class PronunciationRulePatch(BaseModel):
+    """Тело обновления. Поле отсутствует в JSON — колонка не меняется."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    kind: PronunciationRuleKind | None = None
+    pattern: str | None = Field(default=None, min_length=1)
+    replacement: str | None = None
+    language: str | None = None
+    case_sensitive: bool | None = None
+    word_boundary: bool | None = None
+    providers: list[str] | None = None
+    voices: list[str] | None = None
+    enabled: bool | None = None
+    note: str | None = None
 
 
 class NormalizationConfig(BaseModel):
@@ -184,7 +373,7 @@ class CompiledPronunciation:
                     compiled_pat = re.compile(rule.pattern, flags)
                 except re.error as exc:
                     raise ValueError(
-                        f"PronunciationRule id={rule.id!r}: invalid regex {rule.pattern!r}: {exc}"
+                        f"PronunciationRule pronunciation_rule_id={rule.pronunciation_rule_id!r}: invalid regex {rule.pattern!r}: {exc}"
                     ) from exc
                 regex_rules.append(_CompiledRegexRule(
                     pattern=compiled_pat,
@@ -229,7 +418,9 @@ __all__ = [
     "STRESS_CAPABLE_PROVIDERS",
     "PronunciationRule",
     "PronunciationRuleKind",
+    "PronunciationRulePatch",
     "PronunciationRuleSet",
+    "PronunciationRuleWrite",
     "ProviderCapabilities",
     "_CompiledAliasRule",
     "_CompiledRegexRule",

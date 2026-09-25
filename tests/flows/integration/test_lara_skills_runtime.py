@@ -10,8 +10,7 @@ import pytest
 from httpx import AsyncClient
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
@@ -100,39 +99,38 @@ def _lara_state(*, unique_id: str, branch_id: str, user_id: str = "system") -> E
 
 
 async def _require_lara_flow(
-    container: FlowContainer,
+    di: FlowsDi,
     *,
     branch_id: str,
 ) -> Flow:
-    _ = await ensure_lara_flow(container)
-    flow = await container.flow_factory.get_flow("lara", branch_id=branch_id)
+    _ = await ensure_lara_flow(di)
+    flow = await di.flow_factory.get_flow("lara", branch_id=branch_id, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
-async def _seed_lara_skills(container: FlowContainer) -> None:
+async def _seed_lara_skills(di: FlowsDi) -> None:
     seeded = await seed_platform_assistant_skills(
-        container.agent_skill_service,
-        container.files_service,
+        di.files_service,
         "system",
     )
     assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
 async def _run_lara(
-    container: FlowContainer,
+    di: FlowsDi,
     *,
     state: ExecutionState,
     branch_id: str,
 ) -> ExecutionState:
-    flow = await _require_lara_flow(container, branch_id=branch_id)
+    flow = await _require_lara_flow(di, branch_id=branch_id)
     main_node = flow.nodes["main"]
     assert getattr(main_node, "agent_skill_ids", None) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_names = {tool.name for tool in await main_node.get_tools(state)}
     assert "load_agent_skill" in tool_names
     assert "crm_search_entities" not in tool_names
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -166,7 +164,7 @@ def _captured_tool_names(call: JsonObject) -> set[str]:
 
 @pytest.mark.asyncio
 async def test_lara_crm_branch_load_then_search_entities(
-    container: FlowContainer,
+    di: FlowsDi,
     crm_service,
     crm_client,
     auth_headers_system: dict[str, str],
@@ -216,8 +214,8 @@ async def test_lara_crm_branch_load_then_search_entities(
     state = _lara_state(unique_id=unique_id, branch_id="crm", user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id="crm")
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state, branch_id="crm")
 
     assert result.interrupt is None
     search_body = _tool_result_json_object(result.tool_results["crm_search_entities"])
@@ -230,7 +228,7 @@ async def test_lara_crm_branch_load_then_search_entities(
 
 @pytest.mark.asyncio
 async def test_lara_documents_branch_load_then_knowledge_search(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -278,8 +276,8 @@ async def test_lara_documents_branch_load_then_knowledge_search(
     state = _lara_state(unique_id=unique_id, branch_id="documents", user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id="documents")
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state, branch_id="documents")
 
     assert result.interrupt is None
     search_body = _tool_result_json_object(result.tool_results["rag_search"])
@@ -290,7 +288,7 @@ async def test_lara_documents_branch_load_then_knowledge_search(
 
 @pytest.mark.asyncio
 async def test_lara_flows_branch_load_then_read_context(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     flows_client,
     auth_headers_system: dict[str, str],
@@ -341,8 +339,8 @@ async def test_lara_flows_branch_load_then_read_context(
     state = _lara_state(unique_id=unique_id, branch_id="flows", user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id="flows")
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state, branch_id="flows")
 
     assert result.interrupt is None
     read_body = _tool_result_json_object(result.tool_results["flows_read_context"])
@@ -362,20 +360,20 @@ async def test_lara_flows_branch_load_then_read_context(
 
 @pytest.mark.asyncio
 async def test_lara_sync_branch_load_then_send_message(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     sync_service,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
     _ = flows_service, sync_service
     flow_id = f"lara_sync_runtime_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di,
         flow_id=flow_id,
         company_id="system",
         name="Lara Sync Runtime",
@@ -385,7 +383,7 @@ async def test_lara_sync_branch_load_then_send_message(
     employee_user_id = flow_employee_user_id(flow_id)
     assert employee.user_id == employee_user_id
     namespace = f"lara_sync_rt_{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:
         created = await http.post(
@@ -418,8 +416,8 @@ async def test_lara_sync_branch_load_then_send_message(
     )
     state = _lara_state(unique_id=unique_id, branch_id="sync", user_id=employee_user_id)
     with _employee_context(employee, company):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state, branch_id="sync")
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state, branch_id="sync")
 
     assert result.interrupt is None
     send_body = _tool_result_json_object(result.tool_results["sync_send_message"])
@@ -436,7 +434,7 @@ async def test_lara_sync_branch_load_then_send_message(
 )
 @pytest.mark.asyncio
 async def test_lara_any_entry_can_load_cross_service_skill(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -455,8 +453,8 @@ async def test_lara_any_entry_can_load_cross_service_skill(
     state = _lara_state(unique_id=unique_id, branch_id=branch_id, user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id=branch_id)
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state, branch_id=branch_id)
 
     assert result.interrupt is None
     calls = await mock_llm_capture()
@@ -467,7 +465,7 @@ async def test_lara_any_entry_can_load_cross_service_skill(
 
 @pytest.mark.asyncio
 async def test_lara_console_branch_ask_user_interrupts(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -486,8 +484,8 @@ async def test_lara_console_branch_ask_user_interrupts(
     state = _lara_state(unique_id=unique_id, branch_id="console", user_id=system_user_id)
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state, branch_id="console")
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state, branch_id="console")
 
     assert result.interrupt is not None
     assert "консоли" in result.interrupt.question.lower()

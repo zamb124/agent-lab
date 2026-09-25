@@ -28,43 +28,42 @@ async def test_frontend_companies_me_endpoint_returns_list_response(
     assert isinstance(payload["items"], list)
 
 
-class _CompanyRepositoryStub:
-    def __init__(self, company: Company) -> None:
-        self._company = company
-
-    async def get(self, company_id: str) -> Company | None:
-        if company_id != self._company.company_id:
-            return None
-        return self._company
-
-
 @pytest.mark.asyncio
-async def test_build_my_companies_response_returns_items_list_response() -> None:
+async def test_build_my_companies_response_returns_items_list_response(
+    app, unique_id: str
+) -> None:
+    _ = app
+    company_id = f"co-{unique_id}"
+    user_id = f"user-{unique_id}"
+    subdomain = f"co-{unique_id}"
     user = User(
-        user_id="user-1",
+        user_id=user_id,
         name="Test User",
-        emails=["user-1@example.com"],
-        companies={"company-1": ["owner"]},
-        active_company_id="company-1",
+        emails=[f"{user_id}@example.com"],
+        companies={company_id: ["owner"]},
+        active_company_id=company_id,
     )
     company = Company(
-        company_id="company-1",
+        company_id=company_id,
         name="Company One",
-        subdomain="company-one",
-        owner_user_id="user-1",
-        members={"user-1": ["owner"]},
+        subdomain=subdomain,
+        owner_user_id=user_id,
+        members={user_id: ["owner"]},
     )
-    response = await build_my_companies_response(
-        user=user,
-        company_repository=_CompanyRepositoryStub(company),  # pyright: ignore[reportArgumentType]
-    )
-    assert isinstance(response.items, list)
-    assert response.items == [
-        CompanyMembershipResponse(
-            company_id="company-1",
-            name="Company One",
-            subdomain="company-one",
-            role=["owner"],
-            is_active=True,
-        )
-    ]
+    _ = await User.set(user)
+    _ = await Company.set(company)
+    try:
+        response = await build_my_companies_response(user=user)
+        assert isinstance(response.items, list)
+        assert response.items == [
+            CompanyMembershipResponse(
+                company_id=company_id,
+                name="Company One",
+                subdomain=subdomain,
+                role=["owner"],
+                is_active=True,
+            )
+        ]
+    finally:
+        _ = await Company.delete_by_id(company_id)
+        _ = await User.delete_by_id(user_id)

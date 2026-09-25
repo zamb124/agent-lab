@@ -240,7 +240,7 @@ async def test_litserve_tts_client_rejects_empty_text(
         base_url=fake_speech_server.base_url, model="m", default_voice=None,
         default_response_format="wav", default_sample_rate=24000, timeout=10.0,
     )
-    with pytest.raises(ValueError, match="пустой text"):
+    with pytest.raises(ValueError, match="text is empty"):
         await client.synthesize(text="")
 
 
@@ -270,5 +270,5 @@ async def test_mock_tts_client_returns_wav_header(unique_id: str) -> None:
 @pytest.mark.asyncio
 async def test_mock_tts_client_rejects_empty_text() -> None:
     client = MockTTSClient()
-    with pytest.raises(ValueError, match="пустой text"):
+    with pytest.raises(ValueError, match="text is empty"):
         await client.synthesize(text="")

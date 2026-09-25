@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from apps.flows.src.models.agent_skill import AgentSkill
 from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     agent_skill_runtime_host_scope,
@@ -22,37 +23,35 @@ from tests.flows.agent_skills_harness import (
 
 
 @pytest.mark.asyncio
-async def test_seed_platform_assistant_skills_idempotent(container, unique_id: str) -> None:
+async def test_seed_platform_assistant_skills_idempotent(di, unique_id: str) -> None:
     expected_seed_ids = PLATFORM_ASSISTANT_SEED_SKILL_IDS
     assert "google-sheets" in expected_seed_ids
     assert expected_seed_ids.index("google-sheets") > expected_seed_ids.index("web-research")
     assert expected_seed_ids.index("google-sheets") < expected_seed_ids.index("crm-notes")
     seed_count = len(expected_seed_ids)
     company_id = f"company_{unique_id}"
-    async with company_scope(company_id, unique_id):
+    async with company_scope(company_id, unique_id, di=di):
         first = await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             company_id,
         )
         second = await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             company_id,
         )
         assert first == seed_count
         assert second == seed_count
         for skill_id in LARA_PLATFORM_SKILL_ROOTS:
-            skill = await container.agent_skill_service.get(skill_id)
+            skill = await AgentSkill.require_by_agent_skill_id(skill_id)
             assert skill.agent_skill_id == skill_id
-        documents_platform = await container.agent_skill_service.get("documents-platform")
+        documents_platform = await AgentSkill.require_by_agent_skill_id("documents-platform")
         assert "knowledge-rag" in documents_platform.depends_on
         assert "document-workspace" in documents_platform.depends_on
         assert "documents-catalog" in documents_platform.depends_on
         assert "diagrams-viz" in documents_platform.depends_on
         assert "team-directory" in documents_platform.depends_on
         assert documents_platform.references
-        documents_catalog = await container.agent_skill_service.get("documents-catalog")
+        documents_catalog = await AgentSkill.require_by_agent_skill_id("documents-catalog")
         catalog_tool_ids = {ref.tool_id for ref in documents_catalog.tool_refs}
         assert catalog_tool_ids == {
             "documents_list_catalog",
@@ -71,7 +70,7 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             "documents_catalog_rag_disable",
             "documents_catalog_rag_rebuild",
         }
-        networkle = await container.agent_skill_service.get("networkle")
+        networkle = await AgentSkill.require_by_agent_skill_id("networkle")
         assert "crm-entities" in networkle.depends_on
         assert "crm-notes" in networkle.depends_on
         assert "crm-graph" in networkle.depends_on
@@ -79,19 +78,19 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         assert "work-items" in networkle.depends_on
         assert "document-workspace" in networkle.depends_on
         assert "team-directory" in networkle.depends_on
-        crm_entities = await container.agent_skill_service.get("crm-entities")
+        crm_entities = await AgentSkill.require_by_agent_skill_id("crm-entities")
         entity_tools = {ref.tool_id for ref in crm_entities.tool_refs}
         assert "crm_update_entity" in entity_tools
         assert "crm_delete_entity" in entity_tools
         assert "crm_merge_entities" in entity_tools
         assert "crm_period_summary" in entity_tools
         assert "crm_create_activity_task" in entity_tools
-        crm_notes = await container.agent_skill_service.get("crm-notes")
+        crm_notes = await AgentSkill.require_by_agent_skill_id("crm-notes")
         note_tools = {ref.tool_id for ref in crm_notes.tool_refs}
         assert "crm_list_notes" in note_tools
         assert "crm_apply_analysis_draft" in note_tools
         assert "crm_discard_analysis_draft" in note_tools
-        crm_graph = await container.agent_skill_service.get("crm-graph")
+        crm_graph = await AgentSkill.require_by_agent_skill_id("crm-graph")
         graph_tools = {ref.tool_id for ref in crm_graph.tool_refs}
         assert graph_tools == {
             "crm_list_relationships",
@@ -100,7 +99,7 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             "crm_entity_related",
             "crm_shortest_path",
         }
-        crm_ops = await container.agent_skill_service.get("crm-ops")
+        crm_ops = await AgentSkill.require_by_agent_skill_id("crm-ops")
         ops_tools = {ref.tool_id for ref in crm_ops.tool_refs}
         assert ops_tools == {
             "crm_list_suggests",
@@ -108,10 +107,10 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             "crm_dismiss_suggest",
             "crm_knowledge_import_status",
         }
-        addon = await container.agent_skill_service.get("docx-templates")
+        addon = await AgentSkill.require_by_agent_skill_id("docx-templates")
         assert addon.depends_on == []
         assert "fill_docx_template" in [ref.tool_id for ref in addon.tool_refs]
-        docs = await container.agent_skill_service.get("document-workspace")
+        docs = await AgentSkill.require_by_agent_skill_id("document-workspace")
         assert docs.depends_on == ["docx-templates"]
         docs_tool_ids = {ref.tool_id for ref in docs.tool_refs}
         assert "create_file" in docs_tool_ids
@@ -119,7 +118,7 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
         assert "documents_delete" in docs_tool_ids
         assert "documents_move" in docs_tool_ids
         assert docs.references
-        sync = await container.agent_skill_service.get("sync-platform")
+        sync = await AgentSkill.require_by_agent_skill_id("sync-platform")
         assert sync.tool_refs == []
         assert set(sync.depends_on) == {
             "sync-messaging",
@@ -127,32 +126,32 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
             "sync-threads",
             "team-directory",
         }
-        sync_messaging = await container.agent_skill_service.get("sync-messaging")
+        sync_messaging = await AgentSkill.require_by_agent_skill_id("sync-messaging")
         sync_msg_tools = {ref.tool_id for ref in sync_messaging.tool_refs}
         assert "sync_list_messages" in sync_msg_tools
         assert "sync_send_message" in sync_msg_tools
         assert sync.references
-        work = await container.agent_skill_service.get("work-tracking")
+        work = await AgentSkill.require_by_agent_skill_id("work-tracking")
         work_tool_ids = [ref.tool_id for ref in work.tool_refs]
         assert "schedule_cron_task" in work_tool_ids
         assert "schedule_interval_task" in work_tool_ids
-        planning = await container.agent_skill_service.get("agent-planning")
+        planning = await AgentSkill.require_by_agent_skill_id("agent-planning")
         planning_tool_ids = {ref.tool_id for ref in planning.tool_refs}
         assert planning_tool_ids == {"agent_plan_write", "agent_plan_get"}
         assert planning.references
-        workspace = await container.agent_skill_service.get("platform-workspace")
+        workspace = await AgentSkill.require_by_agent_skill_id("platform-workspace")
         assert "agent-planning" in workspace.depends_on
         assert "google-sheets" in workspace.depends_on
-        sheets = await container.agent_skill_service.get("google-sheets")
+        sheets = await AgentSkill.require_by_agent_skill_id("google-sheets")
         sheets_tool_ids = {ref.tool_id for ref in sheets.tool_refs}
         assert "sheets_get_values" in sheets_tool_ids
         assert "sheets_append_rows" in sheets_tool_ids
-        web = await container.agent_skill_service.get("web-research")
+        web = await AgentSkill.require_by_agent_skill_id("web-research")
         web_tool_ids = [ref.tool_id for ref in web.tool_refs]
         assert "browser_duckduckgo_links_batch" in web_tool_ids
         assert "browser_page_snapshot" in web_tool_ids
 
-        seeded_skills = await container.agent_skill_service.list_skills(
+        seeded_skills = await AgentSkill.list_skills(
             limit=100,
             offset=0,
         )
@@ -164,20 +163,19 @@ async def test_seed_platform_assistant_skills_idempotent(container, unique_id: s
 
 @pytest.mark.asyncio
 async def test_platform_assistant_skill_load_docs_viz_and_depends_on(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"company_{unique_id}"
-    async with company_scope(company_id, unique_id):
+    async with company_scope(company_id, unique_id, di=di):
         await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             company_id,
         )
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset(LARA_PLATFORM_SKILL_ROOTS),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index(
+                await AgentSkill.resolve_index(
                     list(LARA_PLATFORM_SKILL_ROOTS)
                 )
             ),

@@ -43,7 +43,7 @@ import '@platform/lib/components/platform-switch.js';
 import { asObject, isPlainObject } from '../../_helpers/flows-resolvers.js';
 import { resolveResourceForPanel } from '../../_helpers/flows-branch-resource.js';
 import { AGENT_SKILL_ICON, replaceAttachedAgentSkillId } from '../../_helpers/agent-skill-map.js';
-import { getNodeTypeMeta } from '../../constants/node-icons.js';
+import { getNodeTypeMeta } from '../../_helpers/node-icons.js';
 import {
     getToolRefVisualMeta,
     getToolLabel,

@@ -33,10 +33,10 @@ async def test_wiki_create_and_edit_page(
     scenario: ScenarioRecorder,
     wiki_ui: AppUI,
     ui_page_system: Page,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     page = ui_page_system
-    _ = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="edit")
+    _ = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="edit", di=frontend_di)
     await scenario.step("Открыта база знаний", page)
 
     await page.locator("wiki-sidebar [data-wiki-create-page]").click()
@@ -80,10 +80,10 @@ async def test_wiki_navigate_tree(
     wiki_ui: AppUI,
     ui_page_system: Page,
     auth_token_system: str,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     page = ui_page_system
-    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="tree")
+    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="tree", di=frontend_di)
 
     parent_id = await wiki_api_create_page(
         wiki_ui.origin,
@@ -133,10 +133,10 @@ async def test_wiki_search_pages(
     wiki_ui: AppUI,
     ui_page_system: Page,
     auth_token_system: str,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     page = ui_page_system
-    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="search")
+    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="search", di=frontend_di)
 
     marker = f"кофемолка{unique_id}"
     page_id = await wiki_api_create_page(
@@ -182,10 +182,10 @@ async def test_wiki_public_link(
     ui_page_system: Page,
     ui_page_anonymous: Page,
     auth_token_system: str,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     page = ui_page_system
-    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="public")
+    namespace = await wiki_e2e_open_with_namespace(wiki_ui, page, unique_id, suffix="public", di=frontend_di)
 
     page_id = await wiki_api_create_page(
         wiki_ui.origin,

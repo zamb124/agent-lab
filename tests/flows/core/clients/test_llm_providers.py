@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType as RuntimeNodeType
 
 
@@ -39,6 +39,7 @@ def disable_testing_mode():
             os.environ["_PYTEST_RAISE"] = old_pytest_raise
 
 
+from apps.flows.src.runtime.execution_context import execution_context_for
 from core.clients.llm.client import LLMClient  # noqa: E402
 from core.clients.llm.provider_resolution import (  # noqa: E402
     _detect_provider,
@@ -305,7 +306,7 @@ class TestLlmNodeLLMConfig:
     @pytest.mark.asyncio
     async def test_llm_node_passes_llm_config_to_factory(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id,
     ):
         """LlmNode передает typed llm config в canonical AI runtime."""
@@ -329,7 +330,7 @@ class TestLlmNodeLLMConfig:
         node = LlmNode(
             node_id="test_node",
             config={"type": RuntimeNodeType.LLM_NODE.value, "prompt": "Test prompt"},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         node._node_config = node_config
 
@@ -373,7 +374,7 @@ class TestLlmNodeLLMConfig:
     @pytest.mark.asyncio
     async def test_llm_node_passes_llm_config_dict(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id,
     ):
         """LlmNode передает llm_config_dict в canonical AI runtime."""
@@ -394,7 +395,7 @@ class TestLlmNodeLLMConfig:
                 "prompt": "Test prompt",
                 "llm": llm_config,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = ExecutionState(
@@ -480,7 +481,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 }
             )
         )
-        service = LLMModelsService(repository, scheduler_client, AsyncMock())
+        service = LLMModelsService(scheduler_client, AsyncMock())
 
         await service.start_background_sync(interval=60)
 
@@ -541,7 +542,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 "error_message": None,
             }
         )
-        service = LLMModelsService(repository, scheduler_client, AsyncMock())
+        service = LLMModelsService(scheduler_client, AsyncMock())
 
         await service.start_background_sync(interval=60)
 
@@ -602,7 +603,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 }
             ),
         )
-        service = LLMModelsService(repository, scheduler_client, AsyncMock())
+        service = LLMModelsService(scheduler_client, AsyncMock())
 
         with pytest.raises(ValueError, match="multiple LLM sync schedules"):
             await service.start_background_sync(interval=60)
@@ -636,7 +637,7 @@ class TestLLMModelsServiceSchedulerIdempotency:
                 "error_message": None,
             }
         )
-        service = LLMModelsService(repository, scheduler_client, AsyncMock())
+        service = LLMModelsService(scheduler_client, AsyncMock())
         service._sync_schedule_task_id = "existing-task"
 
         await service.stop_background_sync()
@@ -658,9 +659,10 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к BotHub API для получения списка моделей.
         Использует endpoint: https://bothub.chat/api/v2/model/list?children=1
         """
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
+
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         assert settings.llm.bothub and settings.llm.bothub.api_key, (
@@ -697,9 +699,10 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к OpenRouter API для получения списка моделей.
         Использует endpoint: {base_url}/models
         """
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
+
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         assert settings.llm.openrouter and settings.llm.openrouter.api_key, (
@@ -743,9 +746,10 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к OpenAI API для получения списка моделей.
         Использует endpoint: {base_url}/models
         """
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
+
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
 
         settings = get_settings()
         if not (settings.llm.openai and settings.llm.openai.api_key):
@@ -784,9 +788,10 @@ class TestLLMModelsServiceRealAPI:
         """
         Полный цикл синхронизации: fetch от реального API и сохранение в БД.
         """
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
+
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
         settings = get_settings()
@@ -839,9 +844,10 @@ class TestLLMModelsServiceRealAPI:
         """
         Синхронизация моделей от ВСЕХ настроенных провайдеров.
         """
+        from core.ai.model_catalog_repository import AIModelCatalogRepository
+
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
         from core.db import Storage
 
         settings = get_settings()
@@ -894,8 +900,9 @@ class TestLLMModelsServiceRealAPI:
             "BotHub API key не настроен в конфиге"
         )
 
-        from core.ai.llm_models_service import LLMModelsService
         from core.ai.model_catalog_repository import AIModelCatalogRepository
+
+        from core.ai.llm_models_service import LLMModelsService
 
         mock_repo = MagicMock(spec=AIModelCatalogRepository)
         service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
@@ -1096,7 +1103,7 @@ class TestGetDefaultBaseUrl:
         """Неизвестный провайдер не подменяется OpenAI."""
         mock_settings = MagicMock()
 
-        with pytest.raises(ValueError, match="Неизвестный LLM провайдер"):
+        with pytest.raises(ValueError, match="Unknown LLM provider"):
             _get_default_base_url("unknown", mock_settings)
 
     def test_get_default_base_url_no_config(self):

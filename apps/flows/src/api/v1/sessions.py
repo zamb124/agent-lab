@@ -5,11 +5,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.session_operations import (
     op_flows_sessions_list,
     op_flows_sessions_remove,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models.session_config import (
     SessionConfig,
     SessionDeletedResponse,
@@ -24,7 +24,7 @@ router = APIRouter(tags=["sessions"])
 
 @router.get("/", response_model=OffsetPage[SessionConfig])
 async def list_sessions(
-    container: ContainerDep,
+    di: Di,
     user_id: Annotated[str | None, Query(description="Фильтр по пользователю")] = None,
     flow_id: Annotated[str | None, Query(description="Фильтр по flow")] = None,
     branch_id: Annotated[str | None, Query(description="Фильтр по ветке (branch_id)")] = None,
@@ -44,17 +44,17 @@ async def list_sessions(
             offset=offset,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{session_id}", response_model=SessionDeletedResponse)
 async def delete_session(
-    container: ContainerDep,
+    di: Di,
     session_id: Annotated[str, Path(description="ID сессии для удаления")],
 ) -> SessionDeletedResponse:
     return await op_flows_sessions_remove(
         SessionIdPayload(session_id=session_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

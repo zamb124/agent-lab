@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.src.container import get_container
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from core.clients.llm import setup_mock_responses
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
@@ -201,11 +201,10 @@ class TestAllFlowConfigs:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("flow_id", FLOW_IDS)
-    async def test_flow_creates_from_config(self, flow_id: str, app: object):
+    async def test_flow_creates_from_config(self, flow_id: str, app: object, di):
         """Agent создаётся из конфига в БД без ошибок."""
         _ = app
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
 
@@ -230,17 +229,16 @@ class TestAllFlowConfigs:
             ],
         }
 
-        flow = await Flow.from_config(config_dict, container=container)  # pyright: ignore[reportArgumentType]
+        flow = await Flow.from_config(config_dict, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)  # pyright: ignore[reportArgumentType]
         assert flow.flow_id == config.flow_id
         assert flow.name == config.name
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("flow_id", FLOW_IDS)
-    async def test_flow_nodes_have_valid_types(self, flow_id: str, app: object):
+    async def test_flow_nodes_have_valid_types(self, flow_id: str, app: object, di):
         """Все ноды имеют валидный тип."""
         _ = app
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
         assert config.nodes is not None, f"Agent {flow_id} must define nodes"
@@ -265,11 +263,10 @@ class TestAllFlowsExecution:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("flow_id", EXECUTABLE_FLOW_IDS)
-    async def test_flow_executes_with_mock_llm(self, flow_id: str, app: object):
+    async def test_flow_executes_with_mock_llm(self, flow_id: str, app: object, di):
         """Самодостаточный flow выполняется с test LLM и возвращает ответ."""
         _ = app
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
 
         assert config is not None, f"Agent {flow_id} не загружен в БД"
 
@@ -278,7 +275,7 @@ class TestAllFlowsExecution:
         _ = setup_mock_responses(default_response=expected_response)
 
         # Получаем flow из БД (где уже загружены промпты и инлайнены tools)
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
 
         assert flow is not None, f"Agent {flow_id} не загружен в БД (flow_factory.get_flow)"
 
@@ -288,7 +285,7 @@ class TestAllFlowsExecution:
             content="Тестовый запрос",
             messages=[],
         )
-        result = await run_flow(container=container, flow=flow, state=state)  # pyright: ignore[reportArgumentType]
+        result = await run_flow(di=di, flow=flow, state=state)  # pyright: ignore[reportArgumentType]
 
         # Проверяем что flow завершился
         assert result is not None

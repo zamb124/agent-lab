@@ -55,7 +55,7 @@ async def test_start_import_empty_source(
     assert response.status_code == 400
     body = _http_json(response)
     detail = object_str(body.get("detail", ""), field="detail").lower()
-    assert "пуст" in detail or "файл" in detail or "текст" in detail
+    assert "non-empty text" in detail or "at least one file" in detail
 
 
 @pytest.mark.asyncio

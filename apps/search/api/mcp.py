@@ -8,8 +8,7 @@ import uuid
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
-from apps.search.container import SearchContainer
-from apps.search.dependencies import ContainerDep
+from apps.search.di import Di
 from core.context import get_context
 from core.integrations.mcp import (
     MCP_PROTOCOL_VERSION,
@@ -128,13 +127,13 @@ async def _tool_call(
     *,
     tool_name: str,
     arguments: JsonObject,
-    container: SearchContainer,
+    di: Di,
     company: Company | None,
     user_id: str | None,
 ) -> MCPToolCallResult:
     if tool_name == "meta_web_search":
         request = MetaSearchRequest.model_validate(arguments)
-        response = await container.meta_search_service.search(
+        response = await di.meta_search_service.search(
             request,
             company=company,
             user_id=user_id,
@@ -147,7 +146,7 @@ async def _tool_call(
         )
     if tool_name == "refine_serp":
         refine_request = MetaSearchRefineRequest.model_validate(arguments)
-        refine_response = await container.meta_search_service.refine(refine_request)
+        refine_response = await di.meta_search_service.refine(refine_request)
         payload = require_json_object(refine_response.model_dump(mode="json"), "MetaSearchResponse")
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "refine_serp result")),
@@ -156,7 +155,7 @@ async def _tool_call(
         )
     if tool_name == "search_suggest":
         request = SearchSuggestRequest.model_validate(arguments)
-        response = container.search_suggestion_service.suggest(request)
+        response = di.search_suggestion_service.suggest(request)
         payload = require_json_object(response.model_dump(mode="json"), "SearchSuggestResponse")
         return MCPToolCallResult(
             content=_json_text_content(require_json_value(payload, "search_suggest result")),
@@ -165,7 +164,7 @@ async def _tool_call(
         )
     if tool_name == "search_result_insights":
         request = SearchResultInsightsRequest.model_validate(arguments)
-        response = container.search_result_insight_service.insights(request)
+        response = di.search_result_insight_service.insights(request)
         payload = require_json_object(
             response.model_dump(mode="json"),
             "SearchResultInsightsResponse",
@@ -183,7 +182,7 @@ async def mcp_jsonrpc(
     req: MCPJsonRpcRequest,
     request: Request,
     response: Response,
-    container: ContainerDep,
+    di: Di,
 ) -> JsonObject:
     method = req.method
     req_id = req.id
@@ -247,7 +246,7 @@ async def mcp_jsonrpc(
                 call_res = await _tool_call(
                     tool_name=name,
                     arguments=arguments_obj,
-                    container=container,
+                    di=di,
                     company=company,
                     user_id=user_id,
                 )

@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     FlowDataflowInspectRequest,
     FlowsFlowIdPayload,
@@ -26,7 +27,6 @@ from apps.flows.realtime.operations import (
     op_flows_versions_list,
     op_flows_voice_session_query,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.models import DataflowInspectResult, FlowType
 from apps.flows.src.models.flow_api import (
     BulkDeleteNodesRequest,
@@ -56,27 +56,27 @@ router = APIRouter(tags=["flows"])
 @router.post("/dataflow/inspect")
 async def inspect_dataflow(
     request: FlowDataflowInspectRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> DataflowInspectResult:
     return await op_flows_dataflow_inspect(
-        request, user=require_context().user, container=container
+        request, user=require_context().user, di=di
     )
 
 
 @router.post("/validate", response_model=FlowValidateResponse)
 async def validate_flow(
     request: FlowValidateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowValidateResponse:
     return await op_flows_validate(
-        request, user=require_context().user, container=container
+        request, user=require_context().user, di=di
     )
 
 
 @router.get("", response_model=OffsetPage[FlowResponse])
 @router.get("/", response_model=OffsetPage[FlowResponse])
 async def list_flows(
-    container: ContainerDep,
+    di: Di,
     type: FlowType | None = None,
     limit: Annotated[int, Query(ge=1, le=2000, description="Максимум flows")] = 500,
     offset: Annotated[int, Query(ge=0, description="Смещение для пагинации")] = 0,
@@ -84,60 +84,60 @@ async def list_flows(
     return await op_flows_list(
         FlowsListPayload(type=type, limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/store/bundles", response_model=ListResponse[FlowStoreBundleResponse])
-async def list_store_bundles(container: ContainerDep) -> ListResponse[FlowStoreBundleResponse]:
+async def list_store_bundles(di: Di) -> ListResponse[FlowStoreBundleResponse]:
     return await op_flows_store_bundles(
         EmptyPayload(),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("", response_model=FlowResponse)
 @router.post("/", response_model=FlowResponse)
-async def create_flow(request: FlowCreateRequest, container: ContainerDep) -> FlowResponse:
+async def create_flow(request: FlowCreateRequest, di: Di) -> FlowResponse:
     return await op_flows_create(
         request,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{flow_id}/voice-session-query", response_model=FlowVoiceSessionQueryResponse)
 async def get_flow_voice_session_query(
     flow_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query(description="ID ветки графа для мержа speech")] = "default",
 ) -> FlowVoiceSessionQueryResponse:
     return await op_flows_voice_session_query(
         FlowVoiceSessionQueryRequest(flow_id=flow_id, branch_id=branch_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{flow_id}", response_model=FlowResponse)
-async def get_flow(flow_id: str, container: ContainerDep) -> FlowResponse:
+async def get_flow(flow_id: str, di: Di) -> FlowResponse:
     return await op_flows_item(
         FlowsFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{flow_id}/reload-from-bundle", response_model=ReloadFlowFromBundleResponse)
 async def reload_flow_from_bundle(
     flow_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ReloadFlowFromBundleResponse:
     return await op_flows_reload_from_bundle(
         FlowsFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -145,13 +145,13 @@ async def reload_flow_from_bundle(
 async def create_flow_preview_share(
     flow_id: str,
     body: FlowPreviewShareRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowPreviewShareResponse:
     payload = body.model_copy(update={"flow_id": flow_id})
     return await op_flows_preview_share(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -159,13 +159,13 @@ async def create_flow_preview_share(
 async def update_flow(
     flow_id: str,
     request: FlowCreateRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowResponse:
     payload = request.model_copy(update={"flow_id": flow_id})
     return await op_flows_update(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -173,13 +173,13 @@ async def update_flow(
 async def bulk_delete_nodes(
     flow_id: str,
     request: BulkDeleteNodesRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> BulkDeleteNodesResponse:
     payload = request.model_copy(update={"flow_id": flow_id})
     return await op_flows_nodes_bulk_delete(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -187,31 +187,31 @@ async def bulk_delete_nodes(
 async def update_flow_metadata(
     flow_id: str,
     request: FlowMetadataRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowMetadataResponse:
     payload = request.model_copy(update={"flow_id": flow_id})
     return await op_flows_metadata_update(
         payload,
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{flow_id}", response_model=FlowDeletedResponse)
-async def delete_flow(flow_id: str, container: ContainerDep) -> FlowDeletedResponse:
+async def delete_flow(flow_id: str, di: Di) -> FlowDeletedResponse:
     return await op_flows_remove(
         FlowsFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/{flow_id}/versions", response_model=ListResponse[str])
-async def list_versions(flow_id: str, container: ContainerDep) -> ListResponse[str]:
+async def list_versions(flow_id: str, di: Di) -> ListResponse[str]:
     return await op_flows_versions_list(
         FlowsFlowIdPayload(flow_id=flow_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -219,12 +219,12 @@ async def list_versions(flow_id: str, container: ContainerDep) -> ListResponse[s
 async def get_version(
     flow_id: str,
     version: str,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowResponse:
     return await op_flows_version_item(
         FlowsFlowVersionPayload(flow_id=flow_id, version=version),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -232,10 +232,10 @@ async def get_version(
 async def rollback_version(
     flow_id: str,
     version: str,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowVersionRollbackResponse:
     return await op_flows_version_rollback(
         FlowsFlowVersionPayload(flow_id=flow_id, version=version),
         user=require_context().user,
-        container=container,
+        di=di,
     )

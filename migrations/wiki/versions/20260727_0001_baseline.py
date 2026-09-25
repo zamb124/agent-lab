@@ -11,7 +11,10 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from apps.wiki.db.models import SEARCH_VECTOR_EXPRESSION
+_SEARCH_VECTOR_EXPRESSION = (
+    "setweight(to_tsvector('simple', coalesce(title, '')), 'A') || "
+    "setweight(to_tsvector('simple', coalesce(text_markdown, '')), 'B')"
+)
 
 revision: str = "wiki_0001"
 down_revision: Union[str, None] = None
@@ -48,7 +51,7 @@ def upgrade() -> None:
         sa.Column(
             "search_vector",
             postgresql.TSVECTOR(),
-            sa.Computed(SEARCH_VECTOR_EXPRESSION, persisted=True),
+            sa.Computed(_SEARCH_VECTOR_EXPRESSION, persisted=True),
             nullable=True,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),

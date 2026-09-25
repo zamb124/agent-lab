@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
 
 async def test_restricted_flow_hidden_from_member_without_group(
     client,
-    container,
+    di,
     unique_id: str,
     system_user_id: str,
     system_user2_id: str,
@@ -45,8 +45,8 @@ async def test_restricted_flow_hidden_from_member_without_group(
         )
     )
     try:
-        _ = await container.flow_repository.set(config)
-        await container.flow_access_service.sync_flow_saved(
+        _ = await FlowConfig.create_version(config)
+        await di.flow_access_service.sync_flow_saved(
             config, company_id="system", owner_user_id=system_user_id
         )
     finally:
@@ -65,7 +65,7 @@ async def test_restricted_flow_hidden_from_member_without_group(
     assert denied.status_code == 403
 
     await sync_user_groups(
-        container.authz_service,
+        di.authz_service,
         user_id=system_user2_id,
         groups=[group_name],
         company_ids=["system"],
@@ -89,7 +89,7 @@ async def test_restricted_flow_hidden_from_member_without_group(
     )
     assert mutate.status_code == 403
 
-    await container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id="system", branch_ids=[]
     )
     set_context(
@@ -100,14 +100,14 @@ async def test_restricted_flow_hidden_from_member_without_group(
         )
     )
     try:
-        _ = await container.flow_repository.delete(flow_id)
+        _ = await FlowConfig.delete_by_flow_id(flow_id)
     finally:
         clear_context()
 
 
 async def test_restricted_flow_visible_to_platform_admin_via_fga(
     client,
-    container,
+    di,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -136,8 +136,8 @@ async def test_restricted_flow_visible_to_platform_admin_via_fga(
         )
     )
     try:
-        _ = await container.flow_repository.set(config)
-        await container.flow_access_service.sync_flow_saved(
+        _ = await FlowConfig.create_version(config)
+        await di.flow_access_service.sync_flow_saved(
             config, company_id="system", owner_user_id=f"owner_{unique_id}"
         )
     finally:
@@ -165,7 +165,7 @@ async def test_restricted_flow_visible_to_platform_admin_via_fga(
     assert listed_admin.status_code == 200, listed_admin.text
     assert flow_id in {item["flow_id"] for item in listed_admin.json()["items"]}
 
-    await container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id="system", branch_ids=[]
     )
     set_context(
@@ -176,7 +176,7 @@ async def test_restricted_flow_visible_to_platform_admin_via_fga(
         )
     )
     try:
-        _ = await container.flow_repository.delete(flow_id)
+        _ = await FlowConfig.delete_by_flow_id(flow_id)
     finally:
         clear_context()
 

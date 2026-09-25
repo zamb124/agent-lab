@@ -1,29 +1,23 @@
 """
-Доступ к RAG namespace из процессов с ``RAGRepository`` на контейнере
-(``container.rag_repository``).
-
-Поиск — ``RAGRepository.search_namespace`` с ``bind=self._bind``.
-Загрузка текста — ``RAGRepository.provider.upload_document_from_text``.
+Доступ к RAG namespace: HTTP-поиск через ``RagClient``, индексация через
+``get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)``.
 """
 
 from __future__ import annotations
 
-from typing import Protocol, override
+from typing import override
 
+from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.context import get_context
 from core.namespace import NamespaceService
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.rag.index_profile_merge import merge_index_profile_dict_overlays
 from core.rag.models import RAGMetadata, RAGMetadataFilter, RAGSearchOptions
+from core.rag.rag_http_namespace_search import merge_search_request_options
 from core.rag.rag_resource_bind import RagResourceBindParams
-from core.rag.repository import RAGRepository
 from core.types import JsonObject, require_json_object
-
-
-class _RAGResourceContainer(Protocol):
-    rag_repository: RAGRepository
-    namespace_service: NamespaceService
 
 
 class RAGResource:
@@ -33,7 +27,7 @@ class RAGResource:
     Пример:
         kb = RAGResource(
             "ns-1",
-            container,
+            namespace_service,
             search_options={
                 "channels": {"semantic": True, "lexical": True},
                 "rerank": True,
@@ -45,7 +39,7 @@ class RAGResource:
     def __init__(
         self,
         namespace: str,
-        container: _RAGResourceContainer,
+        namespace_service: NamespaceService,
         *,
         provider: str = RAG_IN_PROCESS_PROVIDER_ID,
         default_top_k: int = 5,
@@ -53,8 +47,10 @@ class RAGResource:
         search_options: RAGSearchOptions | None = None,
         filters: RAGMetadataFilter | None = None,
         index_profile_config: JsonObject | None = None,
+        rag_client: RagClient | None = None,
     ) -> None:
-        self._container: _RAGResourceContainer = container
+        self._namespace_service: NamespaceService = namespace_service
+        self._rag_client: RagClient = rag_client if rag_client is not None else RagClient()
         self._bind: RagResourceBindParams = RagResourceBindParams(
             namespace=namespace,
             provider=provider,
@@ -79,16 +75,30 @@ class RAGResource:
         top_k: int | None = None,
         filters: RAGMetadataFilter | None = None,
     ) -> list[JsonObject]:
-        """
-        Поиск по документам namespace через ``RAGRepository.search_namespace``.
-        """
+        """Поиск по документам namespace через ``RagClient.search``."""
         limit = top_k if top_k is not None else self._bind.default_top_k
+        merged_filters = dict(self._bind.filters) if self._bind.filters else {}
+        if filters:
+            merged_filters.update(filters)
+        filter_arg: RAGMetadataFilter | None = merged_filters if merged_filters else None
+        search_options = merge_search_request_options(self._bind.search_options, None)
+        if search_options is None:
+            search_options = RAGSearchOptions()
 
-        data = await self._container.rag_repository.search_namespace(
+        data = await self._rag_client.search(
+            namespace_id=self._bind.namespace,
             query=query,
             limit=limit,
-            filters=filters,
-            bind=self._bind,
+            filters=filter_arg,
+            provider=self._bind.provider,
+            channels=search_options.channels,
+            rrf_k=search_options.rrf_k,
+            per_channel_top_k=search_options.per_channel_top_k,
+            rerank=search_options.rerank,
+            rerank_max_candidates=search_options.rerank_max_candidates,
+            retrieval=search_options.retrieval,
+            freshness_weight=search_options.freshness_weight,
+            freshness_half_life_days=search_options.freshness_half_life_days,
         )
 
         raw_results = data.get("results")
@@ -126,11 +136,10 @@ class RAGResource:
         index_profile_config: JsonObject | None = None,
     ) -> JsonObject:
         """Загрузить текст документа в namespace."""
-        repo = self._container.rag_repository
         context = get_context()
         if context is None or context.active_company is None:
             raise ValueError('RAGResource.add_document: context with active_company is required')
-        _ = await self._container.namespace_service.get_or_create(
+        _ = await self._namespace_service.get_or_create(
             self._bind.namespace,
             description=self._bind.namespace_description,
         )
@@ -151,7 +160,7 @@ class RAGResource:
         if ipc:
             doc_metadata["index_profile_config"] = ipc
 
-        doc = await repo.provider.upload_document_from_text(
+        doc = await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).upload_document_from_text(
             namespace_id=self._bind.namespace,
             text=content,
             document_name=name or document_id,

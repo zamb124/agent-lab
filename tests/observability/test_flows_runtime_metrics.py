@@ -47,25 +47,25 @@ from tests.observability.contracts import (
 pytestmark = pytest.mark.timeout(60)
 
 
-def _save_flow(container, flow_config: dict[str, object]) -> None:
-    return container.flow_repository.set(FlowConfig.model_validate(flow_config))
+def _save_flow(di, flow_config: dict[str, object]) -> None:
+    return FlowConfig.create_version(FlowConfig.model_validate(flow_config))
 
 
-async def _persist_flow(container, flow_config: dict[str, object]) -> None:
-    await _save_flow(container, flow_config)
+async def _persist_flow(di, flow_config: dict[str, object]) -> None:
+    await _save_flow(di, flow_config)
 
 
 @pytest.mark.asyncio
 async def test_flow_terminal_emitted_after_enqueue(
-    container,
+    di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     task_id = f"task-terminal-{unique_id}"
     flow_id = f"flow-terminal-{unique_id}"
-    await record_flow_task_enqueued(container.redis_client, task_id=task_id, flow_id=flow_id)
+    await record_flow_task_enqueued(di.redis_client, task_id=task_id, flow_id=flow_id)
     await maybe_record_flow_terminal(
-        container.redis_client,
+        di.redis_client,
         task_id=task_id,
         flow_id=flow_id,
         terminal_state="completed",
@@ -90,15 +90,15 @@ async def test_flow_terminal_emitted_after_enqueue(
 
 @pytest.mark.asyncio
 async def test_flow_first_content_chunk_emitted_after_enqueue(
-    container,
+    di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     task_id = f"task-chunk-{unique_id}"
     flow_id = f"flow-chunk-{unique_id}"
-    await record_flow_task_enqueued(container.redis_client, task_id=task_id, flow_id=flow_id)
+    await record_flow_task_enqueued(di.redis_client, task_id=task_id, flow_id=flow_id)
     await maybe_record_flow_first_content_chunk(
-        container.redis_client,
+        di.redis_client,
         task_id=task_id,
         flow_id=flow_id,
         text="hello",
@@ -121,13 +121,13 @@ async def test_flow_first_content_chunk_emitted_after_enqueue(
 
 @pytest.mark.asyncio
 async def test_flow_react_completed_emitted_after_llm_node(
-    container,
+    di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     flow_id = f"react-metrics-{unique_id}"
     await _persist_flow(
-        container,
+        di,
         {
             "flow_id": flow_id,
             "name": "React metrics",
@@ -151,8 +151,8 @@ async def test_flow_react_completed_emitted_after_llm_node(
         ]
     )
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="calc")
-    flow = await container.flow_factory.get_flow(flow_id)
-    _ = await run_flow(container=container, flow=flow, state=state)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
+    _ = await run_flow(di=di, flow=flow, state=state)
 
     rec = await wait_for_caplog_event(
         observability_caplog,
@@ -171,14 +171,14 @@ async def test_flow_react_completed_emitted_after_llm_node(
 
 @pytest.mark.asyncio
 async def test_tool_call_finished_emitted_for_builtin_tool(
-    container,
+    di,
     enable_observability_tracing: None,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     flow_id = f"tool-metrics-{unique_id}"
     await _persist_flow(
-        container,
+        di,
         {
             "flow_id": flow_id,
             "name": "Tool metrics",
@@ -202,8 +202,8 @@ async def test_tool_call_finished_emitted_for_builtin_tool(
         ]
     )
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content="calc")
-    flow = await container.flow_factory.get_flow(flow_id)
-    _ = await run_flow(container=container, flow=flow, state=state)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
+    _ = await run_flow(di=di, flow=flow, state=state)
 
     rec = find_caplog_record(
         observability_caplog,

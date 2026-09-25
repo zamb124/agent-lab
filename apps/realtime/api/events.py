@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from apps.realtime.dependencies import ContainerDep
+from apps.realtime.di import Di
 from core.context import get_context
 from core.events.contract import PlatformEvent
 from core.models.context_models import Context
@@ -13,12 +13,12 @@ router = APIRouter()
 
 
 @router.get("/events/{event_id}/terminal", response_model=PlatformEvent)
-async def get_terminal_platform_event(event_id: str, container: ContainerDep) -> PlatformEvent:
+async def get_terminal_platform_event(event_id: str, di: Di) -> PlatformEvent:
     context = get_context()
     if context is None:
         raise RuntimeError("get_terminal_platform_event requires request context")
     try:
-        terminal = await container.bus_service.get_terminal_for_causation(event_id)
+        terminal = await di.bus_service.get_terminal_for_causation(event_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"terminal for {event_id} not found") from None
     _require_readable_snapshot(
@@ -31,12 +31,12 @@ async def get_terminal_platform_event(event_id: str, container: ContainerDep) ->
 
 
 @router.get("/events/{event_id}", response_model=PlatformEvent)
-async def get_platform_event(event_id: str, container: ContainerDep) -> PlatformEvent:
+async def get_platform_event(event_id: str, di: Di) -> PlatformEvent:
     context = get_context()
     if context is None:
         raise RuntimeError("get_platform_event requires request context")
     try:
-        event = await container.bus_service.get_event(event_id)
+        event = await di.bus_service.get_event(event_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"event {event_id} not found") from None
     _require_readable_snapshot(

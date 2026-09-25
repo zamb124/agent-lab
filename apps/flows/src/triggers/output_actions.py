@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import ChannelRegistryProtocol
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.channel_config import OutputAction
 from apps.flows.src.triggers.input_mapper import InputMapper
 from apps.flows.src.triggers.output_condition import evaluate_output_action_condition
 from core.logging import get_logger
+from core.mail.service import MailService
 from core.types import JsonObject, require_json_object, require_json_value
 
 logger = get_logger(__name__)
@@ -18,8 +19,14 @@ class OutputActionExecutor:
     Выполняет output_actions после успешного завершения flow без interrupt/breakpoint.
     """
 
-    def __init__(self, *, container: FlowRuntimeContainer):
-        self.container: FlowRuntimeContainer = container
+    def __init__(
+        self,
+        *,
+        channel_registry: ChannelRegistryProtocol,
+        mail_service: MailService,
+    ):
+        self._channel_registry: ChannelRegistryProtocol = channel_registry
+        self._mail_service: MailService = mail_service
         self._input_mapper: InputMapper = InputMapper()
 
     async def execute(
@@ -47,9 +54,9 @@ class OutputActionExecutor:
             params = self._resolve_mapping(action.mapping, state, original_payload)
             params.update(action.config)
 
-            handler = self.container.channel_registry.get(
+            handler = self._channel_registry.get(
                 action.channel,
-                mail_service=self.container.mail_service,
+                mail_service=self._mail_service,
             )
             channel_config: JsonObject = {**trigger_config, **action.config}
 

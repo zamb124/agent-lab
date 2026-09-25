@@ -1,0 +1,73 @@
+{
+    "routes": {
+        "stock_home": "Склад",
+        "stock_transfers": "Переводы",
+        "stock_transfer": "Перевод",
+        "stock_products": "Продукты",
+        "stock_locations": "Локации",
+        "stock_valuation": "Оценка"
+    },
+    "bottom_nav": {
+        "home": "Склад",
+        "transfers": "Переводы",
+        "products": "Товары",
+        "profile": "Профиль"
+    },
+    "home": {
+        "title": "Пульс склада",
+        "empty": "Склад не настроен",
+        "quants": "Остатки",
+        "transfers": "Переводы"
+    },
+    "transfers": {
+        "title": "Переводы",
+        "empty": "Переводов пока нет"
+    },
+    "transfer": {
+        "loading": "Загрузка перевода…",
+        "confirm": "Подтвердить",
+        "assign": "Зарезервировать",
+        "validate": "Провести",
+        "cancel": "Отменить"
+    },
+    "products": {
+        "title": "Продукты",
+        "empty": "Продуктов пока нет"
+    },
+    "locations": {
+        "title": "Локации",
+        "empty": "Локаций пока нет"
+    },
+    "valuation": {
+        "title": "Журнал оценки",
+        "empty": "Записей оценки пока нет"
+    },
+    "fields": {
+        "name": "Название",
+        "product": "Продукт",
+        "location": "Локация",
+        "qty": "Кол-во",
+        "reserved": "Резерв",
+        "available": "Доступно",
+        "avg_cost": "Себестоимость",
+        "value": "Стоимость",
+        "type": "Тип",
+        "state": "Состояние",
+        "scheduled": "Запланирован",
+        "sku": "SKU",
+        "valuation_method": "Метод оценки",
+        "standard_price": "Цена",
+        "tracking": "Учёт",
+        "usage": "Назначение",
+        "parent": "Родитель",
+        "removal": "Выборка",
+        "from": "Откуда",
+        "to": "Куда",
+        "done_qty": "Сделано",
+        "entry_no": "№",
+        "kind": "Операция",
+        "unit_cost": "Цена ед.",
+        "qty_after": "Остаток",
+        "value_after": "Стоимость после"
+    }
+}

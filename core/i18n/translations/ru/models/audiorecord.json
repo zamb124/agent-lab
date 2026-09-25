@@ -4,9 +4,9 @@
       "title": "ID файла",
       "description": "Уникальный ID файла в системе"
     },
-    "provider": {
-      "title": "Провайдер",
-      "description": "Провайдер S3 (aws, yandex, minio, etc.)"
+    "storage_id": {
+      "title": "Хранилище",
+      "description": "Идентификатор хранилища байтов (platform или storage_id компании)"
     },
     "original_name": {
       "title": "Оригинальное имя",
@@ -15,14 +15,6 @@
     "s3_key": {
       "title": "Ключ S3",
       "description": "Ключ аудиофайла в S3"
-    },
-    "s3_bucket": {
-      "title": "Bucket S3",
-      "description": "Bucket в S3"
-    },
-    "s3_endpoint": {
-      "title": "Endpoint S3",
-      "description": "Endpoint URL провайдера"
     },
     "content_type": {
       "title": "Тип содержимого",

@@ -11,7 +11,7 @@ from typing import ClassVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.models.billing_models import UsageType
-from core.tracing.models import BillingSettlementSpan
+from core.tracing.models import Span
 from core.types import JsonObject, JsonValue, parse_json_value, require_json_object
 
 _SETTLEMENT_MODEL_CONFIG: ConfigDict = ConfigDict(
@@ -96,7 +96,7 @@ class SettlementRule(BaseModel):
             raise ValueError(f"resource_name expected as category:resource, got {v!r}")
         return v
 
-    def resolve_resource_name(self, span: BillingSettlementSpan) -> str:
+    def resolve_resource_name(self, span: Span) -> str:
         if not self.resource_name_from_span:
             return self.resource_name
         span_resource = span.required_billing_resource_name()
@@ -141,7 +141,7 @@ def _regex_matches(pattern: str | None, value: JsonValue) -> bool:
         raise ValueError(f"invalid regex {pattern!r}: {e}") from e
 
 
-def rule_matches_span(rule: SettlementRule, span: BillingSettlementSpan) -> bool:
+def rule_matches_span(rule: SettlementRule, span: Span) -> bool:
     m = rule.match
     if m.operation_name_prefix:
         if not span.operation_name.startswith(m.operation_name_prefix):
@@ -174,7 +174,7 @@ def rule_matches_span(rule: SettlementRule, span: BillingSettlementSpan) -> bool
     return True
 
 
-def resolve_matched_rules(doc: SettlementRulesDocument, span: BillingSettlementSpan) -> list[SettlementRule]:
+def resolve_matched_rules(doc: SettlementRulesDocument, span: Span) -> list[SettlementRule]:
     matched = [r for r in doc.rules if r.enabled and rule_matches_span(r, span)]
     if not matched:
         return []
@@ -198,7 +198,7 @@ def resolve_matched_rules(doc: SettlementRulesDocument, span: BillingSettlementS
     return after_groups
 
 
-def quantity_from_span(quantity_from: str, span: BillingSettlementSpan) -> int:
+def quantity_from_span(quantity_from: str, span: Span) -> int:
     if quantity_from.startswith("const:"):
         rest = quantity_from[len("const:") :].strip()
         q = int(rest)

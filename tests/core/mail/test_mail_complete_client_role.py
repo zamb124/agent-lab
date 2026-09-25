@@ -9,13 +9,14 @@ import pytest
 from core.context import set_context
 from core.mail.exceptions import MailPermissionError
 from core.mail.models import (
+    INBOX_FOLDER,
     MailboxBindingCreatePayload,
     MailboxBindingKind,
     MailboxBindingMemberPayload,
     MailboxBindingMemberRole,
     MailMessageListPayload,
+    StoredMailMessage,
 )
-from core.mail.repositories import INBOX_FOLDER, MailMessageRepository
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
@@ -29,7 +30,7 @@ MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 
 
 async def _switch_context(
-    container,
+    di,
     *,
     company: Company,
     user_id: str,
@@ -43,17 +44,16 @@ async def _switch_context(
         companies={company.company_id: roles},
         active_company_id=company.company_id,
     )
-    await container.user_repository.set(user)
+    await User.set(user)
     from tests.fixtures.auth import set_test_company_member_roles
 
     await set_test_company_member_roles(
-        container.company_repository,
-        container.authz_service,
+        di.authz_service,
         company_id=company.company_id,
         user_id=user_id,
         roles=roles,
     )
-    refreshed = await container.company_repository.get(company.company_id)
+    refreshed = await Company.get(company.company_id)
     if refreshed is None:
         raise RuntimeError(f"company missing after membership sync: {company.company_id}")
     set_context(
@@ -71,9 +71,8 @@ async def _switch_context(
 async def test_role_binding_members_acl_and_rag_namespace(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id, admin_user_id, _user_binding = await seed_connected_user_binding(
@@ -83,7 +82,7 @@ async def test_role_binding_members_acl_and_rag_namespace(
         unique_id=unique_id,
         prefix="roleacl",
     )
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
 
     role_binding = await mail_service.bind_mailbox(
@@ -121,14 +120,14 @@ async def test_role_binding_members_acl_and_rag_namespace(
     ]
     synced = await mail_service.sync_binding(role_binding, max_new_messages=50)
     assert synced.skipped_reason is None
-    stored = await mail_message_repository.get_by_uid(
+    stored = await StoredMailMessage.by_binding_folder_uid(
         role_binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=1
     )
     assert stored is not None
     assert stored.rag_namespace == f"mail-{role_binding.mailbox_binding_id}"
 
     _ = await _switch_context(
-        container,
+        di,
         company=company,
         user_id=member_user_id,
         roles=["member"],
@@ -146,7 +145,7 @@ async def test_role_binding_members_acl_and_rag_namespace(
     assert len(listed.items) == 1
 
     _ = await _switch_context(
-        container,
+        di,
         company=company,
         user_id=outsider_user_id,
         roles=["member"],
@@ -162,7 +161,7 @@ async def test_role_binding_members_acl_and_rag_namespace(
         )
 
     _ = await _switch_context(
-        container,
+        di,
         company=company,
         user_id=admin_user_id,
         roles=["owner", "admin"],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.sync.api._helpers import seed_namespace_via_repo
+from tests.sync.conftest import require_sync_di
 
 
 @pytest.mark.asyncio
@@ -13,10 +14,10 @@ async def test_http_list_namespaces_returns_default(
     sync_auth_headers,
     sync_db_clean: None,
 ) -> None:
-    """`GET /sync/api/v1/namespaces` возвращает namespace из shared KV.
+    """`GET /sync/api/v1/namespaces` возвращает namespace из shared.
 
-    `NamespaceRepository.list` лениво создаёт `default` namespace, если у
-    компании ещё нет ни одного, поэтому пустой список не ожидается.
+    `NamespaceService.list` создаёт `default`, если его ещё нет, поэтому пустой
+    список не ожидается.
     """
     r = await sync_client.get("/sync/api/v1/namespaces", headers=sync_auth_headers)
     assert r.status_code == 200
@@ -33,7 +34,7 @@ async def test_http_put_namespace_sync_settings(
     unique_id: str,
 ) -> None:
     name = f"ns_{unique_id}_settings"
-    await seed_namespace_via_repo(company_id, name)
+    await seed_namespace_via_repo(require_sync_di(), company_id, name)
     r = await sync_client.put(
         f"/sync/api/v1/namespaces/{name}",
         headers=sync_auth_headers,

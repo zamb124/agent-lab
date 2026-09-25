@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Never, TypeVar
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_edit_flow,
     require_view_flow,
 )
-from apps.flows.src.container import FlowContainer
 from core.errors.boundary import PlatformNotFoundError
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
@@ -83,13 +83,13 @@ async def op_flows_code_agent_ensure_source(
     payload: CodeAgentNodeRefPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeAgentEnsureSourceResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.ensure_source(
+        di.code_agent_source_service.ensure_source(
             flow_id=flow_id, node_id=node_id, branch_id=branch_id
         )
     )
@@ -99,13 +99,13 @@ async def op_flows_code_agent_import_git(
     payload: CodeAgentImportGitRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeAgentNodeStatusResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.import_git(
+        di.code_agent_source_service.import_git(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,
@@ -119,13 +119,13 @@ async def op_flows_code_agent_import_archive(
     payload: CodeAgentImportArchiveRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeAgentNodeStatusResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.import_archive(
+        di.code_agent_source_service.import_archive(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,
@@ -138,13 +138,13 @@ async def op_flows_code_agent_copy_tree(
     payload: CodeAgentCopyTreeRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeAgentEnsureSourceResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.copy_tree(
+        di.code_agent_source_service.copy_tree(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,
@@ -157,13 +157,13 @@ async def op_flows_code_agent_rebuild(
     payload: CodeAgentRebuildRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> GuestRebuildResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.rebuild(
+        di.code_agent_source_service.rebuild(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,
@@ -176,13 +176,13 @@ async def op_flows_code_agent_status(
     payload: CodeAgentNodeRefPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> CodeAgentNodeStatusResponse:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_view_flow(container, flow_id)
+    _ = await require_view_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.status(
+        di.code_agent_source_service.status(
             flow_id=flow_id, node_id=node_id, branch_id=branch_id
         )
     )
@@ -192,13 +192,13 @@ async def op_flows_code_agent_logs(
     payload: CodeAgentLogsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> GuestRuntimeLogsResponse:
     _ = user
     flow_id, node_id, _branch_id = _require_node_ref(payload)
-    _ = await require_view_flow(container, flow_id)
+    _ = await require_view_flow(di, flow_id)
     return await _run_code_agent(
-        container.code_agent_source_service.logs(
+        di.code_agent_source_service.logs(
             flow_id=flow_id,
             node_id=node_id,
             task_id=payload.task_id,
@@ -212,13 +212,13 @@ async def op_flows_code_agent_delete(
     payload: CodeAgentDeletePayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> None:
     _ = user
     flow_id, node_id, branch_id = _require_node_ref(payload)
-    _ = await require_edit_flow(container, flow_id)
+    _ = await require_edit_flow(di, flow_id)
     await _run_code_agent(
-        container.code_agent_source_service.delete_source(
+        di.code_agent_source_service.delete_source(
             flow_id=flow_id,
             node_id=node_id,
             branch_id=branch_id,

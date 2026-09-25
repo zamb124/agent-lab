@@ -6,7 +6,9 @@ import pytest
 
 from core.mail.exceptions import MailPermissionError
 from core.mail.models import (
+    CompanyMailConnection,
     CompanyMailConnectionUpsertPayload,
+    MailboxBinding,
     MailboxBindingCreatePayload,
     MailboxBindingHealthcheckPayload,
     MailboxBindingKind,
@@ -25,13 +27,13 @@ from tests.core.mail.fakes import RecordingMailServerPort
 async def test_connect_personal_without_company_connection(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"mailpers_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -88,14 +90,14 @@ async def test_connect_personal_without_company_connection(
 async def test_company_and_personal_share_sync_candidates(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = recording_mail_port
     company_id = f"mailboth_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -148,14 +150,14 @@ async def test_company_and_personal_share_sync_candidates(
 async def test_personal_unbind_by_owner_deletes_connection(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = recording_mail_port
     company_id = f"mailunbind_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -176,18 +178,15 @@ async def test_personal_unbind_by_owner_deletes_connection(
         binding.mailbox_binding_id,
         company_id=company_id,
     )
-    assert await mail_service._connection_repository.get(connection_id) is None
-    assert (
-        await mail_service._binding_repository.get(binding.mailbox_binding_id, company_id)
-        is None
-    )
+    assert await CompanyMailConnection.get(connection_id) is None
+    assert await MailboxBinding.find_in_company(company_id, binding.mailbox_binding_id) is None
 
 
 @pytest.mark.asyncio
 async def test_non_owner_cannot_unbind_personal(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -196,7 +195,7 @@ async def test_non_owner_cannot_unbind_personal(
     owner_id = f"owner_{unique_id}"
     other_id = f"other_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=owner_id,
         unique_id=unique_id,
@@ -228,14 +227,14 @@ async def test_non_owner_cannot_unbind_personal(
 async def test_personal_allocate_message_id_without_company_connection(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = recording_mail_port
     company_id = f"mailmsgid_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -276,13 +275,13 @@ async def test_personal_allocate_message_id_without_company_connection(
 async def test_personal_healthcheck_binding_uses_stored_password(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"mailhc_{unique_id}"
     user_id = f"user_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -328,7 +327,7 @@ async def test_personal_healthcheck_binding_uses_stored_password(
 async def test_personal_healthcheck_binding_forbidden_for_non_owner(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    container,
+    di,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -337,7 +336,7 @@ async def test_personal_healthcheck_binding_forbidden_for_non_owner(
     owner_id = f"owner_{unique_id}"
     other_id = f"other_{unique_id}"
     _ = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=owner_id,
         unique_id=unique_id,

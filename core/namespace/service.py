@@ -2,10 +2,8 @@
 Единый платформенный сервис namespace.
 
 Единственное место конструирования записи `Namespace` и её персистентности.
-Все сервисы (CRM, Sync, Office, RAG, core) читают и создают namespace только
-через этот сервис поверх `NamespaceRepository` (shared БД). Прямое
-конструирование `Namespace(...)` + `namespace_repository.set(...)` в остальном
-коде запрещено — это ломает единый источник правды.
+Все сервисы читают и создают namespace только через этот сервис.
+Запросы строки — методы `Namespace`.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
 from core.context import require_active_company
-from core.db.repositories.namespace_repository import NamespaceRepository
+from core.errors.boundary import PlatformNotFoundError
 from core.models.identity_models import (
     Namespace,
     NamespaceCRMSettings,
@@ -70,15 +68,19 @@ class NamespaceService:
 
     def __init__(
         self,
-        repository: NamespaceRepository,
         authz_service: AuthzService,
     ) -> None:
-        self._repository: NamespaceRepository = repository
         self._authz: AuthzService = authz_service
+
+    async def _save_row(self, namespace: Namespace) -> bool:
+        if namespace.company_id == "" or namespace.name == "":
+            raise ValueError("namespace company_id and name are required")
+        namespace.namespace_id = f"{namespace.company_id}:{namespace.name}"
+        return await Namespace.set(namespace)
 
     async def get(self, name: str) -> Namespace | None:
         """Читает namespace по имени в scope активной компании."""
-        return await self._repository.get(name)
+        return await Namespace.by_name(name)
 
     async def list(
         self,
@@ -92,14 +94,14 @@ class NamespaceService:
 
         kinds=None → product list (company_workspace + personal, без technical).
         """
-        if offset == 0 and await self._repository.get(_DEFAULT_NAMESPACE_NAME) is None:
+        if offset == 0 and await Namespace.by_name(_DEFAULT_NAMESPACE_NAME) is None:
             _ = await self.ensure_default()
         allowed = kinds if kinds is not None else _PRODUCT_LIST_KINDS
-        # KV list не умеет SQL-filter по kind — читаем страницу с запасом и фильтруем.
-        fetch_limit = min(max(limit * 4, limit), 500)
-        raw = await self._repository.list(limit=fetch_limit, offset=offset)
-        filtered = [ns for ns in raw if ns.kind in allowed]
-        return filtered[:limit]
+        return await Namespace.list_by_kind(
+            list(allowed),
+            limit=limit,
+            offset=offset,
+        )
 
     async def list_by_company(
         self,
@@ -110,11 +112,10 @@ class NamespaceService:
         kinds: frozenset[NamespaceKind] | None = None,
     ) -> list[Namespace]:
         """Список namespace компании (company_id обязан совпадать с активной)."""
-        if offset == 0 and await self._repository.get(_DEFAULT_NAMESPACE_NAME) is None:
-            _ = await self.ensure_default()
-        allowed = kinds if kinds is not None else _PRODUCT_LIST_KINDS
-        raw = await self._repository.list_by_company(company_id, limit=limit, offset=offset)
-        return [ns for ns in raw if ns.kind in allowed]
+        active_company_id = require_active_company().company_id
+        if company_id != active_company_id:
+            raise ValueError("company_id does not match the active company")
+        return await self.list(limit=limit, offset=offset, kinds=kinds)
 
     async def list_company_workspaces(
         self, *, limit: int = 200, offset: int = 0
@@ -129,12 +130,11 @@ class NamespaceService:
     async def count(self, *, kinds: frozenset[NamespaceKind] | None = None) -> int:
         """Число namespace компании с фильтром kind."""
         allowed = kinds if kinds is not None else _PRODUCT_LIST_KINDS
-        all_items = await self._repository.list(limit=1000, offset=0)
-        return sum(1 for ns in all_items if ns.kind in allowed)
+        return await Namespace.count_by_kind(list(allowed))
 
     async def ensure_default(self) -> Namespace:
         """Идемпотентно гарантирует системный default namespace текущей компании."""
-        existing = await self._repository.get(_DEFAULT_NAMESPACE_NAME)
+        existing = await Namespace.by_name(_DEFAULT_NAMESPACE_NAME)
         if existing is not None:
             migrated = await self._migrate_legacy_kind(existing)
             await self._ensure_platform_namespace_authz(migrated)
@@ -168,7 +168,7 @@ class NamespaceService:
             raise ValueError("display_name is required for personal namespace")
 
         name = personal_namespace_name(cleaned_user_id)
-        existing = await self._repository.get(name)
+        existing = await Namespace.by_name(name)
         if existing is not None:
             if existing.kind != NamespaceKind.PERSONAL:
                 raise ValueError(f"Namespace {name} exists but is not personal")
@@ -178,7 +178,7 @@ class NamespaceService:
                 updated = existing.model_copy(
                     update={"description": cleaned_display},
                 )
-                _ = await self._repository.set(updated)
+                _ = await self._save_row(updated)
                 await self._ensure_platform_namespace_authz(updated)
                 return updated
             await self._ensure_platform_namespace_authz(existing)
@@ -212,7 +212,7 @@ class NamespaceService:
                 "personal namespace must be created via ensure_personal_namespace"
             )
         resolved_kind = infer_namespace_kind(name, explicit=kind)
-        if await self._repository.get(name) is not None:
+        if await Namespace.by_name(name) is not None:
             raise ValueError(f"Namespace {name} already exists")
         company_id = require_active_company().company_id
         namespace = Namespace(
@@ -239,7 +239,7 @@ class NamespaceService:
         sync_settings: NamespaceSyncSettings | None = None,
     ) -> Namespace:
         """Возвращает namespace, создавая его при отсутствии (идемпотентно)."""
-        existing = await self._repository.get(name)
+        existing = await Namespace.by_name(name)
         if existing is not None:
             migrated = await self._migrate_legacy_kind(existing, preferred_kind=kind)
             await self._ensure_platform_namespace_authz(migrated)
@@ -273,7 +273,7 @@ class NamespaceService:
         Системный `default` создаётся автоматически; любое другое отсутствующее
         имя — ошибка (без тихого fallback).
         """
-        existing = await self._repository.get(name)
+        existing = await Namespace.by_name(name)
         if existing is None and name == _DEFAULT_NAMESPACE_NAME:
             existing = await self.ensure_default()
         if existing is None:
@@ -282,15 +282,24 @@ class NamespaceService:
         await self._ensure_platform_namespace_authz(migrated)
         return migrated
 
+    async def set_sync_settings(
+        self, name: str, sync_settings: NamespaceSyncSettings | None
+    ) -> Namespace:
+        existing = await self.get(name)
+        if existing is None:
+            raise PlatformNotFoundError(f"Namespace {name} not found", error_code="not_found")
+        existing.sync_settings = sync_settings
+        return await self.save(existing)
+
     async def save(self, namespace: Namespace) -> Namespace:
         """Персистит уже загруженную/изменённую запись namespace и FGA tuples."""
-        _ = await self._repository.set(namespace)
+        _ = await self._save_row(namespace)
         await self._ensure_platform_namespace_authz(namespace)
         return namespace
 
     async def delete(self, name: str) -> bool:
         """Удаляет запись namespace из реестра и OpenFGA tuples."""
-        existing = await self._repository.get(name)
+        existing = await Namespace.by_name(name)
         if existing is None:
             return False
         deletes = await self._authz.list_tuples(
@@ -298,7 +307,7 @@ class NamespaceService:
         )
         if deletes:
             await self._authz.delete(deletes)
-        return await self._repository.delete(name)
+        return await Namespace.delete_by_name(name)
 
     async def _migrate_legacy_kind(
         self,
@@ -330,20 +339,20 @@ class NamespaceService:
         if not needs_save:
             return namespace
         migrated = namespace.model_copy(update=updates)
-        _ = await self._repository.set(migrated)
+        _ = await self._save_row(migrated)
         try:
             await self._write_platform_namespace_authz(migrated)
         except Exception:
-            _ = await self._repository.set(namespace)
+            _ = await self._save_row(namespace)
             raise
         return migrated
 
     async def _persist_new_namespace(self, namespace: Namespace) -> Namespace:
-        _ = await self._repository.set(namespace)
+        _ = await self._save_row(namespace)
         try:
             await self._write_platform_namespace_authz(namespace)
         except Exception:
-            _ = await self._repository.delete(namespace.name)
+            _ = await Namespace.delete_by_name(namespace.name)
             raise
         return namespace
 

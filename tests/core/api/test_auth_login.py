@@ -52,7 +52,7 @@ class TestAuthLogin:
         assert response.status_code == 400
         data = response.json()
         assert "detail" in data
-        assert "Неподдерживаемый провайдер" in data["detail"]
+        assert "Unsupported provider" in data["detail"]
 
         print("✅ Невалидный провайдер корректно возвращает 400")
 

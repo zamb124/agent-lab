@@ -6,14 +6,15 @@ import asyncio
 from dataclasses import dataclass
 from typing import Literal
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     company_scope,
     require_company_member,
     require_view_tool,
     require_view_tool_or_flow,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import FlowConfig, ToolReference, flow_tool_parameters_schema
+from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.enums import CodeMode, ReactToolRole
 from apps.flows.src.models.flow_config import FlowToolPickerItem
 from apps.flows.src.models.tool_contracts import ToolDefinition
@@ -30,11 +31,6 @@ from apps.flows.src.models.tool_reference import (
     ToolsToolIdPayload,
 )
 from apps.flows.src.models.tool_tag_group import ToolTagGroup
-from apps.flows.src.services.agent_toolkit_service import (
-    get_toolkit_ids_for_flow,
-    get_toolkit_ids_for_tool,
-    set_tool_toolkit_membership,
-)
 from apps.flows.src.services.tool_definition_builder import build_tool_definition_from_base_tool
 from apps.flows.src.services.tool_preview import (
     ToolPreviewRequest,
@@ -64,14 +60,6 @@ def _raise_if_platform_builtin(tool_id: str, *, action: str) -> None:
         raise_conflict(ValueError(f"platform builtin {tool_id!r} cannot be {action}"))
 
 
-async def _toolkit_ids_for_tool(container: FlowContainer, tool_id: str) -> list[str]:
-    return await get_toolkit_ids_for_tool(container.agent_toolkit_repository, tool_id)
-
-
-async def _toolkit_ids_for_flow(container: FlowContainer, flow_id: str) -> list[str]:
-    return await get_toolkit_ids_for_flow(container.agent_toolkit_repository, flow_id)
-
-
 def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[str]) -> ToolResponse:
     return ToolResponse(
         tool_id=t.tool_id,
@@ -95,30 +83,30 @@ def _tool_response_from_reference(t: ToolReference, *, agent_toolkit_ids: list[s
     )
 
 
-def _resolve_registry_tool(container: FlowContainer, tool_id: str) -> BaseTool | None:
-    registry = container.tool_registry
+def _resolve_registry_tool(di: Di, tool_id: str) -> BaseTool | None:
+    registry = di.tool_registry
     registry.register_builtin_tools()
     return registry.get(tool_id)
 
 
-async def _require_runnable_tool(container: FlowContainer, tool_id: str) -> BaseTool:
-    registry_tool = _resolve_registry_tool(container, tool_id)
+async def _require_runnable_tool(di: Di, tool_id: str) -> BaseTool:
+    registry_tool = _resolve_registry_tool(di, tool_id)
     if registry_tool is not None:
         return registry_tool
-    stored = await container.tool_repository.get(tool_id)
+    stored = await ToolReference.get(ToolReference.row_id(tool_id))
     if stored is None:
         raise_not_found(LookupError(f"Tool '{tool_id}' not found"))
     try:
-        return await container.tool_registry.materialize(stored)
+        return await di.tool_registry.materialize(stored)
     except ValueError as exc:
         raise_invalid(exc)
 
 
 def _enrich_tool_response_from_registry(
-    container: FlowContainer,
+    di: Di,
     response: ToolResponse,
 ) -> ToolResponse:
-    registry_tool = _resolve_registry_tool(container, response.tool_id)
+    registry_tool = _resolve_registry_tool(di, response.tool_id)
     if registry_tool is None:
         return response
     return response.model_copy(
@@ -193,8 +181,8 @@ def _picker_text_match(
     return needle in hay
 
 
-def _registry_listed_tools(container: FlowContainer) -> list[BaseTool]:
-    registry = container.tool_registry
+def _registry_listed_tools(di: Di) -> list[BaseTool]:
+    registry = di.tool_registry
     registry.register_builtin_tools()
     return [
         tool
@@ -204,23 +192,21 @@ def _registry_listed_tools(container: FlowContainer) -> list[BaseTool]:
 
 
 async def _company_tool_picker_index(
-    container: FlowContainer,
     *,
     mcp: ToolIndexMcpFilter,
 ) -> list[ToolListIndexItem]:
-    return await container.tool_repository.list_index(
+    return await ToolReference.list_index(
         mcp=mcp,
         exclude_tool_ids=builtin_tool_ids(),
     )
 
 
 async def _flow_picker_refs(
-    container: FlowContainer,
     *,
     needle: str | None,
 ) -> list[_PickerRef]:
     refs: list[_PickerRef] = []
-    for row in await container.flow_repository.list_picker_index():
+    for row in await FlowConfig.list_picker_index():
         if not _picker_text_match(
             tool_id=row.flow_id,
             title=row.name,
@@ -241,7 +227,7 @@ def _tool_picker_mcp_filter(*, include_mcp: bool, mcp_only: bool) -> ToolIndexMc
 
 
 async def _tool_picker_refs(
-    container: FlowContainer,
+    di: Di,
     *,
     include_mcp: bool,
     mcp_only: bool,
@@ -249,7 +235,7 @@ async def _tool_picker_refs(
 ) -> list[_PickerRef]:
     refs: list[_PickerRef] = []
     mcp_filter = _tool_picker_mcp_filter(include_mcp=include_mcp, mcp_only=mcp_only)
-    for row in await _company_tool_picker_index(container, mcp=mcp_filter):
+    for row in await _company_tool_picker_index(mcp=mcp_filter):
         is_mcp = _index_row_is_mcp(row)
         if mcp_only and not is_mcp:
             continue
@@ -265,7 +251,7 @@ async def _tool_picker_refs(
         refs.append(_PickerRef(item_type="tool", object_id=row.tool_id))
     if mcp_only:
         return refs
-    for tool in _registry_listed_tools(container):
+    for tool in _registry_listed_tools(di):
         if not _picker_text_match(
             tool_id=tool.name,
             title=tool.name,
@@ -278,7 +264,7 @@ async def _tool_picker_refs(
 
 
 async def _page_viewable_picker_refs(
-    container: FlowContainer,
+    di: Di,
     catalog: list[_PickerRef],
     *,
     limit: int,
@@ -301,14 +287,14 @@ async def _page_viewable_picker_refs(
         allowed_flows: set[str] = set()
         if flow_ids:
             allowed_flows = set(
-                await container.flow_access_service.filter_viewable_flow_ids(
+                await di.flow_access_service.filter_viewable_flow_ids(
                     flow_ids, user_id=scope.user_id, company_id=scope.company_id
                 )
             )
         allowed_tools: set[str] = set()
         if tool_ids:
             allowed_tools = set(
-                await container.flow_access_service.filter_viewable_tool_ids(
+                await di.flow_access_service.filter_viewable_tool_ids(
                     tool_ids, user_id=scope.user_id, company_id=scope.company_id
                 )
             )
@@ -321,16 +307,16 @@ async def _page_viewable_picker_refs(
 
 
 async def _hydrate_picker_page(
-    container: FlowContainer,
+    di: Di,
     page_refs: list[_PickerRef],
 ) -> list[ToolResponse]:
     flow_ids = [ref.object_id for ref in page_refs if ref.item_type == "flow"]
     tool_ids = [ref.object_id for ref in page_refs if ref.item_type == "tool"]
     platform_ids = builtin_tool_ids()
     company_tool_ids = [tid for tid in tool_ids if tid not in platform_ids]
-    flows_by_id = await container.flow_repository.get_many(flow_ids) if flow_ids else {}
+    flows_by_id = await FlowConfig.latest_by_flow_ids(flow_ids) if flow_ids else {}
     tools_by_id = (
-        await container.tool_repository.get_many(company_tool_ids) if company_tool_ids else {}
+        await ToolReference.by_tool_ids(company_tool_ids) if company_tool_ids else {}
     )
     items: list[ToolResponse] = []
     for ref in page_refs:
@@ -343,7 +329,7 @@ async def _hydrate_picker_page(
             items.append(_flow_response(flow_row))
             continue
         if ref.object_id in platform_ids:
-            registry_tool = _resolve_registry_tool(container, ref.object_id)
+            registry_tool = _resolve_registry_tool(di, ref.object_id)
             if registry_tool is None:
                 raise RuntimeError(
                     f"platform builtin {ref.object_id!r} is missing from ToolRegistry"
@@ -357,7 +343,7 @@ async def _hydrate_picker_page(
             )
         items.append(
             _enrich_tool_response_from_registry(
-                container,
+                di,
                 _tool_response_from_reference(tool_row, agent_toolkit_ids=[]),
             )
         )
@@ -365,7 +351,7 @@ async def _hydrate_picker_page(
 
 
 async def _tool_picker_total(
-    container: FlowContainer,
+    di: Di,
     *,
     mcp: ToolIndexMcpFilter,
     include_registry: bool,
@@ -374,17 +360,17 @@ async def _tool_picker_total(
 ) -> int:
     if needle is not None:
         return len(catalog)
-    total = await container.tool_repository.count_index(
+    total = await ToolReference.count_index(
         mcp=mcp,
         exclude_tool_ids=builtin_tool_ids(),
     )
     if include_registry:
-        total += len(_registry_listed_tools(container))
+        total += len(_registry_listed_tools(di))
     return total
 
 
 async def _list_picker_tools_and_flows(
-    container: FlowContainer,
+    di: Di,
     *,
     picker_category: PickerCategory,
     limit: int,
@@ -394,8 +380,8 @@ async def _list_picker_tools_and_flows(
     needle = q.strip().lower() if isinstance(q, str) and q.strip() else None
     scope = company_scope()
     if picker_category == PickerCategory.FLOW:
-        catalog = await _flow_picker_refs(container, needle=needle)
-        page_ids = await container.flow_access_service.page_viewable_flow_ids(
+        catalog = await _flow_picker_refs(needle=needle)
+        page_ids = await di.flow_access_service.page_viewable_flow_ids(
             [ref.object_id for ref in catalog],
             user_id=scope.user_id,
             company_id=scope.company_id,
@@ -406,9 +392,9 @@ async def _list_picker_tools_and_flows(
         total = len(catalog)
     elif picker_category == PickerCategory.MCP:
         catalog = await _tool_picker_refs(
-            container, include_mcp=True, mcp_only=True, needle=needle
+            di, include_mcp=True, mcp_only=True, needle=needle
         )
-        page_ids = await container.flow_access_service.page_viewable_tool_ids(
+        page_ids = await di.flow_access_service.page_viewable_tool_ids(
             [ref.object_id for ref in catalog],
             user_id=scope.user_id,
             company_id=scope.company_id,
@@ -417,7 +403,7 @@ async def _list_picker_tools_and_flows(
         )
         page_refs = [_PickerRef(item_type="tool", object_id=tool_id) for tool_id in page_ids]
         total = await _tool_picker_total(
-            container,
+            di,
             mcp="only",
             include_registry=False,
             needle=needle,
@@ -425,9 +411,9 @@ async def _list_picker_tools_and_flows(
         )
     elif picker_category == PickerCategory.CODE:
         catalog = await _tool_picker_refs(
-            container, include_mcp=False, mcp_only=False, needle=needle
+            di, include_mcp=False, mcp_only=False, needle=needle
         )
-        page_ids = await container.flow_access_service.page_viewable_tool_ids(
+        page_ids = await di.flow_access_service.page_viewable_tool_ids(
             [ref.object_id for ref in catalog],
             user_id=scope.user_id,
             company_id=scope.company_id,
@@ -436,7 +422,7 @@ async def _list_picker_tools_and_flows(
         )
         page_refs = [_PickerRef(item_type="tool", object_id=tool_id) for tool_id in page_ids]
         total = await _tool_picker_total(
-            container,
+            di,
             mcp="exclude",
             include_registry=True,
             needle=needle,
@@ -444,20 +430,20 @@ async def _list_picker_tools_and_flows(
         )
     else:
         catalog = [
-            *(await _flow_picker_refs(container, needle=needle)),
+            *(await _flow_picker_refs(needle=needle)),
             *(await _tool_picker_refs(
-                container, include_mcp=True, mcp_only=False, needle=needle
+                di, include_mcp=True, mcp_only=False, needle=needle
             )),
         ]
         page_refs = await _page_viewable_picker_refs(
-            container, catalog, limit=limit, offset=offset
+            di, catalog, limit=limit, offset=offset
         )
         if needle is not None:
             total = len(catalog)
         else:
             flow_total = len([ref for ref in catalog if ref.item_type == "flow"])
             tool_total = await _tool_picker_total(
-                container,
+                di,
                 mcp="all",
                 include_registry=True,
                 needle=None,
@@ -465,7 +451,7 @@ async def _list_picker_tools_and_flows(
             )
             total = flow_total + tool_total
     return OffsetPage[ToolResponse](
-        items=await _hydrate_picker_page(container, page_refs),
+        items=await _hydrate_picker_page(di, page_refs),
         total=total,
         limit=limit,
         offset=offset,
@@ -476,16 +462,16 @@ async def op_flows_tools_list(
     payload: ToolsListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[ToolResponse]:
     _ = user
-    scope = await require_company_member(container)
+    scope = await require_company_member(di)
     tools, total = await asyncio.gather(
-        container.tool_repository.list(limit=payload.limit, offset=payload.offset),
-        container.tool_repository.count_all(),
+        ToolReference.list_in_tool_id_order(limit=payload.limit, offset=payload.offset),
+        ToolReference.count_all(),
     )
     allowed_ids = set(
-        await container.flow_access_service.filter_viewable_tool_ids(
+        await di.flow_access_service.filter_viewable_tool_ids(
             [tool_row.tool_id for tool_row in tools],
             user_id=scope.user_id,
             company_id=scope.company_id,
@@ -494,10 +480,10 @@ async def op_flows_tools_list(
     tools = [tool_row for tool_row in tools if tool_row.tool_id in allowed_ids]
     response_items: list[ToolResponse] = []
     for tool_row in tools:
-        toolkit_ids = await _toolkit_ids_for_tool(container, tool_row.tool_id)
+        toolkit_ids = await AgentToolkit.get_toolkit_ids_for_tool(tool_row.tool_id)
         response_items.append(
             _enrich_tool_response_from_registry(
-                container,
+                di,
                 _tool_response_from_reference(tool_row, agent_toolkit_ids=toolkit_ids),
             )
         )
@@ -513,12 +499,12 @@ async def op_flows_tools_list_all(
     payload: ToolsListAllPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[ToolResponse]:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _list_picker_tools_and_flows(
-        container,
+        di,
         picker_category=payload.picker_category
         if payload.picker_category is not None
         else PickerCategory.ALL,
@@ -532,11 +518,11 @@ async def op_flows_tools_tag_groups(
     payload: ToolsTagGroupsPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[ToolTagGroup]:
     _ = user
-    _ = await require_company_member(container)
-    groups = await container.tool_tag_group_service.list_groups(
+    _ = await require_company_member(di)
+    groups = await ToolTagGroup.list_groups(
         limit=payload.limit, offset=payload.offset
     )
     items = list(groups)
@@ -554,11 +540,11 @@ async def op_flows_tools_preview(
     payload: ToolPreviewRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ToolPreviewResponse:
     _ = user
-    _ = await require_view_tool(container, payload.tool_id)
-    tool = await _require_runnable_tool(container, payload.tool_id)
+    _ = await require_view_tool(di, payload.tool_id)
+    tool = await _require_runnable_tool(di, payload.tool_id)
     return build_tool_preview(
         tool,
         binding_overrides=payload.binding_overrides,
@@ -570,11 +556,11 @@ async def op_flows_tools_contract(
     payload: ToolsToolIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ToolDefinition:
     _ = user
-    _ = await require_view_tool(container, payload.tool_id)
-    tool = await _require_runnable_tool(container, payload.tool_id)
+    _ = await require_view_tool(di, payload.tool_id)
+    tool = await _require_runnable_tool(di, payload.tool_id)
     return build_tool_definition_from_base_tool(tool)
 
 
@@ -582,24 +568,24 @@ async def op_flows_tools_item(
     payload: ToolsToolIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ToolResponse:
     _ = user
-    _ = await require_view_tool_or_flow(container, payload.tool_id)
-    tool = await container.tool_repository.get(payload.tool_id)
+    _ = await require_view_tool_or_flow(di, payload.tool_id)
+    tool = await ToolReference.get(ToolReference.row_id(payload.tool_id))
     if tool is not None:
-        toolkit_ids = await _toolkit_ids_for_tool(container, tool.tool_id)
+        toolkit_ids = await AgentToolkit.get_toolkit_ids_for_tool(tool.tool_id)
         return _enrich_tool_response_from_registry(
-            container,
+            di,
             _tool_response_from_reference(tool, agent_toolkit_ids=toolkit_ids),
         )
-    registry_tool = _resolve_registry_tool(container, payload.tool_id)
+    registry_tool = _resolve_registry_tool(di, payload.tool_id)
     if registry_tool is not None:
         return _tool_response_from_registry_tool(registry_tool)
-    flow_cfg = await container.flow_repository.get(payload.tool_id)
+    flow_cfg = await FlowConfig.get_latest(payload.tool_id)
     if flow_cfg is None:
         raise_not_found(LookupError("Tool not found"))
-    flow_toolkit_ids = await _toolkit_ids_for_flow(container, flow_cfg.flow_id)
+    flow_toolkit_ids = await AgentToolkit.get_toolkit_ids_for_flow(flow_cfg.flow_id)
     flow_item = _flow_response(flow_cfg)
     return flow_item.model_copy(update={"agent_toolkit_ids": flow_toolkit_ids})
 
@@ -608,11 +594,11 @@ async def op_flows_tools_create(
     payload: ToolCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ToolResponse:
     _ = user
     _raise_if_platform_builtin(payload.tool_id, action="created")
-    scope = await require_company_member(container)
+    scope = await require_company_member(di)
     react_role = (
         ReactToolRole(payload.react_role) if payload.react_role is not None else ReactToolRole.STANDARD
     )
@@ -639,19 +625,18 @@ async def op_flows_tools_create(
         tags=payload.tags,
         react_role=react_role,
     )
-    _ = await container.tool_repository.set(ref)
-    await container.flow_access_service.sync_tool_saved(
+    _ = await ToolReference.set(ref)
+    await di.flow_access_service.sync_tool_saved(
         ref.tool_id,
         company_id=scope.company_id,
         permission=ref.permission,
     )
-    await set_tool_toolkit_membership(
-        container.agent_toolkit_repository,
+    await AgentToolkit.set_tool_toolkit_membership(
         tool_id=ref.tool_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
     return _enrich_tool_response_from_registry(
-        container,
+        di,
         _tool_response_from_reference(
             ref,
             agent_toolkit_ids=list(payload.agent_toolkit_ids),
@@ -663,15 +648,15 @@ async def op_flows_tools_remove(
     payload: ToolsToolIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ToolDeletedResponse:
     _ = user
     _raise_if_platform_builtin(payload.tool_id, action="deleted")
-    scope = await require_view_tool(container, payload.tool_id)
-    deleted = await container.tool_repository.delete(payload.tool_id)
+    scope = await require_view_tool(di, payload.tool_id)
+    deleted = await ToolReference.delete_by_id(ToolReference.row_id(payload.tool_id))
     if not deleted:
         raise_not_found(LookupError("Tool not found"))
-    await container.flow_access_service.sync_tool_deleted(
+    await di.flow_access_service.sync_tool_deleted(
         payload.tool_id, company_id=scope.company_id
     )
     return ToolDeletedResponse(status="deleted", tool_id=payload.tool_id)

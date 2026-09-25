@@ -16,31 +16,19 @@ _settings = SearchWorkerSettings.model_validate(
 )
 setup_worker_logging_early("search_worker", logging_config=_settings.logging)
 set_settings(_settings)
-_segment = resolve_files_route_segment("search_worker")
-set_files_route_segment(_segment)
+set_files_route_segment(resolve_files_route_segment("search_worker"))
 
-from taskiq import TaskiqState
-
-from apps.platform_tasks.wiring import wire_worker
-from apps.search.container import get_search_container
-from core.billing import set_billing_service
+from apps.search.config import get_search_settings
+from apps.search.services.crawl.bootstrap_service import CrawlBootstrapService
+from apps.search_worker.di import SearchWorkerDi
+from apps.worker_manifest import wire_worker
 from core.crawl.logging_events import log_crawl_bootstrap
-from core.logging import get_logger
-from core.tasks.worker_bootstrap import build_worker, init_worker_tracing
-
-logger = get_logger(__name__)
-
-broker = wire_worker("search")
+from core.di import recipe
+from core.tasks.worker_bootstrap import build_worker
 
 
-async def _startup(state: TaskiqState) -> None:
-    container = get_search_container()
-    container.bind_files_route_segment(_segment)
-    state.container = container
-    set_billing_service(container.billing_service)
-    init_worker_tracing("search_worker", container)
-
-    bootstrap_result = await container.crawl_bootstrap_service.ensure_crawl_pipeline_ready()
+async def ensure_crawl_pipeline(crawl_bootstrap_service: CrawlBootstrapService) -> None:
+    bootstrap_result = await crawl_bootstrap_service.ensure_crawl_pipeline_ready()
     log_crawl_bootstrap(
         crawl_profile_id=bootstrap_result.crawl_profile_id,
         action=bootstrap_result.action,
@@ -48,6 +36,15 @@ async def _startup(state: TaskiqState) -> None:
     )
 
 
-worker_app = build_worker(broker, service_name="search_worker", queue="search", on_startup=_startup)
+broker = wire_worker("search")
+worker_app = build_worker(
+    broker,
+    service_name="search_worker",
+    queue="search",
+    settings=get_search_settings(),
+    di_class=SearchWorkerDi,
+    database="search_url",
+    lifecycle=(recipe(ensure_crawl_pipeline),),
+)
 
 __all__ = ["worker_app"]

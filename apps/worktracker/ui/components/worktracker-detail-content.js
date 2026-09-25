@@ -5,7 +5,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { worktrackerDetailContentStyles } from '../styles/worktracker-detail.styles.js';
-import { truncateWorkItemId } from '../utils/work-item-detail-shared.js';
+import { truncateWorkItemId } from '../_helpers/work-item-detail-shared.js';
 import { buildWorkItemFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import './worktracker-state-pill.js';
 import '@platform/lib/components/fields/platform-field.js';

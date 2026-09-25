@@ -34,8 +34,8 @@ def test_infer_namespace_kind() -> None:
 
 
 @pytest.fixture()
-def namespace_service(container) -> NamespaceService:
-    return container.namespace_service
+def namespace_service(di) -> NamespaceService:
+    return di.namespace_service
 
 
 @pytest.fixture()
@@ -132,22 +132,22 @@ async def test_list_excludes_technical(
 async def test_ensure_exists_repairs_missing_platform_namespace_tuples(
     namespace_service: NamespaceService,
     company_context: tuple[Company, User],
-    container,
+    di,
 ) -> None:
     company, user = company_context
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company.company_id,
         user_id=user.user_id,
         roles=["owner"],
     )
     created = await namespace_service.create(name=f"ws_{user.user_id}")
     obj = AuthzObject.platform_namespace(company.company_id, created.name)
-    existing = await container.authz_service.list_tuples(obj)
+    existing = await di.authz_service.list_tuples(obj)
     assert existing
-    await container.authz_service.delete(existing)
-    assert await container.authz_service.can_view(obj, user_id=user.user_id) is False
+    await di.authz_service.delete(existing)
+    assert await di.authz_service.can_view(obj, user_id=user.user_id) is False
 
     repaired = await namespace_service.ensure_exists(created.name)
     assert repaired.name == created.name
-    assert await container.authz_service.can_view(obj, user_id=user.user_id) is True
+    assert await di.authz_service.can_view(obj, user_id=user.user_id) is True

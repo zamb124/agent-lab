@@ -153,7 +153,7 @@ class TestSchemaValidation:
         """Создаёт entity_type с required_fields и привязывает к namespace."""
         type_id = f"validated_{unique_id}"
         create_resp = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Validated Type",
@@ -183,7 +183,7 @@ class TestSchemaValidation:
             crm_client, unique_id, auth_headers_system
         )
         resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Без email {unique_id}",
@@ -206,7 +206,7 @@ class TestSchemaValidation:
             crm_client, unique_id, auth_headers_system
         )
         resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Не тот тип {unique_id}",
@@ -231,7 +231,7 @@ class TestSchemaValidation:
             crm_client, unique_id, auth_headers_system
         )
         resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Валидная сущность {unique_id}",
@@ -257,7 +257,7 @@ class TestSchemaValidation:
             crm_client, unique_id, auth_headers_system
         )
         resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Строковые числа {unique_id}",
@@ -270,7 +270,7 @@ class TestSchemaValidation:
 
         type_amt = f"deal_amt_{unique_id}"
         amt_resp = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_amt,
                 "name": "Deal amount",
@@ -283,7 +283,7 @@ class TestSchemaValidation:
         assert amt_resp.status_code == 200, amt_resp.text
 
         resp2 = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_amt,
                 "name": f"Сделка {unique_id}",
@@ -307,7 +307,7 @@ class TestSchemaValidation:
             crm_client, unique_id, auth_headers_system
         )
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Обновляемая {unique_id}",
@@ -412,7 +412,7 @@ class TestBulkOperations:
         entity_ids: list[str] = []
         for i in range(3):
             create_resp = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "task",
                     "name": f"Task {i} {unique_id}",
@@ -452,7 +452,7 @@ class TestBulkOperations:
         entity_ids: list[str] = []
         for i in range(3):
             create_resp = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "note",
                     "name": f"Del {i} {unique_id}",
@@ -488,7 +488,7 @@ class TestBulkOperations:
     ) -> None:
         """Частичный сбой: один элемент не существует."""
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Real {unique_id}"},
             headers=auth_headers_system,
         )
@@ -522,7 +522,7 @@ class TestExport:
         user_marker = f"export_json_{unique_id}"
         for i in range(3):
             _ = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "note",
                     "name": f"Export {i} {unique_id}",
@@ -553,7 +553,7 @@ class TestExport:
         """Экспорт в CSV: заголовок + строки с данными."""
         for i in range(2):
             _ = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "note",
                     "name": f"CSV {i} {unique_id}",
@@ -616,7 +616,7 @@ class TestSearchModes:
         """search_mode=text использует tsvector FTS."""
         marker = f"fulltextsearch_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Документ {marker}",
@@ -649,7 +649,7 @@ class TestSearchModes:
         """search_mode=hybrid возвращает score и match_type."""
         marker = f"hybridsearch_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Hybrid {marker}",
@@ -697,7 +697,7 @@ class TestSearchModes:
         """text search + status filter."""
         marker = f"filtered_{unique_id}"
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "task",
                 "name": f"Task {marker}",
@@ -746,7 +746,7 @@ class TestAggregateFacets:
         """Endpoint /aggregate возвращает by_type, by_status, by_month."""
         for i in range(3):
             _ = await crm_client.post(
-                "/crm/api/v1/entities/",
+                "/crm/api/v1/entities",
                 json={
                     "entity_type": "note",
                     "name": f"Agg note {i} {unique_id}",
@@ -754,7 +754,7 @@ class TestAggregateFacets:
                 headers=auth_headers_system,
             )
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "task",
                 "name": f"Agg task {unique_id}",
@@ -792,7 +792,7 @@ class TestAggregateFacets:
         """Фильтрация по namespace: видим только сущности из нужного пространства."""
         ns = f"g_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "contact",
                 "name": f"NS contact {unique_id}",
@@ -825,12 +825,12 @@ class TestRelationshipIntegrity:
     ) -> None:
         """Повторное создание связи с теми же source/target/type → 409."""
         e1_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Rel src {unique_id}"},
             headers=auth_headers_system,
         )
         e2_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"Rel tgt {unique_id}"},
             headers=auth_headers_system,
         )
@@ -844,14 +844,14 @@ class TestRelationshipIntegrity:
         }
 
         first_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json=rel_data,
             headers=auth_headers_system,
         )
         assert first_resp.status_code == 200
 
         dup_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json=rel_data,
             headers=auth_headers_system,
         )
@@ -867,12 +867,12 @@ class TestRelationshipIntegrity:
     ) -> None:
         """При удалении сущности связи удаляются каскадно (FK ON DELETE CASCADE)."""
         e1_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Cascade src {unique_id}"},
             headers=auth_headers_system,
         )
         e2_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"Cascade tgt {unique_id}"},
             headers=auth_headers_system,
         )
@@ -880,7 +880,7 @@ class TestRelationshipIntegrity:
         tgt_id = _entity_id(e2_resp)
 
         rel_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": src_id,
                 "target_entity_id": tgt_id,
@@ -914,12 +914,12 @@ class TestRelationshipIntegrity:
         ns = f"g_{unique_id}"
 
         e1_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"NS rel src {unique_id}"},
             headers=auth_headers_system,
         )
         e2_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"NS rel tgt {unique_id}"},
             headers=auth_headers_system,
         )
@@ -927,7 +927,7 @@ class TestRelationshipIntegrity:
         tgt_id = _entity_id(e2_resp)
 
         resp_default = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": src_id,
                 "target_entity_id": tgt_id,
@@ -939,7 +939,7 @@ class TestRelationshipIntegrity:
         assert resp_default.status_code == 200
 
         resp_ns = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": src_id,
                 "target_entity_id": tgt_id,
@@ -963,7 +963,7 @@ class TestAccessLevel:
     ) -> None:
         """Создатель видит access_level=owner."""
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Owner entity {unique_id}"},
             headers=auth_headers_system,
         )
@@ -993,7 +993,7 @@ class TestAccessLevel:
     ) -> None:
         """Пользователь той же компании видит сущности и access_level=owner (same company)."""
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Same company {unique_id}"},
             headers=auth_headers_system,
         )
@@ -1016,7 +1016,7 @@ class TestAccessLevel:
     ) -> None:
         """Пользователь другой компании не видит чужую сущность."""
         create_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Hidden {unique_id}"},
             headers=auth_headers_system,
         )

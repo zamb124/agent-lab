@@ -10,8 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from apps.crm.container import get_crm_container
-from apps.crm.db.models import CRMTask
+from apps.crm.models.task import CRMTask
 from apps.crm.services.task_service import ALL_NAMESPACES_TASK_KEY
 from apps.crm_worker.tasks.task_names import CRM_REEMBED_STALE_DOCUMENTS
 from core.rag.models import RAGReembedTickResult
@@ -30,19 +29,16 @@ async def crm_reembed_stale_documents_tick(
     """
     _ = company_id
     result = await execute_reembed_tick(
-        container=get_crm_container(),
         channel="crm_worker",
         schedule_task_id=schedule_task_id,
     )
 
-    container = get_crm_container()
-    repo = container.task_repository
     now = datetime.now(timezone.utc)
     for cid, cnt in sorted(result["by_company_written"].items()):
         if cnt <= 0:
             continue
         task_row_id = str(uuid.uuid4())
-        _ = await repo.create(
+        _ = await CRMTask.create(
             CRMTask(
                 task_id=task_row_id,
                 task_type="reembed_stale_documents_tick",

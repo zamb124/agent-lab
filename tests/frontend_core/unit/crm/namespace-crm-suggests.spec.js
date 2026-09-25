@@ -3,7 +3,7 @@ import {
     DEFAULT_SUGGESTS_CRON,
     buildSuggestsSettingsPayload,
     parseSuggestsSettingsFromCrmSettings,
-} from '../../../../apps/crm/ui/utils/namespace-crm-suggests.js';
+} from '../../../../apps/crm/ui/_helpers/namespace-crm-suggests.js';
 
 describe('namespace-crm-suggests', () => {
     it('uses disabled defaults when crm_settings has no suggests block', () => {

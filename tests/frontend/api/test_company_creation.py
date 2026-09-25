@@ -13,6 +13,10 @@ import time
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.models.tool_reference import ToolReference
+from core.models.identity_models import Company, User
+
 
 @pytest.mark.asyncio
 @pytest.mark.real_taskiq  # Используем реальный TaskIQ worker
@@ -21,7 +25,7 @@ async def test_company_creation_with_agents_initialization(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
     auth_token: str,
-    container,
+    di,
     unique_id: str,
     taskiq_worker,  # Запускаем worker
 ):
@@ -40,7 +44,8 @@ async def test_company_creation_with_agents_initialization(
 
     Timeout 300s: сумма cold-start frontend + sync + flows + init_company_resources.
     """
-    from core.context import Context, clear_context, set_context
+    from core.context import clear_context, set_context
+    from core.models.context_models import Context
     from core.models.identity_models import Company
 
     # Шаг 1: Создание компании
@@ -64,8 +69,7 @@ async def test_company_creation_with_agents_initialization(
     print(f"✅ Компания создана: {company_id}")
 
     # Шаг 2: Проверка что компания в БД
-    company_repo = container.company_repository
-    company = await company_repo.get(company_id)
+    company = await Company.get(company_id)
 
     assert company is not None
     assert company.company_id == company_id
@@ -75,10 +79,13 @@ async def test_company_creation_with_agents_initialization(
     print(f"✅ Компания в БД: {company.company_id}")
 
     # Шаг 3: Проверка что subdomain mapping создан
-    subdomain_repo = container.subdomain_repository
-    mapped_company_id = await subdomain_repo.get_company_id(company_slug)
+    mapped = await Company.by_subdomain(company_slug)
 
-    assert mapped_company_id == company_id
+    assert mapped is not None
+    assert mapped.company_id == company_id
+    assert await Company.by_subdomain(f"missing-{company_slug}") is None
+    with pytest.raises(ValueError, match="subdomain is required"):
+        _ = await Company.by_subdomain("")
 
     print(f"✅ Subdomain mapping: {company_slug} → {company_id}")
 
@@ -111,7 +118,7 @@ async def test_company_creation_with_agents_initialization(
     user_id = token_data.user_id
 
     # Получаем пользователя из БД
-    user = await container.user_repository.get(user_id)
+    user = await User.get(user_id)
 
     test_context = Context(
         user=user,
@@ -122,12 +129,11 @@ async def test_company_creation_with_agents_initialization(
     set_context(test_context)
 
     try:
-        agent_repo = container.flow_repository
 
         # Ждем пока агенты появятся в БД
         agents_loaded = False
         for attempt in range(max_wait):
-            agents = await agent_repo.list(limit=1000)
+            agents = await FlowConfig.list_current(limit=1000)
 
             if len(agents) > 0:
                 agents_loaded = True
@@ -141,7 +147,7 @@ async def test_company_creation_with_agents_initialization(
         )
 
         # Проверка что загружены ТОЛЬКО public агенты
-        agents = await agent_repo.list(limit=1000)
+        agents = await FlowConfig.list_current(limit=1000)
         agent_ids = [agent.flow_id for agent in agents]
 
         print(f"📋 Загруженные агенты: {agent_ids}")
@@ -168,8 +174,7 @@ async def test_company_creation_with_agents_initialization(
         print("✅ Internal агенты отфильтрованы корректно")
 
         # Шаг 6: Проверка что tools тоже загружены
-        tool_repo = container.tool_repository
-        tools = await tool_repo.list(limit=1000)
+        tools = await ToolReference.list_in_tool_id_order(limit=1000)
 
         print(f"Загружено tools: {len(tools)} шт")
 
@@ -241,7 +246,7 @@ async def test_company_init_endpoint_directly(flows_client: AsyncClient, auth_to
 
     assert response.status_code == 400
     assert response.json()["error_code"] == "ws_invalid_payload"
-    assert "System namespace" in response.json()["error_detail"]
+    assert "system namespace is initialized" in response.json()["error_detail"]
 
     response = await flows_client.post(
         "/flows/api/v1/company/init",
@@ -310,7 +315,7 @@ async def test_check_slug_availability(
 async def test_company_creation_without_flows_service(
     frontend_client: AsyncClient,
     auth_token: str,
-    container,
+    di,
     unique_id: str,
 ):
     """
@@ -336,7 +341,7 @@ async def test_company_creation_without_flows_service(
     company_id = company_data["company_id"]
 
     # Проверяем что компания в БД
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     assert company.company_id == company_id
 
@@ -350,7 +355,7 @@ async def test_company_agents_api_with_context(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
     auth_token: str,
-    container,
+    di,
     unique_id: str,
     taskiq_worker,
 ):

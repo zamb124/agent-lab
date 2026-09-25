@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from apps.frontend.cookie_consent import COOKIE_CONSENT_TEXT_VERSION
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import (
     CookieConsentCreateBody,
     CookieConsentRecord,
@@ -75,8 +75,8 @@ def _apply_platform_name_to_post(post: PublicBlogPost, platform_name: str) -> Pu
 
 
 @router.get("/site-bundle", response_model=PublicSiteBundle)
-async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSiteBundle:
-    _ = container
+async def get_site_bundle(request: Request, di: Di) -> PublicSiteBundle:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -93,18 +93,18 @@ async def get_site_bundle(request: Request, container: ContainerDep) -> PublicSi
 async def record_cookie_consent(
     request: Request,
     body: CookieConsentCreateBody,
-    container: ContainerDep,
+    di: Di,
 ) -> CookieConsentRecord:
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
     brand = resolve_brand(str(host).strip())
-    return await container.cookie_consent_service.record(body, request=request, brand=brand)
+    return await di.cookie_consent_service.record(body, request=request, brand=brand)
 
 
 @router.get("/blog", response_model=PublicBlogListResponse)
-async def list_public_blog_posts(request: Request, container: ContainerDep) -> PublicBlogListResponse:
-    _ = container
+async def list_public_blog_posts(request: Request, di: Di) -> PublicBlogListResponse:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -116,10 +116,10 @@ async def list_public_blog_posts(request: Request, container: ContainerDep) -> P
 @router.get("/blog/post", response_model=PublicBlogPost)
 async def get_public_blog_post(
     request: Request,
-    container: ContainerDep,
+    di: Di,
     slug: Annotated[str, Query(min_length=1)],
 ) -> PublicBlogPost:
-    _ = container
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -131,9 +131,9 @@ async def get_public_blog_post(
 
 
 @router.get("/startup-card", response_model=PublicStartupCard)
-async def get_startup_card(request: Request, container: ContainerDep) -> PublicStartupCard:
+async def get_startup_card(request: Request, di: Di) -> PublicStartupCard:
     """Карточка продукта для внешних каталогов и форм submit startup."""
-    _ = container
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")

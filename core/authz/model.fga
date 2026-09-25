@@ -173,3 +173,13 @@ type datasource
     define can_view: viewer or editor or owner or admin from platform
     define can_edit: editor or owner or admin from platform
     define can_admin: owner or admin from company
+
+type stock_warehouse
+  relations
+    define company: [company]
+    define owner: [user]
+    define viewer: [user, company#member] or owner
+    define editor: [user, company#member] or owner
+    define can_view: viewer or editor
+    define can_edit: editor
+    define can_admin: owner

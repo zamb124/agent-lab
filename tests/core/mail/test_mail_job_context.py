@@ -30,7 +30,7 @@ async def test_role_job_actor_uses_company_admin_when_recipients_empty(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mail_member_context: MailMemberSeed,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id, admin_user_id, _user_binding = await seed_connected_user_binding(
@@ -51,16 +51,16 @@ async def test_role_job_actor_uses_company_admin_when_recipients_empty(
         ),
         company_id=company_id,
     )
-    await container.authz_service.delete(
+    await di.authz_service.delete(
         [mailbox_binding_owner_tuple(role_binding.mailbox_binding_id, admin_user_id)]
     )
 
-    recipients = await mailbox_recipient_user_ids(container, role_binding)
+    recipients = await mailbox_recipient_user_ids(di.authz_service, role_binding)
     assert recipients == []
-    actor = await mailbox_role_job_actor_user(container, role_binding)
+    actor = await mailbox_role_job_actor_user(di.authz_service, role_binding)
     assert actor.user_id == admin_user_id
 
-    previous = await enter_mail_binding_context(container, role_binding)
+    previous = await enter_mail_binding_context(di.authz_service, role_binding)
     try:
         assert actor.user_id == admin_user_id
     finally:
@@ -72,7 +72,7 @@ async def test_role_job_actor_raises_without_admin(
     mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
     mail_member_context: MailMemberSeed,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id, admin_user_id, _user_binding = await seed_connected_user_binding(
@@ -93,23 +93,22 @@ async def test_role_job_actor_raises_without_admin(
         ),
         company_id=company_id,
     )
-    await container.authz_service.delete(
+    await di.authz_service.delete(
         [mailbox_binding_owner_tuple(role_binding.mailbox_binding_id, admin_user_id)]
     )
-    admin = await container.user_repository.get(admin_user_id)
+    admin = await User.get(admin_user_id)
     if admin is None:
         raise RuntimeError(f"admin user missing: {admin_user_id}")
     admin.companies[company_id] = ["member"]
-    await container.user_repository.set(admin)
+    await User.set(admin)
     await set_test_company_member_roles(
-        container.company_repository,
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=admin_user_id,
         roles=["member"],
     )
 
-    recipients = await mailbox_recipient_user_ids(container, role_binding)
+    recipients = await mailbox_recipient_user_ids(di.authz_service, role_binding)
     assert recipients == []
     with pytest.raises(ValueError, match="no FGA mailbox member for role mail job"):
-        _ = await enter_mail_binding_context(container, role_binding)
+        _ = await enter_mail_binding_context(di.authz_service, role_binding)

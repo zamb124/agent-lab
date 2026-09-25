@@ -58,7 +58,7 @@ async def _create_entity(
     headers: dict[str, str],
     body: dict[str, object],
 ) -> dict[str, object]:
-    response = await crm_client.post("/crm/api/v1/entities/", json=body, headers=headers)
+    response = await crm_client.post("/crm/api/v1/entities", json=body, headers=headers)
     assert response.status_code in (200, 201), response.text
     return _http_json(response)
 
@@ -225,7 +225,7 @@ class TestSuggestsE2E:
         namespace = f"g_{unique_id}"
         type_id = f"auto_contact_{unique_id}"
         create_type = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "namespace": namespace,

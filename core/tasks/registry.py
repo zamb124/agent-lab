@@ -147,13 +147,13 @@ def platform_task(
 
     Биндит функцию к реальному брокеру очереди (broker должен быть зарегистрирован
     через ``create_broker`` до импорта impl-модуля — гарантируется порядком в
-    ``apps/platform_tasks/wiring.py``: сначала брокеры, затем autodiscover).
+    ``apps/worker_manifest.py``: сначала брокеры, затем autodiscover).
     Проставляет ``queue_name`` label (нужен scheduler dispatch и kick-роутингу).
     """
     broker = _QUEUE_BROKERS.get(task.queue)
     if broker is None:
         msg = f"platform_task: брокер очереди {task.queue!r} не зарегистрирован"
-        raise RuntimeError(f"{msg}; import the broker module before impl (apps/platform_tasks/wiring)")
+        raise RuntimeError(f"{msg}; import the broker module before impl (apps/worker_manifest)")
     return broker.task(
         task_name=task.name,
         queue_name=task.queue,

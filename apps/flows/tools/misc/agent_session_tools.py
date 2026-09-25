@@ -136,6 +136,7 @@ async def hitl_operator_task(
     handoff_mode: str = "single_reply",
     *,
     state: "ExecutionState",
+    hitl_client: HitlClient,
 ) -> str:
     mode = HandoffMode(handoff_mode)
     tool_context = get_active_tool_call_context()
@@ -146,7 +147,7 @@ async def hitl_operator_task(
         node_id=tool_context.node_id,
         tool_call_id=tool_context.tool_call_id,
     )
-    cid, work_item_id = await HitlClient().register_handoff(
+    cid, work_item_id = await hitl_client.register_handoff(
         state,
         question=question.strip(),
         task_title=task_title.strip(),

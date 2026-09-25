@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from apps.agent.tunnel_bus import send_mcp_request_to_device
-from apps.flows.src.container_state import require_current_container
 from core.clients.redis_client import RedisClient
 from core.types import JsonObject
 
@@ -13,12 +12,8 @@ class DeviceClient:
 
     _redis_client: RedisClient
 
-    def __init__(self, redis_client: RedisClient | None = None) -> None:
-        self._redis_client = (
-            redis_client
-            if redis_client is not None
-            else require_current_container().redis_client
-        )
+    def __init__(self, redis_client: RedisClient) -> None:
+        self._redis_client = redis_client
 
     async def tools_list(
         self,

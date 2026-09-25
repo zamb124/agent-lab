@@ -7,7 +7,6 @@ from core.clients.redis_client import RedisClient
 from core.config import get_settings
 from core.logging import get_logger
 from core.scheduler.platform_schedules_gc import PlatformSchedulesGcService
-from core.scheduler.repository import SchedulerTaskRepository
 from core.tasks import platform_task
 
 logger = get_logger(__name__)
@@ -20,7 +19,7 @@ async def platform_schedules_gc_tick(
 ) -> dict[str, int | list[str]]:
     _ = schedule_task_id, company_id
     settings = get_settings()
-    if not settings.database.shared_url:
+    if settings.database.shared_url is None or settings.database.shared_url == "":
         raise ValueError("database.shared_url is required for platform_schedules_gc_tick")
 
     broker_redis = RedisClient(settings.tasks.broker_url)
@@ -28,9 +27,6 @@ async def platform_schedules_gc_tick(
     try:
         gc_service = PlatformSchedulesGcService(
             broker_redis_client=broker_redis,
-            scheduler_task_repository=SchedulerTaskRepository(
-                db_url=settings.database.shared_url,
-            ),
         )
         result = await gc_service.run_gc(dry_run=False)
     finally:

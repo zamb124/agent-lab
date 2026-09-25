@@ -7,7 +7,6 @@ from contextlib import contextmanager
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from core.capabilities import (
     CapabilityCallRequest,
     CapabilityExecutionContext,
@@ -72,9 +71,8 @@ def _execution_context(*, namespace: str) -> CapabilityExecutionContext:
     )
 
 
-async def test_wiki_capabilities_in_manifest() -> None:
-    container = get_capability_gateway_container()
-    manifest = await container.capability_registry.manifest()
+async def test_wiki_capabilities_in_manifest(capability_gateway_di) -> None:
+    manifest = await capability_gateway_di.capability_registry.manifest()
     names = {item.name for item in manifest.capabilities}
     assert "wiki.create_page" in names
     assert "wiki.get_markdown" in names
@@ -83,18 +81,17 @@ async def test_wiki_capabilities_in_manifest() -> None:
 
 
 async def test_wiki_capability_create_and_get_markdown(
-    frontend_container,
+    frontend_di,
     unique_id: str,
-) -> None:
-    company = await frontend_container.company_repository.get("system")
+capability_gateway_di) -> None:
+    company = await Company.get("system")
     assert company is not None
-    user = await frontend_container.user_repository.get("system")
+    user = await User.get("system")
     assert user is not None
     namespace = f"wiki-cap-{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
 
-    container = get_capability_gateway_container()
-    registry = container.capability_registry
+    registry = capability_gateway_di.capability_registry
     context = _execution_context(namespace=namespace)
 
     with _namespace_context(user=user, company=company, namespace=namespace):

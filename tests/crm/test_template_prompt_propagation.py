@@ -28,7 +28,7 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.crm.constants_graph import TASK_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import CRMContainer
+from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_SEEDS,
     SYSTEM_ENTITY_TYPE_TEMPLATES,
@@ -36,7 +36,7 @@ from apps.crm.system_templates import (
     NamespaceTemplateSeed,
     NamespaceTemplateTypeSpec,
 )
-from core.context import clear_context, set_context
+from core.context import clear_context, require_active_company, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.types import JsonObject
@@ -261,7 +261,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
     async def test_load_all_entity_types_for_namespace_returns_user_prompt(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         auth_headers_system: dict[str, str],
         unique_id: str,
     ) -> None:
@@ -284,7 +284,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
         assert update_resp.status_code == 200, update_resp.text
 
         with _system_company_context():
-            loaded = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+            loaded = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                 ns_name
             )
         loaded_by_id = {entity_type.type_id: entity_type for entity_type in loaded}
@@ -298,7 +298,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
     async def test_build_composite_prompt_includes_user_overridden_prompt(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         auth_headers_system: dict[str, str],
         unique_id: str,
     ) -> None:
@@ -321,14 +321,16 @@ class TestUserEditsPropagateToAnalyzePipeline:
         assert update_resp.status_code == 200, update_resp.text
 
         with _system_company_context():
-            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+            entity_types = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                 ns_name
             )
             relationship_types = (
-                await crm_container.relationship_type_repository.get_with_prompts()
+                await RelationshipType.all_with_prompt(
+                    require_active_company().company_id,
+                )
             )
 
-            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+            composite = crm_di.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
                 entity_types, relationship_types, None, None,
             )
         assert marker in composite, "Перетёртый prompt должен попасть в analyze prompt"
@@ -340,7 +342,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
     async def test_build_composite_prompt_carries_field_labels_descriptions_and_enum_values(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         auth_headers_system: dict[str, str],
         unique_id: str,
     ) -> None:
@@ -371,13 +373,15 @@ class TestUserEditsPropagateToAnalyzePipeline:
         assert update_resp.status_code == 200, update_resp.text
 
         with _system_company_context():
-            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+            entity_types = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                 ns_name
             )
             relationship_types = (
-                await crm_container.relationship_type_repository.get_with_prompts()
+                await RelationshipType.all_with_prompt(
+                    require_active_company().company_id,
+                )
             )
-            composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+            composite = crm_di.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
                 entity_types, relationship_types, None, None,
             )
 
@@ -393,7 +397,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
     async def test_build_composite_prompt_filters_by_extract_entity_types(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         auth_headers_system: dict[str, str],
         unique_id: str,
     ) -> None:
@@ -402,11 +406,13 @@ class TestUserEditsPropagateToAnalyzePipeline:
         )
 
         with _system_company_context():
-            entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+            entity_types = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                 ns_name
             )
             relationship_types = (
-                await crm_container.relationship_type_repository.get_with_prompts()
+                await RelationshipType.all_with_prompt(
+                    require_active_company().company_id,
+                )
             )
 
             sales_seed = _seed_by_id("sales")
@@ -416,7 +422,7 @@ class TestUserEditsPropagateToAnalyzePipeline:
             deal_prompt = seed_deal.get("prompt")
             assert lead_prompt and deal_prompt
 
-            only_lead = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+            only_lead = crm_di.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
                 entity_types,
                 relationship_types,
                 extract_entity_types=["lead"],
@@ -431,14 +437,14 @@ class TestUserEditsPropagateToAnalyzePipeline:
     async def test_user_edited_relationship_prompt_reaches_composite(
         self,
         crm_client: AsyncClient,
-        crm_container: CRMContainer,
+        crm_di,
         auth_headers_system: dict[str, str],
         unique_id: str,
     ) -> None:
         """
-        Прямая правка `RelationshipType.prompt` через репозиторий — это
-        единственный путь редактирования системных типов связи (HTTP API
-        для PUT не предоставлено). Проверяем, что отредактированный prompt
+        Прямая правка `RelationshipType.prompt` — единственный путь
+        редактирования системных типов связи (HTTP API для PUT не
+        предоставлено). Проверяем, что отредактированный prompt
         читается тем же `get_with_prompts`, что и в `_call_ai_agent`,
         и появляется в финальной строке analyze.
         """
@@ -454,9 +460,11 @@ class TestUserEditsPropagateToAnalyzePipeline:
             "blocks/owner_of."
         )
 
-        repo = crm_container.relationship_type_repository
         with _system_company_context():
-            all_types = await repo.list_by_company(include_system=True, limit=1000)
+            all_types = await RelationshipType.in_company(
+                require_active_company().company_id,
+                include_system=True,
+            ).all()
             mentions_row = next(
                 (relationship_type for relationship_type in all_types if relationship_type.type_id == "mentions"),
                 None,
@@ -465,22 +473,24 @@ class TestUserEditsPropagateToAnalyzePipeline:
             original_prompt = mentions_row.prompt
             try:
                 mentions_row.prompt = new_prompt
-                _ = await repo.update(mentions_row)
+                _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
 
-                entity_types = await crm_container.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
+                entity_types = await crm_di.entity_service._load_all_entity_types_for_namespace(  # pyright: ignore[reportPrivateUsage]
                     ns_name
                 )
                 relationship_types = (
-                    await crm_container.relationship_type_repository.get_with_prompts()
+                    await RelationshipType.all_with_prompt(
+                    require_active_company().company_id,
                 )
-                composite = crm_container.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
+                )
+                composite = crm_di.entity_service._build_composite_prompt(  # pyright: ignore[reportPrivateUsage]
                     entity_types, relationship_types, None, None,
                 )
 
                 assert marker in composite, "правка relationship prompt должна попадать в analyze"
             finally:
                 mentions_row.prompt = original_prompt
-                _ = await repo.update(mentions_row)
+                _ = await RelationshipType.update_by_company_and_type_id(mentions_row)
 
 
 @pytest.mark.timeout(60)

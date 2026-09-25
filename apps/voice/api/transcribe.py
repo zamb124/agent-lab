@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di
 from core.ai.runtime import transcribe_audio_bytes
 from core.authz.models import AuthzObject
 from core.billing.service import COST_ORIGIN_PLATFORM
@@ -31,14 +31,14 @@ transcribe_router = APIRouter(prefix="/api/v1", tags=["voice-transcribe"])
 
 
 async def _require_company_view_when_user_context(
-    container: ContainerDep,
+    di: Di,
     *,
     company_id: str,
 ) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         return
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 class TranscribeResponse(BaseModel):
@@ -59,7 +59,7 @@ class TranscribeResponse(BaseModel):
     ),
 )
 async def transcribe_audio(
-    container: ContainerDep,
+    di: Di,
     file: UploadFile,
     provider: Annotated[SpeechProviderName | None, Form()] = None,
     model: Annotated[str | None, Form()] = None,
@@ -85,7 +85,7 @@ async def transcribe_audio(
         )
     company_id = company.company_id
 
-    await _require_company_view_when_user_context(container, company_id=company_id)
+    await _require_company_view_when_user_context(di, company_id=company_id)
 
     override = SpeechOverride(provider=provider, model=model, language=language)
 

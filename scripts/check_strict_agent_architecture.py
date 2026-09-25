@@ -44,7 +44,7 @@ JSON_BUNDLE_ROOT = "apps/flows/bundles"
 
 UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("apps/flows/src/models/flow_api.py", ('type="reflection"',)),
-    ("apps/flows/ui/constants/node-icons.js", ("reflection:",)),
+    ("apps/flows/ui/_helpers/node-icons.js", ("reflection:",)),
     (
         "apps/flows/ui/components/editor/flows-node-editor-surface.js",
         ("flows-reflection-node-editor.js", "case 'reflection':"),
@@ -57,7 +57,7 @@ UI_REFLECTION_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 UI_CODE_AGENT_CONTRACTS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("apps/flows/src/models/flow_api.py", ('type="code_agent"',)),
-    ("apps/flows/ui/constants/node-icons.js", ("code_agent:", "icon: 'code_agent'")),
+    ("apps/flows/ui/_helpers/node-icons.js", ("code_agent:", "icon: 'code_agent'")),
     (
         "apps/flows/ui/components/editor/flows-node-editor-surface.js",
         ("flows-code-agent-editor.js", "case 'code_agent':"),
@@ -268,15 +268,17 @@ def _is_flow_from_config_call(node: ast.Call) -> bool:
     return isinstance(func.value, ast.Name) and func.value.id == "Flow"
 
 
-def _has_non_none_container_keyword(node: ast.Call) -> bool:
-    for keyword in node.keywords:
-        if keyword.arg != "container":
-            continue
-        return not (
+def _has_required_from_config_keywords(node: ast.Call) -> bool:
+    present = {
+        keyword.arg
+        for keyword in node.keywords
+        if keyword.arg is not None
+        and not (
             isinstance(keyword.value, ast.Constant)
             and keyword.value.value is None
         )
-    return False
+    }
+    return {"node_constructor", "tool_registry", "flow_factory"} <= present
 
 
 def _scan_flow_from_config_contract() -> list[Violation]:
@@ -288,12 +290,15 @@ def _scan_flow_from_config_contract() -> list[Violation]:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and _is_flow_from_config_call(node):
-                if not _has_non_none_container_keyword(node):
+                if not _has_required_from_config_keywords(node):
                     violations.append(
                         Violation(
                             path=path,
                             lineno=node.lineno,
-                            message="Flow.from_config must pass a non-None runtime container",
+                            message=(
+                                "Flow.from_config must pass node_constructor, "
+                                "tool_registry and flow_factory"
+                            ),
                         )
                     )
     return violations

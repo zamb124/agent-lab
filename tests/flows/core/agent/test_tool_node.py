@@ -2,7 +2,7 @@
 Strict CodeNode contract tests.
 
 Every execution goes through the durable workflow harness. These tests must not
-construct side-effect nodes without a runtime container and must not call
+construct side-effect nodes without a runtime di and must not call
 ``node.run(state)`` directly.
 """
 
@@ -12,21 +12,22 @@ from typing import Any
 
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import CodeNode, create_node
 from core.state import ExecutionState
 from core.types import JsonObject
 from tests.flows.durable_runtime_harness import run_node, workflow_state
 
 
-def code_node(container: FlowRuntimeContainer, node_id: str, config: JsonObject) -> CodeNode:
+def code_node(di: FlowsDi, node_id: str, config: JsonObject) -> CodeNode:
     if "type" in config:
         raise ValueError("test code node config must not override canonical node type")
     return CodeNode(
         node_id=node_id,
         config={"type": NodeType.CODE.value, **config},
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
 
 
@@ -36,14 +37,14 @@ def state_for(flow_id: str, unique_id: str, **extra: object) -> ExecutionState:
 
 async def execute_node(
     *,
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     node: CodeNode,
     flow_id: str,
     unique_id: str,
     **state_extra: object,
 ) -> ExecutionState:
     return await run_node(
-        container=container,
+        di=di,
         node=node,
         state=state_for(flow_id, unique_id, **state_extra),
     )
@@ -53,11 +54,11 @@ class TestCodeNode:
     @pytest.mark.asyncio
     async def test_tool_node_basic_execution(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "test_node",
             {
                 "code": (
@@ -69,7 +70,7 @@ class TestCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_basic",
             unique_id=unique_id,
@@ -109,7 +110,7 @@ class TestCodeNode:
     )
     async def test_tool_node_input_mapping_sources(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
         input_mapping: JsonObject,
         state_extra: dict[str, object],
@@ -117,7 +118,7 @@ class TestCodeNode:
         expected_value: object,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "mapping_node",
             {
                 "code": 'async def run(args, state):\n    return {"sum": args["x"] + args["y"]}',
@@ -126,7 +127,7 @@ class TestCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_mapping",
             unique_id=f"{unique_id}-{expected_value}",
@@ -138,11 +139,11 @@ class TestCodeNode:
     @pytest.mark.asyncio
     async def test_tool_node_mixed_mapping(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "greeting_node",
             {
                 "code": (
@@ -157,7 +158,7 @@ class TestCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_mixed_mapping",
             unique_id=unique_id,
@@ -169,11 +170,11 @@ class TestCodeNode:
     @pytest.mark.asyncio
     async def test_tool_node_scalar_result_goes_to_result_field(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "calculator_node",
             {
                 "code": "async def run(args, state):\n    return args['x'] + args['y']",
@@ -182,7 +183,7 @@ class TestCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_scalar_result",
             unique_id=unique_id,
@@ -193,11 +194,11 @@ class TestCodeNode:
     @pytest.mark.asyncio
     async def test_tool_node_preserves_existing_state(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "preserve_node",
             {
                 "code": 'async def run(args, state):\n    return {"result": args["x"] + args["y"]}',
@@ -206,7 +207,7 @@ class TestCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_preserve",
             unique_id=unique_id,
@@ -223,11 +224,11 @@ class TestInlineCodeNode:
     @pytest.mark.asyncio
     async def test_inline_tool_basic(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "inline_node",
             {
                 "code": "async def run(args, state):\n    return {'sum': args['a'] + args['b']}",
@@ -236,7 +237,7 @@ class TestInlineCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_inline",
             unique_id=unique_id,
@@ -247,11 +248,11 @@ class TestInlineCodeNode:
     @pytest.mark.asyncio
     async def test_inline_tool_with_state_access(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "reader_node",
             {
                 "code": "async def run(args, state):\n    return {'secret_value': state['secret']}",
@@ -260,7 +261,7 @@ class TestInlineCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_state_access",
             unique_id=unique_id,
@@ -272,11 +273,11 @@ class TestInlineCodeNode:
     @pytest.mark.asyncio
     async def test_inline_tool_with_var_mapping(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "greeting_node",
             {
                 "code": (
@@ -291,7 +292,7 @@ class TestInlineCodeNode:
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_var_mapping",
             unique_id=unique_id,
@@ -306,7 +307,7 @@ class TestCreateNodeTool:
     @pytest.mark.asyncio
     async def test_create_node_inline_tool(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node_config: JsonObject = {
@@ -320,12 +321,12 @@ class TestCreateNodeTool:
             "input_mapping": {"x": 5},
         }
 
-        node = await create_node("double_node", node_config, container=container)
+        node = await create_node("double_node", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
 
         assert isinstance(node, CodeNode)
         assert node.node_id == "double_node"
         result = await run_node(
-            container=container,
+            di=di,
             node=node,
             state=state_for("double_node_flow", unique_id),
         )
@@ -334,7 +335,7 @@ class TestCreateNodeTool:
     @pytest.mark.asyncio
     async def test_create_node_inline_tool_with_mapping(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         node_config: JsonObject = {
@@ -346,9 +347,9 @@ class TestCreateNodeTool:
             "input_mapping": {"prefix": "@var:order_prefix", "value": "@state:order_id"},
         }
 
-        node = await create_node("format_node", node_config, container=container)
+        node = await create_node("format_node", node_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
         result = await run_node(
-            container=container,
+            di=di,
             node=node,
             state=state_for(
                 "format_node_flow",
@@ -442,7 +443,7 @@ class TestCodeNodeNamedArguments:
     )
     async def test_named_arguments(
         self,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
         case_id: str,
         code: str,
@@ -451,13 +452,13 @@ class TestCodeNodeNamedArguments:
         expected: Any,
     ) -> None:
         node = code_node(
-            container,
+            di,
             "named_args_node",
             {"code": code, "input_mapping": input_mapping},
         )
 
         result = await execute_node(
-            container=container,
+            di=di,
             node=node,
             flow_id="code_node_named_args",
             unique_id=f"{unique_id}-{case_id}",

@@ -89,7 +89,7 @@ class Context(StrictBaseModel):
     auth_token: str | None = Field(
         default=None,
         title="JWT токен",
-        description="JWT токен для межсервисной авторизации (передается в HTTPRepositoryProxy)",
+        description="JWT токен для межсервисной авторизации",
         exclude=True,
     )
     trace_id: str | None = Field(

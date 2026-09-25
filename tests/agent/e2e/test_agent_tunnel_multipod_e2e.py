@@ -31,7 +31,7 @@ from tests.agent._realtime_helpers import (
 @pytest.mark.asyncio
 async def test_e2e_multipod_mcp_full_roundtrip(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
     agent_tunnel_bus_pod_b: None,
@@ -64,7 +64,7 @@ async def test_e2e_multipod_mcp_full_roundtrip(
 
         responder_task = asyncio.create_task(responder())
         result = await send_mcp_request_to_device(
-            frontend_container.redis_client,
+            frontend_di.redis_client,
             device_id,
             method="tools/list",
             params={},
@@ -109,7 +109,7 @@ async def test_e2e_multipod_revoke_disconnects_ws(
 @pytest.mark.asyncio
 async def test_e2e_multipod_origin_pod_skip(
     agent_frontend_http_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     auth_token: str,
     unique_id: str,
     agent_tunnel_bus_pod_b: None,
@@ -149,7 +149,7 @@ async def test_e2e_multipod_origin_pod_skip(
                 "origin_pod": FRONTEND_TUNNEL_POD_ID,
             }
         )
-        _ = await frontend_container.redis_client.publish(TUNNEL_MCP_REQUEST_CHANNEL, skip_payload)
+        _ = await frontend_di.redis_client.publish(TUNNEL_MCP_REQUEST_CHANNEL, skip_payload)
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(request_received.wait(), timeout=2.0)
         collector_task.cancel()
@@ -171,7 +171,7 @@ async def test_e2e_multipod_origin_pod_skip(
         )
         request_received = asyncio.Event()
         collector_task = asyncio.create_task(collect_mcp_requests())
-        _ = await frontend_container.redis_client.publish(TUNNEL_MCP_REQUEST_CHANNEL, deliver_payload)
+        _ = await frontend_di.redis_client.publish(TUNNEL_MCP_REQUEST_CHANNEL, deliver_payload)
         await asyncio.wait_for(request_received.wait(), timeout=5.0)
         collector_task.cancel()
         try:
@@ -240,12 +240,12 @@ async def test_e2e_multipod_platform_mcp_device_mcp_http(
 
 @pytest.mark.asyncio
 async def test_e2e_send_mcp_request_offline(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     with pytest.raises(ValueError, match="offline"):
         _ = await send_mcp_request_to_device(
-            frontend_container.redis_client,
+            frontend_di.redis_client,
             f"missing-device-{unique_id}",
             method="tools/list",
             params={},

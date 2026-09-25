@@ -1,118 +1,102 @@
 ---
-description: "Flow UI: интерфейс flow как FlowUIDocument (грамматика блоков) поверх чистого A2A 1.0 — артефакты state/ui вниз, ui-action Message вверх; редактор блоков, html-блок в sandbox, embed/share/HITL на одном runtime"
+description: "Flow UI: FlowUIDocument поверх A2A, артефакты state/ui и ui-action, грамматика, runtime, голос, редактор, embed/share/HITL. Читать при правке Flow UI"
+globs:
+  - "core/flow_ui/**"
+  - "core/frontend/static/lib/flow-ui/**"
+  - "core/clients/flow_ui_client.py"
+  - "apps/flows/ui/components/interface-editor/**"
+  - "apps/flows/tools/flows/flow_ui_tools.py"
+  - "tests/fixtures/flow_ui/**"
 alwaysApply: false
 ---
-# Flow UI — интерфейс flow поверх A2A
 
-Одна модель интерфейса — `FlowUIDocument` (`core/flow_ui/document.py`) — на всех слоях: `FlowConfig.interface`, `GET .../interface`, JSON Schema редактора, structured output LLM-помощника, store фронтенда. Никаких `*Config`/`*Profile`/`*Template` двойников, translation-слоёв между editor/runtime/embed/share и отдельных chat-runtime.
+# Flow UI
 
-Публичная спецификация протокола — [`docs/api/flows/flow-ui-protocol.md`](../../docs/api/flows/flow-ui-protocol.md); её JSON-примеры совпадают с conformance-фикстурами `tests/fixtures/flow_ui/*.json` (тест `tests/core/flow_ui/test_flow_ui_protocol_docs.py`), которые читают pytest и JS unit.
+Интерфейс flow — одна модель `FlowUIDocument` (`core/flow_ui/document.py`) на всех слоях: `FlowConfig.interface`, `GET .../interface`, JSON Schema редактора, structured output помощника, store фронтенда. Спецификация протокола — `docs/api/flows/flow-ui-protocol.md`; её JSON-примеры совпадают с фикстурами `tests/fixtures/flow_ui/*.json`.
 
-## Формула
-
-```text
-design-time   FlowConfig.interface: FlowUIDocument      (страницы → блоки грамматики; snake_case)
-runtime ↓     A2A Task.artifacts
-                state   application/json            снимок проекции state (первый Part)
-                        application/json-patch+json RFC 6902 поверх предыдущего снимка
-                ui      application/vnd.platform.ui+json  {kind:"render", slot_id, blocks} | {kind:"navigate", page_id}
-                <name>  text Part                  потоки текста: response, reasoning, авторские имена
-runtime ↑     A2A Message (ROLE_USER, contextId, taskId?)
-                text Part (+ raw/url файлы)        реплика в ленту
-                один data Part application/vnd.platform.ui-action+json {action, source, fields, payload}
-```
-
-Интерфейс не знает ни о ветках A2A, ни о расширениях: никаких extension negotiation, второго envelope/endpoint, `metadata`-протоколов. Чат — обычный документ с блоком `conversation` (`default_chat_document`); отдельного chat-протокола нет.
-
-Константы и модели wire — только `core/flow_ui/protocol.py`: `JSON_MEDIA_TYPE`, `JSON_PATCH_MEDIA_TYPE`, `FLOW_UI_MEDIA_TYPE`, `FLOW_UI_ACTION_MEDIA_TYPE`, `TEXT_MEDIA_TYPE`, `FLOW_UI_OUTPUT_MEDIA_TYPES`, `STATE_ARTIFACT_ID="state"`, `UI_ARTIFACT_ID="ui"`, `RESPONSE_ARTIFACT_NAME`, `REASONING_ARTIFACT_NAME`, `CONVERSATION_SLOT_ID`, `FlowUIActionMessage` (`to_state_action()`), `FlowUIRender`, `FlowUINavigate`, `FlowUIEvent` (discriminator `kind`), `JsonPatchOperation`. JS-зеркало — `core/frontend/static/lib/flow-ui/protocol/constants.js`.
-
-## Грамматика блоков
-
-`core/flow_ui/document.py` — единственная спецификация. `GET /flows/api/v1/flow-ui/schema` = `core.flow_ui.schema.flow_ui_schema()` (`FlowUIDocument.model_json_schema()` + `x-flow-ui-frozen-state-fields`); палитра, инспектор, LLM structured output читают только её. Захардкоженные списки типов/иконок/групп во frontend запрещены (`blockCatalog(schema)`).
-
-- `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, show_title=True, blocks[]}`; `block_id` уникален на странице (`assert_unique_block_ids`). `show_title=false` скрывает заголовок на холсте, имя во вкладках редактора остаётся.
-- `FlowUIBlockBase{block_id, visible_when: FlowUICondition{path, equals}|None}`; `type` — Literal, discriminator union `FlowUIBlock`.
-- Метаданные палитры — `block_schema(group, icon)` → `x-flow-ui-block {group, icon}`; `group ∈ layout|content|input|action|data|platform|custom`, `icon` — имя SVG из `core/frontend/static/assets/icons/` (46 иконок, все существуют).
-- Ввод: `FlowUIInputBase{field: FlowUIStatePath, label, required, error_message, action: FlowUIActionSpec|None}` → `text_input`, `number_input`, `select`, `checkbox`, `switch`, `slider`, `date_input`, `datetime_input`, `file_upload`, `voice_input`. `field` — обычный top-level путь state; frozen-поля (`FROZEN_STATE_FIELDS`) запрещены (publish gate `frozen_path`).
-- Действие: `FlowUIActionSpec{name, payload}` у `button` и у input-блоков.
-- Раскладка: `section`, `columns`, `tabs`; контент/данные/платформенные — см. страницу протокола; `slot` — именованная цель `ui_render`; `conversation` — лента с `FlowUIConversationSettings` (`greeting`, `suggested_prompts`, `placeholder`, `show_reasoning`, `tool_calls`, `show_activity`, `show_skill_loads`, `show_reflection`, `errors`, `show_run_trace`, `show_trace_actions`, `show_browser_previews`, `show_files_panel`, `allow_cancel`, `allow_voice`).
-- `html`: `source`, `height: int | "auto"`, `fields` (≤ 64 путей), опциональное `field`; связанные пути из разметки — `core/flow_ui/html_bindings.py::html_bound_paths` (`data-bind` / `data-show`).
-
-Шаблоны текста: `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`, подмножество) и JS (`runtime/templating.js`); паритет — `tests/fixtures/flow_ui/templating.json`. Обязательный `{path}` без значения = блок не рендерится; в редакторе (`designText`) неизвестные пути остаются как `{path}`. Маркер `x-flow-ui: image_url` (`agent_identity.image_url`) — URL иконки; инспектор показывает загрузку файла, не строковое поле.
-
-## Runtime backend
-
-- Проекция state — `core/flow_ui/projection.py`: `referenced_paths(document, ui_slots)` (шаблоны, `field`, `visible_when.path`, `fields` и `data-bind`/`data-show` html, пути блоков `ui_slots`) → `project_state`; `json_patch_operations(previous, current)` → `apply_json_patch`. Frozen-поля в проекцию не попадают.
-- Emitter (`apps/flows/src/streaming/base.py`): `emit_state(interface)` — первый вызов в Task snapshot `application/json`, далее только патчи (пустой diff не публикуется); `emit_ui_event(event)` — Part артефакта `ui` (`append` со второго события), `render` в `conversation` расширяет проекцию state путями блоков; `emit_ui_events`, `flush_ui(interface)` — очередь `state.drain_ui_events()`, затем `emit_state`. Артефакты `state`/`ui` не закрываются (`last_chunk=False`). Текст — `emit_text(name=...)`/`emit_reasoning`.
-- Агент меняет интерфейс тулами `apps/flows/tools/flows/flow_ui_tools.py`: `ui_render(slot_id, blocks)`, `ui_navigate(page_id)`, `state_set(path, value)`; события ставятся в очередь `ExecutionState` (`core/flow_ui/runtime.py::apply_ui_render/apply_ui_navigate`, `assert_known_slot`/`assert_known_page`) и уходят на ближайшем `flush_ui`. Последний рендер именованного slot хранится в `state.ui_slots` (frozen, не проецируется); `conversation` в state не копится. Code-ноды меняют state напрямую.
-- Ingress `ui-action` — `core/flow_ui/action.py`: `ui_action_from_message` (ровно один `data` Part, без текста рядом) → `validate_flow_ui_action` (неизвестное поле, пустое `required` на странице источника, тип по блоку — `ValueError`) → `apply_flow_ui_action` пишет `fields` в state по их путям (`assign_state_path`), `state.ui_action = FlowUIAction{name, source, payload}`, `state.content` = Markdown-проекция с подписями блоков, файлы `file_upload` → `state.files`. Канал делает это до durable commit хода (`apps/flows/src/channels/base.py`), новый ход сбрасывает `ui_action`.
-- `PlatformEffect` из capability runners — `core/flow_ui/effects.py::apply_capability_platform_effects` (проверка manifest и origin); runner не знает renderer.
-- `GET /flows/api/v1/{flow_id}/interface?branch_id=` и `GET /flows/api/v1/embed/{embed_id}/interface` → `FlowInterfaceResponse` (`core/flow_ui/interface.py`): `document`, `viewer{can_edit_flow, can_interact, can_share, auth_mode}`, `capabilities{cancel, files, voice}`, `flow_identity{title, image_url}`, `look` (embed). Embed переопределяет только `EmbedConfig.conversation` / `start_page_id` / `assistant_title` / `look`, документ тот же.
-- Редактор: `GET /flow-ui/schema`, `GET /flow-ui/templates` (`OffsetPage[FlowUITemplate]`, `core/flow_ui/templates.py`, язык из контекста), `POST /flow-ui/assist` — те же `op_flows_flow_ui_*` (`FLOWS_OPERATIONS`). `FlowUIAssistService`: structured output `FlowUIPage` / `FlowUIAssistBlocks`; запрос валидирует `page_id`/`block_id` против документа → 422; противоречивый ответ LLM — `FlowUIAssistOutputError` → `WsCommandError("upstream")` → 502.
-- Publish gate — `core/flow_ui/problems.py::flow_ui_problems` / `assert_flow_ui_publishable` (`FlowUILimits`, `FlowUIProblem{code, message, page_id, block_id}`); JS-зеркало — `interface-editor-domain.js::documentProblems`.
-
-## Ветка сессии
-
-- `FlowConfig.interface` — база; `BranchConfig.interface: FlowUIDocument | None` — полный документ ветки (`None` — интерфейс flow; partial merge нет).
-- Новая сессия берёт ветку из `params.metadata.branch` (`buildSendMessageBody`); нет — `default`. Graph `base` нормализуется в `default` (`normalizeFlowUIBranchId` / `normalize_branch_id`).
-- У живого контекста ветка неизменяема: другая непустая ветка — `ValueError`, не тихое исполнение.
-- URL сессии сохраняет ветку (`flow_chat_branch_session`); смена ветки в чате открывает новый контекст.
-
-## Frontend runtime
-
-`core/frontend/static/lib/flow-ui/` (без host-специфичных копий; бюджет — `scripts/check_flow_ui_hard_cut.py`):
+## Модель
 
 ```text
-protocol/   constants, a2a-codec (URL/Message/JSON-RPC bodies/headers), parts (decodePart, applyJsonPatch), a2a-stream, a2a-task-accumulator
-runtime/    flow-ui-client (open/hydrate/send/cancel/on), flow-ui-store, templating, html-sandbox, conversation, turn-activity, hitl-transport
-blocks/     рендереры по группам: export const <GROUP>_BLOCKS = Object.freeze({ type(block, ctx) {...} }); registry.js::renderBlock
-components/ platform-flow-ui (единственный production surface), flow-ui-page, flow-ui-conversation, files-panel, share-menu, task-controls, drawer-controls (expand/close, slot под share-menu), turn-toasts, run-trace, error-boundary
-editor/     selection, drop-zones, inline-text-edit, editor-chrome.styles — примитивы редактора, hosts запрещены
-shell/      embed-autoload, embed-host-api, embed-script-config, drawer(+geometry/move), page-host, preferences, resolve-theme, tokens.css
-utils/      text (RU/EN chrome словарь flowUIText), markdown, glyph, citations, open-session-file
-voice/      coordinator
+design-time  FlowConfig.interface | BranchConfig.interface : FlowUIDocument
+runtime ↓    Task.artifacts: state (application/json snapshot, затем application/json-patch+json)
+                             ui    (application/vnd.platform.ui+json: render{slot_id, blocks} | navigate{page_id})
+                             <name> text Part (response, reasoning, авторские потоки)
+runtime ↑    Message ROLE_USER: text Part (+ raw/url файлы) | один data Part application/vnd.platform.ui-action+json
 ```
 
-- `FlowUIClient` (`runtime/flow-ui-client.js`) — публичный SDK и единственный транспорт `<platform-flow-ui>`: `open({contextId, document})` → `GET interface` + `ListTasks` гидрация; `send({text, files, action, taskId})` → `SendStreamingMessage`; `cancel`; события `frame|task|ui|state|error`. Python-аналог — `core/clients/flow_ui_client.py::FlowUIClient` (`open`, `send`, `cancel`, `events`, `state`; `decode_task_events`, `task_state`, `task_text`, `task_ui_events`) поверх `A2AClient`. Никаких `fetch`/store/transport в `apps/**`.
-- `FlowUIStore` — один store: документ, state (snapshot + patch по порядку Parts), локальные значения полей, `ui_slots`, активная страница, лента задач. Ошибка протокола (patch до snapshot, чужой mediaType, неизвестный `kind`) — `throw`, не пропуск.
-- `<platform-flow-ui>`: атрибуты `flow-id`/`branch-id`/`embed-id`/`context-id`/`base-url`, `display`, `profile`, `theme`, `locale`, `readonly`, `editing`, `selected-block-id`, `work-item-id`, `company-id`, `voice-base-url`, `platform-ui-origin`, `assistant-title`; свойства `initialDocument`, `sampleState`, `interactionPolicy`, `getRequestHeaders`, `getExtraMetadataVariables` (уходят в `params.metadata.variables` на submit). Рендер блоков — только `renderBlock` через `blockContext()`; выбранный блок помечается `data-selected`. `navigate(page_id)` на неизвестную страницу — `throw`.
-- Submit input-блока/кнопки: `fields` собираются со страницы источника (`field` → локальное значение или state), `source = block_id`, `payload = action.payload`; после отправки локальные значения очищаются, state приходит патчем.
-- Блок `html` (`runtime/html-sandbox.js`): iframe `sandbox="allow-scripts"` (никогда `allow-same-origin`), `srcdoc` с фиксированным `FLOW_UI_HTML_CSP`, токены темы; мост `postMessage` (`action|value|resize|open_url|error`) и API `window.flowUi` (`state`, `onChange`, `send`, `setValue`, `resize`, `openUrl`), `data-bind`/`data-show` в разметке. Константы совпадают с `tests/fixtures/flow_ui/html_sandbox.json` (проверяет hard-cut gate). Ошибка скрипта автора показывается в блоке, не роняет страницу.
-- Chrome-строки — `utils/text.js` (`flowUIText(locale, key)`), не platform i18n bus (runtime standalone). Контент документа (label/greeting/placeholder) — данные владельца.
-- Тема: `--flow-ui-*` только алиасы platform tokens (`shell/tokens.css`); `theme="auto"` через `resolveFlowUITheme`; embed палитра на `platform-flow-ui[data-resolved-theme]`.
-- Файлы сессии: панель «Файлы» из FileRef ленты (`flow-ui-files-panel`), открытие — `openFlowUISessionFile`.
-- Agent identity: `runtime/agent-identity-image.js::resolveAgentIdentityImageSrc` — `agent_identity.image_url` → `flow_identity.image_url` → бренд-марка.
+- Слои (зависимость только влево): `core/a2a` ← `core/flow_ui` ← `apps/flows` (emitter, channels, `flow_ui_tools`, api) ← `core/frontend/static/lib/flow-ui` + `core/clients/flow_ui_client.py` ← `apps/flows/ui` interface-editor. `core/a2a` не импортирует Flow UI; backend не импортирует frontend.
+- Wire-константы и модели — только `core/flow_ui/protocol.py` (`FlowUIActionMessage`, `FlowUIRender`, `FlowUINavigate`, `FlowUIEvent`, media types, `STATE_ARTIFACT_ID`, `UI_ARTIFACT_ID`, `CONVERSATION_SLOT_ID`); JS-зеркало — `flow-ui/protocol/constants.js`.
+- Чат — документ с блоком `conversation` (`default_chat_document`); отдельного chat-протокола нет.
+- `BranchConfig.interface` — полный документ ветки или `None` (интерфейс flow); частичного merge нет. Ветка новой сессии — `params.metadata.branch`, иначе `default`; у живого контекста ветка неизменяема (другая — `ValueError`).
 
-## Interface editor
+## Инварианты
 
-`apps/flows/ui/components/interface-editor/`: `flows-interface-editor` (host), `flows-interface-toolbar` (undo/redo/viewport/publish/assist), `flows-interface-pages-tabs`, `flows-interface-add-panel` (палитра из schema, DnD `application/x-flow-ui-block`), `flows-interface-properties-panel` (форма свойств из JSON Schema через `<platform-field>`, пути state через `<platform-variable-input>`; HTML `source` — свёрнутый превью + «Открыть редактор»), `flows-interface-template-card`; модалки `flows-interface-template-modal` (галерея `GET /flow-ui/templates`, live preview `<platform-flow-ui editing>`), `flows-interface-html-editor-modal` (preview-first: кадр холста 1180/820/390 + исходник CodeMirror с автодополнением `flowUi.*`, inspector вкладки State/Events/Help; test-state last-good при битом JSON; viewport/theme/Reload на тулбаре превью, сниппеты/replace-all/layout на тулбаре исходника; панели Preview/Source/Inspector сворачиваются и отдают место; Apply disabled на пустом source). Chrome — `core/frontend/static/lib/flow-ui/editor/html-editor-*.js`. Новый `html`-блок из `defaultBlock` получает `source` = i18n `interface_editor.default_text_html_source` (прокомментированный пример всех приёмов: `data-bind`/`data-show`, `flowUi.onChange/send/setValue/openUrl`, токены темы), `fields: ['items']` и `field` = id блока — пример работает сразу. Чистая доменная логика — `interface-editor-domain.js` (`blockCatalog`, `defaultBlock`, `insertBlock/moveBlock/removeBlock/setBlockProperty/duplicateBlock/wrapInSection`, pages CRUD, `createHistory/commitHistory/undoHistory/redoHistory` (лимит 80, coalesce), `documentProblems`, `statePathCatalog`).
+### Грамматика
 
-- Холст — тот же `<platform-flow-ui editing .initialDocument .sampleState .selectedBlockId>`: production-рендер, скрытые `visible_when` блоки видны, шаблоны с неизвестными путями остаются `{path}`. Overlay выделения читает геометрию через `editor/selection.js` (`blockElement`, `blockFrame`, `pageRenderRoot`); отдельного «редакторского» рендера нет.
-- Состояние — slice `flows/interface_editor` (`apps/flows/ui/events/resources/interface-editor.resource.js`): `documentKey` (`flow_id:branch_id`), `history{present, past, future}`, `pageId`, `selectedBlockId`, `viewport` (`desktop|tablet|mobile`), `preview`, `sidebarTab` (`add|properties`); операции `flows/flow_ui_schema`, `flows/flow_ui_templates`, `flows/flow_ui_assist` (`flow-ui.resource.js`). Черновики — localStorage `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
-- Publish: `documentProblems` (severity `error` блокирует; `problem_inputs_without_action`, `frozen_path`, неизвестные `page_id`/`slot_id`, дубли `block_id`, лимиты) → `editor-publish` → `interface-change` с полным документом; сохранение вместе с графом.
-- AI-помощник: «Описать страницу» (без `block_id`) / «Изменить выбранный блок» — одна команда истории поверх ответа `POST /flow-ui/assist`.
+1. `core/flow_ui/document.py` — единственная спецификация блоков; `GET /flows/api/v1/flow-ui/schema` = `flow_ui_schema()`; палитра, инспектор и LLM читают только её, списки типов во frontend — через `blockCatalog(schema)`.
+2. `FlowUIDocument{start_page_id, pages[]}`, `FlowUIPage{page_id, title, show_title, blocks[]}`; `block_id` уникален на странице; блок — `FlowUIBlockBase{block_id, visible_when}` с discriminator `type`; метаданные палитры — `x-flow-ui-block {group, icon}`.
+3. Input-блок — `FlowUIInputBase{field, label, required, error_message, action}`; `field` — top-level путь state, frozen-поля запрещены (publish gate `frozen_path`); действие — `FlowUIActionSpec{name, payload}` у `button` и input-блоков.
+4. `slot` — именованная цель `ui_render`; `html` — `source`, `height`, `fields` (≤ 64 путей), пути разметки — `html_bound_paths` (`data-bind`/`data-show`).
+5. Шаблоны текста `{path}`, `{?path}`, `{path|default}`, `\{` — одна грамматика в Python (`VariableResolver.render_template`) и JS (`runtime/templating.js`), паритет — фикстура `templating.json`; обязательный `{path}` без значения не рендерит блок.
 
-## Embed, share, HITL — один runtime
+### Backend runtime
 
-- **Embed** (`TokenType.EMBED_SESSION`): гость стартует новую сессию; `EmbedConfig.presentation ∈ {drawer, page}`, `EmbedConfig.position ∈ {bottom-right, bottom-left}` — только угол launcher-кнопки drawer; `<flow-ui-drawer>` = launcher + панель (`shell/drawer*.js`, persist `writeFlowUIPreferences`). CDN entry — `embed-flow-ui/flow-ui-embed-autoload.js`; `embed-chat/humanitec-embed-autoload.js` — только import того же autoload. Сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload читают одни `data-*` (`data-embed-id|data-flow-id`, `data-token-url`, `data-flows-base-url`, `data-presentation`, `data-position`, `data-theme`, `data-locale`, `data-show-launcher`, `data-platform-ui-origin`, `data-token-expires-seconds`, `data-use-credentials`, `data-toggle-event-name`, `data-voice-base-url`, `data-company-id`; preview — `data-static-bearer`, `data-branch-id`, `data-initial-open`). После mount — `window.linnexFlowUI` (`setTheme`, `setLocale`, `setLauncherVisible`, `setAssistantTitle`, `setToggleEventName`, `setMetadataHooks`, `setAuthProvider`) и событие `linnex-flow-ui-mounted`. A2A allowlist embed = `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `SubscribeToTask`, `CancelTask`; `ListTasks` требует `contextId`.
-- **Live share** (`TokenType.FLOW_UI_SHARE`): `FlowUIShareGrant{grant_id, context_id, permission viewer|editor, redacted_paths (JSON Pointer), expires_at, revoked_at}`; `op_flows_flow_ui_shares_*` + тонкий REST `/flows/api/v1/flow-ui/shares` (`POST`, `GET` → `ListResponse`, `DELETE /{grant_id}` → `{status:deleted,grant_id}`); `POST /exchange/{grant_id}` остаётся HTTP (аноним + Origin). AuthZ — OpenFGA `flow_ui_share`. Flow UI menu — fetch (как HITL), не фабрика редактора. Redaction — на границе A2A: `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из Parts артефакта `state` (snapshot и patch) для `GetTask`/`ListTasks`/stream; `ui-action` посетителя на скрытое поле — `assert_fields_outside_redacted` → `PermissionError`. Ledger и проекция владельца не мутируются. Host страницы — `apps/frontend/services/flow_ui_shared_session_html.py` (`tokens.css`, `theme="auto"`).
-- **HITL** (`hitl_node.handoff_mode = single_reply | takeover`): оператор в Worktracker отвечает через `runtime/hitl-transport.js` (REST worktracker/ask, не A2A), пользователь — обычным A2A ходом; лента читает артефакт `operator_reply`; `runtime/operator-handoff-from-task.js` строит режим из parked Task (`metadata.platform_interrupt`). Пока пользователь ждёт оператора (`single_reply`), композер остаётся на месте, но `readonly` (без файлов/голоса/отправки); без права хода (share viewer, оператор без доступа к очереди, закрытая задача) композер не рендерится. Кнопка формы у оператора — тоже HITL REST: `operatorTurnFromAction` проецирует поля страницы в текст «подпись блока: значение» (в порядке страницы; `file_upload` — вложениями; действие без полей — своим именем). Канон → **`worktracker.mdc`**.
+1. Проекция — `core/flow_ui/projection.py`: `referenced_paths(document, ui_slots)` → `project_state`; патчи — `json_patch_operations`/`apply_json_patch`; frozen-поля в проекцию не входят.
+2. Публикация — `Emitter` (`emit_state`, `emit_ui_event`, `flush_ui`) → `a2a.mdc` § Доставка; агент меняет интерфейс tools `ui_render`, `ui_navigate`, `state_set` (очередь `ExecutionState`, проверки `assert_known_slot`/`assert_known_page`); последний рендер slot — `state.ui_slots`.
+3. Ingress `ui-action` — `core/flow_ui/action.py`: `ui_action_from_message` (ровно один `data` Part без текста) → `validate_flow_ui_action` (неизвестное поле, пустое `required`, тип по блоку — `ValueError`) → `apply_flow_ui_action`; канал применяет его до durable commit хода.
+4. Эффект capability — typed `PlatformEffect` через `apply_capability_platform_effects` (`core/flow_ui/effects.py`, проверка manifest и origin); runner не знает renderer.
+5. `GET /flows/api/v1/{flow_id}/interface` и `GET /flows/api/v1/embed/{embed_id}/interface` → `FlowInterfaceResponse` (`document`, `viewer`, `capabilities`, `flow_identity`, `look`); embed переопределяет только `EmbedConfig.conversation`, `start_page_id`, `assistant_title`, `look`.
+6. Редактор: `flow-ui/schema`, `flow-ui/templates` (`OffsetPage[FlowUITemplate]`), `flow-ui/assist` — `op_flows_flow_ui_*`; невалидный `page_id`/`block_id` запроса — 422; противоречивый ответ LLM — `FlowUIAssistOutputError` → `upstream`.
+7. Publish gate — `flow_ui_problems`/`assert_flow_ui_publishable` (`core/flow_ui/problems.py`, `FlowUILimits`); JS-зеркало — `documentProblems` в `interface-editor-domain.js`.
 
-## Security и limits
+### Frontend runtime
 
-- `html` исполняется только в opaque-origin iframe с фиксированным CSP; никакого `allow-same-origin`, inline HTML/скриптов в других блоках, `eval` данных из state.
-- Markdown санитизируется (`utils/markdown.js`); URL/файлы — только через platform download URL и `flowUIMediaSrc`.
-- `ui-action` принимает только поля, объявленные input/html-блоками документа или отрендеренные агентом (`ui_slots`); значения проверяются по типу блока; `required` — по странице источника.
-- Лимиты — `FlowUILimits` (`max_pages`, `max_blocks_per_page`, `max_blocks_per_render`, `max_state_bytes`, `max_html_source_bytes`, `max_html_blocks_per_page`) в настройках flows, не в документе.
-- Auth/company/origin/grant проверяются до чтения документа; embed CORS — `EmbedDynamicCorsMiddleware`.
+1. `core/frontend/static/lib/flow-ui/` — единственный runtime (`protocol`, `runtime`, `blocks`, `components`, `editor`, `shell`, `utils`, `voice`); host-копии запрещены.
+2. `FlowUIClient` (`runtime/flow-ui-client.js`) — SDK и единственный транспорт `<platform-flow-ui>` (`open`, `send`, `cancel`, события); Python-аналог — `core/clients/flow_ui_client.py::FlowUIClient` поверх `A2AClient`; `fetch`, store и transport Flow UI в `apps/**` запрещены.
+3. `FlowUIStore` — один store (документ, state по порядку Parts, локальные значения полей, `ui_slots`, страница, лента); ошибка протокола (patch до snapshot, чужой mediaType, неизвестный `kind`) — `throw`.
+4. Рендер блока — только `renderBlock` через `blockContext()`; `navigate` на неизвестную страницу — `throw`. Submit собирает `fields` страницы источника, `source = block_id`, `payload = action.payload`; локальные значения после отправки очищаются.
+5. Chrome-строки — `utils/text.js::flowUIText` (runtime standalone, без i18n bus); тема — `--flow-ui-*` как алиасы platform tokens (`shell/tokens.css`).
+6. Эффекты хоста фиксированы грамматикой (`blocks/actions.js`, `blocks/platform.js`): `link` — переход по `url` в новой вкладке, `browser_preview` — `openBrowserPreview`, `file_list` — ссылка на файл, `html` — только мост `window.flowUi`; произвольное имя действия из артефакта хост не исполняет — его интерпретирует flow.
+7. Предпросмотр и итог действия агента — блоки `action_preview`/`action_result` в `conversation` (артефакт `ui`).
 
-## Тесты
+### Голос
 
-- Conformance: `tests/fixtures/flow_ui/{ui_artifacts,ui_action_message,state_patch,templating,html_sandbox,schema}.json` ↔ `tests/core/flow_ui/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`, `test_flow_ui_protocol_docs.py`, JS `tests/frontend_core/unit/flow-ui/conformance.spec.js`.
-- Backend: `tests/core/flow_ui/test_flow_ui_action.py`, `test_flow_ui_effects.py`; API `tests/flows/api/test_flow_interface.py`, `test_flow_ui_assist.py`, `test_flow_ui_shares.py`, `test_hitl_conversation_http.py`; e2e A2A `tests/flows/e2e/test_embed_stream.py`; SDK `tests/core/clients/test_flow_ui_client.py`; хелперы `tests/flows/_flow_ui.py`, `_flow_ui_session.py` (декодирование через SDK).
-- Frontend unit (vitest) `tests/frontend_core/unit/flow-ui/*.spec.js`; browser (web-test-runner) `tests/frontend_core/browser/flow-ui/{platform-flow-ui-editing,html-block,html-editor-modal,interface-editor,template-card}.spec.js`; Playwright `tests/ui/e2e/test_flow_ui_*.py`, `test_hitl_*.py`, `test_embed_autoload_browser.py`.
+1. Единственная точка оркестрации голоса — `flow-ui/voice/coordinator.js`: после каждого A2A-кадра — `feedStreamTtsFromA2aResult` (озвучка только speakable Parts после проекции → `voice.mdc`), цель — `setStreamTtsTarget`/`clearStreamTtsTarget`; блоки второй transport не запускают.
+2. Голос включён при `FlowInterfaceResponse.capabilities.voice` (`allow_voice` ∧ не share-viewer ∧ embed `look.voice_enabled`) и `flowUIVoiceSessionReady`; микрофон — в composer `conversation` (вне HITL) и в блоке `voice_input`; реплика и ответ идут `VoiceAgentBridge` тем же A2A-потоком, `<platform-voice-dictation>` в Flow UI не используется.
+3. Параметры сессии — `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=` (`fetchFlowVoiceSessionQueryDict`); embed по `embed_id` — без query.
+4. Barge-in: новый ход (`text`, `ui-action`, голос) и cancel вызывают `stopStreamTtsPlayback()` до A2A-действия; новый голосовой ход завершает предыдущий voice Task, при активном несовместимом text Task — typed busy rejection.
 
-## Gates
+### Редактор интерфейса
 
-- `scripts/check_flow_ui_hard_cut.py` (в `make lint`): zero-reference на A2UI, negotiation/representation/interaction parser/session service/contract projector, `ui_values`/`ui_document`/`ui_state`/`mutation_id`/`base_revision`, grid layout (`row_start`/`column_span`/`container_layout`), `interface_override`/`FlowInterfaceConfig`, `platform.ui.*`, `ui.*` capabilities; маркеры `TODO|FIXME|HACK|XXX|compat|legacy|deprecated|shim|_v2`; паритет рендереров JS ↔ типы грамматики; бюджеты (файл ≤ 600 строк, `flow-ui/**` ≤ 9000, редактор ≤ 2800); совпадение sandbox/CSP с фикстурой. Единственные допустимые упоминания удалённых имён — allowlist в самом скрипте (CDN shim, миграции, `.cursor/rules`).
-- `make lint`, `uv run pytest tests/core/flow_ui tests/core/state tests/core/clients/test_flow_ui_client.py tests/flows/api/test_flow_interface.py tests/flows/api/test_flow_ui_assist.py`, `npx vitest run tests/frontend_core/unit`, `npm run test:core-browser`, `make check-i18n check-i18n-keys check-events-canon`.
+1. Холст — тот же `<platform-flow-ui editing>`: production-рендер, скрытые `visible_when` блоки видны, неизвестные пути остаются `{path}`; геометрия выделения — `editor/selection.js`; отдельного редакторского рендера нет.
+2. Состояние — slice `flows/interface_editor` (`interface-editor.resource.js`: `history{present, past, future}`, страница, выбор, viewport); доменная логика — `interface-editor-domain.js`; черновики — `platformStorageKey('flows','interface_drafts')`; snapshot-история внутри Lit-элемента запрещена.
+3. Publish: `documentProblems` (severity `error` блокирует) → документ сохраняется вместе с графом; ответ помощника — одна команда истории.
+
+### Embed, share, HITL
+
+1. Один runtime для всех хостов. Embed (`TokenType.EMBED_SESSION`) стартует новую сессию; `EmbedConfig.presentation` `drawer`/`page`; сниппет `GET /frontend/api/embed/configs/{embed_id}/code` и autoload (`embed-flow-ui/flow-ui-embed-autoload.js`) читают одни `data-*`; после mount — `window.linnexFlowUI` и событие `linnex-flow-ui-mounted`; A2A allowlist embed — `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks` (с `contextId`), `SubscribeToTask`, `CancelTask`.
+2. Live share (`TokenType.FLOW_UI_SHARE`) — `FlowUIShareGrant` (`context_id`, `permission` `viewer`/`editor`, `redacted_paths`, `expires_at`, `revoked_at`) на существующий `context_id`, без новой беседы, snapshot и ветки; Check — OpenFGA `flow_ui_share` на каждом вызове; redaction — `apps/flows/src/a2a/share_task_redaction.py` вырезает пути из артефакта `state`; `ui-action` на скрытое поле — `assert_fields_outside_redacted`; ledger и проекция владельца не меняются.
+3. HITL: оператор отвечает через `runtime/hitl-transport.js` (REST worktracker), пользователь — обычным A2A-ходом; лента читает артефакт `operator_reply`; режим — из parked Task (`metadata.platform_interrupt`) → `worktracker.mdc`.
+
+### Безопасность
+
+1. `html` — только iframe `sandbox="allow-scripts"` без `allow-same-origin`, `srcdoc` с фиксированным `FLOW_UI_HTML_CSP`, мост `postMessage` и API `window.flowUi`; константы совпадают с фикстурой `html_sandbox.json`; ошибка скрипта автора показывается в блоке.
+2. Markdown санитизируется (`utils/markdown.js`); URL и файлы — только platform download URL (`flowUIMediaSrc`); `eval` данных state запрещён.
+3. `ui-action` принимает только поля input/html-блоков документа и `ui_slots`; лимиты — `FlowUILimits` в настройках flows; auth, company, origin и grant проверяются до чтения документа; embed CORS — `EmbedDynamicCorsMiddleware`.
+
+## Запреты
+
+1. Двойники `FlowUIDocument` (`*Config`, `*Profile`, `*Template`), translation-слой между editor/runtime/embed/share, chat-specific runtime, host-specific renderer.
+2. A2A extension, negotiation, второй envelope или endpoint, `metadata`-протокол для интерфейса.
+3. Имена `ui_document`, `ui_values`, `ui_state`, `mutation_id`, `base_revision`, `FlowInterfaceConfig`, `interface_override`, `ui_event`, `present_ui`.
+
+## Исключения
+
+- Исключение: `POST /flows/api/v1/flow-ui/shares/exchange/{grant_id}` — HTTP без команды (аноним + Origin); меню share в Flow UI — fetch, не фабрика. `PROTOCOL_HANDLERS` в `scripts/check_rest_handlers_call_ops.py`.
+- Исключение: `core/frontend/static/lib/embed-chat/` — CDN-shim старых embed-сниппетов, только import общего autoload; `ALLOWLIST_PREFIXES` в `scripts/check_flow_ui_hard_cut.py`.
+
+## Гейты
+
+- `scripts/check_flow_ui_hard_cut.py` (`make lint`) — удалённые имена и маркеры, паритет рендереров JS ↔ грамматика, бюджеты (файл ≤ 600 строк, `flow-ui/**` ≤ 9000, редактор ≤ 2800), sandbox/CSP ↔ фикстура.
+- Conformance: `tests/fixtures/flow_ui/*.json` ↔ `tests/core/flow_ui/test_flow_ui_conformance.py`, `test_flow_ui_schema_fixture.py`, `test_flow_ui_protocol_docs.py`, `tests/frontend_core/unit/flow-ui/conformance.spec.js`.
+- Поведение: `tests/core/flow_ui/`, `tests/flows/api/test_flow_interface.py`, `test_flow_ui_shares.py`, `tests/core/clients/test_flow_ui_client.py`, `tests/frontend_core/browser/flow-ui/`.

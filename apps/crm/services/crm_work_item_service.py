@@ -153,7 +153,7 @@ class CrmWorkItemService:
         entity_subtype: str | None = None,
     ) -> WorkItem:
         """Создать или обновить парный WorkItem CRM-задачи (1:1 по entity_id)."""
-        existing = await self._wi.find_by_crm_entity(company_id, entity_id)
+        existing = await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
         fields_set = seed.model_fields_set
 
         if existing is None:
@@ -226,22 +226,22 @@ class CrmWorkItemService:
                         work_item_id=existing.work_item_id,
                         state=target_state,
                     )
-        return await self._wi.get(company_id, existing.work_item_id)
+        return await WorkItem.require_in_company(company_id, existing.work_item_id)
 
     async def delete_for_task(self, *, company_id: str, entity_id: str) -> None:
-        existing = await self._wi.find_by_crm_entity(company_id, entity_id)
+        existing = await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
         if existing is not None:
-            _ = await self._wi.delete(
-                company_id=company_id, work_item_id=existing.work_item_id
+            _ = await WorkItem.delete_in_company(
+                company_id, existing.work_item_id
             )
 
     async def get_for_task(self, *, company_id: str, entity_id: str) -> WorkItem | None:
-        return await self._wi.find_by_crm_entity(company_id, entity_id)
+        return await WorkItem.find_work_item_by_crm_entity(company_id, entity_id)
 
     async def map_work_item_ids_by_entities(
         self, *, company_id: str, entity_ids: list[str]
     ) -> dict[str, str]:
-        return await self._wi.map_work_item_ids_by_crm_entities(company_id, entity_ids)
+        return await WorkItem.map_work_item_ids_by_crm_entities(company_id, entity_ids)
 
     async def list_crm_activity_work_items(
         self,
@@ -252,7 +252,7 @@ class CrmWorkItemService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[WorkItem]:
-        return await self._wi.list(
+        return await WorkItem.list_work_items(
             company_id,
             namespace=namespace,
             kind=WorkItemKind.CRM_ACTIVITY,

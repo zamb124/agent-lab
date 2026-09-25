@@ -1,49 +1,13 @@
-"""
-Пакет SQLAlchemy-моделей платформы.
-
-Реэкспортирует Base и все модели из под-модулей для обратной совместимости.
-"""
+"""Base для env Alembic и таблицы RAG."""
 
 from core.db.models.base import Base
-from core.db.models.platform import (
-    CalendarEventRecord,
-    CalendarIntegrationRecord,
-    CompanyMailConnectionRecord,
-    IntegrationCredentialRecord,
-    MailboxBindingRecord,
-    MailboxFolderRecord,
-    MailMessageRecord,
-    Namespaces,
-    PlatformShortLink,
-    PushSubscription,
-    SchedulerTaskRecord,
-    Storage,
-    Usage,
-    Users,
-)
 from core.db.models.rag import (
     DocumentProcessingStatus,
     VectorDocument,
 )
-from core.db.models.tracing import Spans
 
 __all__ = [
     "Base",
-    "Storage",
-    "Users",
-    "Usage",
-    "Namespaces",
-    "Spans",
-    "PushSubscription",
-    "CalendarEventRecord",
-    "CalendarIntegrationRecord",
-    "CompanyMailConnectionRecord",
-    "MailboxBindingRecord",
-    "MailboxFolderRecord",
-    "MailMessageRecord",
-    "IntegrationCredentialRecord",
-    "SchedulerTaskRecord",
-    "PlatformShortLink",
     "DocumentProcessingStatus",
     "VectorDocument",
 ]

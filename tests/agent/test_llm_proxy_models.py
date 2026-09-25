@@ -16,7 +16,6 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
-from core.websocket import WsCommandError
 
 from apps.flows.src.agent.llm_proxy import (
     AgentOpenAIChatCompletionsRequest,
@@ -25,7 +24,7 @@ from apps.flows.src.agent.llm_proxy import (
     _agent_llm_option_value,
     _build_usage_payload,
     _is_rate_limit_error,
-    _read_agent_llm_model_ids,
+    read_agent_llm_model_ids,
     _resolve_agent_llm_auto_mock_bridge,
     _resolve_agent_llm_model,
     _stream_agent_llm_sse,
@@ -38,6 +37,7 @@ from core.ai.providers import (
     HUMANITEC_LLM_PROVIDER,
     AICapability,
 )
+from core.websocket import WsCommandError
 
 
 def test_agent_llm_option_value_reads_string_and_json_object() -> None:
@@ -64,23 +64,23 @@ def test_validate_requested_agent_model_accepts_auto() -> None:
 @pytest.mark.asyncio
 async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
     monkeypatch: pytest.MonkeyPatch,
+    unique_id: str,
 ) -> None:
+    model_id = f"qwen-{unique_id}:free"
     catalog_record = AIModelRecord(
         provider="openrouter",
-        model_id="qwen/qwen3-coder:free",
+        model_id=model_id,
         capabilities=(AICapability.LLM_CHAT,),
         input_modalities=("text",),
         output_modalities=("text",),
     )
-    container = MagicMock()
-    container.llm_models_service.get_configured_providers_by_capability.return_value = [
+    _ = await AIModelRecord.set(catalog_record)
+    llm_models_service = MagicMock()
+    llm_models_service.get_configured_providers_by_capability.return_value = [
         HUMANITEC_LLM_PROVIDER,
         "openrouter",
     ]
-    container.ai_model_catalog_repository.list_by_provider_capability = AsyncMock(
-        return_value=[catalog_record],
-    )
-    container.llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
+    llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
         return_value=[],
     )
     monkeypatch.setattr(
@@ -88,27 +88,29 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
         AsyncMock(return_value=["documents"]),
     )
 
-    model_ids = await _read_agent_llm_model_ids(container)
+    try:
+        model_ids = await read_agent_llm_model_ids(llm_models_service)
+    finally:
+        stored = await AIModelRecord.get_provider_model("openrouter", model_id)
+        if stored is not None:
+            _ = await stored.delete()
 
     assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
     assert "image-auto" in model_ids
     assert "lara:documents" in model_ids
-    assert "openrouter:qwen/qwen3-coder:free" in model_ids
-    container.llm_models_service.get_model_ids_by_provider_capability.assert_not_called()
+    assert f"openrouter:{model_id}" in model_ids
+    llm_models_service.get_model_ids_by_provider_capability.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    container = MagicMock()
-    container.llm_models_service.get_configured_providers_by_capability.return_value = [
+    llm_models_service = MagicMock()
+    llm_models_service.get_configured_providers_by_capability.return_value = [
         HUMANITEC_LLM_PROVIDER,
     ]
-    container.ai_model_catalog_repository.list_by_provider_capability = AsyncMock(
-        return_value=[],
-    )
-    container.llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
+    llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
         return_value=[
             {"value": HUMANITEC_LLM_AUTO_MODEL, "label": HUMANITEC_LLM_AUTO_MODEL},
             {"value": "groq:llama-3.1-8b-instant", "label": "groq / llama-3.1-8b-instant"},
@@ -119,7 +121,7 @@ async def test_read_agent_llm_model_ids_falls_back_to_humanitec_llm_options(
         AsyncMock(return_value=["documents"]),
     )
 
-    model_ids = await _read_agent_llm_model_ids(container)
+    model_ids = await read_agent_llm_model_ids(llm_models_service)
 
     assert model_ids[0] == HUMANITEC_LLM_AUTO_MODEL
     assert "image-auto" in model_ids

@@ -30,6 +30,7 @@ from tests.sync.api._helpers import seed_namespace_via_repo
 from tests.sync.api._realtime_helpers import (
     http_owner,
 )
+from tests.sync.conftest import require_sync_di
 
 
 def _user_id_from_token(token: str) -> str:
@@ -51,7 +52,7 @@ async def test_speech_to_chat_posts_audio_segment_to_channel_feed(
     unique_id: str,
     livekit_demo_publisher,
 ) -> None:
-    namespace = await seed_namespace_via_repo(company_id, f"ns_{unique_id}_s2c")
+    namespace = await seed_namespace_via_repo(require_sync_di(), company_id, f"ns_{unique_id}_s2c")
 
     async with http_owner(sync_auth_token) as http:
         cr = await http.post(

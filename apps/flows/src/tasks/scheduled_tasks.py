@@ -6,9 +6,10 @@ import uuid
 from datetime import datetime, timezone
 
 from apps.flows.config import get_settings
+from apps.flows.di import Di
+from apps.flows.src.channels.factory import get_channel
 from apps.flows.src.channels.types import PreparedTaskParams
-from apps.flows.src.container import FlowContainer, get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_SCHEDULED
 from apps.flows.src.tools.base import ToolArguments
@@ -20,8 +21,14 @@ from core.identity.flow_employee import (
     is_flow_employee_user_id,
 )
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.scheduler import get_schedule_source
-from core.scheduler.models import ContentType, PlatformScheduleType, ScheduledTaskStatus
+from core.scheduler.models import (
+    ContentType,
+    PlatformScheduledTask,
+    PlatformScheduleType,
+    ScheduledTaskStatus,
+)
 from core.state import ExecutionState
 from core.tasks import platform_task
 from core.types import JsonObject, require_json_object, require_json_value
@@ -30,7 +37,7 @@ from core.websocket.publisher import Notification, NotificationType, notify_user
 logger = get_logger(__name__)
 
 
-async def _resolve_escalation_targets(container: FlowContainer, user_id: str) -> list[str]:
+async def _resolve_escalation_targets(user_id: str) -> list[str]:
     """Кому слать эскалацию/уведомление о завершении.
 
     Обычный пользователь — самому себе. Если таргет — flow-сотрудник (фоновый
@@ -38,7 +45,7 @@ async def _resolve_escalation_targets(container: FlowContainer, user_id: str) ->
     """
     if not is_flow_employee_user_id(user_id):
         return [user_id]
-    employee = await container.user_repository.get(user_id)
+    employee = await User.get(user_id)
     if employee is None or not is_flow_employee(employee):
         return [user_id]
     curators = flow_employee_curator_user_ids(employee)
@@ -56,6 +63,8 @@ async def execute_scheduled_task(
     tool_args: ToolArguments | None = None,
     description: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Выполняет scheduled task.
@@ -87,25 +96,20 @@ async def execute_scheduled_task(
     )
     task_content_type = ContentType(content_type)
 
-    container = get_container()
-
     effective_flow_id = flow_id
     if not effective_flow_id:
         raise ValueError("flow_id is required for scheduled task")
     if company_id is None:
         raise ValueError("company_id is required for scheduled task")
 
-    scheduler_repo = container.scheduler_task_repository
-
-    # Источник правды — платформенная таблица scheduler_tasks (shared БД).
-    task_info = await scheduler_repo.get(
+    scheduler_task = await PlatformScheduledTask.find_in_company(
         company_id=company_id, schedule_task_id=schedule_task_id
     )
 
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise ValueError(f"scheduled task: company {company_id} not found")
-    initiator_user = await container.user_repository.get(user_id)
+    initiator_user = await User.get(user_id)
     if initiator_user is None:
         raise ValueError(f"scheduled task: user {user_id} not found")
     initiator_context = build_job_context(
@@ -118,11 +122,10 @@ async def execute_scheduled_task(
     )
     initiator_context.flow_id = effective_flow_id
 
-    flow_config = await container.flow_repository.get(effective_flow_id)
+    flow_config = await FlowConfig.get_latest(effective_flow_id)
     if flow_config is None:
         raise ValueError(f"scheduled task: flow {effective_flow_id} not found")
     execution = await resolve_execution_context(
-        as_flow_runtime_container(container),
         flow_config=flow_config,
         initiator_context=initiator_context,
     )
@@ -132,7 +135,7 @@ async def execute_scheduled_task(
     try:
         if task_content_type == ContentType.MESSAGE:
             result = await _execute_message_task(
-                container=container,
+                di=di,
                 flow_id=effective_flow_id,
                 session_id=session_id,
                 user_id=actor_user_id,
@@ -143,7 +146,7 @@ async def execute_scheduled_task(
             if tool_args is None:
                 raise ValueError("tool_args is required for scheduled tool_call")
             result = await _execute_tool_call_task(
-                container=container,
+                di=di,
                 session_id=session_id,
                 user_id=actor_user_id,
                 tool_name=content,
@@ -154,9 +157,9 @@ async def execute_scheduled_task(
 
         logger.info("flows.scheduled.task.executed.schedule_task_id", schedule_task_id=schedule_task_id)
         scheduler_status = ScheduledTaskStatus.PENDING
-        if task_info and task_info.schedule_type == PlatformScheduleType.ONE_TIME:
+        if scheduler_task and scheduler_task.schedule_type == PlatformScheduleType.ONE_TIME:
             scheduler_status = ScheduledTaskStatus.EXECUTED
-        _ = await scheduler_repo.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=scheduler_status,
@@ -167,20 +170,20 @@ async def execute_scheduled_task(
 
     except Exception as e:
         logger.error("flows.scheduled.task.failed.schedule_task_id.error", schedule_task_id=schedule_task_id, error=e)
-        _ = await scheduler_repo.update_status(
+        _ = await PlatformScheduledTask.update_status(
             company_id=company_id,
             schedule_task_id=schedule_task_id,
             status=ScheduledTaskStatus.FAILED,
             error_message=str(e),
         )
 
-        if task_info and task_info.schedule_id:
+        if scheduler_task and scheduler_task.schedule_id:
             try:
                 settings = get_settings()
                 source = get_schedule_source(settings.database.redis_url)
                 await source.startup()
-                _ = await source.delete_schedule(task_info.schedule_id)
-                logger.info("flows.schedule.failed_deleted", schedule_id=task_info.schedule_id)
+                _ = await source.delete_schedule(scheduler_task.schedule_id)
+                logger.info("flows.schedule.failed_deleted", schedule_id=scheduler_task.schedule_id)
             except Exception as del_error:
                 logger.warning("flows.schedule.delete_failed", error=str(del_error))
 
@@ -188,7 +191,7 @@ async def execute_scheduled_task(
 
 
 async def _execute_message_task(
-    container: FlowContainer,
+    di: Di,
     flow_id: str,
     session_id: str,
     user_id: str,
@@ -196,7 +199,24 @@ async def _execute_message_task(
     initiator_user_id: str | None = None,
 ) -> JsonObject:
     """Выполняет message task - отправляет сообщение агенту."""
-    channel_instance = container.get_channel("a2a", flow_id)
+    channel_instance = get_channel(
+        "a2a",
+        flow_id,
+        variables_service=di.variables_service,
+        authz_service=di.authz_service,
+        workflow_runtime=di.workflow_runtime,
+        redis_client=di.redis_client,
+        handoff_orchestrator_service=di.handoff_orchestrator_service,
+        flow_factory=di.flow_factory,
+        tool_registry=di.tool_registry,
+        projection_service=di.a2a_task_projection_service,
+        shared_storage=di.shared_storage,
+        channel_registry=di.channel_registry,
+        mail_service=di.mail_service,
+        flow_ui_share_service=di.flow_ui_share_service,
+        hitl_conversation_service=di.hitl_conversation_service,
+        files_service=di.files_service,
+    )
 
     task_id = str(uuid.uuid4())
 
@@ -218,7 +238,7 @@ async def _execute_message_task(
 
     # Уведомление о завершении шлётся инициатору (создателю расписания), не актору-агенту.
     # Если инициатор сам flow-сотрудник (фоновый запуск), эскалация уходит его кураторам.
-    notify_targets = await _resolve_escalation_targets(container, initiator_user_id or user_id)
+    notify_targets = await _resolve_escalation_targets(initiator_user_id or user_id)
     if result.task_state == "completed":
         final_response = result.response
         preview = final_response[:100] + ("..." if len(final_response) > 100 else "")
@@ -247,14 +267,14 @@ async def _execute_message_task(
 
 
 async def _execute_tool_call_task(
-    container: FlowContainer,
+    di: Di,
     session_id: str,
     user_id: str,
     tool_name: str,
     tool_args: ToolArguments,
 ) -> JsonObject:
     """Выполняет tool_call task — только инлайн-тулы из tool_repository."""
-    tool = await container.tool_registry.create_tool({"tool_id": tool_name})
+    tool = await di.tool_registry.create_tool({"tool_id": tool_name})
 
     state = ExecutionState.create(
         task_id=str(uuid.uuid4()),

@@ -33,7 +33,7 @@ from core.models.calendar_models import (
 class MailCalendarBridge(Protocol):
     """
     Мост mail -> calendar через инверсию зависимости: core/mail не знает про
-    CalendarService, контейнер прокидывает реализацию.
+    CalendarService, процесс передаёт реализацию через constructor.
 
     - авто-подъём CalDAV календаря для ящика при bind;
     - снятие календарных интеграций ящика при unbind;

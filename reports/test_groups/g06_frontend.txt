@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/viktor-shved/PycharmProjects/agent-lab
+configfile: pytest.ini
+plugins: hypothesis-6.153.4, cov-7.1.0, xdist-3.8.0, timeout-2.4.0, asyncio-1.4.0, schemathesis-4.20.1, rerunfailures-16.3, hydra-core-1.3.2, anyio-4.13.0
+timeout: 5.0s
+timeout method: thread
+timeout func_only: True
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 4/4 workers
+4 workers [363 items]
+
+...............................................s...sss.....................................................................................................................................................................................................................................................................................................................{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-25T06:45:36.243756Z", "message": "files.cairosvg.libcairo.svg"}
+
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; tests.frontend.api.tinkoff_live
+    self.import_plugin(import_spec)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 359 passed, 4 skipped, 4 warnings in 35.76s ==================

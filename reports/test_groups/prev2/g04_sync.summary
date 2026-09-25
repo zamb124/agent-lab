@@ -1,0 +1,4 @@
+GROUP g04_sync rc=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 252 passed, 7 warnings in 43.12s =======================

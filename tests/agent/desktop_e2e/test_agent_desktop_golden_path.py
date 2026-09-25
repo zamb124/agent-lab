@@ -264,7 +264,7 @@ async def test_d_gold_pairing_tunnel_mcp_audit(
     flows_worker: None,
     unique_id: str,
     mock_llm_with_queue,
-    frontend_container,
+    frontend_di,
     humanitec_desktop_system_process_factory,
 ) -> None:
     _ = flows_service, flows_worker
@@ -306,7 +306,7 @@ async def test_d_gold_pairing_tunnel_mcp_audit(
             )
         assert call_response.status_code == 200
         await assert_audit_event_in_redis(
-            frontend_container,
+            frontend_di,
             company_id=company_id,
             event_type="agent.device_registered",
         )

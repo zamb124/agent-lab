@@ -29,9 +29,9 @@ import './crm-related-neighbor-rows.js';
 import {
     entityDisplayIconName,
     normalizeCatalogIconName,
-} from '../utils/related-entity-presenter.js';
-import { extractNeighborEdges } from '../utils/neighbor-edges.js';
-import { searchScorePercent, relationshipConfidencePercent } from '../utils/search-score-percent.js';
+} from '../_helpers/related-entity-presenter.js';
+import { extractNeighborEdges } from '../_helpers/neighbor-edges.js';
+import { searchScorePercent, relationshipConfidencePercent } from '../_helpers/search-score-percent.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 
 const CREATE_FORM = 'crm/entity_create_form';

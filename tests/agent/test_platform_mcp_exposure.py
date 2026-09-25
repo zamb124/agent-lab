@@ -12,6 +12,7 @@ from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.flow_config import FlowConfig
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from tests.agent._helpers import (
     PLATFORM_MCP_PATH,
     company_id_from_auth_token,
@@ -22,7 +23,7 @@ from tests.agent._helpers import (
 @asynccontextmanager
 async def _repository_context_for_auth(
     auth_headers: dict[str, str],
-    frontend_container,
+    frontend_di,
 ) -> AsyncIterator[None]:
     authorization = auth_headers["Authorization"]
     if not authorization.startswith("Bearer "):
@@ -30,10 +31,10 @@ async def _repository_context_for_auth(
     auth_token = authorization.removeprefix("Bearer ").strip()
     company_id = company_id_from_auth_token(auth_token)
     user_id = user_id_from_auth_token(auth_token)
-    company = await frontend_container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise AssertionError(f"company not found: {company_id}")
-    user = await frontend_container.user_repository.get(user_id)
+    user = await User.get(user_id)
     if user is None:
         raise AssertionError(f"user not found: {user_id}")
     previous = get_context()
@@ -93,15 +94,15 @@ def _tool_schema() -> dict[str, object]:
 async def test_platform_mcp_tools_list_scoped_by_toolkit(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
     toolkit_id = f"tk_{unique_id}"
     flow_in = f"flow_in_{unique_id}"
     flow_out = f"flow_out_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Test toolkit",
@@ -114,7 +115,7 @@ async def test_platform_mcp_tools_list_scoped_by_toolkit(
             )
         )
         for flow_id in (flow_in, flow_out):
-            await container.flow_repository.set(
+            await FlowConfig.create_version(
                 FlowConfig(
                     flow_id=flow_id,
                     name=flow_id,
@@ -132,23 +133,23 @@ async def test_platform_mcp_tools_list_scoped_by_toolkit(
             assert f"flow_{flow_in}" in all_names
             assert f"flow_{flow_out}" not in all_names
         finally:
-            await container.flow_repository.delete(flow_in)
-            await container.flow_repository.delete(flow_out)
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await FlowConfig.delete_by_flow_id(flow_in)
+            await FlowConfig.delete_by_flow_id(flow_out)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_tools_call_rejects_flow_outside_toolkit(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
     toolkit_id = f"tk_call_{unique_id}"
     hidden_flow = f"hidden_flow_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Empty toolkit",
@@ -158,7 +159,7 @@ async def test_platform_mcp_tools_call_rejects_flow_outside_toolkit(
                 source="custom",
             )
         )
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=hidden_flow,
                 name=hidden_flow,
@@ -185,22 +186,23 @@ async def test_platform_mcp_tools_call_rejects_flow_outside_toolkit(
             assert "error" in body
             assert body["error"]["code"] == -32602
         finally:
-            await container.flow_repository.delete(hidden_flow)
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await FlowConfig.delete_by_flow_id(hidden_flow)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_flow_api_persists_agent_toolkit_ids(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     flow_id = f"flow_tk_api_{unique_id}"
     toolkit_id = f"tk_api_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="API toolkit",
@@ -226,27 +228,28 @@ async def test_flow_api_persists_agent_toolkit_ids(
             assert create.status_code == 200, create.text
             assert create.json()["agent_toolkit_ids"] == [toolkit_id]
 
-            toolkit = await container.agent_toolkit_repository.get(toolkit_id)
+            toolkit = await AgentToolkit.by_toolkit_id(toolkit_id)
             assert toolkit is not None
             assert flow_id in toolkit.flow_ids
         finally:
             await flows_client.delete(f"/flows/api/v1/flows/{flow_id}", headers=auth_headers)
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_tool_api_persists_agent_toolkit_ids(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     tool_id = f"tool_tk_api_{unique_id}"
     toolkit_id = f"tk_tool_api_{unique_id}"
     schema = _tool_schema()
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Tool API toolkit",
@@ -271,12 +274,12 @@ async def test_tool_api_persists_agent_toolkit_ids(
             assert create.status_code == 200, create.text
             assert create.json()["agent_toolkit_ids"] == [toolkit_id]
 
-            toolkit = await container.agent_toolkit_repository.get(toolkit_id)
+            toolkit = await AgentToolkit.by_toolkit_id(toolkit_id)
             assert toolkit is not None
             assert tool_id in toolkit.tool_ids
         finally:
             await flows_client.delete(f"/flows/api/v1/tools/{tool_id}", headers=auth_headers)
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 async def _mcp_jsonrpc(
@@ -300,13 +303,14 @@ async def _mcp_jsonrpc(
 async def test_platform_mcp_discover_toolkit_server_info(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     toolkit_id = f"tk_disc_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Discover Name",
@@ -329,20 +333,21 @@ async def test_platform_mcp_discover_toolkit_server_info(
             )
             assert missing.status_code == 404
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_initialize_toolkit_server_info(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     toolkit_id = f"tk_init_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Init Name",
@@ -364,21 +369,22 @@ async def test_platform_mcp_initialize_toolkit_server_info(
             assert body["result"]["serverInfo"]["name"] == "Init Name"
             assert "instructions" not in body["result"]
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_initialize_lara_instructions(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
 ) -> None:
     """LaraOnly: /platform-mcp/lara initialize must instruct Goose to call flow_lara."""
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        existing = await container.agent_toolkit_repository.get("lara")
+    _ = di
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        existing = await AgentToolkit.by_toolkit_id("lara")
         if existing is None:
-            await container.agent_toolkit_repository.set(
+            await AgentToolkit.set(
                 AgentToolkit(
                     toolkit_id="lara",
                     name="Lara",
@@ -415,13 +421,14 @@ async def test_platform_mcp_initialize_lara_instructions(
 async def test_platform_mcp_scoped_tools_list_includes_builtin_tools(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     toolkit_id = f"tk_tools_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Tools toolkit",
@@ -435,20 +442,21 @@ async def test_platform_mcp_scoped_tools_list_includes_builtin_tools(
             tool_names = {str(tool["name"]) for tool in tools}
             assert any(name.startswith("tool_calculator") for name in tool_names)
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_builtin_tool_call_in_toolkit(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     toolkit_id = f"tk_calc_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Calculator toolkit",
@@ -481,22 +489,22 @@ async def test_platform_mcp_builtin_tool_call_in_toolkit(
             assert isinstance(content, list)
             assert "4" in str(content[0]["text"])
         finally:
-            await container.agent_toolkit_repository.delete(toolkit_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_union_root_lists_all_toolkits(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
     toolkit_a = f"tk_union_a_{unique_id}"
     toolkit_b = f"tk_union_b_{unique_id}"
     flow_id = f"flow_union_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_a,
                 name="Union A",
@@ -505,7 +513,7 @@ async def test_platform_mcp_union_root_lists_all_toolkits(
                 source="custom",
             )
         )
-        await container.agent_toolkit_repository.set(
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_b,
                 name="Union B",
@@ -514,7 +522,7 @@ async def test_platform_mcp_union_root_lists_all_toolkits(
                 source="custom",
             )
         )
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name=flow_id,
@@ -528,24 +536,24 @@ async def test_platform_mcp_union_root_lists_all_toolkits(
             assert f"flow_{flow_id}" in names
             assert any(name.startswith("tool_calculator") for name in names)
         finally:
-            await container.flow_repository.delete(flow_id)
-            await container.agent_toolkit_repository.delete(toolkit_a)
-            await container.agent_toolkit_repository.delete(toolkit_b)
+            await FlowConfig.delete_by_flow_id(flow_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_a)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_b)
 
 
 @pytest.mark.asyncio
 async def test_platform_mcp_flow_in_two_toolkits_visible_in_both(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
     flow_id = f"flow_multi_{unique_id}"
     toolkit_a = f"tk_multi_a_{unique_id}"
     toolkit_b = f"tk_multi_b_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.flow_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name=flow_id,
@@ -554,7 +562,7 @@ async def test_platform_mcp_flow_in_two_toolkits_visible_in_both(
             )
         )
         for toolkit_id in (toolkit_a, toolkit_b):
-            await container.agent_toolkit_repository.set(
+            await AgentToolkit.set(
                 AgentToolkit(
                     toolkit_id=toolkit_id,
                     name=toolkit_id,
@@ -569,9 +577,9 @@ async def test_platform_mcp_flow_in_two_toolkits_visible_in_both(
                 names = {str(tool["name"]) for tool in tools}
                 assert f"flow_{flow_id}" in names
         finally:
-            await container.flow_repository.delete(flow_id)
-            await container.agent_toolkit_repository.delete(toolkit_a)
-            await container.agent_toolkit_repository.delete(toolkit_b)
+            await FlowConfig.delete_by_flow_id(flow_id)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_a)
+            await AgentToolkit.delete_by_toolkit_id(toolkit_b)
 
 
 @pytest.mark.asyncio
@@ -579,16 +587,17 @@ async def test_platform_mcp_scoped_endpoint_device_jwt(
     flows_client: AsyncClient,
     frontend_client_with_auth: AsyncClient,
     auth_headers: dict[str, str],
-    container,
-    frontend_container,
+    di,
+    frontend_di,
     unique_id: str,
 ) -> None:
+    _ = di
     from tests.agent._helpers import AGENT_API_PREFIX
     from tests.agent.test_platform_mcp_exposure import _repository_context_for_auth
 
     toolkit_id = f"tk_devjwt_{unique_id}"
-    async with _repository_context_for_auth(auth_headers, frontend_container):
-        await container.agent_toolkit_repository.set(
+    async with _repository_context_for_auth(auth_headers, frontend_di):
+        await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Device JWT toolkit",
@@ -622,5 +631,5 @@ async def test_platform_mcp_scoped_endpoint_device_jwt(
         assert isinstance(tools, list)
         assert len(tools) >= 1
     finally:
-        async with _repository_context_for_auth(auth_headers, frontend_container):
-            await container.agent_toolkit_repository.delete(toolkit_id)
+        async with _repository_context_for_auth(auth_headers, frontend_di):
+            await AgentToolkit.delete_by_toolkit_id(toolkit_id)

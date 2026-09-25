@@ -72,12 +72,10 @@ async def test_upload_missing_spec_422(frontend_client, auth_headers_system):
 
 
 @pytest.mark.asyncio
-async def test_files_service_bind_file_id_mismatch_raises(app):
+async def test_files_service_bind_file_id_mismatch_raises(app, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     from core.documents.placement import DocsPlacement
 
-    container = get_frontend_container()
     placement = DocsPlacement.model_validate(
         {
             "namespace": "default",
@@ -86,7 +84,7 @@ async def test_files_service_bind_file_id_mismatch_raises(app):
         }
     )
     with pytest.raises(ValueError, match="file_id"):
-        await container.files_service.bind("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", placement)
+        await frontend_di.files_service.bind("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", placement)
 
 
 def test_platform_auxiliary_spec_json_valid():

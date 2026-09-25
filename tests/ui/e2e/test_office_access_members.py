@@ -40,14 +40,14 @@ async def test_office_catalog_access_and_members(
     office_client_http,
     auth_headers_system,
     ui_user_system_member: UiTestUser,
-    crm_service,
+    crm_service, frontend_di,
 ) -> None:
     _ = crm_service
     member_id = ui_user_system_member.user_id
     if not isinstance(member_id, str) or member_id == "":
         raise AssertionError("ui_user_system_member.user_id required")
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="acc")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="acc", di=frontend_di)
     catalog_id = await office_api_setup_private_catalog(
         office_client_http,
         auth_headers_system,
@@ -99,7 +99,7 @@ async def test_office_catalog_access_and_members(
         label_en="Catalog made company-visible",
     )
 
-    await office_e2e_open_with_namespace(office_ui, ui_page_system_member, unique_id, suffix="acc")
+    await office_e2e_open_with_namespace(office_ui, ui_page_system_member, unique_id, suffix="acc", di=frontend_di)
     await office_e2e_select_catalog(ui_page_system_member, catalog_title)
     await expect(
         ui_page_system_member.locator("office-documents-explorer-page").filter(has_text=catalog_title)

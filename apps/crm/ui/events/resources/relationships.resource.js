@@ -2,9 +2,9 @@
  * Relationships — связи между сущностями.
  *
  * Backend (`/crm/api/v1/relationships`):
- *   GET    /                    → CursorPage[RelationshipResponse]  (HTTP cursor-list)
- *   GET    /{relationship_id}   → RelationshipResponse
- *   POST   /                    → RelationshipResponse
+ *   GET    /                    → CursorPage[Relationship]  (HTTP cursor-list)
+ *   GET    /{relationship_id}   → Relationship
+ *   POST   /                    → Relationship
  *   DELETE /{relationship_id}   → 204
  *   GET    /path/               → ShortestPathResponse              (graph.resource)
  */

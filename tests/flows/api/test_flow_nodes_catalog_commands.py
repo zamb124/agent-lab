@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.node_operations import (
     op_flows_nodes_catalog_create,
     op_flows_nodes_catalog_item,
@@ -15,7 +16,6 @@ from apps.flows.realtime.node_operations import (
     op_flows_nodes_catalog_remove,
     op_flows_nodes_catalog_update,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.node_config import NodeConfig, NodeIdPayload, NodeListPayload
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -55,7 +55,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_nodes_catalog_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -76,13 +76,13 @@ async def test_nodes_catalog_rest_and_op_share_payload(
         listed = await op_flows_nodes_catalog_list(
             NodeListPayload(limit=200, offset=0),
             user=user,
-            container=container,
+            di=di,
         )
         assert any(item.node_id == node_id for item in listed.items)
         item = await op_flows_nodes_catalog_item(
             NodeIdPayload(node_id=node_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert item.model_dump(mode="json") == created_http.json()
 
@@ -95,7 +95,7 @@ async def test_nodes_catalog_rest_and_op_share_payload(
         updated = await op_flows_nodes_catalog_update(
             NodeConfig.model_validate(_llm_node(node_id, name="Renamed", prompt="hello")),
             user=user,
-            container=container,
+            di=di,
         )
         assert updated.name == "Renamed"
         assert updated.prompt == "hello"
@@ -112,13 +112,13 @@ async def test_nodes_catalog_rest_and_op_share_payload(
         fetched = await op_flows_nodes_catalog_item(
             NodeIdPayload(node_id=node_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert fetched.model_dump(mode="json") == put_http.json()
         removed = await op_flows_nodes_catalog_remove(
             NodeIdPayload(node_id=node_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert removed.status == "deleted"
         assert removed.node_id == node_id
@@ -129,7 +129,7 @@ async def test_nodes_catalog_rest_and_op_share_payload(
 
 async def test_nodes_catalog_create_op_matches_rest_conflict(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -152,5 +152,5 @@ async def test_nodes_catalog_create_op_matches_rest_conflict(
             await op_flows_nodes_catalog_create(
                 NodeConfig.model_validate(_llm_node(node_id, name="Two", prompt="b")),
                 user=user,
-                container=container,
+                di=di,
             )

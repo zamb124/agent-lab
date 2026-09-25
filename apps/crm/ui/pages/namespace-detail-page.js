@@ -47,26 +47,26 @@ import '../components/namespace-note-defaults-fields.js';
 import {
     normalizeDefaultNoteVoiceMode,
     parseNoteVoiceDefaultsFromCrmSettings,
-} from '../utils/namespace-crm-note-defaults.js';
+} from '../_helpers/namespace-crm-note-defaults.js';
 import {
     DEFAULT_SUGGESTS_CRON,
     buildSuggestsSettingsPayload,
     parseSuggestsSettingsFromCrmSettings,
-} from '../utils/namespace-crm-suggests.js';
+} from '../_helpers/namespace-crm-suggests.js';
 import {
     buildDefaultSidebarNav,
     sidebarNavTreeToApiPayload,
-} from '../utils/build-default-sidebar-nav.js';
+} from '../_helpers/build-default-sidebar-nav.js';
 import {
     normalizeSchemaRows,
     buildSchemaFromRows,
 } from '../components/schema-field-builder.js';
-import { entityTypeNoteSubtreeLocked } from '../utils/entity-type-note-subtree-lock.js';
+import { entityTypeNoteSubtreeLocked } from '../_helpers/entity-type-note-subtree-lock.js';
 import {
     CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN,
     CRM_ENTITY_TYPE_PRESET_PICKER_APPLIED,
-} from '../utils/entity-type-create-events.js';
-import { buildEntityTypeDraftFromTemplateTypeItem } from '../utils/entity-type-draft-from-preset.js';
+} from '../_helpers/entity-type-create-events.js';
+import { buildEntityTypeDraftFromTemplateTypeItem } from '../_helpers/entity-type-draft-from-preset.js';
 
 const DEFAULT_TYPE_DRAFT = Object.freeze({
     type_id: '',

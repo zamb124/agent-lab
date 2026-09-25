@@ -8,12 +8,12 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
-from apps.crm.container import get_crm_container
+from apps.crm.di import CrmDi
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.lara_operations import (
     LaraPendingActionApplyPayload,
     op_flows_lara_pending_actions_apply,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.services.lara_action_engine import LaraPendingAction
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -58,17 +58,20 @@ def _apply_payload(*, pending_action_id: str, context_id: str) -> LaraPendingAct
 
 async def test_lara_pending_actions_apply_http_equals_op_after_crm_propose(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     crm_service: object,
     crm_client: AsyncClient,
+    crm_di,
     system_user_id: str,
     unique_id: str,
 ) -> None:
     _ = crm_service, crm_client
+    if not isinstance(crm_di, CrmDi):
+        raise TypeError("crm_di fixture must be CrmDi")
     context_id = f"ctx-lara-apply-{unique_id}"
     namespace = f"g_{unique_id}"
     with _user_scope(system_user_id, name="System"):
-        proposed = await container.lara_facade.preview_crm_create_note(
+        proposed = await di.lara_facade.preview_crm_create_note(
             name=f"lara-cmd-note-{unique_id}",
             description="identity: HTTP apply == op apply",
             note_date=None,
@@ -96,7 +99,7 @@ async def test_lara_pending_actions_apply_http_equals_op_after_crm_propose(
     entity_id = entity_payload["entity_id"]
     if not isinstance(entity_id, str) or entity_id == "":
         raise AssertionError("Lara apply: CRM entity_id обязателен")
-    note = await get_crm_container().entity_service.get_entity(entity_id)
+    note = await crm_di.entity_service.get_entity(entity_id)
     if note is None:
         raise AssertionError(f"Lara apply: CRM-заметка {entity_id} не найдена")
     assert note.name == f"lara-cmd-note-{unique_id}"
@@ -108,7 +111,7 @@ async def test_lara_pending_actions_apply_http_equals_op_after_crm_propose(
                 context_id=context_id,
             ),
             user=user,
-            container=container,
+            di=di,
         )
 
     assert isinstance(op_result, LaraPendingAction)
@@ -119,14 +122,14 @@ async def test_lara_pending_actions_apply_http_equals_op_after_crm_propose(
 
 async def test_lara_pending_actions_apply_owner_mismatch_is_forbidden(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
     context_id = f"ctx-lara-owner-{unique_id}"
     foreign_user_id = f"user-lara-foreign-{unique_id}"
     with _user_scope(foreign_user_id, name="Foreign"):
-        proposed = await container.lara_facade.preview_crm_create_note(
+        proposed = await di.lara_facade.preview_crm_create_note(
             name=f"lara-owner-note-{unique_id}",
             description="identity: чужой pending_action_id",
             note_date=None,
@@ -151,14 +154,14 @@ async def test_lara_pending_actions_apply_owner_mismatch_is_forbidden(
                     context_id=context_id,
                 ),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "forbidden"
 
 
 async def test_lara_pending_actions_apply_missing_is_invalid(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
 ) -> None:
@@ -176,6 +179,6 @@ async def test_lara_pending_actions_apply_missing_is_invalid(
             await op_flows_lara_pending_actions_apply(
                 _apply_payload(pending_action_id=missing_id, context_id=context_id),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "ws_invalid_payload"

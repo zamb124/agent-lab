@@ -17,7 +17,8 @@ from core.documents.viewer.models import (
     VizViewerKind,
 )
 from core.files.models import FileRecord
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 from core.viz.models import VIZ_CONTENT_TYPE, parse_viz_document_bytes
@@ -91,20 +92,23 @@ class VizViewerHandler:
         )
 
     async def _load_document(self, file_record: FileRecord) -> JsonObject:
-        s3 = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
+        if file_record.company_id is None or file_record.company_id == "":
+            raise ValueError("viz file has no company_id")
         try:
-            body = await s3.download_bytes(file_record.s3_key)
+            handle = await FileGate().open_record(
+                file_record,
+                SystemPrincipal(company_id=file_record.company_id),
+            )
+            body = await handle.read_bytes()
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
                 "office.viz.handler.s3.error.file_id",
                 file_id=file_record.file_id,
-                bucket=file_record.s3_bucket,
+                storage_id=file_record.storage_id,
                 key=file_record.s3_key,
                 code=code,
             )
             raise ValueError(f"failed to read viz file: {code}") from exc
-        finally:
-            await s3.close()
         viz_document = parse_viz_document_bytes(body)
         return require_json_object(viz_document.model_dump(mode="json"), "viz.document")

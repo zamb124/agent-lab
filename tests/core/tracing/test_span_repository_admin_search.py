@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from core.tracing.models import TraceSpanWrite
+from core.tracing.models import Span
 
 
 def _row(
@@ -22,8 +22,8 @@ def _row(
     user_id: str | None = "u1",
     namespace: str = "default",
     event_type: str | None = None,
-) -> TraceSpanWrite:
-    return TraceSpanWrite(
+) -> Span:
+    return Span(
         span_id=span_id,
         trace_id=trace_id,
         parent_span_id=None,
@@ -51,10 +51,9 @@ def _row(
 
 
 @pytest.mark.asyncio
-async def test_admin_search_spans_ilike_company(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_search_spans_ilike_company(di, unique_id: str):
     base = datetime.now(timezone.utc)
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_1",
             trace_id=f"{unique_id}_t1",
@@ -64,7 +63,7 @@ async def test_admin_search_spans_ilike_company(container, unique_id: str):
             company_id="prefix_acme_suffix",
         )
     )
-    rows, _ = await repo.admin_search_spans(
+    rows, _ = await Span.admin_search_spans(
         company_id_query="acme",
         limit=20,
     )
@@ -73,10 +72,9 @@ async def test_admin_search_spans_ilike_company(container, unique_id: str):
 
 
 @pytest.mark.asyncio
-async def test_admin_facet_company_requires_min_len_for_ilike_branch(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_facet_company_requires_min_len_for_ilike_branch(di, unique_id: str):
     base = datetime.now(timezone.utc)
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_f",
             trace_id=f"{unique_id}_tf",
@@ -87,15 +85,14 @@ async def test_admin_facet_company_requires_min_len_for_ilike_branch(container, 
         )
     )
     with pytest.raises(ValueError, match="company_id_query"):
-        await repo.admin_search_spans(company_id_query="z", limit=10)
+        await Span.admin_search_spans(company_id_query="z", limit=10)
 
 
 @pytest.mark.asyncio
-async def test_admin_facet_distinct_company_ids(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_facet_distinct_company_ids(di, unique_id: str):
     base = datetime.now(timezone.utc)
     cid = f"facet_co_{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_fc",
             trace_id=f"{unique_id}_tfc",
@@ -105,16 +102,15 @@ async def test_admin_facet_distinct_company_ids(container, unique_id: str):
             company_id=cid,
         )
     )
-    out = await repo.admin_facet_distinct_company_ids(q=unique_id, limit=20)
+    out = await Span.admin_facet_distinct_company_ids(q=unique_id, limit=20)
     assert cid in out
 
 
 @pytest.mark.asyncio
-async def test_admin_list_distinct_company_ids_in_spans(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_list_distinct_company_ids_in_spans(di, unique_id: str):
     base = datetime.now(timezone.utc)
     cid = f"list_in_spans_{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_lis",
             trace_id=f"{unique_id}_tlis",
@@ -124,16 +120,15 @@ async def test_admin_list_distinct_company_ids_in_spans(container, unique_id: st
             company_id=cid,
         )
     )
-    out = await repo.admin_list_distinct_company_ids_in_spans(max_ids=5000)
+    out = await Span.admin_list_distinct_company_ids_in_spans(max_ids=5000)
     assert cid in out
 
 
 @pytest.mark.asyncio
-async def test_admin_list_distinct_user_ids_in_spans(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_list_distinct_user_ids_in_spans(di, unique_id: str):
     base = datetime.now(timezone.utc)
     uid = f"list_users_{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_uins",
             trace_id=f"{unique_id}_tuins",
@@ -143,18 +138,17 @@ async def test_admin_list_distinct_user_ids_in_spans(container, unique_id: str):
             user_id=uid,
         )
     )
-    out = await repo.admin_list_distinct_user_ids_in_spans(max_ids=5000)
+    out = await Span.admin_list_distinct_user_ids_in_spans(max_ids=5000)
     assert uid in out
 
 
 @pytest.mark.asyncio
-async def test_admin_facet_distinct_user_ids_scoped_by_company(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_facet_distinct_user_ids_scoped_by_company(di, unique_id: str):
     base = datetime.now(timezone.utc)
     co_a = f"scope_a_{unique_id}"
     co_b = f"scope_b_{unique_id}"
     uid = f"user_scope_{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_sa",
             trace_id=f"{unique_id}_tsa",
@@ -165,7 +159,7 @@ async def test_admin_facet_distinct_user_ids_scoped_by_company(container, unique
             user_id=uid,
         )
     )
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_sb",
             trace_id=f"{unique_id}_tsb",
@@ -176,22 +170,21 @@ async def test_admin_facet_distinct_user_ids_scoped_by_company(container, unique
             user_id=uid,
         )
     )
-    out_all = await repo.admin_facet_distinct_user_ids(q=unique_id, limit=20)
+    out_all = await Span.admin_facet_distinct_user_ids(q=unique_id, limit=20)
     assert uid in out_all
-    out_a = await repo.admin_facet_distinct_user_ids(q=unique_id, company_id=co_a, limit=20)
+    out_a = await Span.admin_facet_distinct_user_ids(q=unique_id, company_id=co_a, limit=20)
     assert uid in out_a
-    out_b_only = await repo.admin_facet_distinct_user_ids(
+    out_b_only = await Span.admin_facet_distinct_user_ids(
         q=unique_id, company_id=co_b, namespace="other", limit=20
     )
     assert uid not in out_b_only
 
 
 @pytest.mark.asyncio
-async def test_admin_search_spans_namespace_and_service_ilike(container, unique_id: str):
-    repo = container.span_repository
+async def test_admin_search_spans_namespace_and_service_ilike(di, unique_id: str):
     base = datetime.now(timezone.utc)
     svc = f"my_svc_{unique_id}_tail"
-    await repo.save_span(
+    await Span.insert_once(
         _row(
             span_id=f"{unique_id}_ns",
             trace_id=f"{unique_id}_tns",
@@ -202,12 +195,12 @@ async def test_admin_search_spans_namespace_and_service_ilike(container, unique_
             namespace=f"ns_{unique_id}_x",
         )
     )
-    rows_ns, _ = await repo.admin_search_spans(
+    rows_ns, _ = await Span.admin_search_spans(
         namespace_query=unique_id,
         limit=20,
     )
     assert any(r.span_id == f"{unique_id}_ns" for r in rows_ns)
-    rows_svc, _ = await repo.admin_search_spans(
+    rows_svc, _ = await Span.admin_search_spans(
         service_name_query=unique_id,
         limit=20,
     )

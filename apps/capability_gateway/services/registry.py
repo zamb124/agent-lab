@@ -18,7 +18,6 @@ import httpx
 from a2a.types import Message, Part, Role
 
 from apps.capability_gateway.services.context_service import CapabilityContextService
-from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from apps.capability_gateway.services.crm_capabilities import (
     CRM_CAPABILITY_SPECS,
     crm_capability_definitions,
@@ -87,16 +86,20 @@ from core.capabilities import (
     verify_execution_token,
 )
 from core.capabilities.tokens import assert_capability_allowed
-from core.clients.service_client import ServiceClientError
+from core.clients.service_client import ServiceClient, ServiceClientError
 from core.clients.speech_override import SpeechOverride, SpeechProviderName, SpeechResponseFormat
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
+from core.data_tables.service import DataTableService
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import stored_file_ref
+from core.files.models import FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import ExecutionPrincipal, SystemPrincipal
 from core.files.reader import FileReader, FileReadError
 from core.files.reader.models import ReadFileArgs, ReadLane
 from core.files.registry import default_retention_for_source
-from core.files.s3_client import S3ClientFactory
+from core.files.service import FilesService
 from core.files.writer import ContentMode, FileWriteError, FileWriter
 from core.flow_ui.document import FlowUISuggestedPrompts
 from core.flow_ui.protocol import CONVERSATION_SLOT_ID, FlowUINavigate, FlowUIRender
@@ -542,11 +545,15 @@ class CapabilityRegistry:
     def __init__(
         self,
         *,
-        container: CapabilityGatewayContainerProtocol,
+        service_client: ServiceClient,
+        data_table_service: DataTableService,
+        files_service: FilesService,
         context_service: CapabilityContextService,
         text_transform_service: TextTransformService,
-    ):
-        self._container: CapabilityGatewayContainerProtocol = container
+    ) -> None:
+        self._service_client: ServiceClient = service_client
+        self._data_table_service: DataTableService = data_table_service
+        self._files_service: FilesService = files_service
         self._context_service: CapabilityContextService = context_service
         self._text_transform_service: TextTransformService = text_transform_service
         self._static_definitions: dict[str, CapabilityDefinition] = self._build_static_definitions()
@@ -914,7 +921,7 @@ class CapabilityRegistry:
         last_error: ServiceClientError | None = None
         for attempt, retry_delay in enumerate((*retry_delays, None), start=1):
             try:
-                raw_manifest = await self._container.service_client.get(
+                raw_manifest = await self._service_client.get(
                     "flows",
                     TOOL_RUNTIME_MANIFEST_PATH,
                     timeout=30.0,
@@ -1774,7 +1781,7 @@ class CapabilityRegistry:
             context = await self._context_service.build_context(request.context)
             with self._context_service.activate(context):
                 return await invoke_tables_client(
-                    method, request.kwargs, self._container.data_table_service
+                    method, request.kwargs, self._data_table_service
                 )
 
         return _handler
@@ -1798,7 +1805,7 @@ class CapabilityRegistry:
 
         context = await self._context_service.build_context(request.context)
         writer = FileWriter.bind_for_upload(
-            files_service=self._container.files_service,
+            files_service=self._files_service,
             default_spec=FileCreateSpec(
                 source_kind=FileSourceKind.FLOW_ASSET,
                 source_ref=FileSourceRef(flow_id="runtime"),
@@ -1822,15 +1829,20 @@ class CapabilityRegistry:
     async def _files_get_bytes(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
-        record = await self._container.file_repository.get(file_id)
+        record = await FileRecord.get(file_id)
         if record is None:
             raise ValueError(f"File not found: {file_id}")
 
-        s3_client = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-        try:
-            content = await s3_client.download_bytes(record.s3_key, bucket=record.s3_bucket)
-        finally:
-            await s3_client.close()
+        if record.company_id is None or record.company_id == "":
+            raise ValueError(f"File has no company_id: {file_id}")
+        handle = await FileGate().open_record(
+            record,
+            ExecutionPrincipal(
+                company_id=request.context.company_id,
+                flow_id=request.context.flow_id,
+            ),
+        )
+        content = await handle.read_bytes()
 
         return {
             "content_base64": base64.b64encode(content).decode("ascii"),
@@ -1841,7 +1853,7 @@ class CapabilityRegistry:
     async def _files_get_metadata(self, request: CapabilityCallRequest) -> JsonObject:
         self._reject_positional_args(request)
         file_id = _required_string(request.kwargs.get("file_id"), "file_id")
-        record = await self._container.file_repository.get(file_id)
+        record = await FileRecord.get(file_id)
         if record is None:
             raise ValueError(f"File not found: {file_id}")
         return require_json_object(
@@ -1963,7 +1975,7 @@ class CapabilityRegistry:
             kwargs["content"] = body
         context = await self._context_service.build_context(request.context)
         with self._context_service.activate(context):
-            result = await self._container.service_client.request(
+            result = await self._service_client.request(
                 service,
                 method,
                 path,
@@ -2259,13 +2271,15 @@ class CapabilityRegistry:
         context = await self._context_service.build_context(request.context)
         company = _active_company(context)
         with self._context_service.activate(context):
-            record = await self._container.files_service.get(file_id)
+            record = await self._files_service.get(file_id)
 
-            s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-            try:
-                audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
-            finally:
-                await s3.close()
+            if record.company_id is None or record.company_id == "":
+                raise ValueError(f"File has no company_id: {file_id}")
+            handle = await FileGate().open_record(
+                record,
+                SystemPrincipal(company_id=record.company_id),
+            )
+            audio_bytes = await handle.read_bytes()
 
             result = await transcribe_audio_bytes(
                 company_id=company.company_id,
@@ -2335,7 +2349,7 @@ class CapabilityRegistry:
                 retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
                 post_create=FilePostCreate(is_public=False),
             )
-            record = await self._container.files_service.create(
+            record = await self._files_service.create(
                 spec=spec,
                 data=result.audio_bytes,
                 original_name=original_name,
@@ -2373,7 +2387,7 @@ class CapabilityRegistry:
             "state": request.state,
         }
         with self._context_service.activate(context):
-            raw_response = await self._container.service_client.post(
+            raw_response = await self._service_client.post(
                 "flows",
                 "/flows/api/v1/tool-runtime/call",
                 json=payload,

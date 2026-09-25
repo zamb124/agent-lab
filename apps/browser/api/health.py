@@ -15,7 +15,7 @@ from fastapi import APIRouter, Response
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict
 
-from apps.browser.dependencies import ContainerDep
+from apps.browser.di import Di
 from core.logging import get_logger
 
 router = APIRouter(prefix="/health", tags=["browser-health"])
@@ -31,8 +31,8 @@ class CdpHealthResponse(BaseModel):
 
 
 @router.get("/cdp", response_model=CdpHealthResponse)
-async def health_cdp(container: ContainerDep, response: Response) -> CdpHealthResponse:
-    runtime = container.browser_runtime
+async def health_cdp(di: Di, response: Response) -> CdpHealthResponse:
+    runtime = di.browser_runtime
     endpoint_key = runtime.settings.default_endpoint_key
     cdp_url = runtime.settings.cdp_urls_by_endpoint[endpoint_key]
     try:

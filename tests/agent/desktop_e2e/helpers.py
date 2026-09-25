@@ -196,9 +196,10 @@ async def ensure_humanitec_paired_and_llm_ready(
     page: Page,
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
+    di,
 ) -> None:
     # Device JWT → company namespace only; GET /llm/v1/models 503 без public flow lara.
-    await ensure_company_public_flows(company_id_from_auth_token(auth_token))
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
     composer = page.locator("[data-humanitec-chat-composer]")
     if await composer.count() > 0:
         credentials = desktop.read_credentials()

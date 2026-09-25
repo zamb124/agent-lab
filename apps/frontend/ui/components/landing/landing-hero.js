@@ -9,8 +9,8 @@ import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import {
     fileListToPublicSearchFiles,
     setPendingPublicSearchFiles,
-} from '../../utils/public-search-files.js';
-import { markPublicSearchLandingTransition } from '../../utils/public-search-transition.js';
+} from '../../_helpers/public-search-files.js';
+import { markPublicSearchLandingTransition } from '../../_helpers/public-search-transition.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '@platform/lib/components/platform-icon.js';

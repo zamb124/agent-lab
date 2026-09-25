@@ -11,6 +11,7 @@
     }
   },
   "client": {
+    "queue_max_size": 16777216,
     "allowed_origins": ["*"],
     "token": {
       "hmac_secret_key": "local-dev-override-via-env",
@@ -47,7 +48,7 @@
   "rpc": {
     "proxy": {
       "endpoint": "http://host.docker.internal:8025/realtime/api/v1/internal/centrifugo/inbound",
-      "timeout": "15s",
+      "timeout": "60s",
       "include_connection_meta": true
     },
     "without_namespace": {

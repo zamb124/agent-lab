@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, cast
+from typing import Annotated, Literal
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
@@ -20,7 +20,7 @@ from core.flow_ui.document import (
     FlowUIPageId,
 )
 from core.models.base import StrictBaseModel
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, require_serializer_json_object
 
 JSON_MEDIA_TYPE = "application/json"
 JSON_PATCH_MEDIA_TYPE = "application/json-patch+json"
@@ -91,7 +91,7 @@ class JsonPatchOperation(StrictBaseModel):
 
     @model_serializer(mode="wrap")
     def _without_removed_value(self, handler: SerializerFunctionWrapHandler) -> JsonObject:
-        payload = require_json_object(cast(object, handler(self)), "JsonPatchOperation")
+        payload = require_serializer_json_object(handler, self, "JsonPatchOperation")
         if self.op == "remove" and "value" in payload:
             del payload["value"]
         return payload

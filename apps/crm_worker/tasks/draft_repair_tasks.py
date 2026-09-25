@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import CRMContainer, get_crm_container
-from apps.crm.db.repositories.task_repository import CRM_TASK_TERMINAL_STATUSES
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.task import CRM_TASK_TERMINAL_STATUSES, CRMTask
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_REPAIR_NOTE_ANALYSIS_DRAFT
 from core.logging import get_logger
@@ -25,9 +26,9 @@ async def _broadcast_draft_repair_phase(
     namespace: str,
     note_id: str,
     phase: Literal["started", "failed", "complete"],
-    container: CRMContainer,
+    di: Di,
 ) -> None:
-    entity = await container.entity_repository.get(note_id)
+    entity = await CRMEntity.get(note_id)
     if entity is None:
         logger.warning(
             "draft_repair_broadcast_note_missing",
@@ -43,7 +44,7 @@ async def _broadcast_draft_repair_phase(
         note_date_iso=note_date_iso,
         action="updated",
         note=entity,
-                authz=container.authz_service,
+        authz=di.authz_service,
         skip_notification_center=True,
         draft_repair={"phase": phase},
     )
@@ -51,7 +52,6 @@ async def _broadcast_draft_repair_phase(
 
 async def _journal_failed(
     *,
-    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
@@ -59,9 +59,8 @@ async def _journal_failed(
 ) -> None:
     if not task_id:
         return
-    repo = container.task_repository
     now = datetime.now(timezone.utc)
-    await repo.patch_progress(
+    await CRMTask.patch_progress(
         task_id,
         company_id,
         status="failed",
@@ -72,7 +71,6 @@ async def _journal_failed(
     )
     await publish_crm_task_snapshot_for_user(
         user_id=snapshot_user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -80,16 +78,14 @@ async def _journal_failed(
 
 async def _journal_completed(
     *,
-    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
 ) -> None:
     if not task_id:
         return
-    repo = container.task_repository
     now = datetime.now(timezone.utc)
-    await repo.patch_progress(
+    await CRMTask.patch_progress(
         task_id,
         company_id,
         status="completed",
@@ -99,7 +95,6 @@ async def _journal_completed(
     )
     await publish_crm_task_snapshot_for_user(
         user_id=snapshot_user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -114,6 +109,8 @@ async def repair_note_analysis_draft_task(
     user_id: str,
     interface_language: str,
     task_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     await set_crm_context(
         company_id,
@@ -122,12 +119,10 @@ async def repair_note_analysis_draft_task(
         user_id,
         interface_language=interface_language,
     )
-    container = get_crm_container()
-    repo = container.task_repository
     snapshot_user_id = user_id
 
     if task_id:
-        row = await repo.get_for_worker(task_id, company_id)
+        row = await CRMTask.by_company_and_task_id(company_id, task_id)
         if row is None:
             raise ValueError(f"CRM task not found: {task_id}")
         if row.status in CRM_TASK_TERMINAL_STATUSES:
@@ -143,7 +138,7 @@ async def repair_note_analysis_draft_task(
                 "note_id": note_id,
             }
         snapshot_user_id = row.user_id
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="running",
@@ -153,16 +148,14 @@ async def repair_note_analysis_draft_task(
         )
         await publish_crm_task_snapshot_for_user(
             user_id=snapshot_user_id,
-            repo=repo,
             task_id=task_id,
             company_id=company_id,
         )
 
-    entity = await container.entity_repository.get(note_id)
+    entity = await CRMEntity.get(note_id)
     if entity is None:
         msg = f"Заметка не найдена: {note_id}"
         await _journal_failed(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -172,7 +165,6 @@ async def repair_note_analysis_draft_task(
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         msg = "Ожидалась заметка (entity_type=note)"
         await _journal_failed(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -182,7 +174,6 @@ async def repair_note_analysis_draft_task(
     if entity.company_id != company_id:
         msg = "Заметка принадлежит другой компании"
         await _journal_failed(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -191,9 +182,8 @@ async def repair_note_analysis_draft_task(
         raise ValueError(msg)
 
     try:
-        updated = await container.entity_service.repair_analysis_draft_via_flow(note_id)
+        updated = await di.entity_service.repair_analysis_draft_via_flow(note_id)
         await _journal_completed(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -203,7 +193,7 @@ async def repair_note_analysis_draft_task(
             namespace=namespace,
             note_id=note_id,
             phase="complete",
-            container=container,
+            di=di,
         )
         return {"status": "complete", "note_id": note_id, "draft_version": updated.draft_version}
     except Exception as exc:
@@ -211,7 +201,6 @@ async def repair_note_analysis_draft_task(
         if not msg:
             msg = type(exc).__name__
         await _journal_failed(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -222,7 +211,7 @@ async def repair_note_analysis_draft_task(
             namespace=namespace,
             note_id=note_id,
             phase="failed",
-            container=container,
+            di=di,
         )
-        await container.entity_service.record_note_analysis_failure(note_id, msg)
+        await di.entity_service.record_note_analysis_failure(note_id, msg)
         raise

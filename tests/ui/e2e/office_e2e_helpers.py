@@ -9,6 +9,7 @@ import httpx
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page, expect
 
+from core.di.platform import PlatformDi
 from tests.office.access_helpers import (
     create_private_catalog,
     create_public_catalog,
@@ -85,11 +86,12 @@ async def office_e2e_open_with_namespace(
     page: Page,
     unique_id: str,
     *,
+    di: PlatformDi,
     suffix: str = "ui",
     company_id: str | None = None,
 ) -> str:
     resolved_company_id = company_id if company_id is not None else ui_e2e_company_id()
-    namespace = await sync_e2e_seed_namespace(
+    namespace = await sync_e2e_seed_namespace(di,
         unique_id, suffix=suffix, company_id=resolved_company_id
     )
     await sync_e2e_activate_namespace_for_next_load(

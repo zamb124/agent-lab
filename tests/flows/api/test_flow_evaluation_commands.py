@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_case_create,
     op_flows_evaluation_cases_list,
@@ -17,7 +18,6 @@ from apps.flows.realtime.evaluation_operations import (
     op_flows_evaluation_suite_item,
     op_flows_evaluation_suites_list,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.evaluation_lab import (
     EvaluationBuiltinEvaluatorCatalog,
     EvaluationCase,
@@ -96,7 +96,7 @@ def _case_payload(*, name: str) -> dict[str, object]:
 
 async def test_evaluation_catalog_and_suite_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -153,25 +153,25 @@ async def test_evaluation_catalog_and_suite_rest_match_op(
         catalog = await op_flows_evaluation_evaluator_catalog(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
         assert catalog.model_dump(mode="json") == catalog_http.json()
         listed = await op_flows_evaluation_suites_list(
             EvaluationFlowIdPayload(flow_id=flow_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert listed.model_dump(mode="json") == list_http.json()
         item = await op_flows_evaluation_suite_item(
             EvaluationSuiteIdPayload(suite_id=suite.suite_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert item.model_dump(mode="json") == suite_http.json()
         cases = await op_flows_evaluation_cases_list(
             EvaluationSuiteIdPayload(suite_id=suite.suite_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert cases.model_dump(mode="json") == cases_http.json()
         _ = ListResponse[EvaluationSuite].model_validate(list_http.json())
@@ -187,7 +187,7 @@ async def test_evaluation_catalog_and_suite_rest_match_op(
             _ = await op_flows_evaluation_suite_item(
                 EvaluationSuiteIdPayload(suite_id=f"missing-{unique_id}"),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "not_found"
 
@@ -196,7 +196,7 @@ async def test_evaluation_catalog_and_suite_rest_match_op(
 
 async def test_evaluation_suite_create_and_archive_via_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -213,7 +213,7 @@ async def test_evaluation_suite_create_and_archive_via_op(
                 tags=[],
             ),
             user=user,
-            container=container,
+            di=di,
         )
         case = await op_flows_evaluation_case_create(
             EvaluationCaseCreateRequest(
@@ -229,13 +229,13 @@ async def test_evaluation_suite_create_and_archive_via_op(
                 ],
             ),
             user=user,
-            container=container,
+            di=di,
         )
         assert case.suite_id == created.suite_id
         archived = await op_flows_evaluation_suite_archive(
             EvaluationSuiteIdPayload(suite_id=created.suite_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert archived.archived_at is not None
 

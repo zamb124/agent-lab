@@ -18,20 +18,16 @@ from core.mail.models import (
     CompanyMailConnection,
     MailboxBinding,
     MailboxSecret,
+    MailboxSyncCursor,
     MailConnectionScope,
     MailConnectionStatus,
     MailFetchQuery,
     MailProvider,
     PersonalMailboxConnectPayload,
+    StoredMailboxFolder,
+    StoredMailMessage,
 )
 from core.mail.ports import MailServerPort
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxFolderRepository,
-    MailboxSyncCursorRepository,
-    MailMessageRepository,
-)
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -123,22 +119,15 @@ def mail_personal_port(mail_personal_cfg: MailLivePersonalConfig) -> MailServerP
 @pytest.fixture()
 def mail_personal_service(
     mail_personal_live_settings: MailConfig,
-    container,
+    di,
 ) -> MailService:
     settings = get_settings()
     shared_url = settings.database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для personal live tests")
     return MailService(
-        connection_repository=CompanyMailConnectionRepository(db_url=shared_url),
-        binding_repository=MailboxBindingRepository(db_url=shared_url),
-        sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
-        folder_repository=MailboxFolderRepository(db_url=shared_url),
-        message_repository=MailMessageRepository(db_url=shared_url),
         authz=build_authz_service(),
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        namespace_service=di.namespace_service,
         mail_config=mail_personal_live_settings,
         port_override=None,
     )
@@ -151,13 +140,13 @@ def mail_subject_marker(unique_id: str) -> str:
 
 @pytest.fixture()
 async def mail_personal_company_ctx(
-    container,
+    di,
     unique_id: str,
 ) -> AsyncIterator[tuple[str, str, Company, User]]:
     company_id = f"mailpers_live_{unique_id}"[:64]
     user_id = f"upers_{unique_id}"[:64]
     company, user = await seed_mail_company_member(
-        container,
+        di,
         company_id=company_id,
         user_id=user_id,
         unique_id=unique_id,
@@ -170,21 +159,18 @@ async def mail_personal_company_ctx(
 
 async def _wipe_local_binding_state(
     *,
-    message_repository: MailMessageRepository,
-    sync_cursor_repository: MailboxSyncCursorRepository,
-    folder_repository: MailboxFolderRepository,
     mailbox_binding_id: str,
 ) -> None:
-    folders = await folder_repository.list_for_binding(mailbox_binding_id)
+    folders = await StoredMailboxFolder.list_for_binding(mailbox_binding_id)
     folder_names = {item.folder_name for item in folders} | set(_SWEEP_FOLDERS)
     for folder_name in folder_names:
-        _ = await message_repository.delete_folder(
+        _ = await StoredMailMessage.delete_folder(
             mailbox_binding_id, folder=folder_name
         )
-        _ = await sync_cursor_repository.delete(
+        _ = await MailboxSyncCursor.delete_by_mailbox_binding(
             mailbox_binding_id, folder=folder_name
         )
-    _ = await folder_repository.replace_for_binding(
+    _ = await StoredMailboxFolder.replace_for_binding(
         mailbox_binding_id,
         company_id="wipe",
         folders=[],
@@ -285,22 +271,12 @@ async def mail_personal_bindings(
         ),
         company_id=company_id,
     )
-    settings = get_settings()
-    shared_url = settings.database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен")
-    message_repository = MailMessageRepository(db_url=shared_url)
-    sync_cursor_repository = MailboxSyncCursorRepository(db_url=shared_url)
-    folder_repository = MailboxFolderRepository(db_url=shared_url)
     try:
         yield company_id, binding_a, binding_b
     finally:
         for binding in (binding_a, binding_b):
             with suppress(MailError, ValueError):
                 await _wipe_local_binding_state(
-                    message_repository=message_repository,
-                    sync_cursor_repository=sync_cursor_repository,
-                    folder_repository=folder_repository,
                     mailbox_binding_id=binding.mailbox_binding_id,
                 )
             with suppress(MailError, ValueError):

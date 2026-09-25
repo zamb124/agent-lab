@@ -1,0 +1,275 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/viktor-shved/PycharmProjects/agent-lab
+configfile: pytest.ini
+plugins: hypothesis-6.153.4, cov-7.1.0, xdist-3.8.0, timeout-2.4.0, asyncio-1.4.0, schemathesis-4.20.1, rerunfailures-16.3, hydra-core-1.3.2, anyio-4.13.0
+timeout: 5.0s
+timeout method: thread
+timeout func_only: True
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 6/6 workers
+6 workers [393 items]
+
+............................................s........................................................................................................................................F......F....F.......F................s.................................................s...................................F...............................................sssss....s...s....................s......{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-24T19:03:10.361301Z", "message": "files.cairosvg.libcairo.svg"}
+
+=================================== FAILURES ===================================
+_______________ test_tool_call_finished_emitted_for_builtin_tool _______________
+[gw5] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/observability/test_flows_runtime_metrics.py:205: in test_tool_call_finished_emitted_for_builtin_tool
+    flow = await di.flow_factory.get_flow(flow_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: FlowFactory.get_flow() missing 1 required keyword-only argument: 'tool_registry'
+----------------------------- Captured stdout call -----------------------------
+{"flow_id": "tool-metrics-90311a69", "version": "20260924190320333246", "test_scope": "test_85c32de7badf", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "apps.flows.src.models.flow_config", "level": "INFO", "timestamp": "2026-09-24T19:03:20.382164Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "flows.repo.saved"}
+{"model": "mock-gpt-4", "provider": null, "testing": true, "test_scope": "test_85c32de7badf", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.clients.llm.runtime", "level": "WARNING", "timestamp": "2026-09-24T19:03:20.382353Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "llm.mock_client_selected"}
+------------------------------ Captured log call -------------------------------
+INFO     apps.flows.src.models.flow_config:flow_config.py:695 {'flow_id': 'tool-metrics-90311a69', 'version': '20260924190320333246', 'test_scope': 'test_85c32de7badf', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'apps.flows.src.models.flow_config', 'level': 'INFO', 'timestamp': '2026-09-24T19:03:20.382164Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'flows.repo.saved'}
+WARNING  core.clients.llm.runtime:runtime.py:332 {'model': 'mock-gpt-4', 'provider': None, 'testing': True, 'test_scope': 'test_85c32de7badf', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'core.clients.llm.runtime', 'level': 'WARNING', 'timestamp': '2026-09-24T19:03:20.382353Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'llm.mock_client_selected'}
+_____________ test_billing_settlement_lag_emitted_for_pending_span _____________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/observability/test_billing_settlement_lag.py:82: in test_billing_settlement_lag_emitted_for_pending_span
+    _ = await span_billing_settlement_tick(company_id=cid)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/taskiq/decor.py:98: in __call__
+    return self.original_func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: span_billing_settlement_tick__taskiq_original() missing 1 required keyword-only argument: 'di'
+_______________ test_flow_react_completed_emitted_after_llm_node _______________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/observability/test_flows_runtime_metrics.py:154: in test_flow_react_completed_emitted_after_llm_node
+    flow = await di.flow_factory.get_flow(flow_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: FlowFactory.get_flow() missing 1 required keyword-only argument: 'tool_registry'
+----------------------------- Captured stdout call -----------------------------
+{"flow_id": "react-metrics-6172d8c4", "version": "20260924190320703957", "test_scope": "test_e8b8373a1e59", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "apps.flows.src.models.flow_config", "level": "INFO", "timestamp": "2026-09-24T19:03:20.753030Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "flows.repo.saved"}
+{"model": "mock-gpt-4", "provider": null, "testing": true, "test_scope": "test_e8b8373a1e59", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.clients.llm.runtime", "level": "WARNING", "timestamp": "2026-09-24T19:03:20.753221Z", "user_id": "test_user", "company_id": "system", "session_id": "test_session", "message": "llm.mock_client_selected"}
+------------------------------ Captured log call -------------------------------
+INFO     apps.flows.src.models.flow_config:flow_config.py:695 {'flow_id': 'react-metrics-6172d8c4', 'version': '20260924190320703957', 'test_scope': 'test_e8b8373a1e59', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'apps.flows.src.models.flow_config', 'level': 'INFO', 'timestamp': '2026-09-24T19:03:20.753030Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'flows.repo.saved'}
+WARNING  core.clients.llm.runtime:runtime.py:332 {'model': 'mock-gpt-4', 'provider': None, 'testing': True, 'test_scope': 'test_e8b8373a1e59', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'core.clients.llm.runtime', 'level': 'WARNING', 'timestamp': '2026-09-24T19:03:20.753221Z', 'user_id': 'test_user', 'company_id': 'system', 'session_id': 'test_session', 'message': 'llm.mock_client_selected'}
+__________ test_flow_terminal_via_process_flow_task_in_worker_context __________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/observability/test_taskiq_flow_metrics.py:123: in test_flow_terminal_via_process_flow_task_in_worker_context
+    _ = await process_flow_task(
+.venv/lib/python3.14/site-packages/taskiq/decor.py:98: in __call__
+    return self.original_func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: process_flow_task__taskiq_original() missing 1 required keyword-only argument: 'di'
+----------------------------- Captured stdout call -----------------------------
+{"flow_id": "flow-worker-terminal-a11c5bd8", "version": "20260924190320808840", "test_scope": "test_a23b87e64989", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "apps.flows.src.models.flow_config", "level": "INFO", "timestamp": "2026-09-24T19:03:20.811541Z", "user_id": "test_user_system_f16bc9f3", "company_id": "system", "company_subdomain": "system", "session_id": "test_session", "message": "flows.repo.saved"}
+{"task.id": "task-a11c5bd8", "flow.id": "flow-worker-terminal-a11c5bd8", "flow_task_enqueued_at": 1790276600.812015, "test_scope": "test_a23b87e64989", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "apps.flows.src.observability.flow_timing", "level": "INFO", "timestamp": "2026-09-24T19:03:20.812593Z", "user_id": "test_user_system_f16bc9f3", "company_id": "system", "company_subdomain": "system", "session_id": "test_session", "message": "flow_task_enqueued"}
+{"model": "mock-gpt-4", "provider": null, "testing": true, "test_scope": "test_a23b87e64989", "service.name": "pytest-observability", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.clients.llm.runtime", "level": "WARNING", "timestamp": "2026-09-24T19:03:20.812690Z", "user_id": "test_user_system_f16bc9f3", "company_id": "system", "company_subdomain": "system", "session_id": "test_session", "message": "llm.mock_client_selected"}
+------------------------------ Captured log call -------------------------------
+INFO     apps.flows.src.models.flow_config:flow_config.py:695 {'flow_id': 'flow-worker-terminal-a11c5bd8', 'version': '20260924190320808840', 'test_scope': 'test_a23b87e64989', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'apps.flows.src.models.flow_config', 'level': 'INFO', 'timestamp': '2026-09-24T19:03:20.811541Z', 'user_id': 'test_user_system_f16bc9f3', 'company_id': 'system', 'company_subdomain': 'system', 'session_id': 'test_session', 'message': 'flows.repo.saved'}
+INFO     apps.flows.src.observability.flow_timing:flow_timing.py:43 {'task.id': 'task-a11c5bd8', 'flow.id': 'flow-worker-terminal-a11c5bd8', 'flow_task_enqueued_at': 1790276600.812015, 'test_scope': 'test_a23b87e64989', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'apps.flows.src.observability.flow_timing', 'level': 'INFO', 'timestamp': '2026-09-24T19:03:20.812593Z', 'user_id': 'test_user_system_f16bc9f3', 'company_id': 'system', 'company_subdomain': 'system', 'session_id': 'test_session', 'message': 'flow_task_enqueued'}
+WARNING  core.clients.llm.runtime:runtime.py:332 {'model': 'mock-gpt-4', 'provider': None, 'testing': True, 'test_scope': 'test_a23b87e64989', 'service.name': 'pytest-observability', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'core.clients.llm.runtime', 'level': 'WARNING', 'timestamp': '2026-09-24T19:03:20.812690Z', 'user_id': 'test_user_system_f16bc9f3', 'company_id': 'system', 'company_subdomain': 'system', 'session_id': 'test_session', 'message': 'llm.mock_client_selected'}
+_____________ test_check_tool_contracts_exits_zero_on_current_tree _____________
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/scripts/test_check_tool_contracts.py:22: in test_check_tool_contracts_exits_zero_on_current_tree
+    assert completed.returncode == 0, completed.stderr or completed.stdout
+E   AssertionError: check_tool_contracts: WARN (163 missing Field descriptions)
+E       create_viz: property 'title' missing description
+E       update_viz: property 'file_id' missing description
+E       update_viz: property 'title' missing description
+E       update_viz: property 'source' missing description
+E       update_viz: property 'option' missing description
+E       update_viz: property 'spec' missing description
+E       export_viz: property 'file_id' missing description
+E       viz_open_file: property 'file_id' missing description
+E       viz_open_file: property 'file_name' missing description
+E       tables_create: property 'name' missing description
+E       tables_create: property 'columns' missing description
+E       tables_create: property 'scope' missing description
+E       tables_create: property 'table_name' missing description
+E       tables_create: property 'original_name' missing description
+E       tables_list: property 'file_id' missing description
+E       tables_schema: property 'file_id' missing description
+E       tables_schema: property 'table_name' missing description
+E       tables_schema: property 'columns' missing description
+E       tables_query: property 'file_id' missing description
+E       tables_query: property 'sql' missing description
+E       tables_insert: property 'file_id' missing description
+E       tables_insert: property 'table_name' missing description
+E       tables_insert: property 'rows' missing description
+E       tables_update: property 'file_id' missing description
+E       tables_update: property 'table_name' missing description
+E       tables_update: property 'row_id' missing description
+E       tables_update: property 'values' missing description
+E       tables_delete_rows: property 'file_id' missing description
+E       tables_delete_rows: property 'table_name' missing description
+E       tables_delete_rows: property 'row_ids' missing description
+E       db_schema: property 'datasource_id' missing description
+E       db_query: property 'sql' missing description
+E       db_query: property 'params' missing description
+E       db_query: property 'datasource_id' missing description
+E       db_execute: property 'sql' missing description
+E       db_execute: property 'params' missing description
+E       db_execute: property 'datasource_id' missing description
+E       sandbox_codegen: property 'max_iterations' missing description
+E       sandbox_codegen: property 'max_doc_chars' missing description
+E       sheets_add_sheet: property 'spreadsheet_id' missing description
+E       sheets_add_sheet: property 'title' missing description
+E       sheets_append_rows: property 'spreadsheet_id' missing description
+E       sheets_append_rows: property 'values' missing description
+E       sheets_append_rows: property 'value_input_option' missing description
+E       sheets_batch_clear_values: property 'spreadsheet_id' missing description
+E       sheets_batch_clear_values: property 'ranges' missing description
+E       sheets_batch_get_values: property 'spreadsheet_id' missing description
+E       sheets_batch_get_values: property 'ranges' missing description
+E       sheets_batch_get_values: property 'value_render_option' missing description
+E       sheets_batch_update_values: property 'spreadsheet_id' missing description
+E       sheets_batch_update_values: property 'data' missing description
+E       sheets_batch_update_values: property 'value_input_option' missing description
+E       sheets_clear_values: property 'spreadsheet_id' missing description
+E       sheets_clear_values: property 'range' missing description
+E       sheets_delete_sheet: property 'spreadsheet_id' missing description
+E       sheets_delete_sheet: property 'sheet_id' missing description
+E       sheets_get_values: property 'spreadsheet_id' missing description
+E       sheets_rename_sheet: property 'spreadsheet_id' missing description
+E       sheets_rename_sheet: property 'sheet_id' missing description
+E       sheets_rename_sheet: property 'title' missing description
+E       sheets_share: property 'spreadsheet_id' missing description
+E       sheets_update_values: property 'spreadsheet_id' missing description
+E       sheets_update_values: property 'range' missing description
+E       pravo_document_rag_search: property 'limit' missing description
+E       rag_search: property 'limit' missing description
+E       index_search: property 'query' missing description
+E       index_search: property 'search_index_ids' missing description
+E       index_search: property 'limit' missing description
+E       runet_search: property 'query' missing description
+E       runet_search: property 'limit' missing description
+E       web_search: property 'query' missing description
+E       web_search: property 'limit' missing description
+E       web_search: property 'providers' missing description
+E       web_search: property 'provider_strategy' missing description
+E       web_search: property 'language' missing description
+E       web_search: property 'region' missing description
+E       web_search: property 'mode' missing description
+E       read_file: property 'page_start' missing description
+E       read_file: property 'page_summarizations' missing description
+E       read_file: property 'summarization_prompt' missing description
+E       read_file: property 'summarization_model' missing description
+E       read_file: property 'vision_prompt' missing description
+E       read_file: property 'vision_model' missing description
+E       read_file: property 'compression' missing description
+E       read_file: property 'transcription_company_id' missing description
+E       read_file: property 'forced_lane' missing description
+E       read_file: property 'budget' missing description
+E       wiki_update_properties: property 'title' missing description
+E       wiki_update_properties: property 'icon' missing description
+E       wiki_update_properties: property 'is_published' missing description
+E       wiki_update_properties: property 'is_template' missing description
+E       wiki_update_properties: property 'is_full_width' missing description
+E       wiki_move_page: property 'wiki_page_id' missing description
+E       wiki_move_page_namespace: property 'wiki_page_id' missing description
+E       wiki_list_revisions: property 'wiki_page_id' missing description
+E       wiki_list_revisions: property 'limit' missing description
+E       wiki_create_comment: property 'wiki_page_id' missing description
+E       wiki_create_comment: property 'body_markdown' missing description
+E       wiki_resolve_comment: property 'wiki_comment_id' missing description
+E       wiki_resolve_comment: property 'resolved' missing description
+E       wiki_delete_comment: property 'wiki_comment_id' missing description
+E       wiki_set_company_visible: property 'wiki_page_id' missing description
+E       wiki_set_member: property 'wiki_page_id' missing description
+E       wiki_set_member: property 'relation' missing description
+E       wiki_remove_member: property 'wiki_page_id' missing description
+E       wiki_remove_member: property 'user_id' missing description
+E       wiki_rotate_public_link: property 'wiki_page_id' missing description
+E       wiki_rotate_public_link: property 'permission' missing description
+E       wiki_search: property 'query' missing description
+E       wiki_search: property 'mode' missing description
+E       wiki_search: property 'published_only' missing description
+E       wiki_search: property 'updated_after_days' missing description
+E       wiki_search: property 'editor_user_id' missing description
+E       wiki_search: property 'limit' missing description
+E       wiki_list_backlinks: property 'limit' missing description
+E       browser_duckduckgo_links_batch: property 'server_id' missing description
+E       browser_duckduckgo_links_batch: property 'per_query_limit' missing description
+E       browser_page_markdown: property 'server_id' missing description
+E       browser_page_markdown: property 'navigation_timeout_ms' missing description
+E       browser_page_markdown: property 'ingest_source' missing description
+E       browser_page_markdown: property 'max_markdown_chars' missing description
+E       browser_page_snapshot: property 'url' missing description
+E       browser_page_snapshot: property 'server_id' missing description
+E       browser_page_snapshot: property 'navigation_timeout_ms' missing description
+E       browser_page_snapshot: property 'ingest_source' missing description
+E       browser_page_snapshot: property 'max_markdown_chars' missing description
+E       stock_warehouse_pulse: property 'warehouse_id' missing description
+E       stock_quants_list: property 'location_id' missing description
+E       stock_quants_list: property 'product_id' missing description
+E       stock_quants_list: property 'limit' missing description
+E       stock_quants_list: property 'offset' missing description
+E       stock_products_list: property 'limit' missing description
+E       stock_products_list: property 'offset' missing description
+E       stock_products_create: property 'name' missing description
+E       stock_products_create: property 'sku' missing description
+E       stock_products_create: property 'uom_id' missing description
+E       stock_products_create: property 'standard_price' missing description
+E       stock_products_create: property 'category' missing description
+E       stock_products_create: property 'barcode' missing description
+E       stock_locations_list: property 'warehouse_id' missing description
+E       stock_transfers_list: property 'warehouse_id' missing description
+E       stock_transfers_list: property 'limit' missing description
+E       stock_transfers_list: property 'offset' missing description
+E       stock_transfers_create: property 'warehouse_id' missing description
+E       stock_transfers_create: property 'operation_type_id' missing description
+E       stock_transfers_create: property 'moves' missing description
+E       stock_transfers_create: property 'partner_entity_id' missing description
+E       stock_transfers_create: property 'owner_entity_id' missing description
+E       stock_transfers_create: property 'origin_document_type' missing description
+E       stock_transfers_create: property 'origin_document_id' missing description
+E       stock_transfers_create: property 'barcode' missing description
+E       stock_transfers_confirm: property 'transfer_id' missing description
+E       stock_transfers_assign: property 'transfer_id' missing description
+E       stock_transfers_validate: property 'transfer_id' missing description
+E       stock_transfers_cancel: property 'transfer_id' missing description
+E       stock_barcode_resolve: property 'barcode' missing description
+E       stock_move_apply_decision: property 'move_id' missing description
+E       stock_valuation_product_value: property 'product_id' missing description
+E       stock_valuation_product_value: property 'warehouse_id' missing description
+E       stock_valuation_layers_list: property 'product_id' missing description
+E       stock_valuation_layers_list: property 'warehouse_id' missing description
+E       stock_valuation_layers_list: property 'limit' missing description
+E       stock_valuation_layers_list: property 'offset' missing description
+E     check_tool_contracts: FAIL (15 issue(s))
+E       stock_warehouse_pulse: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_quants_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_products_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_products_create: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_locations_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_create: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_confirm: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_assign: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_validate: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_transfers_cancel: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_barcode_resolve: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_move_apply_decision: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_valuation_product_value: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E       stock_valuation_layers_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3', '/Users/viktor-shved/Pycharm...ayers_list: parameters root must set additionalProperties=false (use Pydantic parameters_model with extra='forbid')\n").returncode
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/_pytest/config/__init__.py:858: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; tests.fixtures.service_processes
+    self.import_plugin(import_spec)
+
+tests/e2e/voice/test_voice_chat.py::test_voice_chat_e2e_speak_roundtrip
+tests/e2e/voice/test_voice_chat.py::test_voice_chat_e2e_binary_pcm_upload_smoke
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/starlette/testclient.py:661: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    super().request("GET", url, **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/observability/test_flows_runtime_metrics.py::test_tool_call_finished_emitted_for_builtin_tool
+FAILED tests/observability/test_billing_settlement_lag.py::test_billing_settlement_lag_emitted_for_pending_span
+FAILED tests/observability/test_flows_runtime_metrics.py::test_flow_react_completed_emitted_after_llm_node
+FAILED tests/observability/test_taskiq_flow_metrics.py::test_flow_terminal_via_process_flow_task_in_worker_context
+FAILED tests/scripts/test_check_tool_contracts.py::test_check_tool_contracts_exits_zero_on_current_tree
+============ 5 failed, 377 passed, 11 skipped, 9 warnings in 28.12s ============

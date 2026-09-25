@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 
-from apps.rag.container import RAGContainer
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.context import get_context
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
+from core.namespace import NamespaceService
 from core.types import JsonObject, JsonValue
 
 _MAX_METADATA_JSON_BYTES = 32 * 1024
@@ -16,18 +17,23 @@ _MAX_METADATA_DEPTH = 12
 _MAX_INGEST_TEXT_CHARS = 512_000
 
 
-async def require_registered_rag_namespace(namespace_id: str, container: RAGContainer) -> None:
+async def require_registered_rag_namespace(
+    namespace_id: str,
+    *,
+    authz_service: AuthzService,
+    namespace_service: NamespaceService,
+) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         raise PlatformAccessDeniedError("Company is not selected", error_code='forbidden')
     company_id = context.active_company.company_id
     try:
-        await container.authz_service.require_can_view(
+        await authz_service.require_can_view(
             AuthzObject.platform_namespace(company_id, namespace_id)
         )
     except AuthzDenied as exc:
         raise PlatformAccessDeniedError("Forbidden", error_code='forbidden') from exc
-    ns = await container.namespace_repository.get(namespace_id)
+    ns = await namespace_service.get(namespace_id)
     if ns is None:
         raise PlatformNotFoundError(f"Namespace '{namespace_id}' not found", error_code='not_found')
 

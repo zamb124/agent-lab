@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
@@ -70,7 +70,7 @@ def _events_text(events: list[dict[str, object]]) -> str:
 @pytest.mark.asyncio
 async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
     client,
-    container: FlowContainer,
+    di: FlowsDi,
     crm_service,
     crm_client,
     auth_headers_system: dict[str, str],
@@ -112,14 +112,13 @@ async def test_lara_a2a_stream_loads_skill_and_runs_crm_tool(
         )
     )
     try:
-        loaded = await ensure_lara_flow(container)
+        loaded = await ensure_lara_flow(di)
         seeded = await seed_platform_assistant_skills(
-            container.agent_skill_service,
-            container.files_service,
+            di.files_service,
             "system",
         )
         assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
-        flow = await container.flow_factory.get_flow("lara", branch_id="crm")
+        flow = await di.flow_factory.get_flow("lara", branch_id="crm", tool_registry=di.tool_registry)
         assert flow is not None
         main_node = flow.nodes["main"]
         assert isinstance(main_node, LlmNode)

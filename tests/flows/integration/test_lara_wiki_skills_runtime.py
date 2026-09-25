@@ -11,8 +11,7 @@ from contextlib import contextmanager
 import pytest
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
@@ -116,31 +115,30 @@ def _lara_state(*, unique_id: str, user_id: str, suffix: str = "") -> ExecutionS
     )
 
 
-async def _seed_lara_skills(container: FlowContainer) -> None:
+async def _seed_lara_skills(di: FlowsDi) -> None:
     seeded = await seed_platform_assistant_skills(
-        container.agent_skill_service,
-        container.files_service,
+        di.files_service,
         "system",
     )
     assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
-async def _require_lara(container: FlowContainer) -> Flow:
-    _ = await ensure_lara_flow(container)
-    flow = await container.flow_factory.get_flow("lara", branch_id=_BRANCH)
+async def _require_lara(di: FlowsDi) -> Flow:
+    _ = await ensure_lara_flow(di)
+    flow = await di.flow_factory.get_flow("lara", branch_id=_BRANCH, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
-async def _run_lara(container: FlowContainer, *, state: ExecutionState) -> ExecutionState:
-    flow = await _require_lara(container)
+async def _run_lara(di: FlowsDi, *, state: ExecutionState) -> ExecutionState:
+    flow = await _require_lara(di)
     main_node = flow.nodes["main"]
     assert getattr(main_node, "agent_skill_ids", None) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_names = {tool.name for tool in await main_node.get_tools(state)}
     assert "load_agent_skill" in tool_names
     assert "wiki_list_tree" not in tool_names
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -190,15 +188,15 @@ def _ok_tool(result: ExecutionState, tool_id: str) -> JsonObject:
 
 async def _prepare_employee(
     *,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     flow_suffix: str,
 ) -> tuple[User, Company, str, str]:
     flow_id = f"lara_wiki_{flow_suffix}_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di,
         flow_id=flow_id,
         company_id="system",
         name=f"Lara Wiki {flow_suffix}",
@@ -207,7 +205,7 @@ async def _prepare_employee(
     )
     employee_user_id = flow_employee_user_id(flow_id)
     namespace = f"lara_wiki_{flow_suffix}_{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     return employee, company, employee_user_id, namespace
 
 
@@ -233,7 +231,7 @@ def _captured_tool_names(call: JsonObject) -> set[str]:
 
 async def _turn(
     *,
-    container: FlowContainer,
+    di: FlowsDi,
     mock_llm_with_queue: MockLLMQueue,
     employee: User,
     company: Company,
@@ -246,23 +244,23 @@ async def _turn(
     _ = mock_llm_with_queue(list(queue))
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix=suffix)
     with _employee_context(employee, company, namespace=namespace):
-        result = await _run_lara(container, state=state)
+        result = await _run_lara(di, state=state)
     assert result.interrupt is None, result.interrupt
     return result
 
 
 @pytest.mark.asyncio
 async def test_lara_wiki_unlock_skills(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     mock_llm_with_queue: MockLLMQueue,
     mock_llm_capture,
     unique_id: str,
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         flow_suffix="unlock",
     )
@@ -278,8 +276,8 @@ async def test_lara_wiki_unlock_skills(
     )
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id)
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state)
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     calls = await mock_llm_capture()
@@ -293,9 +291,9 @@ async def test_lara_wiki_unlock_skills(
 
 @pytest.mark.asyncio
 async def test_lara_wiki_every_tool_full_tour(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     mock_llm_with_queue: MockLLMQueue,
     system_user2_id: str,
     unique_id: str,
@@ -303,15 +301,15 @@ async def test_lara_wiki_every_tool_full_tour(
     """Каждый wiki_* вызывается хотя бы раз через Lara на реальном wiki ASGI."""
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         flow_suffix="full",
     )
     other_namespace = f"lara_wiki_full_other_{unique_id}"
-    await seed_namespace_via_repo("system", other_namespace)
+    await seed_namespace_via_repo(frontend_di, "system", other_namespace)
 
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
+        await _seed_lara_skills(di)
 
     exercised: set[str] = set()
 
@@ -326,7 +324,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- orient + create + parse/import ---
     turn1 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -373,7 +371,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- read / write / search / properties / child + move ---
     turn2 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -428,7 +426,7 @@ async def test_lara_wiki_every_tool_full_tour(
     )
 
     turn3 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -455,7 +453,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- revisions ---
     turn4 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -479,7 +477,7 @@ async def test_lara_wiki_every_tool_full_tour(
     mark("wiki_list_revisions")
 
     turn5 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -502,7 +500,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- comments ---
     turn6 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -529,7 +527,7 @@ async def test_lara_wiki_every_tool_full_tour(
     mark("wiki_create_comment", "wiki_list_comments")
 
     turn7 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -556,7 +554,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- access + public link ---
     turn8 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -617,7 +615,7 @@ async def test_lara_wiki_every_tool_full_tour(
     )
 
     turn8b = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -641,7 +639,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- backlinks (mention in markdown) ---
     turn9 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -675,7 +673,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- trash / restore (imported page) ---
     turn10 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -705,7 +703,7 @@ async def test_lara_wiki_every_tool_full_tour(
 
     # --- move to another namespace (disposable page last) ---
     turn11 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -728,7 +726,7 @@ async def test_lara_wiki_every_tool_full_tour(
     mark("wiki_create_page")
 
     turn12 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -757,25 +755,25 @@ async def test_lara_wiki_every_tool_full_tour(
 
 @pytest.mark.asyncio
 async def test_lara_wiki_page_lifecycle(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         flow_suffix="life",
     )
     title = f"Wiki page {unique_id}"
     body_md = f"# {title}\n\nBody for {unique_id}."
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
+        await _seed_lara_skills(di)
 
     result1 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -793,7 +791,7 @@ async def test_lara_wiki_page_lifecycle(
     wiki_page_id = _require_str(created, "wiki_page_id")
 
     result2 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -824,23 +822,23 @@ async def test_lara_wiki_page_lifecycle(
 
 @pytest.mark.asyncio
 async def test_lara_wiki_access_public_link(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         unique_id=unique_id,
         flow_suffix="access",
     )
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
+        await _seed_lara_skills(di)
 
     result1 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,
@@ -862,7 +860,7 @@ async def test_lara_wiki_access_public_link(
     wiki_page_id = _require_str(created, "wiki_page_id")
 
     result2 = await _turn(
-        container=container,
+        di=di,
         mock_llm_with_queue=mock_llm_with_queue,
         employee=employee,
         company=company,

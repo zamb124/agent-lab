@@ -9,7 +9,6 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import (
     NodeFailedPayload,
     SuperstepCommittedPayload,
@@ -57,7 +56,7 @@ def _assert_branch_result(body: JsonObject, *, expected_reason: ExecutionBranchR
     return result
 
 
-async def _seed_three_step_session(unique_id: str) -> str:
+async def _seed_three_step_session(unique_id: str, di) -> str:
     session_id = f"durable_api_{unique_id}:{uuid.uuid4().hex}"
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",
@@ -67,7 +66,7 @@ async def _seed_three_step_session(unique_id: str) -> str:
         content="one",
     )
     state.variables = {"step": 1}
-    runtime = get_container().workflow_runtime
+    runtime = di.workflow_runtime
 
     _ = await runtime.save_state(
         session_id,
@@ -95,7 +94,7 @@ async def _seed_three_step_session(unique_id: str) -> str:
     return session_id
 
 
-async def _seed_failed_session(unique_id: str) -> tuple[str, int]:
+async def _seed_failed_session(unique_id: str, di) -> tuple[str, int]:
     session_id = f"durable_retry_{unique_id}:{uuid.uuid4().hex}"
     state = create_initial_state(
         task_id=f"task-{uuid.uuid4().hex}",
@@ -105,7 +104,7 @@ async def _seed_failed_session(unique_id: str) -> tuple[str, int]:
         content="start",
     )
     state.current_nodes = ["fragile_node"]
-    runtime = get_container().workflow_runtime
+    runtime = di.workflow_runtime
 
     _ = await runtime.save_state(
         session_id,
@@ -162,10 +161,11 @@ async def test_fork_returns_200_with_branch_result(
     auth_headers_system: dict[str, str],
     unique_id: str,
     with_system_context: Callable[[], None],
+    di,
 ) -> None:
     with_system_context()
     try:
-        session_id = await _seed_three_step_session(unique_id)
+        session_id = await _seed_three_step_session(unique_id, di=di)
     finally:
         clear_context()
 
@@ -193,10 +193,11 @@ async def test_rewind_returns_200_with_branch_result(
     auth_headers_system: dict[str, str],
     unique_id: str,
     with_system_context: Callable[[], None],
+    di,
 ) -> None:
     with_system_context()
     try:
-        session_id = await _seed_three_step_session(unique_id)
+        session_id = await _seed_three_step_session(unique_id, di=di)
     finally:
         clear_context()
 
@@ -218,7 +219,7 @@ async def test_rewind_returns_200_with_branch_result(
 
     with_system_context()
     try:
-        active = await get_container().workflow_runtime.get_state(session_id)
+        active = await di.workflow_runtime.get_state(session_id)
     finally:
         clear_context()
     assert active is not None
@@ -231,11 +232,12 @@ async def test_manual_patch_returns_200_with_branch_result(
     auth_headers_system: dict[str, str],
     unique_id: str,
     with_system_context: Callable[[], None],
+    di,
 ) -> None:
     with_system_context()
     try:
-        session_id = await _seed_three_step_session(unique_id)
-        runtime = get_container().workflow_runtime
+        session_id = await _seed_three_step_session(unique_id, di=di)
+        runtime = di.workflow_runtime
         current = await runtime.get_state(session_id)
         assert current is not None
         history, total = await runtime.get_state_history(session_id, limit=1, offset=0)
@@ -275,10 +277,11 @@ async def test_retry_from_failure_returns_200_with_branch_result(
     auth_headers_system: dict[str, str],
     unique_id: str,
     with_system_context: Callable[[], None],
+    di,
 ) -> None:
     with_system_context()
     try:
-        session_id, failed_sequence = await _seed_failed_session(unique_id)
+        session_id, failed_sequence = await _seed_failed_session(unique_id, di=di)
     finally:
         clear_context()
 

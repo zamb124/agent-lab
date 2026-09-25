@@ -12,9 +12,7 @@ from uuid import uuid4
 import aiohttp
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
-from apps.sync.db.models import SyncCall, SyncCallParticipant
-from apps.sync.db.repositories.call_repository import CallRepository
-from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.di import Di
 from apps.sync.events import (
     event_call_accepted,
     event_call_declined,
@@ -23,6 +21,9 @@ from apps.sync.events import (
     event_call_participant_joined,
     event_call_participant_left,
 )
+from apps.sync.models.call import SyncCall
+from apps.sync.models.call_link import SyncCallLink
+from apps.sync.models.call_participant import SyncCallParticipant
 from apps.sync.models.calls import (
     CallMode,
     CallParticipantRead,
@@ -34,6 +35,7 @@ from apps.sync.models.calls import (
     CallStatus,
     ParticipantStatus,
 )
+from apps.sync.models.channel import SyncChannel
 from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
@@ -42,9 +44,9 @@ from core.authz.service import AuthzService
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
-from core.db.repositories.user_repository import UserRepository
 from core.events.contract import PlatformEvent
 from core.logging import get_logger
+from core.models.identity_models import User
 
 logger = get_logger(__name__)
 
@@ -112,7 +114,7 @@ def call_read_from_entities(call: SyncCall, participants: list[SyncCallParticipa
                 joined_at=p.joined_at,
                 left_at=p.left_at,
             )
-            for p in participants
+            for p in sorted(participants, key=lambda participant: participant.user_id)
         ],
     )
 
@@ -122,11 +124,9 @@ async def handle_call_invite(
     *,
     actor_user_id: str,
     company_id: str,
-    calls: CallRepository,
-    channels: ChannelRepository,
     channel_access: SyncChannelAccessService,
     authz: AuthzService,
-    user_repository: UserRepository | None = None,
+    resolve_user: bool = False,
 ) -> tuple[CallRead, list[PlatformEvent]]:
     """Создаёт звонок и событие call.incoming только для участников канала."""
     if not await authz.can_view(
@@ -134,13 +134,18 @@ async def handle_call_invite(
     ):
         raise PermissionError("No access to channel.")
 
-    existing = await calls.get_active_call_for_channel(payload.channel_id, company_id)
+    existing = await SyncCall.find_open_in_channel(company_id, payload.channel_id)
     if existing is not None:
         now = datetime.now(UTC)
-        await calls.update_call_status(existing.call_id, "ended", ended_at=now)
-        for p in await calls.list_participants(existing.call_id):
-            if p.status == "joined":
-                await calls.update_participant_status(existing.call_id, p.user_id, "left", left_at=now)
+        await SyncCall.mark_call_status(existing.call_id, "ended", ended_at=now)
+        for participant_row in await SyncCallParticipant.list_for_call(existing.call_id):
+            if participant_row.status == "joined":
+                await SyncCallParticipant.mark_call_participant_status(
+                    existing.call_id,
+                    participant_row.user_id,
+                    "left",
+                    left_at=now,
+                )
 
     member_rows = await channel_access.list_member_rows(payload.channel_id)
     member_ids = [user_id for user_id, _role in member_rows]
@@ -154,7 +159,7 @@ async def handle_call_invite(
             api_key=settings.calls.livekit_api_key,
             api_secret=settings.calls.livekit_api_secret,
         )
-        persistent = await calls.get_persistent_channel_link(
+        persistent = await SyncCallLink.find_persistent_for_channel(
             company_id, payload.channel_id
         )
         if persistent is not None:
@@ -178,7 +183,7 @@ async def handle_call_invite(
         livekit_room_name=livekit_room_name,
         created_by_user_id=actor_user_id,
     )
-    _ = await calls.create_call(call)
+    _ = await SyncCall.set(call)
 
     for uid in member_ids:
         participant = SyncCallParticipant(
@@ -188,18 +193,18 @@ async def handle_call_invite(
             status="joined" if uid == actor_user_id else "invited",
             joined_at=datetime.now(UTC) if uid == actor_user_id else None,
         )
-        _ = await calls.add_participant(participant)
+        _ = await SyncCallParticipant.set(participant)
 
-    participants = await calls.list_participants(call.call_id)
+    participants = await SyncCallParticipant.list_for_call(call.call_id)
     call_read = call_read_from_entities(call, participants)
 
-    ch_entity = await channels.get(payload.channel_id)
+    ch_entity = await SyncChannel.get(payload.channel_id)
     if ch_entity is None:
         raise ValueError(f"Channel {payload.channel_id} not found.")
 
     caller_display_name = actor_user_id
-    if user_repository is not None:
-        creator = await user_repository.get(actor_user_id)
+    if resolve_user:
+        creator = await User.get(actor_user_id)
         if creator is not None:
             caller_display_name = creator.name
     channel_display_name: str | None = None
@@ -226,30 +231,32 @@ async def handle_call_accept(
     *,
     actor_user_id: str,
     company_id: str,
-    calls: CallRepository,
     channel_access: SyncChannelAccessService,
 ) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок только что перешёл ringing → active (для маркера в чате)."""
-    call = await calls.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Call is already ended.")
 
     was_ringing = call.status == "ringing"
     now = datetime.now(UTC)
-    await calls.update_participant_status(
-        payload.call_id, actor_user_id, "joined", joined_at=now
+    await SyncCallParticipant.mark_call_participant_status(
+        payload.call_id,
+        actor_user_id,
+        "joined",
+        joined_at=now,
     )
 
-    active_count = await calls.count_active_participants(payload.call_id)
+    active_count = await SyncCallParticipant.count_joined(payload.call_id)
     became_active = False
     if active_count >= 2 and call.status == "ringing":
-        await calls.update_call_status(payload.call_id, "active", started_at=now)
+        await SyncCall.mark_call_status(payload.call_id, "active", started_at=now)
         became_active = True
 
-    participants = await calls.list_participants(payload.call_id)
+    participants = await SyncCallParticipant.list_for_call(payload.call_id)
     call_read = call_read_from_entities(
-        await calls.get_call(payload.call_id, company_id), participants
+        await SyncCall.require_company_call(payload.call_id, company_id), participants
     )
 
     recipients = await _call_event_recipients(
@@ -276,16 +283,17 @@ async def handle_call_decline(
     *,
     actor_user_id: str,
     company_id: str,
-    calls: CallRepository,
     channel_access: SyncChannelAccessService,
 ) -> tuple[CallRead, list[PlatformEvent]]:
-    call = await calls.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Call is already ended.")
 
-    await calls.update_participant_status(payload.call_id, actor_user_id, "declined")
-    participants = await calls.list_participants(payload.call_id)
+    await SyncCallParticipant.mark_call_participant_status(
+        payload.call_id, actor_user_id, "declined"
+    )
+    participants = await SyncCallParticipant.list_for_call(payload.call_id)
     call_read = call_read_from_entities(call, participants)
 
     recipients = await _call_event_recipients(
@@ -306,21 +314,24 @@ async def handle_call_hangup(
     *,
     actor_user_id: str,
     company_id: str,
-    calls: CallRepository,
     channel_access: SyncChannelAccessService,
+    di: Di,
 ) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
-    call = await calls.get_call(payload.call_id, company_id)
+    call = await SyncCall.require_company_call(payload.call_id, company_id)
 
     if call.status == "ended":
         raise ValueError("Call is already ended.")
 
     now = datetime.now(UTC)
-    await calls.update_participant_status(
-        payload.call_id, actor_user_id, "left", left_at=now
+    await SyncCallParticipant.mark_call_participant_status(
+        payload.call_id,
+        actor_user_id,
+        "left",
+        left_at=now,
     )
 
-    participants = await calls.list_participants(payload.call_id)
+    participants = await SyncCallParticipant.list_for_call(payload.call_id)
     active_count = sum(1 for p in participants if p.status == "joined")
 
     recipients = await _call_event_recipients(
@@ -337,13 +348,14 @@ async def handle_call_hangup(
 
     call_fully_ended = False
     if active_count == 0:
-        await calls.update_call_status(payload.call_id, "ended", ended_at=now)
+        await SyncCall.mark_call_status(payload.call_id, "ended", ended_at=now)
         if call.mode == "sfu" and call.livekit_room_name:
             await stop_speech_egresses_for_call_room(
                 call_id=payload.call_id,
                 company_id=company_id,
                 room_name=call.livekit_room_name,
                 actor_user_id=actor_user_id,
+                di=di,
             )
             settings = get_settings()
             lk = LiveKitClient(
@@ -367,7 +379,7 @@ async def handle_call_hangup(
                     f"LiveKit delete_room: aiohttp network error room={call.livekit_room_name}"
                 ) from exc
 
-        ended_call = await calls.get_call(payload.call_id, company_id)
+        ended_call = await SyncCall.require_company_call(payload.call_id, company_id)
         if (
             ended_call.mode == "sfu"
             and ended_call.livekit_room_name is not None
@@ -381,7 +393,7 @@ async def handle_call_hangup(
                 started_at=ended_call.started_at,
                 ended_at=ended_call.ended_at,
             )
-        final_participants = await calls.list_participants(payload.call_id)
+        final_participants = await SyncCallParticipant.list_for_call(payload.call_id)
         call_read = call_read_from_entities(ended_call, final_participants)
         events.append(
             event_call_ended(

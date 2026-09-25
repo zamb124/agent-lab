@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from apps.wiki.dependencies import ContainerDep
+from apps.wiki.di import Di
 from apps.wiki.models.api import (
     WikiCommentCreateRequest,
     WikiCommentResolveRequest,
@@ -28,18 +28,18 @@ router = APIRouter(tags=["wiki-comments"])
 
 @router.get("/pages/{wiki_page_id}/comments", response_model=ListResponse[WikiComment])
 async def list_comments(
-    container: ContainerDep, wiki_page_id: str
+    di: Di, wiki_page_id: str
 ) -> ListResponse[WikiComment]:
     return await op_pages_comments_list(
         WikiPageIdPayload(wiki_page_id=wiki_page_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/pages/{wiki_page_id}/comments", response_model=WikiComment, status_code=201)
 async def create_comment(
-    container: ContainerDep, wiki_page_id: str, request: WikiCommentCreateRequest
+    di: Di, wiki_page_id: str, request: WikiCommentCreateRequest
 ) -> WikiComment:
     return await op_pages_comment_create(
         WikiCommentCreatePayload(
@@ -49,27 +49,27 @@ async def create_comment(
             parent_comment_id=request.parent_comment_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/comments/{wiki_comment_id}/resolve", response_model=WikiComment)
 async def resolve_comment(
-    container: ContainerDep, wiki_comment_id: str, request: WikiCommentResolveRequest
+    di: Di, wiki_comment_id: str, request: WikiCommentResolveRequest
 ) -> WikiComment:
     return await op_comments_resolve(
         WikiCommentResolvePayload(
             wiki_comment_id=wiki_comment_id, resolved=request.resolved
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/comments/{wiki_comment_id}", status_code=204)
-async def delete_comment(container: ContainerDep, wiki_comment_id: str) -> None:
+async def delete_comment(di: Di, wiki_comment_id: str) -> None:
     await op_comments_remove(
         WikiCommentIdPayload(wiki_comment_id=wiki_comment_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

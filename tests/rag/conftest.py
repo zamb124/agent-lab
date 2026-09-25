@@ -3,8 +3,20 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
+from fastapi import FastAPI
+
+from apps.rag.di import RagDi
+from core.di import require_di
+
+
+@pytest_asyncio.fixture
+async def rag_di(rag_app: FastAPI) -> AsyncIterator[RagDi]:
+    """Тот же ``RagDi``, что собирает lifespan ``rag_app``."""
+    yield require_di(rag_app, RagDi)
 
 
 @pytest.fixture

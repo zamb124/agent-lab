@@ -11,9 +11,8 @@ from core.authz.factory import build_authz_service
 from core.authz.group_sync import delete_unscoped_group_tuples, sync_user_groups
 from core.authz.ids import PLATFORM_ADMIN_GROUP
 from core.config import get_settings
-from core.db.repositories.user_repository import UserRepository
-from core.db.storage import Storage
 from core.logging import get_logger
+from core.models.identity_models import User
 
 logger = get_logger(__name__)
 
@@ -25,11 +24,9 @@ async def backfill_user_groups(*, limit: int | None = None) -> int:
     authz = build_authz_service()
     if not authz.enabled:
         raise RuntimeError("openfga.enabled must be true for group backfill")
-    storage = Storage(db_url=str(settings.database.shared_url))
-    user_repository = UserRepository(storage=storage)
     written = 0
     unscoped_names: set[str] = set()
-    users = await user_repository.list(limit=10_000)
+    users = await User.list(limit=10_000)
     try:
         for user in users:
             if limit is not None and written >= limit:

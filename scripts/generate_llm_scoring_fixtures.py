@@ -28,7 +28,6 @@ from core.ai.free_pool import (  # noqa: E402
     platform_free_records_from_model_records,
 )
 from core.ai.llm_models_service import LLMModelsService  # noqa: E402
-from core.ai.model_catalog_repository import AIModelCatalogRepository  # noqa: E402
 from core.ai.models import AIModelRecord  # noqa: E402
 from core.ai.provider_error import AIProviderErrorClass, classify_ai_provider_http  # noqa: E402
 from core.ai.providers import AICapability  # noqa: E402
@@ -37,7 +36,7 @@ from core.clients.redis_client import RedisClient  # noqa: E402
 from core.clients.scheduler_client import SchedulerClient  # noqa: E402
 from core.clients.service_client import ServiceClient  # noqa: E402
 from core.config import get_settings  # noqa: E402
-from core.db.storage import Storage  # noqa: E402
+from core.db.oxyde_runtime import init_oxyde_databases  # noqa: E402
 from tests.core.ai.scoring_fixture_support import (  # noqa: E402
     POOL_RANKING_PATH,
     PoolRankingSnapshot,
@@ -58,15 +57,15 @@ from tests.core.clients.live_llm_provider_helpers import (  # noqa: E402
 )
 
 
-def _model_service() -> LLMModelsService:
+async def _model_service() -> LLMModelsService:
     settings = get_settings()
     db_url = settings.database.shared_url
     if not db_url:
         raise RuntimeError("database.shared_url не настроен")
-    repository = AIModelCatalogRepository(Storage(db_url=db_url))
+    await init_oxyde_databases(default_url=db_url, shared_url=db_url)
     scheduler_client = SchedulerClient(ServiceClient())
     redis_client = RedisClient(settings.database.redis_url)
-    return LLMModelsService(repository, scheduler_client, redis_client)
+    return LLMModelsService(scheduler_client, redis_client)
 
 
 def _free_pool_catalog_records(records: list[AIModelRecord], provider: str) -> list[AIModelRecord]:
@@ -154,7 +153,7 @@ async def _build_snapshot() -> ScoringFixtureBuildResult:
     if not providers:
         raise RuntimeError("Нет провайдеров с настроенным api_key для free pool")
 
-    service = _model_service()
+    service = await _model_service()
     records_by_provider: dict[str, list[AIModelRecord]] = {}
     for provider in providers:
         fetched = await _fetch_provider_catalog(provider, service)

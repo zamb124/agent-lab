@@ -25,6 +25,8 @@ procs:
     shell: "uv run python scripts/run.py secrets"
   wiki:
     shell: "uv run python scripts/run.py wiki"
+  stock:
+    shell: "uv run python scripts/run.py stock"
   guest_runtime:
     shell: "uv run python scripts/run.py guest_runtime"
   realtime:

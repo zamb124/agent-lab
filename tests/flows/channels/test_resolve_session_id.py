@@ -6,7 +6,6 @@ import uuid
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.durable_execution import (
     UserInputAppliedPayload,
     WorkflowEventType,
@@ -15,9 +14,8 @@ from apps.flows.src.durable_execution import (
 
 
 @pytest.mark.asyncio
-async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
+async def test_runtime_resolve_by_task_id(app, unique_id: str, di) -> None:
     _ = app
-    container = get_container()
     flow_id = f"flow-{unique_id}"
     context_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
@@ -31,7 +29,7 @@ async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
         session_id=session_id,
         content="hi",
     )
-    await container.workflow_runtime.save_state(
+    await di.workflow_runtime.save_state(
         session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
@@ -42,15 +40,15 @@ async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
         ),
         snapshot=True,
     )
-    assert await container.workflow_runtime.get_state(session_id_wrong) is None
+    assert await di.workflow_runtime.get_state(session_id_wrong) is None
 
-    found = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+    found = await di.workflow_runtime.resolve_session_id_by_flow_and_identifier(
         flow_id,
         task_id,
     )
     assert found == session_id
 
-    found_ctx = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+    found_ctx = await di.workflow_runtime.resolve_session_id_by_flow_and_identifier(
         flow_id,
         context_id,
     )
@@ -58,10 +56,9 @@ async def test_runtime_resolve_by_task_id(app, unique_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_resolve_unknown(app) -> None:
+async def test_runtime_resolve_unknown(app, di) -> None:
     _ = app
-    container = get_container()
-    out = await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+    out = await di.workflow_runtime.resolve_session_id_by_flow_and_identifier(
         "f",
         "missing",
     )

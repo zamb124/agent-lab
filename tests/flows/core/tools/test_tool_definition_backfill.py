@@ -13,7 +13,12 @@ from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 
 def test_iter_builtin_tool_definitions_count_matches_specs() -> None:
     definitions = iter_builtin_tool_definitions()
-    assert len(definitions) == len(BUILTIN_TOOL_SPECS)
+    expected = [
+        spec
+        for spec in BUILTIN_TOOL_SPECS
+        if not spec[1].startswith("stock_")
+    ]
+    assert len(definitions) == len(expected)
 
 
 def test_all_builtins_produce_valid_tool_definition() -> None:

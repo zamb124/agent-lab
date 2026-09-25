@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from apps.sync.channel_lane_preview import lane_preview_from_content
+from apps.sync.models.lane_preview import lane_preview_from_content
 from apps.sync.models.messages import (
     CodeBlockContent,
     CustomToolResponseContent,

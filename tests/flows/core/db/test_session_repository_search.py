@@ -5,15 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import update
 
-from apps.flows.src.container import get_container
-from apps.flows.src.db.models import WorkflowInstances
+from apps.flows.src.durable_execution.models import WorkflowInstance
 from apps.flows.src.durable_execution import (
     UserInputAppliedPayload,
     WorkflowEventType,
     create_initial_state,
 )
+from core.context import require_active_company
 from core.state import ExecutionState
 
 
@@ -69,8 +68,8 @@ def create_test_state(
     return state
 
 
-async def save_test_state(state: ExecutionState) -> None:
-    await get_container().workflow_runtime.save_state(
+async def save_test_state(state: ExecutionState, di) -> None:
+    await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.user_input_applied,
@@ -83,22 +82,25 @@ async def save_test_state(state: ExecutionState) -> None:
     )
 
 
-async def set_instance_time(session_id: str, updated_at: datetime) -> None:
-    container = get_container()
-    async with container.storage.get_session() as session:
-        await session.execute(
-            update(WorkflowInstances)
-            .where(WorkflowInstances.session_id == session_id)
-            .values(created_at=updated_at, updated_at=updated_at)
-        )
-        await session.commit()
+async def set_instance_time(session_id: str, updated_at: datetime, di) -> None:
+    _ = di
+    company_id = require_active_company().company_id
+    _ = await WorkflowInstance.objects.filter(
+        company_id=company_id,
+        session_id=session_id,
+    ).update(
+        returning=False,
+        using="flows",
+        created_at=updated_at,
+        updated_at=updated_at,
+    )
 
 
 class TestDurableWorkflowSessionSearch:
     @pytest.mark.asyncio
-    async def test_search_all_sessions(self, app, unique_id):
+    async def test_search_all_sessions(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         session1_id = f"flow1_{unique_id}:session1_{unique_id}"
         session2_id = f"flow2_{unique_id}:session2_{unique_id}"
 
@@ -108,16 +110,16 @@ class TestDurableWorkflowSessionSearch:
                 f"user1_{unique_id}",
                 first_message="Hello",
                 message_count=5,
-            )
-        )
+            ),
+        di=di)
         await save_test_state(
             create_test_state(
                 session2_id,
                 f"user2_{unique_id}",
                 first_message="Hi",
                 message_count=10,
-            )
-        )
+            ),
+        di=di)
 
         sessions, total = await runtime.search_sessions(limit=500)
 
@@ -127,16 +129,16 @@ class TestDurableWorkflowSessionSearch:
         assert session2_id in session_ids
 
     @pytest.mark.asyncio
-    async def test_search_by_user_id(self, app, unique_id):
+    async def test_search_by_user_id(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         target_user = f"target_user_{unique_id}"
 
         session1_id = f"flow1_{unique_id}:session1_{unique_id}"
         session2_id = f"flow2_{unique_id}:session2_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, target_user))
-        await save_test_state(create_test_state(session2_id, f"other_user_{unique_id}"))
+        await save_test_state(create_test_state(session1_id, target_user), di=di)
+        await save_test_state(create_test_state(session2_id, f"other_user_{unique_id}"), di=di)
 
         sessions, total = await runtime.search_sessions(user_id=target_user, limit=100)
 
@@ -145,17 +147,17 @@ class TestDurableWorkflowSessionSearch:
         assert sessions[0].user_id == target_user
 
     @pytest.mark.asyncio
-    async def test_search_by_flow_id(self, app, unique_id):
+    async def test_search_by_flow_id(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         target_flow = f"target_flow_{unique_id}"
         other_flow = f"other_flow_{unique_id}"
 
         session1_id = f"{target_flow}:session1_{unique_id}"
         session2_id = f"{other_flow}:session2_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, f"user1_{unique_id}"))
-        await save_test_state(create_test_state(session2_id, f"user2_{unique_id}"))
+        await save_test_state(create_test_state(session1_id, f"user1_{unique_id}"), di=di)
+        await save_test_state(create_test_state(session2_id, f"user2_{unique_id}"), di=di)
 
         sessions, total = await runtime.search_sessions(flow_id=target_flow, limit=100)
 
@@ -164,9 +166,9 @@ class TestDurableWorkflowSessionSearch:
         assert sessions[0].flow_id == target_flow
 
     @pytest.mark.asyncio
-    async def test_search_by_branch_id(self, app, unique_id):
+    async def test_search_by_branch_id(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         flow_id = f"branch_flow_{unique_id}"
         target_branch_id = f"branch-a-{unique_id}"
         other_branch_id = f"branch-b-{unique_id}"
@@ -174,11 +176,11 @@ class TestDurableWorkflowSessionSearch:
         session2_id = f"{flow_id}:session2_{unique_id}"
 
         await save_test_state(
-            create_test_state(session1_id, f"user1_{unique_id}", branch_id=target_branch_id)
-        )
+            create_test_state(session1_id, f"user1_{unique_id}", branch_id=target_branch_id),
+        di=di)
         await save_test_state(
-            create_test_state(session2_id, f"user2_{unique_id}", branch_id=other_branch_id)
-        )
+            create_test_state(session2_id, f"user2_{unique_id}", branch_id=other_branch_id),
+        di=di)
 
         sessions, total = await runtime.search_sessions(branch_id=target_branch_id, limit=100)
 
@@ -186,9 +188,9 @@ class TestDurableWorkflowSessionSearch:
         assert sessions[0].session_id == session1_id
 
     @pytest.mark.asyncio
-    async def test_search_by_date_range(self, app, unique_id):
+    async def test_search_by_date_range(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         base_user = f"date_test_user_{unique_id}"
         now = datetime.now(timezone.utc)
         date_from = now - timedelta(days=2)
@@ -201,13 +203,13 @@ class TestDurableWorkflowSessionSearch:
         session_in_range_id = f"flow2_{unique_id}:session_in_range_{unique_id}"
         session_new_id = f"flow3_{unique_id}:session_new_{unique_id}"
 
-        await save_test_state(create_test_state(session_old_id, base_user))
-        await save_test_state(create_test_state(session_in_range_id, base_user))
-        await save_test_state(create_test_state(session_new_id, base_user))
+        await save_test_state(create_test_state(session_old_id, base_user), di=di)
+        await save_test_state(create_test_state(session_in_range_id, base_user), di=di)
+        await save_test_state(create_test_state(session_new_id, base_user), di=di)
 
-        await set_instance_time(session_old_id, date_old)
-        await set_instance_time(session_in_range_id, date_in_range)
-        await set_instance_time(session_new_id, date_new)
+        await set_instance_time(session_old_id, date_old, di=di)
+        await set_instance_time(session_in_range_id, date_in_range, di=di)
+        await set_instance_time(session_new_id, date_new, di=di)
 
         sessions, total = await runtime.search_sessions(
             user_id=base_user,
@@ -220,9 +222,9 @@ class TestDurableWorkflowSessionSearch:
         assert sessions[0].session_id == session_in_range_id
 
     @pytest.mark.asyncio
-    async def test_search_combined_filters(self, app, unique_id):
+    async def test_search_combined_filters(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         target_user = f"target_user_{unique_id}"
         target_flow = f"target_flow_{unique_id}"
 
@@ -230,9 +232,9 @@ class TestDurableWorkflowSessionSearch:
         session2_id = f"other_flow_{unique_id}:session2_{unique_id}"
         session3_id = f"{target_flow}:session3_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, target_user))
-        await save_test_state(create_test_state(session2_id, target_user))
-        await save_test_state(create_test_state(session3_id, f"other_user_{unique_id}"))
+        await save_test_state(create_test_state(session1_id, target_user), di=di)
+        await save_test_state(create_test_state(session2_id, target_user), di=di)
+        await save_test_state(create_test_state(session3_id, f"other_user_{unique_id}"), di=di)
 
         sessions, total = await runtime.search_sessions(
             user_id=target_user,
@@ -244,16 +246,16 @@ class TestDurableWorkflowSessionSearch:
         assert sessions[0].session_id == session1_id
 
     @pytest.mark.asyncio
-    async def test_search_pagination(self, app, unique_id):
+    async def test_search_pagination(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         base_user = f"user_{unique_id}"
         flow_id = f"flow_{unique_id}"
 
         for i in range(5):
             await save_test_state(
-                create_test_state(f"{flow_id}:session_{i}_{unique_id}", base_user)
-            )
+                create_test_state(f"{flow_id}:session_{i}_{unique_id}", base_user),
+            di=di)
 
         page1, total1 = await runtime.search_sessions(user_id=base_user, limit=2, offset=0)
         page2, total2 = await runtime.search_sessions(user_id=base_user, limit=2, offset=2)
@@ -264,9 +266,9 @@ class TestDurableWorkflowSessionSearch:
         assert {s.session_id for s in page1}.isdisjoint({s.session_id for s in page2})
 
     @pytest.mark.asyncio
-    async def test_search_empty_result(self, app, unique_id):
+    async def test_search_empty_result(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
 
         sessions, total = await runtime.search_sessions(
             user_id=f"nonexistent_user_{unique_id}",
@@ -277,9 +279,9 @@ class TestDurableWorkflowSessionSearch:
         assert sessions == []
 
     @pytest.mark.asyncio
-    async def test_search_ordering(self, app, unique_id):
+    async def test_search_ordering(self, app, unique_id, di):
         _ = app
-        runtime = get_container().workflow_runtime
+        runtime = di.workflow_runtime
         base_user = f"user_{unique_id}"
         flow_id = f"flow_{unique_id}"
         now = datetime.now(timezone.utc)
@@ -288,13 +290,13 @@ class TestDurableWorkflowSessionSearch:
         session2_id = f"{flow_id}:session2_{unique_id}"
         session3_id = f"{flow_id}:session3_{unique_id}"
 
-        await save_test_state(create_test_state(session1_id, base_user))
-        await save_test_state(create_test_state(session2_id, base_user))
-        await save_test_state(create_test_state(session3_id, base_user))
+        await save_test_state(create_test_state(session1_id, base_user), di=di)
+        await save_test_state(create_test_state(session2_id, base_user), di=di)
+        await save_test_state(create_test_state(session3_id, base_user), di=di)
 
-        await set_instance_time(session1_id, now - timedelta(hours=2))
-        await set_instance_time(session2_id, now - timedelta(hours=1))
-        await set_instance_time(session3_id, now)
+        await set_instance_time(session1_id, now - timedelta(hours=2), di=di)
+        await set_instance_time(session2_id, now - timedelta(hours=1), di=di)
+        await set_instance_time(session3_id, now, di=di)
 
         sessions, total = await runtime.search_sessions(user_id=base_user, limit=100)
 

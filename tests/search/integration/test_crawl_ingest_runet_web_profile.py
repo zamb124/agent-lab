@@ -11,7 +11,7 @@ from apps.search.services.crawl.ingest_service import CrawlIngestService
 from core.config import get_settings
 from core.crawl.models import CrawlDomain, CrawlFetchResult, CrawlIngestPayload
 from core.rag.index_profile_registry import resolve_index_profile
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.index_models import SearchIndexDefinition
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,6 @@ async def test_ingest_page_attaches_runet_web_profile_config(unique_id) -> None:
         rag_collection_id=f"idx_{unique_id}",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         indexing_profile_key="runet_web",
         created_at=now,
         updated_at=now,

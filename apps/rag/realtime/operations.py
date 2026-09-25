@@ -6,7 +6,7 @@ from pydantic import Field
 
 import core.tracing.attributes as trace_attributes
 from apps.rag.config import get_rag_settings
-from apps.rag.container import RAGContainer
+from apps.rag.di import Di
 from apps.rag.models import (
     DocumentStatusesBatchRequest,
     DocumentStatusesBatchResponse,
@@ -30,7 +30,9 @@ from apps.rag_worker.tasks.task_names import RAG_INDEX_DOCUMENT_S3
 from core.ai.rerank_client import AIRerankerClientError
 from core.authz.models import AuthzObject
 from core.context import require_active_company, require_context
+from core.db.models.rag import DocumentProcessingStatus
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
+from core.files.models import FileRecord
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.identity_models import Namespace, User
@@ -38,7 +40,6 @@ from core.pagination import OffsetPage
 from core.rag.base_provider import BaseRAGProvider, validate_metadata_filters
 from core.rag.factory import get_rag_provider
 from core.rag.models import (
-    DocumentProcessingStatus,
     RAGDocument,
     RAGDocumentContent,
     RAGGlobalSearchRequest,
@@ -126,21 +127,25 @@ def _resolve_provider(provider: str | None) -> tuple[BaseRAGProvider, str]:
     return rag_provider, provider_name
 
 
-async def _company_view(container: RAGContainer) -> str:
+async def _company_view(di: Di) -> str:
     company_id = require_active_company().company_id
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
     return company_id
 
 
-async def _company_admin(container: RAGContainer) -> str:
+async def _company_admin(di: Di) -> str:
     company_id = require_active_company().company_id
-    await container.authz_service.require_company_admin(company_id=company_id)
+    await di.authz_service.require_company_admin(company_id=company_id)
     return company_id
 
 
-async def _namespace(container: RAGContainer, namespace_id: str) -> None:
+async def _namespace(di: Di, namespace_id: str) -> None:
     try:
-        await require_registered_rag_namespace(namespace_id, container)
+        await require_registered_rag_namespace(
+            namespace_id,
+            authz_service=di.authz_service,
+            namespace_service=di.namespace_service,
+        )
     except PlatformAccessDeniedError as exc:
         raise_forbidden(exc)
     except PlatformNotFoundError as exc:
@@ -151,16 +156,16 @@ async def op_namespaces_create(
     payload: RagNamespaceCreatePayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> Namespace:
     _ = user
-    company_id = await _company_admin(container)
+    company_id = await _company_admin(di)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     try:
         _ = await rag_provider.create_namespace(
             name=payload.name, description=payload.description
         )
-        namespace = await container.namespace_service.get_or_create(
+        namespace = await di.namespace_service.get_or_create(
             payload.name, description=payload.description
         )
     except ValueError as exc:
@@ -173,16 +178,16 @@ async def op_namespaces_remove(
     payload: RagNamespaceDeletePayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> NamespaceDeleteResponse:
     _ = user
-    company_id = await _company_admin(container)
+    company_id = await _company_admin(di)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     provider_deleted = await rag_provider.delete_namespace(payload.name)
-    ns_from_repo = await container.namespace_service.get(payload.name)
+    ns_from_repo = await di.namespace_service.get(payload.name)
     if not provider_deleted and ns_from_repo is None:
         raise WsCommandError("not_found", "Namespace not found", error_code='not_found')
-    _ = await container.namespace_service.delete(payload.name)
+    _ = await di.namespace_service.delete(payload.name)
     logger.info("rag.namespace", name=payload.name, company_id=company_id)
     return NamespaceDeleteResponse(success=True, name=payload.name)
 
@@ -191,13 +196,13 @@ async def op_documents_list(
     payload: RagDocumentsListPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> OffsetPage[RAGDocument]:
     _ = user
-    await _namespace(container, payload.namespace_id)
+    await _namespace(di, payload.namespace_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     completed_docs = await rag_provider.list_documents(payload.namespace_id, limit=payload.limit)
-    processing_statuses = await container.document_status_repository.list_by_namespace(
+    processing_statuses = await DocumentProcessingStatus.list_by_namespace(
         payload.namespace_id, status=["pending", "processing", "failed"], limit=payload.limit
     )
     all_documents = list(completed_docs)
@@ -227,10 +232,10 @@ async def op_documents_ingest_text(
     payload: RagIngestTextPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> RAGIngestTextResponse:
     _ = user
-    await _namespace(container, payload.namespace_id)
+    await _namespace(di, payload.namespace_id)
     try:
         validate_rag_user_metadata(payload.metadata)
         text = validate_ingest_text_body(payload.text)
@@ -269,7 +274,6 @@ async def op_documents_ingest_text(
 async def _enqueue_s3_indexing_task(
     *,
     namespace_id: str,
-    container: RAGContainer,
     document_id: str,
     s3_key: str,
     document_name: str,
@@ -287,9 +291,8 @@ async def _enqueue_s3_indexing_task(
     ttl_raw = metadata_dict["ttl_seconds"]
     if not isinstance(ttl_raw, int) or isinstance(ttl_raw, bool):
         raise RuntimeError("ensure_ttl_seconds_in_metadata returned non-integer ttl_seconds")
-    status_repo = container.document_status_repository
     task_id_placeholder = f"pending_{document_id}"
-    _ = await status_repo.create_status(
+    _ = await DocumentProcessingStatus.create_status(
         document_id=document_id,
         task_id=task_id_placeholder,
         namespace_id=namespace_id,
@@ -308,7 +311,7 @@ async def _enqueue_s3_indexing_task(
         metadata=dict(metadata_dict),
         provider=provider,
     )
-    _ = await status_repo.finalize_enqueued_indexing_task(document_id, task.task_id)
+    _ = await DocumentProcessingStatus.finalize_enqueued_indexing_task(document_id, task.task_id)
     return document_id, task.task_id
 
 
@@ -316,10 +319,10 @@ async def op_documents_index_file(
     payload: RagIndexFilePayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> IndexFileResponse:
     _ = user
-    await _namespace(container, payload.namespace_id)
+    await _namespace(di, payload.namespace_id)
     try:
         validate_rag_user_metadata(payload.metadata)
     except ValueError as exc:
@@ -329,7 +332,7 @@ async def op_documents_index_file(
         raise WsCommandError("ws_invalid_payload", "file_id is required", error_code='ws_invalid_payload')
     context = require_context()
     company_id = require_active_company().company_id
-    file_record = await container.file_repository.get(file_id)
+    file_record = await FileRecord.get(file_id)
     if file_record is None:
         raise WsCommandError("not_found", "File not found", error_code='not_found')
     if file_record.company_id != company_id:
@@ -340,13 +343,12 @@ async def op_documents_index_file(
         document_name = payload.document_name
     metadata_dict: RAGMetadata = dict(payload.metadata)
     metadata_dict["document_id"] = file_id
-    metadata_dict["s3_bucket"] = file_record.s3_bucket
+    metadata_dict["storage_id"] = file_record.storage_id
     metadata_dict["company_id"] = company_id
     metadata_dict["uploaded_by_user_id"] = context.user.user_id
     metadata_dict["external_file_owner"] = "peer"
     document_id, task_id = await _enqueue_s3_indexing_task(
         namespace_id=payload.namespace_id,
-        container=container,
         document_id=file_id,
         s3_key=file_record.s3_key,
         document_name=document_name,
@@ -366,17 +368,16 @@ async def op_documents_remove(
     payload: RagDocumentRefPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> RagDocumentDeleteResult:
     _ = user
-    await _namespace(container, payload.namespace_id)
-    status_repo = container.document_status_repository
-    status = await status_repo.get_by_document_id(payload.document_id)
-    file_record = await container.file_repository.get(payload.document_id)
+    await _namespace(di, payload.namespace_id)
+    status = await DocumentProcessingStatus.get(payload.document_id)
+    file_record = await FileRecord.get(payload.document_id)
     if file_record is not None:
-        _ = await container.files_service.delete(payload.document_id)
+        _ = await di.files_service.delete(payload.document_id)
     if status is not None:
-        _ = await status_repo.delete_by_document_id(payload.document_id)
+        _ = await DocumentProcessingStatus.delete_by_id(payload.document_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None and file_record is None:
@@ -388,14 +389,13 @@ async def op_documents_index_remove(
     payload: RagDocumentRefPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> RagDocumentDeleteResult:
     _ = user
-    await _namespace(container, payload.namespace_id)
-    status_repo = container.document_status_repository
-    status = await status_repo.get_by_document_id(payload.document_id)
+    await _namespace(di, payload.namespace_id)
+    status = await DocumentProcessingStatus.get(payload.document_id)
     if status is not None:
-        _ = await status_repo.delete_by_document_id(payload.document_id)
+        _ = await DocumentProcessingStatus.delete_by_id(payload.document_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     success = await rag_provider.delete_document(payload.namespace_id, payload.document_id)
     if not success and status is None:
@@ -407,10 +407,10 @@ async def op_documents_content(
     payload: RagDocumentRefPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> RAGDocumentContent:
     _ = user
-    await _namespace(container, payload.namespace_id)
+    await _namespace(di, payload.namespace_id)
     rag_provider, _provider_name = _resolve_provider(payload.provider)
     try:
         content = await rag_provider.get_document_content(payload.namespace_id, payload.document_id)
@@ -425,11 +425,11 @@ async def op_documents_status(
     payload: RagDocumentStatusPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> DocumentProcessingStatus:
     _ = user
-    _ = await _company_view(container)
-    status = await container.document_status_repository.get_by_document_id(payload.document_id)
+    _ = await _company_view(di)
+    status = await DocumentProcessingStatus.get(payload.document_id)
     if status is None:
         raise WsCommandError("not_found", "Document status not found", error_code='not_found')
     return status
@@ -439,10 +439,10 @@ async def op_documents_statuses(
     payload: DocumentStatusesBatchRequest,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> DocumentStatusesBatchResponse:
     _ = user
-    _ = await _company_view(container)
+    _ = await _company_view(di)
     normalized_ids: list[str] = []
     seen: set[str] = set()
     for raw_id in payload.document_ids:
@@ -455,7 +455,7 @@ async def op_documents_statuses(
         normalized_ids.append(document_id)
     if not normalized_ids:
         raise WsCommandError("ws_invalid_payload", "document_ids is required", error_code='ws_invalid_payload')
-    found = await container.document_status_repository.get_by_document_ids(normalized_ids)
+    found = await DocumentProcessingStatus.get_many(normalized_ids)
     statuses: dict[str, DocumentProcessingStatus | None] = {
         document_id: found.get(document_id) for document_id in normalized_ids
     }
@@ -466,11 +466,11 @@ async def op_search_defaults(
     payload: EmptyPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> RAGSearchOptions:
     _ = payload, user
     company_id = require_active_company().company_id
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
     return resolve_platform_search_options(settings=get_rag_settings())
 
 
@@ -478,10 +478,10 @@ async def op_search_namespace(
     payload: RagNamespaceSearchPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> SearchResponse:
     _ = user
-    await _namespace(container, payload.namespace_id)
+    await _namespace(di, payload.namespace_id)
     if payload.filters is not None:
         try:
             validate_metadata_filters(payload.filters)
@@ -521,7 +521,7 @@ async def op_search_namespace(
                 profile_sd=None,
                 settings=settings,
                 request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
-                score_cache=container.rerank_score_cache,
+                score_cache=di.rerank_score_cache,
             )
             span.set_attribute("platform.rag.result_count", len(results))
     except AIRerankerClientError as exc:
@@ -538,13 +538,13 @@ async def op_search_global(
     payload: RagGlobalSearchPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> GlobalSearchResponse:
     _ = user
     if not payload.namespace_ids:
         raise WsCommandError("ws_invalid_payload", "No namespaces provided", error_code='ws_invalid_payload')
     for namespace_id in payload.namespace_ids:
-        await _namespace(container, namespace_id)
+        await _namespace(di, namespace_id)
     if payload.filters is not None:
         try:
             validate_metadata_filters(payload.filters)
@@ -574,7 +574,7 @@ async def op_search_global(
             profile_sd=None,
             settings=settings,
             request_rerank_max_candidates=resolved_search_options.rerank_max_candidates,
-            score_cache=container.rerank_score_cache,
+            score_cache=di.rerank_score_cache,
         )
     except AIRerankerClientError as exc:
         raise WsCommandError("internal", str(exc.detail), error_code='internal') from exc
@@ -585,9 +585,9 @@ async def op_providers_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: RAGContainer,
+    di: Di,
 ) -> ProvidersView:
-    _ = payload, user, container
+    _ = payload, user, di
     settings = get_rag_settings()
     if not settings.rag.enabled:
         raise WsCommandError("internal", "RAG is disabled", error_code='internal')

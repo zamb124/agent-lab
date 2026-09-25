@@ -99,28 +99,22 @@ class TestFlowsLoaderReactRoleValidation:
     def test_loader_duplicate_reason_raises(self, tmp_path):
         loader = FlowsLoader(
             bundles_dir=tmp_path,
-            flow_repository=None,
-            node_repository=None,
-            tool_repository=None,
         )
         tools = [
             {"tool_id": "reason", "react_role": "reason"},
             {"tool_id": "calc", "react_role": "standard"},
             {"tool_id": "my_reason", "react_role": "reason"},
         ]
-        with pytest.raises(ValueError, match="только 1 reasoning"):
+        with pytest.raises(ValueError, match="only 1 reasoning"):
             loader._validate_llm_node_tools("n", tools)
 
     def test_loader_duplicate_exit_raises(self, tmp_path):
         loader = FlowsLoader(
             bundles_dir=tmp_path,
-            flow_repository=None,
-            node_repository=None,
-            tool_repository=None,
         )
         tools = [
             {"tool_id": "finish", "react_role": "exit"},
             {"tool_id": "final_answer", "react_role": "exit"},
         ]
-        with pytest.raises(ValueError, match="только 1 exit"):
+        with pytest.raises(ValueError, match="only 1 exit"):
             loader._validate_llm_node_tools("n", tools)

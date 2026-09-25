@@ -1,6 +1,6 @@
 """Аудит act-as: `impersonated_by` из JWT протянут в `Context.metadata`.
 
-Проверяем `ContextFactory` напрямую с реальным контейнером (без моков).
+Проверяем `ContextFactory` напрямую с реальным процессом (без моков).
 """
 
 from __future__ import annotations
@@ -40,8 +40,11 @@ def _token_data(user_id: str, company_id: str, *, impersonated_by: str | None) -
     )
 
 
-async def test_impersonated_by_propagated(frontend_container, unique_id):
-    factory = ContextFactory(frontend_container)
+async def test_impersonated_by_propagated(frontend_di, unique_id):
+    factory = ContextFactory(
+        namespace_service=frontend_di.namespace_service,
+        authz_service=frontend_di.authz_service,
+    )
     company = make_test_company(company_id="system", name="System")
     user = User(
         user_id=f"emp_{unique_id}",
@@ -57,8 +60,11 @@ async def test_impersonated_by_propagated(frontend_container, unique_id):
     assert ctx.metadata.get("impersonated_by") == "curator_1"
 
 
-async def test_normal_token_has_no_impersonated_by(frontend_container, unique_id):
-    factory = ContextFactory(frontend_container)
+async def test_normal_token_has_no_impersonated_by(frontend_di, unique_id):
+    factory = ContextFactory(
+        namespace_service=frontend_di.namespace_service,
+        authz_service=frontend_di.authz_service,
+    )
     company = make_test_company(company_id="system", name="System")
     user = User(
         user_id=f"human_{unique_id}",

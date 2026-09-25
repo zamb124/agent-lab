@@ -72,20 +72,20 @@ def _child_flow(child_fid: str) -> dict[str, Any]:
     )
 
 
-async def _count_workflow_events(container, session_id: str, event_type: WorkflowEventType) -> int:
-    records, _ = await container.workflow_runtime.get_state_history(session_id, limit=500)
+async def _count_workflow_events(di, session_id: str, event_type: WorkflowEventType) -> int:
+    records, _ = await di.workflow_runtime.get_state_history(session_id, limit=500)
     return sum(1 for record in records if record.event_type == event_type)
 
 
 class TestHandoffMultiCycleA2A:
     @pytest.mark.asyncio
     async def test_l1_repeat_handoff_same_child_after_handback(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         """Два полных цикла handoff→child→handback→parent→handoff в одну child-сессию."""
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-l1-{unique_id}"
@@ -124,7 +124,7 @@ class TestHandoffMultiCycleA2A:
         first_data = first.json()
         assert first_data["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
-        child_before = await container.workflow_runtime.get_state(child_session)
+        child_before = await di.workflow_runtime.get_state(child_session)
         assert child_before is not None
 
         second = await _send_message(
@@ -136,8 +136,8 @@ class TestHandoffMultiCycleA2A:
         )
         _validate_jsonrpc_response(second.json())
 
-        parent_final = await container.workflow_runtime.get_state(parent_session)
-        child_final = await container.workflow_runtime.get_state(child_session)
+        parent_final = await di.workflow_runtime.get_state(parent_session)
+        child_final = await di.workflow_runtime.get_state(child_session)
         assert parent_final is not None
         assert child_final is not None
         assert len(child_final.messages) > len(child_before.messages)
@@ -149,20 +149,20 @@ class TestHandoffMultiCycleA2A:
             assert parent_final.interrupt is not None
             assert _interrupt_kind_value(parent_final.interrupt.body) == "handoff"
         assert await _count_workflow_events(
-            container, parent_session, WorkflowEventType.handoff_initiated
+            di, parent_session, WorkflowEventType.handoff_initiated
         ) >= 1
 
     @pytest.mark.asyncio
     async def test_l2_handoff_child_a_then_child_b_after_handbacks(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         """После handback к child A — handoff к child B в той же parent-сессии."""
         child_a = f"ht-multi-a-{unique_id}"
         child_b = f"ht-multi-b-{unique_id}"
         parent_cfg = _router_parent_two_children(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, _child_flow(child_a))
-        await _save_flow(container, _child_flow(child_b))
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, _child_flow(child_a))
+        await _save_flow(di, _child_flow(child_b))
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-l2-{unique_id}"
         session_a = f"{child_a}:{context_id}:handoff:{child_a}"
@@ -204,8 +204,8 @@ class TestHandoffMultiCycleA2A:
         )
         _validate_jsonrpc_response(second.json())
 
-        parent_final = await container.workflow_runtime.get_state(parent_session)
-        child_b_state = await container.workflow_runtime.get_state(session_b)
+        parent_final = await di.workflow_runtime.get_state(parent_session)
+        child_b_state = await di.workflow_runtime.get_state(session_b)
         assert parent_final is not None
         assert child_b_state is not None
         assert session_a in parent_final.child_workflows
@@ -217,12 +217,12 @@ class TestHandoffMultiCycleA2A:
 
     @pytest.mark.asyncio
     async def test_l3_three_handoff_cycles_same_child(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         """Три последовательных handoff→handback в одного субагента."""
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-l3-{unique_id}"
@@ -252,7 +252,7 @@ class TestHandoffMultiCycleA2A:
         task_id = first.json()["result"]["id"]
         assert first.json()["result"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
-        child_before = await container.workflow_runtime.get_state(child_session)
+        child_before = await di.workflow_runtime.get_state(child_session)
         assert child_before is not None
 
         second = await _send_message(
@@ -260,23 +260,23 @@ class TestHandoffMultiCycleA2A:
         )
         _validate_jsonrpc_response(second.json())
 
-        parent_state = await container.workflow_runtime.get_state(parent_session)
-        child_state = await container.workflow_runtime.get_state(child_session)
+        parent_state = await di.workflow_runtime.get_state(parent_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert parent_state is not None
         assert child_state is not None
         assert len(child_state.messages) > len(child_before.messages)
         assert await _count_workflow_events(
-            container, parent_session, WorkflowEventType.handoff_initiated
+            di, parent_session, WorkflowEventType.handoff_initiated
         ) >= 1
 
     @pytest.mark.asyncio
     async def test_l4_handoff_depth_resets_after_handback(
-        self, client, container, mock_llm_with_queue, sync_tools, unique_id
+        self, client, di, mock_llm_with_queue, sync_tools, unique_id
     ):
         """handoff_depth parent возвращается к 0 после handback, второй цикл снова depth=1."""
         parent_cfg, child_cfg = _handoff_parent_child_configs(unique_id)
-        await _save_flow(container, parent_cfg)
-        await _save_flow(container, child_cfg)
+        await _save_flow(di, parent_cfg)
+        await _save_flow(di, child_cfg)
         child_fid = child_cfg["flow_id"]
         parent_fid = parent_cfg["flow_id"]
         context_id = f"ctx-l4-{unique_id}"
@@ -307,7 +307,7 @@ class TestHandoffMultiCycleA2A:
         first = await _send_message(client, parent_fid, context_id, "depth check 1")
         task_id = first.json()["result"]["id"]
 
-        parent_after_first = await container.workflow_runtime.get_state(parent_session)
+        parent_after_first = await di.workflow_runtime.get_state(parent_session)
         assert parent_after_first is not None
         assert parent_after_first.handoff_depth == 1
 
@@ -316,7 +316,7 @@ class TestHandoffMultiCycleA2A:
         )
         _validate_jsonrpc_response(second.json())
 
-        parent_after_handback = await container.workflow_runtime.get_state(parent_session)
+        parent_after_handback = await di.workflow_runtime.get_state(parent_session)
         assert parent_after_handback is not None
         assert parent_after_handback.handoff_depth in (0, 1)
         if parent_after_handback.interrupt is not None:
@@ -324,16 +324,16 @@ class TestHandoffMultiCycleA2A:
             assert parent_after_handback.handoff_depth == 1
 
         child_session = f"{child_fid}:{context_id}:handoff:{child_fid}"
-        child_state = await container.workflow_runtime.get_state(child_session)
+        child_state = await di.workflow_runtime.get_state(child_session)
         assert child_state is not None
         assert len(child_state.messages) >= 2
 
 
 class TestHandoffDepthWithoutMonkeypatch:
     @pytest.mark.asyncio
-    async def test_l5_orchestrator_max_depth_raises(self, container, unique_id):
+    async def test_l5_orchestrator_max_depth_raises(self, di, unique_id):
         """Превышение handoff_max_depth без monkeypatch — прямой контракт orchestrator."""
-        orchestrator = container.handoff_orchestrator_service
+        orchestrator = di.handoff_orchestrator_service
         max_depth = get_settings().handoff_max_depth
         state = workflow_state(
             flow_id=f"ht-depth-{unique_id}",

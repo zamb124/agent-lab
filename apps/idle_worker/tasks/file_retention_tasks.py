@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import (
     TASK_FILE_RETENTION_BACKFILL_TICK,
     TASK_FILE_RETENTION_PURGE_TICK,
@@ -19,13 +19,14 @@ logger = get_logger(__name__)
 async def file_retention_purge_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int | list[str]]:
     settings = get_settings()
     if not settings.files.retention.purge_enabled:
         return {"purged_count": 0, "failed_count": 0}
 
-    container = get_container()
-    result = await container.file_purge_service.purge_expired_batch()
+    result = await di.file_purge_service.purge_expired_batch()
     logger.info(
         "idle.file_retention_purge_tick",
         purged=result.purged_count,
@@ -46,8 +47,7 @@ async def file_retention_backfill_tick(
 ) -> dict[str, int]:
     settings = get_settings()
     batch_limit = settings.files.retention.backfill_batch_size
-    container = get_container()
-    backfill = FileRetentionBackfillService(file_repository=container.file_repository)
+    backfill = FileRetentionBackfillService()
     result = await backfill.backfill_batch(limit=batch_limit)
     logger.info(
         "idle.file_retention_backfill_tick",

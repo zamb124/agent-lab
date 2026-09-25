@@ -7,7 +7,6 @@ from collections.abc import Awaitable, Callable, Sequence
 import pytest
 from httpx import AsyncClient
 
-from apps.frontend.container import FrontendContainer
 from apps.guest_runtime.services.slots import require_docker
 from core.clients.a2a_client import A2AClient
 from core.clients.flow_ui_client import FlowUIClient, FlowUIClientError
@@ -15,7 +14,7 @@ from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.guest_runtime.models import GuestInvokeKind, GuestLanguage
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.fixtures.auth import set_test_company_member_roles
@@ -649,7 +648,7 @@ async def test_code_agent_ensure_lease_billing_blocked(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
 ) -> None:
     _ = office_service, guest_runtime_service
@@ -672,11 +671,10 @@ async def test_code_agent_ensure_lease_billing_blocked(
         active_company_id=company_id,
         groups=["admin"],
     )
-    await frontend_container.company_repository.set(company)
-    await frontend_container.user_repository.set(user)
+    await Company.set(company)
+    await User.set(user)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],
@@ -760,7 +758,12 @@ async def test_llm_node_then_code_agent(
     headers = code_agent_headers(auth_headers_system)
     flow_id = f"ca_llm_{unique_id}"
     llm_text = f"llm-out-{unique_id}"
-    await mock_llm_redis([{"type": "text", "content": llm_text}])
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": llm_text},
+            {"type": "text", "content": llm_text},
+        ]
+    )
     create = await flows_client_http.post(
         "/flows/api/v1/flows/",
         headers=headers,
@@ -1037,6 +1040,7 @@ SET_TICKET_CODE = (
 MAPPING_CLI = b"""import json
 import os
 import sys
+from core.models.identity_models import Company
 
 ticket = os.environ.get("TICKET")
 if ticket is None or ticket.strip() == "":

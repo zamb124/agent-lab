@@ -39,7 +39,7 @@ def test_nested_assign_builds_objects_and_keeps_siblings(unique_id: str) -> None
     assert state["order"] == {"customer": {"replaced": True}, "total": 10}
 
 
-def test_nested_assign_does_not_mutate_the_previous_container(unique_id: str) -> None:
+def test_nested_assign_does_not_mutate_the_previous_copy(unique_id: str) -> None:
     state = _state(unique_id)
     assign_state_path(state, "order", {"customer": {"email": "old"}})
     previous = state["order"]

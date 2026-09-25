@@ -17,7 +17,7 @@ def test_split_short_is_single_chunk() -> None:
 
 
 def test_split_invalid_max_raises() -> None:
-    with pytest.raises(ValueError, match="положительным"):
+    with pytest.raises(ValueError, match="must be positive"):
         split_text_into_summarize_chunks("a", 0)
 
 

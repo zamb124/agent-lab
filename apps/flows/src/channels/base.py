@@ -45,14 +45,20 @@ from google.protobuf.json_format import MessageToDict
 from apps.agent.device_binding import bind_user_device_variables
 from apps.flows.config import get_settings
 from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
+from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.channels.request_context_variables import (
     flow_employee_variables_from_user,
     flow_user_identity_overrides,
     flow_variables_from_request_context,
 )
 from apps.flows.src.channels.types import ChannelRequestContext, FlowTaskResult, PreparedTaskParams
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.contracts import (
+    ChannelRegistryProtocol,
+    FlowFactoryProtocol,
+    ToolRegistryProtocol,
+)
 from apps.flows.src.durable_execution import (
+    DurableWorkflowRuntime,
     RunStartedPayload,
     UserInputAppliedPayload,
     VariablesResolvedPayload,
@@ -60,7 +66,7 @@ from apps.flows.src.durable_execution import (
     WorkflowEventType,
     create_initial_state,
 )
-from apps.flows.src.durable_execution.repository import WorkflowConcurrencyError
+from apps.flows.src.durable_execution.models import WorkflowConcurrencyError
 from apps.flows.src.files.state_file_refs import upsert_state_file
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models.enums import ChannelType
@@ -73,6 +79,7 @@ from apps.flows.src.observability.handoff_timing import record_handoff_initiated
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.services.flow_speech_resolve import attach_flow_speech_layers_to_context
 from apps.flows.src.services.flow_ui_cards import card_block_id, show_activity
+from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
 from apps.flows.src.services.handoff_tracing import (
     HANDOFF_OP_INITIATED,
     HANDOFF_OP_ROUTE_REPLY,
@@ -103,12 +110,15 @@ from core.a2a import (
 from core.auth.errors import PermissionDeniedA2AError
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.billing.exceptions import BillingBalanceBlockedError
 from core.clients.llm.mock_control import (
     parse_mock_control_metadata,
     setup_mock_control,
 )
-from core.context import Context, clear_context, get_context, set_context
+from core.clients.redis_client import RedisClient
+from core.context import clear_context, get_context, set_context
+from core.db.storage import Storage
 from core.files.file_ref import FileRef
 from core.flow_ui.action import apply_flow_ui_action, validate_flow_ui_action
 from core.flow_ui.protocol import (
@@ -117,7 +127,10 @@ from core.flow_ui.protocol import (
     FlowUIActionMessage,
 )
 from core.logging import bind_session_agent, get_logger
+from core.mail.service import MailService
+from core.models.context_models import Context
 from core.models.flow_ui_share import FlowUIShareGrant
+from core.models.identity_models import User
 from core.state import ChildWorkflowLink, ExecutionState, ExecutionTaskState
 from core.state.interrupt import HandoffInterrupt, HandoffMode, OperatorTaskInterrupt
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
@@ -134,7 +147,8 @@ from core.types import (
     require_json_object,
 )
 from core.utils.background import run_with_log_context
-from core.worktracker.models import TERMINAL_WORK_ITEM_STATES
+from core.variables.service import VariablesService
+from core.worktracker.models import TERMINAL_WORK_ITEM_STATES, WorkItem
 
 logger = get_logger(__name__)
 
@@ -208,12 +222,32 @@ class BaseChannel(ABC):
         context: Context | None = None,
         flow_config: FlowConfig | None = None,
         *,
-        container: FlowRuntimeContainer,
+        variables_service: VariablesService,
+        authz_service: AuthzService,
+        workflow_runtime: DurableWorkflowRuntime,
+        redis_client: RedisClient,
+        handoff_orchestrator_service: HandoffOrchestratorService,
+        flow_factory: FlowFactoryProtocol,
+        tool_registry: ToolRegistryProtocol,
+        projection_service: A2ATaskProjectionService,
+        shared_storage: Storage,
+        channel_registry: ChannelRegistryProtocol,
+        mail_service: MailService,
     ) -> None:
         self.flow_id: str = flow_id
         self.context: Context | None = context or get_context()
         self._flow_config: FlowConfig | None = flow_config
-        self.container: FlowRuntimeContainer = container
+        self._variables_service: VariablesService = variables_service
+        self._authz_service: AuthzService = authz_service
+        self._workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self._redis_client: RedisClient = redis_client
+        self._handoff_orchestrator_service: HandoffOrchestratorService = handoff_orchestrator_service
+        self._flow_factory: FlowFactoryProtocol = flow_factory
+        self._tool_registry: ToolRegistryProtocol = tool_registry
+        self._projection_service: A2ATaskProjectionService = projection_service
+        self._shared_storage: Storage = shared_storage
+        self._channel_registry: ChannelRegistryProtocol = channel_registry
+        self._mail_service: MailService = mail_service
 
     # === Универсальный метод отправки сообщения ===
 
@@ -298,12 +332,11 @@ class BaseChannel(ABC):
         if "target_branch_id" not in normalized and "branch_id" in normalized:
             normalized["target_branch_id"] = normalized["branch_id"]
 
-        container = self.container
         resolved: JsonObject = {}
         for key, value in normalized.items():
             raw_value = value["value"] if isinstance(value, dict) and "value" in value else value
             if isinstance(raw_value, str) and raw_value.startswith("@var:"):
-                resolved[key] = await container.variables_service.resolve(raw_value)
+                resolved[key] = await self._variables_service.resolve(raw_value)
             else:
                 resolved[key] = raw_value
         return resolved
@@ -323,7 +356,7 @@ class BaseChannel(ABC):
         Исключения:
             PermissionDenied: если нет доступа к агенту или ветке
         """
-        authz = self.container.authz_service
+        authz = self._authz_service
         try:
             ctx = self.context
             if ctx is None or ctx.active_company is None:
@@ -333,7 +366,7 @@ class BaseChannel(ABC):
                 AuthzObject.flow(self.flow_id, company_id=company_id),
                 user_id=user_id,
             )
-            flow_config = await self.container.flow_repository.get(self.flow_id)
+            flow_config = await FlowConfig.get_latest(self.flow_id)
             if (
                 flow_config is not None
                 and flow_config.branches
@@ -346,7 +379,7 @@ class BaseChannel(ABC):
                     user_id=user_id,
                 )
         except AuthzDenied as exc:
-            flow_config = await self.container.flow_repository.get(self.flow_id)
+            flow_config = await FlowConfig.get_latest(self.flow_id)
             required = list(flow_config.permission) if flow_config is not None else []
             if (
                 flow_config is not None
@@ -366,8 +399,7 @@ class BaseChannel(ABC):
 
     async def _get_state(self, session_id: str) -> ExecutionState | None:
         """Получает projection state из durable workflow runtime."""
-        container = self.container
-        return await container.workflow_runtime.get_state(session_id)
+        return await self._workflow_runtime.get_state(session_id)
 
     async def _save_state(
         self,
@@ -379,8 +411,7 @@ class BaseChannel(ABC):
         snapshot: bool = False,
     ) -> None:
         """Коммитит промежуточную projection delta в durable workflow ledger."""
-        container = self.container
-        _ = await container.workflow_runtime.save_state(
+        _ = await self._workflow_runtime.save_state(
             session_id,
             state,
             event_type=event_type,
@@ -397,15 +428,14 @@ class BaseChannel(ABC):
         error: str | None = None,
     ) -> None:
         """Коммитит terminal boundary в durable workflow ledger."""
-        container = self.container
-        _ = await container.workflow_runtime.save_terminal_state(
+        _ = await self._workflow_runtime.save_terminal_state(
             session_id,
             state,
             terminal_task_state,
             error=error,
         )
         await maybe_record_flow_terminal(
-            container.redis_client,
+            self._redis_client,
             task_id=state.task_id,
             flow_id=self.flow_id,
             terminal_state=terminal_task_state,
@@ -422,8 +452,7 @@ class BaseChannel(ABC):
         if st is not None and (st.context_id == lookup_id or st.task_id == lookup_id):
             return direct
 
-        container = self.container
-        return await container.workflow_runtime.resolve_session_id_by_flow_and_identifier(
+        return await self._workflow_runtime.resolve_session_id_by_flow_and_identifier(
             self.flow_id, lookup_id
         )
 
@@ -432,12 +461,11 @@ class BaseChannel(ABC):
 
         Возвращает work_item_id или None (задача уже завершена / не найдена).
         """
-        container = self.container
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             return None
         company_id = ctx.active_company.company_id
-        work_item = await container.work_item_service.find_by_completion_correlation(
+        work_item = await WorkItem.find_work_item_by_correlation(
             company_id, str(correlation_id)
         )
         if work_item is None:
@@ -534,7 +562,7 @@ class BaseChannel(ABC):
                         "Operator reply is expected: the user cannot resume HITL single_reply"
                     )
                 elif isinstance(state.interrupt.body, HandoffInterrupt):
-                    routing = self.container.handoff_orchestrator_service.resolve_active_handoff_child(
+                    routing = self._handoff_orchestrator_service.resolve_active_handoff_child(
                         state
                     )
                     if routing is not None:
@@ -557,7 +585,7 @@ class BaseChannel(ABC):
             # Невалидный ход отклоняется ответом на запрос, а не падением Task в фоне;
             # текстом хода становится Markdown-проекция полей.
             pinned_version = state.flow_config_version if state is not None else None
-            flow_config = await self.container.flow_factory.get_flow_config_snapshot(
+            flow_config = await self._flow_factory.get_flow_config_snapshot(
                 self.flow_id, pinned_version
             )
             if flow_config is None:
@@ -599,18 +627,17 @@ class BaseChannel(ABC):
         if self.context is None:
             raise ValueError("Context is not set. Context must be created in middleware.")
 
-        target = await self.container.handoff_orchestrator_service.resolve_execution_target(
+        target = await self._handoff_orchestrator_service.resolve_execution_target(
             parent_flow_id=self.flow_id,
             params=params,
         )
 
         # Единая точка подмены identity: flow-сотрудник исполняется от собственного имени.
         # Инициатор (собеседник/человек) сохраняется для аудита, эскалаций и prompt-переменных.
-        target_flow_config = await self.container.flow_repository.get(target.flow_id)
+        target_flow_config = await FlowConfig.get_latest(target.flow_id)
         if target_flow_config is None:
             raise ValueError(f"create_task: flow {target.flow_id} not found")
         execution_identity = await resolve_execution_context(
-            self.container,
             flow_config=target_flow_config,
             initiator_context=self.context,
             share_grant=params.share_grant,
@@ -622,7 +649,7 @@ class BaseChannel(ABC):
         active_company = execution_identity.context.active_company
         if active_company is None:
             raise ValueError("create_task requires active_company for durable A2A projection")
-        target_state = await self.container.workflow_runtime.get_state(target.session_id)
+        target_state = await self._workflow_runtime.get_state(target.session_id)
         if target_state is None:
             projection_state = create_initial_state(
                 task_id=params.task_id,
@@ -740,7 +767,7 @@ class BaseChannel(ABC):
         else:
             await _kick_flow_task()
         await record_flow_task_enqueued(
-            self.container.redis_client,
+            self._redis_client,
             task_id=params.task_id,
             flow_id=target.flow_id,
         )
@@ -756,7 +783,6 @@ class BaseChannel(ABC):
         company_id: str,
     ) -> None:
         await ensure_submitted_a2a_task(
-            repository=self.container.a2a_task_repository,
             company_id=company_id,
             state=state,
             input_message=params.message,
@@ -776,7 +802,7 @@ class BaseChannel(ABC):
             return
         cfg = flow_config
         if cfg is None:
-            cfg = await self.container.flow_repository.get(self.flow_id)
+            cfg = await FlowConfig.get_latest(self.flow_id)
         if cfg is None:
             return
         trigger = cfg.triggers.get(trigger_id)
@@ -801,7 +827,10 @@ class BaseChannel(ABC):
         state_dict = require_json_object(state.model_dump(mode="json"), "execution_state")
         if triggers_meta:
             state_dict["triggers"] = triggers_meta
-        executor = OutputActionExecutor(container=self.container)
+        executor = OutputActionExecutor(
+            channel_registry=self._channel_registry,
+            mail_service=self._mail_service,
+        )
         _ = await executor.execute(
             output_actions=actions,
             state=state_dict,
@@ -823,7 +852,6 @@ class BaseChannel(ABC):
             raise ValueError("BaseChannel.process_task requires Context")
         ctx = self.context
 
-        container = self.container
 
         # Context должен быть установлен в middleware и передан через context_data
         # Обновляем только специфичные для задачи поля
@@ -838,8 +866,7 @@ class BaseChannel(ABC):
         bind_session_agent(params.session_id)
 
         # Загружаем state для определения task_id, resume и закреплённой версии flow
-        container = self.container
-        saved_state = await container.workflow_runtime.get_state(params.session_id)
+        saved_state = await self._workflow_runtime.get_state(params.session_id)
 
         effective_task_id = effective_stream_task_id_for_session(params.task_id, saved_state)
         if not effective_task_id:
@@ -870,10 +897,10 @@ class BaseChannel(ABC):
         mock_config = parse_mock_control_metadata(params.metadata) if params.metadata else None
         if mock_config is not None:
             await setup_mock_control(
-                container.redis_client,
+                self._redis_client,
                 params.session_id,
                 mock_config,
-                authz=container.authz_service,
+                authz=self._authz_service,
                 user_id=ctx.user.user_id,
             )
 
@@ -920,8 +947,11 @@ class BaseChannel(ABC):
         state.ui_action = None
 
         pinned_version = saved_state.flow_config_version if saved_state else None
-        runtime_flow = await container.flow_factory.get_flow(
-            self.flow_id, params.branch_id, config_version=pinned_version
+        runtime_flow = await self._flow_factory.get_flow(
+            self.flow_id,
+            params.branch_id,
+            config_version=pinned_version,
+            tool_registry=self._tool_registry,
         )
         if runtime_flow is None:
             raise ValueError(f"Flow not found: {self.flow_id}")
@@ -941,7 +971,7 @@ class BaseChannel(ABC):
             company_id=company_id,
         )
         emitter = Emitter(
-            container.a2a_task_projection_service,
+            self._projection_service,
             state,
             company_id=company_id,
         )
@@ -992,18 +1022,22 @@ class BaseChannel(ABC):
             # Flow-сотрудник: user_* = собеседник (инициатор), employee_* = сам сотрудник (актор).
             if initiator_user_id != user_id:
                 identity_vars.update(flow_employee_variables_from_user(ctx.user))
-                initiator_user = await container.user_repository.get(initiator_user_id)
+                initiator_user = await User.get(initiator_user_id)
                 if initiator_user is not None:
                     identity_vars.update(flow_user_identity_overrides(initiator_user))
 
             if state_is_new:
-                cfg_nodes_raw = (runtime_flow.config or {}).get("nodes") or {}
+                cfg_nodes_value = runtime_flow.config.get("nodes")
+                if cfg_nodes_value is None:
+                    cfg_nodes_value = {}
+                if not isinstance(cfg_nodes_value, dict):
+                    raise ValueError("runtime flow config nodes must be an object")
                 cfg_nodes = {
                     node_id: require_json_object(
                         node_config,
                         f"runtime_flow.config.nodes.{node_id}",
                     )
-                    for node_id, node_config in cfg_nodes_raw.items()
+                    for node_id, node_config in cfg_nodes_value.items()
                 }
                 state.files = collect_flow_node_files(cfg_nodes)
 
@@ -1032,13 +1066,13 @@ class BaseChannel(ABC):
 
             await bind_user_device_variables(
                 state.variables,
-                container.shared_storage,
+                self._shared_storage,
                 company_id=company_id,
                 user_id=user_id,
             )
 
             if state_is_new:
-                company_secret_keys = await container.variables_service.secret_variable_keys()
+                company_secret_keys = await self._variables_service.secret_variable_keys()
                 secret_keys = sorted(set(company_secret_keys) & set(state.variables.keys()))
                 await self._save_state(
                     params.session_id,
@@ -1111,7 +1145,7 @@ class BaseChannel(ABC):
                 snapshot=True,
             )
 
-            cancellation_token = CancellationToken(effective_task_id, container.redis_client)
+            cancellation_token = CancellationToken(effective_task_id, self._redis_client)
             set_cancellation_token(cancellation_token)
 
             try:
@@ -1131,10 +1165,16 @@ class BaseChannel(ABC):
                 node_id = state.breakpoint_hit
                 logger.info("flows.channel.breakpoint_hit", node_id=node_id)
 
-                breakpoint_node = runtime_flow.nodes.get(node_id)
-                raw_node_type = (
-                    breakpoint_node.config.get("type", "unknown") if breakpoint_node else "unknown"
+                nodes_value = runtime_flow.config.get("nodes")
+                raw_node: JsonValue | None = None
+                if isinstance(nodes_value, dict):
+                    raw_node = nodes_value.get(node_id)
+                node_config = (
+                    require_json_object(raw_node, f"runtime_flow.config.nodes.{node_id}")
+                    if isinstance(raw_node, dict)
+                    else {}
                 )
+                raw_node_type = node_config.get("type", "unknown")
                 node_type = raw_node_type if isinstance(raw_node_type, str) else "unknown"
                 await self._save_terminal_state(params.session_id, state, "input-required")
                 await emitter.emit_breakpoint(node_id, node_type, state.breakpoint_state or {})
@@ -1167,7 +1207,7 @@ class BaseChannel(ABC):
                     state.interrupt.question,
                 )
             elif state.terminal_task_state == "handback":
-                await container.handoff_orchestrator_service.complete_handback(
+                await self._handoff_orchestrator_service.complete_handback(
                     child_state=state,
                     channel_name=self.name,
                     context_data=self.context.to_dict(),
@@ -1295,7 +1335,7 @@ class BaseChannel(ABC):
         """
         Синхронизирует handoff-interrupt, запускает child flow и UI-событие.
         """
-        orchestrator = self.container.handoff_orchestrator_service
+        orchestrator = self._handoff_orchestrator_service
         validated_body = await orchestrator.validate_handoff_target(body)
         child_depth = orchestrator.assert_handoff_depth_allowed(parent_state)
         parent_state.handoff_depth = child_depth
@@ -1363,7 +1403,7 @@ class BaseChannel(ABC):
             )
             await emitter.emit_ui_events(parent_state.drain_ui_events())
             await record_handoff_initiated(
-                self.container.redis_client,
+                self._redis_client,
                 child_session_id=child_session_id,
             )
 
@@ -1581,12 +1621,11 @@ class BaseChannel(ABC):
 
     async def get_agent_card(self, base_url: str) -> JsonObject:
         """Собрать AgentCard (A2A) для этого flow_id."""
-        container = self.container
-        config = self._flow_config or await container.flow_repository.get(self.flow_id)
+        config = self._flow_config or await FlowConfig.get_latest(self.flow_id)
         if config is None:
             raise ValueError(f"Flow '{self.flow_id}' not found")
 
-        branches_map = await container.flow_factory.get_branches(self.flow_id)
+        branches_map = await self._flow_factory.get_branches(self.flow_id)
 
         card_branch_entries: list[AgentSkill] = []
         for branch_id, branch_cfg in branches_map.items():

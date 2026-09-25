@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import TASK_PAYMENT_SYNC_TICK
 from core.clients.payment.factory import PaymentProviderFactory
 from core.config import get_settings
@@ -20,6 +20,8 @@ logger = get_logger(__name__)
 async def payment_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     _ = schedule_task_id, company_id
     settings = get_settings()
@@ -28,14 +30,12 @@ async def payment_sync_tick(
         logger.debug("idle.payment_sync_tick")
         return {"companies_checked": 0, "total_updated": 0}
 
-    container = get_container()
     payment_service = PaymentService(
-        company_repository=container.company_repository,
-        storage=container.shared_storage,
+        storage=di.shared_storage,
     )
     sync_service = PaymentSyncService(
         payment_service=payment_service,
-        storage=container.shared_storage,
+        storage=di.shared_storage,
     )
 
     if not PaymentProviderFactory.get_available_providers():

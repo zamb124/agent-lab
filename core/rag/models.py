@@ -1,9 +1,7 @@
 """Pydantic модели и публичные контракты RAG системы."""
 
-from datetime import datetime
-from typing import ClassVar, Literal, NotRequired, TypeAlias, TypedDict
+from typing import Literal, NotRequired, TypeAlias, TypedDict
 
-from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 
 from core.files.file_ref import FileRef
@@ -205,34 +203,3 @@ class FlowRAGConfig(StrictBaseModel):
         description="Автоматически индексировать сообщения из сессии",
     )
 
-
-class DocumentProcessingStatus(BaseModel):
-    """
-    Статус обработки документа в RAG.
-
-    Статусы:
-    - pending: документ принят, ожидает обработки
-    - processing: документ обрабатывается (парсинг, chunking, индексация)
-    - completed: документ успешно проиндексирован
-    - failed: ошибка при обработке
-
-    Первичный ключ в БД — document_id (одна строка на документ).
-    """
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True, populate_by_name=True)
-
-    document_id: str
-    task_id: str
-    namespace_id: str
-    document_name: str
-    status: Literal["pending", "processing", "completed", "failed"]
-    error_message: str | None = None
-    s3_key: str | None = None
-    s3_bucket: str | None = None
-    file_size: int | None = None
-    chunks_count: int | None = None
-    created_at: datetime
-    updated_at: datetime
-    completed_at: datetime | None = None
-    extra_metadata: RAGMetadata | None = None
-    ttl_seconds: int = 864000

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import httpx
 
 from apps.flows.src.tasks.task_names import TASK_DISPATCH_EMAIL_TRIGGERS
-from apps.idle_worker.container import IdleWorkerContainer, get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.mail_job_context import (
     enter_mail_binding_context,
     leave_mail_binding_context,
@@ -78,19 +78,19 @@ def _classify_failure(error: BaseException) -> MailSyncErrorKind:
 
 
 async def _recipient_user_ids(
-    container: IdleWorkerContainer, binding: MailboxBinding
+    di: Di, binding: MailboxBinding
 ) -> list[str]:
-    return await mailbox_recipient_user_ids(container, binding)
+    return await mailbox_recipient_user_ids(di.authz_service, binding)
 
 
 async def _publish_message_upserted(
     *,
-    container: IdleWorkerContainer,
+    di: Di,
     binding: MailboxBinding,
     messages: list[InboundMailMessage],
     folder: str = "INBOX",
 ) -> None:
-    recipients = await _recipient_user_ids(container, binding)
+    recipients = await _recipient_user_ids(di, binding)
     if not recipients:
         return
     for message in messages:
@@ -117,12 +117,12 @@ async def _publish_message_upserted(
 
 async def _send_new_mail_notifications(
     *,
-    container: IdleWorkerContainer,
+    di: Di,
     binding: MailboxBinding,
     messages: list[InboundMailMessage],
     dedup_ttl_seconds: int,
 ) -> int:
-    recipients = await _recipient_user_ids(container, binding)
+    recipients = await _recipient_user_ids(di, binding)
     if not recipients:
         return 0
     sent = 0
@@ -132,7 +132,7 @@ async def _send_new_mail_notifications(
                 f"mail:notify:{binding.company_id}:{user_id}:"
                 f"{binding.mailbox_binding_id}:{message.uid}"
             )
-            existing = await container.shared_storage.get(key=dedup_key, force_global=True)
+            existing = await di.shared_storage.get(key=dedup_key, force_global=True)
             if existing is not None:
                 continue
             from_display = message.from_address if message.from_address is not None else "—"
@@ -179,7 +179,7 @@ async def _send_new_mail_notifications(
                     ],
                 ),
             )
-            _ = await container.shared_storage.set(
+            _ = await di.shared_storage.set(
                 key=dedup_key,
                 value=json.dumps({"sent_at": datetime.now(timezone.utc).isoformat()}),
                 ttl=dedup_ttl_seconds,
@@ -187,23 +187,23 @@ async def _send_new_mail_notifications(
             )
             sent += 1
     await _publish_message_upserted(
-        container=container, binding=binding, messages=messages
+        di=di, binding=binding, messages=messages
     )
     return sent
 
 
 async def _sync_single_binding(
     *,
-    container: IdleWorkerContainer,
+    di: Di,
     semaphore: asyncio.Semaphore,
     binding: MailboxBinding,
     max_new_messages: int,
     dedup_ttl_seconds: int,
 ) -> tuple[int, int, bool, str | None]:
     async with semaphore:
-        previous = await enter_mail_binding_context(container, binding)
+        previous = await enter_mail_binding_context(di.authz_service, binding)
         try:
-            result = await container.mail_service.sync_binding(
+            result = await di.mail_service.sync_binding(
                 binding,
                 max_new_messages=max_new_messages,
                 backfill_batch_size=get_settings().mail_sync.backfill_batch_size,
@@ -217,7 +217,7 @@ async def _sync_single_binding(
         if len(result.new_messages) == 0:
             return 0, 0, False, None
         sent = await _send_new_mail_notifications(
-            container=container,
+            di=di,
             binding=binding,
             messages=result.new_messages,
             dedup_ttl_seconds=dedup_ttl_seconds,
@@ -272,6 +272,8 @@ async def mail_sync_tick(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
     drain_depth: int = 0,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     settings = get_settings()
     config = settings.mail_sync
@@ -281,11 +283,10 @@ async def mail_sync_tick(
     if not settings.database.shared_url:
         raise ValueError("database.shared_url is required for mail sync task")
 
-    container = get_container()
-    lag = await container.mail_service.sync_lag_stats(
+    lag = await di.mail_service.sync_lag_stats(
         auth_error_cooldown_seconds=config.auth_error_cooldown_seconds,
     )
-    candidates = await container.mail_service.list_sync_candidates(
+    candidates = await di.mail_service.list_sync_candidates(
         limit=config.max_bindings_per_tick,
         auth_error_cooldown_seconds=config.auth_error_cooldown_seconds,
     )
@@ -309,7 +310,7 @@ async def mail_sync_tick(
     semaphore = asyncio.Semaphore(config.max_parallel_bindings)
     tasks = [
         _sync_single_binding(
-            container=container,
+            di=di,
             semaphore=semaphore,
             binding=binding,
             max_new_messages=config.max_new_messages_per_binding,
@@ -332,7 +333,7 @@ async def mail_sync_tick(
                 stats.failures_validation += 1
             else:
                 stats.failures_unknown += 1
-            await container.mail_service.record_sync_failure(
+            await di.mail_service.record_sync_failure(
                 binding,
                 error_kind=failure_kind,
                 error_message=str(outcome),
@@ -410,18 +411,18 @@ async def mail_sync_binding_task(
     *,
     company_id: str,
     mailbox_binding_id: str,
+    di: Di,
 ) -> dict[str, int | bool | str | None]:
     settings = get_settings()
     config = settings.mail_sync
-    container = get_container()
-    binding = await container.mailbox_binding_repository.get(
-        mailbox_binding_id, company_id
+    binding = await MailboxBinding.find_in_company(
+        company_id, mailbox_binding_id
     )
     if binding is None:
         raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
-    previous = await enter_mail_binding_context(container, binding)
+    previous = await enter_mail_binding_context(di.authz_service, binding)
     try:
-        result = await container.mail_service.sync_binding(
+        result = await di.mail_service.sync_binding(
             binding,
             max_new_messages=config.max_new_messages_per_binding,
             backfill_batch_size=config.backfill_batch_size,
@@ -434,7 +435,7 @@ async def mail_sync_binding_task(
         and result.new_messages
     ):
         _ = await _send_new_mail_notifications(
-            container=container,
+            di=di,
             binding=binding,
             messages=result.new_messages,
             dedup_ttl_seconds=config.notification_dedup_ttl_seconds,

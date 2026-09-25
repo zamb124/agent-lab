@@ -18,7 +18,7 @@ class TestToolRegistryInlineConfig:
     """Тесты ToolRegistry с inline tool конфигами."""
 
     @pytest.mark.asyncio
-    async def test_get_tool_from_dict_config(self, container, unique_id):
+    async def test_get_tool_from_dict_config(self, di, unique_id):
         """ToolRegistry создает CodeTool из dict конфига."""
         config = {
             "tool_id": "inline_calculator",
@@ -33,7 +33,7 @@ class TestToolRegistryInlineConfig:
             },
             "code": "async def run(args, state):\n    return args['a'] + args['b']",
         }
-        tool = await container.tool_registry.create_tool(config)
+        tool = await di.tool_registry.create_tool(config)
         assert isinstance(tool, CodeTool)
         assert tool.name == "inline_calculator"
         assert tool.description == "Простой калькулятор"
@@ -47,14 +47,14 @@ class TestToolRegistryInlineConfig:
         assert result == 30
 
     @pytest.mark.asyncio
-    async def test_get_tool_from_dict_minimal(self, container, unique_id):
+    async def test_get_tool_from_dict_minimal(self, di, unique_id):
         """ToolRegistry создает CodeTool из минимального dict."""
         config = {
             "tool_id": "simple",
             "code": "async def run(args, state):\n    return 'ok'",
             "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
         }
-        tool = await container.tool_registry.create_tool(config)
+        tool = await di.tool_registry.create_tool(config)
         assert isinstance(tool, CodeTool)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -66,14 +66,14 @@ class TestToolRegistryInlineConfig:
         assert result == "ok"
 
     @pytest.mark.asyncio
-    async def test_create_tools_string_raises_error(self, container):
+    async def test_create_tools_string_raises_error(self, di):
         """ToolRegistry выбрасывает ошибку для строковых tool ID."""
         tools_config = ["calculator"]
         with pytest.raises(ValueError, match="passed as string"):
-            await container.tool_registry.create_tools(tools_config)
+            await di.tool_registry.create_tools(tools_config)
 
     @pytest.mark.asyncio
-    async def test_create_tools_inline_list(self, container):
+    async def test_create_tools_inline_list(self, di):
         """ToolRegistry обрабатывает список inline dict конфигов."""
         tools_config = [
             {
@@ -95,7 +95,7 @@ class TestToolRegistryInlineConfig:
                 },
             },
         ]
-        tools = await container.tool_registry.create_tools(tools_config)
+        tools = await di.tool_registry.create_tools(tools_config)
         assert len(tools) == 2
         assert isinstance(tools[0], CodeTool)
         assert tools[0].name == "inline_calc"
@@ -103,14 +103,14 @@ class TestToolRegistryInlineConfig:
         assert tools[1].name == "inline_doubler"
 
     @pytest.mark.asyncio
-    async def test_get_tool_dict_missing_code_raises(self, container):
+    async def test_get_tool_dict_missing_code_raises(self, di):
         """ToolRegistry выбрасывает ошибку если нет code в dict."""
         config = {"tool_id": "broken", "description": "Без кода"}
         with pytest.raises(
             ValueError,
             match="Tool 'broken': нет inline code в конфиге и нет шаблона в tool_repository",
         ):
-            await container.tool_registry.create_tool(config)
+            await di.tool_registry.create_tool(config)
 
 
 class TestCodeToolSchema:
@@ -143,14 +143,13 @@ class TestCodeToolSchema:
         assert params["properties"]["formal"]["type"] == ["boolean", "null"]
 
     @pytest.mark.asyncio
-    async def test_inline_tool_with_state_access(self, container, unique_id):
+    async def test_inline_tool_with_state_access(self, di, unique_id):
         """CodeTool имеет доступ к state."""
         tool = CodeTool(
             tool_id="state_reader",
             code="async def run(args, state):\n    user = state.get('user', {})\n    return f\"User: {user.get('name', 'anonymous')}\"\n",
             description="Читает данные пользователя из state",
             parameters_schema=EMPTY_PARAMETERS_SCHEMA,
-            container=container,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -167,7 +166,7 @@ class TestCodeToolsExecution:
     """Тесты выполнения inline tools."""
 
     @pytest.mark.asyncio
-    async def test_inline_tool_with_complex_logic(self, container, unique_id):
+    async def test_inline_tool_with_complex_logic(self, di, unique_id):
         """Inline tool с complex логикой."""
         tool = CodeTool(
             tool_id="data_processor",
@@ -181,7 +180,6 @@ class TestCodeToolsExecution:
                 },
                 "required": ["items"],
             },
-            container=container,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -195,7 +193,7 @@ class TestCodeToolsExecution:
         assert result["sum"] == 100
 
     @pytest.mark.asyncio
-    async def test_inline_tool_uses_allowed_modules(self, container, unique_id):
+    async def test_inline_tool_uses_allowed_modules(self, di, unique_id):
         """Inline tool может использовать разрешенные модули."""
         tool = CodeTool(
             tool_id="json_tool",
@@ -206,7 +204,6 @@ class TestCodeToolsExecution:
                 "properties": {"value": {"type": "string"}},
                 "required": ["value"],
             },
-            container=container,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -218,7 +215,7 @@ class TestCodeToolsExecution:
         assert result == '{"key": "test"}'
 
     @pytest.mark.asyncio
-    async def test_inline_tool_math_operations(self, container, unique_id):
+    async def test_inline_tool_math_operations(self, di, unique_id):
         """Inline tool с math операциями."""
         tool = CodeTool(
             tool_id="math_tool",
@@ -229,7 +226,6 @@ class TestCodeToolsExecution:
                 "properties": {"x": {"type": "number"}},
                 "required": ["x"],
             },
-            container=container,
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -247,7 +243,7 @@ class TestCodeToolsInFlowConfig:
     """Тесты inline tools в конфигурации flow."""
 
     @pytest.mark.asyncio
-    async def test_agent_config_with_inline_tools(self, container, unique_id):
+    async def test_agent_config_with_inline_tools(self, di, unique_id):
         """Конфигурация агента с inline tools (после прохождения через FlowsLoader)."""
         agent_tools_config = [
             {
@@ -274,7 +270,7 @@ class TestCodeToolsInFlowConfig:
                 "code": "async def run(args, state):\n    text = args.get('text', '')\n    if args.get('uppercase', False):\n        return text.upper()\n    return text\n",
             },
         ]
-        tools = await container.tool_registry.create_tools(agent_tools_config)
+        tools = await di.tool_registry.create_tools(agent_tools_config)
         assert len(tools) == 2
         assert isinstance(tools[0], CodeTool)
         assert isinstance(tools[1], CodeTool)
@@ -289,7 +285,7 @@ class TestCodeToolsInFlowConfig:
         assert result == "HELLO"
 
     @pytest.mark.asyncio
-    async def test_multiple_inline_tools(self, container, unique_id):
+    async def test_multiple_inline_tools(self, di, unique_id):
         """Несколько inline tools в одном агенте."""
         tools_config = [
             {
@@ -308,7 +304,7 @@ class TestCodeToolsInFlowConfig:
                 "parameters_schema": EMPTY_PARAMETERS_SCHEMA,
             },
         ]
-        tools = await container.tool_registry.create_tools(tools_config)
+        tools = await di.tool_registry.create_tools(tools_config)
         assert len(tools) == 3
         assert all((isinstance(t, CodeTool) for t in tools))
         state = ExecutionState(

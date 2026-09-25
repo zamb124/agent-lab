@@ -4,7 +4,12 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from core.ai.models import AIModelRecord, ArtificialAnalysisIndices
+from core.ai.models import (
+    EDITORIAL_PRIOR_CAP,
+    AIModelRecord,
+    ArtificialAnalysisIndices,
+    LLMModelScore,
+)
 from core.ai.providers import AICapability
 from core.ai.requirements import AIRequestRequirements, model_satisfies_requirements
 
@@ -12,14 +17,24 @@ _SIZE_RE = re.compile(r"(?<![a-z0-9])(\d+(?:\.\d+)?)\s*([bm])\b", re.IGNORECASE)
 _ROUTER_MODEL_IDS = frozenset({"openrouter/free", "free"})
 _NON_TEXT_CHAT_OUTPUT = frozenset({"image", "audio", "music", "video"})
 
-EDITORIAL_PRIOR_CAP = 5.0
-
-
 @dataclass(frozen=True)
 class PlatformModelScoreOverlay:
     enabled: bool
     editorial_prior: float
     note: str | None
+
+
+def platform_model_score_overlays(
+    rows: Iterable[LLMModelScore],
+) -> dict[tuple[str, str], PlatformModelScoreOverlay]:
+    return {
+        (row.provider, row.model_id): PlatformModelScoreOverlay(
+            enabled=row.enabled,
+            editorial_prior=row.editorial_prior,
+            note=row.note,
+        )
+        for row in rows
+    }
 
 
 @dataclass(frozen=True)

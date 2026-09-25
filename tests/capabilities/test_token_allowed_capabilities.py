@@ -73,10 +73,8 @@ def test_assert_capability_allowed_denies_missing_capability() -> None:
 
 
 @pytest.mark.asyncio
-async def test_registry_call_denies_capability_not_in_token() -> None:
-    from apps.capability_gateway.container import get_capability_gateway_container
+async def test_registry_call_denies_capability_not_in_token(capability_gateway_di) -> None:
 
-    container = get_capability_gateway_container()
     context = _signed_context(allowed_capabilities=["files.create"])
     request = CapabilityCallRequest(
         context=context,
@@ -84,4 +82,4 @@ async def test_registry_call_denies_capability_not_in_token() -> None:
         kwargs={"url": "https://example.com"},
     )
     with pytest.raises(ValueError, match="Capability not allowed"):
-        await container.capability_registry.call(request)
+        await capability_gateway_di.capability_registry.call(request)

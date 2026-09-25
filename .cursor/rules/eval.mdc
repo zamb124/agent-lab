@@ -1,173 +1,58 @@
 ---
-description: "Code Execution 2026: isolated runners, capability gateway, no in-process eval"
+description: "Исполнение кода пользователя: code-runner-*, capability-gateway, CapabilityManifest, sandbox-библиотеки, LSP редактора. Читать при правке runners, gateway, CodeNode и CodeTool"
+globs:
+  - "apps/code_runner_*/**"
+  - "apps/capability_gateway/**"
+  - "core/capabilities/**"
+  - "apps/flows/src/runners/**"
+  - "apps/flows/ui/components/**/*code-editor*"
 alwaysApply: false
 ---
-# Code Execution Sandbox
 
-Пользовательский код **никогда** не исполняется внутри процесса `flows`.
+# Исполнение кода
 
-## Архитектура
+Код пользователя (code-нода, inline tool, code-условие ребра) никогда не исполняется в процессе `flows`: `RemoteCodeRunner` (`apps/flows/src/runners/remote.py`) → `code-runner-<language>` → `capability-gateway` → доверенные сервисы. Целый агент из дерева исходников — `code_agent` на ферме → `guest_runtime.mdc`.
 
-```
-flows runtime / code API
-  -> RemoteCodeRunner
-  -> code-runner-python | code-runner-node | code-runner-go | code-runner-csharp
-  -> capability-gateway
-  -> trusted platform services
-```
+## Модель
 
-- `flows` оркестрирует graph/state/tasks и подписывает execution context.
-- `code-runner-*` исполняют код в отдельном процессе своего языка.
-- `code-runner-python` и `code-runner-node` держат persistent worker pool с cached compiled artifact/script (`CODE_RUNNER_PYTHON_WORKERS` / `CODE_RUNNER_NODE_WORKERS`).
-- `code-runner-go` и `code-runner-csharp` кэшируют build artifact по hash(source+entrypoint+manifest) и не компилируют каждый вызов заново. Параллельный `go build` / `dotnet build` ограничен semaphore `CODE_RUNNER_GO_WORKERS` / `CODE_RUNNER_CSHARP_WORKERS` (минимум 2); слот только на compile, не на `tools.call` вложенного same-language runner.
-- `capability-gateway` — единственный trusted API к платформенным возможностям.
-- Целый агент из дерева файлов — нода **`code_agent`** на ферме `guest_runtime` (не code-runner, не `remote_flow`). Канон → **`guest_runtime.mdc`**.
-- Python, JavaScript, TypeScript, Go и C# получают один `CapabilityManifest`.
+- `CapabilityManifest` (`core/capabilities/models.py`) — единый источник API платформы для Python, JS/TS, Go и C#; реестр и handlers — `apps/capability_gateway/services/registry.py` (`CapabilityDefinition`, `CAPABILITY_LANGUAGES`).
+- SDK namespaces: `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, `worktracker`, `rag`, `tables`, `db`, `ui` — строятся в каждом runner из manifest.
+- `execution_token` (`core/capabilities/tokens.py`) — AuthN runner'а к подписанному контексту исполнения, не PDP.
+- Процессы: `CodeRunner<Lang>Di(ServiceDi)` (поле `executor`, recipe `lsp_manager`), `CapabilityGatewayDi(ServiceDi)` (поле `capability_registry`).
+
+## Инварианты
+
+1. Entrypoint — `entrypoint` конфига или первая объявленная функция; сигнатура `(args, state)`; `args` — dict входов ноды (playground `POST /flows/api/v1/code/execute` принимает `args`, иначе `{}`).
+2. `state` в Python — `ExecutionStateView(dict)`: атрибутный стиль первичен, dict-протокол работает на том же объекте, чтение отсутствующего поля — `AttributeError`; frozen-поля возвращённого state не переносятся (`FIELDS_COPY_FROM_USER_RETURNED_STATE`) → `flows_runtime.mdc` § Состояние.
+3. Библиотеки sandbox — allowlist `core/capabilities/sandbox_libraries.py` (Python stdlib ETL + `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`; JS `lodash`, `uuid`, `date-fns`; C# `System.Text.Json` и др.; Go `GO_ALLOWED_STDLIB_MODULES`); импорт вне allowlist — `PermissionError`; LSP видит те же пакеты.
+4. Файлы — только `files.*`, HTTP — только `http.get`, таблицы — `tables.*`, живые БД — `db.*`; `open()`, `sqlite3`, `requests`/`httpx`/`fetch`/`net/http`/`HttpClient`, `System.IO`, `Process`, `getattr`/`hasattr` недоступны.
+5. Импорт `apps.*`/`core.*` в коде пользователя удаляет source sanitizer (`core/capabilities/source_sanitize.py`) до сохранения и исполнения; `raise FlowInterrupt(question=...)` — builtin sandbox.
+6. Python и Node держат пул воркеров с кэшем скомпилированного артефакта (`CODE_RUNNER_PYTHON_WORKERS`, `CODE_RUNNER_NODE_WORKERS`); Go и C# кэшируют сборку по hash(source + entrypoint + manifest), параллельные сборки ограничены semaphore (`CODE_RUNNER_GO_WORKERS`, `CODE_RUNNER_CSHARP_WORKERS`, минимум 2).
+7. Flow UI из кода — `await ui.render(...)`/`await ui.navigate(...)`: gateway валидирует блоки грамматикой, подписывает `PlatformEffectEnvelope` (origin: hash `execution_token`, `capability_call_id`, ids исполнения), flows применяет `apply_capability_platform_effects` (проверка origin, manifest, slot/page) → `flow_ui.mdc`.
+8. Ошибка runner — `CodeExecutionResponse` с `language`, `service`, `stage`, `message`, `exception_type`, `traceback`, `stdout`/`stderr`, `request_id`, `trace_id`; `/flows/api/v1/code/execute` отдаёт его в `error_payload` без потерь.
+9. Нет `node`, `go` или `dotnet` в окружении — ошибка окружения.
+
+### LSP редактора
+
+1. Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client` (`scripts/build_codemirror_bundle.mjs`); intelligence — language-native stubs из `CapabilityManifest` + allowlist → language servers в `code-runner-*` (basedpyright, tsserver, gopls, csharp-ls) на изолированной vfs (`core/capabilities/lsp_workspace.py`).
+2. Bootstrap — `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`); кадры — `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}`: flows проверяет `GET {runner}/lsp/session/{id}` и проксирует через `core/clients/service_websocket.py`; нет сессии или cookie — close `1008`.
+3. Language server живёт в bridge-процессе `core.capabilities.lsp_bridge` (сессии — `core/capabilities/lsp_session.py`), не в памяти granian worker; REST-зеркало кадров не требуется.
+4. `GET /flows/api/v1/code/documentation` — markdown для человека, редактор его не читает.
+
+### Добавление capability
+
+1. `CapabilityDefinition` + handler в `registry.py` (или модуль рядом, например `wiki_capabilities.py`), общий — через `CAPABILITY_LANGUAGES`.
+2. SDK языков руками не пишется — он строится из manifest.
+3. Тесты manifest/docs и исполнения через каждый runner.
 
 ## Запреты
 
-1. Не добавлять in-process `exec`, `eval`, `safe_eval`, `PythonNamespaceBuilder`, `PythonCompiler`.
-2. Не добавлять `apps/flows/src/eval`.
-3. Не импортировать `apps.*` / `core.*` из пользовательского кода; source sanitizer удаляет такие строки до сохранения/исполнения.
-4. Не делать language-specific platform APIs: новая возможность добавляется как capability в `capability-gateway` и автоматически появляется во всех языках.
-5. Не добавлять mock/fallback runtime path. Если `node`, `go` или `dotnet` отсутствует в окружении, это ошибка окружения, а не fallback.
+1. In-process `exec`, `eval`, `safe_eval`, `PythonNamespaceBuilder`, `PythonCompiler`; пакет `eval` в `apps/flows/src/`.
+2. Language-specific API платформы в обход capability.
+3. Mock или fallback runtime path исполнения.
+4. JSON-каталог completions.
 
-## Где что находится
+## Гейты
 
-| Что | Файл |
-|---|---|
-| Контракты capability/code execution | `core/capabilities/models.py` |
-| Execution token | `core/capabilities/tokens.py` — **AuthN only** (binds runner to signed execution context); не OpenFGA PDP |
-| Capability registry + docs | `apps/capability_gateway/services/registry.py` |
-| Python runner | `apps/code_runner_python/` |
-| JS/TS runner | `apps/code_runner_node/` |
-| Go runner | `apps/code_runner_go/` |
-| C# runner | `apps/code_runner_csharp/` |
-| Flows adapter | `apps/flows/src/runners/remote.py` |
-| LSP workspace stubs | `core/capabilities/lsp_workspace.py` |
-| LSP session manager | `core/capabilities/lsp_session.py` |
-| LSP stdio bridge | `core/capabilities/lsp_bridge.py` (`python -m core.capabilities.lsp_bridge`) |
-| Code node LSP bootstrap | `POST /flows/api/v1/code/lsp/session` + `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}` |
-| CodeNode | `apps/flows/src/runtime/nodes.py::CodeNode` |
-| Source sanitizer | `core/capabilities/source_sanitize.py` |
-
-## Контракт пользовательского кода
-
-Если `entrypoint` не задан в конфиге ноды/tool, исполняющий runner вызывает первую функцию,
-объявленную в source. `run` — только имя в примерах, не требование.
-
-### Python
-
-```python
-async def run(args, state):
-    result = await files.get_bytes(file_id=args["file_id"])
-    state.last_file_id = args["file_id"]
-    return {"result": result}
-```
-
-**Контракт `state` в Python sandbox** — тот же DX, что был у in-process `ExecutionState`, и тот же, что у объекта `state` в JS-runner:
-
-- Атрибутный стиль — первичный: `state.session_id` (чтение), `state.my_field = value` (запись любого нового поля без дополнительного синтаксиса).
-- Dict-протокол работает на том же объекте: `state["key"]`, `state.get(...)`, `key in state` — запасной стиль для динамических ключей и имён, совпадающих с методами dict (`get`, `items`, `keys`).
-- Чтение отсутствующего поля — `AttributeError` (Zero-Guess, без тихого `None`).
-- Вложенные структуры — обычные dict (`state.variables` — dict, дальше `["key"]`).
-- Реализация — `ExecutionStateView(dict)` в worker bootstrap `apps/code_runner_python/services/executor.py`: одна обёртка при разборе запроса, без копий и преобразований; JSON-сериализация ответа и identity `result is state` не меняются.
-
-`args` — обычный dict во всех языках. В графе его заполняют входы ноды (`input_mapping` / рёбра). Playground `POST /flows/api/v1/code/execute` принимает поле `args`; без него entrypoint получает `{}`.
-
-Python sandbox — привычный `import`, не DSL:
-
-- `import wiki` / `from files import read` / `import crm` / `import rag` / `import worktracker` / `import tables` / `import db` работают на тех же SDK-объектах, что и globals.
-- Stdlib ETL: `csv`, `json`, `pathlib`, `io`, `copy`, `dataclasses`, `enum`, `urllib.parse`, `zoneinfo`, `hmac`, `secrets`, `contextlib`, `tomllib`, `struct`, `zipfile` (поверх `BytesIO`), `xml.etree.ElementTree`, `email.message`, …
-- Builtins: `frozenset`, `hash`, `slice` (нет `getattr`/`hasattr`/`open`).
-- Third-party в отдельном sandbox site-packages: `pandas`, `numpy`, `dateutil`, `yaml`, `openpyxl`, `bs4`, `defusedxml`. Не в корневом `pyproject.toml`. `sqlite3` в sandbox **нет** — табличные файлы платформы только через `tables.*` / `DataTableService`. TCP к живым БД в sandbox **нет** — только `db.*` → capability-gateway → `DatasourceClient`.
-- HTTP только `await http.get(url=...)`. `requests` / `httpx` / `urllib.request` запрещены.
-- `pathlib.Path` — path math; `Path.read_text()` / `open()` запрещены, файлы платформы — `files.*`.
-- `raise FlowInterrupt(question="...")` — sandbox builtin без `from apps.flows...`.
-
-JS/TS: в vm есть `JSON` / `Date` / `Map` / `Object` / `Array` / `ArrayBuffer` / `Uint8Array` / `Intl` / `crypto` / `BigInt` / `structuredClone`; allowlisted `import lodash from 'lodash'`, `uuid`, `date-fns`. `fetch` / `process` / произвольный `require` запрещены.
-
-C#: `System.Text.Json`, `System.Text.RegularExpressions`, `System.Xml.Linq`, `System.Buffers`, `System.Collections.Immutable` разрешены; `System.IO` / `HttpClient` / `Process` / `DllImport` запрещены.
-
-Go: runtime = LSP = `GO_ALLOWED_STDLIB_MODULES` (`encoding/json`, `encoding/csv`, `encoding/xml`, `encoding/binary`, `strings`, `time`, …). `net/http` нельзя — `http.Get`. Импорт вне allowlist — `PermissionError`.
-
-Allowlist канон: `core/capabilities/sandbox_libraries.py`. Language server видит те же пакеты через vfs runners; JSON-каталог `/code/completions` удалён.
-
-### Flow UI из sandbox-кода
-
-Интерфейс sandbox-код меняет теми же событиями, что и тулы агента, но только через capability-gateway: `await ui.render(slot_id=..., blocks=[...])` и `await ui.navigate(page_id=...)` (`CapabilityDefinition` `ui.*`, tags `flow-ui`/`trusted-effect`; `channel.send_with_buttons` выдаёт `suggested_prompts` в `conversation` тем же путём). Gateway валидирует блоки грамматикой (`FlowUIRender`/`FlowUINavigate`), подписывает `PlatformEffectEnvelope` (`origin`: `execution_token_sha256`, `capability_call_id`, `company_id`/`flow_id`/`branch_id`/`session_id`/`task_id`/`context_id`, `source_node_id`/`source_tool_call_id`) и возвращает их runner'у; ответ `CodeExecutionResponse.platform_effects` в `flows` проходит `apply_capability_platform_effects` (`core/flow_ui/effects.py`): проверка issuer/origin против `CapabilityExecutionContext`, capability против manifest, `assert_known_slot`/`assert_known_page` по текущему интерфейсу, затем очередь `state` → артефакт `ui` на `flush_ui`. `PlatformEffect = FlowUIEvent` — отдельной модели эффекта нет. Returned `state` не переносит `ui_slots` и другие frozen поля (`FIELDS_COPY_FROM_USER_RETURNED_STATE`). Значения экрана меняются обычной записью `state.<field> = value` — интерфейс читает их через `{field}`.
-
-`html`-блок интерфейса — отдельный browser sandbox, не code-runner: `<iframe sandbox="allow-scripts">` с фиксированным CSP (`core/frontend/static/lib/flow-ui/blocks/html.js`), без cookies/origin платформы и без доступа к DOM хоста; в iframe доступен только мост `window.flowUi` (`state`, `onChange`, `send`, `setValue`, `resize`, `openUrl`) и декларативные `data-bind`/`data-show`. Размер HTML и число `html`-блоков ограничены `FlowUILimits` (`max_html_source_bytes`, `max_html_blocks_per_page`). Канон → **`flow_ui.mdc`**.
-
-### Code node LSP
-
-Редактор `flows-code-editor` — vendored CodeMirror + `@codemirror/lsp-client`. Бандл (`scripts/build_codemirror_bundle.mjs`) экспортирует `LSPClient`, `languageServerExtensions` и `startCompletion`. Источник правды — `CapabilityManifest` + allowlist → language-native stubs (`.pyi` / `.d.ts` / Go / C#) → language servers в `code-runner-*` (basedpyright / tsserver / gopls / csharp-ls) только на isolated vfs.
-
-- Bootstrap: `POST /flows/api/v1/code/lsp/session` (фабрика `flows/code_lsp_session`, REST-зеркало есть).
-- JSON-RPC: `WS /flows/api/v1/code/lsp/ws/{language}/{session_id}` — не `command_router`, REST-зеркало кадров не требуется. Language server живёт в отдельном bridge-процессе (`core.capabilities.lsp_bridge`), не в памяти granian worker.
-- Unknown `session_id` / без cookie → WS close `1008` (flows проверяет `GET {runner}/lsp/session/{id}` до proxy).
-- C# LSP vfs: `Sdk.cs` (static class на каждый SDK namespace) + `UserCode.cs` (user source). didOpen редактора не затирает SDK.
-- Markdown `/code/documentation` остаётся для человека и не кормит editor.
-
-### JavaScript / TypeScript
-
-```ts
-async function run(args, state) {
-  const result = await files.get_bytes({file_id: args.file_id});
-  return {result};
-}
-```
-
-### Go
-
-```go
-package main
-
-func run(args map[string]any, state map[string]any) (any, error) {
-    result, err := files.GetBytes(map[string]any{"file_id": args["file_id"]})
-    if err != nil {
-        return nil, err
-    }
-    return map[string]any{"result": result}, nil
-}
-```
-
-### C#
-
-```csharp
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-async Task<object?> run(Dictionary<string, object?> args, Dictionary<string, object?> state)
-{
-    var result = await files.GetBytes(new Dictionary<string, object?> { ["file_id"] = args["file_id"] });
-    return new Dictionary<string, object?> { ["result"] = result };
-}
-```
-
-## Добавление platform capability
-
-1. Добавить `CapabilityDefinition` в `apps/capability_gateway/services/registry.py` (или выделенный модуль вроде `wiki_capabilities.py`).
-2. Добавить handler там же.
-3. Проверить, что capability использует `CAPABILITY_LANGUAGES`, если capability должна быть общей.
-4. Не добавлять language-specific SDK вручную: SDK namespace строится из manifest в каждом runner.
-5. Обновить tests для manifest/docs и выполнения через каждый runner (или dedicated smoke, если namespace не входит в multi-language static suite).
-
-SDK namespaces (as-is): `tools`, `files`, `http`, `text`, `voice`, `flow_state`, `log`, `trace`, `platform`, `channel`, `flow`, `wiki`, `documents`, `crm`, `sync`, `worktracker`, `rag`, `tables`, `db`, `ui`.
-
-## Трассировка и ошибки
-
-Каждый runner возвращает `CodeExecutionResponse`.
-При ошибке обязательно заполнены:
-
-- `language`
-- `service`
-- `stage`
-- `message`
-- `exception_type`
-- `traceback`
-- `stdout` / `stderr`, если есть
-- `request_id`
-- `trace_id`
-
-`flows` не должен терять этот payload: API `/flows/api/v1/code/execute` возвращает `error_payload`.
+- `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые in-process eval символы.
+- `tests/` runners и gateway — исполнение через каждый язык на реальном стеке `[без гейта]` для allowlist библиотек.

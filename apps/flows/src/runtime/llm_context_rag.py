@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, NamedTuple
+from typing import NamedTuple
 
-from apps.flows.src.container_state import get_current_container
 from apps.flows.src.mapping import MappingResolver
 from apps.flows.src.models import ResourceType
-from apps.flows.src.models.resource import ResourceReference, ResourceReferenceInput
+from apps.flows.src.models.resource import (
+    ResourceDefinition,
+    ResourceReference,
+    ResourceReferenceInput,
+)
 from apps.flows.src.resources.merge import (
     merge_flow_skill_node_resource_maps,
     merge_shared_definition_config_with_patch,
@@ -17,18 +20,16 @@ from apps.flows.src.resources.merge import (
 from core.authz.errors import AuthzDenied
 from core.authz.ids import PLATFORM_ADMIN_GROUP
 from core.authz.models import AuthzObject, AuthzSubject
+from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation
+from core.clients.rag_client import RagClient
 from core.context import require_active_company
 from core.llm_context import LLMContextSourceRegistry
 from core.namespace import NamespaceService
 from core.rag.llm_context_source import RAGLLMContextSource
 from core.rag.rag_resource_bind import RagResourceBindParams
-from core.rag.repository import RAGRepository
 from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
-
-if TYPE_CHECKING:
-    from apps.flows.src.db import ResourceRepository
 
 
 class _ResolvedRagConfig(NamedTuple):
@@ -41,27 +42,27 @@ async def resolve_rag_context_source_registry_for_runtime(
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     node_resources_raw: Mapping[str, ResourceReferenceInput],
-    resource_repository: ResourceRepository | None,
-    rag_repository: RAGRepository,
     namespace_service: NamespaceService | None = None,
     state: ExecutionState | None = None,
+    rag_client: RagClient | None = None,
+    authz: AuthzService,
 ) -> LLMContextSourceRegistry | None:
     """Собирает context sources из каждого merged ``type: rag`` resource, доступного ноде."""
     binds = await resolve_rag_resource_binds_for_runtime(
         flow_resources=flow_resources,
         skill_resources=skill_resources,
         node_resources_raw=node_resources_raw,
-        repository=resource_repository,
         namespace_service=namespace_service,
         state=state,
+        authz=authz,
     )
     if not binds:
         return None
     return LLMContextSourceRegistry(
         [
             RAGLLMContextSource(
-                repository=rag_repository,
                 bind=bind,
+                rag_client=rag_client,
                 name=_source_name_from_resource_key(key),
             )
             for key, bind in binds.items()
@@ -74,9 +75,9 @@ async def resolve_rag_resource_binds_for_runtime(
     flow_resources: Mapping[str, ResourceReferenceInput],
     skill_resources: Mapping[str, ResourceReferenceInput] | None,
     node_resources_raw: Mapping[str, ResourceReferenceInput],
-    repository: ResourceRepository | None,
     namespace_service: NamespaceService | None = None,
     state: ExecutionState | None = None,
+    authz: AuthzService,
 ) -> dict[str, RagResourceBindParams]:
     """Разрешает merged flow/skill/node RAG resource references в typed bind params."""
     merged = merge_flow_skill_node_resource_maps(
@@ -88,7 +89,6 @@ async def resolve_rag_resource_binds_for_runtime(
         resolved = await _resolve_rag_config_for_reference(
             key=key,
             ref=ref,
-            repository=repository,
         )
         if resolved is None:
             continue
@@ -96,6 +96,7 @@ async def resolve_rag_resource_binds_for_runtime(
             key=key,
             permission=resolved.permission,
             state=state,
+            authz=authz,
         )
         raw_config = _resolve_runtime_templates(resolved.config, state)
         bind = RagResourceBindParams.model_validate(raw_config)
@@ -109,7 +110,6 @@ async def _resolve_rag_config_for_reference(
     *,
     key: str,
     ref: ResourceReference,
-    repository: ResourceRepository | None,
 ) -> _ResolvedRagConfig | None:
     if ref.is_inline:
         if ref.type != ResourceType.RAG:
@@ -118,12 +118,12 @@ async def _resolve_rag_config_for_reference(
             raise ValueError(f"Resource '{key}': inline RAG without config")
         return _ResolvedRagConfig(config=ref.config, permission=list(ref.permission))
 
-    if repository is None:
-        raise ValueError("resource_repository is required for shared RAG resources")
     resource_id = ref.resource_id
     if resource_id is None:
         raise ValueError(f"Resource '{key}': shared reference without resource_id")
-    definition = await repository.get(resource_id)
+    definition = await ResourceDefinition.get(
+        ResourceDefinition.row_id(resource_id)
+    )
     if definition is None:
         raise ValueError(f"Shared resource '{resource_id}' not found in the database")
     if definition.type != ResourceType.RAG:
@@ -144,13 +144,10 @@ async def _assert_rag_resource_permission(
     key: str,
     permission: list[str],
     state: ExecutionState | None,
+    authz: AuthzService,
 ) -> None:
     if state is None:
         raise PermissionError(f"User has no access to RAG resource '{key}'")
-    runtime = get_current_container()
-    if runtime is None:
-        raise RuntimeError("FlowContainer is required for RAG permission checks")
-    authz = runtime.authz_service
     user_id = state.user_id
     try:
         if not permission:

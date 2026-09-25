@@ -6,8 +6,8 @@
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from core.state import ExecutionState
@@ -58,10 +58,24 @@ def flow_config():
     )
 
 
+def _llm_node_deps(di):
+    return {
+        "execution": execution_context_for(di.node_constructor.workflow_runtime),
+        "redis_client": di.node_constructor.redis_client,
+        "flow_factory": di.flow_factory,
+        "llm_context_memory_store": di.node_constructor.llm_context_memory_store,
+        "namespace_service": di.node_constructor.namespace_service,
+        "authz_service": di.node_constructor.authz_service,
+        "tool_registry": di.tool_registry,
+        "workflow_runtime": di.node_constructor.workflow_runtime,
+        "text_transform_service": di.node_constructor.text_transform_service,
+        "emitter_factory": di.node_constructor.emitter_factory,
+    }
+
+
 @pytest.fixture
-def runner_with_hooks(flow_config):
+def runner_with_hooks(flow_config, di):
     """LlmNodeRunner с агентом, у которого есть хуки."""
-    container = get_container()
     node_config_json = require_json_object(
         flow_config.model_dump(mode="json", exclude_none=True),
         "test_agent_hooks.node_config",
@@ -69,7 +83,7 @@ def runner_with_hooks(flow_config):
     agent = AgentWithHooks(
         config=node_config_json,
         node_config=flow_config,
-        container=container,
+        **_llm_node_deps(di),
     )
     return LlmNodeRunner(
         node_config=flow_config,
@@ -77,14 +91,13 @@ def runner_with_hooks(flow_config):
         llm=None,
         prompt=flow_config.prompt,
         llm_node=agent,
-        container=container,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
 
 
 @pytest.fixture
-def runner_without_hooks(flow_config):
+def runner_without_hooks(flow_config, di):
     """LlmNodeRunner с агентом без хуков."""
-    container = get_container()
     node_config_json = require_json_object(
         flow_config.model_dump(mode="json", exclude_none=True),
         "test_agent_hooks.node_config",
@@ -92,7 +105,7 @@ def runner_without_hooks(flow_config):
     agent = AgentWithoutHooks(
         config=node_config_json,
         node_config=flow_config,
-        container=container,
+        **_llm_node_deps(di),
     )
     return LlmNodeRunner(
         node_config=flow_config,
@@ -100,7 +113,7 @@ def runner_without_hooks(flow_config):
         llm=None,
         prompt=flow_config.prompt,
         llm_node=agent,
-        container=container,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
 
 

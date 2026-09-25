@@ -1,4 +1,4 @@
-"""Private S3 + FileRepository persistence."""
+"""Private S3 + FileRecord persistence."""
 
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ from core.files.audio_transcode import (
     resolve_ios_transcode_source,
     transcode_audio_bytes_to_m4a_aac,
 )
-from core.files.file_repository import FileRepository
+from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
+from core.files.object_store.gate import raise_storage_unavailable
+from core.files.object_store.pool import client_for
+from core.files.object_store.resolver import resolve_for_record, resolve_for_write
 from core.files.retention import FileRetentionKind, FileRetentionSpec, resolve_retention_ttl_seconds
-from core.files.s3_client import S3Client, S3ClientFactory
 from core.files.urls import files_download_url
 from core.logging import get_logger
 from core.types import JsonObject
@@ -58,23 +60,8 @@ def _original_name_with_extension(original_name: str, content_type: str) -> str:
 
 
 class FileStorage:
-    def __init__(self, file_repository: FileRepository, bucket_name: str | None = None) -> None:
-        self._file_repository: FileRepository = file_repository
-        self._bucket_name: str | None = bucket_name
-        self._s3_client: S3Client | None = None
-
-    async def _get_s3_client(self) -> S3Client:
-        if self._s3_client is None:
-            if self._bucket_name:
-                self._s3_client = S3ClientFactory.create_client_for_bucket(self._bucket_name)
-            else:
-                self._s3_client = S3ClientFactory.create_default_client()
-        return self._s3_client
-
     async def close(self) -> None:
-        if self._s3_client:
-            await self._s3_client.close()
-            self._s3_client = None
+        return None
 
     async def upload_bytes(
         self,
@@ -92,6 +79,7 @@ class FileStorage:
         content_sha256_hex: str | None = None,
         existing_file_id: str | None = None,
         route_segment: str | None = None,
+        source_kind: FileSourceKind,
     ) -> FileRecord:
         if len(data) == 0:
             raise ValueError("File is empty.")
@@ -112,15 +100,19 @@ class FileStorage:
         extension = Path(effective_name).suffix or ".bin"
         s3_key = f"files/{file_id}_{file_hash}{extension}"
 
-        s3_client = await self._get_s3_client()
+        resolved = await resolve_for_write(company_id, source_kind)
+        s3_client = await client_for(resolved)
         s3_metadata = _to_ascii_s3_metadata(metadata or {})
-        _ = await s3_client.upload_bytes(
-            data=data,
-            key=s3_key,
-            metadata=s3_metadata,
-            content_type=content_type,
-            public=is_public,
-        )
+        try:
+            _ = await s3_client.upload_bytes(
+                data=data,
+                key=s3_key,
+                metadata=s3_metadata,
+                content_type=content_type,
+                public=is_public,
+            )
+        except Exception as exc:
+            raise_storage_unavailable(exc)
 
         created_at = datetime.now(UTC)
         expires_at: datetime | None
@@ -132,13 +124,11 @@ class FileStorage:
         checksum = content_sha256_hex if content_sha256_hex else hashlib.sha256(data).hexdigest()
         file_record = FileRecord(
             file_id=file_id,
-            provider=s3_client.provider_name,
             original_name=effective_name,
             content_type=content_type,
             file_size=len(data),
-            s3_bucket=s3_client.require_bucket_config_key(),
+            storage_id=resolved.storage_id,
             s3_key=s3_key,
-            s3_endpoint=s3_client.endpoint_url,
             uploaded_by=uploaded_by,
             company_id=company_id,
             is_public=is_public,
@@ -150,7 +140,7 @@ class FileStorage:
             expires_at=expires_at,
             download_url=files_download_url(file_id, route_segment=route_segment),
         )
-        _ = await self._file_repository.set(file_record)
+        _ = await FileRecord.set(file_record)
         logger.info(
             "files.file.stored.file_id.original_name.bytes",
             file_id=file_id,
@@ -163,7 +153,7 @@ class FileStorage:
         self,
         *,
         s3_key: str,
-        s3_bucket: str,
+        storage_id: str,
         original_name: str,
         content_type: str,
         file_size: int,
@@ -181,13 +171,6 @@ class FileStorage:
         file_id = existing_file_id if existing_file_id else f"file_{uuid.uuid4().hex[:12]}"
         if file_id == "":
             raise ValueError("existing_file_id cannot be empty")
-        s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
-        try:
-            provider_name = s3_client.provider_name
-            endpoint_url = s3_client.endpoint_url
-        finally:
-            await s3_client.close()
-
         created_at = datetime.now(UTC)
         expires_at: datetime | None
         if ttl_seconds == 0:
@@ -197,13 +180,11 @@ class FileStorage:
 
         file_record = FileRecord(
             file_id=file_id,
-            provider=provider_name,
             original_name=original_name,
             content_type=content_type,
             file_size=file_size,
-            s3_bucket=s3_bucket,
+            storage_id=storage_id,
             s3_key=s3_key,
-            s3_endpoint=endpoint_url,
             uploaded_by=uploaded_by,
             company_id=company_id,
             is_public=is_public,
@@ -215,26 +196,24 @@ class FileStorage:
             expires_at=expires_at,
             download_url=files_download_url(file_id, route_segment=route_segment),
         )
-        _ = await self._file_repository.set(file_record)
+        _ = await FileRecord.set(file_record)
         return file_record
 
     async def get(self, file_id: str) -> FileRecord | None:
-        return await self._file_repository.get(file_id)
+        return await FileRecord.get(file_id)
 
     async def save(self, file_record: FileRecord) -> FileRecord:
-        _ = await self._file_repository.set(file_record)
+        _ = await FileRecord.set(file_record)
         return file_record
 
     async def delete(self, file_id: str) -> bool:
         file_record = await self.get(file_id)
         if file_record is None:
             return False
-        s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
-        try:
-            _ = await s3_client.delete_file(file_record.s3_key)
-        finally:
-            await s3_client.close()
-        _ = await self._file_repository.delete(file_id)
+        resolved = await resolve_for_record(file_record)
+        s3_client = await client_for(resolved)
+        _ = await s3_client.delete_file(file_record.s3_key)
+        _ = await FileRecord.delete_by_id(file_id)
         return True
 
 

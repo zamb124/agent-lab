@@ -1,0 +1,6 @@
+GROUP g10_realtime rc=1
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/evaluation/monitor_cycles_run_active_requested]
+FAILED tests/realtime/test_sweeper.py::test_sweeper_publishes_deadline_exceeded
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/evaluation/monitor_cycles_run_active_requested]
+FAILED tests/realtime/test_sweeper.py::test_sweeper_publishes_deadline_exceeded
+================== 2 failed, 656 passed in 217.47s (0:03:37) ===================

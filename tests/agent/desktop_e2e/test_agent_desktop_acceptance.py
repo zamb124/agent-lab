@@ -266,7 +266,7 @@ async def test_acc_04_audit_after_platform_mcp_call(
     flows_client_http: AsyncClient,
     flows_service: None,
     flows_worker: None,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
@@ -297,7 +297,7 @@ async def test_acc_04_audit_after_platform_mcp_call(
     assert response.status_code == 200
     company_id = company_id_from_auth_token(auth_token)
     await assert_audit_event_in_redis(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         event_type="agent.platform_mcp.tools_call",
     )

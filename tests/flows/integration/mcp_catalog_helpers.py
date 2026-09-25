@@ -13,7 +13,6 @@ from typing import Literal, NotRequired, TypedDict
 from httpx import AsyncClient
 
 from apps.flows.config import get_settings, set_settings
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.mcp_catalog import (
     MCPAuthPolicy,
     MCPCatalogEntry,
@@ -103,26 +102,21 @@ def build_verified_catalog_entry(
     )
 
 
-async def persist_catalog_entry(
-    *,
-    container: FlowRuntimeContainer,
-    entry: MCPCatalogEntry,
-) -> MCPCatalogEntry:
+async def persist_catalog_entry(*, entry: MCPCatalogEntry) -> MCPCatalogEntry:
     stored = entry.model_copy(
         update={"catalog_snapshot_hash": entry.recompute_snapshot_hash()}
     )
-    _ = await container.mcp_catalog_repository.set(stored)
+    _ = await MCPCatalogEntry.set(stored)
     return stored
 
 
 async def cleanup_catalog_and_server(
     *,
-    container: FlowRuntimeContainer,
     client: AsyncClient,
     catalog_id: str,
     server_id: str,
 ) -> None:
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
     response = await client.delete(f"/flows/api/v1/mcp/servers/{server_id}")
     if response.status_code not in (200, 404):
         raise AssertionError(

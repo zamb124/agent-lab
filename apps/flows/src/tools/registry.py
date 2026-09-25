@@ -11,33 +11,25 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Sequence
-from typing import Protocol, TypeAlias, cast
+from typing import cast
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
-from apps.flows.src.models import FlowToolReference, NodeConfig, ToolReference
-from apps.flows.src.models.enums import CodeMode, NodeToolCallType, NodeType
+from apps.flows.src.contracts import FlowFactoryProtocol
+from apps.flows.src.models import FlowToolReference, MCPServerConfig, NodeConfig, ToolReference
+from apps.flows.src.models.enums import CodeMode, NodeType
+from apps.flows.src.runtime.nodes import NodeConstructor
 from apps.flows.src.tools.base import BaseTool
+from apps.flows.src.tools.builtin_dependencies import BuiltinToolClient
 from apps.flows.src.tools.code_tool import CodeTool
+from apps.flows.src.tools.decorator import FunctionTool
+from apps.flows.src.tools.materialize import ToolMaterializeInput
 from apps.flows.src.tools.mcp_wrapper import MCPTool
+from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
 from core.capabilities.source_sanitize import reject_forbidden_platform_imports
 from core.logging import get_logger
 from core.types import JsonObject
 
 logger = get_logger(__name__)
-
-
-ToolMaterializeInput: TypeAlias = FlowToolReference | ToolReference | NodeConfig | JsonObject
-
-
-class NodeToolWrapperFactory(Protocol):
-    def __call__(
-        self,
-        node_config: NodeConfig,
-        *,
-        container: FlowRuntimeContainer | None = None,
-        call_type: NodeToolCallType = NodeToolCallType.CALL,
-    ) -> BaseTool: ...
 
 
 class ToolRegistry:
@@ -54,13 +46,15 @@ class ToolRegistry:
     def __init__(
         self,
         *,
-        container: FlowRuntimeContainer | None = None,
-        node_tool_wrapper_cls: NodeToolWrapperFactory | None = None,
+        clients: tuple[BuiltinToolClient, ...] = (),
+        node_constructor: NodeConstructor | None = None,
+        flow_factory: FlowFactoryProtocol,
     ):
         self._tools: dict[str, BaseTool] = {}
         self._initialized: bool = False
-        self.container: FlowRuntimeContainer | None = container
-        self._node_tool_wrapper_cls: NodeToolWrapperFactory | None = node_tool_wrapper_cls
+        self._clients: tuple[BuiltinToolClient, ...] = clients
+        self._node_constructor: NodeConstructor | None = node_constructor
+        self._flow_factory: FlowFactoryProtocol = flow_factory
 
     def register(self, tool: BaseTool) -> None:
         """Регистрирует tool в процессном реестре (builtin, MCPTool и т.д.)."""
@@ -99,7 +93,12 @@ class ToolRegistry:
             builtin_tools.append(raw_tool)
 
         for tool in builtin_tools:
-            self.register(tool)
+            registered = (
+                tool.with_dependencies(self._clients)
+                if isinstance(tool, FunctionTool) and self._clients
+                else tool
+            )
+            self.register(registered)
 
         self._initialized = True
         logger.info("flows.tool.builtins_registered", count=len(builtin_tools))
@@ -167,9 +166,9 @@ class ToolRegistry:
         6. иначе ValueError
         """
         if isinstance(tool_ref, NodeConfig):
-            return self._create_node_as_tool(tool_ref)
+            return await self._create_node_as_tool(tool_ref)
         if isinstance(tool_ref, FlowToolReference):
-            return self._create_node_as_tool(
+            return await self._create_node_as_tool(
                 NodeConfig.model_validate(tool_ref.model_dump(mode="python"))
             )
 
@@ -179,11 +178,11 @@ class ToolRegistry:
                 return await self._create_mcp_tool(ToolReference.model_validate(tool_ref))
             if tool_ref.get("type") == NodeType.FLOW.value:
                 flow_ref = FlowToolReference.model_validate(tool_ref)
-                return self._create_node_as_tool(
+                return await self._create_node_as_tool(
                     NodeConfig.model_validate(flow_ref.model_dump(mode="python"))
                 )
             if self._is_node_as_tool_payload(tool_ref):
-                return self._create_node_as_tool(NodeConfig.model_validate(tool_ref))
+                return await self._create_node_as_tool(NodeConfig.model_validate(tool_ref))
 
         ref = (
             tool_ref
@@ -203,10 +202,7 @@ class ToolRegistry:
             return self._registered_builtin_tool(tid)
 
         if tid and not has_inline_code and not tid.startswith("mcp:"):
-            container = self.container
-            if container is None:
-                raise RuntimeError(f"Tool '{tid}' requires FlowContainer to load tool template")
-            stored = await container.tool_repository.get(tid)
+            stored = await ToolReference.get(ToolReference.row_id(tid))
             if stored is None:
                 raise ValueError(
                     f"Tool '{tid}': no inline code in config and no template in tool_repository"
@@ -290,7 +286,6 @@ class ToolRegistry:
             language=config.language,
             entrypoint=config.entrypoint,
             resources=config.resources,
-            container=self.container,
         )
         return tool
 
@@ -313,10 +308,7 @@ class ToolRegistry:
         tool_id = config.tool_id
         mcp_contract = config.require_mcp_contract()
 
-        if self.container is None:
-            raise RuntimeError("ToolRegistry requires FlowContainer for MCP tools")
-
-        server_config = await self.container.mcp_server_repository.get(mcp_contract.server_id)
+        server_config = await MCPServerConfig.get(MCPServerConfig.row_id(mcp_contract.server_id))
 
         if not server_config:
             raise ValueError(f"MCP server '{mcp_contract.server_id}' not found")
@@ -335,29 +327,22 @@ class ToolRegistry:
         self.register(tool)
         return tool
 
-    def _create_node_as_tool(self, config: NodeConfig) -> BaseTool:
-        """
-        Создает NodeAsToolWrapper из inline llm_node конфига.
-
-        Аргументы:
-            config: {
-                "tool_id": "my_node",
-                "type": "llm_node",
-                "prompt": "...",
-                "tools": [...],
-                ...
-            }
-
-        Возвращает:
-            NodeAsToolWrapper
-        """
-        if self._node_tool_wrapper_cls is None:
-            raise RuntimeError(
-                "ToolRegistry requires node_tool_wrapper_cls for node-as-tool configs"
-            )
-
-        return self._node_tool_wrapper_cls(
-            node_config=config,
-            container=self.container,
-            call_type=config.call_type,
+    async def _create_node_as_tool(self, config: NodeConfig) -> BaseTool:
+        """Собирает ноду и отдаёт обёртку, привязанную к этому экземпляру."""
+        constructor = self._node_constructor
+        if constructor is None:
+            raise RuntimeError(f"Node tool '{config.node_id}' requires a node constructor")
+        node_dict = cast(
+            JsonObject,
+            config.model_dump(mode="json", exclude_none=True),
         )
+        _ = node_dict.pop("tool_id", None)
+        node = constructor.materialize(
+            config.node_id,
+            node_dict,
+            tool_registry=self,
+            flow_factory=self._flow_factory,
+        )
+        wrapper = NodeAsToolWrapper(node_config=config, call_type=config.call_type)
+        wrapper.bind_node(node)
+        return wrapper

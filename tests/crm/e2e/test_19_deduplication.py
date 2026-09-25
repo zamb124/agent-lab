@@ -174,7 +174,7 @@ class TestEntityDeduplication:
             })
         }])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Знакомство {unique_id}",
             "description": f"Сегодня познакомился с Уникальный контакт {unique_id}. Он менеджер проекта.",
@@ -204,7 +204,7 @@ class TestEntityDeduplication:
         В БД есть entity с высоким similarity (>0.95) -> автоматический merge
         """
         namespace = _test_namespace(unique_id)
-        existing_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        existing_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Иван Петров {unique_id}",
             "description": "Технический директор компании ABC, отвечает за разработку",
@@ -256,7 +256,7 @@ class TestEntityDeduplication:
             })
         }])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Звонок {unique_id}",
             "description": f"Созвонился с Иваном Петровым {unique_id}. Он CTO в ABC.",
@@ -283,7 +283,7 @@ class TestEntityDeduplication:
         семантическая проверка выбирает merge (ветка LLM при среднем score или merge без LLM при >0.95).
         """
         namespace = _test_namespace(unique_id)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "organization",
             "name": f"ООО Альфа {unique_id}",
             "description": "IT компания, занимается разработкой ПО",
@@ -336,7 +336,7 @@ class TestEntityDeduplication:
             }
         ])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
             "description": f"Встреча с ООО Альфа {unique_id}: обсудили разработку ПО.",
@@ -364,7 +364,7 @@ class TestEntityDeduplication:
         Проверяем что дедупликация работает для разных entities
         """
         namespace = _test_namespace(unique_id)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Мария Сидорова {unique_id}",
             "description": "Бухгалтер, работает в финансовом отделе",
@@ -414,7 +414,7 @@ class TestEntityDeduplication:
             }
         ])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Собеседование {unique_id}",
             "description": f"Провел собеседование с Алексеем Кузнецовым {unique_id}. Хороший backend разработчик.",
@@ -441,7 +441,7 @@ class TestEntityDeduplication:
         AI извлекает несколько entities - часть дубликаты, часть новые
         """
         namespace = _test_namespace(unique_id)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Петр Иванов {unique_id}",
             "description": "Менеджер по продажам",
@@ -514,7 +514,7 @@ class TestEntityDeduplication:
             }
         ])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Планерка {unique_id}",
             "description": f"На планерке был Петр Иванов {unique_id} и новая дизайнер Анна Новикова {unique_id}.",
@@ -544,7 +544,7 @@ class TestEntityDeduplication:
         Дедупликация может быть отключена параметром check_duplicates=false
         """
         namespace = _test_namespace(unique_id)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project",
             "name": f"Проект Омега {unique_id}",
             "description": "Секретный проект",
@@ -573,7 +573,7 @@ class TestEntityDeduplication:
             })
         }])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Статус {unique_id}",
             "description": f"Обсудили статус Проекта Омега {unique_id}. Все идет по плану.",
@@ -602,7 +602,7 @@ class TestDeduplicateSkill:
         Deduplicate skill корректно определяет дубликат и возвращает merge
         """
         namespace = _test_namespace(unique_id)
-        existing_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        existing_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "organization",
             "name": f"ООО Рога и Копыта {unique_id}",
             "description": "Крупная торговая компания",
@@ -658,7 +658,7 @@ class TestDeduplicateSkill:
             }
         ])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
             "description": f"Встреча с ООО Рога и Копыта {unique_id}. Обсудили поставки.",
@@ -709,7 +709,7 @@ class TestDeduplicateSkill:
             }
         ])
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Знакомство {unique_id}",
             "description": f"Познакомился с новым контактом {unique_id}, инженер.",

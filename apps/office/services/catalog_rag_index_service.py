@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from datetime import datetime, timezone
+from typing import Literal
 
 from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.models.api import (
@@ -20,6 +21,7 @@ from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import get_context
+from core.files.models import FileRecord
 from core.logging import get_logger
 from core.rag.indexable import effective_rag_file_category, is_rag_indexable_file_category
 from core.rag.models import RAGMetadata, RAGSearchOptions, RAGSearchResult
@@ -30,11 +32,6 @@ from core.rag.rag_http_namespace_search import (
 from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_object
 
-if TYPE_CHECKING:
-    from apps.office.db.repositories.catalog_repository import CatalogRepository
-    from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
-    from core.files.file_repository import FileRepository
-
 logger = get_logger(__name__)
 
 OFFICE_CATALOG_RAG_NAMESPACE_PREFIX = "office-catalog-"
@@ -43,14 +40,8 @@ OFFICE_CATALOG_RAG_NAMESPACE_PREFIX = "office-catalog-"
 class OfficeCatalogRagIndexService:
     def __init__(
         self,
-        catalog_repository: CatalogRepository,
-        document_binding_repository: DocumentBindingRepository,
-        file_repository: FileRepository,
         rag_client: RagClient,
     ) -> None:
-        self._catalog_repository: CatalogRepository = catalog_repository
-        self._document_binding_repository: DocumentBindingRepository = document_binding_repository
-        self._file_repository: FileRepository = file_repository
         self._rag_client: RagClient = rag_client
 
     @staticmethod
@@ -79,7 +70,11 @@ class OfficeCatalogRagIndexService:
         company_id: str,
         workspace_namespace: str,
     ) -> OfficeDocumentCatalog:
-        catalog = await self._catalog_repository.get(catalog_id, company_id, workspace_namespace)
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(
+            catalog_id,
+            company_id,
+            workspace_namespace,
+        )
         if catalog is None:
             raise ValueError("Catalog not found")
         return catalog
@@ -124,14 +119,9 @@ class OfficeCatalogRagIndexService:
             rag_namespace_id,
             description=catalog.title,
         )
-        updated = await self._catalog_repository.set_rag_index_enabled(
-            catalog.catalog_id,
-            company_id,
-            workspace_namespace,
-            enabled=True,
-        )
-        if updated is None:
-            raise ValueError("Catalog not found")
+        catalog.rag_index_enabled = True
+        catalog.rag_index_updated_at = datetime.now(timezone.utc)
+        _ = await catalog.save()
         rebuild = await self.rebuild_catalog(catalog.catalog_id)
         return OfficeCatalogRagIndexEnableResponse(
             rag_namespace_id=rag_namespace_id,
@@ -151,14 +141,9 @@ class OfficeCatalogRagIndexService:
         except ServiceClientError as exc:
             if not str(exc).startswith("HTTP 404"):
                 raise
-        updated = await self._catalog_repository.set_rag_index_enabled(
-            catalog.catalog_id,
-            company_id,
-            workspace_namespace,
-            enabled=False,
-        )
-        if updated is None:
-            raise ValueError("Catalog not found")
+        catalog.rag_index_enabled = False
+        catalog.rag_index_updated_at = datetime.now(timezone.utc)
+        _ = await catalog.save()
 
     async def index_binding(
         self,
@@ -184,7 +169,7 @@ class OfficeCatalogRagIndexService:
                 raise ValueError("scope_user_id is required")
         else:
             company_id, workspace_namespace, user_id = self._require_context()
-        catalog = await self._catalog_repository.get(
+        catalog = await OfficeDocumentCatalog.catalog_in_namespace(
             binding.catalog_id,
             company_id,
             workspace_namespace,
@@ -194,7 +179,7 @@ class OfficeCatalogRagIndexService:
         if not catalog.rag_index_enabled:
             return None
 
-        file_record = await self._file_repository.get(binding.file_id)
+        file_record = await FileRecord.get(binding.file_id)
         if file_record is None:
             raise ValueError(f"FileRecord not found: {binding.file_id}")
 
@@ -251,12 +236,29 @@ class OfficeCatalogRagIndexService:
         company_id: str,
         workspace_namespace: str,
     ) -> list[str]:
-        return await self._catalog_repository.resolve_rag_search_catalog_ids(
-            catalog.catalog_id,
-            company_id,
-            workspace_namespace,
-            include_subcatalogs=catalog.rag_index_include_subcatalogs,
-        )
+        catalog_ids: list[str] = []
+        seen: set[str] = set()
+        if catalog.rag_index_enabled:
+            catalog_ids.append(catalog.catalog_id)
+            seen.add(catalog.catalog_id)
+        if not catalog.rag_index_include_subcatalogs:
+            return catalog_ids
+        queue = [catalog.catalog_id]
+        while queue:
+            current_id = queue.pop(0)
+            children = await OfficeDocumentCatalog.child_catalogs(
+                company_id,
+                workspace_namespace,
+                current_id,
+            )
+            for child in children:
+                if child.catalog_id in seen:
+                    continue
+                seen.add(child.catalog_id)
+                queue.append(child.catalog_id)
+                if child.rag_index_enabled:
+                    catalog_ids.append(child.catalog_id)
+        return catalog_ids
 
     async def _reindex_catalog_bindings(
         self,
@@ -270,10 +272,10 @@ class OfficeCatalogRagIndexService:
 
         Возвращает task_id последнего поставленного документа и число поставленных.
         """
-        bindings = await self._document_binding_repository.list_by_company_namespace_and_catalog(
-            company_id,
-            workspace_namespace,
-            catalog.catalog_id,
+        bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+            company_id=company_id,
+            namespace=workspace_namespace,
+            catalog_id=catalog.catalog_id,
         )
         last_task_id: str | None = None
         enqueued = 0
@@ -308,16 +310,16 @@ class OfficeCatalogRagIndexService:
             search_options_json = call_opts.model_dump(exclude_none=True)
             if search_options_json == {}:
                 search_options_json = None
-        updated = await self._catalog_repository.patch_rag_index_settings(
+        updated = await self._get_catalog_or_raise(
             catalog_id,
-            company_id,
-            workspace_namespace,
-            include_subcatalogs=request.include_subcatalogs,
-            search_options=search_options_json,
-            update_search_options=update_search_options,
+            company_id=company_id,
+            workspace_namespace=workspace_namespace,
         )
-        if updated is None:
-            raise ValueError("Catalog not found")
+        if request.include_subcatalogs is not None:
+            updated.rag_index_include_subcatalogs = request.include_subcatalogs
+        if update_search_options:
+            updated.rag_index_search_options = search_options_json
+        _ = await updated.save()
         return OfficeCatalogRagIndexSettingsResponse(
             include_subcatalogs=updated.rag_index_include_subcatalogs,
             search_options=self.catalog_search_options_model(updated),
@@ -380,12 +382,9 @@ class OfficeCatalogRagIndexService:
             if task_id is not None:
                 last_task_id = task_id
             enqueued_total += enqueued
-            _ = await self._catalog_repository.set_rag_index_enabled(
-                searchable_catalog.catalog_id,
-                company_id,
-                workspace_namespace,
-                enabled=True,
-            )
+            searchable_catalog.rag_index_enabled = True
+            searchable_catalog.rag_index_updated_at = datetime.now(timezone.utc)
+            _ = await searchable_catalog.save()
         return OfficeCatalogRagIndexRebuildResponse(
             task_id=last_task_id, enqueued_documents=enqueued_total
         )
@@ -407,13 +406,13 @@ class OfficeCatalogRagIndexService:
         indexable_file_ids: list[str] = []
         non_indexable_count = 0
         for searchable_catalog_id in searchable_catalog_ids:
-            bindings = await self._document_binding_repository.list_by_company_namespace_and_catalog(
-                company_id,
-                workspace_namespace,
-                searchable_catalog_id,
+            bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+                company_id=company_id,
+                namespace=workspace_namespace,
+                catalog_id=searchable_catalog_id,
             )
             for binding in bindings:
-                file_record = await self._file_repository.get(binding.file_id)
+                file_record = await FileRecord.get(binding.file_id)
                 document_name = (
                     file_record.original_name if file_record is not None else binding.title
                 )
@@ -603,11 +602,14 @@ class OfficeCatalogRagIndexService:
 
         deduped_hits = self._dedupe_search_hits(hits)[:limit]
 
-        bindings = await self._document_binding_repository.list_by_company_namespace_and_catalogs(
-            company_id,
-            workspace_namespace,
-            searchable_catalog_ids,
-        )
+        if len(searchable_catalog_ids) == 0:
+            bindings = []
+        else:
+            bindings = await OfficeDocumentBinding.active_bindings_in_catalogs(
+                company_id=company_id,
+                namespace=workspace_namespace,
+                catalog_ids=searchable_catalog_ids,
+            )
         binding_by_file_and_catalog: dict[tuple[str, str], OfficeDocumentBinding] = {}
         for binding in bindings:
             binding_by_file_and_catalog[(binding.file_id, binding.catalog_id)] = binding

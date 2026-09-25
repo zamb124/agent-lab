@@ -23,7 +23,7 @@
 
 ## Реестр `TriggerRegistry` (факт)
 
-В `apps/flows/src/container.py` в реестр добавлены `TriggerType.TELEGRAM` (`TelegramTriggerHandler`), `TriggerType.WEBHOOK` (`WebhookTriggerHandler`), `TriggerType.EMAIL` (`EmailTriggerHandler`) и `TriggerType.PLATFORM_EVENT` (`PlatformEventTriggerHandler`). Для `cron` `get_handler` возвращает `None` — при `sync_triggers` триггер получает `status=error`, `last_error` про отсутствие handler, пока не добавят handler.
+`TriggerRegistry` (`apps/flows/src/triggers/registry.py`) хранит handlers в `_handlers` через `register_handler`. Классы: `TelegramTriggerHandler`, `WebhookTriggerHandler`, `EmailTriggerHandler`, `PlatformEventTriggerHandler` в `apps/flows/src/triggers/handlers/`. Экземпляр реестра `FlowsDi` не собирает. Если `get_handler` вернул `None` (для `cron` handler не регистрируют), `_register_trigger` ставит `status=error` и `last_error` `No handler for type <type>`.
 
 ## По типу триггера (`TriggerType`)
 

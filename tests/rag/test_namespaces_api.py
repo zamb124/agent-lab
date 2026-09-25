@@ -10,6 +10,37 @@
 import pytest
 
 
+async def _namespace_names(rag_client, headers, *, provider: str | None = None) -> set[str]:
+    names: set[str] = set()
+    offset = 0
+    limit = 200
+    while True:
+        params: dict[str, str | int] = {"limit": limit, "offset": offset}
+        if provider is not None:
+            params["provider"] = provider
+        response = await rag_client.get(
+            "/rag/api/v1/namespaces",
+            headers=headers,
+            params=params,
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        items = data["items"]
+        if not isinstance(items, list):
+            raise AssertionError("namespaces items must be a list")
+        for item in items:
+            name = item["name"]
+            if not isinstance(name, str):
+                raise AssertionError("namespace name must be a string")
+            names.add(name)
+        total = data["total"]
+        if not isinstance(total, int):
+            raise AssertionError("namespaces total must be an int")
+        if len(items) < limit or offset + limit >= total:
+            return names
+        offset += limit
+
+
 @pytest.mark.asyncio
 async def test_create_namespace(rag_client, unique_namespace_name, auth_headers_system):
     """POST /namespaces создает namespace в pgvector"""
@@ -55,13 +86,8 @@ async def test_list_namespaces(rag_client, unique_namespace_name, auth_headers_s
     )
 
     # Получаем список
-    response = await rag_client.get("/rag/api/v1/namespaces", headers=auth_headers_system)
-    assert response.status_code == 200
-    data = response.json()
-
-    assert "items" in data
-    assert len(data["items"]) > 0, f"Namespaces list is empty: {data}"
-    assert any(ns["name"] == unique_namespace_name for ns in data["items"]), f"Namespace {unique_namespace_name} not found in {[ns['name'] for ns in data['items']]}"
+    names = await _namespace_names(rag_client, auth_headers_system)
+    assert unique_namespace_name in names
 
 
 @pytest.mark.asyncio
@@ -75,11 +101,10 @@ async def test_list_namespaces_with_provider_param(rag_client, unique_namespace_
     )
 
     # Получаем список с параметром провайдера
-    response = await rag_client.get("/rag/api/v1/namespaces?provider=pgvector", headers=auth_headers_system)
-    assert response.status_code == 200
-    data = response.json()
-
-    assert any(ns["name"] == unique_namespace_name for ns in data["items"])
+    names = await _namespace_names(
+        rag_client, auth_headers_system, provider="pgvector"
+    )
+    assert unique_namespace_name in names
 
 
 @pytest.mark.asyncio

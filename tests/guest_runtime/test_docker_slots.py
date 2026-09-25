@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import time
 from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
 
-from apps.guest_runtime.container import GuestRuntimeContainer
 from apps.guest_runtime.services.farm_service import GuestFarmService
 from apps.guest_runtime.services.identity import guest_identity_scope
+from apps.guest_runtime.services.lease_store import GuestLeaseStore
 from apps.guest_runtime.services.slots import (
     build_docker_image,
     docker_image_inspect,
@@ -17,6 +18,12 @@ from apps.guest_runtime.services.slots import (
     start_docker_slot,
     stop_slot,
 )
+from core.capabilities.models import CapabilityExecutionContext
+from core.capabilities.tokens import (
+    CapabilityExecutionTokenClaims,
+    issue_execution_token,
+)
+from core.clients.files_client import FilesClient
 from core.config.models import GuestRuntimeFarmConfig
 from core.guest_runtime.models import (
     GuestExecutorKind,
@@ -25,6 +32,7 @@ from core.guest_runtime.models import (
     GuestRebuildRequest,
 )
 from core.http import get_httpx_client
+from core.models.identity_models import Company, User
 from core.types import JsonObject
 from tests.fixtures.s3 import require_s3_configured
 from tests.guest_runtime.http_helpers import (
@@ -46,13 +54,48 @@ async def require_docker_configured() -> None:
         pytest.skip(str(exc))
 
 
-def _docker_slot_env(*, flow_id: str) -> dict[str, str]:
+def _guest_execution_token(
+    *,
+    flow_id: str,
+    user_id: str,
+    test_scope: str,
+    session_id: str,
+    task_id: str,
+    context_id: str,
+    channel: str,
+    request_id: str,
+    source_node_id: str,
+    namespace: str | None,
+) -> str:
+    return issue_execution_token(
+        CapabilityExecutionTokenClaims(
+            company_id="system",
+            user_id=user_id,
+            flow_id=flow_id,
+            branch_id="default",
+            session_id=session_id,
+            task_id=task_id,
+            context_id=context_id,
+            channel=channel,
+            request_id=request_id,
+            source_node_id=source_node_id,
+            namespace=namespace,
+            test_scope=test_scope,
+            allowed_capabilities=["text.summarize"],
+            max_calls=8,
+            exp=int(time.time()) + 3600,
+        )
+    )
+
+
+def _docker_slot_env(*, flow_id: str, execution_token: str, capability_context: str) -> dict[str, str]:
     return {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "OPENAI_BASE_URL": "http://host.docker.internal:9001/flows/api/v1/agent/llm/v1",
-        "OPENAI_API_KEY": "docker-test-token",
+        "OPENAI_API_KEY": execution_token,
         "CAPABILITY_GATEWAY_URL": "http://host.docker.internal:9016",
-        "PLATFORM_EXECUTION_TOKEN": "docker-test-token",
+        "PLATFORM_EXECUTION_TOKEN": execution_token,
+        "PLATFORM_CAPABILITY_CONTEXT": capability_context,
         "PLATFORM_SESSION_ID": "sess",
         "PLATFORM_TASK_ID": "task",
         "PLATFORM_FLOW_ID": flow_id,
@@ -83,6 +126,7 @@ async def _invoke_shim_cli(
                 "flow_id": flow_id,
                 "guest_runtime_id": "rt",
                 "guest_lease_id": "lease",
+                "env": {},
             },
         )
         assert context.status_code == 200, context.text
@@ -96,8 +140,20 @@ async def _invoke_shim_cli(
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(300, func_only=True)
-async def test_docker_build_and_cli_invoke(tmp_path: Path, unique_id: str) -> None:
+async def test_docker_build_and_cli_invoke(
+    tmp_path: Path,
+    unique_id: str,
+    system_user_id: str,
+    platform_test_scope: str,
+    mock_llm_redis,
+) -> None:
     await require_docker_configured()
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": "docker-llm"},
+            {"type": "text", "content": "docker-summary"},
+        ]
+    )
     flow_id = f"ca_dock_{unique_id}"
     source_digest_hex = hashlib.sha256(f"{flow_id}-py".encode()).hexdigest()
     image_digest, image_bytes = await build_docker_image(
@@ -109,11 +165,42 @@ async def test_docker_build_and_cli_invoke(tmp_path: Path, unique_id: str) -> No
         source_digest_hex=source_digest_hex,
     )
     assert image_bytes > 0
+    execution_token = _guest_execution_token(
+        flow_id=flow_id,
+        user_id=system_user_id,
+        test_scope=platform_test_scope,
+        session_id="sess",
+        task_id="task",
+        context_id="ctx",
+        channel="a2a",
+        request_id="req",
+        source_node_id="agent",
+        namespace="default",
+    )
+    capability_context = CapabilityExecutionContext(
+        execution_token=execution_token,
+        company_id="system",
+        user_id=system_user_id,
+        flow_id=flow_id,
+        branch_id="default",
+        session_id="sess",
+        task_id="task",
+        context_id="ctx",
+        channel="a2a",
+        request_id="req",
+        trace_id="tr",
+        source_node_id="agent",
+        namespace="default",
+    ).model_dump_json()
     farm = GuestRuntimeFarmConfig(executor="docker", data_dir=str(tmp_path))
     slot = await start_docker_slot(
         farm=farm,
         image_digest=image_digest,
-        env=_docker_slot_env(flow_id=flow_id),
+        env=_docker_slot_env(
+            flow_id=flow_id,
+            execution_token=execution_token,
+            capability_context=capability_context,
+        ),
         extra_host_pairs=[],
     )
     try:
@@ -148,7 +235,11 @@ async def test_docker_build_and_node_cli_invoke(tmp_path: Path, unique_id: str) 
     slot = await start_docker_slot(
         farm=farm,
         image_digest=image_digest,
-        env=_docker_slot_env(flow_id=flow_id),
+        env=_docker_slot_env(
+            flow_id=flow_id,
+            execution_token="docker-test-token",
+            capability_context="{}",
+        ),
         extra_host_pairs=[],
     )
     try:
@@ -170,16 +261,24 @@ async def test_docker_farm_rebuild_and_ensure_lease(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    guest_runtime_container: GuestRuntimeContainer,
+    guest_runtime_di,
     guest_farm_service: tuple[GuestFarmService, list[tuple[str, str]]],
     auth_headers_system: dict[str, str],
     system_user_id: str,
     unique_id: str,
     tmp_path: Path,
+    platform_test_scope: str,
+    mock_llm_redis,
 ) -> None:
     _ = office_service, guest_runtime_service
     await require_docker_configured()
     require_s3_configured()
+    await mock_llm_redis(
+        [
+            {"type": "text", "content": "docker-llm"},
+            {"type": "text", "content": "docker-summary"},
+        ]
+    )
     _, held = guest_farm_service
     headers = code_agent_headers(auth_headers_system)
     flow_id = f"ca_dfarm_{unique_id}"
@@ -207,16 +306,18 @@ async def test_docker_farm_rebuild_and_ensure_lease(
         flows_client_http, headers, flow_id=flow_id, node_id=node_id
     )
     assert status_catalog_id == catalog_id
-    user = await guest_runtime_container.user_repository.get(system_user_id)
-    company = await guest_runtime_container.company_repository.get("system")
+    user = await User.get(system_user_id)
+    company = await Company.get("system")
     if user is None:
         raise RuntimeError("system user required")
     if company is None:
         raise RuntimeError("system company required")
     docker_farm = GuestFarmService(
-        repository=guest_runtime_container.guest_runtime_repository,
-        lease_store=guest_runtime_container.lease_store,
-        files_client=guest_runtime_container.files_client,
+        lease_store=GuestLeaseStore(
+            guest_runtime_di.redis_client,
+            guest_runtime_di.farm_service.farm_config,
+        ),
+        files_client=FilesClient(service="office"),
         farm=GuestRuntimeFarmConfig(executor="docker", data_dir=str(tmp_path)),
     )
     held.append((flow_id, node_id))
@@ -253,6 +354,18 @@ async def test_docker_farm_rebuild_and_ensure_lease(
                 invoke_argv=invoke_argv,
                 language=GuestLanguage.PYTHON,
                 invoke_kind=GuestInvokeKind.CLI,
+                execution_token=_guest_execution_token(
+                    flow_id=flow_id,
+                    user_id=user.user_id,
+                    test_scope=platform_test_scope,
+                    session_id=f"sess-{unique_id}",
+                    task_id=f"task-{unique_id}",
+                    context_id=f"ctx-{unique_id}",
+                    channel="web",
+                    request_id=f"req-{unique_id}",
+                    source_node_id=node_id,
+                    namespace=None,
+                ),
             )
         )
         rpc: JsonObject = {

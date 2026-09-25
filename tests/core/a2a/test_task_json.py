@@ -69,5 +69,5 @@ def test_extract_text_ignores_kind_field() -> None:
 
 
 def test_extract_text_raises_when_empty() -> None:
-    with pytest.raises(ValueError, match="не содержит текстового ответа"):
+    with pytest.raises(ValueError, match="contains no text response"):
         _ = extract_text_from_task_json({"status": {"state": "TASK_STATE_COMPLETED"}})

@@ -12,12 +12,13 @@ from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorSer
 from core.crawl.models import (
     CrawlDomain,
     CrawlFetchResult,
+    CrawlJob,
     CrawlProfile,
     CrawlProfileWithIndex,
     CrawlStructuralSignals,
     CrawlUrl,
 )
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
@@ -50,7 +51,6 @@ def _profile_bundle(*, llm_enrichment_enabled: bool = True) -> CrawlProfileWithI
         rag_collection_id="runet",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
@@ -109,14 +109,10 @@ async def test_fetch_layer1_never_calls_enrichment_synchronously(
         fetch_transport="http",
     )
     page_enrichment_service = AsyncMock()
+    monkeypatch.setattr(CrawlUrl, "mark_indexed", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "mark_failed", AsyncMock())
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
-        crawl_url_repository=AsyncMock(
-            mark_indexed=AsyncMock(),
-            mark_failed=AsyncMock(),
-        ),
-        crawl_job_repository=AsyncMock(increment=AsyncMock()),
         fetch_service=AsyncMock(fetch_markdown=AsyncMock(return_value=fetched)),
         page_enrichment_service=page_enrichment_service,
         politeness_service=AsyncMock(
@@ -166,11 +162,10 @@ async def test_fetch_layer1_skips_enrich_kiq_when_llm_disabled(
         content_hash="hash-layer1",
         fetch_transport="http",
     )
+    monkeypatch.setattr(CrawlUrl, "mark_indexed", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "mark_failed", AsyncMock())
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
-        crawl_url_repository=AsyncMock(mark_indexed=AsyncMock(), mark_failed=AsyncMock()),
-        crawl_job_repository=AsyncMock(increment=AsyncMock()),
         fetch_service=AsyncMock(fetch_markdown=AsyncMock(return_value=fetched)),
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(
@@ -196,22 +191,17 @@ async def test_fetch_layer1_skips_enrich_kiq_when_llm_disabled(
 
 
 @pytest.mark.asyncio
-async def test_fetch_marks_skipped_on_extract_too_short() -> None:
+async def test_fetch_marks_skipped_on_extract_too_short(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.crawl.errors import CrawlExtractTooShortError
 
     profile_bundle = _profile_bundle(llm_enrichment_enabled=True)
     mark_skipped_mock = AsyncMock()
     mark_failed_mock = AsyncMock()
     increment_mock = AsyncMock()
+    monkeypatch.setattr(CrawlUrl, "mark_skipped", mark_skipped_mock)
+    monkeypatch.setattr(CrawlUrl, "mark_failed", mark_failed_mock)
+    monkeypatch.setattr(CrawlJob, "increment", increment_mock)
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
-        crawl_url_repository=AsyncMock(
-            mark_indexed=AsyncMock(),
-            mark_failed=mark_failed_mock,
-            mark_skipped=mark_skipped_mock,
-        ),
-        crawl_job_repository=AsyncMock(increment=increment_mock),
         fetch_service=AsyncMock(
             fetch_markdown=AsyncMock(
                 side_effect=CrawlExtractTooShortError("https://example.com/thin"),
@@ -250,47 +240,45 @@ async def test_enrich_one_url_reads_snapshot_not_http(
         enrichment_prompt_version="structured",
     )
 
-    class _UrlRepo:
-        async def get(self, crawl_url_id: str) -> CrawlUrl:
-            assert crawl_url_id == "url-1"
-            return CrawlUrl(
-                crawl_url_id="url-1",
-                crawl_domain_id="dom-1",
-                url="https://example.com/page",
-                canonical_url="https://example.com/page",
-                crawl_status="indexed",
-                document_id="doc-1",
-                extract_content_hash="hash-layer1",
-                fetch_transport="http",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-            )
+    indexed_url = CrawlUrl(
+        crawl_url_id="url-1",
+        crawl_domain_id="dom-1",
+        url="https://example.com/page",
+        canonical_url="https://example.com/page",
+        crawl_status="indexed",
+        document_id="doc-1",
+        extract_content_hash="hash-layer1",
+        fetch_transport="http",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
-        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
-            assert crawl_url_id == "url-1"
-            return (
-                "https://example.com/page",
-                "https://example.com/page",
-                "# Stored\n\nFrom database snapshot.",
-                "Stored title",
-                "hash-layer1",
-                CrawlStructuralSignals(title="Stored title"),
-            )
+    async def get_layer1_snapshot(crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
+        assert crawl_url_id == "url-1"
+        return (
+            "https://example.com/page",
+            "https://example.com/page",
+            "# Stored\n\nFrom database snapshot.",
+            "Stored title",
+            "hash-layer1",
+            CrawlStructuralSignals(title="Stored title"),
+        )
 
-        async def mark_enriched(self, crawl_url_id: str, **kwargs: object) -> None:
-            assert crawl_url_id == "url-1"
+    async def mark_enrichment_failed(crawl_url_id: str, error: str) -> None:
+        raise AssertionError("mark_enrichment_failed must not run on success")
 
-        async def mark_enrichment_failed(self, crawl_url_id: str, error: str) -> None:
-            raise AssertionError("mark_enrichment_failed must not run on success")
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlUrl, "get", AsyncMock(return_value=indexed_url))
+    monkeypatch.setattr(CrawlUrl, "get_layer1_snapshot", get_layer1_snapshot)
+    monkeypatch.setattr(CrawlUrl, "mark_enriched", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "mark_enrichment_failed", mark_enrichment_failed)
+    monkeypatch.setattr(CrawlDomain, "get", AsyncMock(return_value=_domain()))
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
 
     fetch_service = AsyncMock()
     page_enrichment_service = AsyncMock(enrich_markdown=AsyncMock(return_value=enriched_page))
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
-        crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=AsyncMock(increment=AsyncMock()),
         fetch_service=fetch_service,
         page_enrichment_service=page_enrichment_service,
         politeness_service=AsyncMock(
@@ -318,49 +306,45 @@ async def test_enrich_failure_keeps_indexed_status(
     profile_bundle = _profile_bundle(llm_enrichment_enabled=True)
     enrichment_failed_mock = AsyncMock()
     mark_failed_mock = AsyncMock()
+    indexed_url = CrawlUrl(
+        crawl_url_id="url-1",
+        crawl_domain_id="dom-1",
+        url="https://example.com/page",
+        canonical_url="https://example.com/page",
+        crawl_status="indexed",
+        document_id="doc-1",
+        extract_content_hash="hash-layer1",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
 
-    class _UrlRepo:
-        async def get(self, crawl_url_id: str) -> CrawlUrl:
-            return CrawlUrl(
-                crawl_url_id="url-1",
-                crawl_domain_id="dom-1",
-                url="https://example.com/page",
-                canonical_url="https://example.com/page",
-                crawl_status="indexed",
-                document_id="doc-1",
-                extract_content_hash="hash-layer1",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
-            )
+    async def get_layer1_snapshot(crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
+        return (
+            "https://example.com/page",
+            "https://example.com/page",
+            "markdown",
+            "title",
+            "hash-layer1",
+            CrawlStructuralSignals(),
+        )
 
-        async def get_layer1_snapshot(self, crawl_url_id: str) -> tuple[str, str, str, str, str, CrawlStructuralSignals]:
-            return (
-                "https://example.com/page",
-                "https://example.com/page",
-                "markdown",
-                "title",
-                "hash-layer1",
-                CrawlStructuralSignals(),
-            )
+    async def mark_enriched(crawl_url_id: str, **kwargs: object) -> None:
+        raise AssertionError("mark_enriched must not run on failure")
 
-        async def mark_enrichment_failed(self, crawl_url_id: str, error: str) -> None:
-            await enrichment_failed_mock(crawl_url_id, error)
-
-        async def mark_failed(self, crawl_url_id: str, error: str) -> None:
-            await mark_failed_mock(crawl_url_id, error)
-
-        async def mark_enriched(self, crawl_url_id: str, **kwargs: object) -> None:
-            raise AssertionError("mark_enriched must not run on failure")
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlUrl, "get", AsyncMock(return_value=indexed_url))
+    monkeypatch.setattr(CrawlUrl, "get_layer1_snapshot", get_layer1_snapshot)
+    monkeypatch.setattr(CrawlUrl, "mark_enrichment_failed", enrichment_failed_mock)
+    monkeypatch.setattr(CrawlUrl, "mark_failed", mark_failed_mock)
+    monkeypatch.setattr(CrawlUrl, "mark_enriched", mark_enriched)
+    monkeypatch.setattr(CrawlDomain, "get", AsyncMock(return_value=_domain()))
+    monkeypatch.setattr(CrawlJob, "increment", AsyncMock())
 
     page_enrichment_service = AsyncMock(
         enrich_markdown=AsyncMock(side_effect=ValueError("humanitec_llm timeout")),
     )
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(get=AsyncMock(return_value=_domain())),
-        crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=AsyncMock(increment=AsyncMock()),
         fetch_service=AsyncMock(),
         page_enrichment_service=page_enrichment_service,
         politeness_service=AsyncMock(
@@ -394,22 +378,19 @@ async def test_enqueue_enrichment_backfill_enqueues_missing_urls(
 
     profile_bundle = _profile_bundle(llm_enrichment_enabled=True)
 
-    class _UrlRepo:
-        async def list_indexed_missing_enrichment(
-            self,
-            crawl_profile_id: str,
-            *,
-            limit: int,
-        ) -> list[str]:
-            assert crawl_profile_id == "cr_test"
-            assert limit == 100
-            return ["url-a", "url-b"]
+    async def list_indexed_missing_enrichment(
+        crawl_profile_id: str,
+        *,
+        limit: int,
+    ) -> list[str]:
+        assert crawl_profile_id == "cr_test"
+        assert limit == 100
+        return ["url-a", "url-b"]
+
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlUrl, "list_indexed_missing_enrichment", list_indexed_missing_enrichment)
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=AsyncMock(get_with_index=AsyncMock(return_value=profile_bundle)),
-        crawl_domain_repository=AsyncMock(),
-        crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=AsyncMock(),
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(

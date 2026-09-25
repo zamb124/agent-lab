@@ -8,12 +8,12 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.code_agent_operations import (
     op_flows_code_agent_ensure_source,
     op_flows_code_agent_rebuild,
     op_flows_code_agent_status,
 )
-from apps.flows.src.container import FlowContainer
 from core.context import reset_context, set_context
 from core.guest_runtime.models import (
     CodeAgentEnsureSourceResponse,
@@ -55,7 +55,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_code_agent_ensure_and_status_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     office_service: object,
     guest_runtime_service: object,
     unique_id: str,
@@ -97,9 +97,9 @@ async def test_code_agent_ensure_and_status_rest_match_op(
 
     with _system_scope(system_user_id) as user:
         ref = CodeAgentNodeRefPayload(flow_id=flow_id, node_id=node_id, branch_id="default")
-        op_ensured = await op_flows_code_agent_ensure_source(ref, user=user, container=container)
+        op_ensured = await op_flows_code_agent_ensure_source(ref, user=user, di=di)
         assert op_ensured.model_dump(mode="json") == ensure_http.json()
-        op_status = await op_flows_code_agent_status(ref, user=user, container=container)
+        op_status = await op_flows_code_agent_status(ref, user=user, di=di)
         assert op_status.model_dump(mode="json") == status_http.json()
 
     missing = await client.get(
@@ -118,7 +118,7 @@ async def test_code_agent_ensure_and_status_rest_match_op(
                     branch_id="default",
                 ),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "forbidden"
 
@@ -127,7 +127,7 @@ async def test_code_agent_ensure_and_status_rest_match_op(
 
 async def test_code_agent_rebuild_empty_argv_via_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     office_service: object,
     unique_id: str,
     system_user_id: str,
@@ -176,7 +176,7 @@ async def test_code_agent_rebuild_empty_argv_via_op(
                     invoke_argv=[],
                 ),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "ws_invalid_payload"
 

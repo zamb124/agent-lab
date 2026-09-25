@@ -1,4 +1,4 @@
-"""Seed глобального MCP branding из git-бандла (S3 + MCPServerBrandingRepository)."""
+"""Seed глобального MCP branding из git-бандла в таблицу ``mcp_server_branding``."""
 
 from __future__ import annotations
 
@@ -10,17 +10,19 @@ from typing import cast
 import yaml
 
 from apps.flows.config import get_settings
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.mcp_branding import (
     MCPBrandingManifestEntryPayload,
     MCPBrandingManifestFilePayload,
 )
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry
 from apps.flows.src.services.mcp_branding_aliases import (
     BRANDING_SERVER_ID_ALIASES,
     resolve_branding_server_id,
 )
+from apps.flows.src.services.mcp_branding_service import MCPServerBrandingService
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from core.files.create_spec import FileCreateSpec
+from core.files.service import FilesService
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -117,13 +119,12 @@ def load_mcp_branding_manifest(*, manifest_path: Path | None = None) -> MCPBrand
 
 
 async def _collect_seed_targets(
-    container: FlowRuntimeContainer,
     *,
     manifest: MCPBrandingManifest,
     server_ids: frozenset[str] | None,
 ) -> list[str]:
     platform_ids = [server.server_id for server in build_default_mcp_servers()]
-    catalog_entries = await container.mcp_catalog_repository.list(limit=10_000)
+    catalog_entries = await MCPCatalogEntry.list(limit=10_000)
     catalog_ids = [entry.catalog_id for entry in catalog_entries]
     manifest_ids = list(manifest.entries.keys())
     alias_ids = list(BRANDING_SERVER_ID_ALIASES.keys())
@@ -148,14 +149,14 @@ async def _collect_seed_targets(
 
 
 async def _upload_icon_file(
-    container: FlowRuntimeContainer,
+    files_service: FilesService,
     *,
     icon_path: Path,
     original_name: str,
 ) -> str:
     payload = icon_path.read_bytes()
     content_type = _content_type_for_path(icon_path)
-    record = await container.files_service.create(
+    record = await files_service.create(
         _platform_auxiliary_spec(is_public=True),
         payload,
         original_name=original_name,
@@ -165,22 +166,23 @@ async def _upload_icon_file(
 
 
 async def seed_mcp_branding_from_bundle(
-    container: FlowRuntimeContainer,
     *,
+    files_service: FilesService,
+    mcp_branding_service: MCPServerBrandingService,
     force: bool = False,
     server_ids: frozenset[str] | None = None,
     dry_run: bool = False,
     manifest_path: Path | None = None,
 ) -> MCPBrandingSeedStats:
     manifest = load_mcp_branding_manifest(manifest_path=manifest_path)
-    targets = await _collect_seed_targets(container, manifest=manifest, server_ids=server_ids)
+    targets = await _collect_seed_targets(manifest=manifest, server_ids=server_ids)
 
     seeded = 0
     skipped_existing = 0
     generic_file_id: str | None = None
 
     for server_id in targets:
-        existing_icon_url = await container.mcp_branding_service.get_icon_url(server_id)
+        existing_icon_url = await mcp_branding_service.get_icon_url(server_id)
         if existing_icon_url is not None and not force:
             skipped_existing += 1
             continue
@@ -202,19 +204,19 @@ async def seed_mcp_branding_from_bundle(
         if manifest_entry is None:
             if generic_file_id is None:
                 generic_file_id = await _upload_icon_file(
-                    container,
+                    files_service,
                     icon_path=icon_path,
                     original_name="_generic.svg",
                 )
             icon_file_id = generic_file_id
         else:
             icon_file_id = await _upload_icon_file(
-                container,
+                files_service,
                 icon_path=icon_path,
                 original_name=icon_path.name,
             )
 
-        _ = await container.mcp_branding_service.upsert_branding(server_id, icon_file_id)
+        _ = await mcp_branding_service.upsert_branding(server_id, icon_file_id)
         seeded += 1
 
     stats = MCPBrandingSeedStats(

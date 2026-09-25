@@ -2,6 +2,7 @@
 Company-owned integration credentials + Google Workspace auth resolver order.
 """
 
+
 from __future__ import annotations
 
 import json
@@ -9,8 +10,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
-from apps.flows.src.container import get_container
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from core.ai.company_settings import decrypt_secret
 from core.authz.errors import AuthzDenied
@@ -33,7 +34,6 @@ from core.integrations.constants import (
     TOKEN_TYPE_SERVICE_ACCOUNT,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 from core.models import Company, Context, User
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.state import ExecutionState
@@ -50,6 +50,13 @@ _MINIMAL_SA_JSON = json.dumps(
         "token_uri": "https://oauth2.googleapis.com/token",
     }
 )
+
+
+def _google_workspace_client(di: FlowsDi) -> GoogleWorkspaceClient:
+    return GoogleWorkspaceClient(
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
+    )
 
 
 class _StubAuthz:
@@ -84,19 +91,14 @@ def _as_authz(stub: _StubAuthz) -> AuthzService:
     return stub  # type: ignore[return-value]
 
 
-@pytest.fixture()
-def credential_repository(app) -> IntegrationCredentialRepository:
-    from core.config import get_settings
-
-    return IntegrationCredentialRepository(db_url=get_settings().database.shared_url)
+@pytest.fixture(autouse=True)
+def credential_repository(app: object) -> None:
+    _ = app
 
 
 @pytest.fixture()
-def company_cred_service(
-    credential_repository: IntegrationCredentialRepository,
-) -> CompanyIntegrationCredentialService:
+def company_cred_service() -> CompanyIntegrationCredentialService:
     return CompanyIntegrationCredentialService(
-        repository=credential_repository,
         google_workspace_config=GoogleWorkspaceConfig(),
         authz=_as_authz(_StubAuthz(allow_admin=True)),
     )
@@ -144,12 +146,11 @@ def _make_state(user_id: str = "test-user") -> ExecutionState:
 
 
 async def _cleanup_google(
-    repository: IntegrationCredentialRepository,
     company_id: str,
     user_id: str,
 ) -> None:
     for service in ("workspace", "docs", "sheets"):
-        await repository.delete_by_user_provider_service(
+        await IntegrationCredential.delete_by_user_provider_service(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider.GOOGLE,
@@ -161,14 +162,11 @@ class TestCompanyGoogleWorkspaceCredential:
     @pytest.mark.asyncio
     async def test_admin_upsert_and_delete(
         self,
-        credential_repository: IntegrationCredentialRepository,
         company_cred_service: CompanyIntegrationCredentialService,
         unique_id: str,
     ) -> None:
         company_id = f"co-gw-{unique_id}"
-        await _cleanup_google(
-            credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
         set_context(_admin_context(company_id))
         try:
             public = await company_cred_service.upsert_google_workspace_service_account(
@@ -182,12 +180,13 @@ class TestCompanyGoogleWorkspaceCredential:
             assert public.impersonate_email == "user@example.com"
             assert public.token_type == TOKEN_TYPE_SERVICE_ACCOUNT
 
-            stored = await credential_repository.get_by_user_provider_service(
+            stored = await IntegrationCredential.by_natural_key(
                 company_id=company_id,
                 user_id=COMPANY_INTEGRATION_USER_ID,
                 provider=IntegrationProvider.GOOGLE,
                 service="workspace",
-            )
+            mailbox_binding_id=None,
+        )
             assert stored is not None
             assert stored.token_type == TOKEN_TYPE_SERVICE_ACCOUNT
             assert decrypt_secret(stored.access_token) == _MINIMAL_SA_JSON
@@ -208,19 +207,15 @@ class TestCompanyGoogleWorkspaceCredential:
             ) is None
         finally:
             clear_context()
-            await _cleanup_google(
-                credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-            )
+            await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
     @pytest.mark.asyncio
     async def test_member_cannot_upsert(
         self,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
     ) -> None:
         company_id = f"co-gw-member-{unique_id}"
         service = CompanyIntegrationCredentialService(
-            repository=credential_repository,
             google_workspace_config=GoogleWorkspaceConfig(),
             authz=_as_authz(_StubAuthz(allow_admin=False)),
         )
@@ -256,14 +251,10 @@ class TestCompanyGoogleWorkspaceCredential:
     @pytest.mark.asyncio
     async def test_reconcile_system_from_config(
         self,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
     ) -> None:
-        await _cleanup_google(
-            credential_repository, SYSTEM_COMPANY_ID, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(SYSTEM_COMPANY_ID, COMPANY_INTEGRATION_USER_ID)
         service = CompanyIntegrationCredentialService(
-            repository=credential_repository,
             google_workspace_config=GoogleWorkspaceConfig(
                 system=GoogleWorkspaceSystemConfig(
                     enabled=True,
@@ -280,17 +271,13 @@ class TestCompanyGoogleWorkspaceCredential:
             assert material is not None
             assert material.subject == "sys@example.com"
         finally:
-            await _cleanup_google(
-                credential_repository, SYSTEM_COMPANY_ID, COMPANY_INTEGRATION_USER_ID
-            )
+            await _cleanup_google(SYSTEM_COMPANY_ID, COMPANY_INTEGRATION_USER_ID)
 
     @pytest.mark.asyncio
     async def test_reconcile_disabled_noop(
         self,
-        credential_repository: IntegrationCredentialRepository,
     ) -> None:
         service = CompanyIntegrationCredentialService(
-            repository=credential_repository,
             google_workspace_config=GoogleWorkspaceConfig(
                 system=GoogleWorkspaceSystemConfig(enabled=False)
             ),
@@ -321,19 +308,17 @@ class TestResolveGoogleWorkspaceAuthOrder:
     @pytest.mark.asyncio
     async def test_variables_override_wins(
         self,
-        credential_repository: IntegrationCredentialRepository,
         unique_id: str,
         monkeypatch: pytest.MonkeyPatch,
+        di: FlowsDi,
     ) -> None:
         from core.config import get_settings
         from core.config.models import AuthConfig, AuthProviderConfig
 
         company_id = f"co-resolve-{unique_id}"
         user_id = f"user-resolve-{unique_id}"
-        await _cleanup_google(credential_repository, company_id, user_id)
-        await _cleanup_google(
-            credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(company_id, user_id)
+        await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
         settings = get_settings()
         monkeypatch.setattr(
@@ -352,37 +337,33 @@ class TestResolveGoogleWorkspaceAuthOrder:
             ),
         )
 
-        _ = get_container()
+        runtime = di
         set_context(_admin_context(company_id, user_id=user_id))
         try:
             state = _make_state(user_id)
             state.variables = {"google_access_token": "vars-token"}
-            material = await GoogleWorkspaceClient().resolve_auth(state)
+            material = await _google_workspace_client(runtime).resolve_auth(state)
             assert material == GoogleAuthMaterial(access_token="vars-token")
         finally:
             clear_context()
-            await _cleanup_google(credential_repository, company_id, user_id)
-            await _cleanup_google(
-                credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-            )
+            await _cleanup_google(company_id, user_id)
+            await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
     @pytest.mark.asyncio
     async def test_user_workspace_then_prior_then_company_then_interrupt(
         self,
-        credential_repository: IntegrationCredentialRepository,
         company_cred_service: CompanyIntegrationCredentialService,
         unique_id: str,
         monkeypatch: pytest.MonkeyPatch,
+        di: FlowsDi,
     ) -> None:
         from core.config import get_settings
         from core.config.models import AuthConfig, AuthProviderConfig
 
         company_id = f"co-order-{unique_id}"
         user_id = f"user-order-{unique_id}"
-        await _cleanup_google(credential_repository, company_id, user_id)
-        await _cleanup_google(
-            credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-        )
+        await _cleanup_google(company_id, user_id)
+        await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)
 
         settings = get_settings()
         monkeypatch.setattr(
@@ -401,14 +382,14 @@ class TestResolveGoogleWorkspaceAuthOrder:
             ),
         )
 
-        _ = get_container()
+        runtime = di
         set_context(_admin_context(company_id, user_id=user_id))
         now = datetime.now(timezone.utc)
         try:
             state = _make_state(user_id)
 
             with pytest.raises(FlowInterrupt) as exc_info:
-                _ = await GoogleWorkspaceClient().resolve_auth(state)
+                _ = await _google_workspace_client(runtime).resolve_auth(state)
             interrupt = exc_info.value.body
             assert isinstance(interrupt, OAuthInterrupt)
             assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
@@ -421,11 +402,11 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     impersonate_email="imp@example.com",
                 ),
             )
-            company_material = await GoogleWorkspaceClient().resolve_auth(state)
+            company_material = await _google_workspace_client(runtime).resolve_auth(state)
             assert company_material.credentials_json == _MINIMAL_SA_JSON
             assert company_material.subject == "imp@example.com"
 
-            await credential_repository.upsert(
+            await IntegrationCredential.upsert_by_credential_id(
                 IntegrationCredential(
                     credential_id=f"prior-{unique_id}",
                     company_id=company_id,
@@ -439,10 +420,10 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     updated_at=now,
                 )
             )
-            prior_material = await GoogleWorkspaceClient().resolve_auth(state)
+            prior_material = await _google_workspace_client(runtime).resolve_auth(state)
             assert prior_material.access_token == "prior-docs-token"
 
-            await credential_repository.upsert(
+            await IntegrationCredential.upsert_by_credential_id(
                 IntegrationCredential(
                     credential_id=f"ws-{unique_id}",
                     company_id=company_id,
@@ -456,11 +437,9 @@ class TestResolveGoogleWorkspaceAuthOrder:
                     updated_at=now,
                 )
             )
-            user_material = await GoogleWorkspaceClient().resolve_auth(state)
+            user_material = await _google_workspace_client(runtime).resolve_auth(state)
             assert user_material.access_token == "user-workspace-token"
         finally:
             clear_context()
-            await _cleanup_google(credential_repository, company_id, user_id)
-            await _cleanup_google(
-                credential_repository, company_id, COMPANY_INTEGRATION_USER_ID
-            )
+            await _cleanup_google(company_id, user_id)
+            await _cleanup_google(company_id, COMPANY_INTEGRATION_USER_ID)

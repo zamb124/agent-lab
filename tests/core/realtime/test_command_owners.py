@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.di import ServiceDi
 from core.events.registry import is_registered_platform_event
 from core.models.identity_models import User
 from core.realtime.command_owners import is_command_event_type, owner_service_for_event_type
@@ -25,8 +26,7 @@ def test_owner_service_for_known_scopes() -> None:
     assert owner_service_for_event_type("flows/flow/create_requested") == "flows"
     assert owner_service_for_event_type("search/crawl_profiles/list_requested") == "search"
     assert owner_service_for_event_type("frontend/dashboard/stats_requested") == "frontend"
-    with pytest.raises(ValueError):
-        _ = owner_service_for_event_type("secrets/variables/list_requested")
+    assert owner_service_for_event_type("secrets/variables/list_requested") == "secrets"
 
 
 def test_owner_service_unknown_scope_raises() -> None:
@@ -39,8 +39,8 @@ def test_is_command_event_type() -> None:
     assert is_command_event_type("sync/message/created") is False
 
 
-async def _noop_handler(payload: JsonObject, user: User) -> JsonObject | None:
-    _ = payload, user
+async def _noop_handler(payload: JsonObject, user: User, di: ServiceDi) -> JsonObject | None:
+    _ = payload, user, di
     return None
 
 

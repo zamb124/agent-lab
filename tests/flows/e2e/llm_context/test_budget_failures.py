@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.models.agent_skill import AgentSkill
 from core.llm_context import LLMContextBudgetError
 from tests.fixtures.auth import service_client_asgi_auth_context
@@ -19,7 +20,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_context_budget_rejects_oversized_system_prompt(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -28,7 +29,7 @@ async def test_context_budget_rejects_oversized_system_prompt(
     """Обязательный system prompt не может быть молча усечён."""
     _ = app
     flow_id = f"ctx-budget-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="MANDATORY_SYSTEM " + ("must-fit " * 500),
@@ -43,7 +44,7 @@ async def test_context_budget_rejects_oversized_system_prompt(
     try:
         with pytest.raises(LLMContextBudgetError, match="System LLM context prefix"):
             await run_context_flow(
-                container=container,
+                di=di,
                 flow_id=flow_id,
                 query=f"QUERY_BUDGET_{unique_id}",
                 response="unreachable",
@@ -54,7 +55,7 @@ async def test_context_budget_rejects_oversized_system_prompt(
             )
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,
@@ -63,7 +64,7 @@ async def test_context_budget_rejects_oversized_system_prompt(
 
 async def test_context_budget_rejects_required_skill_index(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -91,7 +92,7 @@ async def test_context_budget_rejects_required_skill_index(
         "cache": "off",
     }
     with service_client_asgi_auth_context(auth_headers_system):
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=agent_skill_id,
                 name="budget-skill",
@@ -99,7 +100,7 @@ async def test_context_budget_rejects_required_skill_index(
                 body_markdown="## Body",
             )
         )
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             single_node_flow(
                 flow_id=flow_id,
                 prompt="SYS " + ("keep " * 60),
@@ -110,7 +111,7 @@ async def test_context_budget_rejects_required_skill_index(
     try:
         with pytest.raises(LLMContextBudgetError):
             await run_context_flow(
-                container=container,
+                di=di,
                 flow_id=flow_id,
                 query=f"QUERY_BUDGET_SKILL_{unique_id}",
                 response="unreachable",
@@ -121,9 +122,9 @@ async def test_context_budget_rejects_required_skill_index(
             )
     finally:
         with service_client_asgi_auth_context(auth_headers_system):
-            await container.agent_skill_service.delete(agent_skill_id)
+            await AgentSkill.delete_by_agent_skill_id(agent_skill_id)
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

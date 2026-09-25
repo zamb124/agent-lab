@@ -195,7 +195,7 @@ Fallback из `label_en`/`label` существует только для сов
 
 ## База механизма
 
-Полный технический канон: [`testing.mdc`](../../rules/testing.mdc) § UI E2E, [`tests/ui/README.md`](../../../tests/ui/README.md), [`doc-sources.md`](../../../doc-sources.md). Этот skill задаёт более строгий авторский стандарт поверх минимального технического gate.
+Полный технический канон: [`testing.mdc`](../../rules/testing.mdc) § UI-тесты, [`tests/ui/README.md`](../../../tests/ui/README.md), [`doc-sources.md`](../../../doc-sources.md). Этот skill задаёт более строгий авторский стандарт поверх минимального технического gate.
 
 Путь данных:
 

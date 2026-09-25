@@ -37,12 +37,12 @@ async def test_office_share_catalog_and_document(
     unique_id: str,
     office_client_http,
     auth_headers_system,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     catalog_title = f"share-{unique_id}"
     doc_title = f"PublicDoc {unique_id}"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="share")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="share", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

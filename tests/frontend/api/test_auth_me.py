@@ -14,6 +14,7 @@ import jwt
 import pytest
 
 from core.config import get_settings
+from core.models.identity_models import Company
 
 
 class TestAuthMeFrontend:
@@ -82,7 +83,7 @@ class TestAuthMeFrontend:
 
     @pytest.mark.asyncio
     async def test_auth_me_with_subdomain(
-        self, frontend_client, auth_token, frontend_container
+        self, frontend_client, auth_token, frontend_di
     ):
         """Запрос с субдоменом: Host должен соответствовать маппингу компании в storage."""
         from core.utils.tokens import get_token_service
@@ -92,7 +93,7 @@ class TestAuthMeFrontend:
         td = token_service.validate_token(auth_token)
         if td is None or not td.company_id:
             raise AssertionError("auth_token: ожидается валидный company_id")
-        company = await frontend_container.company_repository.get(td.company_id)
+        company = await Company.get(td.company_id)
         if company is None or not company.subdomain:
             raise AssertionError("Компания из токена с subdomain")
         response = await frontend_client.get(

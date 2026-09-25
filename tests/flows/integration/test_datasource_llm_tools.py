@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import pytest
 
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from core.clients.llm.mock import MockLLMQueuedResponse
 from core.types import require_json_object
@@ -23,7 +24,7 @@ def _seed_row(customer: CustomerDatasource) -> dict[str, object]:
 
 
 async def test_llm_node_datasource_as_tool_writes_state(
-    container,
+    di,
     unique_id: str,
     customer_datasource: CustomerDatasource,
     auth_headers_system: dict[str, str],
@@ -63,7 +64,7 @@ async def test_llm_node_datasource_as_tool_writes_state(
                 }
             ],
         },
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(
         flow_id=f"ds_llm_tool_{unique_id}",
@@ -72,14 +73,14 @@ async def test_llm_node_datasource_as_tool_writes_state(
         user_id=system_user_id,
     )
     with service_client_asgi_auth_context(auth_headers_system):
-        finished = await run_node(container=container, node=node, state=state)
+        finished = await run_node(di=di, node=node, state=state)
     result = finished.datasource_result
     assert result["rows"] == [_seed_row(customer_datasource)]
     assert "orders_query" in finished.tool_results
 
 
 async def test_llm_node_db_schema_query_execute_live_rows(
-    container,
+    di,
     unique_id: str,
     customer_datasource: CustomerDatasource,
     auth_headers_system: dict[str, str],
@@ -127,7 +128,7 @@ async def test_llm_node_db_schema_query_execute_live_rows(
                 {"tool_id": "db_execute"},
             ],
         },
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(
         flow_id=f"ds_llm_db_{unique_id}",
@@ -136,7 +137,7 @@ async def test_llm_node_db_schema_query_execute_live_rows(
         user_id=system_user_id,
     )
     with service_client_asgi_auth_context(auth_headers_system):
-        finished = await run_node(container=container, node=node, state=state)
+        finished = await run_node(di=di, node=node, state=state)
     schema = require_json_object(finished.tool_results["db_schema"], "db_schema")
     tables = schema["tables"]
     if not isinstance(tables, list):

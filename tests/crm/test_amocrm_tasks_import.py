@@ -9,18 +9,34 @@ import pytest
 from apps.crm.integrations.amocrm.mapping import AMO_PROVIDER_ID
 from apps.crm.integrations.amocrm.service import AmoCRMIntegrationService
 from apps.crm.integrations.entity_upsert import upsert_canonical_by_external_ref
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.relationship import Relationship
 from core.context import clear_context, set_context
+from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.identity.system_bootstrap import ensure_system_company_exists
 from core.models.context_models import Context
-from core.models.identity_models import Company, User
-from core.worktracker.models import WorkItemState
+from core.models.identity_models import Company, NamespaceKind, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
+from core.worktracker.models import WorkItem, WorkItemState
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
 
+def _test_shared_storage():
+    from apps.crm.config import get_crm_settings
+    from core.context import get_context
+    from core.db.storage import SharedStorage, Storage
+
+    shared_url = get_crm_settings().database.shared_url
+    if shared_url is None or shared_url == "":
+        raise ValueError("database.shared_url is required")
+    return SharedStorage(Storage(db_url=shared_url, get_context_func=get_context))
+
+
 @pytest.mark.asyncio
 async def test_amocrm_import_tasks_upsert_and_relationships(
-    crm_container,
+    crm_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -34,12 +50,15 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
     set_context(ctx)
     try:
         await ensure_system_company_exists(
-            company_repository=crm_container.company_repository,
-            subdomain_repository=crm_container.subdomain_repository,
+        )
+        _ = await crm_di.namespace_service.get_or_create(
+            ns,
+            description="amo tasks",
+            kind=NamespaceKind.COMPANY_WORKSPACE,
         )
         _, _ = await upsert_canonical_by_external_ref(
-            entity_repo=crm_container.entity_repository,
-            entity_access=crm_container.crm_entity_access_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -51,8 +70,8 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
             account_key="sub_amocrm",
         )
         _, _ = await upsert_canonical_by_external_ref(
-            entity_repo=crm_container.entity_repository,
-            entity_access=crm_container.crm_entity_access_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_access=crm_di.crm_entity_access_service,
             namespace=ns,
             company_id="system",
             user_id=system_user_id,
@@ -65,15 +84,16 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         )
 
         service = AmoCRMIntegrationService(
-            oauth_service=crm_container.oauth_service,
-            entity_repository=crm_container.entity_repository,
-            entity_type_repository=crm_container.entity_type_repository,
-            relationship_repository=crm_container.relationship_repository,
-            entity_service=crm_container.entity_service,
-            namespace_service=crm_container.namespace_service,
-            task_service=crm_container.task_service,
-            integration_external_author=crm_container.integration_external_author_service,
-            entity_access=crm_container.crm_entity_access_service,
+            oauth_service=crm_di.oauth_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_service=crm_di.entity_service,
+            namespace_service=crm_di.namespace_service,
+            task_service=crm_di.task_service,
+            integration_external_author=IntegrationExternalAuthorService(
+                storage=_test_shared_storage(),
+                authz=crm_di.authz_service,
+            ),
+            entity_access=crm_di.crm_entity_access_service,
         )
 
         task_payload: dict = {
@@ -114,7 +134,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert stats["tasks_skipped_no_parent"] == 0
         assert stats["relationships"] == 2
 
-        rows = await crm_container.entity_repository.find_by_external_ref(
+        rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="task",
@@ -130,7 +150,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert "Позвонить" in ent.description
 
         # Канбан-статус и срок живут в парном WorkItem, не на CRM-узле.
-        work_item = await crm_container.work_item_service.find_by_crm_entity(
+        work_item = await WorkItem.find_work_item_by_crm_entity(
             "system", ent.entity_id
         )
         assert work_item is not None
@@ -138,14 +158,14 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         assert work_item.due_date is not None
         assert work_item.due_date.date() == date(2024, 1, 1)
 
-        lead_rows = await crm_container.entity_repository.find_by_external_ref(
+        lead_rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="lead",
             source_id=AMO_PROVIDER_ID,
             record_id="555",
         )
-        member_rows = await crm_container.entity_repository.find_by_external_ref(
+        member_rows = await CRMEntity.all_by_namespace_entity_type_and_external_ref(
             company_id="system",
             namespace=ns,
             entity_type="member",
@@ -157,16 +177,18 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
         lead_id = lead_rows[0].entity_id
         member_id = member_rows[0].entity_id
 
-        rel_related = await crm_container.relationship_repository.find_exact(
-            ent.entity_id,
-            lead_id,
-            "related_to",
+        rel_related = await Relationship.by_namespace_source_target_and_type(
+            company_id="system",
+            source_entity_id=ent.entity_id,
+            target_entity_id=lead_id,
+            relationship_type="related_to",
             namespace=ns,
         )
-        rel_assigned = await crm_container.relationship_repository.find_exact(
-            ent.entity_id,
-            member_id,
-            "assigned_to",
+        rel_assigned = await Relationship.by_namespace_source_target_and_type(
+            company_id="system",
+            source_entity_id=ent.entity_id,
+            target_entity_id=member_id,
+            relationship_type="assigned_to",
             namespace=ns,
         )
         assert rel_related is not None
@@ -177,7 +199,7 @@ async def test_amocrm_import_tasks_upsert_and_relationships(
 
 @pytest.mark.asyncio
 async def test_amocrm_import_tasks_skips_unmapped_parent(
-    crm_container,
+    crm_di,
     unique_id: str,
     system_user_id: str,
 ) -> None:
@@ -191,15 +213,16 @@ async def test_amocrm_import_tasks_skips_unmapped_parent(
     set_context(ctx)
     try:
         service = AmoCRMIntegrationService(
-            oauth_service=crm_container.oauth_service,
-            entity_repository=crm_container.entity_repository,
-            entity_type_repository=crm_container.entity_type_repository,
-            relationship_repository=crm_container.relationship_repository,
-            entity_service=crm_container.entity_service,
-            namespace_service=crm_container.namespace_service,
-            task_service=crm_container.task_service,
-            integration_external_author=crm_container.integration_external_author_service,
-            entity_access=crm_container.crm_entity_access_service,
+            oauth_service=crm_di.oauth_service,
+            rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            entity_service=crm_di.entity_service,
+            namespace_service=crm_di.namespace_service,
+            task_service=crm_di.task_service,
+            integration_external_author=IntegrationExternalAuthorService(
+                storage=_test_shared_storage(),
+                authz=crm_di.authz_service,
+            ),
+            entity_access=crm_di.crm_entity_access_service,
         )
 
         task_payload: dict = {

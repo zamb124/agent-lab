@@ -1,4 +1,7 @@
-"""Alembic env для БД platform_realtime (лог PlatformEvent)."""
+"""Alembic env для БД platform_realtime.
+
+Лог больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
+"""
 
 import asyncio
 import logging
@@ -12,8 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.realtime.db.models import PlatformEventLogRow  # noqa: F401
-from core.db.models import Base
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -23,9 +25,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "platform_event_log",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

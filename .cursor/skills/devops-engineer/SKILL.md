@@ -76,6 +76,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 |---|---|---|---|---|---|
 | postgres | StatefulSet | master | `postgres.nodeName` | 50Gi | 7 сервисных БД (pgvector/pg17) |
 | redis | StatefulSet | master | `redis.nodeName` | 10Gi | TaskIQ broker, sessions, кэш, pub/sub UI events |
+| minio | StatefulSet | master | `minio.nodeName` | 50Gi | платформенное объектное хранилище, ClusterIP `minio:9000` |
 | loki | StatefulSet | master | `observability.loki.nodeName` | 100Gi | Логи 14 дней |
 | tempo | StatefulSet | master | `observability.tempo.nodeName` | 50Gi | Trace OTel 7 дней |
 | grafana | Deployment | master | `observability.grafana.nodeName` | 10Gi | UI + provisioned dashboards/alerts |
@@ -89,7 +90,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 | nvidia-device-plugin | DaemonSet | master | — (label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
 | portainer | Deployment (community-аддон, если `microk8s enable portainer` прошёл) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` / `30779`; сейчас на BM аддон disabled |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
-| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | Alembic upgrade head с DDL-блокировкой на `alembic_version` |
+| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | `db_migrate upgrade`: `0001_initial` и запись в `oxyde_migrations`, ожидание advisory lock |
 
 ## Базовые команды
 
@@ -103,7 +104,7 @@ make k8s-deploy IMAGE_TAG=<sha>      # helm upgrade --install (--wait, см. HEL
 make k8s-rollback                    # helm rollback на предыдущую ревизию
 make k8s-helm-clear-pending          # удалить Helm pending-* Secret (без отката Pod); см. deploy/scripts/helm_clear_pending_release.sh
 make k8s-secrets-sync                # пересоздать platform-secrets из ENV
-make k8s-backup [S3=s3://...]        # pg_dumpall в backups/ (или Selectel S3)
+make k8s-backup                   # pg_dumpall в backups/ на диске ноды
 make k8s-restore FILE=backups/...gz  # restore из дампа
 make k8s-template > /tmp/r.yaml      # рендер всех манифестов
 make render-helm-app-conf            # conf.json + overlay -> files/app-conf.json
@@ -203,7 +204,7 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 **macOS signing pipeline:** CI Phase 1 — pre-sign goosed → forge sign → DMG + `notarytool submit` (`AGENT_MACOS_NOTARIZE=submit-only`, без poll). Phase 2 — workflow [`humanitec-agent-macos-notarize.yml`](../../.github/workflows/humanitec-agent-macos-notarize.yml): poll до 48 ч → stapler → replace DMG в release. Локальный полный sync: **`make agent-build-macos-local`**. Followup: **`make agent-notarize-followup`**. Чеклист: `apps/agent/desktop/docs/MACOS_SIGNING.md`.
 
-**Windows self-contained MSI:** `scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
+**Windows self-contained MSI:** `apps/agent/desktop/scripts/bundle_windows_runtime_dlls.ps1` копирует MSVC CRT + UCRT в `src/bin` рядом с `goosed.exe`; gate `dumpbin /dependents` до forge. Пользователю **не** нужен VC++ Redistributable. Child exit `3221225781` (`0xC0000135`) = missing DLL.
 
 **Prod download API:** репозиторий **private** → frontend обязан ходить в GitHub Releases API с PAT (`AGENT__RELEASES__GITHUB_TOKEN` в GitHub Secrets → `platform-secrets` → pod env). Без токена API отдаёт **404** (не 403); артефакты на Release при этом **не пропадают**. Деплой платформы билды не трогает.
 
@@ -258,7 +259,7 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 
 ### Voice / speech (STT/TTS/VAD): диагностика
 
-См. также `.cursor/rules/voice.mdc` и `.cursor/rules/speech_providers.mdc`.
+См. также `.cursor/rules/voice.mdc`.
 
 1. Канон выбора провайдера в кластере: ENV `VOICE__STT__/VOICE__TTS__/VOICE__VAD__*`
    (Pydantic `settings.voice.{stt,tts,vad}.*`) — это **только** deployment-default.
@@ -299,7 +300,7 @@ make agent-ci-build AGENT_PLATFORM=macos-arm64 AGENT_ARTIFACT_MODE=release AGENT
 2. Если `service down` алёрт — `kubectl logs -n platform deployment/<svc> --tail=500`.
 3. По trace_id из лога — Tempo waterfall (Grafana → Explore → Tempo → search by trace_id).
 4. `kubectl describe pod -n platform <pod>` → Events (Failed/OOMKilled/ContainerCannotRun).
-   - При `Init` фазе — `kubectl logs <pod> -c db-migrate` (Alembic upgrade head).
+   - При `Init` фазе — `kubectl logs <pod> -c db-migrate` (`db_migrate upgrade`, таблица `oxyde_migrations`).
 5. `kubectl get events -n platform --sort-by='.lastTimestamp' | tail -50`.
 6. Если Helm-релиз сломан — `helm history agent-lab -n platform` → `helm rollback agent-lab <REV>`.
 7. Подробные сценарии — [`troubleshooting.md`](mdc:.cursor/skills/devops-engineer/troubleshooting.md).
@@ -319,7 +320,7 @@ make k8s-rollback
 ### Бэкап перед опасной операцией
 
 ```bash
-make k8s-backup S3=s3://shvedzilla/backups/
+make k8s-backup
 # Делать ПЕРЕД любой миграцией БД, изменением schema, restore тестового дампа.
 ```
 
@@ -338,4 +339,5 @@ make k8s-backup S3=s3://shvedzilla/backups/
 ## Прогрессивные ссылки
 
 - Пошаговые сценарии (первичная настройка, откат, restore, обновление NVIDIA driver, добавление ноды) — [`runbooks.md`](mdc:.cursor/skills/devops-engineer/runbooks.md).
+- Справочник кластера (чарт, ingress и приоритеты, Grafana forwardAuth, GPU, observability, деплой) — [`cluster-reference.md`](mdc:.cursor/skills/devops-engineer/cluster-reference.md).
 - Каталог типовых проблем и команд диагностики — [`troubleshooting.md`](mdc:.cursor/skills/devops-engineer/troubleshooting.md).

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from apps.flows.src.models.agent_skill import AgentSkill, AgentSkillUpdatePayload
-from apps.flows.src.services.agent_skill_service import (
-    AgentSkillService,
+from apps.flows.src.models.agent_skill import (
+    AgentSkill,
+    AgentSkillUpdatePayload,
     parse_skill_md,
 )
 from core.files.create_spec import FileCreateSpec
@@ -79,7 +79,6 @@ PLATFORM_ASSISTANT_SEED_SKILL_IDS: tuple[str, ...] = (
 
 
 async def seed_platform_assistant_skills(
-    agent_skill_service: AgentSkillService,
     files_service: FilesService,
     company_id: str,
 ) -> int:
@@ -96,7 +95,7 @@ async def seed_platform_assistant_skills(
         parsed = parse_skill_md(skill_md_path.read_text(encoding="utf-8"))
         existing: AgentSkill | None
         try:
-            existing = await agent_skill_service.get(parsed.agent_skill_id)
+            existing = await AgentSkill.require_by_agent_skill_id(parsed.agent_skill_id)
         except LookupError:
             existing = None
 
@@ -117,20 +116,25 @@ async def seed_platform_assistant_skills(
             assets=[],
         )
         if existing is None:
-            _ = await agent_skill_service.create(
-                AgentSkill(
-                    agent_skill_id=parsed.agent_skill_id,
-                    name=parsed.name,
-                    description=parsed.description,
-                    body_markdown=parsed.body_markdown,
-                    tool_refs=parsed.tool_refs,
-                    depends_on=parsed.depends_on,
-                    references=references,
-                    assets=[],
+            try:
+                _ = await AgentSkill.create(
+                    AgentSkill(
+                        agent_skill_id=parsed.agent_skill_id,
+                        name=parsed.name,
+                        description=parsed.description,
+                        body_markdown=parsed.body_markdown,
+                        tool_refs=parsed.tool_refs,
+                        depends_on=parsed.depends_on,
+                        references=references,
+                        assets=[],
+                    )
                 )
-            )
+            except ValueError as exc:
+                if str(exc) != f"AgentSkill already exists: {parsed.agent_skill_id}":
+                    raise
+                _ = await AgentSkill.update(update_payload)
         else:
-            _ = await agent_skill_service.update(update_payload)
+            _ = await AgentSkill.update(update_payload)
         seeded += 1
 
     logger.info(
@@ -142,13 +146,11 @@ async def seed_platform_assistant_skills(
 
 
 async def ensure_platform_assistant_skills_for_company(
-    agent_skill_service: AgentSkillService,
     files_service: FilesService,
     company_id: str,
 ) -> int:
     """Idempotent ensure of platform Agent Skills for an existing company."""
     return await seed_platform_assistant_skills(
-        agent_skill_service,
         files_service,
         company_id,
     )

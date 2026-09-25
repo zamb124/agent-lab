@@ -12,6 +12,8 @@ import uuid
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
+
 INLINE_CALCULATOR = {
     "tool_id": "calculator",
     "description": "Вычисляет математические выражения",
@@ -30,16 +32,13 @@ class TestReasoningInAgent:
     """Тесты reasoning в flow с llm_node."""
 
     async def test_flow_with_reasoning_returns_separate_artifacts(
-        self, client, mock_llm_with_queue, sync_tools, unique_id: str
-    ):
+        self, client, mock_llm_with_queue, sync_tools, unique_id: str,
+    di):
         """Agent с reasoning возвращает отдельные reasoning и response артефакты."""
-        from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_flow_{unique_id}"
-        from apps.flows.src.models import FlowConfig
 
-        container = get_container()
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name="Test Reasoning Agent",
@@ -118,16 +117,13 @@ class TestReasoningInAgent:
         assert "Это ответ на вопрос" in response_text
 
     async def test_flow_with_reasoning_only(
-        self, client, mock_llm_with_queue, sync_tools, unique_id: str
-    ):
+        self, client, mock_llm_with_queue, sync_tools, unique_id: str,
+    di):
         """Agent с только reasoning (без content) возвращает только reasoning артефакт."""
-        from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_only_flow_{unique_id}"
-        from apps.flows.src.models import FlowConfig
 
-        container = get_container()
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name="Test Reasoning Only Agent",
@@ -171,16 +167,13 @@ class TestReasoningInAgent:
             assert "Я думаю над ответом" in reasoning_text
 
     async def test_flow_with_reasoning_and_tool_call(
-        self, client, mock_llm_with_queue, sync_tools, unique_id: str
-    ):
+        self, client, mock_llm_with_queue, sync_tools, unique_id: str,
+    di):
         """Agent с reasoning и tool call правильно обрабатывает reasoning."""
-        from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_tool_flow_{unique_id}"
-        from apps.flows.src.models import FlowConfig
 
-        container = get_container()
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name="Test Reasoning Tool Agent",
@@ -239,16 +232,13 @@ class TestReasoningInAgent:
             )
 
     async def test_stream_returns_reasoning_events(
-        self, client, mock_llm_with_queue, sync_tools, unique_id: str
-    ):
+        self, client, mock_llm_with_queue, sync_tools, unique_id: str,
+    di):
         """SendStreamingMessage возвращает reasoning события в SSE."""
-        from apps.flows.src.container import get_container
 
         flow_id = f"test_reasoning_stream_flow_{unique_id}"
-        from apps.flows.src.models import FlowConfig
 
-        container = get_container()
-        await container.flow_repository.set(
+        await FlowConfig.create_version(
             FlowConfig(
                 flow_id=flow_id,
                 name="Test Reasoning Stream Agent",

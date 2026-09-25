@@ -13,22 +13,25 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal, cast
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.db.models import CRMTask
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
-from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import (
     KnowledgeImportCreatedEntityItem,
     NoteProcessingConfig,
     TaskCreatedEntitiesResponse,
 )
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_task_broadcast import broadcast_crm_task_updated_for_user
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     store_pending_import_text,
 )
+from apps.crm.services.note_markdown_format_schedule import (
+    ActiveTaskExistsError,
+    begin_note_markdown_format,
+)
 from apps.crm_worker.tasks.task_names import (
-    CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
     CRM_PROCESS_NOTE,
     CRM_REBUILD_DAILY_SUMMARY,
     CRM_REBUILD_PERIOD_SUMMARY,
@@ -37,15 +40,12 @@ from apps.crm_worker.tasks.task_names import (
     CRM_RUN_NAMESPACE_INTEGRATION_JOB,
 )
 from core.context import get_context, reset_context, resolve_namespace_or_raise, set_context
+from core.files.models import FileRecord
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.tasks import enqueue
-from core.test_scope import (
-    MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN,
-    mock_llm_side_effect_enqueue_labels,
-)
 from core.types import JsonObject
 from core.utils.knowledge_text_split import validate_chunk_max_chars
 
@@ -57,8 +57,7 @@ ALL_NAMESPACES_TASK_KEY = "__all_namespaces__"
 STALE_CRM_TASK_INACTIVITY = timedelta(minutes=10)
 
 if TYPE_CHECKING:
-    from core.db.repositories.company_repository import CompanyRepository
-    from core.files.file_repository import FileRepository
+    pass
 
 KnowledgeImportMode = Literal["notes_only", "graph"]
 NamespaceIntegrationJobKind = Literal["entities", "custom_fields"]
@@ -128,24 +127,6 @@ def _task_data_import_mode(
     raise ValueError(f"task data field {key!r} must be notes_only or graph")
 
 
-class ActiveTaskExistsError(ValueError):
-    """Бросается при попытке стартовать задачу, для которой уже есть активная (pending/running)."""
-
-    def __init__(
-        self,
-        task_type: str,
-        existing_task_id: str,
-        *,
-        dedup: dict[str, str] | None = None,
-    ) -> None:
-        super().__init__(
-            f"Задача типа '{task_type}' уже выполняется (task_id={existing_task_id}). Дождитесь завершения или отмените текущую задачу."
-        )
-        self.task_type: str = task_type
-        self.existing_task_id: str = existing_task_id
-        self.dedup: dict[str, str] = dict(dedup) if dedup else {}
-
-
 def _normalize_import_file_ids(source_file_ids: list[str] | None) -> list[str]:
     from_list: list[str] = []
     if source_file_ids:
@@ -165,17 +146,9 @@ def _normalize_import_file_ids(source_file_ids: list[str] | None) -> list[str]:
 class TaskService:
     def __init__(
         self,
-        task_repo: TaskRepository,
         entity_service: EntityService,
-        relationship_repo: RelationshipRepository,
-        file_repository: FileRepository,
-        company_repository: CompanyRepository,
     ) -> None:
-        self._task_repo: TaskRepository = task_repo
         self._entity_service: EntityService = entity_service
-        self._relationship_repo: RelationshipRepository = relationship_repo
-        self._file_repository: FileRepository = file_repository
-        self._company_repository: CompanyRepository = company_repository
 
     def _get_company_id(self) -> str:
         ctx = get_context()
@@ -216,7 +189,7 @@ class TaskService:
         namespace: str,
     ) -> None:
         """Бросает ValueError если уже есть активная (pending/running) задача того же типа с теми же ключами."""
-        existing = await self._task_repo.find_active_by_data_keys(
+        existing = await CRMTask.active_by_data_keys(
             task_type, data_key_values, namespace, self._get_company_id()
         )
         if existing is not None:
@@ -293,7 +266,7 @@ class TaskService:
             },
         )
         try:
-            _ = await self._task_repo.create(row)
+            row = await CRMTask.create(row)
         except Exception:
             if has_text:
                 await delete_pending_import_text(task_id)
@@ -313,7 +286,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -326,7 +299,7 @@ class TaskService:
                 await delete_pending_import_text(task_id)
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -373,7 +346,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"provider_id": pid, "job": job, "stats": {}},
         )
-        _ = await self._task_repo.create(row)
+        row = await CRMTask.create(row)
 
         ctx = get_context()
         if ctx is None:
@@ -389,7 +362,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -400,7 +373,7 @@ class TaskService:
             )
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -430,9 +403,13 @@ class TaskService:
         note = await self._entity_service.get_entity(note_id)
         if note is None:
             raise ValueError(f"Note not found: {note_id}")
+        if mode == "apply":
+            draft = (note.attributes or {}).get("ai_analysis_draft")
+            if not isinstance(draft, dict):
+                raise ValueError("Note has no ai_analysis_draft")
         missing_attachment_ids: list[str] = []
         for attachment_id in note.attachment_ids:
-            file_record = await self._file_repository.get(attachment_id)
+            file_record = await FileRecord.get(attachment_id)
             if file_record is None:
                 missing_attachment_ids.append(attachment_id)
         if missing_attachment_ids:
@@ -461,7 +438,7 @@ class TaskService:
                 "result_relationships_count": None,
             },
         )
-        _ = await self._task_repo.create(row)
+        row = await CRMTask.create(row)
 
         ctx = get_context()
         if ctx is None:
@@ -482,7 +459,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -492,7 +469,7 @@ class TaskService:
             )
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -532,7 +509,7 @@ class TaskService:
                 "note_name": note.name or "",
             },
         )
-        _ = await self._task_repo.create(row)
+        row = await CRMTask.create(row)
 
         ctx = get_context()
         if ctx is None or ctx.auth_token is None:
@@ -552,7 +529,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -562,7 +539,7 @@ class TaskService:
             )
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -581,86 +558,12 @@ class TaskService:
         *,
         note_id: str,
     ) -> CRMTask:
-        note = await self._entity_service.get_entity(note_id)
-        if note is None:
-            raise ValueError("Note not found")
-        if note.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
-            raise ValueError("Expected a note (entity_type=note)")
-        desc = note.description
-        if desc is None or not str(desc).strip():
-            raise ValueError("Note text is empty")
-        ns = resolve_namespace_or_raise(note.namespace)
-        await self._assert_no_active_task(
-            "note_markdown_format",
-            {"note_id": note_id},
-            ns,
-        )
-        task_id = str(uuid.uuid4())
-        row = CRMTask(
-            task_id=task_id,
-            task_type="note_markdown_format",
-            status="pending",
-            stage="pending",
-            progress_pct=0,
-            company_id=self._get_company_id(),
-            namespace=ns,
-            user_id=self._get_user_id(),
-            data={
-                "note_id": note_id,
-                "note_name": note.name or "",
-            },
-        )
-        _ = await self._task_repo.create(row)
-
-        ctx = get_context()
-        if ctx is None or ctx.auth_token is None:
-            raise ValueError("Request context is required to start note formatting")
-        auth_token = ctx.auth_token
-        try:
-            task = await enqueue(
-                CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN,
-                note_id=note_id,
-                company_id=row.company_id,
-                namespace=ns,
-                auth_token=auth_token,
-                user_id=row.user_id,
-                interface_language=ctx.language.value,
-                task_id=task_id,
-                background_kind="crm_task",
-                extra_labels=mock_llm_side_effect_enqueue_labels(
-                    MOCK_LLM_SIDE_EFFECT_NOTE_MARKDOWN
-                ),
-            )
-            taskiq_id = str(task.task_id)
-        except Exception as exc:
-            await self._task_repo.patch_progress(
-                task_id,
-                row.company_id,
-                status="failed",
-                stage="failed",
-                error_message=str(exc),
-                completed_at=datetime.now(UTC),
-            )
-            raise
-
-        await self._task_repo.patch_progress(
-            task_id,
-            row.company_id,
-            status="running",
-            stage="format_markdown",
-            started_at=datetime.now(UTC),
-            taskiq_task_id=taskiq_id,
-        )
-        row.status = "running"
-        row.stage = "format_markdown"
-        row.started_at = datetime.now(UTC)
-        row.taskiq_task_id = taskiq_id
-        return row
+        return await begin_note_markdown_format(note_id=note_id)
 
     # ── Common ────────────────────────────────────────────────────────────────
 
     async def get_task(self, task_id: str) -> CRMTask | None:
-        return await self._task_repo.get(task_id)
+        return await CRMTask.by_company_and_task_id(self._get_company_id(), task_id)
 
     async def list_tasks(
         self,
@@ -672,8 +575,21 @@ class TaskService:
         offset: int = 0,
     ) -> list[CRMTask]:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
-        return await self._task_repo.list_for_namespace(
-            ns, task_type=task_type, note_id=note_id, limit=limit, offset=offset
+        if note_id is not None:
+            return await CRMTask.list_by_note_id(
+                company_id=self._get_company_id(),
+                namespace=ns,
+                task_type=task_type,
+                note_id=note_id,
+                limit=limit,
+                offset=offset,
+            )
+        return await (
+            CRMTask.namespace_tasks(self._get_company_id(), ns, task_type)
+            .order_by("-created_at")
+            .limit(limit)
+            .offset(offset)
+            .all()
         )
 
     async def count_tasks(
@@ -684,10 +600,17 @@ class TaskService:
         note_id: str | None = None,
     ) -> int:
         ns = namespace.strip() if isinstance(namespace, str) and namespace.strip() else None
-        return await self._task_repo.count_for_namespace(ns, task_type=task_type, note_id=note_id)
+        if note_id is not None:
+            return await CRMTask.count_by_note_id(
+                company_id=self._get_company_id(),
+                namespace=ns,
+                task_type=task_type,
+                note_id=note_id,
+            )
+        return await CRMTask.namespace_tasks(self._get_company_id(), ns, task_type).count()
 
     async def request_cancel(self, task_id: str) -> CRMTask:
-        row = await self._task_repo.get(task_id)
+        row = await self.get_task(task_id)
         if row is None:
             raise ValueError(f"Task not found: {task_id}")
         if row.user_id != self._get_user_id():
@@ -698,7 +621,7 @@ class TaskService:
         if row.cancel_requested and row.status in ("pending", "running"):
             now = datetime.now(UTC)
             pct = int(row.progress_pct)
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="cancelled",
@@ -707,13 +630,13 @@ class TaskService:
                 completed_at=now,
                 cancel_requested=False,
             )
-            updated = await self._task_repo.get(task_id)
+            updated = await self.get_task(task_id)
             if updated is None:
                 raise ValueError(f"Task not found: {task_id}")
             await broadcast_crm_task_updated_for_user(user_id=updated.user_id, row=updated)
             return updated
 
-        await self._task_repo.patch_progress(task_id, row.company_id, cancel_requested=True)
+        await CRMTask.patch_progress(task_id, row.company_id, cancel_requested=True)
         row.cancel_requested = True
         return row
 
@@ -727,8 +650,8 @@ class TaskService:
         Вызывается при старте процесса ``crm_worker`` (до reclaim Redis) и HTTP-сервиса ``crm``.
         """
         cutoff = datetime.now(UTC) - STALE_CRM_TASK_INACTIVITY
-        cancel_rows = await self._task_repo.reconcile_cancel_requested_active_tasks()
-        stale_rows = await self._task_repo.reconcile_stale_active_tasks_older_than(cutoff=cutoff)
+        cancel_rows = await CRMTask.cancel_if_requested()
+        stale_rows = await CRMTask.close_stale(cutoff=cutoff)
         rows = cancel_rows + stale_rows
         if not rows:
             return 0
@@ -740,7 +663,7 @@ class TaskService:
                 raw_note = row.data.get("note_id")
                 note_id = raw_note if isinstance(raw_note, str) and raw_note else None
                 if note_id:
-                    company_row = await self._company_repository.get(row.company_id)
+                    company_row = await Company.get(row.company_id)
                     if company_row is None:
                         logger.warning("crm.reconcile_stale_task.company_missing", task_id=row.task_id, company_id=row.company_id)
                     else:
@@ -766,7 +689,7 @@ class TaskService:
         return len(rows)
 
     async def rollback_task(self, task_id: str) -> CRMTask:
-        row = await self._task_repo.get(task_id)
+        row = await self.get_task(task_id)
         if row is None:
             raise ValueError(f"Task not found: {task_id}")
         if row.task_type != "knowledge_import":
@@ -783,12 +706,15 @@ class TaskService:
             raise ValueError("No created entities or relationships to roll back")
 
         for rid in reversed(created_relationship_ids):
-            _ = await self._relationship_repo.delete_by_relationship_id(rid)
+            _ = await Relationship.delete_by_company_and_relationship_id(
+                self._get_company_id(),
+                rid,
+            )
 
         for eid in reversed(created_entity_ids):
             _ = await self._entity_service.delete_entity(eid)
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="rolled_back",
@@ -800,7 +726,7 @@ class TaskService:
         return row
 
     async def get_task_created_entities(self, task_id: str) -> TaskCreatedEntitiesResponse:
-        row = await self._task_repo.get(task_id)
+        row = await self.get_task(task_id)
         if row is None:
             raise LookupError(task_id)
         if row.user_id != self._get_user_id():
@@ -816,7 +742,7 @@ class TaskService:
         if len(raw_ids) == 0 and rel_n == 0:
             raise ValueError("Task has no created entities or relationships")
 
-        entities = await self._entity_service.list_entities_by_ids_ordered(raw_ids)
+        entities = await CRMEntity.list_by_ids_in_order(raw_ids)
         found_ids = {e.entity_id for e in entities}
         missing = [eid for eid in raw_ids if eid not in found_ids]
         items = [
@@ -840,7 +766,7 @@ class TaskService:
         )
 
     async def complete_task_review(self, task_id: str) -> CRMTask:
-        row = await self._task_repo.get(task_id)
+        row = await self.get_task(task_id)
         if row is None:
             raise LookupError(task_id)
         if row.user_id != self._get_user_id():
@@ -858,7 +784,7 @@ class TaskService:
         if ent_n == 0 and rel_n == 0:
             raise ValueError("No created entities or relationships to confirm review")
         now = datetime.now(UTC)
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             data_patch={"review_completed_at": now.isoformat()},
@@ -890,7 +816,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"date_str": date_str, "reason": reason},
         )
-        _ = await self._task_repo.create(row)
+        row = await CRMTask.create(row)
 
         ctx = get_context()
         if ctx is None:
@@ -909,7 +835,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -919,7 +845,7 @@ class TaskService:
             )
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -958,7 +884,7 @@ class TaskService:
             user_id=self._get_user_id(),
             data={"date_from": date_from, "date_to": date_to, "reason": reason},
         )
-        _ = await self._task_repo.create(row)
+        row = await CRMTask.create(row)
 
         ctx = get_context()
         if ctx is None:
@@ -978,7 +904,7 @@ class TaskService:
             )
             taskiq_id = str(task.task_id)
         except Exception as exc:
-            await self._task_repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 row.company_id,
                 status="failed",
@@ -988,7 +914,7 @@ class TaskService:
             )
             raise
 
-        await self._task_repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             row.company_id,
             status="running",
@@ -1006,7 +932,7 @@ class TaskService:
 
     async def retry_task(self, task_id: str) -> CRMTask:
         """Перезапустить failed/cancelled задачу с теми же параметрами."""
-        old = await self._task_repo.get(task_id)
+        old = await self.get_task(task_id)
         if old is None:
             raise LookupError(task_id)
         if old.status not in ("failed", "cancelled"):

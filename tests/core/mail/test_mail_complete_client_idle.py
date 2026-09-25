@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -22,30 +21,6 @@ from tests.core.mail.fakes import RecordingMailServerPort
 MailMemberSeed = Callable[..., Awaitable[tuple[Company, User]]]
 
 
-async def _patch_idle_container(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    mail_service: MailService,
-    company_id: str,
-) -> None:
-    connection = await mail_service.get_connection(company_id=company_id)
-    if connection is None:
-        raise RuntimeError(f"mail connection missing for company_id={company_id}")
-
-    async def _get_connection(company_mail_connection_id: str):
-        if company_mail_connection_id != connection.company_mail_connection_id:
-            return None
-        return connection
-
-    monkeypatch.setattr(
-        "apps.idle_worker.tasks.mail_idle_supervisor.get_container",
-        lambda: SimpleNamespace(
-            company_mail_connection_repository=SimpleNamespace(get=AsyncMock(side_effect=_get_connection)),
-            mail_service=mail_service,
-        ),
-    )
-
-
 @pytest.mark.asyncio
 async def test_idle_exists_enqueues_sync(
     mail_service: MailService,
@@ -54,7 +29,7 @@ async def test_idle_exists_enqueues_sync(
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    company_id, _user_id, binding = await seed_connected_user_binding(
+    _company_id, _user_id, binding = await seed_connected_user_binding(
         mail_service,
         mail_member_context,
         recording_mail_port,
@@ -71,10 +46,11 @@ async def test_idle_exists_enqueues_sync(
         "apps.idle_worker.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
         _fake_enqueue,
     )
-    await _patch_idle_container(
-        monkeypatch, mail_service=mail_service, company_id=company_id
+    woke = await _idle_one_binding(
+        mail_service=mail_service,
+        binding=binding,
+        timeout_seconds=1.0,
     )
-    woke = await _idle_one_binding(binding=binding, timeout_seconds=1.0)
     assert woke is True
     assert enqueued == [(binding.company_id, binding.mailbox_binding_id)]
 
@@ -87,7 +63,7 @@ async def test_idle_timeout_does_not_enqueue(
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    company_id, _user_id, binding = await seed_connected_user_binding(
+    _company_id, _user_id, binding = await seed_connected_user_binding(
         mail_service,
         mail_member_context,
         recording_mail_port,
@@ -104,10 +80,11 @@ async def test_idle_timeout_does_not_enqueue(
         "apps.idle_worker.tasks.mail_idle_supervisor.enqueue_mail_sync_binding",
         _fake_enqueue,
     )
-    await _patch_idle_container(
-        monkeypatch, mail_service=mail_service, company_id=company_id
+    woke = await _idle_one_binding(
+        mail_service=mail_service,
+        binding=binding,
+        timeout_seconds=1.0,
     )
-    woke = await _idle_one_binding(binding=binding, timeout_seconds=1.0)
     assert woke is False
     assert enqueued == []
 
@@ -122,5 +99,5 @@ async def test_idle_supervisor_respects_idle_enabled(
             mail_sync=MailSyncConfig(enabled=True, idle_enabled=False)
         ),
     )
-    result = await mail_idle_supervisor_task()
+    result = await mail_idle_supervisor_task(di=SimpleNamespace())
     assert result == {"idle_sessions": 0, "wakes": 0}

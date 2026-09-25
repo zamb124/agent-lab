@@ -21,7 +21,6 @@ from urllib.parse import urlparse
 
 import yaml
 
-from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
 from apps.flows.src.models import (
     CodeMode,
     FlowConfig,
@@ -88,16 +87,10 @@ class FlowsLoader:
     def __init__(
         self,
         bundles_dir: Path,
-        flow_repository: FlowRepository,
-        node_repository: NodeRepository,
-        tool_repository: ToolRepository,
         registry_path: Path | None = None,
         flow_access_service: FlowAccessService | None = None,
     ):
         self.bundles_dir: Path = bundles_dir
-        self.flow_repository: FlowRepository = flow_repository
-        self.node_repository: NodeRepository = node_repository
-        self.tool_repository: ToolRepository = tool_repository
         self.flow_access_service: FlowAccessService | None = flow_access_service
         self.registry_path: Path = registry_path or (bundles_dir / "registry.yaml")
         self._registry: JsonObject = {}
@@ -199,7 +192,7 @@ class FlowsLoader:
         self._preloaded_bundle_ids.add(bundle_id)
 
     async def _ensure_references_resolved(self, reference_ids: set[str]) -> None:
-        """Подгружает tool/node refs по явным ID через repository.get_many (demand-driven)."""
+        """Подгружает tool/node refs по явным ID через by_tool_ids (demand-driven)."""
         if not reference_ids:
             return
 
@@ -211,7 +204,7 @@ class FlowsLoader:
         if not missing_tool_lookup:
             return
 
-        resolved_tools = await self.tool_repository.get_many(missing_tool_lookup)
+        resolved_tools = await ToolReference.by_tool_ids(missing_tool_lookup)
         for ref_id, tool_ref in resolved_tools.items():
             if tool_ref.tool_id.startswith("mcp:"):
                 continue
@@ -235,7 +228,7 @@ class FlowsLoader:
             )
             return
 
-        resolved_nodes = await self.node_repository.get_many(still_missing)
+        resolved_nodes = await NodeConfig.get_many(still_missing)
         for ref_id, node_config in resolved_nodes.items():
             self._nodes_cache[ref_id] = node_config
 
@@ -323,15 +316,15 @@ class FlowsLoader:
         if flow_config is None:
             return None
 
-        previous = await self.flow_repository.get(flow_config.flow_id)
-        _ = await self.flow_repository.set(flow_config)
+        previous = await FlowConfig.get_latest(flow_config.flow_id)
+        _ = await FlowConfig.create_version(flow_config)
         try:
             await self._sync_loaded_flow(flow_config)
         except Exception:
             if previous is None:
-                _ = await self.flow_repository.delete(flow_config.flow_id)
+                _ = await FlowConfig.delete_by_flow_id(flow_config.flow_id)
             else:
-                _ = await self.flow_repository.set(previous)
+                _ = await FlowConfig.create_version(previous)
             raise
 
         logger.info("flows.loader.bundle_saved", bundle_id=bundle_id, name=flow_config.name)
@@ -532,7 +525,7 @@ class FlowsLoader:
                 }
             )
 
-            _ = await self.node_repository.set(node_config)
+            _ = await NodeConfig.set(node_config)
             # Добавляем в кеш для инлайнинга в flows
             self._nodes_cache[node_id] = node_config
             self._loaded_nodes.append(node_id)
@@ -568,6 +561,7 @@ class FlowsLoader:
             retention_kind=retention_kind,
             ttl_seconds=ttl_seconds,
             metadata={"source_kind": FileSourceKind.FLOW_ASSET.value},
+            source_kind=FileSourceKind.FLOW_ASSET,
         )
         return record
 
@@ -1344,9 +1338,6 @@ class FlowsLoader:
 
 
 async def load_flows_to_db(
-    flow_repository: FlowRepository,
-    node_repository: NodeRepository,
-    tool_repository: ToolRepository,
     flow_access_service: FlowAccessService,
     bundles_dir: Path | None = None,
 ) -> tuple[list[str], list[str]]:
@@ -1357,9 +1348,6 @@ async def load_flows_to_db(
     tools подтягиваются из ``tool_repository`` и инлайнятся в конфиг.
 
     Аргументы:
-        flow_repository: сохранение FlowConfig
-        node_repository: сохранение NodeConfig из nodes.json
-        tool_repository: чтение tools для инлайнинга
         bundles_dir: корень каталога с подпапками bundle (``{bundle_id}/flow.json``).
             По умолчанию: ``apps/flows/bundles``, реестр: ``apps/flows/registry.yaml``.
             Если ``bundles_dir`` задан явно: реестр ``{bundles_dir}/registry.yaml``.
@@ -1378,9 +1366,6 @@ async def load_flows_to_db(
 
     loader = FlowsLoader(
         bundles_dir,
-        flow_repository,
-        node_repository,
-        tool_repository,
         registry_path=registry_path,
         flow_access_service=flow_access_service,
     )
@@ -1388,7 +1373,6 @@ async def load_flows_to_db(
 
 
 async def load_tools_to_db(
-    tool_repository: ToolRepository,
     modules: list[str] | None = None,
     *,
     flow_access_service: FlowAccessService,
@@ -1401,7 +1385,6 @@ async def load_tools_to_db(
     - FunctionTool (созданные через @tool декоратор) - сохраняет schema/metadata без source-кода
 
     Аргументы:
-        tool_repository: ToolRepository для сохранения
         modules: Список модулей для загрузки
         flow_access_service: dual-write OpenFGA для tool tuples
         company_id: компания для company#member viewer (seed — system)
@@ -1449,7 +1432,7 @@ async def load_tools_to_db(
             react_role=tool_instance.react_role,
         )
 
-        _ = await tool_repository.set(tool_ref)
+        _ = await ToolReference.set(tool_ref)
         await flow_access_service.sync_tool_saved(
             tool_id,
             company_id=company_id,

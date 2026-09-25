@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer, as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventType
 from apps.flows.src.models.agent_skill import AgentSkill, AgentSkillUpdatePayload
 from apps.flows.src.models.enums import NodeType
@@ -17,10 +17,12 @@ from apps.flows.src.runtime.agent_skill_runtime import (
     AgentSkillRuntimeHost,
     agent_skill_runtime_host_scope,
 )
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.streaming import InMemoryEmitter
 from apps.flows.tools.flows.agent_skill_tools import load_agent_skill, read_agent_skill_reference
+from core.di import require_di
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef
 from core.types import JsonObject
@@ -49,20 +51,20 @@ _CALC_SCHEMA: JsonObject = {
 }
 
 
-def _runtime_container(app: FastAPI) -> FlowRuntimeContainer:
-    return as_flow_runtime_container(app.state.container)
+def _flows_di(app: FastAPI) -> FlowsDi:
+    return require_di(app, FlowsDi)
 
 
-async def _persist_runner_state(app: FastAPI, state) -> FlowRuntimeContainer:
-    container = _runtime_container(app)
-    _ = await container.workflow_runtime.save_state(
+async def _persist_runner_state(app: FastAPI, state) -> FlowsDi:
+    di = _flows_di(app)
+    _ = await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.run_started,
         payload=RunStartedPayload(),
         snapshot=True,
     )
-    return container
+    return di
 
 
 async def _consume_runner(runner: LlmNodeRunner, state, content: str = "run") -> None:
@@ -78,14 +80,14 @@ def _tool_names(runner: LlmNodeRunner) -> set[str]:
 async def test_llm_runner_load_skill_unlocks_and_runs_calculator(
     app: FastAPI,
     mock_llm_with_queue,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     company_id = f"company_rt_{unique_id}"
     skill_id = f"calc-skill-{unique_id}"
     flow_id = f"skill_flow_{unique_id}"
-    async with company_scope(company_id, unique_id):
-        container = _runtime_container(app)
-        await container.agent_skill_service.create(
+    async with company_scope(company_id, unique_id, di=di):
+        di = _flows_di(app)
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -118,9 +120,9 @@ async def test_llm_runner_load_skill_unlocks_and_runs_calculator(
             llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
         )
         state = make_skill_state(flow_id=flow_id, unique_id=unique_id, content="compute")
-        container = await _persist_runner_state(app, state)
+        di = await _persist_runner_state(app, state)
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=flow_id,
             branch_id=state.branch_id,
@@ -129,7 +131,7 @@ async def test_llm_runner_load_skill_unlocks_and_runs_calculator(
             node_id=node_config.node_id,
             config=cast(JsonObject, node_config.model_dump(mode="json")),
             node_config=node_config,
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         runner = await node.get_runner(state)
         assert "load_agent_skill" in _tool_names(runner)
@@ -161,7 +163,7 @@ async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
     app: FastAPI,
     mock_llm_with_queue,
     mock_llm_capture,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     """Doctrine: call[0] без unlocked tool, call[1] с ним после load_agent_skill."""
     company_id = f"company_schema_{unique_id}"
@@ -187,9 +189,9 @@ async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
                     names.add(function_name)
         return names
 
-    async with company_scope(company_id, unique_id):
-        container = _runtime_container(app)
-        await container.agent_skill_service.create(
+    async with company_scope(company_id, unique_id, di=di):
+        di = _flows_di(app)
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -222,9 +224,9 @@ async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
             llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
         )
         state = make_skill_state(flow_id=flow_id, unique_id=unique_id, content="compute")
-        container = await _persist_runner_state(app, state)
+        di = await _persist_runner_state(app, state)
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=flow_id,
             branch_id=state.branch_id,
@@ -233,7 +235,7 @@ async def test_llm_runner_rebuilds_tools_schema_after_skill_load(
             node_id=node_config.node_id,
             config=cast(JsonObject, node_config.model_dump(mode="json")),
             node_config=node_config,
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         runner = await node.get_runner(state)
         await _consume_runner(runner, state, content="compute")
@@ -253,7 +255,7 @@ async def test_no_agent_skills_does_not_inject_meta_tools(
     unique_id: str,
 ) -> None:
     flow_id = f"noskill_{unique_id}"
-    container = _runtime_container(app)
+    di = _flows_di(app)
     node_config = NodeConfig(
         node_id=f"node_{unique_id}",
         type=NodeType.LLM_NODE,
@@ -265,12 +267,12 @@ async def test_no_agent_skills_does_not_inject_meta_tools(
         llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
     )
     state = make_skill_state(flow_id=flow_id, unique_id=unique_id)
-    container = await _persist_runner_state(app, state)
+    di = await _persist_runner_state(app, state)
     node = LlmNode(
         node_id=node_config.node_id,
         config=cast(JsonObject, node_config.model_dump(mode="json")),
         node_config=node_config,
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
     )
     tools = await node.get_tools(state)
     names = {tool.name for tool in tools}
@@ -279,8 +281,8 @@ async def test_no_agent_skills_does_not_inject_meta_tools(
 
 
 @pytest.mark.asyncio
-async def test_load_agent_skill_without_host_raises(unique_id: str) -> None:
-    async with company_scope(f"company_no_host_{unique_id}", unique_id):
+async def test_load_agent_skill_without_host_raises(unique_id: str, di) -> None:
+    async with company_scope(f"company_no_host_{unique_id}", unique_id, di=di):
         state = make_skill_state(flow_id=f"flow_{unique_id}", unique_id=unique_id)
         with pytest.raises(RuntimeError, match="AgentSkillRuntimeHost is not active"):
             await load_agent_skill.run({"agent_skill_id": "document-workspace"}, state)
@@ -290,15 +292,15 @@ async def test_load_agent_skill_without_host_raises(unique_id: str) -> None:
 async def test_depends_on_merge_unlocks_child_tool(
     app: FastAPI,
     mock_llm_with_queue,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     company_id = f"company_dep_{unique_id}"
     parent_id = f"parent-{unique_id}"
     child_id = f"child-{unique_id}"
     flow_id = f"dep_flow_{unique_id}"
-    async with company_scope(company_id, unique_id):
-        container = _runtime_container(app)
-        await container.agent_skill_service.create(
+    async with company_scope(company_id, unique_id, di=di):
+        di = _flows_di(app)
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=child_id,
                 name=child_id,
@@ -313,7 +315,7 @@ async def test_depends_on_merge_unlocks_child_tool(
                 ],
             )
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=parent_id,
                 name=parent_id,
@@ -350,9 +352,9 @@ async def test_depends_on_merge_unlocks_child_tool(
             llm=NodeLLMConfig(provider="mock", model="mock-gpt-4"),
         )
         state = make_skill_state(flow_id=flow_id, unique_id=unique_id)
-        container = await _persist_runner_state(app, state)
+        di = await _persist_runner_state(app, state)
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=flow_id,
             branch_id=state.branch_id,
@@ -361,7 +363,7 @@ async def test_depends_on_merge_unlocks_child_tool(
             node_id=node_config.node_id,
             config=cast(JsonObject, node_config.model_dump(mode="json")),
             node_config=node_config,
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         runner = await node.get_runner(state)
         await _consume_runner(runner, state)
@@ -374,13 +376,13 @@ async def test_depends_on_merge_unlocks_child_tool(
 
 @pytest.mark.asyncio
 async def test_live_catalog_update_seen_on_next_load(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     company_id = f"company_live_{unique_id}"
     skill_id = f"live-skill-{unique_id}"
-    async with company_scope(company_id, unique_id):
-        await container.agent_skill_service.create(
+    async with company_scope(company_id, unique_id, di=di):
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -398,7 +400,7 @@ async def test_live_catalog_update_seen_on_next_load(
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({skill_id}),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index([skill_id])
+                await AgentSkill.resolve_index([skill_id])
             ),
         )
         state = make_skill_state(flow_id=f"live_{unique_id}", unique_id=unique_id)
@@ -407,7 +409,7 @@ async def test_live_catalog_update_seen_on_next_load(
             assert first["tools_unlocked"] == ["calculator"]
             assert any("Old body" in b.content for b in host.context_blocks)
 
-        await container.agent_skill_service.update(
+        await AgentSkill.update(
             AgentSkillUpdatePayload(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -428,7 +430,7 @@ async def test_live_catalog_update_seen_on_next_load(
         host2 = AgentSkillRuntimeHost(
             attached_ids=frozenset({skill_id}),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index([skill_id])
+                await AgentSkill.resolve_index([skill_id])
             ),
         )
         with agent_skill_runtime_host_scope(host2):
@@ -438,12 +440,12 @@ async def test_live_catalog_update_seen_on_next_load(
 
 
 @pytest.mark.asyncio
-async def test_company_isolation_skills(container, unique_id: str) -> None:
+async def test_company_isolation_skills(di, unique_id: str) -> None:
     skill_id = f"iso-skill-{unique_id}"
     company_a = f"company_a_{unique_id}"
     company_b = f"company_b_{unique_id}"
-    async with company_scope(company_a, unique_id):
-        await container.agent_skill_service.create(
+    async with company_scope(company_a, unique_id, di=di):
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -451,19 +453,19 @@ async def test_company_isolation_skills(container, unique_id: str) -> None:
                 body_markdown="Body A",
             )
         )
-        loaded = await container.agent_skill_service.get(skill_id)
+        loaded = await AgentSkill.require_by_agent_skill_id(skill_id)
         assert loaded.agent_skill_id == skill_id
-    async with company_scope(company_b, f"b{unique_id}"):
+    async with company_scope(company_b, f"b{unique_id}", di=di):
         with pytest.raises(LookupError, match="not found"):
-            await container.agent_skill_service.get(skill_id)
+            await AgentSkill.require_by_agent_skill_id(skill_id)
 
 
 @pytest.mark.asyncio
-async def test_read_reference_requires_loaded_skill(container, unique_id: str) -> None:
+async def test_read_reference_requires_loaded_skill(di, unique_id: str) -> None:
     company_id = f"company_ref_{unique_id}"
     skill_id = f"ref-skill-{unique_id}"
-    async with company_scope(company_id, unique_id):
-        record = await container.files_service.create(
+    async with company_scope(company_id, unique_id, di=di):
+        record = await di.files_service.create(
             FileCreateSpec.model_validate(
                 {
                     "source_kind": "platform_auxiliary",
@@ -476,7 +478,7 @@ async def test_read_reference_requires_loaded_skill(container, unique_id: str) -
             original_name=f"ref-{unique_id}.md",
             content_type="text/markdown",
         )
-        await container.agent_skill_service.create(
+        await AgentSkill.create(
             AgentSkill(
                 agent_skill_id=skill_id,
                 name=skill_id,
@@ -496,7 +498,7 @@ async def test_read_reference_requires_loaded_skill(container, unique_id: str) -
         host = AgentSkillRuntimeHost(
             attached_ids=frozenset({skill_id}),
             index_entries=tuple(
-                await container.agent_skill_service.resolve_index([skill_id])
+                await AgentSkill.resolve_index([skill_id])
             ),
         )
         state = make_skill_state(flow_id=f"ref_{unique_id}", unique_id=unique_id)
@@ -523,9 +525,9 @@ async def test_read_reference_requires_loaded_skill(container, unique_id: str) -
 
 
 @pytest.mark.asyncio
-async def test_platform_assistant_flow_factory_loads(container, unique_id: str) -> None:
+async def test_platform_assistant_flow_factory_loads(di, unique_id: str) -> None:
     _ = unique_id
-    flow_config = await ensure_platform_assistant_flow(container)
+    flow_config = await ensure_platform_assistant_flow(di)
     assert_platform_assistant_attach(flow_config)
-    flow = await container.flow_factory.get_flow("platform_assistant")
+    flow = await di.flow_factory.get_flow("platform_assistant", tool_registry=di.tool_registry)
     assert flow.flow_id == "platform_assistant"

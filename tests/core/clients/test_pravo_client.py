@@ -27,7 +27,7 @@ def test_extract_hash_protocol_relative() -> None:
 
 
 def test_extract_hash_rejects_wrong_host() -> None:
-    with pytest.raises(ValueError, match="Ожидается хост"):
+    with pytest.raises(ValueError, match="Expected host"):
         PravoClient.extract_legislation_document_hash(
             f"https://example.com/api/ips/legislation/document?hash={H64}",
         )
@@ -79,7 +79,7 @@ def test_hits_from_search_json_docs() -> None:
 
 
 def test_hits_from_search_json_error_status() -> None:
-    with pytest.raises(PravoClientError, match="Поиск IPS"):
+    with pytest.raises(PravoClientError, match="IPS search"):
         PravoClient._hits_from_search_json({"status": 400, "error": "bad"})
 
 

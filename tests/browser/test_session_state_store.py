@@ -92,8 +92,8 @@ async def test_session_state_store_put_get_delete_and_unknown_key_raises() -> No
     assert blob.session_storage_by_origin["https://example.com"] == {"k": "v"}
 
     await store.delete(key)
-    with pytest.raises(KeyError, match="Неизвестный state_key"):
+    with pytest.raises(KeyError, match="Unknown state_key"):
         _ = await store.get(key)
 
-    with pytest.raises(KeyError, match="Неизвестный state_key"):
+    with pytest.raises(KeyError, match="Unknown state_key"):
         _ = await store.get("missing")

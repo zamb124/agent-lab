@@ -29,6 +29,7 @@ pytest_plugins = [
     "tests.hang_guard",
     "tests.fixtures.workers",
     "tests.fixtures.services",
+    "tests.fixtures.service_processes",
     "tests.fixtures.clients",
     "tests.fixtures.auth",
     "tests.fixtures.push",
@@ -39,7 +40,10 @@ pytest_plugins = [
     "tests.fixtures.flows_chat_e2e",
     "tests.fixtures.google_api_emulator.handle",
     "tests.fixtures.wiki",
+    "tests.fixtures.stock",
     "tests.fixtures.datasources",
+    "tests.fixtures.search_platform",
+    "tests.fixtures.capability_gateway",
     "tests.fixtures.openfga",
     "tests.agent.fixtures.local_releases",
     "tests.agent.fixtures.e2e",
@@ -91,8 +95,14 @@ os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_PER_COMPANY", "32")
 os.environ.setdefault("GUEST_RUNTIME__MAX_LEASES_CLUSTER", "128")
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")
 os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая транскрипция sync worker")
-os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
-os.environ.setdefault("S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL", "http://localhost:19002")
+os.environ.setdefault("S3__ENABLED", "true")
+os.environ.setdefault("S3__ENDPOINT_URL", "http://localhost:19002")
+os.environ.setdefault("S3__BUCKET_NAME", "test-bucket")
+os.environ.setdefault("S3__ACCESS_KEY_ID", "minioadmin")
+os.environ.setdefault("S3__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__REGION_NAME", "us-east-1")
+os.environ.setdefault("S3__PROVIDER", "minio")
+os.environ.setdefault("S3__PATH_STYLE", "true")
 from tests.fixtures.test_database_env import TEST_HS256_JWT_SECRET  # noqa: E402
 
 os.environ.setdefault("AUTH__JWT_SECRET_KEY", TEST_HS256_JWT_SECRET)
@@ -122,15 +132,17 @@ from core.logging.setup import setup_logging  # noqa: E402
 
 setup_logging("pytest", get_settings().logging)
 
-from apps.platform_tasks.wiring import wire_brokers  # noqa: E402
+from apps.worker_manifest import wire_brokers  # noqa: E402
 
 wire_brokers()
 
 import apps.flows_worker.broker as platform_broker_module  # noqa: E402
-from apps.flows.main import app as fastapi_app  # noqa: E402
+from apps.flows.main import app as fastapi_app  # noqa: E402, F401 — импорт задаёт settings процесса тестов (flows)
+from apps.flows.src.models import FlowConfig, NodeConfig
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses  # noqa: E402
 from core.context import Context, User  # noqa: E402
+from core.models.identity_models import Company
 from core.tracing.provider import shutdown_tracing  # noqa: E402
 from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
 
@@ -157,46 +169,43 @@ def pytest_sessionfinish(session, exitstatus):
     release_pytest_controller_session()
 
 
-async def _alembic_current_revision(db_url: str) -> str | None:
-    """Читает текущую ревизию alembic_version из БД. None если таблицы нет."""
-    from sqlalchemy import text
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    engine = create_async_engine(db_url, echo=False)
-    try:
-        async with engine.begin() as conn:
-            row = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
-            r = row.first()
-            return r[0] if r else None
-    except Exception:
-        return None
-    finally:
-        await engine.dispose()
-
-
-def _alembic_head_revision(script_location: str) -> str | None:
-    """Читает head ревизию из файлов Alembic (без подключения к БД)."""
+def _expected_migration_names(script_location: str) -> list[str]:
+    """Oxyde-миграции каталога `migrations/<svc>/`: файлы `NNNN_name.py`."""
     from pathlib import Path
 
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-
     root = Path(__file__).parent.parent
-    ini_path = root / script_location / "alembic.ini"
-    if not ini_path.exists():
+    directory = root / script_location
+    if not directory.is_dir():
+        return []
+    return sorted(path.stem for path in directory.glob("[0-9]*.py"))
+
+
+async def _applied_migration_names(db_url: str) -> set[str] | None:
+    """Имена применённых миграций из `oxyde_migrations`. None если таблицы нет."""
+    from asyncpg.exceptions import UndefinedTableError
+
+    from core.db.postgres_service_databases import open_postgres_connection
+
+    try:
+        connection = await open_postgres_connection(db_url)
+    except Exception:
         return None
-    cfg = Config(str(ini_path))
-    cfg.set_main_option("script_location", str(root / script_location))
-    directory = ScriptDirectory.from_config(cfg)
-    heads = directory.get_heads()
-    return heads[0] if heads else None
+    try:
+        try:
+            rows = await connection.fetch("SELECT name FROM oxyde_migrations")
+        except UndefinedTableError:
+            return None
+    finally:
+        await connection.close()
+    return {str(row["name"]) for row in rows}
 
 
 async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
     """
-    Сравнивает head в коде с current в БД для каждого сервиса из migration_manifest.
+    Все `NNNN_*.py` из `migrations/<svc>/` присутствуют в `oxyde_migrations` сервисной БД.
     Возвращает (all_ok, list_of_stale_service_names).
     """
+    from core.config import get_settings
     from core.db.migration_manifest import (
         database_url_for_migration_key,
         load_migration_manifest,
@@ -209,17 +218,14 @@ async def _all_migrations_up_to_date() -> tuple[bool, list[str]]:
         if not migration_entry_is_active(entry):
             continue
         name = entry.name
-        script_loc = f"migrations/{name}"
-        head = _alembic_head_revision(script_loc)
-        if head is None:
+        expected = _expected_migration_names(f"migrations/{name}")
+        if not expected:
             continue
-        from core.config import get_settings
-
         db_url = database_url_for_migration_key(get_settings().database, entry.database_url_key)
         if not db_url or not str(db_url).strip():
             continue
-        current = await _alembic_current_revision(str(db_url))
-        if current != head:
+        applied = await _applied_migration_names(str(db_url))
+        if applied is None or not set(expected).issubset(applied):
             stale.append(name)
     return (len(stale) == 0, stale)
 
@@ -243,7 +249,14 @@ async def setup_database_before_tests():
             + " — выполните make test-up",
             pytrace=False,
         )
-    yield
+    # Сессия — первый владелец пулов Oxyde (shared + все сервисные БД, как у test_migrate);
+    # lifespan сервисов и DI воркеров внутри теста делят эти пулы.
+    from core.config import get_settings
+    from core.db.oxyde_runtime import oxyde_databases
+
+    shared_url = str(get_settings().database.shared_url)
+    async with oxyde_databases(default_url=shared_url, shared_url=shared_url, all_aliases=True):
+        yield
 
 
 def pytest_configure(config):
@@ -493,16 +506,16 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 def _skip_autouse_test_context(request: pytest.FixtureRequest) -> bool:
     """ASGI-клиенты с Bearer auth: контекст выставляет AuthMiddleware, не test_user.
 
-    In-process ``*_container`` + HTTP в одном тесте: test_context нужен после
+    In-process DI и HTTP в одном тесте: test_context нужен после
     ASGI (middleware restore внешнего Context). Не скипать.
     """
-    direct_container_fixtures = (
-        "crm_container",
-        "flows_container",
-        "worktracker_container",
-        "wiki_container",
+    direct_di_fixtures = (
+        "crm_di",
+        "di",
+        "worktracker_di",
+        "wiki_di",
     )
-    if any(name in request.fixturenames for name in direct_container_fixtures):
+    if any(name in request.fixturenames for name in direct_di_fixtures):
         return False
     asgi_client_fixtures = (
         "frontend_client",
@@ -706,7 +719,7 @@ def mock_llm_with_queue():
 
 
 @pytest_asyncio.fixture
-async def mock_llm_capture(container, platform_test_scope):
+async def mock_llm_capture(di, platform_test_scope):
     """
     Журнал LLM-вызовов MockLLM за текущий тест; возвращает callable-читатель.
 
@@ -727,19 +740,19 @@ async def mock_llm_capture(container, platform_test_scope):
         stop_mock_llm_capture,
     )
 
-    _ = await start_mock_llm_capture(container.redis_client, platform_test_scope)
+    _ = await start_mock_llm_capture(di.redis_client, platform_test_scope)
 
     async def _read():
-        return await read_mock_llm_capture(container.redis_client, platform_test_scope)
+        return await read_mock_llm_capture(di.redis_client, platform_test_scope)
 
     try:
         yield _read
     finally:
-        await stop_mock_llm_capture(container.redis_client, platform_test_scope)
+        await stop_mock_llm_capture(di.redis_client, platform_test_scope)
 
 
 @pytest_asyncio.fixture
-async def mock_llm_redis(container, platform_test_scope):
+async def mock_llm_redis(di, platform_test_scope):
     """Очередь mock-ответов LLM, адресованная test scope текущего теста.
 
     MockLLM в любом процессе снимает ответы строго из
@@ -756,11 +769,11 @@ async def mock_llm_redis(container, platform_test_scope):
 
     async def _factory(responses: List[Any]) -> None:
         await setup_mock_responses_redis(
-            container.redis_client, responses, test_scope=platform_test_scope
+            di.redis_client, responses, test_scope=platform_test_scope
         )
 
     yield _factory
-    await clear_mock_responses_redis(container.redis_client, test_scope=platform_test_scope)
+    await clear_mock_responses_redis(di.redis_client, test_scope=platform_test_scope)
 
 
 @pytest.fixture
@@ -838,7 +851,7 @@ def reset_mock_llm(request: pytest.FixtureRequest):
 
 
 @pytest.fixture(autouse=True)
-def sync_tools(request: pytest.FixtureRequest):
+def sync_tools(request: pytest.FixtureRequest, service_processes):
     """
     Выполняет tools и agent tasks синхронно без TaskIQ worker.
 
@@ -850,7 +863,8 @@ def sync_tools(request: pytest.FixtureRequest):
 
     Патчит:
     - ``core.tasks.enqueue`` (и локальные импорты ``enqueue`` в producer-модулях) —
-      выполняет задачи синхронно по ``TaskSpec``
+      выполняет задачи синхронно по ``TaskSpec``; задаче с ``di: Di`` передаётся DI
+      её процесса из ``service_processes``, как это делает ``task_di`` воркера.
 
     Redis Pub/Sub не подменяется: стриминг идёт через реальный Redis из контейнера.
     """
@@ -948,6 +962,7 @@ def sync_tools(request: pytest.FixtureRequest):
         MAIL_TRASH,
     )
     from core.tasks.registry import TaskSpec, get_task_spec
+    from tests.fixtures.service_processes import task_di_class
 
     class SyncTaskResult:
         """Имитация результата TaskIQ task."""
@@ -962,14 +977,16 @@ def sync_tools(request: pytest.FixtureRequest):
         async def wait_result(self):
             return self
 
-    async def sync_tool_kiq(tool_id, args, state):
+    async def sync_tool_kiq(tool_id, args, state, *, di):
         """Выполняет tool синхронно."""
         from core.context import get_context
 
         ctx = get_context()
         context_data = ctx.to_dict() if ctx is not None else None
         try:
-            result = await tool_tasks.execute_tool(tool_id, args, state, context_data=context_data)
+            result = await tool_tasks.execute_tool(
+                tool_id, args, state, context_data=context_data, di=di
+            )
             return SyncTaskResult(result)
         except Exception as exc:
             return SyncTaskResult(error=exc)
@@ -1077,9 +1094,9 @@ def sync_tools(request: pytest.FixtureRequest):
             sync_notification_tasks.deliver_sync_mention_notification
         ),
         RAG_INDEX_DOCUMENT_S3: rag_indexing_tasks.index_rag_document_s3_task,
-        # Mail worker tasks требуют IdleWorkerContainer + IMAP port теста.
+        # Mail worker tasks требуют IdleWorkerDi и IMAP port теста.
         # Offline-тесты бьют MailService напрямую; worker path — в
-        # test_mail_complete_client_taskiq с patched get_container.
+        # test_mail_complete_client_taskiq.
         # Здесь только ack, чтобы enqueue не падал на «неизвестный task».
         MAIL_SYNC_TICK: _mail_task_ack,
         MAIL_SYNC_BINDING: _mail_task_ack,
@@ -1093,6 +1110,12 @@ def sync_tools(request: pytest.FixtureRequest):
         MAIL_STAR: _mail_task_ack,
         MAIL_RAG_INDEX: _mail_task_ack,
         MAIL_IDLE_SUPERVISOR: _mail_task_ack,
+    }
+    task_functions_behind_wrappers = {
+        sync_agent_kiq: flow_tasks.process_flow_task,
+        sync_tool_kiq: tool_tasks.execute_tool,
+        sync_send_task_update_kiq: push_notification_tasks.send_task_update,
+        sync_send_webhook_kiq: push_notification_tasks.send_webhook,
     }
 
     async def sync_enqueue(
@@ -1124,6 +1147,9 @@ def sync_tools(request: pytest.FixtureRequest):
             )
         if handler is None:
             raise AssertionError(f"Неизвестный TaskIQ task: {spec.name!r}")
+        di_class = task_di_class(task_functions_behind_wrappers.get(handler, handler))
+        if di_class is not None:
+            kwargs["di"] = await service_processes.di(di_class)
         if handler is sync_agent_kiq:
             return await sync_agent_kiq(**kwargs)
         if handler is sync_tool_kiq:
@@ -1198,10 +1224,9 @@ async def skip_if_code_runner_unavailable(request: pytest.FixtureRequest) -> Non
 
 
 @pytest_asyncio.fixture(scope="session")
-async def app(taskiq_worker, crm_worker):
+async def app(taskiq_worker, crm_worker, service_processes):
     """
-    Реальное FastAPI приложение с lifespan.
-    Загружает flows, инициализирует контейнер.
+    Реальное FastAPI приложение flows с lifespan (``service_processes``): FlowsDi собран.
     Зависит от taskiq_worker/crm_worker — воркеры стека должны быть готовы.
 
     scope="session" - приложение поднимается один раз на все тесты.
@@ -1211,8 +1236,7 @@ async def app(taskiq_worker, crm_worker):
     должны явно использовать фикстуру taskiq_scheduler.
     """
     _ = taskiq_worker, crm_worker
-    async with fastapi_app.router.lifespan_context(fastapi_app):
-        yield fastapi_app
+    return await service_processes.app("flows")
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -1231,56 +1255,74 @@ async def client(app, auth_token_system):
 
 
 @pytest.fixture(scope="session")
-def container(app):
-    """
-    DI контейнер agents приложения.
-    Зависит от app чтобы lifespan уже отработал.
-    """
-    from apps.flows.src.container import get_container
+def di(app):
+    """FlowsDi процесса flows. Зависит от app, чтобы lifespan уже отработал."""
+    from apps.flows.di import FlowsDi
+    from core.di import require_di
 
-    c = get_container()
-    c.use_worker = False
-    return c
+    return require_di(app, FlowsDi)
 
 
-@pytest.fixture
-def worktracker_container():
-    """Worktracker DI: держит autouse test_context при HTTP-клиентах worktracker."""
-    from apps.worktracker.container import get_worktracker_container
+@pytest_asyncio.fixture
+async def worktracker_di(service_processes):
+    """WorktrackerDi приложения worktracker с lifespan (``service_processes``)."""
+    from apps.worktracker.di import WorktrackerDi
+    from core.di import require_di
 
-    return get_worktracker_container()
+    return require_di(await service_processes.app("worktracker"), WorktrackerDi)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def crm_di(openfga_settings, service_processes):
+    """CrmDi приложения crm с lifespan (``service_processes``)."""
+    from apps.crm.di import CrmDi
+    from core.di import require_di
+
+    _ = openfga_settings
+    return require_di(await service_processes.app("crm"), CrmDi)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def rag_worker_di(service_processes):
+    """RagWorkerDi процесса rag_worker (``service_processes``)."""
+    from apps.rag_worker.di import RagWorkerDi
+
+    return await service_processes.di(RagWorkerDi)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def idle_worker_di(service_processes):
+    """IdleWorkerDi процесса idle_worker (``service_processes``)."""
+    from apps.idle_worker.di import IdleWorkerDi
+
+    return await service_processes.di(IdleWorkerDi)
 
 
 @pytest.fixture(scope="session")
-def frontend_container(frontend_app):
-    """
-    DI контейнер frontend приложения.
-    Используется для тестов frontend API.
-    Зависит от frontend_app чтобы использовать тот же контейнер.
+def frontend_di(frontend_app):
+    """FrontendDi того же процесса, что frontend_app."""
+    from apps.frontend.di import FrontendDi
+    from core.di import require_di
 
-    scope="session" - контейнер создается один раз на все тесты.
-    """
-    from apps.frontend.container import get_container as get_frontend_container
-
-    return get_frontend_container()
+    return require_di(frontend_app, FrontendDi)
 
 
 @pytest_asyncio.fixture
-async def storage(container):
+async def storage(di):
     """
     Storage для тестов репозиториев.
-    Использует контейнер приложения для получения storage.
+    Берётся из FlowsDi.
     """
-    return container.storage
+    return di.storage
 
 
 @pytest_asyncio.fixture
-async def storage_shared(container):
+async def storage_shared(di):
     """
     Shared Storage для тестов глобальных репозиториев.
     Используется для is_global=True репозиториев.
     """
-    return container.shared_storage
+    return di.shared_storage
 
 
 @pytest.fixture(scope="session")
@@ -1347,28 +1389,16 @@ async def flows_app(app):
     Тот же экземпляр agents-приложения, что и ``app`` (единый lifespan в фикстуре ``app``).
 
     Раньше ``flows_app`` отдавал приложение без lifespan: HTTP через ``flows_client`` мог
-    выполняться до ``container``/``app``, а TaskIQ и Redis для flows оставались в частично
+    выполняться до ``di``/``app``, а TaskIQ и Redis для flows оставались в частично
     инициализированном состоянии относительно сессии тестов.
     """
     yield app
 
 
 @pytest_asyncio.fixture(scope="session")
-async def frontend_app():
-    """
-    FastAPI приложение frontend сервиса для интеграционных тестов.
-
-    Использует:
-    - Реальный frontend app
-    - Тестовую БД (Redis, Postgres)
-    - С lifespan context для правильной инициализации
-
-    scope="session" - приложение создается один раз на все тесты.
-    """
-    from apps.frontend.main import app
-
-    async with app.router.lifespan_context(app):
-        yield app
+async def frontend_app(service_processes):
+    """FastAPI приложение frontend с lifespan (``service_processes``), одно на сессию."""
+    return await service_processes.app("frontend")
 
 
 @pytest_asyncio.fixture
@@ -1427,7 +1457,7 @@ async def frontend_client_with_auth(frontend_app, auth_token):
 
 
 @pytest_asyncio.fixture
-async def test_agent(app, container):
+async def test_agent(app, di):
     """
     Создает тестового агента для API тестов.
 
@@ -1443,13 +1473,13 @@ async def test_agent(app, container):
         entry="main",
         nodes={"main": {"type": "llm_node", "prompt": "Test prompt", "next": None}},
     )
-    await container.flow_repository.set(agent)
+    await FlowConfig.create_version(agent)
     yield agent
-    await container.flow_repository.delete("test_agent")
+    await FlowConfig.delete_by_flow_id("test_agent")
 
 
 @pytest_asyncio.fixture
-async def test_agent_fixture(app, unique_id):
+async def test_agent_fixture(app, unique_id, di):
     """
     Создает уникального тестового агента с автоматической очисткой.
 
@@ -1457,13 +1487,11 @@ async def test_agent_fixture(app, unique_id):
 
     Пример:
         async def test_something(test_agent_fixture):
-            flow_id, container = test_agent_fixture
+            flow_id, di = test_agent_fixture
             # Создайте агента с flow_id
             # Очистка произойдёт автоматически
     """
-    from apps.flows.src.container import get_container
 
-    container = get_container()
     flow_ids_to_cleanup = []
 
     def register_agent(flow_id: str):
@@ -1471,16 +1499,16 @@ async def test_agent_fixture(app, unique_id):
         flow_ids_to_cleanup.append(flow_id)
         return flow_id
 
-    yield (register_agent, container)
+    yield (register_agent, di)
     for flow_id in flow_ids_to_cleanup:
         try:
-            await container.flow_repository.delete(flow_id)
+            await FlowConfig.delete_by_flow_id(flow_id)
         except Exception:
             pass
 
 
 @pytest_asyncio.fixture
-async def auth_token(frontend_container):
+async def auth_token(frontend_di):
     """
     Создает авторизованного пользователя с компанией и возвращает токен.
 
@@ -1494,7 +1522,7 @@ async def auth_token(frontend_container):
     import uuid
 
     from core.authz.company_sync import sync_company_member_roles
-    from core.models.identity_models import Company, User
+    from core.models.identity_models import User
     from core.utils.tokens import get_token_service
 
     user_id = f"test_user_{uuid.uuid4().hex[:8]}"
@@ -1507,8 +1535,7 @@ async def auth_token(frontend_container):
         owner_user_id=user_id,
         members={user_id: ["owner", "admin"]},
     )
-    await frontend_container.company_repository.set(company)
-    await frontend_container.subdomain_repository.set_mapping(company_subdomain, company_id)
+    await Company.set(company)
 
     # Сохраняем пользователя ДО обновления system_company.members,
     # чтобы middleware CompanyResolver видел user.companies с "system" при любом порядке выполнения.
@@ -1519,9 +1546,9 @@ async def auth_token(frontend_container):
         companies={company_id: ["owner", "admin"], "system": ["admin"]},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
 
-    system_company = await frontend_container.company_repository.get("system")
+    system_company = await Company.get("system")
     if system_company is None:
         system_company = Company(
             company_id="system",
@@ -1530,21 +1557,20 @@ async def auth_token(frontend_container):
             owner_user_id=user_id,
             members={user_id: ["admin"]},
         )
-        await frontend_container.company_repository.set(system_company)
-        await frontend_container.subdomain_repository.set_mapping("system", "system")
+        await Company.set(system_company)
     else:
         if user_id not in system_company.members:
             system_company.members[user_id] = ["admin"]
-            await frontend_container.company_repository.set(system_company)
+            await Company.set(system_company)
 
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],
     )
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id="system",
         user_id=user_id,
         roles=["admin"],
@@ -1578,9 +1604,11 @@ async def rag_provider_pgvector():
 
     Использует PostgreSQL с расширением pgvector для хранения embeddings.
     """
-    from apps.rag.container import get_rag_container
+    from apps.rag.di import RagDi
+    from apps.rag.main import app as rag_application
     from core.config import get_settings
     from core.config.models import RAGProviderConfig
+    from core.di import require_di
     from core.files.reader.service import FileReader
     from core.rag.embedding_runtime import resolve_rag_embedding_runtime
     from core.rag.providers.pgvector_provider import PgVectorProvider
@@ -1596,8 +1624,9 @@ async def rag_provider_pgvector():
         settings.rag.embedding, settings.llm, settings.provider_litserve
     )
     provider = PgVectorProvider(config, embedding_runtime)
-    FileReader.configure_asset_persist(get_rag_container().files_service)
-    yield provider
+    async with rag_application.router.lifespan_context(rag_application):
+        FileReader.configure_asset_persist(require_di(rag_application, RagDi).files_service)
+        yield provider
 
 
 @pytest.fixture
@@ -1654,22 +1683,21 @@ def test_a2a_sample():
 
 
 @pytest_asyncio.fixture
-async def test_node_in_db(container, unique_id):
+async def test_node_in_db(di, unique_id):
     """Создает тестовую ноду в БД для валидации."""
-    from apps.flows.src.models import NodeConfig
     from apps.flows.src.models.enums import NodeType
 
     node_id = f"test_node_{unique_id}"
     node = NodeConfig(
         node_id=node_id, name="Test Node", type=NodeType.LLM_NODE, prompt="Test prompt"
     )
-    await container.node_repository.set(node)
+    await NodeConfig.set(node)
     yield node_id
-    await container.node_repository.delete(node_id)
+    await NodeConfig.delete_by_id(node_id)
 
 
 @pytest_asyncio.fixture
-async def test_agent_for_tool(container, unique_id):
+async def test_agent_for_tool(di, unique_id):
     """Создает тестового агента для использования как tool."""
     from apps.flows.src.models import FlowConfig
 
@@ -1680,6 +1708,6 @@ async def test_agent_for_tool(container, unique_id):
         entry="main",
         nodes={"main": {"type": "code", "code": "async def run(args, state):\n    return state"}},
     )
-    await container.flow_repository.set(agent)
+    await FlowConfig.create_version(agent)
     yield flow_id
-    await container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)

@@ -26,7 +26,7 @@ from apps.voice.api.voice_providers_catalog_helpers import (
     allowed_secret_keys,
     secrets_dict_to_meta,
 )
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di
 from core.ai.runtime import invalidate_voice_company_overrides_cache
 from core.authz.models import AuthzObject
 from core.clients.speech_provider_catalog import (
@@ -37,14 +37,13 @@ from core.clients.speech_provider_catalog import (
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
 from core.context import require_context
-from core.db.company_voice_provider_secrets import (
+from core.logging import get_logger
+from core.models.company_voice_provider_secrets import (
     SecretsPatchValue,
     merge_secrets,
     unset_secrets_sentinel,
 )
-from core.db.models.platform import CompanyVoiceProvider
-from core.db.repositories.company_voice_provider_repository import VoiceKind
-from core.logging import get_logger
+from core.models.voice_models import CompanyVoiceProvider, VoiceKind
 from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
 
 if TYPE_CHECKING:
@@ -113,18 +112,18 @@ class CompanyVoiceProviderUpsertRequest(BaseModel):
     )
 
 async def _ensure_user_can_read_company(
-    container: ContainerDep, user: "User", company_id: str
+    di: Di, user: "User", company_id: str
 ) -> None:
-    await container.authz_service.require_can_view(
+    await di.authz_service.require_can_view(
         AuthzObject.company(company_id),
         user_id=user.user_id,
     )
 
 
 async def _ensure_user_can_manage_company(
-    container: ContainerDep, user: "User", company_id: str
+    di: Di, user: "User", company_id: str
 ) -> None:
-    await container.authz_service.require_company_admin(
+    await di.authz_service.require_company_admin(
         company_id=company_id,
         user_id=user.user_id,
     )
@@ -283,12 +282,12 @@ def _credential_providers_needing_optional_model(provider: str) -> bool:
 @router.get("", response_model=CompanyVoiceProvidersResponse)
 async def list_company_voice_providers(
     company_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> CompanyVoiceProvidersResponse:
     """Список per-company override-ов провайдеров речи (stt/tts)."""
     user = require_context().user
-    await _ensure_user_can_read_company(container, user, company_id)
-    rows = await container.company_voice_provider_repository.list_by_company(
+    await _ensure_user_can_read_company(di, user, company_id)
+    rows = await CompanyVoiceProvider.list_by_company(
         company_id=company_id
     )
     items = [_row_to_item(row) for row in rows if row.kind != "vad"]
@@ -304,11 +303,11 @@ async def upsert_company_voice_provider(
     kind: str,
     payload: CompanyVoiceProviderUpsertRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> CompanyVoiceProviderItem:
     """Создать/обновить override для конкретного kind-а."""
     user = require_context().user
-    await _ensure_user_can_manage_company(container, user, company_id)
+    await _ensure_user_can_manage_company(di, user, company_id)
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     _validate_provider(voice_kind, payload.provider)
@@ -342,7 +341,7 @@ async def upsert_company_voice_provider(
                 voice_product_name=voice_product_name,
             )
 
-    existing = await container.company_voice_provider_repository.get(
+    existing = await CompanyVoiceProvider.by_kind(
         company_id=company_id, kind=voice_kind
     )
     secrets_arg: SecretsPatchValue
@@ -369,7 +368,7 @@ async def upsert_company_voice_provider(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         secrets_arg = merged if merged else None
 
-    row = await container.company_voice_provider_repository.upsert(
+    row = await CompanyVoiceProvider.upsert_by_kind(
         company_id=company_id,
         kind=voice_kind,
         provider=payload.provider,
@@ -396,14 +395,14 @@ async def upsert_company_voice_provider(
 async def delete_company_voice_provider(
     company_id: str,
     kind: str,
-    container: ContainerDep,
+    di: Di,
 ) -> dict[str, bool]:
     """Снять per-company override (вернуть kind на deployment-default)."""
     user = require_context().user
-    await _ensure_user_can_manage_company(container, user, company_id)
+    await _ensure_user_can_manage_company(di, user, company_id)
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
-    deleted = await container.company_voice_provider_repository.delete(
+    deleted = await CompanyVoiceProvider.delete_by_company_kind(
         company_id=company_id, kind=voice_kind
     )
     invalidate_voice_company_overrides_cache(company_id=company_id)

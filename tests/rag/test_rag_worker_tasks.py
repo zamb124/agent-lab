@@ -16,6 +16,7 @@ from apps.rag_worker.tasks import maintenance_tasks
 @pytest.mark.asyncio
 async def test_rag_cleanup_expired_documents_tick_skips_when_disabled(
     unique_id: str,
+    rag_worker_di,
 ) -> None:
     """``rag.ttl.cleanup_enabled=false`` → no-op skip response."""
     from core.config import get_settings
@@ -27,6 +28,7 @@ async def test_rag_cleanup_expired_documents_tick_skips_when_disabled(
         result = await maintenance_tasks.rag_cleanup_expired_documents_tick(
             schedule_task_id=f"skip_{unique_id}",
             company_id=None,
+            di=rag_worker_di,
         )
     finally:
         settings.rag.ttl.cleanup_enabled = original
@@ -41,6 +43,7 @@ async def test_rag_cleanup_expired_documents_tick_skips_when_disabled(
 @pytest.mark.asyncio
 async def test_rag_cleanup_expired_documents_tick_runs_batch(
     unique_id: str,
+    rag_worker_di,
 ) -> None:
     """Тик с ``cleanup_enabled=true`` на пустой shared БД возвращает нули без ошибок."""
     from core.config import get_settings
@@ -52,6 +55,7 @@ async def test_rag_cleanup_expired_documents_tick_runs_batch(
         result = await maintenance_tasks.rag_cleanup_expired_documents_tick(
             schedule_task_id=f"run_{unique_id}",
             company_id=None,
+            di=rag_worker_di,
         )
     finally:
         settings.rag.ttl.cleanup_enabled = original

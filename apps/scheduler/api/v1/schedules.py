@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.scheduler.dependencies import ContainerDep
+from apps.scheduler.di import Di
 from apps.scheduler.realtime.operations import (
     SchedulerTaskIdPayload,
     op_schedule_tasks_cancel,
@@ -33,16 +33,16 @@ router = APIRouter(tags=["scheduler"])
 
 @router.post("/schedules", response_model=PlatformScheduledTask)
 async def create_schedule(
-    request_body: PlatformScheduleCreateRequest, container: ContainerDep
+    request_body: PlatformScheduleCreateRequest, di: Di
 ) -> PlatformScheduledTask:
     return await op_schedule_tasks_create(
-        request_body, user=require_context().user, container=container
+        request_body, user=require_context().user, di=di
     )
 
 
 @router.get("/schedules", response_model=OffsetPage[PlatformScheduledTask])
 async def list_schedules(
-    container: ContainerDep,
+    di: Di,
     status: Annotated[ScheduledTaskStatus | None, Query()] = None,
     target_service: Annotated[str | None, Query()] = None,
     task_name: Annotated[str | None, Query()] = None,
@@ -58,61 +58,61 @@ async def list_schedules(
             offset=offset,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/schedules/{schedule_task_id}", response_model=PlatformScheduledTask)
-async def get_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
+async def get_schedule(schedule_task_id: str, di: Di) -> PlatformScheduledTask:
     return await op_schedule_tasks_item(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/schedules/{schedule_task_id}/pause", response_model=PlatformScheduledTask)
-async def pause_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
+async def pause_schedule(schedule_task_id: str, di: Di) -> PlatformScheduledTask:
     return await op_schedule_tasks_pause(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/schedules/{schedule_task_id}/resume", response_model=PlatformScheduledTask)
-async def resume_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
+async def resume_schedule(schedule_task_id: str, di: Di) -> PlatformScheduledTask:
     return await op_schedule_tasks_resume(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/schedules/{schedule_task_id}/cancel", response_model=PlatformScheduledTask)
-async def cancel_schedule(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
+async def cancel_schedule(schedule_task_id: str, di: Di) -> PlatformScheduledTask:
     return await op_schedule_tasks_cancel(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/schedules/{schedule_task_id}/run-now", response_model=PlatformScheduledTask)
-async def run_schedule_now(schedule_task_id: str, container: ContainerDep) -> PlatformScheduledTask:
+async def run_schedule_now(schedule_task_id: str, di: Di) -> PlatformScheduledTask:
     return await op_schedule_tasks_run_now(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/schedules/{schedule_task_id}/redis", response_model=PlatformRedisScheduleSnapshot)
 async def get_schedule_redis_snapshot(
-    schedule_task_id: str, container: ContainerDep
+    schedule_task_id: str, di: Di
 ) -> PlatformRedisScheduleSnapshot:
     return await op_schedule_tasks_redis_snapshot(
         SchedulerTaskIdPayload(schedule_task_id=schedule_task_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )

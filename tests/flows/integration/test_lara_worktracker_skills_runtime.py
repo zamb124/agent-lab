@@ -9,28 +9,24 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
     PLATFORM_ASSISTANT_SEED_SKILL_IDS,
     seed_platform_assistant_skills,
 )
-from apps.flows.src.services.schedule_service import ScheduleService
-from apps.scheduler.container import scheduler_broker_for_queue
 from core.clients.llm.mock import MockLLM, MockLLMQueuedResponse
-from core.config import get_settings
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
-from core.scheduler.service import SchedulerService
 from core.state import ExecutionState
 from core.types import JsonObject, JsonValue
 from core.worktracker.models import (
     QueueAssignment,
     UserActor,
     UsersAssignment,
+    WorkItem,
     WorkItemState,
 )
 from tests.fixtures.auth import service_client_asgi_auth_context
@@ -79,49 +75,34 @@ def _lara_state(*, unique_id: str, user_id: str, suffix: str = "") -> ExecutionS
     )
 
 
-async def _seed_lara_skills(container: FlowContainer) -> None:
+async def _seed_lara_skills(di: FlowsDi) -> None:
     seeded = await seed_platform_assistant_skills(
-        container.agent_skill_service,
-        container.files_service,
+        di.files_service,
         "system",
     )
     assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
-def _wire_inprocess_schedule_service(container: FlowContainer) -> None:
-    """Schedule tools через in-process SchedulerService (без HTTP к apps.scheduler)."""
-    settings = get_settings()
-    scheduler_service = SchedulerService(
-        repository=container.scheduler_task_repository,
-        redis_url=settings.database.redis_url,
-        broker_for_queue=scheduler_broker_for_queue,
-    )
-    container.__dict__["_cached_schedule_service"] = ScheduleService(
-        scheduler_client=container.scheduler_client,
-        scheduler_service=scheduler_service,
-    )
-
-
-async def _require_lara(container: FlowContainer) -> Flow:
-    _ = await ensure_lara_flow(container)
-    flow = await container.flow_factory.get_flow("lara", branch_id=_BRANCH)
+async def _require_lara(di: FlowsDi) -> Flow:
+    _ = await ensure_lara_flow(di)
+    flow = await di.flow_factory.get_flow("lara", branch_id=_BRANCH, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
 async def _run_lara(
-    container: FlowContainer,
+    di: FlowsDi,
     *,
     state: ExecutionState,
 ) -> ExecutionState:
-    flow = await _require_lara(container)
+    flow = await _require_lara(di)
     main_node = flow.nodes["main"]
     assert getattr(main_node, "agent_skill_ids", None) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_names = {tool.name for tool in await main_node.get_tools(state)}
     assert "load_agent_skill" in tool_names
     assert "work_item_list_mine" not in tool_names
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -182,7 +163,7 @@ def _call(tool: str, **args: object) -> MockLLMQueuedResponse:
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_skill_unlocks_tools_after_load(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -206,8 +187,8 @@ async def test_lara_worktracker_skill_unlocks_tools_after_load(
     state = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-unlock")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state)
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     calls = await mock_llm_capture()
@@ -226,7 +207,7 @@ async def test_lara_worktracker_skill_unlocks_tools_after_load(
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -252,8 +233,8 @@ async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
     state1 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-c1")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result1 = await _run_lara(container, state=state1)
+            await _seed_lara_skills(di)
+            result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     created = _tool_json(result1.tool_results["work_item_create"])
@@ -269,7 +250,7 @@ async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
     assert work_item_id in mine_ids
     assert mine.get("assignee_user_id") == system_user_id
 
-    item = await container.work_item_service.get("system", work_item_id)
+    item = await WorkItem.require_in_company("system", work_item_id)
     assert item.title == title
     assert item.board_id is not None
 
@@ -299,7 +280,7 @@ async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
     state2 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-c2")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result2 = await _run_lara(container, state=state2)
+            result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     detail = _tool_json(result2.tool_results["work_item_get"])
@@ -317,7 +298,7 @@ async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
     assert "work_queue_ids" in summary
     completed = _tool_json(result2.tool_results["work_item_complete"])
     assert completed["state"] == WorkItemState.DONE.value
-    persisted = await container.work_item_service.get("system", work_item_id)
+    persisted = await WorkItem.require_in_company("system", work_item_id)
     assert persisted.state == WorkItemState.DONE
     assert persisted.resolution is not None
     assert persisted.resolution.text == f"done {unique_id}"
@@ -325,26 +306,26 @@ async def test_lara_worktracker_create_list_mine_get_update_comment_complete(
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_list_filters_assign_cancel_failed(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
-    open_item = await container.work_item_service.create_manual_task(
+    open_item = await di.work_item_service.create_manual_task(
         company_id="system",
         title=f"open-filter-{unique_id}",
         created_by=UserActor(user_id=system_user_id),
         assignment=UsersAssignment(user_ids=[system_user_id]),
     )
-    cancel_item = await container.work_item_service.create_manual_task(
+    cancel_item = await di.work_item_service.create_manual_task(
         company_id="system",
         title=f"cancel-me-{unique_id}",
         created_by=UserActor(user_id=system_user_id),
         assignment=UsersAssignment(user_ids=[system_user_id]),
     )
-    fail_item = await container.work_item_service.create_manual_task(
+    fail_item = await di.work_item_service.create_manual_task(
         company_id="system",
         title=f"fail-me-{unique_id}",
         created_by=UserActor(user_id=system_user_id),
@@ -375,8 +356,8 @@ async def test_lara_worktracker_list_filters_assign_cancel_failed(
     state = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-fac")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state)
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     listed = _tool_json(result.tool_results["work_item_list"])
@@ -393,14 +374,14 @@ async def test_lara_worktracker_list_filters_assign_cancel_failed(
     failed = _tool_json(result.tool_results["work_item_complete"])
     assert failed["state"] == WorkItemState.FAILED.value
 
-    persisted_open = await container.work_item_service.get("system", open_item.work_item_id)
+    persisted_open = await WorkItem.require_in_company("system", open_item.work_item_id)
     assert isinstance(persisted_open.assignment, UsersAssignment)
     assert persisted_open.assignment.user_ids == [other_user]
     assert (
-        await container.work_item_service.get("system", cancel_item.work_item_id)
+        await WorkItem.require_in_company("system", cancel_item.work_item_id)
     ).state == WorkItemState.CANCELLED
     assert (
-        await container.work_item_service.get("system", fail_item.work_item_id)
+        await WorkItem.require_in_company("system", fail_item.work_item_id)
     ).state == WorkItemState.FAILED
 
     _ = mock_llm_with_queue(
@@ -413,7 +394,7 @@ async def test_lara_worktracker_list_filters_assign_cancel_failed(
     state2 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-fac2")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result2 = await _run_lara(container, state=state2)
+            result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     members = _tool_json(result2.tool_results["team_list_members"])
@@ -436,7 +417,7 @@ async def test_lara_worktracker_list_filters_assign_cancel_failed(
     state3 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-fac3")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result3 = await _run_lara(container, state=state3)
+            result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     resolved = _tool_json(result3.tool_results["team_resolve_user"])
@@ -449,7 +430,7 @@ async def test_lara_worktracker_list_filters_assign_cancel_failed(
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_queues_claim_and_members(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -482,8 +463,8 @@ async def test_lara_worktracker_queues_claim_and_members(
     state1 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-q1")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result1 = await _run_lara(container, state=state1)
+            await _seed_lara_skills(di)
+            result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     queue = _tool_json(result1.tool_results["work_queue_create"])
@@ -532,7 +513,7 @@ async def test_lara_worktracker_queues_claim_and_members(
     state2 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-q2")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result2 = await _run_lara(container, state=state2)
+            result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     updated_queue = _tool_json(result2.tool_results["work_queue_update"])
@@ -549,7 +530,7 @@ async def test_lara_worktracker_queues_claim_and_members(
     claim_work_item_id = created["work_item_id"]
     assert isinstance(claim_work_item_id, str)
 
-    queued = await container.work_item_service.get("system", claim_work_item_id)
+    queued = await WorkItem.require_in_company("system", claim_work_item_id)
     assert isinstance(queued.assignment, QueueAssignment)
     assert queued.assignment.work_queue_id == work_queue_id
 
@@ -574,7 +555,7 @@ async def test_lara_worktracker_queues_claim_and_members(
     state3 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-q3")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result3 = await _run_lara(container, state=state3)
+            result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     unclaimed = _tool_json(result3.tool_results["work_item_list"])
@@ -584,7 +565,7 @@ async def test_lara_worktracker_queues_claim_and_members(
     )
     claimed = _tool_json(result3.tool_results["work_item_claim"])
     assert claimed["work_item_id"] == claim_work_item_id
-    claimed_item = await container.work_item_service.get("system", claim_work_item_id)
+    claimed_item = await WorkItem.require_in_company("system", claim_work_item_id)
     assert isinstance(claimed_item.assignment, QueueAssignment)
     assert claimed_item.assignment.claimed_by_user_id == system_user_id
     removed = _tool_json(result3.tool_results["work_queue_remove_member"])
@@ -593,7 +574,7 @@ async def test_lara_worktracker_queues_claim_and_members(
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_boards_and_move(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
@@ -635,8 +616,8 @@ async def test_lara_worktracker_boards_and_move(
     state1 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-b1")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result1 = await _run_lara(container, state=state1)
+            await _seed_lara_skills(di)
+            result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     board = _tool_json(result1.tool_results["work_board_create"])
@@ -670,7 +651,7 @@ async def test_lara_worktracker_boards_and_move(
     state2 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-b2")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result2 = await _run_lara(container, state=state2)
+            result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     created = _tool_json(result2.tool_results["work_item_create"])
@@ -697,27 +678,26 @@ async def test_lara_worktracker_boards_and_move(
     state3 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-b3")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result3 = await _run_lara(container, state=state3)
+            result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     moved = _tool_json(result3.tool_results["work_item_move"])
     assert moved["board_column_id"] == "doing"
     assert moved["state"] == WorkItemState.IN_PROGRESS.value
-    after = await container.work_item_service.get("system", work_item_id)
+    after = await WorkItem.require_in_company("system", work_item_id)
     assert after.board_column_id == "doing"
     assert after.state == WorkItemState.IN_PROGRESS
 
 
 @pytest.mark.asyncio
 async def test_lara_worktracker_create_self_and_schedules(
-    container: FlowContainer,
+    di: FlowsDi,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     system_user_id: str,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
-    _wire_inprocess_schedule_service(container)
     run_at = (datetime.now(UTC) + timedelta(hours=2)).replace(microsecond=0).isoformat()
 
     _ = mock_llm_with_queue(
@@ -734,14 +714,14 @@ async def test_lara_worktracker_create_self_and_schedules(
     state = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-sch")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            await _seed_lara_skills(container)
-            result = await _run_lara(container, state=state)
+            await _seed_lara_skills(di)
+            result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     created = _tool_json(result.tool_results["work_item_create"])
     work_item_id = created["work_item_id"]
     assert isinstance(work_item_id, str)
-    item = await container.work_item_service.get("system", work_item_id)
+    item = await WorkItem.require_in_company("system", work_item_id)
     assert isinstance(item.assignment, UsersAssignment)
     # session_flow_id from session_id "lara:…" → flow id "lara"
     assert item.assignment.user_ids == ["flow_employee_lara"]
@@ -763,7 +743,7 @@ async def test_lara_worktracker_create_self_and_schedules(
     state_sched = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-sch1")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result_sched = await _run_lara(container, state=state_sched)
+            result_sched = await _run_lara(di, state=state_sched)
 
     assert result_sched.interrupt is None
     schedule_task_id = _schedule_task_id_from_tool_result(
@@ -803,7 +783,7 @@ async def test_lara_worktracker_create_self_and_schedules(
     state2 = _lara_state(unique_id=unique_id, user_id=system_user_id, suffix="-sch2")
     with service_client_asgi_auth_context(auth_headers_system):
         with _system_context(auth_token=auth_token_system, system_user_id=system_user_id):
-            result2 = await _run_lara(container, state=state2)
+            result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     cancelled = _tool_json(result2.tool_results["cancel_scheduled_task"])

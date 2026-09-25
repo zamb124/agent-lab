@@ -39,12 +39,12 @@ async def test_office_explorer_search_and_organize(
     unique_id: str,
     office_client_http,
     auth_headers_system,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     alpha_title = f"Alpha {unique_id}"
     beta_title = f"Beta {unique_id}"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="exp")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="exp", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,
@@ -141,10 +141,10 @@ async def test_office_explorer_nested_catalog_in_table(
     office_ui: AppUI,
     ui_page_system: Page,
     unique_id: str,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     nested_title = f"nested-{unique_id}"
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="ncat")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="ncat", di=frontend_di)
     parent_catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

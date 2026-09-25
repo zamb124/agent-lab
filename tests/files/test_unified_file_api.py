@@ -122,16 +122,14 @@ async def test_frontend_upload_empty_file_rejected(frontend_client, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_upload_without_s3_returns_503(auth_headers_system, monkeypatch):
+async def test_upload_without_s3_returns_503(auth_headers_system, monkeypatch, frontend_app):
     monkeypatch.setenv("S3__ENABLED", "false")
     import core.config.base as config_base
 
     config_base._settings_instance = None
     from httpx import ASGITransport, AsyncClient
 
-    from apps.frontend.main import app
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+    async with AsyncClient(transport=ASGITransport(app=frontend_app), base_url="http://testserver") as client:
         r = await client.post(
             "/frontend/api/v1/files/uploads",
             headers={**auth_headers_system, "Content-Type": "application/json"},

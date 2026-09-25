@@ -5,17 +5,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from apps.frontend.models import LandingDemoSpec
 from core.context import clear_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import SYSTEM_COMPANY_ID, User
-
-if TYPE_CHECKING:
-    from apps.frontend.container import FrontendContainer
+from core.models.embed_models import EmbedConfig, EmbedStatus
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 
 logger = get_logger(__name__)
 
@@ -88,17 +84,17 @@ def public_landing_demo_card_url(embed_id: str) -> str | None:
     return _landing_demo_card_url(image)
 
 
-async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> None:
+async def ensure_system_landing_demo_embeds() -> None:
     """
     Создаёт или обновляет пять публичных embed (company system) для каталога лендинга.
     Картинка карточки: статика /flows/demo_cards (без S3), чтобы каталог не зависел от бакета и file_id.
     """
-    company = await container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     if company is None:
         logger.warning("landing_demo_bootstrap_skip_no_system_company")
         return
 
-    admin = await container.user_repository.get("user_zambas124_yandex_ru_001")
+    admin = await User.get("user_zambas124_yandex_ru_001")
     user_ctx = (
         admin
         if admin is not None
@@ -118,8 +114,6 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
     )
     _ = set_context(ctx)
     try:
-        cfg_repo = container.embed_config_repository
-        map_repo = container.embed_mapping_repository
         now = datetime.now(timezone.utc)
 
         for spec in LANDING_DEMO_SPECS:
@@ -127,7 +121,7 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
             flow_id = spec.flow_id
             card_url = _landing_demo_card_url(spec.image)
 
-            prev = await cfg_repo.get(embed_id)
+            prev = await EmbedConfig.get(embed_id)
             created_at = prev.created_at if prev is not None else now
             created_by = (
                 prev.created_by
@@ -137,6 +131,7 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
 
             config = EmbedConfig(
                 embed_id=embed_id,
+                company_id=SYSTEM_COMPANY_ID,
                 name=spec.name,
                 flow_id=flow_id,
                 branch_id="default",
@@ -161,8 +156,7 @@ async def ensure_system_landing_demo_embeds(container: FrontendContainer) -> Non
                 created_by=created_by,
                 updated_at=now,
             )
-            _ = await cfg_repo.set(config)
-            _ = await map_repo.set(EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID))
+            _ = await EmbedConfig.set(config)
             logger.info(
                 "landing_demo_embed_upserted",
                 embed_id=embed_id,

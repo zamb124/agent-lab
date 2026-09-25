@@ -18,6 +18,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/glass-button.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '../../components/company-storage-settings.js';
 import '@platform/lib/components/llm/llm-config-editor.js';
 import '@platform/lib/components/llm/llm-context-editor.js';
 
@@ -534,6 +535,14 @@ export class FrontendSettingsPage extends PlatformPage {
 
     static properties = {
         _activeTab: { state: true },
+        _storageName: { state: true },
+        _storageEndpoint: { state: true },
+        _storageBucket: { state: true },
+        _storageRegion: { state: true },
+        _storageAccessKey: { state: true },
+        _storageSecret: { state: true },
+        _storageKind: { state: true },
+        _storageTargetId: { state: true },
         _name: { state: true },
         _monthlyBudget: { state: true },
         _metadataJson: { state: true },
@@ -586,6 +595,14 @@ export class FrontendSettingsPage extends PlatformPage {
         this._lastSeededAiRef = null;
         this._lastSeededSearchRef = null;
         this._activeTab = 'company';
+        this._storageName = '';
+        this._storageEndpoint = '';
+        this._storageBucket = '';
+        this._storageRegion = 'us-east-1';
+        this._storageAccessKey = '';
+        this._storageSecret = '';
+        this._storageKind = '';
+        this._storageTargetId = 'platform';
         this._name = '';
         this._monthlyBudget = 0;
         this._metadataJson = '{}';
@@ -753,6 +770,7 @@ export class FrontendSettingsPage extends PlatformPage {
             { id: 'security', label: this.t('settings_page.tab_security') },
             { id: 'agent', label: this.t('settings_page.tab_agent') },
             { id: 'integrations', label: this.t('settings_page.tab_integrations') },
+            { id: 'storages', label: this.t('settings_page.tab_storages') },
         ];
         return html`
             <div class="tabs">
@@ -764,6 +782,10 @@ export class FrontendSettingsPage extends PlatformPage {
                 `)}
             </div>
         `;
+    }
+
+    _renderStoragesTab() {
+        return html`<company-storage-settings></company-storage-settings>`;
     }
 
     _renderCompanyTab(company) {
@@ -2215,6 +2237,7 @@ export class FrontendSettingsPage extends PlatformPage {
             ${this._activeTab === 'security' ? this._renderSecurityTab() : ''}
             ${this._activeTab === 'agent' ? this._renderAgentTab() : ''}
             ${this._activeTab === 'integrations' ? this._renderIntegrationsTab() : ''}
+            ${this._activeTab === 'storages' ? this._renderStoragesTab() : ''}
             </div>
         `;
     }

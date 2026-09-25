@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import ResourceNode, create_node
 from core.state import ExecutionState
 
@@ -22,21 +23,21 @@ def _minimal_state() -> ExecutionState:
 
 class TestResourceNode:
     @pytest.mark.asyncio
-    async def test_create_node_registry(self, container) -> None:
+    async def test_create_node_registry(self, di) -> None:
         node = await create_node(
             "res_a",
             {"type": NodeType.RESOURCE.value, "resources": {}},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
         assert isinstance(node, ResourceNode)
         assert node.node_id == "res_a"
 
     @pytest.mark.asyncio
-    async def test_run_leaves_state_unchanged(self, container) -> None:
+    async def test_run_leaves_state_unchanged(self, di) -> None:
         node = ResourceNode(
             node_id="res_b",
             config={"type": NodeType.RESOURCE.value, "resources": {}},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         state = _minimal_state()
         state.content = "keep"

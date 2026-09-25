@@ -8,12 +8,12 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.agent_toolkit_operations import (
     op_flows_agent_toolkits_item,
     op_flows_agent_toolkits_list,
     op_flows_agent_toolkits_remove,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.agent_toolkit import (
     AgentToolkit,
     AgentToolkitCreateRequest,
@@ -61,7 +61,7 @@ def _create_body(toolkit_id: str) -> AgentToolkitCreateRequest:
 
 async def test_agent_toolkits_list_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -71,14 +71,14 @@ async def test_agent_toolkits_list_rest_match_op(
         listed = await op_flows_agent_toolkits_list(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert http.json() == listed.model_dump(mode="json")
 
 
 async def test_agent_toolkits_item_create_update_remove_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
     unique_id: str,
@@ -95,7 +95,7 @@ async def test_agent_toolkits_item_create_update_remove_rest_match_op(
             op_item = await op_flows_agent_toolkits_item(
                 AgentToolkitIdPayload(toolkit_id=toolkit_id),
                 user=user,
-                container=container,
+                di=di,
             )
         assert created.json() == op_item.model_dump(mode="json")
         _ = AgentToolkit.model_validate(created.json())
@@ -121,7 +121,7 @@ async def test_agent_toolkits_item_create_update_remove_rest_match_op(
             op_updated = await op_flows_agent_toolkits_item(
                 AgentToolkitIdPayload(toolkit_id=toolkit_id),
                 user=user,
-                container=container,
+                di=di,
             )
         assert updated.json() == op_updated.model_dump(mode="json")
         assert updated.json()["name"] == "Command toolkit updated"
@@ -134,14 +134,14 @@ async def test_agent_toolkits_item_create_update_remove_rest_match_op(
                 await op_flows_agent_toolkits_item(
                     AgentToolkitIdPayload(toolkit_id=toolkit_id),
                     user=user,
-                    container=container,
+                    di=di,
                 )
         assert raised.value.code == "not_found"
 
 
 async def test_agent_toolkits_item_missing_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
     unique_id: str,
@@ -155,21 +155,21 @@ async def test_agent_toolkits_item_missing_rest_match_op(
             await op_flows_agent_toolkits_item(
                 AgentToolkitIdPayload(toolkit_id=missing_id),
                 user=user,
-                container=container,
+                di=di,
             )
     assert raised.value.code == "not_found"
 
 
 async def test_agent_toolkits_remove_platform_forbidden_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
     unique_id: str,
 ) -> None:
     toolkit_id = f"tk_plat_{unique_id}"
     with _system_scope(system_user_id):
-        _ = await container.agent_toolkit_repository.set(
+        _ = await AgentToolkit.set(
             AgentToolkit(
                 toolkit_id=toolkit_id,
                 name="Platform locked",
@@ -186,9 +186,9 @@ async def test_agent_toolkits_remove_platform_forbidden_rest_match_op(
                 await op_flows_agent_toolkits_remove(
                     AgentToolkitIdPayload(toolkit_id=toolkit_id),
                     user=user,
-                    container=container,
+                    di=di,
                 )
         assert raised.value.code == "forbidden"
     finally:
         with _system_scope(system_user_id):
-            _ = await container.agent_toolkit_repository.delete(toolkit_id)
+            _ = await AgentToolkit.delete_by_toolkit_id(toolkit_id)

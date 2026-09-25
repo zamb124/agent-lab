@@ -15,7 +15,7 @@ import {
     workQueueMemberAddOp,
     workQueueMemberRemoveOp,
 } from '../events/resources/queues.resource.js';
-import { WorktrackerUiEvents } from '../events/worktracker-ui-events.js';
+import { WorktrackerUiEvents } from '../events/types.js';
 import {
     replaceWorkItemUrl,
     readWorkItemIdFromLocation,

@@ -159,7 +159,7 @@ def test_provider_live_probe_hard_failure_rules() -> None:
 @pytest.mark.network
 @pytest.mark.timeout(600)
 async def test_live_all_openai_compat_providers_report() -> None:
-    _ = live_model_service()
+    _ = await live_model_service()
     probes = await probe_all_openai_compat_providers()
     assert tuple(probe.provider for probe in probes) == LIVE_LLM_PROVIDERS
 

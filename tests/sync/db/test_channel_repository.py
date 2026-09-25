@@ -6,13 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.db.models import SyncChannel
-from apps.sync.db.repositories.channel_repository import ChannelRepository
+from apps.sync.models.channel import SyncChannel, SyncChannelMember
 
 
 @pytest.mark.asyncio
 async def test_channel_crud(
-    channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -42,25 +40,26 @@ async def test_channel_crud(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await channel_repo.create(ch1_obj)
-    await channel_repo.create(ch2_obj)
+    _ = await SyncChannel.objects.create(instance=ch1_obj)
+    _ = await SyncChannel.objects.create(instance=ch2_obj)
 
-    got = await channel_repo.get(ch1)
+    got = await SyncChannel.get(ch1)
     assert got is not None
     assert got.name == "general"
     assert got.namespace == namespace
 
-    by_ns = await channel_repo.list_by_namespace(namespace, company_id=company_id)
+    by_ns = await SyncChannel.list_channels_in_namespace(
+        namespace, company_id=company_id, limit=100, offset=0
+    )
     assert {c.channel_id for c in by_ns} == {ch1, ch2}
 
-    deleted = await channel_repo.delete(ch2)
+    deleted = await SyncChannel.delete_by_id(ch2)
     assert deleted is True
-    assert await channel_repo.get(ch2) is None
+    assert await SyncChannel.get(ch2) is None
 
 
 @pytest.mark.asyncio
 async def test_channel_members(
-    channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -78,23 +77,29 @@ async def test_channel_members(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="user_1",
     )
-    await channel_repo.create(ch)
+    _ = await SyncChannel.objects.create(instance=ch)
 
-    ids_before = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    ids_before = await SyncChannelMember.list_channel_member_user_ids(ch_mbr, company_id=company_id
+    )
     assert "user_10" not in ids_before
 
-    await channel_repo.ensure_member_row(ch_mbr, "user_10", company_id)
-    ids_after = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(
+        ch_mbr, "user_10", company_id=company_id
+    )
+    ids_after = await SyncChannelMember.list_channel_member_user_ids(ch_mbr, company_id=company_id
+    )
     assert "user_10" in ids_after
 
-    await channel_repo.ensure_member_row(ch_mbr, "user_10", company_id)
-    ids_idempotent = await channel_repo.list_settings_user_ids(ch_mbr, company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(
+        ch_mbr, "user_10", company_id=company_id
+    )
+    ids_idempotent = await SyncChannelMember.list_channel_member_user_ids(ch_mbr, company_id=company_id
+    )
     assert ids_idempotent.count("user_10") == 1
 
 
 @pytest.mark.asyncio
 async def test_list_for_user_filters_by_membership(
-    channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
@@ -134,23 +139,32 @@ async def test_list_for_user_filters_by_membership(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="bob",
     )
-    await channel_repo.create(ch_in_namespace)
-    await channel_repo.create(ch_direct)
-    await channel_repo.create(ch_other)
+    _ = await SyncChannel.objects.create(instance=ch_in_namespace)
+    _ = await SyncChannel.objects.create(instance=ch_direct)
+    _ = await SyncChannel.objects.create(instance=ch_other)
 
-    await channel_repo.ensure_member_row(ch_topic, "alice", company_id)
-    await channel_repo.ensure_member_row(ch_dm, "alice", company_id)
-    await channel_repo.ensure_member_row(ch_secret, "bob", company_id)
+    await SyncChannelMember.ensure_channel_member_row(ch_topic, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(ch_dm, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(ch_secret, "bob", company_id=company_id)
 
-    alice_all = await channel_repo.list_for_user(
-        "alice", company_id=company_id, namespace=None
+    alice_all = await SyncChannel.list_channels_for_user(
+        "alice",
+        company_id=company_id,
+        namespace=None,
+        limit=100,
+        offset=0,
     )
     assert {c.channel_id for c in alice_all} == {ch_topic, ch_dm}
 
-    alice_in_ns = await channel_repo.list_for_user(
-        "alice", company_id=company_id, namespace=namespace
+    alice_in_ns = await SyncChannel.list_channels_for_user(
+        "alice",
+        company_id=company_id,
+        namespace=namespace,
+        limit=100,
+        offset=0,
     )
     assert [c.channel_id for c in alice_in_ns] == [ch_topic]
 
-    ids = await channel_repo.list_settings_user_ids(ch_dm, company_id=company_id)
+    ids = await SyncChannelMember.list_channel_member_user_ids(ch_dm, company_id=company_id
+    )
     assert "alice" in ids

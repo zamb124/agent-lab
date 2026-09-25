@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 import pytest
 
 from core.ai.company_settings import encrypt_secret
-from core.config import get_settings
 from core.mail.models import (
     CompanyMailConnection,
     IspmanagerProvisionConfig,
@@ -16,20 +15,14 @@ from core.mail.models import (
     MailConnectionStatus,
     MailProvider,
 )
-from core.mail.repositories import CompanyMailConnectionRepository, MailboxBindingRepository
 
 
 @pytest.mark.asyncio
 async def test_list_by_user_and_default(unique_id: str) -> None:
     company_id = f"mail_multi_{unique_id}"
     user_id = f"user_{unique_id}"
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен")
-    conn_repo = CompanyMailConnectionRepository(db_url=shared_url)
-    bind_repo = MailboxBindingRepository(db_url=shared_url)
     now = datetime.now(timezone.utc)
-    _ = await conn_repo.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=f"mailconn_multi_{unique_id}",
             company_id=company_id,
@@ -47,7 +40,7 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    first = await bind_repo.upsert(
+    first = await MailboxBinding.upsert_by_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_a_{unique_id}",
             company_id=company_id,
@@ -63,7 +56,7 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    second = await bind_repo.upsert(
+    second = await MailboxBinding.upsert_by_email(
         MailboxBinding(
             mailbox_binding_id=f"mailbind_b_{unique_id}",
             company_id=company_id,
@@ -79,19 +72,22 @@ async def test_list_by_user_and_default(unique_id: str) -> None:
             updated_at=now,
         )
     )
-    listed = await bind_repo.list_by_user(company_id, user_id)
+    listed = await MailboxBinding.list_by_user(company_id, user_id)
     assert len(listed) == 2
     assert listed[0].mailbox_binding_id == first.mailbox_binding_id
-    by_user = await bind_repo.get_by_user(company_id, user_id)
+    by_user = await MailboxBinding.preferred_for_user(company_id, user_id)
     assert by_user is not None
     assert by_user.mailbox_binding_id == first.mailbox_binding_id
 
-    await bind_repo.clear_defaults_for_user(company_id, user_id)
+    await MailboxBinding.clear_defaults_for_user(company_id, user_id)
     promoted = second.model_copy(update={"is_default": True})
-    _ = await bind_repo.upsert(promoted)
-    by_user2 = await bind_repo.get_by_user(company_id, user_id)
+    _ = await MailboxBinding.upsert_by_email(promoted)
+    by_user2 = await MailboxBinding.preferred_for_user(company_id, user_id)
     assert by_user2 is not None
     assert by_user2.mailbox_binding_id == second.mailbox_binding_id
+    assert await MailboxBinding.preferred_for_user(company_id, f"missing_{unique_id}") is None
+    with pytest.raises(ValueError, match="user_id cannot be empty"):
+        _ = await MailboxBinding.preferred_for_user(company_id, "")
 
 
 @pytest.mark.asyncio
@@ -105,18 +101,14 @@ async def test_mail_api_bindings_me_and_admin_list(
     Upsert по PK не конфликтует с uq_company_mail_connections_company_scope:
     если company-scope уже есть — обновляем существующую запись, иначе создаём.
     """
-    shared_url = get_settings().database.shared_url
-    if shared_url is None:
-        raise RuntimeError("DATABASE__SHARED_URL обязателен")
-    repo = CompanyMailConnectionRepository(db_url=shared_url)
     now = datetime.now(timezone.utc)
-    existing = await repo.get_by_company("system")
+    existing = await CompanyMailConnection.for_company("system")
     connection_id = (
         existing.company_mail_connection_id
         if existing is not None
         else f"mailconn_api_me_{unique_id}"
     )
-    _ = await repo.upsert(
+    _ = await CompanyMailConnection.upsert_by_company_mail_connection_id(
         CompanyMailConnection(
             company_mail_connection_id=connection_id,
             company_id="system",

@@ -8,8 +8,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.sync.dependencies import ContainerDep
 from core.context import require_context
+from core.di.platform import Di
 from core.models.base import StrictBaseModel
 from core.models.identity_models import Namespace, NamespaceKind, NamespaceSyncSettings
 from core.namespace.operations import (
@@ -29,25 +29,25 @@ class SyncNamespaceUpdateRequest(StrictBaseModel):
 
 @router.get("", response_model=OffsetPage[Namespace])
 async def list_namespaces(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OffsetPage[Namespace]:
     return await op_namespaces_list(
         NamespacesListPayload(limit=limit, offset=offset, kinds=frozenset({NamespaceKind.COMPANY_WORKSPACE})),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.put("/{name}", response_model=Namespace)
 async def update_namespace_sync_settings(
-    container: ContainerDep,
+    di: Di,
     name: str,
     body: SyncNamespaceUpdateRequest,
 ) -> Namespace:
     return await op_namespaces_sync_settings_update(
         NamespaceSyncSettingsUpdatePayload(name=name, sync_settings=body.sync_settings),
         user=require_context().user,
-        container=container,
+        di=di,
     )

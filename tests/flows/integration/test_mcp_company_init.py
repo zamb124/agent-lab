@@ -43,7 +43,7 @@ async def test_internal_company_init_accepts_signed_headers(
 
 
 @pytest.mark.asyncio
-async def test_init_company_resources_reraises_mcp_errors() -> None:
+async def test_init_company_resources_reraises_mcp_errors(di) -> None:
     """MCP ошибки при init не проглатываются — TaskIQ может retry."""
     with patch(
         "apps.flows.src.tasks.company_init_tasks.ensure_default_mcp_servers_for_company",
@@ -55,4 +55,5 @@ async def test_init_company_resources_reraises_mcp_errors() -> None:
                 company_id="mcp_error_company",
                 company_name="MCP Error Co",
                 subdomain="mcperror",
+                di=di,
             )

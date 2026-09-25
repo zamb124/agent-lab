@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import TypeVar
 
+from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.container import FlowContainer
 from core.authz.errors import AuthzDenied
 from core.datasources.models import (
     DatasourceConnection,
@@ -48,12 +48,12 @@ async def op_flows_datasources_connectors_list(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[DatasourceConnectorSpec]:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
-    items = await _datasource_call(container.datasource_service.list_connectors())
+    _ = await require_company_member(di)
+    items = await _datasource_call(di.datasource_service.list_connectors())
     return ListResponse[DatasourceConnectorSpec](items=items)
 
 
@@ -61,22 +61,22 @@ async def op_flows_datasources_connectors_upsert(
     payload: DatasourceConnectorUpsert,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceConnectorSpec:
     _ = user
-    _ = await require_company_member(container)
-    return await _datasource_call(container.datasource_service.upsert_connector(payload))
+    _ = await require_company_member(di)
+    return await _datasource_call(di.datasource_service.upsert_connector(payload))
 
 
 async def op_flows_datasources_list(
     payload: DatasourceListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[DatasourceConnection]:
     _ = user
-    _ = await require_company_member(container)
-    items = await _datasource_call(container.datasource_service.list_connections())
+    _ = await require_company_member(di)
+    items = await _datasource_call(di.datasource_service.list_connections())
     total = len(items)
     return OffsetPage[DatasourceConnection](
         items=items[payload.offset : payload.offset + payload.limit],
@@ -90,12 +90,12 @@ async def op_flows_datasources_item(
     payload: DatasourceSchemaArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceConnection:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _datasource_call(
-        container.datasource_service.get_connection(payload.datasource_id)
+        di.datasource_service.get_connection(payload.datasource_id)
     )
 
 
@@ -103,23 +103,23 @@ async def op_flows_datasources_create(
     payload: DatasourceConnectionCreate,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceConnection:
     _ = user
-    _ = await require_company_member(container)
-    return await _datasource_call(container.datasource_service.create_connection(payload))
+    _ = await require_company_member(di)
+    return await _datasource_call(di.datasource_service.create_connection(payload))
 
 
 async def op_flows_datasources_update(
     payload: DatasourceConnectionPatchPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceConnection:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _datasource_call(
-        container.datasource_service.patch_connection(payload.datasource_id, payload)
+        di.datasource_service.patch_connection(payload.datasource_id, payload)
     )
 
 
@@ -127,34 +127,36 @@ async def op_flows_datasources_remove(
     payload: DatasourceSchemaArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> None:
     _ = user
-    _ = await require_company_member(container)
-    await _datasource_call(container.datasource_service.delete_connection(payload.datasource_id))
+    _ = await require_company_member(di)
+    await _datasource_call(di.datasource_service.delete_connection(payload.datasource_id))
 
 
 async def op_flows_datasources_test(
     payload: DatasourceSchemaArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceTestResult:
     _ = user
-    _ = await require_company_member(container)
-    return await _datasource_call(container.datasource_service.test(payload.datasource_id))
+    _ = await require_company_member(di)
+    return await _datasource_call(di.datasource_service.test(payload.datasource_id, executors=di.datasource_executors))
 
 
 async def op_flows_datasources_introspect(
     payload: DatasourceSchemaArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceSchemaSnapshot:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _datasource_call(
-        container.datasource_service.introspect(payload.datasource_id)
+        di.datasource_service.introspect(
+            payload.datasource_id, executors=di.datasource_executors
+        )
     )
 
 
@@ -162,12 +164,17 @@ async def op_flows_datasources_query(
     payload: DatasourceSqlCallArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceQueryResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _datasource_call(
-        container.datasource_service.query(payload.datasource_id, payload.sql, payload.params)
+        di.datasource_service.query(
+            payload.datasource_id,
+            payload.sql,
+            payload.params,
+            executors=di.datasource_executors,
+        )
     )
 
 
@@ -175,10 +182,15 @@ async def op_flows_datasources_execute(
     payload: DatasourceSqlCallArgs,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DatasourceExecuteResult:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return await _datasource_call(
-        container.datasource_service.execute(payload.datasource_id, payload.sql, payload.params)
+        di.datasource_service.execute(
+            payload.datasource_id,
+            payload.sql,
+            payload.params,
+            executors=di.datasource_executors,
+        )
     )

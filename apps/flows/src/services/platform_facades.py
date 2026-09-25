@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
-from apps.flows.src.container_state import require_current_container
+from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
     merge_explicit_over_flow_speech_layer,
@@ -25,8 +25,10 @@ from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RES
 from core.context import get_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.files.registry import default_retention_for_source
-from core.files.s3_client import S3ClientFactory
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.types import JsonObject
 
@@ -66,7 +68,7 @@ async def get_mcp_client(
     """Вернуть MCP-клиент по `server_id` для trusted platform code."""
     if server_id.strip() == "":
         raise ValueError("server_id is required")
-    config = await require_current_container().mcp_server_repository.get(server_id.strip())
+    config = await MCPServerConfig.get(MCPServerConfig.row_id(server_id.strip()))
     if config is None:
         raise ValueError(f"MCP server not found: {server_id}")
     variables: JsonObject = state.variables if state is not None else {}
@@ -100,6 +102,7 @@ async def get_file_bytes(file_id: str) -> bytes:
 async def transcribe_audio(
     file_id: str,
     *,
+    files_service: FilesService,
     language: str | None = None,
     provider: str | None = None,
     model: str | None = None,
@@ -113,13 +116,14 @@ async def transcribe_audio(
         raise ValueError("transcribe_audio: Context with active_company is required.")
     company_id = ctx.active_company.company_id
 
-    container = require_current_container()
-    record = await container.files_service.get(file_id.strip())
-    s3 = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-    try:
-        audio_bytes = await s3.download_bytes(record.s3_key, bucket=record.s3_bucket)
-    finally:
-        await s3.close()
+    record = await files_service.get(file_id.strip())
+    if record.company_id is None or record.company_id == "":
+        raise ValueError(f"file {file_id!r} has no company_id")
+    handle = await FileGate().open_record(
+        record,
+        SystemPrincipal(company_id=record.company_id),
+    )
+    audio_bytes = await handle.read_bytes()
 
     override = SpeechOverride(
         provider=_speech_provider(provider),
@@ -166,6 +170,7 @@ async def transcribe_audio(
 async def synthesize_speech(
     text: str,
     *,
+    files_service: FilesService,
     voice: str | None = None,
     language: str | None = None,
     provider: str | None = None,
@@ -200,14 +205,13 @@ async def synthesize_speech(
     ext = result.response_format if result.response_format else "wav"
     name = file_name if file_name and file_name.strip() else f"tts_{uuid.uuid4().hex[:12]}.{ext}"
 
-    container = require_current_container()
     spec = FileCreateSpec(
         source_kind=FileSourceKind.GENERATED_EPHEMERAL,
         source_ref=FileSourceRef(),
         retention=default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL),
         post_create=FilePostCreate(is_public=False),
     )
-    record = await container.files_service.create(
+    record = await files_service.create(
         spec=spec,
         data=result.audio_bytes,
         original_name=name,
@@ -226,10 +230,14 @@ async def synthesize_speech(
     return record.file_id
 
 
-async def get_google_oauth_token(state: "ExecutionState", service: str) -> str:
+async def get_google_oauth_token(
+    state: "ExecutionState",
+    service: str,
+    google_workspace_client: GoogleWorkspaceClient,
+) -> str:
     """Thin helper: resolve auth and return access_token only."""
     _ = service
-    material = await GoogleWorkspaceClient().resolve_auth(state)
+    material = await google_workspace_client.resolve_auth(state)
     if material.access_token is None or material.access_token.strip() == "":
         raise ValueError(
             "get_google_oauth_token requires OAuth access_token; "

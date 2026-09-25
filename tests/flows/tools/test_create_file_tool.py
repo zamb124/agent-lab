@@ -26,7 +26,7 @@ async def test_create_file_rejects_name_without_extension_before_upload() -> Non
         user_id="u1",
         session_id="flow:c1",
     )
-    with pytest.raises(FileWriteError, match="расширение"):
+    with pytest.raises(FileWriteError, match="file extension"):
         _ = await create_file.run(
             {"content": "report", "original_name": "report", "content_mode": "raw"},
             state,

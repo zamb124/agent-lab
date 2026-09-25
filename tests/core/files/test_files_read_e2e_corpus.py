@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.capability_gateway.container import get_capability_gateway_container
 from apps.flows.tools.files.files import read_file
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
@@ -38,7 +37,8 @@ _POSITIVE_E2E: tuple[CorpusFile, ...] = tuple(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_capability_files_read_corpus_file(
-    frontend_container,
+    capability_gateway_di,
+    frontend_di,
     system_user_id: str,
     unique_id: str,
     mock_llm_with_queue,
@@ -52,13 +52,13 @@ async def test_capability_files_read_corpus_file(
 
     raw = require_corpus_bytes(entry)
     file_ref = await store_corpus_in_files_service(
-        frontend_container,
+        frontend_di,
         entry,
         unique_id=unique_id,
     )
     assert file_ref.file_id is not None
 
-    registry = get_capability_gateway_container().capability_registry
+    registry = capability_gateway_di.capability_registry
     read_kwargs = read_file_kwargs_for_entry(entry, unique_id=unique_id)
     response = await registry.call(
         capability_files_read_request(
@@ -79,7 +79,7 @@ async def test_capability_files_read_corpus_file(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_tool_corpus_file(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
     entry: CorpusFile,
@@ -92,7 +92,7 @@ async def test_read_file_tool_corpus_file(
 
     _ = require_corpus_bytes(entry)
     file_ref = await store_corpus_in_files_service(
-        frontend_container,
+        frontend_di,
         entry,
         unique_id=unique_id,
     )

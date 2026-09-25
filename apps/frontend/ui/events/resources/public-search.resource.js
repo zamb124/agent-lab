@@ -21,7 +21,7 @@ import { applyJsonPatch, decodePart, textFromParts } from '@platform/lib/flow-ui
 import {
     takePendingPublicSearchRunFiles,
     uploadPublicSearchFilesForA2a,
-} from '../../utils/public-search-files.js';
+} from '../../_helpers/public-search-files.js';
 
 const SEARCH_RUN_MODES = Object.freeze(new Set(['quick', 'deep', 'research']));
 const PUBLIC_SEARCH_SESSION_MODES = Object.freeze(new Set(['quick', 'deep', 'research', 'source']));

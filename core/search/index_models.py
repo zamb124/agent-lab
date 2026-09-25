@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import ClassVar, Self
 
-from pydantic import Field, field_validator
+from oxyde import Field as DbField
+from oxyde import Index
+from pydantic import Field, computed_field, field_validator
 
 from core.models import StrictBaseModel
+from core.models.platform_model import PlatformModel
+from core.pagination import OffsetPage
 
 
 class SearchIndexRetrievalConfig(StrictBaseModel):
@@ -85,19 +90,118 @@ class SearchIndexCrawlTaxonomy(StrictBaseModel):
         return normalized_paths
 
 
-class SearchIndexDefinition(StrictBaseModel):
-    search_index_id: str
-    company_id: str
-    display_name: str
-    description: str | None = None
-    rag_namespace_id: str
-    rag_collection_id: str
-    enabled: bool
-    search_enabled: bool
-    retrieval: SearchIndexRetrievalConfig
-    indexing_profile_key: str | None = None
-    created_at: datetime
-    updated_at: datetime
+class SearchIndexDefinition(PlatformModel):
+    """Реестр индекса. Таблица ``search_indexes``.
+
+    ``retrieval`` — вид для API и рантайма, не колонка. В строке лежат плоские
+    ``retrieval_*`` и ``snippet_max_chars``. ``retrieve_limit`` в базе не хранится.
+    """
+
+    __database_alias__: ClassVar[str | None] = "search"
+    __global_model__: ClassVar[bool] = True
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "search_indexes"
+        unique_together: list[tuple[str, str]] = [
+            ("company_id", "rag_namespace_id"),
+            ("company_id", "rag_collection_id"),
+        ]
+        indexes: list[Index] = [
+            Index(["company_id", "enabled"]),
+        ]
+
+    search_index_id: str = DbField(db_pk=True, max_length=64)
+    company_id: str = DbField(max_length=255)
+    display_name: str = DbField(max_length=512)
+    rag_namespace_id: str = DbField(max_length=255)
+    rag_collection_id: str = DbField(max_length=128)
+    created_at: datetime = DbField()
+    updated_at: datetime = DbField()
+    description: str | None = DbField(default=None, db_type="TEXT")
+    enabled: bool = DbField(default=True)
+    search_enabled: bool = DbField(default=True)
+    retrieval_semantic: bool = DbField(default=True)
+    retrieval_lexical: bool = DbField(default=True)
+    retrieval_rerank: bool = DbField(default=True)
+    retrieval_rerank_max_candidates: int | None = DbField(default=None)
+    retrieval_rrf_k: int | None = DbField(default=60)
+    retrieval_per_channel_top_k: int | None = DbField(default=None)
+    retrieval_freshness_weight: float = DbField(default=0.0)
+    retrieval_freshness_half_life_days: float = DbField(default=180.0)
+    retrieval_freshness_recency_half_life_days: float = DbField(default=30.0)
+    retrieval_domain_authority_weight: float = DbField(default=0.0)
+    snippet_max_chars: int = DbField(default=2000)
+    indexing_profile_key: str | None = DbField(default=None, max_length=64)
+
+    @computed_field
+    @property
+    def retrieval(self) -> SearchIndexRetrievalConfig:
+        return SearchIndexRetrievalConfig(
+            semantic=self.retrieval_semantic,
+            lexical=self.retrieval_lexical,
+            rerank=self.retrieval_rerank,
+            rerank_max_candidates=self.retrieval_rerank_max_candidates,
+            rrf_k=self.retrieval_rrf_k,
+            per_channel_top_k=self.retrieval_per_channel_top_k,
+            snippet_max_chars=self.snippet_max_chars,
+            freshness_weight=self.retrieval_freshness_weight,
+            freshness_half_life_days=self.retrieval_freshness_half_life_days,
+            freshness_recency_half_life_days=self.retrieval_freshness_recency_half_life_days,
+            domain_authority_weight=self.retrieval_domain_authority_weight,
+        )
+
+    @classmethod
+    async def find_in_company(cls, company_id: str, search_index_id: str) -> Self | None:
+        if company_id == "":
+            raise ValueError("company_id cannot be empty.")
+        if search_index_id == "":
+            raise ValueError("search_index_id cannot be empty.")
+        return await cls.objects.filter(
+            search_index_id=search_index_id,
+            company_id=company_id,
+        ).get_or_none()
+
+    @classmethod
+    async def list_page(
+        cls,
+        *,
+        company_id: str,
+        enabled: bool | None,
+        limit: int,
+        offset: int,
+    ) -> OffsetPage[SearchIndexDefinition]:
+        rows = cls.objects.filter(company_id=company_id)
+        if enabled is not None:
+            rows = rows.filter(enabled=enabled)
+        total = await rows.count()
+        items = await rows.order_by("search_index_id").limit(limit).offset(offset).all()
+        return OffsetPage[SearchIndexDefinition].model_validate(
+            {
+                "items": items,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+
+    @classmethod
+    async def create(cls, row: Self) -> Self:
+        return await cls.objects.create(instance=row)
+
+    @classmethod
+    async def batch_get_for_company(
+        cls,
+        search_index_ids: list[str],
+        *,
+        company_id: str,
+    ) -> list[Self]:
+        if len(search_index_ids) == 0:
+            return []
+        return await cls.objects.filter(
+            company_id=company_id,
+            search_index_id__in=search_index_ids,
+        ).all()
 
 
 class SearchIndexCreateRequest(StrictBaseModel):

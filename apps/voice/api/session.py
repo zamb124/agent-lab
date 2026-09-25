@@ -19,8 +19,7 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from apps.voice.container import get_voice_container
-from apps.voice.dependencies import ContainerDep
+from apps.voice.di import Di, VoiceDi
 from apps.voice.services.speak_worker import run_speak_worker
 from apps.voice.services.voice_barge_in import BargeInController
 from apps.voice.services.voice_client_channel import VoiceClientChannel
@@ -40,9 +39,13 @@ from core.clients.speech_override import (
     SpeechProviderName,
 )
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VAD_PROVIDER_IDS
-from core.context import get_context
+from core.context import get_context, reset_context, set_context
+from core.di.boundary import require_di
 from core.logging import get_logger
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.utils.background import run_with_log_context
+from core.utils.tokens import get_token_service
 
 logger = get_logger(__name__)
 
@@ -55,14 +58,14 @@ _HEARTBEAT_INTERVAL_S = 30.0
 
 
 async def _require_company_view_when_user_context(
-    container: ContainerDep,
+    di: Di,
     *,
     company_id: str,
 ) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         return
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _speech_provider_name(value: str | None) -> SpeechProviderName | None:
@@ -79,6 +82,31 @@ def _speech_override_provider_name(value: str | None) -> SpeechOverrideProviderN
     if value in VAD_PROVIDER_IDS:
         return cast(SpeechOverrideProviderName, value)
     raise ValueError(f"Unsupported VAD provider: {value!r}")
+
+
+async def _open_voice_session_context(websocket: WebSocket, company_id: str) -> Context:
+    """Контекст голосовой сессии берётся из cookie ``auth_token``, не из потока клиента."""
+    auth_token = websocket.cookies.get("auth_token")
+    if not auth_token:
+        raise ValueError("voice session requires auth_token cookie")
+    token_data = get_token_service().validate_token(auth_token)
+    if token_data is None or token_data.user_id == "":
+        raise ValueError("voice session auth_token is invalid")
+    if token_data.company_id != company_id:
+        raise ValueError("voice session company does not match auth_token")
+    user = await User.get(token_data.user_id)
+    if user is None:
+        raise ValueError("voice session user is not found")
+    company = await Company.get(company_id)
+    if company is None:
+        raise ValueError("voice session company is not found")
+    return Context(
+        user=user,
+        active_company=company,
+        session_id=token_data.session_id,
+        channel="voice",
+        auth_token=auth_token,
+    )
 
 
 @router.websocket("/{session_id}")
@@ -145,7 +173,20 @@ async def voice_session(
         await websocket.close(code=1008)
         return
 
-    container = get_voice_container()
+    try:
+        session_context = await _open_voice_session_context(websocket, company_id)
+    except ValueError as exc:
+        logger.info(
+            "voice.session.auth_rejected",
+            session_id=session_id,
+            company_id=company_id,
+            reason=str(exc),
+        )
+        await websocket.close(code=1008, reason="company context required")
+        return
+
+    context_token = set_context(session_context)
+    di = require_di(websocket, VoiceDi)
 
     tts_voice_q: str | None
     if isinstance(tts_voice, str):
@@ -156,7 +197,7 @@ async def voice_session(
 
     await websocket.accept()
     try:
-        await _require_company_view_when_user_context(container, company_id=company_id)
+        await _require_company_view_when_user_context(di, company_id=company_id)
     except AuthzDenied:
         await websocket.close(code=1008, reason="permission denied")
         return
@@ -212,10 +253,10 @@ async def voice_session(
     )
 
     try:
-        vad_provider = await container.create_vad_provider(
+        vad_provider = await di.session_providers.create_vad_provider(
             company_id=company_id, override=vad_override
         )
-        stt_provider = await container.create_stt_provider(
+        stt_provider = await di.session_providers.create_stt_provider(
             company_id=company_id, override=stt_override
         )
         tts_streamer = await create_voice_tts_streamer(
@@ -260,7 +301,7 @@ async def voice_session(
         await websocket.close(code=1011)
         return
 
-    settings = container.settings
+    settings = di.session_providers.settings
     barge_in = BargeInController(
         enabled=settings.barge_in.enabled,
         smart_turn_buffer_ms=settings.barge_in.smart_turn_buffer_ms,
@@ -361,6 +402,7 @@ async def voice_session(
     except Exception:
         logger.exception("voice.session.error", session_id=session_id)
     finally:
+        reset_context(context_token)
         channel.mark_closed()
         await session.cancel()
         try:

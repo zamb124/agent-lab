@@ -1,0 +1,4 @@
+GROUP g02_core rc=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 3346 passed, 4 warnings in 130.29s (0:02:10) =================

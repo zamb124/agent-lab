@@ -5,11 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from collections.abc import AsyncIterator, Mapping
 from typing import cast
-
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from apps.flows.authz.tuples import (
     flow_branch_company_viewer_tuple,
@@ -29,15 +25,16 @@ from apps.flows.authz.tuples import (
     tool_platform_link,
 )
 from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.models.tool_reference import ToolReference
 from core.authz.factory import build_authz_service
 from core.authz.models import AuthzObject, AuthzTuple
 from core.authz.platform_sync import ensure_platform_global_admin
 from core.authz.service import AuthzService
 from core.authz.types import AuthzObjectType, AuthzRelation
 from core.config import get_settings
-from core.db.storage import Storage
+from core.db.oxyde_runtime import init_oxyde_databases
 from core.logging import get_logger
-from core.types import JsonObject, parse_json_object
+from core.models.flow_ui_share import FlowUIShareGrant
 
 logger = get_logger(__name__)
 
@@ -85,24 +82,6 @@ async def _delete_tuple_chunks(authz: AuthzService, tuples: list[AuthzTuple]) ->
         done = min(start + _OPENFGA_WRITE_CHUNK, total)
         if done == total or done % 10000 == 0:
             logger.info("flows.authz.backfill.tuples.deleted", deleted=done, total=total)
-
-
-async def _iter_company_prefixed_rows(
-    storage: Storage, table_name: str
-) -> AsyncIterator[tuple[str, str]]:
-    offset = 0
-    while True:
-        page = await storage.get_all_by_prefix_and_table(
-            "company:", table_name, limit=_KV_PAGE_SIZE, offset=offset
-        )
-        page_len = len(page)
-        if page_len == 0:
-            break
-        for storage_key, raw_value in page.items():
-            yield storage_key, raw_value
-        if page_len < _KV_PAGE_SIZE:
-            break
-        offset += _KV_PAGE_SIZE
 
 
 def _flow_permission_writes(
@@ -159,46 +138,18 @@ def _tool_permission_writes(
     return writes
 
 
-def parse_company_resource_key(storage_key: str, resource: str) -> tuple[str, str] | None:
-    # company:{company_id}:flow:{flow_id} / company:{company_id}:tool:{tool_id}
-    # tool_id MCP содержит `:`, поэтому entity — всё после третьего сегмента.
-    parts = storage_key.split(":")
-    if len(parts) < 4 or parts[0] != "company" or parts[2] != resource:
-        return None
-    company_id = parts[1]
-    entity_id = ":".join(parts[3:])
-    if not company_id or not entity_id:
-        return None
-    return company_id, entity_id
-
-
-def tool_permission_from_payload(
-    payload: JsonObject, *, storage_key: str, tool_id: str
-) -> list[str]:
-    stored_tool_id = payload.get("tool_id")
-    if not isinstance(stored_tool_id, str) or stored_tool_id != tool_id:
-        raise ValueError(
-            f"tool_id mismatch in key {storage_key}: {stored_tool_id!r}"
-        )
-    raw_permission = payload.get("permission")
-    if raw_permission is None:
-        return []
-    if not isinstance(raw_permission, list):
-        raise ValueError(f"permission must be list in key {storage_key}")
-    groups: list[str] = []
-    for item in raw_permission:
-        if not isinstance(item, str):
-            raise ValueError(f"permission item must be str in key {storage_key}")
-        groups.append(item)
-    return groups
-
-
 async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, int]:
     settings = get_settings()
     if not settings.openfga.enabled:
         raise RuntimeError("openfga.enabled must be true for flows authz backfill")
-    if not settings.database.flows_url:
+    if settings.database.flows_url is None or settings.database.flows_url == "":
         raise RuntimeError("database.flows_url is required for flows authz backfill")
+    if settings.database.shared_url is None or settings.database.shared_url == "":
+        raise RuntimeError("database.shared_url is required for flows authz backfill")
+    await init_oxyde_databases(
+        default_url=settings.database.flows_url,
+        shared_url=settings.database.shared_url,
+    )
 
     authz = build_authz_service()
     if not authz.enabled:
@@ -213,76 +164,89 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
     )
     logger.info("flows.authz.backfill.purged.unscoped", flows=unscoped_flows, branches=unscoped_branches)
 
-    storage = Storage(db_url=str(settings.database.flows_url))
     flows_written = 0
     tools_written = 0
     shares_written = 0
     try:
-        async for storage_key, raw_value in _iter_company_prefixed_rows(storage, "flows"):
-            if limit is not None and flows_written + tools_written + shares_written >= limit:
+        flow_offset = 0
+        stop_flows = False
+        while not stop_flows:
+            flow_page = await FlowConfig.list_current(limit=_KV_PAGE_SIZE, offset=flow_offset)
+            if len(flow_page) == 0:
                 break
-            parsed = parse_company_resource_key(storage_key, "flow")
-            if parsed is None:
-                raise ValueError(f"invalid flow storage key: {storage_key}")
-            company_id, flow_id = parsed
-            payload = parse_json_object(raw_value, "flow_config")
-            config = FlowConfig.model_validate(payload)
-            if config.flow_id != flow_id:
-                raise ValueError(
-                    f"flow_id mismatch in key {storage_key}: {config.flow_id!r}"
+            for config in flow_page:
+                if limit is not None and flows_written + tools_written + shares_written >= limit:
+                    stop_flows = True
+                    break
+                company_id = config.company_id
+                flow_id = config.flow_id
+                if company_id == "" or flow_id == "":
+                    raise ValueError("flow row requires company_id and flow_id")
+                flow_desired = [
+                    flow_company_link(flow_id, company_id),
+                    flow_platform_link(flow_id, company_id=company_id),
+                    *_flow_permission_writes(flow_id, company_id, config.permission),
+                ]
+                flow_existing = await authz.list_tuples(
+                    AuthzObject.flow(flow_id, company_id=company_id)
                 )
-            flow_desired = [
-                flow_company_link(flow_id, company_id),
-                flow_platform_link(flow_id, company_id=company_id),
-                *_flow_permission_writes(flow_id, company_id, config.permission),
-            ]
-            flow_existing = await authz.list_tuples(
-                AuthzObject.flow(flow_id, company_id=company_id)
-            )
-            flow_desired_set = frozenset(flow_desired)
-            flow_existing_set = frozenset(flow_existing)
-            await authz.write_and_delete(
-                list(flow_desired_set - flow_existing_set),
-                [
-                    item
-                    for item in flow_existing_set - flow_desired_set
-                    if item.relation is not AuthzRelation.OWNER
-                ],
-            )
-            for branch_id, branch in config.branches.items():
-                branch_desired = _branch_permission_writes(
-                    flow_id, branch_id, company_id, branch.permission
-                )
-                branch_existing = await authz.list_tuples(
-                    AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
-                )
-                branch_desired_set = frozenset(branch_desired)
-                branch_existing_set = frozenset(branch_existing)
+                flow_desired_set = frozenset(flow_desired)
+                flow_existing_set = frozenset(flow_existing)
                 await authz.write_and_delete(
-                    list(branch_desired_set - branch_existing_set),
-                    list(branch_existing_set - branch_desired_set),
+                    list(flow_desired_set - flow_existing_set),
+                    [
+                        item
+                        for item in flow_existing_set - flow_desired_set
+                        if item.relation is not AuthzRelation.OWNER
+                    ],
                 )
-            flows_written += 1
+                for branch_id, branch in config.branches.items():
+                    branch_desired = _branch_permission_writes(
+                        flow_id, branch_id, company_id, branch.permission
+                    )
+                    branch_existing = await authz.list_tuples(
+                        AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
+                    )
+                    branch_desired_set = frozenset(branch_desired)
+                    branch_existing_set = frozenset(branch_existing)
+                    await authz.write_and_delete(
+                        list(branch_desired_set - branch_existing_set),
+                        list(branch_existing_set - branch_desired_set),
+                    )
+                flows_written += 1
+            if len(flow_page) < _KV_PAGE_SIZE:
+                break
+            flow_offset += _KV_PAGE_SIZE
         logger.info("flows.authz.backfill.flows.written", written=flows_written)
 
         tool_desired_all: list[AuthzTuple] = []
-        async for storage_key, raw_value in _iter_company_prefixed_rows(storage, "tools"):
-            if limit is not None and flows_written + tools_written + shares_written >= limit:
+        tool_offset = 0
+        stop_tools = False
+        while not stop_tools:
+            tool_page = await ToolReference.list_in_tool_id_order(
+                limit=_KV_PAGE_SIZE,
+                offset=tool_offset,
+            )
+            if len(tool_page) == 0:
                 break
-            parsed = parse_company_resource_key(storage_key, "tool")
-            if parsed is None:
-                raise ValueError(f"invalid tool storage key: {storage_key}")
-            company_id, tool_id = parsed
-            payload = parse_json_object(raw_value, "tool_reference")
-            permission = tool_permission_from_payload(
-                payload, storage_key=storage_key, tool_id=tool_id
-            )
-            tool_desired_all.extend(
-                _tool_permission_writes(tool_id, company_id, permission)
-            )
-            tools_written += 1
-            if tools_written % 20000 == 0:
-                logger.info("flows.authz.backfill.tools.scanned", scanned=tools_written)
+            for tool in tool_page:
+                if limit is not None and flows_written + tools_written + shares_written >= limit:
+                    stop_tools = True
+                    break
+                company_id = tool.company_id
+                tool_id = tool.tool_id
+                if company_id == "" or tool_id == "":
+                    raise ValueError("tool row requires company_id and tool_id")
+                permission = tool.permission
+                tool_desired_all.extend(
+                    _tool_permission_writes(tool_id, company_id, permission)
+                )
+                tools_written += 1
+                if tools_written % 20000 == 0:
+                    logger.info("flows.authz.backfill.tools.scanned", scanned=tools_written)
+            if len(tool_page) < _KV_PAGE_SIZE:
+                break
+            tool_offset += _KV_PAGE_SIZE
         logger.info("flows.authz.backfill.tools.loaded", loaded=tools_written, desired_tuples=len(tool_desired_all))
         unscoped_tools = 0
         if limit is None:
@@ -301,54 +265,19 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
         else:
             await _write_tuple_chunks(authz, list(tool_desired_set))
 
-        engine = create_async_engine(str(settings.database.flows_url))
-        share_rows: list[Mapping[str, object]] = []
-        try:
-            async with engine.connect() as connection:
-                share_sql = (
-                    "SELECT grant_id, flow_id, company_id, created_by_user_id, permission "
-                    "FROM flow_ui_share_grants "
-                    "WHERE revoked_at IS NULL "
-                    "ORDER BY grant_id"
-                )
-                remaining: int | None = None
-                if limit is not None:
-                    remaining = limit - flows_written - tools_written - shares_written
-                if remaining is None:
-                    result = await connection.execute(text(share_sql))
-                    share_rows = [
-                        cast(Mapping[str, object], dict(row))
-                        for row in result.mappings()
-                    ]
-                elif remaining > 0:
-                    result = await connection.execute(
-                        text(f"{share_sql} LIMIT :share_limit"),
-                        {"share_limit": remaining},
-                    )
-                    share_rows = [
-                        cast(Mapping[str, object], dict(row))
-                        for row in result.mappings()
-                    ]
-        finally:
-            await engine.dispose()
-
-        for row in share_rows:
-            grant_id = cast(str, row["grant_id"])
-            flow_id = cast(str, row["flow_id"])
-            company_id = cast(str, row["company_id"])
-            owner_user_id = cast(str, row["created_by_user_id"])
-            permission = cast(str, row["permission"])
+        remaining: int | None = None
+        if limit is not None:
+            remaining = limit - flows_written - tools_written - shares_written
+        grants = await FlowUIShareGrant.list_unrevoked(limit=remaining)
+        for grant in grants:
             writes = [
-                flow_ui_share_flow_link(grant_id, flow_id, company_id=company_id),
-                flow_ui_share_owner_tuple(grant_id, owner_user_id),
+                flow_ui_share_flow_link(grant.grant_id, grant.flow_id, company_id=grant.company_id),
+                flow_ui_share_owner_tuple(grant.grant_id, grant.created_by_user_id),
             ]
-            if permission == "editor":
-                writes.append(flow_ui_share_public_editor_tuple(grant_id))
-            elif permission == "viewer":
-                writes.append(flow_ui_share_public_viewer_tuple(grant_id))
+            if grant.permission == "editor":
+                writes.append(flow_ui_share_public_editor_tuple(grant.grant_id))
             else:
-                logger.error("flows.authz.backfill.skip.share", grant_id=grant_id, permission=permission)
-                continue
+                writes.append(flow_ui_share_public_viewer_tuple(grant.grant_id))
             await authz.write(writes)
             shares_written += 1
     finally:

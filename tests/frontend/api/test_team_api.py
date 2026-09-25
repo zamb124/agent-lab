@@ -8,6 +8,8 @@ Integration тесты для API управления командой.
 import pytest
 from httpx import AsyncClient
 
+from core.models.identity_models import Company
+
 
 @pytest.mark.asyncio
 class TestTeamAPI:
@@ -35,7 +37,7 @@ class TestTeamAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Обновление ролей участника"""
         # Получаем текущего пользователя
@@ -48,8 +50,7 @@ class TestTeamAPI:
 
         test_user_id = "test_member_to_update"
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=test_user_id,
             roles=["developer"],
@@ -63,7 +64,7 @@ class TestTeamAPI:
             companies={company_id: ["developer"]},
             active_company_id=company_id
         )
-        await frontend_container.user_repository.set(test_user)
+        await User.set(test_user)
 
         # Обновляем роль
         response = await frontend_client.patch(
@@ -78,14 +79,14 @@ class TestTeamAPI:
         assert "admin" in data["roles"]
 
         # Проверяем что роль действительно обновилась в БД
-        updated_company = await frontend_container.company_repository.get(company_id)
+        updated_company = await Company.get(company_id)
         assert "admin" in updated_company.members[test_user_id]
 
     async def test_update_member_role_cannot_remove_owner(
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Нельзя удалить роль owner у владельца"""
         from core.utils.tokens import get_token_service
@@ -93,7 +94,7 @@ class TestTeamAPI:
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
 
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         owner_id = company.owner_user_id
 
         response = await frontend_client.patch(
@@ -109,7 +110,7 @@ class TestTeamAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Удаление участника из команды"""
         import uuid
@@ -131,17 +132,15 @@ class TestTeamAPI:
             owner_user_id=test_user_id,
             members={test_user_id: ["owner"]},
         )
-        await frontend_container.company_repository.set(fallback_company)
+        await Company.set(fallback_company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=fallback_company_id,
             user_id=test_user_id,
             roles=["owner"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=test_user_id,
             roles=["developer"],
@@ -156,7 +155,7 @@ class TestTeamAPI:
             },
             active_company_id=company_id,
         )
-        await frontend_container.user_repository.set(test_user)
+        await User.set(test_user)
 
         response = await frontend_client.delete(
             f"/frontend/api/team/members/{test_user_id}",
@@ -167,10 +166,10 @@ class TestTeamAPI:
         data = response.json()
         assert data["success"] is True
 
-        updated_company = await frontend_container.company_repository.get(company_id)
+        updated_company = await Company.get(company_id)
         assert test_user_id not in updated_company.members
 
-        updated_user = await frontend_container.user_repository.get(test_user_id)
+        updated_user = await User.get(test_user_id)
         assert company_id not in updated_user.companies
         assert updated_user.active_company_id == fallback_company_id
 
@@ -178,7 +177,7 @@ class TestTeamAPI:
         self,
         frontend_client: AsyncClient,
         auth_headers,
-        frontend_container
+        frontend_di
     ):
         """Нельзя удалить владельца компании"""
         from core.utils.tokens import get_token_service
@@ -186,7 +185,7 @@ class TestTeamAPI:
         token_data = token_service.validate_token(auth_headers["Authorization"].replace("Bearer ", ""))
         company_id = token_data.company_id
 
-        company = await frontend_container.company_repository.get(company_id)
+        company = await Company.get(company_id)
         owner_id = company.owner_user_id
 
         response = await frontend_client.delete(
@@ -195,12 +194,12 @@ class TestTeamAPI:
         )
 
         assert response.status_code == 400
-        assert "владельца" in response.json()["detail"].lower()
+        assert "cannot remove the company owner" in response.json()["detail"].lower()
 
     async def test_team_isolation_between_companies(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Проверка изоляции команд между компаниями"""
         import uuid
@@ -226,25 +225,22 @@ class TestTeamAPI:
             members={"user2": ["owner"]}
         )
 
-        await frontend_container.company_repository.set(company1)
-        await frontend_container.company_repository.set(company2)
+        await Company.set(company1)
+        await Company.set(company2)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company1_id,
             user_id="user1",
             roles=["owner"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company1_id,
             user_id="shared_member",
             roles=["developer"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company2_id,
             user_id="user2",
             roles=["owner"],
@@ -257,7 +253,7 @@ class TestTeamAPI:
             companies={company2_id: ["owner"]},
             active_company_id=company2_id
         )
-        await frontend_container.user_repository.set(user2)
+        await User.set(user2)
 
         token_service = get_token_service()
         token2 = token_service.create_token("user2", company_id=company2_id)
@@ -281,7 +277,7 @@ class TestTeamAPI:
 class TestSystemAccessAPI:
     """Тесты self-access для пользователей компании system."""
 
-    async def _create_system_actor(self, frontend_container):
+    async def _create_system_actor(self, frontend_di):
         import uuid
 
         from core.models.identity_models import Company, User
@@ -289,7 +285,7 @@ class TestSystemAccessAPI:
         from tests.fixtures.auth import set_test_company_member_roles
 
         user_id = f"system_actor_{uuid.uuid4().hex[:8]}"
-        system_company = await frontend_container.company_repository.get("system")
+        system_company = await Company.get("system")
         if system_company is None:
             system_company = Company(
                 company_id="system",
@@ -297,10 +293,9 @@ class TestSystemAccessAPI:
                 owner_user_id=user_id,
                 members={},
             )
-            await frontend_container.company_repository.set(system_company)
+            await Company.set(system_company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id="system",
             user_id=user_id,
             roles=["admin"],
@@ -312,18 +307,18 @@ class TestSystemAccessAPI:
             companies={"system": ["admin"]},
             active_company_id="system",
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         token_service = get_token_service()
         token = token_service.create_token(user_id=user_id, company_id="system")
         return user_id, {"Authorization": f"Bearer {token}"}
 
-    async def test_enter_company_as_system_member_success(self, frontend_client: AsyncClient, frontend_container):
+    async def test_enter_company_as_system_member_success(self, frontend_client: AsyncClient, frontend_di):
         import uuid
 
-        from core.models.identity_models import Company
+        from core.models.identity_models import User
 
-        system_user_id, auth_headers = await self._create_system_actor(frontend_container)
+        system_user_id, auth_headers = await self._create_system_actor(frontend_di)
         company_id = f"target_company_{uuid.uuid4().hex[:8]}"
         target_company = Company(
             company_id=company_id,
@@ -332,7 +327,7 @@ class TestSystemAccessAPI:
             members={"target_owner": ["owner"]},
             subdomain=f"target-{uuid.uuid4().hex[:6]}",
         )
-        await frontend_container.company_repository.set(target_company)
+        await Company.set(target_company)
 
         response = await frontend_client.post(
             f"/frontend/api/companies/{company_id}/system-access",
@@ -344,21 +339,21 @@ class TestSystemAccessAPI:
         assert response.json()["success"] is True
         assert "admin" in response.json()["roles"]
 
-        updated_user = await frontend_container.user_repository.get(system_user_id)
+        updated_user = await User.get(system_user_id)
         assert "admin" in updated_user.companies[company_id]
-        updated_company = await frontend_container.company_repository.get(company_id)
+        updated_company = await Company.get(company_id)
         assert "admin" in updated_company.members[system_user_id]
 
     async def test_enter_company_as_system_member_rejects_owner_role(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
     ):
         import uuid
 
         from core.models.identity_models import Company
 
-        _, auth_headers = await self._create_system_actor(frontend_container)
+        _, auth_headers = await self._create_system_actor(frontend_di)
         company_id = f"target_company_{uuid.uuid4().hex[:8]}"
         target_company = Company(
             company_id=company_id,
@@ -367,7 +362,7 @@ class TestSystemAccessAPI:
             members={"target_owner": ["owner"]},
             subdomain=f"target-{uuid.uuid4().hex[:6]}",
         )
-        await frontend_container.company_repository.set(target_company)
+        await Company.set(target_company)
 
         response = await frontend_client.post(
             f"/frontend/api/companies/{company_id}/system-access",
@@ -376,13 +371,13 @@ class TestSystemAccessAPI:
         )
 
         assert response.status_code == 400
-        assert "Недопустимая роль" in response.json()["detail"]
+        assert "invalid role" in response.json()["detail"].lower()
 
     async def test_enter_company_as_system_member_rejects_non_system_user(
         self,
         frontend_client: AsyncClient,
         auth_headers_company2,
-        frontend_container,
+        frontend_di,
     ):
         import uuid
 
@@ -396,7 +391,7 @@ class TestSystemAccessAPI:
             members={"target_owner": ["owner"]},
             subdomain=f"target-{uuid.uuid4().hex[:6]}",
         )
-        await frontend_container.company_repository.set(target_company)
+        await Company.set(target_company)
 
         response = await frontend_client.post(
             f"/frontend/api/companies/{company_id}/system-access",
@@ -410,15 +405,15 @@ class TestSystemAccessAPI:
     async def test_leave_company_switches_active_company_to_system(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
     ):
         import uuid
 
-        from core.models.identity_models import Company
+        from core.models.identity_models import User
         from core.utils.tokens import get_token_service
         from tests.fixtures.auth import set_test_company_member_roles
 
-        system_user_id, _ = await self._create_system_actor(frontend_container)
+        system_user_id, _ = await self._create_system_actor(frontend_di)
         company_id = f"target_company_{uuid.uuid4().hex[:8]}"
         target_company = Company(
             company_id=company_id,
@@ -427,26 +422,24 @@ class TestSystemAccessAPI:
             members={"target_owner": ["owner"], system_user_id: ["admin"]},
             subdomain=f"target-{uuid.uuid4().hex[:6]}",
         )
-        await frontend_container.company_repository.set(target_company)
+        await Company.set(target_company)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id="target_owner",
             roles=["owner"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company_id,
             user_id=system_user_id,
             roles=["admin"],
         )
 
-        user = await frontend_container.user_repository.get(system_user_id)
+        user = await User.get(system_user_id)
         user.companies[company_id] = ["admin"]
         user.active_company_id = company_id
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         # Токен должен содержать целевую компанию: AuthMiddleware
         # `_sync_active_company` синхронизирует user.active_company_id
@@ -470,8 +463,8 @@ class TestSystemAccessAPI:
         assert set_cookie is not None
         assert "auth_token=" in set_cookie
 
-        updated_user = await frontend_container.user_repository.get(system_user_id)
+        updated_user = await User.get(system_user_id)
         assert company_id not in updated_user.companies
         assert updated_user.active_company_id == "system"
-        updated_company = await frontend_container.company_repository.get(company_id)
+        updated_company = await Company.get(company_id)
         assert system_user_id not in updated_company.members

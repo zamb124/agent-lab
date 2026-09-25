@@ -5,12 +5,17 @@ Google Docs tools требуют явную авторизацию через st
 """
 
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 
+from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
+from core.context import reset_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -34,10 +39,33 @@ def _make_state() -> ExecutionState:
     )
 
 
+def _workspace_client_without_credentials() -> GoogleWorkspaceClient:
+    oauth = AsyncMock()
+    oauth.get_valid_token.return_value = None
+    oauth.build_auth_url.return_value = "https://accounts.google.com/o/oauth2/auth"
+    company_credentials = AsyncMock()
+    company_credentials.get_google_workspace_auth_material.return_value = None
+    return GoogleWorkspaceClient(
+        oauth_service=oauth,
+        company_credentials=company_credentials,
+    )
+
+
 async def _assert_requires_google_docs_oauth(tool: FunctionTool, args: ToolArguments) -> None:
     state = _make_state()
-    with pytest.raises(FlowInterrupt) as exc_info:
-        _ = await tool.run(args, state)
+    bound = tool.with_dependencies([_workspace_client_without_credentials()])
+    token = set_context(
+        Context(
+            user=User(user_id=state.user_id, name="Test"),
+            active_company=Company(company_id="system", name="System"),
+            channel="api",
+        )
+    )
+    try:
+        with pytest.raises(FlowInterrupt) as exc_info:
+            _ = await bound.run(args, state)
+    finally:
+        reset_context(token)
     interrupt = exc_info.value.body
     assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
     assert isinstance(interrupt, OAuthInterrupt)
@@ -147,7 +175,7 @@ class TestGDocsClientInit:
     def test_both_args_raises(self):
         from core.clients.google_docs_client import GoogleDocsClient
 
-        with pytest.raises(ValueError, match="не оба"):
+        with pytest.raises(ValueError, match="not both"):
             GoogleDocsClient(
                 credentials_json='{"fake": true}',
                 access_token="tok_abc",
@@ -170,13 +198,13 @@ class TestGDocsClientInit:
     def test_subject_without_credentials_raises(self):
         from core.clients.google_docs_client import GoogleDocsClient
 
-        with pytest.raises(ValueError, match="только с credentials_json"):
+        with pytest.raises(ValueError, match="only with credentials_json"):
             GoogleDocsClient(access_token="tok_abc", subject="user@domain.ru")
 
     def test_subject_with_access_token_raises(self):
         from core.clients.google_docs_client import GoogleDocsClient
 
-        with pytest.raises(ValueError, match="только с credentials_json"):
+        with pytest.raises(ValueError, match="only with credentials_json"):
             GoogleDocsClient(access_token="tok_abc", subject="admin@corp.com")
 
     def test_subject_none_is_allowed(self):

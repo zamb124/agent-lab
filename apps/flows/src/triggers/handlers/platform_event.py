@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from typing import override
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.durable_execution import DurableWorkflowRuntime
 from apps.flows.src.models import (
     EventFilter,
     PlatformEventTriggerConfig,
@@ -22,6 +22,7 @@ from apps.flows.src.models import (
     TriggerStatus,
     TriggerType,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.execution_identity import resolve_execution_context
 from apps.flows.src.triggers.executor import TriggerExecutor
 from apps.flows.src.triggers.handlers.base import (
@@ -31,8 +32,10 @@ from apps.flows.src.triggers.handlers.base import (
 )
 from core.authz.ids import is_openfga_user_subject_id
 from core.authz.models import AuthzObject
+from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
-from core.context import User, clear_context, get_context, set_context
+from core.clients.redis_client import RedisClient
+from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.events import (
     PlatformEvent,
@@ -41,6 +44,7 @@ from core.events import (
     validate_event_filters_against_fields,
 )
 from core.logging import get_logger
+from core.models.identity_models import Company, User
 from core.types import JsonObject, JsonValue
 
 logger = get_logger(__name__)
@@ -125,7 +129,6 @@ def platform_event_trigger_run_id(event_id: str, trigger_id: str) -> str:
 
 
 async def _event_actor_user(
-    container: FlowRuntimeContainer,
     actor_user_id: str,
 ) -> User:
     """Актор из meta: только существующий platform user с FGA-безопасным id."""
@@ -133,7 +136,7 @@ async def _event_actor_user(
         raise ValueError(
             f"platform event actor_user_id must not contain ':': {actor_user_id!r}"
         )
-    actor = await container.user_repository.get(actor_user_id)
+    actor = await User.get(actor_user_id)
     if actor is None:
         raise ValueError(
             f"platform event actor_user_id={actor_user_id!r} is not a platform user"
@@ -142,13 +145,13 @@ async def _event_actor_user(
 
 
 async def _flow_owner_user(
-    container: FlowRuntimeContainer,
+    authz_service: AuthzService,
     *,
     company_id: str,
     flow_id: str,
 ) -> User:
     """Владелец flow из OpenFGA — identity исполнения, когда у события нет актора."""
-    subjects = await container.authz_service.list_users(
+    subjects = await authz_service.list_users(
         AuthzObject.flow(flow_id, company_id=company_id),
         AuthzRelation.OWNER,
     )
@@ -161,7 +164,7 @@ async def _flow_owner_user(
         raise ValueError(
             f"platform event trigger dispatch: flow {flow_id} has no owner"
         )
-    owner = await container.user_repository.get(owner_ids[0])
+    owner = await User.get(owner_ids[0])
     if owner is None:
         raise ValueError(
             f"platform event trigger dispatch: flow owner {owner_ids[0]} not found"
@@ -174,8 +177,9 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
 
     trigger_type: TriggerType = TriggerType.PLATFORM_EVENT
 
-    def __init__(self, base_url: str, *, container: FlowRuntimeContainer) -> None:
-        super().__init__(base_url, container=container)
+    def __init__(self, base_url: str, *, redis_client: RedisClient) -> None:
+        super().__init__(base_url)
+        self.redis_client: RedisClient = redis_client
         self._executor: TriggerExecutor = TriggerExecutor()
 
     @override
@@ -212,7 +216,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
             flow_id=flow_id,
             trigger_id=trigger.trigger_id,
         )
-        _ = await self.container.redis_client.sadd(
+        _ = await self.redis_client.sadd(
             platform_event_trigger_index_key(config.event_type),
             member,
         )
@@ -254,7 +258,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
             flow_id=flow_id,
             trigger_id=trigger.trigger_id,
         )
-        _ = await self.container.redis_client.srem(
+        _ = await self.redis_client.srem(
             platform_event_trigger_index_key(raw_event_type.strip()),
             member,
         )
@@ -267,7 +271,7 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
         payload: JsonObject,
     ) -> JsonObject:
         """Ручной прогон триггера (тесты); боевой вход — consumer шины."""
-        flow_config = await self.container.flow_repository.get(flow_id)
+        flow_config = await FlowConfig.get_latest(flow_id)
         if flow_config is None:
             raise TriggerValidationError(f"Flow not found: {flow_id}")
         trigger = flow_config.triggers.get(trigger_id)
@@ -287,7 +291,9 @@ class PlatformEventTriggerHandler(BaseTriggerHandler):
 
 async def dispatch_platform_event_triggers(
     *,
-    container: FlowRuntimeContainer,
+    redis_client: RedisClient,
+    workflow_runtime: DurableWorkflowRuntime,
+    authz_service: AuthzService,
     event: PlatformEvent,
 ) -> int:
     """
@@ -296,13 +302,13 @@ async def dispatch_platform_event_triggers(
     Возвращает число успешных запусков TriggerExecutor. Ошибка одного
     триггера логируется и не блокирует остальные.
     """
-    members = await container.redis_client.smembers(
+    members = await redis_client.smembers(
         platform_event_trigger_index_key(event.type)
     )
     if not members:
         return 0
 
-    company = await container.company_repository.get(event.company_id)
+    company = await Company.get(event.company_id)
     if company is None:
         logger.error("flows.platform.event.trigger.dispatch.company", company_id=event.company_id)
         return 0
@@ -311,7 +317,7 @@ async def dispatch_platform_event_triggers(
     event_actor: User | None = None
     if actor_user_id is not None:
         try:
-            event_actor = await _event_actor_user(container, actor_user_id)
+            event_actor = await _event_actor_user(actor_user_id)
         except ValueError as exc:
             logger.error("flows.platform.event.trigger.dispatch.invalid", company_id=event.company_id, error=exc)
             return 0
@@ -338,14 +344,14 @@ async def dispatch_platform_event_triggers(
                 continue
 
             index_key = platform_event_trigger_index_key(event.type)
-            flow_config = await container.flow_repository.get(flow_id)
+            flow_config = await FlowConfig.get_latest(flow_id)
             if flow_config is None:
                 logger.warning("flows.platform.event.trigger.dispatch.flow", flow_id=flow_id)
-                _ = await container.redis_client.srem(index_key, member)
+                _ = await redis_client.srem(index_key, member)
                 continue
             trigger = flow_config.triggers.get(trigger_id)
             if trigger is None:
-                _ = await container.redis_client.srem(index_key, member)
+                _ = await redis_client.srem(index_key, member)
                 continue
             if trigger.type != TriggerType.PLATFORM_EVENT or not trigger.enabled:
                 continue
@@ -367,7 +373,7 @@ async def dispatch_platform_event_triggers(
 
             run_id = platform_event_trigger_run_id(event.event_id, trigger_id)
             session_id = f"{flow_id}:{run_id}"
-            existing_state = await container.workflow_runtime.get_state(session_id)
+            existing_state = await workflow_runtime.get_state(session_id)
             if existing_state is not None:
                 # Deterministic run_id: at-least-once redelivery must not start a second run
                 # (A2A terminal event identity would collide).
@@ -377,7 +383,7 @@ async def dispatch_platform_event_triggers(
                 initiator = event_actor
                 if initiator is None:
                     initiator = await _flow_owner_user(
-                        container,
+                        authz_service,
                         company_id=company_id,
                         flow_id=flow_id,
                     )
@@ -392,7 +398,6 @@ async def dispatch_platform_event_triggers(
                 )
                 initiator_context.flow_id = flow_id
                 execution = await resolve_execution_context(
-                    container,
                     flow_config=flow_config,
                     initiator_context=initiator_context,
                 )

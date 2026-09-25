@@ -9,7 +9,6 @@ import os
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import ExternalAgentStatus, FlowConfig, FlowType
 from tests.flows.fixtures.external_agent.main import external_agent_app
 
@@ -38,7 +37,7 @@ class TestFlowDiscoveryService:
 
     @pytest.mark.asyncio
     async def test_register_agent_via_asgi(self, app, asgi_external_agent):
-        """Регистрация агента через ASGI (без реального контейнера)."""
+        """Регистрация агента через ASGI."""
         response = await asgi_external_agent.get("/.well-known/agent-card.json")
         assert response.status_code == 200
 
@@ -46,9 +45,8 @@ class TestFlowDiscoveryService:
         assert agent_card["name"] == "Test External Agent"
 
     @pytest.mark.asyncio
-    async def test_register_and_list_agents(self, app):
+    async def test_register_and_list_agents(self, app, di):
         """Регистрация и получение списка агентов."""
-        container = get_container()
 
         agent = FlowConfig(
             flow_id="test_agent_1",
@@ -59,20 +57,19 @@ class TestFlowDiscoveryService:
             headers={"X-API-Key": "test-key"},
         )
 
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
-        all_agents = await container.flow_repository.list(limit=10000)
+        all_agents = await FlowConfig.list(limit=10000)
         assert len(all_agents) >= 1
 
-        found = await container.flow_repository.get("test_agent_1")
+        found = await FlowConfig.get_latest("test_agent_1")
         assert found is not None
         assert found.name == "Test Agent 1"
         assert found.headers == {"X-API-Key": "test-key"}
 
     @pytest.mark.asyncio
-    async def test_list_active_agents(self, app):
+    async def test_list_active_agents(self, app, di):
         """Только активные агенты."""
-        container = get_container()
 
         agent_active = FlowConfig(
             flow_id="active_agent",
@@ -89,11 +86,11 @@ class TestFlowDiscoveryService:
             status=ExternalAgentStatus.INACTIVE,
         )
 
-        await container.flow_repository.set(agent_active)
-        await container.flow_repository.set(agent_inactive)
+        await FlowConfig.create_version(agent_active)
+        await FlowConfig.create_version(agent_inactive)
 
         # Фильтруем external агентов по статусу
-        all_agents = await container.flow_repository.list(limit=10000)
+        all_agents = await FlowConfig.list(limit=10000)
         active_agents = [a for a in all_agents if a.type == FlowType.EXTERNAL and a.status == ExternalAgentStatus.ACTIVE]
         agent_ids = [a.flow_id for a in active_agents]
 
@@ -101,9 +98,8 @@ class TestFlowDiscoveryService:
         assert "inactive_agent" not in agent_ids
 
     @pytest.mark.asyncio
-    async def test_get_agent_by_url(self, app, unique_id):
+    async def test_get_agent_by_url(self, app, unique_id, di):
         """Получение агента по URL."""
-        container = get_container()
 
         flow_id = f"url_test_agent_{unique_id}"
         url = f"http://unique-url-{unique_id}:9000"
@@ -115,10 +111,10 @@ class TestFlowDiscoveryService:
             name="URL Test Agent",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
         # Ищем агента по URL
-        all_agents = await container.flow_repository.list(limit=10000)
+        all_agents = await FlowConfig.list(limit=10000)
         found = None
         for a in all_agents:
             if a.type == FlowType.EXTERNAL and a.url == url:
@@ -128,9 +124,8 @@ class TestFlowDiscoveryService:
         assert found.flow_id == flow_id
 
     @pytest.mark.asyncio
-    async def test_update_health_check(self, app):
+    async def test_update_health_check(self, app, di):
         """Обновление статуса после health check."""
-        container = get_container()
 
         agent = FlowConfig(
             flow_id="health_test_agent",
@@ -139,18 +134,18 @@ class TestFlowDiscoveryService:
             name="Health Test Agent",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
         # Обновляем health check
-        agent = await container.flow_repository.get("health_test_agent")
+        agent = await FlowConfig.get_latest("health_test_agent")
         agent.status = ExternalAgentStatus.UNHEALTHY
         agent.agent_card = {"name": "Updated Card"}
         from datetime import datetime
         from datetime import timezone as tz
         agent.last_health_check = datetime.now(tz.utc)
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
-        updated = await container.flow_repository.get("health_test_agent")
+        updated = await FlowConfig.get_latest("health_test_agent")
         assert updated.status == ExternalAgentStatus.UNHEALTHY
         assert updated.agent_card == {"name": "Updated Card"}
         assert updated.last_health_check is not None
@@ -230,9 +225,8 @@ class TestExternalAgentsAPI:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_register_and_get_external_agent(self, app, client, asgi_external_agent):
+    async def test_register_and_get_external_agent(self, app, client, asgi_external_agent, di):
         """Регистрация и получение внешнего агента через API."""
-        container = get_container()
 
         agent = FlowConfig(
             flow_id="api_test_agent",
@@ -241,7 +235,7 @@ class TestExternalAgentsAPI:
             name="API Test Agent",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
         # API для external agents теперь объединен с основным agents API
         response = await client.get("/flows/api/v1/flows/api_test_agent")
@@ -252,9 +246,8 @@ class TestExternalAgentsAPI:
         assert data["name"] == "API Test Agent"
 
     @pytest.mark.asyncio
-    async def test_delete_external_agent(self, app, client):
+    async def test_delete_external_agent(self, app, client, di):
         """Удаление внешнего агента через API."""
-        container = get_container()
 
         agent = FlowConfig(
             flow_id="delete_test_agent",
@@ -263,13 +256,13 @@ class TestExternalAgentsAPI:
             name="Delete Test Agent",
             status=ExternalAgentStatus.ACTIVE,
         )
-        await container.flow_repository.set(agent)
+        await FlowConfig.create_version(agent)
 
         # API для external agents теперь объединен с основным agents API
         response = await client.delete("/flows/api/v1/flows/delete_test_agent")
         assert response.status_code == 200
 
-        deleted = await container.flow_repository.get("delete_test_agent")
+        deleted = await FlowConfig.get_latest("delete_test_agent")
         assert deleted is None
 
     @pytest.mark.asyncio

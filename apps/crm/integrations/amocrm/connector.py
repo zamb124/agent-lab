@@ -13,6 +13,7 @@ from apps.crm.integrations.amocrm.type_extensions import (
     amo_canonical_type_ids,
 )
 from apps.crm.models.api import IntegrationManifestItem
+from apps.crm.models.entity_type import EntityType
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
@@ -68,9 +69,6 @@ def _missing_canonical_entity_type_error(namespace_name: str, type_id: str) -> G
 
 
 if TYPE_CHECKING:
-    from apps.crm.db.repositories.entity_repository import EntityRepository
-    from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
-    from apps.crm.db.repositories.relationship_repository import RelationshipRepository
     from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
     from apps.crm.services.entity_service import EntityService
     from apps.crm.services.namespace_template_service import NamespaceTemplateService
@@ -78,6 +76,7 @@ if TYPE_CHECKING:
     from core.identity.integration_external_author import IntegrationExternalAuthorService
     from core.integrations.oauth_service import OAuthService
     from core.namespace import NamespaceService
+    from core.rag import BaseRAGProvider
 
 
 class AmoCRMConnector:
@@ -97,9 +96,7 @@ class AmoCRMConnector:
         self,
         *,
         oauth_service: OAuthService,
-        entity_repository: EntityRepository,
-        entity_type_repository: EntityTypeRepository,
-        relationship_repository: RelationshipRepository,
+        rag: BaseRAGProvider,
         entity_service: EntityService,
         namespace_service: NamespaceService,
         task_service: TaskService,
@@ -108,14 +105,11 @@ class AmoCRMConnector:
         entity_access: CrmEntityAccessService,
     ) -> None:
         self._oauth_service: OAuthService = oauth_service
-        self._entity_type_repository: EntityTypeRepository = entity_type_repository
         self._namespace_service: NamespaceService = namespace_service
         self._namespace_template_service: NamespaceTemplateService = namespace_template_service
         self._service: AmoCRMIntegrationService = AmoCRMIntegrationService(
             oauth_service=oauth_service,
-            entity_repository=entity_repository,
-            entity_type_repository=entity_type_repository,
-            relationship_repository=relationship_repository,
+            rag=rag,
             entity_service=entity_service,
             namespace_service=namespace_service,
             task_service=task_service,
@@ -174,33 +168,32 @@ class AmoCRMConnector:
         namespace_name: str,
         company_id: str,
     ) -> None:
-        repo = self._entity_type_repository
         ns = namespace_name.strip()
         if not ns:
             raise ValueError("namespace_name is required")
         for type_id in sorted(amo_canonical_type_ids()):
-            existing_type = await repo.get_by_type_id(
-                type_id,
-                namespace=ns,
+            existing_type = await EntityType.by_company_namespace_and_type_id(
                 company_id=company_id,
-            )
+                namespace=ns,
+                type_id=type_id,
+            ).get_or_none()
             if existing_type is None:
-                src_default = await repo.get_by_type_id(
-                    type_id,
-                    namespace="default",
+                src_default = await EntityType.by_company_namespace_and_type_id(
                     company_id=company_id,
-                )
+                    namespace="default",
+                    type_id=type_id,
+                ).get_or_none()
                 if src_default is None:
                     raise _missing_canonical_entity_type_error(ns, type_id)
-                _ = await repo.clone_entity_type_between_namespaces(
+                _ = await EntityType.ensure_in_namespace(
                     type_id,
                     source_namespace="default",
                     target_namespace=ns,
                     company_id=company_id,
                 )
             extra = AMO_OPTIONAL_FIELDS_BY_TYPE_ID.get(type_id)
-            if extra:
-                await repo.merge_optional_fields_if_absent(
+            if extra is not None and len(extra) > 0:
+                await EntityType.merge_optional_fields(
                     type_id,
                     namespace=ns,
                     company_id=company_id,

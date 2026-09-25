@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.sync.dependencies import ContainerDep
+from apps.sync.di import Di
 from apps.sync.models.channels import (
     ChannelCreate,
     ChannelMemberAdd,
@@ -39,7 +39,7 @@ router = APIRouter()
 
 @router.get("/", response_model=OffsetPage[ChannelRead])
 async def list_channels(
-    container: ContainerDep,
+    di: Di,
     namespace: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -48,25 +48,25 @@ async def list_channels(
     return await op_channels_list(
         ChannelsListPayload(namespace=namespace, limit=limit, offset=offset),
         user=user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/", status_code=201, response_model=ChannelRead)
-async def create_channel(container: ContainerDep, body: ChannelCreate) -> ChannelRead:
+async def create_channel(di: Di, body: ChannelCreate) -> ChannelRead:
     user = require_context().user
-    return await op_channels_create(body, user=user, container=container)
+    return await op_channels_create(body, user=user, di=di)
 
 
 @router.patch("/{channel_id}", response_model=ChannelRead)
 async def update_channel(
-    container: ContainerDep, channel_id: str, body: ChannelUpdate
+    di: Di, channel_id: str, body: ChannelUpdate
 ) -> ChannelRead:
     user = require_context().user
     return await op_channels_update(
         ChannelsUpdatePayload(channel_id=channel_id, body=body),
         user=user,
-        container=container,
+        di=di,
     )
 
 
@@ -74,7 +74,7 @@ async def update_channel(
 async def patch_channel_notification_settings(
     channel_id: str,
     body: ChannelNotificationSettingsUpdate,
-    container: ContainerDep,
+    di: Di,
 ) -> ChannelRead:
     user = require_context().user
     return await op_channels_notification_settings_update(
@@ -82,45 +82,45 @@ async def patch_channel_notification_settings(
             channel_id=channel_id, notifications_muted=body.notifications_muted
         ),
         user=user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{channel_id}/read", status_code=204)
-async def mark_channel_read(container: ContainerDep, channel_id: str) -> None:
+async def mark_channel_read(di: Di, channel_id: str) -> None:
     user = require_context().user
     await op_channels_mark_read(
         ChannelsMarkReadPayload(channel_id=channel_id),
         user=user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{channel_id}/typing", status_code=204)
 async def typing_channel(
-    container: ContainerDep, channel_id: str, body: ChannelsTypingPayload
+    di: Di, channel_id: str, body: ChannelsTypingPayload
 ) -> None:
     if body.channel_id != channel_id:
         raise WsCommandError("ws_invalid_payload", "channel_id mismatch", error_code='ws_invalid_payload')
     user = require_context().user
-    await op_channels_typing(body, user=user, container=container)
+    await op_channels_typing(body, user=user, di=di)
 
 
 @router.get("/{channel_id}/members", response_model=ListResponse[ChannelMemberRead])
 async def list_channel_members(
-    channel_id: str, container: ContainerDep
+    channel_id: str, di: Di
 ) -> ListResponse[ChannelMemberRead]:
     user = require_context().user
     return await op_channels_list_members(
         ChannelsListMembersPayload(channel_id=channel_id),
         user=user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{channel_id}/members", status_code=201, response_model=ChannelMemberRead)
 async def add_member(
-    channel_id: str, body: ChannelMemberAdd, container: ContainerDep
+    channel_id: str, body: ChannelMemberAdd, di: Di
 ) -> ChannelMemberRead:
     user = require_context().user
     return await op_channels_add_member(
@@ -128,5 +128,5 @@ async def add_member(
             channel_id=channel_id, user_id=body.user_id, role=body.role
         ),
         user=user,
-        container=container,
+        di=di,
     )

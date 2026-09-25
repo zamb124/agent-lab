@@ -5,17 +5,15 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from apps.capability_gateway.services.contracts import CapabilityGatewayContainerProtocol
 from core.capabilities import CapabilityExecutionContext
-from core.context import Context, clear_context, get_context, set_context
+from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 
 
 class CapabilityContextService:
     """Строит platform Context из capability execution context."""
-
-    def __init__(self, container: CapabilityGatewayContainerProtocol):
-        self._container: CapabilityGatewayContainerProtocol = container
 
     async def build_context(
         self,
@@ -24,11 +22,11 @@ class CapabilityContextService:
         if execution_context.user_id is None:
             raise ValueError("Capability context requires user_id")
 
-        user = await self._container.user_repository.get(execution_context.user_id)
+        user = await User.get(execution_context.user_id)
         if user is None:
             raise ValueError(f"User not found: {execution_context.user_id}")
 
-        company = await self._container.company_repository.get(execution_context.company_id)
+        company = await Company.get(execution_context.company_id)
         if company is None:
             raise ValueError(f"Company not found: {execution_context.company_id}")
 

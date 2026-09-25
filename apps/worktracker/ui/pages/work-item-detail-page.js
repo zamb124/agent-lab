@@ -9,7 +9,7 @@ import {
     truncateWorkItemId,
     workItemAllowsSilentComplete,
     workItemFromEventPayload,
-} from '../utils/work-item-detail-shared.js';
+} from '../_helpers/work-item-detail-shared.js';
 import {
     WORK_ITEM_EVENTS,
     WORK_ITEM_MUTATION_SUCCEEDED,

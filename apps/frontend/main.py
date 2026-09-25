@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import HTTPException, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -28,6 +28,7 @@ from apps.frontend.api.auth import router as auth_router
 from apps.frontend.api.authz_explorer import router as authz_explorer_router
 from apps.frontend.api.billing import router as billing_router
 from apps.frontend.api.companies import router as companies_router
+from apps.frontend.api.company_storages import router as company_storages_router
 from apps.frontend.api.dashboard import router as dashboard_router
 from apps.frontend.api.design_system import router as design_system_router
 from apps.frontend.api.embed_configs import router as embed_configs_router
@@ -52,9 +53,8 @@ from apps.frontend.config import (
     FrontendSettings,
     get_frontend_settings,
 )
-from apps.frontend.container import FrontendContainer, get_frontend_container
-from apps.frontend.dependencies import ContainerDep
-from apps.frontend.realtime.command_router import register_frontend_ws_commands
+from apps.frontend.di import Di, FrontendDi
+from apps.frontend.realtime.command_router import FRONTEND_OPERATIONS
 from apps.frontend.services.docs_assistant_bootstrap import schedule_docs_assistant_bootstrap
 from apps.frontend.services.flow_embed_page_html import build_flow_embed_page_html
 from apps.frontend.services.flow_preview_guest_html import (
@@ -65,13 +65,23 @@ from apps.frontend.services.flow_ui_shared_session_html import (
     build_flow_ui_shared_session_html,
 )
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
-from core.app.factory import create_service_app
+from core.app import create_service_app
 from core.app.health_payload import build_health_payload
 from core.app_state import get_request_correlation_ids
+from core.authz.service import AuthzService
+from core.billing.service import BillingService
 from core.clients.payment import PaymentProviderFactory
+from core.clients.redis_client import RedisClient
+from core.clients.tts_pronunciation.models import (
+    PronunciationRule,
+    PronunciationRuleKind,
+    PronunciationRuleWrite,
+)
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
 from core.config.testing import is_testing
+from core.db.storage import SharedStorage
+from core.di import recipe
 from core.identity.demo_bootstrap import ensure_demo_company_and_user
 from core.identity.flow_preview_handoff import (
     consume_flow_preview_handoff,
@@ -79,9 +89,11 @@ from core.identity.flow_preview_handoff import (
 )
 from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
+from core.mail.service import MailService
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
 from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
+from core.short_links.models import PlatformShortLink
 from core.short_links.payloads import FlowPreviewEmbedPayload
 from core.types import JsonObject, parse_json_object
 
@@ -229,15 +241,14 @@ def _build_llms_txt(base_url: str, brand: PlatformBrandConfig) -> str:
         f"- Service health endpoint (technical): {base_url}/health\n"
     )
 
-async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> None:
+async def _seed_platform_pronunciation_rules() -> None:
     """Засевает платформенные правила произношения при первом старте (идемпотентно)."""
     if not get_settings().voice.tts.pronunciation_seed_enabled:
         return
-    repo = container.platform_pronunciation_rule_repository
-    existing = await repo.list_all()
+    existing = await PronunciationRule.all_for_company_scope(company_id=None)
     existing_patterns = {(r.kind, r.pattern, r.language) for r in existing}
 
-    seed_rules = [
+    seed_rules: list[tuple[PronunciationRuleKind, str, str, str]] = [
         ("alias", "Хуманитик", "хуманитэк", "ru"),
         ("alias", "Humanitec", "хуманитэк", "ru"),
         ("alias", "humanitec", "хуманитэк", "ru"),
@@ -246,44 +257,45 @@ async def _seed_platform_pronunciation_rules(container: FrontendContainer) -> No
     ]
     for kind, pattern, replacement, lang in seed_rules:
         if (kind, pattern, lang) not in existing_patterns:
-            _ = await repo.create(
-                kind=kind,
-                pattern=pattern,
-                replacement=replacement,
-                language=lang,
-                word_boundary=True,
-                case_sensitive=False,
-                note="Платформенное правило (seed)",
+            _ = await PronunciationRule.create_for_company_scope(
+                company_id=None,
+                rule=PronunciationRuleWrite(
+                    kind=kind,
+                    pattern=pattern,
+                    replacement=replacement,
+                    language=lang,
+                    word_boundary=True,
+                    case_sensitive=False,
+                    note="Платформенное правило (seed)",
+                ),
             )
     invalidate_voice_platform_pronunciation_cache()
     logger.info("frontend.pronunciation_seed_applied")
 
 
-async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings) -> None:
-    _ = settings
-    register_frontend_ws_commands()
-    await container.redis_client.connect()
+async def frontend_startup(
+    redis_client: RedisClient,
+    shared_storage: SharedStorage,
+    authz_service: AuthzService,
+    mail_service: MailService,
+    billing_service: BillingService,
+) -> None:
+    await redis_client.connect()
     logger.info("frontend.redis.connected")
 
-    configure_tunnel_bus_storage(container.shared_storage)
-    await start_tunnel_bus_listener(container.redis_client)
+    configure_tunnel_bus_storage(shared_storage)
+    await start_tunnel_bus_listener(redis_client)
 
     if is_testing():
         return
     _ = await ensure_system_admin_membership(
-        company_repository=container.company_repository,
-        subdomain_repository=container.subdomain_repository,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
+        authz=authz_service,
     )
     await ensure_demo_company_and_user(
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
-        subdomain_repository=container.subdomain_repository,
-        authz=container.authz_service,
+        authz=authz_service,
     )
     if get_settings().mail.system.enabled:
-        reconcile_result = await container.mail_service.reconcile_system()
+        reconcile_result = await mail_service.reconcile_system()
         logger.info(
             "mail.system.reconcile",
             connection_ensured=reconcile_result.connection_ensured,
@@ -292,19 +304,18 @@ async def on_startup(app: FastAPI, container: FrontendContainer, settings: Front
             role_missing_password_count=len(reconcile_result.role_mailboxes_missing_password),
             user_missing_password_count=len(reconcile_result.user_bindings_missing_password),
         )
-    await _seed_platform_pronunciation_rules(container)
-    n = await container.billing_service.ensure_settlement_rules_materialized_for_all_companies()
+    await _seed_platform_pronunciation_rules()
+    n = await billing_service.ensure_settlement_rules_materialized_for_all_companies()
     logger.info("frontend.settlement", n=n)
 
     PaymentProviderFactory.initialize()
     logger.info("frontend.event")
     schedule_docs_assistant_bootstrap(
-        app,
-        container,
+        shared_storage,
         project_root=Path(__file__).resolve().parents[2],
     )
 
-# Создаем приложение через фабрику (автоматически подключает middleware, контейнер и т.д.)
+# Приложение собирает create_service_app: middleware и FrontendDi.
 _frontend_settings = get_frontend_settings()
 _frontend_cors_regex = _frontend_settings.cors_allow_origin_regex
 _frontend_cors_origins = list(_frontend_settings.cors_allow_origins)
@@ -312,10 +323,12 @@ if _frontend_cors_regex is None and _frontend_settings.server.debug and not is_t
     _frontend_cors_regex = _FRONTEND_DEV_CORS_ORIGIN_REGEX
 
 app = create_service_app(
-    service_name="frontend",
-    settings_class=FrontendSettings,
-    get_container=get_frontend_container,
-    on_startup=on_startup,
+    "frontend",
+    FrontendSettings,
+    FrontendDi,
+    database="shared_url",
+    operations=FRONTEND_OPERATIONS,
+    lifecycle=(recipe(frontend_startup),),
     routers=[],
     services_spa_index=Path(__file__).parent / "ui" / "index.html",
     pages_routers=[
@@ -339,6 +352,7 @@ app = create_service_app(
         api_keys_router,
         billing_router,
         settings_router,
+        company_storages_router,
         ai_providers_router,
         services_router,
         leads_router,
@@ -352,7 +366,6 @@ app = create_service_app(
     description="Управление платформой: авторизация, компании, биллинг",
     version="1.0.0",
     api_version=None,
-    include_crud_routers=False,
     documentation_gateway_prefix="frontend",
     cors_origins=_frontend_cors_origins,
     cors_allow_origin_regex=_frontend_cors_regex,
@@ -397,8 +410,8 @@ for route in list(app.routes):
 
 @app.get("/api/health")
 @app.get("/health")
-async def health(container: ContainerDep):
-    _ = container
+async def health(di: Di):
+    _ = di
     return build_health_payload(get_frontend_settings())
 
 
@@ -422,22 +435,22 @@ async def flow_embed_page_host(request: Request, embed: str = "") -> Response:
     return HTMLResponse(build_flow_embed_page_html(embed_id=embed_id))
 
 @app.api_route("/l/{code}", methods=["GET", "HEAD"])
-async def resolve_short_link(request: Request, container: ContainerDep, code: str):
+async def resolve_short_link(request: Request, di: Di, code: str):
     trimmed = code.strip()
 
     if request.method.upper() == "HEAD":
-        row_head = await container.short_link_repository.get_by_code(trimmed)
+        row_head = await PlatformShortLink.get(trimmed)
         if row_head is not None and row_head.kind == SHORT_LINK_KIND_FLOW_PREVIEW_EMBED:
             now = datetime.now(UTC)
             if row_head.expires_at <= now:
                 raise HTTPException(status_code=404, detail="Link not found or expired")
             return Response(status_code=200, content=b"")
-        target_head = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
+        target_head = await di.short_link_service.resolve_absolute_redirect_url(trimmed)
         if target_head is None:
             raise HTTPException(status_code=404, detail="Link not found or expired")
         return Response(status_code=200, content=b"")
 
-    row = await container.short_link_repository.delete_by_code_and_kind_returning(
+    row = await PlatformShortLink.delete_by_code_and_kind_returning(
         trimmed, SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
     )
     if row is not None:
@@ -448,14 +461,14 @@ async def resolve_short_link(request: Request, container: ContainerDep, code: st
         loc_path = f"/flow-preview?h={quote(payload.handoff_id, safe='')}"
         return RedirectResponse(url=_short_link_redirect_location(loc_path), status_code=303)
 
-    target = await container.short_link_service.resolve_absolute_redirect_url(trimmed)
+    target = await di.short_link_service.resolve_absolute_redirect_url(trimmed)
     if target is None:
         raise HTTPException(status_code=404, detail="Link not found or expired")
     return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
 
 
 @app.api_route("/flow-preview", methods=["GET", "HEAD"])
-async def flow_preview_guest_page(request: Request, container: ContainerDep, h: str = ""):
+async def flow_preview_guest_page(request: Request, di: Di, h: str = ""):
     handoff_id = (h or "").strip()
     if not handoff_id:
         if request.method.upper() == "HEAD":
@@ -464,7 +477,7 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
 
     if request.method.upper() == "HEAD":
         exists = await peek_flow_preview_handoff(
-            redis=container.redis_client,
+            redis=di.redis_client,
             handoff_id=handoff_id,
         )
         if not exists:
@@ -472,7 +485,7 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
         return Response(status_code=200, content=b"")
 
     payload = await consume_flow_preview_handoff(
-        redis=container.redis_client,
+        redis=di.redis_client,
         handoff_id=handoff_id,
     )
     if payload is None:
@@ -533,9 +546,9 @@ async def flow_preview_guest_page(request: Request, container: ContainerDep, h: 
 
 @app.get("/api/public/legal")
 @app.get("/frontend/api/public/legal")
-async def get_public_legal(request: Request, container: ContainerDep) -> JSONResponse:
+async def get_public_legal(request: Request, di: Di) -> JSONResponse:
     """Публичные юридические реквизиты для страниц policy/terms."""
-    _ = container
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -544,8 +557,8 @@ async def get_public_legal(request: Request, container: ContainerDep) -> JSONRes
 
 @app.get("/robots.txt")
 @app.get("/frontend/robots.txt")
-async def get_robots_txt(request: Request, container: ContainerDep) -> PlainTextResponse:
-    _ = container
+async def get_robots_txt(request: Request, di: Di) -> PlainTextResponse:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -570,8 +583,8 @@ async def get_robots_txt(request: Request, container: ContainerDep) -> PlainText
 
 @app.get("/sitemap.xml")
 @app.get("/frontend/sitemap.xml")
-async def get_sitemap_xml(request: Request, container: ContainerDep) -> Response:
-    _ = container
+async def get_sitemap_xml(request: Request, di: Di) -> Response:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -581,8 +594,8 @@ async def get_sitemap_xml(request: Request, container: ContainerDep) -> Response
 
 @app.get("/llms.txt")
 @app.get("/frontend/llms.txt")
-async def serve_llms_txt(request: Request, container: ContainerDep) -> PlainTextResponse:
-    _ = container
+async def serve_llms_txt(request: Request, di: Di) -> PlainTextResponse:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -612,8 +625,8 @@ def _render_pwa_brand_template(template_path: Path, platform_name: str) -> str:
 
 @app.get("/manifest.json")
 @app.get("/frontend/manifest.json")
-async def get_pwa_manifest(request: Request, container: ContainerDep) -> JSONResponse:
-    _ = container
+async def get_pwa_manifest(request: Request, di: Di) -> JSONResponse:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -632,8 +645,8 @@ async def get_pwa_manifest(request: Request, container: ContainerDep) -> JSONRes
 
 @app.get("/sw.js")
 @app.get("/frontend/sw.js")
-async def get_pwa_service_worker(request: Request, container: ContainerDep) -> Response:
-    _ = container
+async def get_pwa_service_worker(request: Request, di: Di) -> Response:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -651,8 +664,8 @@ async def get_pwa_service_worker(request: Request, container: ContainerDep) -> R
 
 @app.get("/offline.html")
 @app.get("/frontend/offline.html")
-async def get_pwa_offline_page(request: Request, container: ContainerDep) -> Response:
-    _ = container
+async def get_pwa_offline_page(request: Request, di: Di) -> Response:
+    _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
         raise HTTPException(status_code=400, detail="Host header is required")
@@ -682,17 +695,17 @@ def _frontend_spa_index_response() -> FileResponse:
 @app.get("/agent/")
 @app.get("/frontend/agent")
 @app.get("/frontend/agent/")
-async def agent_download_spa_page(container: ContainerDep) -> FileResponse:
+async def agent_download_spa_page(di: Di) -> FileResponse:
     """HumanitecAgent download landing — SPA (agent-download-page)."""
-    _ = container
+    _ = di
     return _frontend_spa_index_response()
 
 
 # SPA-резерв (все неизвестные пути → index.html)
 @app.get("/")
 @app.get("/{full_path:path}")
-async def serve_spa(container: ContainerDep, full_path: str = ""):
-    _ = container
+async def serve_spa(di: Di, full_path: str = ""):
+    _ = di
     # Исключаем API, статику, WebSocket и PWA файлы
     # full_path может начинаться с frontend/ из-за префикса сервиса
     excluded = (

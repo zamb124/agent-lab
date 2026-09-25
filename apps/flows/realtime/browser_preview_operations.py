@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import Di
 from apps.flows.src.services.browser_preview import (
     BrowserPreviewActiveSessionResponse,
     build_browser_preview_urls,
@@ -100,16 +100,16 @@ def _raise_from_browser(exc: ServiceClientError) -> None:
     raise_unavailable(exc)
 
 
-async def _browser_get(container: FlowContainer, session_id: str, suffix: str, *, timeout: float) -> JsonValue:
+async def _browser_get(di: Di, session_id: str, suffix: str, *, timeout: float) -> JsonValue:
     try:
-        return await container.service_client.get("browser", _control_path(session_id, suffix), timeout=timeout)
+        return await di.service_client.get("browser", _control_path(session_id, suffix), timeout=timeout)
     except ServiceClientError as exc:
         _raise_from_browser(exc)
         raise
 
 
 async def _browser_post(
-    container: FlowContainer,
+    di: Di,
     session_id: str,
     suffix: str,
     *,
@@ -118,7 +118,7 @@ async def _browser_post(
 ) -> JsonValue:
     json_body = body.model_dump(mode="json") if body is not None else {}
     try:
-        return await container.service_client.post(
+        return await di.service_client.post(
             "browser", _control_path(session_id, suffix), timeout=timeout, json=json_body
         )
     except ServiceClientError as exc:
@@ -130,11 +130,11 @@ async def op_flows_browser_preview_status(
     payload: BrowserPreviewSessionPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlSessionStatusResponse:
     _ = user
     _verify_session_token(payload)
-    response_payload = await _browser_get(container, payload.session_id, "status", timeout=5.0)
+    response_payload = await _browser_get(di, payload.session_id, "status", timeout=5.0)
     return ControlSessionStatusResponse.model_validate(response_payload)
 
 
@@ -142,10 +142,10 @@ async def op_flows_browser_preview_active_session(
     payload: BrowserPreviewTaskPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> BrowserPreviewActiveSessionResponse:
     """Текущая browser-сессия задачи; `session_id=None` — сейчас открытой сессии нет."""
-    _ = user, container
+    _ = user, di
     try:
         _ = verify_browser_preview_token_for_task(token=payload.token, task_id=payload.task_id)
     except ValueError as exc:
@@ -166,7 +166,7 @@ async def op_flows_browser_preview_click(
     payload: BrowserPreviewClickPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlPointerClickResponse:
     _ = user
     _verify_session_token(BrowserPreviewSessionPayload(session_id=payload.session_id, token=payload.token))
@@ -179,7 +179,7 @@ async def op_flows_browser_preview_click(
         click_count=payload.click_count,
     )
     response_payload = await _browser_post(
-        container, payload.session_id, "pointer/click", body=body, timeout=10.0
+        di, payload.session_id, "pointer/click", body=body, timeout=10.0
     )
     return ControlPointerClickResponse.model_validate(response_payload)
 
@@ -188,12 +188,12 @@ async def op_flows_browser_preview_key(
     payload: BrowserPreviewKeyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlOkResponse:
     _ = user
     _verify_session_token(BrowserPreviewSessionPayload(session_id=payload.session_id, token=payload.token))
     response_payload = await _browser_post(
-        container,
+        di,
         payload.session_id,
         "pointer/key",
         body=ControlPointerKeyBody(key=payload.key),
@@ -206,12 +206,12 @@ async def op_flows_browser_preview_text(
     payload: BrowserPreviewTextPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlOkResponse:
     _ = user
     _verify_session_token(BrowserPreviewSessionPayload(session_id=payload.session_id, token=payload.token))
     response_payload = await _browser_post(
-        container,
+        di,
         payload.session_id,
         "pointer/text",
         body=ControlPointerTextBody(text=payload.text),
@@ -224,12 +224,12 @@ async def op_flows_browser_preview_takeover(
     payload: BrowserPreviewTakeoverPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlHumanTakeoverResponse:
     _ = user
     _verify_session_token(BrowserPreviewSessionPayload(session_id=payload.session_id, token=payload.token))
     response_payload = await _browser_post(
-        container,
+        di,
         payload.session_id,
         "human-takeover",
         body=ControlHumanTakeoverBody(owner=payload.owner),
@@ -242,12 +242,12 @@ async def op_flows_browser_preview_takeover_release(
     payload: BrowserPreviewSessionPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ControlHumanTakeoverResponse:
     _ = user
     _verify_session_token(payload)
     response_payload = await _browser_post(
-        container, payload.session_id, "human-takeover/release", body=None, timeout=5.0
+        di, payload.session_id, "human-takeover/release", body=None, timeout=5.0
     )
     return ControlHumanTakeoverResponse.model_validate(response_payload)
 

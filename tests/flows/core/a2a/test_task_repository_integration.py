@@ -19,18 +19,10 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from apps.flows.src.models.a2a_projection import A2ATaskRepositoryError
 from sqlalchemy import func, select
 
 from apps.flows.config import get_settings
-from apps.flows.src.db.a2a_task_repository import (
-    A2ATaskRepository,
-    A2ATaskRepositoryError,
-)
-from apps.flows.src.db.models import (
-    A2AArtifactProjections,
-    A2ATaskEventDedup,
-    A2ATaskMessages,
-)
 from core.a2a import struct_from_mapping, task_to_json_dict
 from core.db.storage import Storage
 

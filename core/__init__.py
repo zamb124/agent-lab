@@ -6,12 +6,12 @@ Core - общая инфраструктура Humanitec.
 
 Структура:
 - config/       - Конфигурация (каскадная загрузка)
-- db/           - База данных (Storage, BaseRepository)
+- db/           - База данных (Storage, модели Oxyde)
 - models/       - Базовые модели (User, Company, Context)
 - context/      - Глобальный контекст (contextvars)
 - http/         - HTTP клиенты с прокси
 - logging/      - Логирование (JSON, Structured)
-- container/    - DI контейнер (BaseContainer)
+- di/           - Service Kit (ServiceDi, PlatformDi)
 - variables/    - Переменные компаний (резолюция @var:key)
 - files/        - Файлы и S3 (FilesService, S3Client)
 - clients/      - Клиенты (LLM, NanoBanana, STT, Payment)

@@ -50,10 +50,8 @@ def _build_browser_app(*, cdp_url: str, artifacts_dir: str) -> object:
     os.environ.setdefault("SERVER__BROWSER_SERVICE_URL", "http://testserver")
 
     from apps.browser.config import reset_browser_settings
-    from apps.browser.container import reset_browser_container
 
     reset_browser_settings()
-    reset_browser_container()
 
     import apps.browser.main as browser_main
 

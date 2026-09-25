@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import (
     FlowsFlowIdPayload,
     FlowsFlowVersionPayload,
@@ -16,7 +17,6 @@ from apps.flows.realtime.operations import (
     op_flows_version_item,
     op_flows_versions_list,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.flow_api import FlowValidateRequest
 from core.context import reset_context, set_context
 from core.models.context_models import Context
@@ -45,7 +45,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_store_bundles_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -61,14 +61,14 @@ async def test_store_bundles_rest_and_op_share_payload(
         listed = await op_flows_store_bundles(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert [item.model_dump() for item in listed.items] == http_items
 
 
 async def test_validate_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -90,7 +90,7 @@ async def test_validate_rest_and_op_share_payload(
         validated = await op_flows_validate(
             FlowValidateRequest.model_validate(body),
             user=user,
-            container=container,
+            di=di,
         )
     assert validated.valid is True
     assert validated.model_dump() == http_json
@@ -98,7 +98,7 @@ async def test_validate_rest_and_op_share_payload(
 
 async def test_versions_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -128,13 +128,13 @@ async def test_versions_rest_and_op_share_payload(
         listed = await op_flows_versions_list(
             FlowsFlowIdPayload(flow_id=flow_id),
             user=user,
-            container=container,
+            di=di,
         )
         assert listed.items == version_ids
         item = await op_flows_version_item(
             FlowsFlowVersionPayload(flow_id=flow_id, version=first),
             user=user,
-            container=container,
+            di=di,
         )
     item_http = await client.get(
         f"/flows/api/v1/flows/{flow_id}/versions/{first}",

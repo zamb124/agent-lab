@@ -207,7 +207,7 @@ async def test_public_resolve_garbage_token_not_found(
 ):
     response = await office_client.get(f"/documents/api/v1/public/resolve/not-a-valid-token-{unique_id}")
     assert response.status_code == 404
-    assert "найдена" in (response.json().get("detail") or "").lower()
+    assert "link not found" in (response.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio
@@ -222,7 +222,7 @@ async def test_public_open_catalog_token_rejected(
 
     open_response = await office_client.get(f"/documents/api/v1/public/open/{token}")
     assert open_response.status_code == 400
-    assert "прямой" in (open_response.json().get("detail") or "").lower()
+    assert "direct link" in (open_response.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ async def test_public_catalog_items_with_binding_token_rejected(
 
     items = await office_client.get(f"/documents/api/v1/public/catalog/{binding_token}/items")
     assert items.status_code == 400
-    assert "каталог" in (items.json().get("detail") or "").lower()
+    assert "catalog" in (items.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio

@@ -151,6 +151,33 @@ def _row_by_marker(payload: JsonObject, marker: str) -> JsonObject:
     return require_json_object(matched[0], "list.row")
 
 
+def _items_by_key(payload: JsonObject) -> dict[str, JsonObject]:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise AssertionError("resolve payload must have items[]")
+    rows: dict[str, JsonObject] = {}
+    for item in items:
+        row = require_json_object(item, "resolve.item")
+        key = row.get("variable_key")
+        if not isinstance(key, str) or key == "":
+            raise AssertionError(f"resolve item variable_key required, got {row!r}")
+        rows[key] = row
+    return rows
+
+
+def _assert_shared_variable_keys(ws_result: JsonObject, rest_result: JsonObject) -> None:
+    """Каталог компании пишут параллельные тесты: сравниваются ключи, видимые обоим вызовам."""
+    ws_rows = _items_by_key(ws_result)
+    rest_rows = _items_by_key(rest_result)
+    shared = sorted(set(ws_rows) & set(rest_rows))
+    if "company_name" not in shared:
+        raise AssertionError("resolve must include seeded company_name in both WS and REST")
+    for key in shared:
+        assert _normalize(ws_rows[key]) == _normalize(rest_rows[key]), (
+            f"WS != REST resolve variable_key={key}"
+        )
+
+
 def _event_payload(event: JsonObject) -> JsonObject:
     raw = event.get("payload")
     if raw is None:
@@ -268,6 +295,9 @@ async def test_secrets_op_ws_rest_identical(
         assert _normalize(_row_by_marker(ws_result, rest_marker)) == _normalize(
             _row_by_marker(rest_result, rest_marker)
         ), f"WS != REST row для {canonical_type}"
+        return
+    if canonical_type == "secrets/variables/resolve_requested":
+        _assert_shared_variable_keys(ws_result, rest_result)
         return
     assert _normalize(ws_result) == _normalize(rest_result), (
         f"WS != REST для {canonical_type}\nWS: {ws_result}\nREST: {rest_result}"

@@ -6,10 +6,11 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models import Edge, FlowConfig, ResourceDefinition, ResourceType
 from apps.flows.src.runtime.a2a_messages import build_assistant_message, build_user_message
 from core.context import get_context
+from core.db.models.rag import VectorDocument
 from core.rag.llm_context_memory_store import llm_context_memory_namespace_id
 from core.rag.rag_resource import RAGResource
 from core.state import ExecutionState
@@ -149,15 +150,15 @@ def single_node_flow(
 
 async def index_rag_document(
     *,
-    container: FlowContainer,
+    di: FlowsDi,
     namespace: str,
     collection_id: str,
     marker: str,
 ) -> None:
     rag = RAGResource(
-        namespace=namespace,
+        namespace,
+        di.namespace_service,
         company_id="system",
-        container=container,
         search_options={"channels": {"semantic": True, "lexical": True}, "rerank": False},
     )
     await rag.add_document(
@@ -187,7 +188,7 @@ def stale_messages(*, context_id: str, task_id: str, marker: str = "OLD_CONTEXT"
 
 async def run_context_flow(
     *,
-    container: FlowContainer,
+    di: FlowsDi,
     flow_id: str,
     query: str,
     response: str,
@@ -217,8 +218,8 @@ async def run_context_flow(
             content=query,
             messages=initial_messages or [],
         )
-        flow = await container.flow_factory.get_flow(flow_id, branch_id=branch_id)
-        result = await run_flow(container=container, flow=flow, state=state)
+        flow = await di.flow_factory.get_flow(flow_id, branch_id=branch_id, tool_registry=di.tool_registry)
+        result = await run_flow(di=di, flow=flow, state=state)
     assert result["response"] == response
     calls = await capture()
     new_calls = calls[before_count:]
@@ -231,12 +232,24 @@ async def run_context_flow(
     return main_calls[-1], state
 
 
+async def _documents_matching(
+    namespace_id: str, filters: dict[str, str], *, limit: int
+) -> list[VectorDocument]:
+    rows = await VectorDocument.objects.filter(namespace_id=namespace_id).limit(1000).all()
+    matched = [
+        row
+        for row in rows
+        if all(row.metadata.get(key) == value for key, value in filters.items())
+    ]
+    return matched[:limit]
+
+
 def call_text(call: dict[str, Any]) -> str:
     return "\n".join(str(message.get("text") or "") for message in call["messages"])
 
 
 async def wait_for_compacted_memory(
-    *, container: FlowContainer, flow_id: str, session_id: str
+    *, di: FlowsDi, flow_id: str, session_id: str
 ) -> None:
     namespace_id = llm_context_memory_namespace_id("system")
     filters = {
@@ -246,7 +259,7 @@ async def wait_for_compacted_memory(
     }
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        documents = await container.rag_repository.list_with_filters(namespace_id, filters, limit=10)
+        documents = await _documents_matching(namespace_id, filters, limit=10)
         if documents:
             return
         await asyncio.sleep(0.05)
@@ -255,31 +268,31 @@ async def wait_for_compacted_memory(
 
 async def cleanup_flow_context(
     *,
-    container: FlowContainer,
+    di: FlowsDi,
     flow_id: str,
     namespaces: list[str],
     auth_headers_system: dict[str, str],
     resource_ids: list[str] | None = None,
 ) -> None:
     with service_client_asgi_auth_context(auth_headers_system):
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
         for resource_id in resource_ids or []:
-            await container.resource_repository.delete(resource_id)
+            await ResourceDefinition.delete_by_id(ResourceDefinition.row_id(resource_id))
         memory_namespace = llm_context_memory_namespace_id("system")
-        compacted_documents = await container.rag_repository.list_with_filters(
+        compacted_documents = await _documents_matching(
             memory_namespace, {"flow_id": flow_id, "source": "llm_context_compaction"}, limit=100
         )
         for document in compacted_documents:
-            await container.rag_repository.delete_document(memory_namespace, document.document_id)
+            _ = await VectorDocument.delete_document_chunks(memory_namespace, document.document_id)
         for namespace in namespaces:
-            await container.rag_repository.delete_namespace(namespace)
-            await container.namespace_repository.delete(namespace)
+            _ = await VectorDocument.delete_namespace_chunks(namespace)
+            _ = await di.namespace_service.delete(namespace)
 
 
 async def store_context_resource(
-    *, container: FlowContainer, resource_id: str, config: dict[str, Any]
+    *, di: FlowsDi, resource_id: str, config: dict[str, Any]
 ) -> None:
-    await container.resource_repository.set(
+    await ResourceDefinition.set(
         ResourceDefinition(
             resource_id=resource_id,
             type=ResourceType.LLM_CONTEXT,

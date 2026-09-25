@@ -7,14 +7,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
-from core.tracing.models import TraceSpanRecord
+from core.tracing.models import Span
 from core.types import JsonObject, require_json_object
 
-TraceTreeInput = TraceSpanRecord | JsonObject
+TraceTreeInput = Span | JsonObject
 
 
 def _span_tree_payload(span: TraceTreeInput) -> JsonObject:
-    if isinstance(span, TraceSpanRecord):
+    if isinstance(span, Span):
         return span.to_json_object()
     return span
 

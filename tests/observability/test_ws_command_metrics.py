@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.context import reset_context, set_context
+from core.di import ServiceDi
 from core.events.contract import PlatformEvent
 from core.logging.attributes import (
     LOG_WS_COMMAND,
@@ -34,8 +35,9 @@ _TEST_COMMAND = "test/observability/ping_requested"
 async def _observability_ping_handler(
     payload: JsonObject,
     user: User,
+    di: ServiceDi,
 ) -> JsonObject:
-    _ = payload, user
+    _ = payload, user, di
     return {"ok": True}
 
 
@@ -79,7 +81,7 @@ async def test_ws_command_finished_emitted_for_successful_command(
     )
     request = SimpleNamespace(
         app=SimpleNamespace(
-            state=SimpleNamespace(container=object(), settings=object()),
+            state=SimpleNamespace(di=object(), settings=object()),
         )
     )
     try:

@@ -1,400 +1,93 @@
 ---
-description: "Voice gateway (apps/voice, порт 8015) и единый канон провайдеров речи STT/TTS/VAD: voice_resolver, SpeechOverride, company_voice_providers (только stt/tts), real-time pipeline, batch-транскрипция, биллинг"
+description: "Voice — голосовой шлюз apps/voice и канон клиентов речи STT/TTS/VAD: voice_resolver, SpeechOverride, company_voice_providers, произношение TTS, WS-сессия и batch. Читать при правке речи"
+globs:
+  - "apps/voice/**"
+  - "core/voice/**"
+  - "core/clients/voice_resolver.py"
+  - "core/clients/speech_override.py"
+  - "core/clients/tts_pronunciation/**"
+  - "core/models/voice_models.py"
+  - "core/frontend/static/lib/voice/**"
 alwaysApply: false
 ---
-# Voice Gateway и Speech Providers
 
-Сервис `apps/voice` (порт **8015**) — акустический шлюз: real-time голос для AI-агентов и batch-транскрипция. Доменно нейтрален: только сигналы и аудио, без бизнес-логики клиентов.
+# Voice
 
-**Платформенный инвариант:** любой код, которому нужен STT/TTS/VAD-клиент, получает его **только** через `core.clients.voice_resolver`. Прямые импорты реализаций (`LitserveSTTClient`, `CloudRuTTSClient`, `SileroVADProvider`, …) вне `core/clients/**` запрещены — `scripts/check_voice_resolver_usage.py` (`make check-voice-canon`).
+Сервис `voice` (порт 8015, база `platform_shared`) — доменно-нейтральный акустический шлюз: real-time WS-сессия (VAD, STT, TTS, barge-in) и batch HTTP. LLM в шлюзе нет: распознанную реплику в A2A отправляет клиент, текст ответа приходит в сессию командой `speak`. Клиенты речи для всей платформы создаёт `voice_resolver` (`core/clients/voice_resolver.py`). Не владеет: голосом `<platform-flow-ui>` → `flow_ui.mdc`; тарификацией речи → `billing.mdc`; выбором LLM и границей AI-рантайма → `ai_models.mdc`; моделями LitServe → `infrastructure.mdc`.
 
-## Сценарии и эндпоинты
+## Модель
 
-| Сценарий | Транспорт | Эндпоинт |
-|---|---|---|
-| Real-time голос AI | WebSocket | `/voice/api/ws/session/{session_id}?company_id=...` |
-| Batch Play (кнопка в чате) | HTTP POST | `/voice/api/v1/synthesize` (тело — один корректный WAV после полного синтеза, см. ниже) |
-| Batch-транскрипция | HTTP POST | `/voice/api/v1/transcribe` (multipart, `file`) |
-| Статус провайдеров | HTTP GET | `/voice/health/providers` |
+- `SpeechOverride` (`core/clients/speech_override.py`, `extra="forbid"`) — per-call настройка: `provider`, `model`, `voice`, `language` (BCP-47), `sample_rate`, `threshold` (VAD), `response_format`, `timeout_s`, `pronunciation_rules`, `pronunciation_replace`.
+- `CompanyVoiceProvider` (`core/models/voice_models.py`), таблица `company_voice_providers`, PK `company_voice_provider_id` = `{company_id}:{kind}`, уникальность `(company_id, kind)`: `kind` ∈ `stt` | `tts`, `provider`, `model`, `voice`, `language`, `sample_rate`, `threshold`, `response_format`, `secrets` (JSONB, в JSON не отдаётся). Поле типа — `kind`, не `type`.
+- `PronunciationRule` (`core/clients/tts_pronunciation/models.py`), таблица `pronunciation_rules`, PK `pronunciation_rule_id`: `company_id` (`null` — правило платформы), `kind` ∈ `alias` | `regex` | `stress`, `pattern`, `replacement`, `language`, `providers`, `voices`, `enabled`. Одна модель для строки БД, API и per-call правила.
+- Базовые клиенты — `BaseSTTClient`, `BaseTTSClient`, `BaseVADClient` (`core/clients/stt_client.py`, `core/clients/tts_client.py`, `core/clients/vad_client.py`); реализации провайдеров и `*ClientFactory` живут только в `core/clients/**`.
+- Каталог провайдеров, моделей, языков и голосов — `VoiceProvidersCatalogDTO` (`core/models/voice_providers_catalog.py`, константы — `core/clients/speech_provider_catalog.py`).
+- Deployment-default — `settings.voice` (`SpeechProvidersConfig`, `core/config/models.py`, ENV `VOICE__{STT,TTS,VAD}__*`).
+- Сессия — `VoiceSession` (`apps/voice/services/voice_session.py`) с очередями воркеров; `VoiceDi.session_providers` — `VoiceSessionProviders` (`apps/voice/services/session_providers.py`): deployment-default и фабрики потоковых VAD и STT на сессию.
 
-**HTTP Play (`/voice/api/v1/synthesize`):** потоковый TTS внутри режет текст на фразы и каждая даёт отдельный WAV; тело ответа склеивается в **один** RIFF (PCM конкатенация через `core.files.media.wav_merge`), иначе `<audio>` в браузере воспроизводит только первую фразу. Ответ с `200` не может иметь пустое тело — при нуле байт аудио — `502` и лог `voice.synthesize.empty_audio_body` (корреляция: `voice.synthesize.started` / `voice.synthesize.completed`, заголовок `X-Voice-Provider`). Для не-WAV MIME чанки провайдера пробрасываются последовательно без склейки.
+## Инварианты
 
-**Локальный dev (`make app`):** SPA и API часто на одном host (например `*.lvh.me:8001`), а процесс voice слушает отдельный порт (**8015**). Путь `{origin}/voice/...` должен проксироваться на voice; иначе Play и WS могут отдавать не тот сервис или пустые ответы. Настройка origin: meta `platform-voice-origin` и `voice_service_url` в сборке flows UI.
+### Клиенты речи
 
-**Chromium `net::ERR_NETWORK_IO_SUSPENDED` на `POST /voice/api/v1/synthesize`:** это приостановка сети браузером (фоновая вкладка, сон Макбука, энергосбережение), а не JSON-ошибка voice. В логах voice при этом WS-сессия может продолжать принимать PCM (`ws_receiver`) — это нормально. В логах `voice.speak_worker.synthesis_failed` с `httpcore.ReadTimeout` — голосовой шлюз ждал ответ от provider_litserve дольше `voice.tts.litserve.timeout_s` (и аналогично для STT/VAD в своих блоках); дефолтная модель Silero TTS прогревается при старте воркера TTS в litserve (`tts_litapi.worker_warmup`), но первый запрос к другому воркеру или долгий синтез на CPU всё ещё могут требовать большего таймаута — увеличьте `VOICE__TTS__LITSERVE__TIMEOUT_S`.
+- Реализации STT/TTS/VAD и их фабрики импортируются только внутри `core/clients/**`; клиента создаёт `voice_resolver` (`get_*_client`, `get_*_streamer`).
+- Код вне `core/clients/**` получает клиента через обёртки `core.ai.runtime` (`create_voice_*`, `transcribe_audio_bytes`, `synthesize_speech_audio`), которые делегируют в `voice_resolver`; сессия voice — через `VoiceSessionProviders` и `create_voice_tts_streamer`. `[без гейта]`
+- `company_id` обязателен в каждом вызове; системный вызов без компании — `system`; пустое обязательное поле провайдера (ключ API) — `ValueError` при создании клиента. `[без гейта]`
+- Резолв STT и TTS по полю: `SpeechOverride` → `company_voice_providers` → `settings.voice`; LitServe без `model` получает `provider_litserve.infra.<kind>_default_api_model_id`, TTS LitServe с `language` — модель по `synthesis_locale`. VAD — только `SpeechOverride` и `settings.voice.vad`, per-company VAD нет.
+- Профиль речи flow и ветки flows подмешивает до вызова (`merge_explicit_over_flow_speech_layer`, `apps/flows/src/services/flow_speech_resolve.py`): явные поля вызова побеждают, итог приходит тем же `override`. `[без гейта]`
+- `SpeechOverride` живёт в request scope (HTTP-хендлер, WS control-frame, вызов tool); долгоживущее правило компании — строка `company_voice_providers`. `[без гейта]`
+- Кэш `company_voice_providers` и правил произношения — in-process TTL только в `voice_resolver`; запись провайдера или правила сбрасывает его (`invalidate_company_overrides_cache`, `invalidate_platform_pronunciation_cache`). `[без гейта]`
+- REST провайдеров компании принимает `kind` только `stt` | `tts`; `secrets` — allowlist ключей провайдера (`allowed_secret_keys`, `apps/voice/api/voice_providers_catalog_helpers.py`), наружу — только `secrets_meta`, PUT — merge-patch; `model: null` — дефолт резолвера, неизвестная модель — 400. Чтение — FGA `company#can_view`, запись — `require_company_admin`.
 
-### Speakable и авто-TTS из A2A
+### Произношение
 
-Whitelist имён артефактов для озвучивания — `apps/flows/src/streaming/speakable.py` (зеркало `core/frontend/static/lib/voice/speakable.js`): `response`, `operator_reply` (артефакт `reasoning` в чате есть, в TTS не идёт). Пустое `artifact.name` при наличии text part трактуется как потоковый `response`. Negative override: `artifact.metadata.speak === false`. Паритет whitelist — `make check-speakable-parity` (`scripts/check_speakable_parity.py`).
+- Текст TTS проходит одну точку препроцесса — `PronunciationAwareTTSClient.synthesize` (`core/clients/tts_client.py`), его собирает `get_tts_client` для всех провайдеров.
+- Каскад правил: платформа (`company_id=null`) → компания → `SpeechOverride.pronunciation_rules`; `pronunciation_replace=true` заменяет платформенные и компанейские правила; `stress` у провайдера без ударений игнорируется (`PROVIDER_CAPABILITIES`, `core/clients/tts_pronunciation/models.py`).
+- Текст перед TTS очищает `sanitize_text_for_speech_backend` (`core/utils/text_sanitize.py`) во всех batch-клиентах и на HTTP-границе; чанк, пустой после очистки, не синтезируется. `[без гейта]`
+- Платформенные правила сидирует старт `frontend` при `voice.tts.pronunciation_seed_enabled`. `[без гейта]`
 
-**Interrupt / `TASK_STATE_INPUT_REQUIRED`:** вопрос пользователю из `ask_user` и аналогичные прерывания часто приходят только в финальном `TaskStatusUpdateEvent` (`status.message.parts`), без артефакта `response`. Клиент озвучивает такой текст в `a2a-result-tts.js` (`extractSpeakableTextFromFinalStatusUpdate`), если `isA2aInterruptedState(status.state)` (wire `TASK_STATE_INPUT_REQUIRED` / `TASK_STATE_AUTH_REQUIRED`) или в кадре есть `metadata.platform_interrupt`; затем по-прежнему вызывается `endUtterance`.
+### Сессия
 
-**Кто вызывает WS `speak` при ответе ассистента:** не `VoiceAgentBridge`. После применения каждого A2A frame universal Flow UI voice coordinator вызывает `feedStreamTtsFromA2aResult` (`core/frontend/static/lib/flow-ui/voice/`) одинаково для text Submit и релея голосового `SendStreamingMessage` во всех surface contexts. TTS получает только speakable Parts после projection, не renderer DOM. Регистрация цели: `setStreamTtsTarget(mediaSession, readTtsOutputEnabled)` после успешного `connect`/`bridge.start()` или отдельного tts-only `VoiceMediaSession` (`autoRecord:false`). Сброс — `clearStreamTtsTarget` до dispose.
+- WS `/voice/api/ws/session/{session_id}?company_id=…` открывается при FGA `can_view` на компанию и `company_id`, совпадающем с токеном; первый кадр сервера — `media_config`: формат downlink TTS и обязательный `uplink` — PCM s16le 16 kHz mono бинарными кадрами по 20 ms.
+- Кадры клиента — `config`, `speak`, `end_of_utterance`, `stop_playback`, `end_recording`; `end_recording` сбрасывает открытый сегмент STT и отвечает `finalize_done` до закрытия сокета. Кадры сервера — `media_config`, `transcript` (`final`, `interrupted`), `vad`, `tts_state`, `ping`, `error`, `finalize_done` и бинарный PCM.
+- Конвейер: `ws_receiver` → VAD → `stt_worker` → `transcript`; `speak` → `speak_worker` (`VoiceChunker`, `core/clients/voice_chunker.py`, потоковый TTS) → PCM. Partial — `peek_transcript` без сброса буфера (`final=false`), финал — flush после паузы.
+- Barge-in и `stop_playback` исполняет одна политика `execute_voice_transport_interrupt` (`apps/voice/services/voice_transport_interrupt.py`): отмена воспроизведения, очистка очереди синтеза, сброс STT и VAD; при barge-in до сброса — `peek_transcript`, непустой текст уходит `transcript` с `final=true` и `interrupted=true`.
+- Потоковая обёртка batch-клиентов — только `apps/voice/providers/streaming_adapters.py`; окно `StreamingVADProvider` не меньше 40 ms, между пересчётами окна — последнее решение. `[без гейта]`
+- Шлюз не знает бизнес-логики клиентов: только сигналы и аудио. `[без гейта]`
 
-`VoiceAgentBridge` по-прежнему поднимает A2A `SendStreamingMessage` после STT и ретранслирует кадры в UI через `onA2aStreamEvent`, но **не** вызывает `speak` / `endUtterance`.
+### Batch и потребители
 
-**`a2aSettled` и второй голосовой ход:** в `VoiceAgentBridge` на каждый `_sendUserMessage` инкрементируется `_sendSeq` (после `_abortCurrent`); `finally` завершает только тот же seq. Universal Flow UI voice coordinator синхронно supersede/finalize предыдущий voice Task перед следующим user turn; новый голосовой ход при активном несовместимом text Task получает typed busy rejection.
+- `POST /voice/api/v1/transcribe` нормализует контейнер в WAV PCM s16le mono 16 kHz (`core/files/media/ffmpeg_wav.py`), битый контейнер — 422; ответ — `TranscribeResponse(text, provider)`. `[без гейта]`
+- `POST /voice/api/v1/synthesize` для WAV отдаёт один RIFF (`core/files/media/wav_merge.py`); ноль байт аудио — 502 и лог `voice.synthesize.empty_audio_body`. `[без гейта]`
+- UI-диктовка — только `<platform-voice-dictation>` → `VoiceMediaSession` в режиме STT-only (`core/frontend/static/lib/voice/voice-media-session.js`) по WS сессии; batch `transcribe` — для файлов, capabilities и Sync. `[без гейта]`
+- Озвучиваются только артефакты из `SPEAKABLE_ARTIFACT_NAMES` (`apps/flows/src/streaming/speakable.py`, зеркало `core/frontend/static/lib/voice/speakable.js`); `artifact.metadata.speak === false` отключает озвучку; оркестрация голоса Flow UI → `flow_ui.mdc § Инварианты`.
+- Capabilities `voice.transcribe_audio` и `voice.synthesize_speech` (`apps/capability_gateway/services/registry.py`) и авто-STT аудио-вложений flows (`apps/flows/src/files/audio_input.py`) идут через `core.ai.runtime`. `[без гейта]`
+- Использование речи тарифицируют spans `record_stt_usage_span` и `record_tts_usage_span` (`core/billing/speech_usage.py`) → `billing.mdc § Канон`.
 
-**Client barge-in и `tts_state`:** условие «ассистент ещё говорит» в `VoiceAgentBridge._isClientBargeInScope` включает не только `_ttsActive` (JSON `tts_state`) и живой A2A-fetch, но и `VoiceMediaSession.hasScheduledTtsPlayback()` — локальная очередь Web Audio после `tts_state: stopped` на сервере может ещё воспроизводить принятые PCM.
+## Контракты
 
-**`<platform-flow-ui>` и voice query:** при наличии `flowId` координатор (`flow-ui/voice/coordinator.js`) берёт параметры сессии из control-plane `GET /flows/api/v1/flows/{flow_id}/voice-session-query?branch_id=` (`fetchFlowVoiceSessionQueryDict`); без `flowId` (embed по `embed_id`) query пустой. Невалидная строка из `normalizeVoiceLocaleForWs` не добавляет overlay.
-
-**Неожиданное закрытие WS в embed:** если `VoiceMediaSession` шлёт `closed` не после явного `_stopVoice` / `disconnectedCallback` (`_voiceDisconnectExpected`), через ~500 ms вызывается `_startVoice()` при открытой панели и полном duplex — один реконнект без цикла при совпадении условий.
-
-**Захват микрофона после TTS:** `VoiceMediaSession._nudgeCaptureResumeIfRecording()` — при входящем `tts_state: stopped` и после клиентского `stopPlayback()` (resume `AudioContext` захвата, если запись активна и контекст не `running`).
-
-**Real-time pipeline:** WS клиент → `audio_receiver` → VAD → STT → `text_in_queue` → `llm_bridge` → `synthesis_queue` → TTS → `audio_sender` → WS клиент. Один runner LLM на сессию, LLM создаётся через `core.ai.runtime` и вызывается streaming-first, `core.clients.voice_chunker.VoiceChunker` режет ответ на синтаксические границы; при сбросе буфера (`flush`) хвост режется по `chunk_max_chars`, чтобы один вызов TTS не получал текст «на всю простыню» (лимит Silero и др.).
-
-**Язык UI / STT и TTS (LitServe Silero v5):** query WebSocket `language=…` (на flows из локали UI через `createFlowVoiceSession`) передаётся в tier-резолв и в **STT**, и в **TTS** (`SpeechOverride.language`). Для провайдера `litserve` в `get_tts_client` при совпадении с полем `synthesis_locale` (ISO 639-1, две буквы) в записи `provider_litserve.infra.tts_models` выбирается соответствующий `api_model_id` вместо дефолтной модели. Конфиг записи: `silero_bundle` (идентификатор бандла v5, например `v5_5_ru`), `silero_language` (`ru`), голос по умолчанию в поле `voice` (имя для `apply_tts`, например `xenia`), `sample_rate` из допустимых для модели (8000 / 24000 / 48000). По умолчанию **`tts_input_steps`** включают `silero_ru_latin_to_cyrillic` (однобуквенная транслитерация латинских фрагментов, таблица как у `slugify`, без диграфов `sch`). Если после нормализации и шагов текст пуст или для `ru` нет кириллицы (например только пунктуация/цифры), **LitServe отдаёт короткую тишину (WAV/PCM)** и `200`, не `422`. `BatchBackedTTSStreamer` не вызывает HTTP для чанков, пустых после `sanitize_text_for_speech_backend`. Пустой `tts_input_steps` оставляет латиницу без транслита — тогда срабатывает та же тишина, если кириллицы нет. Новые шаги — реестр `core.utils.tts_input_steps`. Голоса — только имена Silero (`aidar`, `baya`, …), не OpenAI (`alloy` и т.п.).
-
-**Санитизация текста перед TTS:** канон — `sanitize_text_for_speech_backend` во всех batch TTS-клиентах (`LitserveTTSClient`, `CloudRuTTSClient`, `MockTTSClient`, …) — для поля `input` и для имени голоса в HTTP — и на границе HTTP в `parse_tts_body` — плюс именованные шаги `tts_input_steps` модели в `LocalTTSEngine.synthesize` после Unicode-нормализации (NFKC, lone surrogate, категория Cc кроме `\n`/`\r`/`\t`, категория Cf). `BatchBackedTTSStreamer` перед вызовом `synthesize` отбрасывает чанки, пустые после той же санитизации. Нужна для стабильного UTF-8 во входах Silero и облачных API.
-
-**TTS HTTP-ответ:** `TTSLitAPI.encode_response` возвращает ``starlette.responses.Response`` с бинарным телом и ``media_type`` по сигнатуре (WAV/MP3/pcm), а не сырые ``bytes``. Иначе при монтировании LitServe в общий FastAPI (`_merge_litserver_v1_routes`) ответ с аннотацией ``-> bytes`` проходит через JSON-serialize и даёт ``UnicodeDecodeError`` на WAV уже после успешного синтеза.
-
-**`StreamingVADProvider` (`apps/voice/providers/streaming_adapters.py`):** окно `window_ms` по умолчанию **40 мс** (=2 кадра по 20 мс). Минимум для silero — 32 мс / 512 сэмплов на 16 kHz, поэтому окно меньше 40 мс задавать нельзя. Между пересчётами окна провайдер возвращает **последнее решение** (`_last_decision`), а не `False`: иначе `stt_worker` пропускает большую часть речевых фреймов в STT-буфер и финальный сегмент рвётся в клочья (Whisper на огрызках возвращает либо пустоту, либо галлюцинации вроде «Спасибо.»). `reset_state()` обнуляет и буфер, и `_last_decision`.
-
-**Barge-in** (`apps/voice/services/voice_barge_in.py`): при `is_speech=True` во время `tts_active=True` — `audio_sender.cancel_playback()` + `synthesis_queue.clear()` + `llm_bridge.cancel_active()` + `stt_provider.reset()` + `vad_provider.reset_state()`. Сброс STT/VAD обязателен: PCM, накопленный к моменту прерывания, — это аудио уходящего ответа TTS, и без сброса финальный `flush_buffer` транскрибирует «свой собственный» голос как пользовательский запрос. **Единая транспортная политика** — `apps/voice/services/voice_transport_interrupt.py`: и barge-in, и команда WS `stop_playback` вызывают `execute_voice_transport_interrupt` (очереди TTS/гейтинг `tts_active`; при barge-in до `reset` — один `peek_transcript`, при непустом тексте клиенту `transcript` с `final=true` и `interrupted=true` без `flush_buffer`).
-
-**Partial transcripts (chunked-batch):** при открытом VAD-окне `stt_worker` каждые `voice.stt.partial_min_speech_frames` 20 ms-фреймов вызывает `stt_provider.peek_transcript(min_buffer_bytes=...)` (batch-распознавание текущего PCM **без** сброса буфера) и шлёт клиенту `transcript final=False`. Финальный transcript после паузы — обычный `flush_buffer` + `final=True`. Native streaming STT (litserve / cloud_ru / Whisper) не используется, потому что провайдеры не отдают delta-токены. **`VoiceAgentBridge`** хранит последний `final=False` и при **`stop()`** (выключение микрофона в UI, пока финал не пришёл) отправляет этот текст в A2A как обычное сообщение пользователя (`SendStreamingMessage` + тот же `beforeA2aStream`, что и для финала). Если финальный транскрипт **уже** вызвал `SendStreamingMessage`, пустой `stop()` после `awaitRecordingFinalized` **не** отменяет этот fetch: иначе в чате уже есть пузырь пользователя (`beforeA2aStream`), а ответ модели пропадает.
-
-**`VoiceMediaSession` / UI:** перед закрытием WebSocket клиент шлёт текстовую команду ``{"type":"end_recording"}``; STT worker выполняет эквивалент «конца сегмента» (flush буфера без ожидания тишины по VAD). В ответ клиент получает ``{"type":"finalize_done"}``. Порядок в UI: ``await awaitRecordingFinalized`` (ожидание ``finalize_done``) **до** ``VoiceAgentBridge.stop()`` и закрытия сокета, иначе финальный транскрипт может не успеть быть разобран мостом. Путь ``disposeVoiceMediaThenBridge``.
-
-**Frontend uplink contract (`core/frontend/static/lib/voice/voice-media-session.js`):**
-- `getUserMedia` ужесточает constraints до `exact` (`echoCancellation`, `noiseSuppression`, `autoGainControl`, `channelCount=1`, `sampleRate ideal 16000`); fallback к `ideal`, затем к голому `audio: true`.
-- `AudioContext` создаётся с `sampleRate: 16000`; если браузер отказал — fallback к нативному `sampleRate` устройства + ресемплер.
-- Перед децимацией к каждому батчу применяется FIR low-pass (Hamming-windowed sinc, 31 tap, cutoff 7.5 kHz) с непрерывной историей между чанками — иначе после downsample 48→16 kHz появляются alias-шумы, искажающие распознавание.
-- Outbound PCM нарезается на кадры ровно по 320 сэмплов = 640 байт = 20 ms (`VOICE_OUTBOUND_FRAME_SAMPLES`), что совпадает с серверным `_FRAME_DURATION_S = 0.02`.
-
-## Кадр `media_config`
-
-Сразу после `accept` сервер шлёт `{"type":"media_config", ...}`:
-- `mime`, `sample_rate`, `channels` — формат **исходящего с сервера** аудио (TTS), напр. `audio/wav` 24000.
-- `uplink` — обязательное описание потока **на сервер**: PCM **s16le, 16000 Hz, mono** (бинарные WS-фреймы). Пока клиент не шлёт такие кадры — `transcript`/`vad` нет. Сервер периодически шлёт `ping`.
-
-## Структура `apps/voice/`
-
-```
-api/        health, session (WS), transcribe (HTTP)
-providers/  streaming_adapters.py — единственная разрешённая обёртка batch-клиентов в стрим
-services/   voice_session, voice_barge_in, voice_chunker, llm_bridge
-workers/    audio_receiver, stt_worker, tts_worker, audio_sender
-config.py, container.py, dependencies.py, main.py
-```
-
-Введение новых streaming-провайдеров в `apps/voice/providers/` помимо `streaming_adapters.py` — запрещено.
-
-## `voice_resolver` (`core/clients/voice_resolver.py`)
-
-```python
-async def get_stt_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseSTTClient: ...
-async def get_tts_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseTTSClient: ...
-async def get_vad_client(*, company_id: str, override: SpeechOverride | None = None) -> BaseVADClient: ...
-
-async def resolve_stt_settings(*, company_id: str, override: SpeechOverride | None = None) -> ResolvedSttSettings: ...
-
-def invalidate_company_overrides_cache(company_id: str) -> None: ...
-```
-
-`resolve_stt_settings` возвращает финальные `provider`, `model`, `language` без создания клиента — нужно `apps/voice/container.py`, чтобы `StreamingSTTProvider` использовал тот же `language`, что и батч-клиент (избежать рассинхрона `cfg.default_language` vs override). При создании клиентов `voice_resolver` пишет `info`-лог `voice_resolver.{stt,tts,vad}_resolved` с полями `provider`, `model`, `language`, `source_provider`, `source_language` (`override`/`company`/`settings`). Для **VAD** источник `company` не используется — только `override` и `settings`.
-
-- `company_id` обязателен (Zero-Guess). Системный бот без company — `system`.
-- TTL-кэш записей `company_voice_providers` (in-process, локальная инвалидация) — только для kind `stt` и `tts`.
-- Создание клиента — внутри функции; кэш `(company_id, kind, provider, model)` — деталь реализации.
-
-### Профиль flow и аргумент `override` в `voice_resolver`
-
-`voice_resolver` по-прежнему получает **один** `SpeechOverride` и дальше **три** уровня: `override` → `company_voice_providers` (stt/tts) → `settings.voice`. Слой **профиля речи flow/ветки** не реализован внутри `voice_resolver`: код flows перед вызовом `get_*_client` подмешивает его через `merge_explicit_over_flow_speech_layer` (явные непустые поля вызова/tool побеждают, остальное заполняется из `Context.metadata["platform_flow_speech_layers"]`, см. `apps/flows/src/services/flow_speech_resolve.py`). Итог передаётся как этот же аргумент `override`.
-
-### Три уровня внутри `voice_resolver` для STT/TTS
-
-```
-SpeechOverride (аргумент; уже может включать поля профиля flow) → company_voice_providers (БД, kind=stt|tts) → settings.voice
-```
-
-### VAD
-
-Только **`SpeechOverride` (per-call)** и **`settings.voice.vad`**. Записи `company_voice_providers` с `kind=vad` не читаются; API/UI для per-company VAD отключены; миграция `20260504_0011_drop_company_vad_voice_providers` удаляет старые строки `vad`.
-
-Если на уровне STT/TTS нет значения — спуск на следующий tier. Pydantic-дефолт — на самом нижнем. Пустое обязательное поле провайдера (`api_key` Yandex/Sber) — `ValueError` на инициализации клиента, не «тихо потом».
-
-## `SpeechOverride` (`core/clients/speech_override.py`)
-
-Pydantic `extra="forbid"`, **request-scope** (создаётся в HTTP-хендлере или WS-control-frame). Глобальный/per-process хранение запрещено (singleton, env-var, модульная переменная). Для долгоживущих правил по STT/TTS — `company_voice_providers` (kind `stt` / `tts`).
-
-| Поле | Тип |
-|---|---|
-| `provider` | `Literal["litserve","cloud_ru","yandex","sber","silero_local","mock"] \| None` |
-| `model` | `str \| None` (`gigaam-v3-rnnt-ru`, `silero-tts-v5-5-ru`, …) |
-| `voice` | `str \| None` |
-| `language` | `str \| None` (BCP-47) |
-| `sample_rate` | `int \| None` |
-| `threshold` | `float \| None` (VAD 0..1) |
-| `response_format` | `Literal["wav","mp3","ogg","pcm","lpcm"] \| None` |
-| `timeout_s` | `float \| None` |
-
-## `CompanyVoiceProvider` (БД)
-
-Таблица `company_voice_providers` (`core/db/models/platform.py`, миграции `20260503_0009_company_voice_providers`, `20260504_0010_company_voice_providers_secrets`). Уникальный ключ `(company_id, kind)`. Репозиторий `core/db/repositories/company_voice_provider_repository.py`, DI `@lazy company_voice_provider_repository`.
-
-Колонки: `company_id`, `kind` (`stt` | `tts`; значение `vad` в legacy-строках игнорируется резолвером и API), `provider`, `model`, плюс `voice`/`language`/`sample_rate`/`threshold`/`response_format` как в `SpeechOverride`, `secrets: JSONB?` (per-company, merge через `model_copy` поверх backend-конфига).
-
-**Ключи `secrets`** (allowlist из `apps/voice/api/voice_providers_catalog_helpers.py:allowed_secret_keys`):
-
-| provider | ключи |
-|---|---|
-| `cloud_ru` | `api_key` |
-| `yandex` | `api_key`, `folder_id` |
-| `sber` | `client_id`, `client_secret`, `scope` |
-
-`GET .../voice-providers` возвращает только `secrets_meta` (флаги `*_set`), сырые секреты не отдаёт. `PUT` принимает merge-patch (опускание ключа = «не менять»).
-
-**Каталог для UI** (`VoiceProvidersCatalogDTO`, `op_voice_providers_catalog`): `GET /voice/api/v1/voice-providers/catalog` и `GET /flows/api/v1/voice-providers/catalog` — тонкий REST одного `op_*`. Flows UI — `flows/voice_providers_catalog_load` (`transport: 'ws'`). Console — `voice/voice_providers_catalog_load` (HTTP: voice без command-router). Помимо провайдеров и моделей отдаёт allowlists языков (`speech_language_ids`), частот (`tts_sample_rate_ids`, `litserve_silero_tts_sample_rate_ids`, `vad_sample_rate_ids`), VAD-провайдеров (`vad_provider_ids`), голосов TTS по провайдеру (`tts_litserve_voice_hints[].voice_ids` из `SILERO_V5_RU_SPEAKERS_BY_BUNDLE`, плюс `cloud_ru_tts_voice_ids` / `yandex_tts_voice_ids` / `sber_tts_voice_ids`). Источник констант — `core/clients/speech_provider_catalog.py`; модели и `synthesis_locale` LitServe — из `provider_litserve.infra` при сборке DTO (`core/models/voice_providers_catalog.py`).
-
-## Базовые клиенты
-
-`core/clients/{stt,tts,vad}_client.py`:
-
-- `BaseSTTClient.transcribe_audio(audio: bytes, mime: str, *, language: str | None) -> STTResult`.
-- `BaseTTSClient.synthesize(text, *, voice, language, response_format, sample_rate) -> TTSResult`.
-- `BaseVADClient.detect_segments(pcm, *, sample_rate, threshold) -> list[VADSegment]`.
-
-Реализации **только** в `core/clients/**`: `Litserve*`/`CloudRu*`/`Yandex*`/`Sber*`/`Mock*`/`LocalSilero*`.
-
-## Где можно / нельзя
-
-| Зона | `voice_resolver.get_*_client` | Прямой `LitserveSTTClient(...)` |
-|---|---|---|
-| `core/clients/**` | разрешён | разрешён (фабрика реализаций) |
-| `apps/voice/**` | **обязателен** | запрещён |
-| `apps/flows/**` | **обязателен** | запрещён |
-| `apps/sync/**` (вкл. `MediaTranscriber`) | **обязателен** | запрещён |
-| `apps/crm/**`, `apps/rag/**`, `apps/office/**` | **обязателен** | запрещён |
-| `core/files/media/**` | **обязателен** | запрещён |
-
-CI — `scripts/check_voice_resolver_usage.py`.
-
-## Использование
-
-```python
-from core.clients.voice_resolver import get_stt_client, get_tts_client, get_vad_client
-from core.clients.speech_override import SpeechOverride
-
-stt = await get_stt_client(company_id=company_id, override=SpeechOverride(provider="cloud_ru"))
-tts = await get_tts_client(company_id=company_id)
-vad = await get_vad_client(company_id=company_id)
-```
-
-Capabilities `voice.transcribe_audio` / `voice.synthesize_speech` для isolated code runners и `llm_node` проходят через `capability-gateway` (через `voice_resolver`). Авто-STT входящих audio-вложений (A2A/embed/чат) — `apps/flows/src/files/audio_input.py`.
-
-## Batch-транскрипция
-
-`POST /voice/api/v1/transcribe` (multipart `file`):
-- Перед STT контейнер нормализуется в WAV PCM s16le mono 16 kHz через ffmpeg (`core/files/media/ffmpeg_wav.py`). Неизвестный/битый контейнер → **422**, не «успех» с пустым текстом.
-- `voice_resolver.get_stt_client(company_id=ctx.company.company_id)` → `stt.transcribe_audio(...)`.
-- Длительность через `probe_audio_duration_seconds_from_upload` (ffprobe) по нормализованному WAV. Если недоступна — usage пропускается с предупреждением `voice.transcribe.stt_usage_skipped` (запись расходов не пишется).
-- Ответ: `TranscribeResponse(text: str, provider: str)`.
-
-**UI dictation (браузер):** единственный канон — `<platform-voice-dictation>` → `VoiceMediaSession` STT-only (PCM 16 kHz → WS `/voice/api/ws/session/{id}` → серверный VAD → `transcript` `final=true` → событие `transcribed`). Без `VoiceAgentBridge` / A2A / TTS. PME встраивает компонент по умолчанию (`enableVoiceDictation`). Сервисные прокси (`/crm/api/v1/entities/voice-input` и аналоги) и локальные MediaRecorder+HTTP-op в `apps/**` запрещены. `POST /voice/api/v1/transcribe` — только файл/batch (sync, capabilities), не UI-кнопка «Диктовать».
-
-Любой **backend**-сервис кроме `apps/sync` обращается **только через** `ServiceClient("voice", "/voice/api/v1/transcribe")`. Прямой вызов `MediaTranscriber` из HTTP-хендлеров вне `sync` — запрещён.
-
-## Биллинг
-
-Категории прайса (`conf.json` → `platform.billing.resource_base_prices`):
-
-- `stt:<provider>` — за единицу `audio_seconds` (округление вверх).
-- `tts:<provider>` — за 1 символ (`char_count`).
-- `vad:<provider>` — обычно `0.0`.
-
-`core/billing/speech_usage.py`: `record_stt_usage_span(user, company, provider, audio_seconds, cost_origin, extra_attributes=None)` / `record_tts_usage_span(..., char_count, cost_origin, ...)` — billing spans `stt.{provider}` / `tts.{provider}` с `pending_settlement` (`UsageType.TOOL_CALL`, `resource_name` per-provider из атрибута span, правила `stt_audio_seconds` / `tts_characters`); прямой `record_usage` запрещён. Вызовы: `apps/voice/api/transcribe.py`, `synthesize.py`, `apps/flows/src/services/platform_facades.py`, `apps/capability_gateway/services/registry.py`. Real-time длительность сессии — spans `platform_tracing` (`category=voice`, `resource_name="session_minute"`).
-
-## `<platform-flow-ui>`: голос в браузере
-
-Полный голос AI (эфир) в `<platform-flow-ui>` включается при `FlowInterfaceResponse.capabilities.voice` (сервер: `FlowUIConversationSettings.allow_voice` ∧ не share-viewer ∧ embed `look.voice_enabled`) и готовности инфраструктуры (`flowUIVoiceSessionReady`: `company-id`, voice origin из `voice-base-url` или flows `base-url`, `flow-id` либо `embed-id`). Кнопка микрофона — в composer блока `conversation` (вне HITL) и в блоке `voice_input` (`FlowUIVoiceInput`: текстовое поле `field` + toggle эфира). `<platform-voice-dictation>` в Flow UI не используется: реплика пользователя и ответ идут через `VoiceAgentBridge` тем же A2A-потоком (`onA2aStreamEvent` → `applyA2AFrame`). Без capability кнопка не рендерится / `voice_input` остаётся disabled control.
-
-| Условие | Кнопка микрофона | Технология |
-|---|---|---|
-| `capabilities.voice`, готова инфраструктура voice + A2A | переключение эфира (`toggleVoiceSession`) | `VoiceMediaSession` + `VoiceAgentBridge`, WS `/voice/api/ws/session/{id}` |
-| `capabilities.voice`, инфраструктура неполная | кнопка disabled | — |
-| `allow_voice=false` в документе или нет capability | нет mic | — |
-
-Потоковая озвучка ответа (`feedStreamTtsFromA2aResult` → WS `speak`): при видимой surface и включённом pref `platform:voice:tts_output_enabled` universal runtime держит tts-only `VoiceMediaSession`; duplex переносит target на свою сессию. Команды буферизуются до `OPEN`, длинный text режется по `VOICE_WS_SPEAK_TEXT_CHUNK_MAX`. Artifact projection сохраняет wire order и не озвучивает data/raw/url или hidden reasoning без policy.
-
-**Barge-in:** новый ход (`text`/`ui-action`)/voice turn и cancel обязаны вызывать `stopStreamTtsPlayback()` до A2A action, чтобы прервать stream и per-component audio. Единственная orchestration point — `flow-ui/voice/coordinator.js`; блоки не запускают второй transport.
-
-Stop action в Flow UI при active Task вызывает `stopStreamTtsPlayback()`, abort current SSE + standard `CancelTask` при известном `task_id`; для voice relay — `VoiceAgentBridge.userStopActiveTurn()`.
-
-Host не может расширить server allowlist атрибутом: `capabilities.voice` считает только сервер (`GET .../interface`).
-
-`VoiceMediaSession` uplink — **только** Web Audio: `MediaStream` → один зафиксированный при `startRecording` граф (`AudioWorklet voice-mic-capture` → `ScriptProcessorNode` → `AnalyserNode`+таймер). `MediaStreamTrackProcessor` не используется. Нет переключения тракта во время сессии — при неудаче графа сессия падает в ошибку. Флаг `_recording` до графа; интервал `~140 ms` + `onstatechange` → `resume()` при `suspended`. TTS binary downlink: очередь `_playbackQueue` — декод и смещение `_playbackCursor` строго по порядку WS-кадров; перед каждым `BufferSource.start` и при повторном использовании контекста — `await audioContext.resume()`, иначе после первого чанка Chromium снова держит playback-контекст в `suspended` и последующие фразы без звука (`primePlaybackFromUserGesture` — только первичный жест).
-
-Отладка: `?voice_debug=1` в URL, `sessionStorage.voice_debug=1`, `voice_debug=true` (логи `[voice-media]`, событие `diagnostic` на медиасессии).
-
-## Authorization
-
-Sole PDP — `AuthzService`. Session/gateway ACL: `company#can_view` для чтения overrides; mutate providers — `require_company_admin`. Нет roster JWT gate. Канон → **`authorization.mdc`**.
-
-## REST/UI per-company override
-
-REST: `apps/voice/api/company_voice_providers.py`:
-
-| Метод | Путь | Доступ |
-|---|---|---|
-| `GET` | `/voice/api/v1/voice-providers/catalog` | любой авторизованный; тот же `op_voice_providers_catalog`, что `/flows/api/v1/voice-providers/catalog` |
-| `GET` | `/voice/api/v1/companies/{company_id}/voice-providers` | FGA `company#can_view` |
-| `PUT` | `/voice/api/v1/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; `kind` только `stt` или `tts` |
-| `DELETE` | `/voice/api/v1/companies/{company_id}/voice-providers/{kind}` | FGA `require_company_admin`; то же |
-
-После `PUT`/`DELETE` сервер **обязан** вызвать `invalidate_company_overrides_cache(company_id)` — иначе in-process кэш других подов держит старое до TTL.
-
-`PUT` принимает `model: null` для **любого** провайдера (включая `litserve`) — резолвер сам подставит default из `settings`/`provider_litserve.infra.<kind>_default_api_model_id`. Если `model` указан, валидируется по каталогу провайдера; неизвестная модель → `400`.
-
-UI: `apps/frontend/ui/pages/company-voice-providers/`, фабрики `frontend/company_voice_providers_*`, каталог `frontend/voice_providers_catalog_load`. В селекте «Model» для litserve есть опция «По умолчанию» (`value=""` → отправляется как `null`) и хинт `model_default_litserve`. i18n: секция `company_voice_providers_page` в `core/i18n/translations/{ru,en}/frontend.json`.
-
-## Конфигурация и Helm
-
-Per-process default — `settings.voice` (`SpeechProvidersConfig`), ENV-префикс `VOICE__{STT,TTS,VAD}__`. Helm маппит секреты в ENV подов `voice` и `flows` через `_helpers.tpl`: `VOICE__STT__YANDEX__API_KEY`, `VOICE__STT__SBER__CLIENT_*`, `VOICE__TTS__CLOUD_RU__API_KEY`, и т.д. (полная таблица — в `_helpers.tpl` чарта).
-
-Дополнительные поля:
-
-- `voice.stt.partial_transcripts_enabled: bool = True` — слать `transcript final=False` пока пользователь говорит.
-- `voice.stt.partial_min_speech_frames: int = 50` — минимум 20 ms-фреймов между двумя partial-вызовами (50 ≈ 1 s).
-- `voice.stt.partial_min_buffer_ms: int = 500` — минимальная длина PCM в буфере для запуска `peek_transcript`.
-- `voice.diagnostics.uplink_dump_dir: str | None = None` — dev-only директория для дампа сырого uplink PCM как WAV (`voice_uplink_<session>_<ts>.wav`). По умолчанию выкл.
-- `voice.diagnostics.uplink_dump_max_mb: int = 50` — лимит размера дампа.
-
-`voice` на `master`. Дефолтные `api_model_id` для litserve — Helm: `litserve.{stt,tts,vad}DefaultApiModelId` → ENV `PROVIDER_LITSERVE__INFRA__*_DEFAULT_API_MODEL_ID`.
-
-**LitServe `LitAPI` (`apps/provider_litserve/stt|tts|vad/api.py`):** в `decode_request` нужен параметр `request: Request` (`from fastapi import Request`). В этом же файле **нельзя** `from __future__ import annotations`: при отложенных аннотациях `inspect.signature` видит строку `'Request'`, LitServe не совпадает с классом `Request`, тело не парсится через `await request.json()`, в multiprocessing-queue попадает сырой ASGI-`Request` → pickle падает (`Can't get local object 'FastAPI.setup.<locals>.openapi'`), клиент видит **500**.
-
-Локальный STT **GigaAM** (`ai-sage/GigaAM-v3`, `trust_remote_code`): modeling на HF тянет импорты `hydra`, `omegaconf`, `pyannote` — в проекте это группа **`rag`** в `pyproject.toml` (`hydra-core`, `omegaconf`, `pyannote-audio`). Без `uv sync` с этой группой `provider_litserve` падает при первом `from_pretrained` с `ImportError` → **500** на `/v1/audio/transcriptions`.
-
-GigaAM short-form принимает дорожку **≤25 с** (`length > 25 * sr` → `ValueError: Too long wav file`). В `_GigaAMAdapter.transcribe` (`apps/provider_litserve/stt/engines.py`) длительность считают как `len(floats) / sample_rate`: ровно 25 с — один `model.transcribe`; длиннее — PCM окнами **24 с**, каждый кусок во временный WAV, склейка `" ".join` непустых кусков. `transcribe_longform` не вызывают: он тянет gated `pyannote/segmentation-3.0`. После смены адаптера на проде нужен GPU-образ: `make k8s-gpu-sync` + `roll_litserve=true`.
-
-Локальный TTS **Silero v5** (`silero` в группе `rag` в `pyproject.toml`): в `provider_litserve.infra.tts_models` задаются `silero_bundle` (например `v5_5_ru`), `silero_language` (`ru`), `voice` (голос для `apply_tts`), `sample_rate`, `hf_model_id` (каталог `snakers4/silero-models` для реестра), `api_model_id` (OpenAI-поле `model`). Русские модели v5 поддерживают автоударение и омографы (см. README snakers4/silero-models). В ``apps/provider_litserve/tts/engines.py`` перед каждым ``apply_tts`` текст режется на сегменты до 900 символов (сначала по последнему пробелу в окне, иначе жёстко), PCM16 сегментов склеивается в один WAV/PCM — длиннее ~1000 символов за один вызов Silero падает в TorchScript.
-
-**Silero в памяти:** при старте воркера TTS LitServe вызывается ``TTSLitAPI.setup()`` — в нём выполняется прогрев ``warmup_pipeline`` для ``tts_default_api_model_id`` (загрузка весов без синтеза речи). Ручных вызовов не требуется; в логах provider_litserve — ``tts_litapi.worker_warmup``.
-
-## Как добавить провайдера
-
-1. `core/config/models.py` — `<X>{STT,TTS,VAD}BackendConfig`, ключ в `*ProvidersConfig`, расширить `Literal[...]`.
-2. `core/clients/{stt,tts,vad}_client.py` — `<X>{STT,TTS,VAD}Client(Base*Client)`, без `||`/`??` фолбеков, конфиг — только из backend-config.
-3. `core/clients/voice_resolver.py` — ветка в `_build_*_client`.
-4. `conf.json` → `platform.billing.resource_base_prices.{stt,tts,vad}.<x>`.
-5. Helm: `_helpers.tpl` (secretKeyRef), `01-platform-secrets.yaml` (stringData), `values.yaml.platformSecrets`, `helm_platform_secrets_json.sh`, `.github/workflows/deploy.yml`, `deploy/github-actions-secrets-checklist.md`.
-6. UI: каталог моделей — `apps/voice/api/voice_providers_catalog.py`; ресурсы `core/frontend/static/lib/events/resources/voice-*.resource.js`; страница `company-voice-providers-page.js`.
-7. Тесты: `tests/clients/test_<x>_speech.py` (httpx_mock без monkeypatch), session-scoped fixture для тяжёлых моделей, `pytest.mark.timeout(15)`.
-
-## Тестирование
-
-- Фикстуры `voice_app` (sync), `voice_client` (async) в `tests/fixtures/clients.py` ставят `VOICE__{STT,TTS,VAD}__PROVIDER=mock`.
-- Реальная инфраструктура (Postgres/Redis/MinIO), `unique_id` для `company_id`/`user_id`/`file_id`.
-- Heavy-модели (Silero, GigaAM) — session-scoped в `tests/provider_litserve/conftest.py`, `pytest.mark.timeout(15)`.
-- Прогон: `uv run pytest tests/voice/ -v`; `uv run pytest tests/provider_litserve/ -v --confcutdir=tests/provider_litserve`.
-
-## Pronunciation Pipeline (TTS Text-Shaping)
-
-Перед вызовом провайдера текст проходит **единственную** общую точку препроцесса — `PronunciationAwareTTSClient.synthesize` в `core/clients/tts_client.py`. Собирается в `voice_resolver.get_tts_client` для всех провайдеров.
-
-### Стадии `TtsTextPipeline.transform`
-
-1. **SSML extract** (фича-флаг `voice.tts.pronunciation.ssml_subset_enabled`, выкл по умолчанию).
-2. **Нормализация** — числа, даты, валюты, аббревиатуры (`core/utils/text_normalizers/`).
-3. **Regex-правила** — precompiled `re.Pattern`, порядок из БД.
-4. **Alias + stress-правила** — Aho-Corasick, longest-match, word-boundary.
-5. **Provider-final** — `apply_tts_input_steps` остаётся внутри `LocalTTSEngine` (litserve).
-
-### Capabilities matrix
-
-| provider | alias | regex | числа/даты | stress `+` | SSML phoneme |
-|---|---|---|---|---|---|
-| litserve (Silero) | да | да | да | **да** | нет |
-| yandex | да | да | да | **да** | да |
-| sber | да | да | да | **да** | да |
-| cloud_ru | да | да | да | нет | нет |
-| mock | да | да | да | **да** | да |
-
-### Модели правил (`core/clients/tts_pronunciation/models.py`)
-
-```python
-PronunciationRule(
-    id,              # UUID
-    kind,            # "alias" | "regex" | "stress"
-    pattern,         # слово / regex / слово
-    replacement,     # замена; для stress с '+' перед ударной гласной
-    language,        # BCP-47 ISO 639-1, None = любой
-    case_sensitive,  # по умолчанию False
-    word_boundary,   # только для alias/stress, по умолчанию True
-    providers,       # whitelist провайдеров; None = все совместимые
-    voices,          # whitelist голосов; None = любые
-    enabled,
-    note,
-)
-```
-
-### Cascade резолва
-
-```
-platform_pronunciation_rules (БД, system/superadmin)
-  → company_pronunciation_rules (БД, per-company)
-  → SpeechOverride.pronunciation_rules (per-call)
-```
-
-`voice_resolver.resolve_tts_pronunciation(company_id, override)` — TTL-кэш 300s. Инвалидация: `invalidate_company_overrides_cache(company_id)` и `invalidate_platform_pronunciation_cache()`.
-
-### SpeechOverride (расширение)
-
-| Поле | Тип |
-|---|---|
-| `pronunciation_rules` | `list[PronunciationRule] \| None` |
-| `pronunciation_replace` | `bool` (default False; True — заменяет platform+company) |
-
-### REST (per-company)
-
-| Метод | Путь |
-|---|---|
-| `GET` | `/voice/api/v1/companies/{company_id}/pronunciation-rules` |
-| `POST` | `/voice/api/v1/companies/{company_id}/pronunciation-rules` |
-| `PUT` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/{rule_id}` |
-| `DELETE` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/{rule_id}` |
-| `POST` | `/voice/api/v1/companies/{company_id}/pronunciation-rules/test` (dry-run) |
-
-### REST (platform, superadmin)
-
-| Метод | Путь |
-|---|---|
-| `GET/POST/PUT/DELETE` | `/voice/api/v1/platform/pronunciation-rules[/{rule_id}]` |
-
-### CI
-
-`make check-tts-pipeline` (`scripts/check_tts_pipeline_single_apply.py`) — запрещает прямой импорт `TtsTextPipeline` / `get_tts_text_pipeline` в `apps/**` кроме `apps/voice/api/company_pronunciation_rules.py` (dry-run).
-
-### Bootstrap seed
-
-При старте `frontend` (если таблица `platform_pronunciation_rules` пустая): `Хуманитик → хуманитэк`, `Humanitec → хуманитэк` + stress-варианты. Управляется флагом `voice.tts.pronunciation_seed_enabled` (не в `TtsPronunciationConfig`, а в on_startup `frontend`).
-
-### Запреты
-
-- Прямой вызов `TtsTextPipeline.transform` вне `PronunciationAwareTTSClient` и dry-run REST — fail CI.
-- Хранение `CompiledPronunciation` как глобального синглтона — запрещено (TTL-кэш только в `voice_resolver`).
-- Stress-правила для провайдеров без stress capability (cloud_ru) — игнорируются, не ошибка.
+- Протокол шлюза: WS `/voice/api/ws/session/{session_id}`, `POST /voice/api/v1/transcribe`, `POST /voice/api/v1/synthesize`, `GET /voice/health/providers`; управление провайдерами и правилами произношения — `apps/voice/api/`.
+- Каталог — один `op_voice_providers_catalog` (`core/voice/operations.py`): REST `/voice/api/v1/voice-providers/catalog` и команда `flows/voice_providers/catalog_requested` с зеркалом `/flows/api/v1/voice-providers/catalog`.
 
 ## Запреты
 
-- Прямой импорт `Litserve*Client` / `CloudRu*Client` / `Yandex*Client` / `Sber*Client` / `LocalSileroVADClient` / `SileroVADProvider` вне `core/clients/**` — fail CI.
-- `voice_resolver.get_*_client()` без `company_id` — `ValueError`.
-- Глобальный/per-process `SpeechOverride` (singleton/env-var/модуль) — запрещён.
-- Произвольная композиция backend-конфигов в коде сервиса (`CloudRuSTTConfig(api_key="hardcoded")`) — запрещена.
-- `STTClientFactory.create_for_voice` / `TTSClientFactory.create_for_voice` / `VADClientFactory.create_for_voice` вне `core/clients/voice_resolver.py` и реализаций в `core/clients/**` — запрещено (CI).
-- `MediaTranscriber` из HTTP-хендлеров любого сервиса кроме `sync` — запрещён, только через `ServiceClient("voice", ...)`.
-- Создание собственных STT/TTS/VAD провайдеров в `apps/{crm,flows,rag,sync}` — запрещено. Расширение — через `core/clients/{stt,tts,vad}_client.py` + регистрация в `voice_resolver`.
-- Хардкод модели/провайдера в коде — запрещён. Источники: `SpeechOverride` → `company_voice_providers` (stt/tts) → `settings.voice`.
-- `apps/voice` не знает бизнес-логики клиентов — только сигналы и аудио.
+- Прямой импорт реализаций (`Litserve*`, `CloudRu*`, `Yandex*`, `Sber*`, `Mock*`, `LocalSilero*`) и `*ClientFactory` вне `core/clients/**`.
+- Прямой `TtsTextPipeline` и `get_tts_text_pipeline` в `apps/**`.
+- Глобальный, процессный или ENV `SpeechOverride`; хардкод провайдера, модели и backend-конфига в коде сервиса. `[без гейта]`
+- Свой STT/TTS/VAD-провайдер в `apps/**`: расширение — клиент в `core/clients/` и ветка `voice_resolver`. `[без гейта]`
+- Строки `kind=vad` в `company_voice_providers` и API per-company VAD. `[без гейта]`
+- Сервисные прокси диктовки (`/…/voice-input`) и локальные MediaRecorder + HTTP в `apps/**`. `[без гейта]`
+- Второй real-time голосовой транспорт вне WS-сессии `apps/voice`. `[без гейта]`
 
-## См. также
+## Исключения
 
-- `architecture.mdc` — REST-зеркало команд, DI ContainerDep.
-- `eval.mdc` — tools `transcribe_audio` / `synthesize_speech` в namespace.
-- `infrastructure.mdc` — `provider-litserve`, GPU node.
-- `billing.mdc` — категории `stt:`/`tts:`/`vad:`.
-- `calls.mdc` — WebRTC через LiveKit (отдельный домен).
+- Исключение: dry-run правил произношения `apps/voice/api/company_pronunciation_rules.py` вызывает `TtsTextPipeline` напрямую — allowlist `_ALLOWED_FILES` в `scripts/check_tts_pipeline_single_apply.py`.
+
+## Гейты
+
+- `scripts/check_voice_resolver_usage.py` (`make check-voice-canon`, `make lint`) — реализации клиентов речи и фабрики не импортируются вне `core/clients/**`.
+- `scripts/check_tts_pipeline_single_apply.py` (`make check-voice-canon`, `make lint`) — `TtsTextPipeline` только внутри `PronunciationAwareTTSClient`.
+- `scripts/check_speakable_parity.py` (`make check-voice-canon`, `make lint`) — `SPEAKABLE_ARTIFACT_NAMES` Python ≡ JS.
+- `tests/clients/test_voice_resolver.py`, `tests/clients/test_voice_resolver_tts_synthesis_locale.py` — порядок резолва, VAD без company-строки, модель по `synthesis_locale`.
+- `tests/voice/test_company_voice_providers_api.py` — REST провайдеров компании: отказ `vad`, `model: null`, отказ неизвестной модели, снятие override.
+- `tests/clients/test_tts_pronunciation.py` — каскад правил и capabilities провайдеров.
+- `tests/voice/test_voice_ws_contract.py`, `tests/voice/test_session_partial_transcripts.py`, `tests/voice/test_voice_barge_in.py` — WS-контракт, partial и barge-in.

@@ -2,7 +2,7 @@
 Worktracker-специфичные фикстуры.
 
 HTTP: worktracker_client (ASGI), worktracker_client_http (session HTTP).
-Service/repository: worktracker_container, worktracker_service, worktracker_repository.
+Service: worktracker_di, worktracker_service.
 Helpers: worktracker_queue, worktracker_board, worktracker_item.
 Realtime: platform_events_listener (шина Redis platform:events).
 """
@@ -15,6 +15,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from apps.worktracker.di import WorktrackerDi
+from core.di import require_di
 from core.worktracker.models import (
     Board,
     BoardColumn,
@@ -23,6 +25,8 @@ from core.worktracker.models import (
     WorkItemState,
     WorkQueue,
 )
+from core.worktracker.service import WorkItemService
+from tests.fixtures.service_processes import ServiceProcesses
 from tests.fixtures.platform_events import (
     PlatformEventsReceive,
 )
@@ -35,32 +39,28 @@ API_PREFIX = "/worktracker/api/v1"
 UiEventsReceive = PlatformEventsReceive
 
 
-@pytest.fixture
-def worktracker_container():
-    from apps.worktracker.container import get_worktracker_container
-
-    return get_worktracker_container()
-
-
-@pytest.fixture
-def worktracker_repository(worktracker_container):
-    return worktracker_container.worktracker_repository
+@pytest_asyncio.fixture
+async def worktracker_di(worktracker_app) -> WorktrackerDi:
+    """Тот же ``WorktrackerDi``, что собрал lifespan ``worktracker_app``."""
+    return require_di(worktracker_app, WorktrackerDi)
 
 
 @pytest.fixture
-def worktracker_service(worktracker_container):
-    return worktracker_container.work_item_service
+def worktracker_service(request: pytest.FixtureRequest) -> WorkItemService:
+    opened = request.getfixturevalue("worktracker_di")
+    if not isinstance(opened, WorktrackerDi):
+        raise TypeError("worktracker DI is not open")
+    return opened.work_item_service
 
 
 @pytest_asyncio.fixture
-async def worktracker_app():
-    from apps.worktracker.main import app
-
-    yield app
+async def worktracker_app(service_processes: ServiceProcesses):
+    return await service_processes.app("worktracker")
 
 
 @pytest_asyncio.fixture
-async def worktracker_client(worktracker_app, auth_headers_system):
+async def worktracker_client(worktracker_app, setup_database_before_tests, auth_headers_system):
+    _ = setup_database_before_tests
     transport = ASGITransport(app=worktracker_app)
     async with AsyncClient(
         transport=transport,
@@ -71,7 +71,8 @@ async def worktracker_client(worktracker_app, auth_headers_system):
 
 
 @pytest_asyncio.fixture
-async def worktracker_client_company2(worktracker_app, auth_headers_company2):
+async def worktracker_client_company2(worktracker_app, setup_database_before_tests, auth_headers_company2):
+    _ = setup_database_before_tests
     transport = ASGITransport(app=worktracker_app)
     async with AsyncClient(
         transport=transport,

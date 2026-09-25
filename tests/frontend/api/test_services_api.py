@@ -19,7 +19,7 @@ class TestServicesAPI:
     async def test_get_services_status_success(
         self,
         frontend_client: AsyncClient,
-        frontend_container,
+        frontend_di,
     ):
         """Получение статуса всех сервисов"""
         response = await frontend_client.get("/frontend/api/services/status")

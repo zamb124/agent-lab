@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import asyncio
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from core.config import get_settings
 from core.logging import get_logger
 from core.mail.enqueue import enqueue_mail_sync_binding
-from core.mail.models import MailboxBinding, MailboxBindingKind, MailIdleWakeKind
-from core.mail.repositories import INBOX_FOLDER
+from core.mail.models import (
+    INBOX_FOLDER,
+    CompanyMailConnection,
+    MailboxBinding,
+    MailboxBindingKind,
+    MailIdleWakeKind,
+)
+from core.mail.service import MailService
 from core.mail.task_names import MAIL_IDLE_SUPERVISOR
 from core.tasks import platform_task
 
@@ -18,17 +24,15 @@ logger = get_logger(__name__)
 
 async def _idle_one_binding(
     *,
+    mail_service: MailService,
     binding: MailboxBinding,
     timeout_seconds: float,
 ) -> bool:
-    container = get_container()
-    connection = await container.company_mail_connection_repository.get(
-        binding.company_mail_connection_id
-    )
+    connection = await CompanyMailConnection.get(binding.company_mail_connection_id)
     if connection is None:
         return False
-    port = container.mail_service.port_for_connection(connection)
-    secret = container.mail_service.binding_secret(binding)
+    port = mail_service.port_for_connection(connection)
+    secret = mail_service.binding_secret(binding)
     try:
         session = await port.open_idle_session(secret, mailbox=INBOX_FOLDER)
     except Exception as exc:
@@ -73,6 +77,8 @@ async def _idle_one_binding(
 async def mail_idle_supervisor_task(
     schedule_task_id: str | None = None,
     company_id: str | None = None,
+    *,
+    di: Di,
 ) -> dict[str, int]:
     """Параллельный IDLE-pass (короткий timeout) → enqueue sync на wake.
 
@@ -85,8 +91,7 @@ async def mail_idle_supervisor_task(
     config = settings.mail_sync
     if not config.enabled or not config.idle_enabled:
         return {"idle_sessions": 0, "wakes": 0}
-    container = get_container()
-    candidates = await container.mail_service.list_sync_candidates(
+    candidates = await di.mail_service.list_sync_candidates(
         limit=config.max_idle_bindings,
         auth_error_cooldown_seconds=config.auth_error_cooldown_seconds,
     )
@@ -102,7 +107,11 @@ async def mail_idle_supervisor_task(
     timeout_seconds = float(min(60, config.idle_timeout_seconds))
     results = await asyncio.gather(
         *[
-            _idle_one_binding(binding=binding, timeout_seconds=timeout_seconds)
+            _idle_one_binding(
+                mail_service=di.mail_service,
+                binding=binding,
+                timeout_seconds=timeout_seconds,
+            )
             for binding in filtered
         ]
     )

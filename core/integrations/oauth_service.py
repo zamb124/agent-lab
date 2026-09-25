@@ -11,11 +11,11 @@ import json
 import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 from uuid import uuid4
 
 from core.config import get_settings
+from core.db.storage import SharedStorage
 from core.http.client import get_httpx_client
 from core.integrations.guided_integration_error import OAuthErrorLocale
 from core.integrations.models import (
@@ -32,10 +32,6 @@ from core.logging import get_logger
 from core.platform_brand.resolver import resolve_oauth_brand_origin
 from core.types import JsonObject, parse_json_object, require_json_object
 from core.utils.domain import is_allowed_integration_return_origin
-
-if TYPE_CHECKING:
-    from core.db.storage import Storage
-    from core.integrations.repository import IntegrationCredentialRepository
 
 logger = get_logger(__name__)
 
@@ -72,13 +68,8 @@ class OAuthService:
     - refresh_token() — принудительный refresh
     """
 
-    def __init__(
-        self,
-        repository: IntegrationCredentialRepository,
-        storage: Storage,
-    ) -> None:
-        self._repository: IntegrationCredentialRepository = repository
-        self._storage: Storage = storage
+    def __init__(self, storage: SharedStorage) -> None:
+        self._storage: SharedStorage = storage
 
     def get_provider_config(
         self,
@@ -400,11 +391,12 @@ class OAuthService:
             updated_at=now,
         )
 
-        existing = await self._repository.get_by_user_provider_service(
+        existing = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=user_id,
             provider=provider,
             service=service,
+            mailbox_binding_id=None,
         )
         if existing:
             merged_meta = {**existing.metadata, **metadata}
@@ -416,7 +408,7 @@ class OAuthService:
                 }
             )
 
-        await self._repository.upsert(credential)
+        await IntegrationCredential.upsert_by_credential_id(credential)
         logger.info(
             "integrations.oauth.credential.saved.provider.service",
             provider=provider.value,
@@ -454,7 +446,7 @@ class OAuthService:
                 service=credential.service,
                 user=credential.user_id,
             )
-            _ = await self._repository.delete_by_user_provider_service(
+            _ = await IntegrationCredential.delete_by_user_provider_service(
                 company_id=credential.company_id,
                 user_id=credential.user_id,
                 provider=credential.provider,
@@ -515,7 +507,7 @@ class OAuthService:
                     user=credential.user_id,
                     desc=oauth_error_desc,
                 )
-                _ = await self._repository.delete_by_user_provider_service(
+                _ = await IntegrationCredential.delete_by_user_provider_service(
                     company_id=credential.company_id,
                     user_id=credential.user_id,
                     provider=credential.provider,
@@ -559,7 +551,7 @@ class OAuthService:
                 "updated_at": datetime.now(timezone.utc),
             }
         )
-        await self._repository.upsert(refreshed)
+        await IntegrationCredential.upsert_by_credential_id(refreshed)
         return refreshed
 
     async def get_valid_token(
@@ -579,11 +571,12 @@ class OAuthService:
         Исключения:
             OAuthTokenRefreshError: при отозванном refresh_token (credential удалён).
         """
-        credential = await self._repository.get_by_user_provider_service(
+        credential = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=user_id,
             provider=provider,
             service=service,
+            mailbox_binding_id=None,
         )
         if credential is None:
             return None
@@ -603,4 +596,7 @@ class OAuthService:
     def _is_about_to_expire(credential: IntegrationCredential) -> bool:
         if credential.expires_at is None:
             return False
-        return credential.expires_at <= datetime.now(timezone.utc) + TOKEN_EXPIRY_BUFFER
+        expires_at = credential.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at <= datetime.now(timezone.utc) + TOKEN_EXPIRY_BUFFER

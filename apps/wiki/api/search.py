@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from apps.wiki.dependencies import ContainerDep
+from apps.wiki.di import Di
 from apps.wiki.models.api import WikiSearchRequest
 from apps.wiki.models.domain import WikiSearchHit
 from apps.wiki.realtime.operations import op_search_run
@@ -16,6 +16,6 @@ router = APIRouter(prefix="/search", tags=["wiki-search"])
 
 @router.post("", response_model=ListResponse[WikiSearchHit])
 async def search(
-    container: ContainerDep, request: WikiSearchRequest
+    di: Di, request: WikiSearchRequest
 ) -> ListResponse[WikiSearchHit]:
-    return await op_search_run(request, user=require_context().user, container=container)
+    return await op_search_run(request, user=require_context().user, di=di)

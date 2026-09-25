@@ -1,0 +1,57 @@
+---
+description: "Stock/WMS (apps/stock): леджер StockMove, проекция StockQuant, append-only StockValueLayer, движок, оценка, рефлекс StockDecision. Читать при правке apps/stock"
+globs:
+  - "apps/stock/**"
+  - "core/clients/stock_client.py"
+  - "apps/flows/tools/stock/**"
+  - "tests/stock/**"
+alwaysApply: false
+---
+
+# Stock
+
+Складской учёт компании по модели Odoo `stock` + `stock_account`: любое изменение количества — `StockMove` из локации A в локацию B, стоимость — отдельный append-only журнал `StockValueLayer`. REST — `/stock/api/v1/`, SPA — `/stock`, команды — `STOCK_OPERATIONS`, DI — `StockDi`.
+
+## Модель
+
+- `StockLocation` (`location_id`, `usage`: `view`/`internal`/`supplier`/`customer`/`inventory`/`production`/`transit`); виртуальные локации создаёт `init_company_stock`, поэтому приход, расход и инвентаризация — пары `usage`, а не отдельные сущности.
+- `StockWarehouse` (`warehouse_id`) — площадка компании (`view_location_id`, `stock_location_id`), объект FGA `stock_warehouse`.
+- `StockProduct` + `StockProductTemplate` (`tracking` `none`/`lot`/`serial`, `is_storable`, `valuation_method`, `standard_price`).
+- `StockOperationType` (`code` `incoming`/`outgoing`/`internal`, `reservation_policy`, `backorder_policy`, `putaway_mode` `rule`/`inline`/`shadow`, `putaway_flow_id`); `StockTransfer` — документ-группировка move (`state` — проекция, `backorder_of_id`, `return_of_id`).
+- `StockMove` (`draft → confirmed → partially_available → assigned → done`, `waiting`, `cancel`; `returned_move_id`), `StockMoveLine` — lot/package/reserved/done детализация.
+- `StockQuant` — ключ `(company, product, location, lot, package, owner)` unique `NULLS NOT DISTINCT`, `available = quantity - reserved_quantity`, `in_date` для FIFO, `inventory_quantity` — черновик инвентаризации.
+- `StockValueLayer` (`entry_no`, `entry_kind`, signed `quantity`/`value`, `unit_cost`, `remaining_*`, `qty_after`/`value_after`, `price_source`, снимок `valuation_method`, `origin_layer_id`) + `StockValueLayerConsumption`; `StockDecision` (`reflex_point` `putaway`/`removal`/`qc_route`/`receipt_lines`, кандидаты, выбор, `status`); `StockBarcodeIndex` — `(company_id, barcode)` unique → сущность.
+- Контрагент и владелец остатка — `partner_entity_id`/`owner_entity_id` (id CRM-сущности без FK в чужую БД).
+
+## Инварианты
+
+1. `StockQuant` пишет только `StockMoveEngine` (`services/move_engine.py`) внутри своей транзакции: `reserved_quantity` — `assign`/`unreserve`, `quantity` — `done`.
+2. Слои стоимости пишутся в той же транзакции, что `done`; `done` без слоёв для метода ≠ `unvalued` невозможен; событие — уведомление после commit.
+3. `StockValueLayer` append-only: коррекция и сторно — новые слои (`entry_kind` `revaluation`/`correction`, `origin_layer_id`); `entry_no` — nogap per company через `StockLedgerCounter` (`SELECT FOR UPDATE` в той же транзакции); running balance — company + product.
+4. `valuation_method` обязателен (`standard`/`average`/`fifo`/`unvalued`); смена при наличии слоёв — `conflict`; `unit_price` на move — цена документа (`price_source=document`).
+5. Оценка по паре `usage`: внешняя → internal `+qty`, internal → внешняя `−qty`, internal → internal — пара слоёв по текущей себестоимости, return — `unit_cost` исходного move; `fifo` потребляет `remaining_quantity > 0` по `entry_no`.
+6. Стратегии removal (`fifo` по `in_date`) и valuation — реестр по коду; нет реализации — `raise`.
+7. Движок: `confirm`, `assign` (incoming — точка рефлекса putaway), `unreserve`, `done`/`validate` (частичное — backorder по `backorder_policy`), `cancel`, `return_`, `inventory_set` + `inventory_apply` (move `internal ↔ inventory` на дельту); tracking `none` с lot или `serial` с qty ∉ {0, 1} — `raise`.
+8. ИИ не пишет quant и слои: рефлекс — между `confirm` и `assign`, ядро собирает кандидатов, flow выбирает из них; ответ вне кандидатов, пустой или таймаут — `raise`, move остаётся `confirmed`.
+9. Доступ — OpenFGA `stock_warehouse`: чтение остатков, слоёв и пульса — `can_view`; `validate`, `inventory_apply`, `revalue`, правка рефлекса — `can_edit`; `stock_access_service` пишет tuples.
+
+## Контракты
+
+- События: `stock/move/done` (`unit_cost`, `value`, `value_layer_ids`), `stock/transfer/done`, `stock/quant/changed`, `stock/valuation/changed`; payload несёт поля фильтров триггеров (`warehouse_id`, `operation_code`, `state`, `product_id`, `location_id`, `location_dest_id`, `transfer_id`, `move_id`, `quantity`, `value`, `entry_kind`).
+- Инициализация компании — `stock/company/init_requested` (`POST /stock/api/v1/internal/company/init`) из idle `company_init_new_company`, идемпотентно.
+
+## Интеграции
+
+- WorkItem links `stock_transfer`, `stock_location` (`core/worktracker/models.py`).
+- Tools `stock_*` (`apps/flows/tools/stock/`) — тонкие над `core/clients/stock_client.py`, без записи quant и слоёв.
+
+## Запреты
+
+1. `save()` на `StockQuant` вне движка; update/delete `StockValueLayer`; PG sequence для `entry_no`.
+2. Дефолтная стратегия removal или valuation в runtime.
+3. FK в базы других сервисов.
+
+## Гейты
+
+- `tests/stock/test_stock_domain.py`, `tests/stock/test_stock_valuation_math.py`, `tests/stock/test_stock_api.py` — движок, оценка, API.
+- Единственный писатель quant и слоёв `[без гейта]`.

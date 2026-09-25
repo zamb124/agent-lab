@@ -10,11 +10,13 @@ import pytest
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.crawl.models import CrawlDomain, CrawlProfile, CrawlProfileWithIndex
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.index_models import SearchIndexDefinition
 
 
 @pytest.mark.asyncio
-async def test_discover_domain_logs_structured_failure_on_generic_exception() -> None:
+async def test_discover_domain_logs_structured_failure_on_generic_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = datetime.now(UTC)
     profile = CrawlProfile(
         crawl_profile_id="cr_test",
@@ -39,7 +41,6 @@ async def test_discover_domain_logs_structured_failure_on_generic_exception() ->
         rag_collection_id="runet",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
@@ -55,25 +56,20 @@ async def test_discover_domain_logs_structured_failure_on_generic_exception() ->
         updated_at=now,
     )
 
-    class _ProfileRepo:
-        async def get_with_index(self, crawl_profile_id: str) -> CrawlProfileWithIndex:
-            assert crawl_profile_id == "cr_test"
-            return profile_bundle
+    async def _get_with_index(crawl_profile_id: str) -> CrawlProfileWithIndex:
+        assert crawl_profile_id == "cr_test"
+        return profile_bundle
 
-    class _DomainRepo:
-        async def get(self, crawl_domain_id: str) -> CrawlDomain:
-            assert crawl_domain_id == "dom-1"
-            return domain
+    async def _get_domain(crawl_domain_id: str) -> CrawlDomain:
+        assert crawl_domain_id == "dom-1"
+        return domain
 
-        schedule_next = AsyncMock()
-
-    domain_repo = _DomainRepo()
+    schedule_next = AsyncMock()
+    monkeypatch.setattr(CrawlProfile, "get_with_index", _get_with_index)
+    monkeypatch.setattr(CrawlDomain, "get", _get_domain)
+    monkeypatch.setattr(CrawlDomain, "schedule_next", schedule_next)
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=_ProfileRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_domain_repository=domain_repo,  # pyright: ignore[reportArgumentType]
-        crawl_url_repository=AsyncMock(),
-        crawl_job_repository=AsyncMock(),
         fetch_service=AsyncMock(),
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(
@@ -101,7 +97,7 @@ async def test_discover_domain_logs_structured_failure_on_generic_exception() ->
             await orchestrator.discover_domain("dom-1", "job-1", "cr_test")
 
     discover_mock.assert_awaited_once()
-    domain_repo.schedule_next.assert_awaited_once()
+    schedule_next.assert_awaited_once()
     log_failed_mock.assert_called_once()
     call_kwargs = log_failed_mock.call_args.kwargs
     assert call_kwargs["crawl_profile_id"] == "cr_test"

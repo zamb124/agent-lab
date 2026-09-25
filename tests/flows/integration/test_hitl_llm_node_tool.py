@@ -9,7 +9,7 @@ import pytest
 from a2a.helpers.proto_helpers import get_message_text
 from httpx import AsyncClient
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from core.clients.llm.mock import MockLLMQueuedResponse
 from core.context import get_context, reset_context, set_context
 from core.state import ExecutionState
@@ -73,7 +73,7 @@ def _task_interrupt_kind(task: object) -> str | None:
 
 
 async def _wait_state(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     session_id: str,
     *,
     timeout_sec: float = 60.0,
@@ -81,7 +81,7 @@ async def _wait_state(
     deadline = asyncio.get_running_loop().time() + timeout_sec
     last_state: ExecutionState | None = None
     while asyncio.get_running_loop().time() < deadline:
-        last_state = await container.workflow_runtime.get_state(session_id)
+        last_state = await di.workflow_runtime.get_state(session_id)
         if (
             last_state is not None
             and last_state.interrupt is None
@@ -109,7 +109,7 @@ async def _create_llm_hitl_flow(client: AsyncClient, *, flow_id: str) -> None:
 
 
 async def _park_llm_hitl(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     client: AsyncClient,
     unique_id: str,
     *,
@@ -122,13 +122,13 @@ async def _park_llm_hitl(
     current = get_context()
     if current is None:
         raise RuntimeError("HITL llm_node test requires Context")
-    queue = await container.work_item_service.create_queue(
+    queue = await di.work_item_service.create_queue(
         company_id="system",
         name=f"HITL LLM {unique_id}",
         slug=queue_slug,
         creator=UserActor(user_id=owner_user_id),
     )
-    _ = await container.work_item_service.add_queue_member(
+    _ = await di.work_item_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=owner_user_id),
@@ -147,12 +147,12 @@ async def _park_llm_hitl(
         content=f"эскалация {unique_id}",
         user_id=current.user.user_id,
     )
-    flow = await container.flow_factory.get_flow(flow_id)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
     if flow is None:
         raise RuntimeError(f"llm_node HITL flow {flow_id} missing after create")
     token = set_context(current.model_copy(update={"channel": "a2a"}))
     try:
-        parked = await run_flow(container=container, flow=flow, state=state)
+        parked = await run_flow(di=di, flow=flow, state=state)
     finally:
         reset_context(token)
     assert parked.interrupt is not None
@@ -161,7 +161,7 @@ async def _park_llm_hitl(
     assert parked.interrupt.body.tool_call_id is not None
     assert parked.interrupt.body.node_id == "agent"
     assert parked.interrupt.correlation_id is not None
-    item = await container.work_item_service.find_by_completion_correlation(
+    item = await di.work_item_service.find_by_completion_correlation(
         "system", str(parked.interrupt.correlation_id)
     )
     assert item is not None
@@ -171,8 +171,8 @@ async def _park_llm_hitl(
 
 async def test_llm_node_calculator_then_hitl_single_reply_resumes_via_platform_events(
     app: object,
-    container: FlowRuntimeContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     client: AsyncClient,
     worktracker_client: AsyncClient,
     mock_llm_redis: MockLlmRedis,
@@ -180,9 +180,9 @@ async def test_llm_node_calculator_then_hitl_single_reply_resumes_via_platform_e
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked, item, _queue = await _park_llm_hitl(
-        container,
+        di,
         client,
         unique_id,
         mode=HandoffMode.SINGLE_REPLY,
@@ -201,7 +201,7 @@ async def test_llm_node_calculator_then_hitl_single_reply_resumes_via_platform_e
     )
     assert done.status_code == 200, done.text
     assert done.json()["state"] == "done"
-    resumed = await _wait_state(container, parked.session_id)
+    resumed = await _wait_state(di, parked.session_id)
     assert resumed.interrupt is None
     assert reply in _message_texts(resumed)
     assert resumed.response == reply
@@ -209,8 +209,8 @@ async def test_llm_node_calculator_then_hitl_single_reply_resumes_via_platform_e
 
 async def test_llm_node_hitl_takeover_user_append_operator_ask_then_empty_complete(
     app: object,
-    container: FlowRuntimeContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     client: AsyncClient,
     worktracker_client: AsyncClient,
     mock_llm_redis: MockLlmRedis,
@@ -218,9 +218,9 @@ async def test_llm_node_hitl_takeover_user_append_operator_ask_then_empty_comple
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked, item, _queue = await _park_llm_hitl(
-        container,
+        di,
         client,
         unique_id,
         mode=HandoffMode.TAKEOVER,
@@ -266,9 +266,9 @@ async def test_llm_node_hitl_takeover_user_append_operator_ask_then_empty_comple
         turn["role"] == "operator" and turn["text"] == operator_text for turn in turns
     )
 
-    still_open = await container.work_item_service.get("system", item.work_item_id)
+    still_open = await WorkItem.require_in_company("system", item.work_item_id)
     assert still_open.state is WorkItemState.OPEN
-    mid = await container.workflow_runtime.get_state(parked.session_id)
+    mid = await di.workflow_runtime.get_state(parked.session_id)
     assert mid is not None
     assert mid.interrupt is not None
     assert isinstance(mid.interrupt.body, OperatorTaskInterrupt)
@@ -281,7 +281,7 @@ async def test_llm_node_hitl_takeover_user_append_operator_ask_then_empty_comple
     )
     assert done.status_code == 200, done.text
     assert done.json()["state"] == "done"
-    resumed = await _wait_state(container, parked.session_id)
+    resumed = await _wait_state(di, parked.session_id)
     assert resumed.interrupt is None
     assert resumed.response is not None
     assert resumed.response.strip() != ""
@@ -289,23 +289,23 @@ async def test_llm_node_hitl_takeover_user_append_operator_ask_then_empty_comple
 
 async def test_a2a_send_parks_llm_node_hitl_operator_task(
     app: object,
-    container: FlowRuntimeContainer,
-    worktracker_container: object,
+    di: FlowsDi,
+    worktracker_di: object,
     client: AsyncClient,
     mock_llm_redis: MockLlmRedis,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     queue_slug = f"hitl-a2a-q-{unique_id}"
-    queue = await container.work_item_service.create_queue(
+    queue = await di.work_item_service.create_queue(
         company_id="system",
         name=f"HITL A2A {unique_id}",
         slug=queue_slug,
         creator=UserActor(user_id=system_user_id),
     )
-    _ = await container.work_item_service.add_queue_member(
+    _ = await di.work_item_service.add_queue_member(
         company_id="system",
         work_queue_id=queue.work_queue_id,
         member=UserActor(user_id=system_user_id),
@@ -337,13 +337,13 @@ async def test_a2a_send_parks_llm_node_hitl_operator_task(
     assert task["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
     assert _task_interrupt_kind(task) == "operator_task"
     session_id = f"{flow_id}:{context_id}"
-    parked = await container.workflow_runtime.get_state(session_id)
+    parked = await di.workflow_runtime.get_state(session_id)
     assert parked is not None
     assert parked.interrupt is not None
     assert isinstance(parked.interrupt.body, OperatorTaskInterrupt)
     assert parked.interrupt.body.tool_call_id is not None
     assert parked.interrupt.body.handoff_mode == HandoffMode.SINGLE_REPLY
-    item = await container.work_item_service.find_by_completion_correlation(
+    item = await di.work_item_service.find_by_completion_correlation(
         "system", str(parked.interrupt.correlation_id)
     )
     assert item is not None

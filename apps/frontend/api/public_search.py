@@ -18,8 +18,7 @@ from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
-from apps.frontend.container import FrontendContainer
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.services.public_search_bootstrap import (
     PUBLIC_SEARCH_SPEC_BY_MODE,
     ensure_public_search_embed_configs,
@@ -29,9 +28,8 @@ from core.context import get_context
 from core.http import get_httpx_client
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
-from core.models.embed_models import EmbedStatus
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, PublicSearchMode
 from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest, SerpClickEvent
@@ -128,7 +126,6 @@ def _platform_authenticated_user() -> User | None:
 
 async def _resolve_platform_authenticated_user(
     request: Request,
-    container: FrontendContainer,
 ) -> User | None:
     platform_user = _platform_authenticated_user()
     if platform_user is not None:
@@ -146,7 +143,7 @@ async def _resolve_platform_authenticated_user(
     if token_data.user_id.startswith("search_guest_"):
         return None
 
-    user = await container.user_repository.get(token_data.user_id)
+    user = await User.get(token_data.user_id)
     if user is None:
         return None
     if user.attributes.get("kind") == "embed_session_guest":
@@ -171,12 +168,12 @@ def _platform_user_roles(user: User) -> list[str]:
 async def issue_public_search_session(
     body: PublicSearchSessionRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> PublicSearchSessionResponse:
     if body.mode not in PUBLIC_SEARCH_SPEC_BY_MODE:
         raise HTTPException(status_code=400, detail="Unsupported search mode")
 
-    configs = await ensure_public_search_embed_configs(container)
+    configs = await ensure_public_search_embed_configs()
     config = configs[body.mode]
 
     referer = request.headers.get("referer", "")
@@ -192,27 +189,20 @@ async def issue_public_search_session(
     if origin == "":
         raise HTTPException(status_code=403, detail="origin is required for a public search session")
 
-    platform_user = await _resolve_platform_authenticated_user(request, container)
+    platform_user = await _resolve_platform_authenticated_user(request)
     if platform_user is None and body.consume_search_quota:
         quota_cost = (
             PUBLIC_SEARCH_RESEARCH_QUOTA_COST if body.mode == "research" else 1
         )
         await enforce_public_search_run_quota(
-            redis_client=container.redis_client,
+            redis_client=di.redis_client,
             request=request,
             cost=quota_cost,
         )
 
-    mapping = await container.embed_mapping_repository.get(config.embed_id)
-    if mapping is None or mapping.company_id != SYSTEM_COMPANY_ID:
+    persisted_config = await EmbedConfig.get(config.embed_id)
+    if persisted_config is None or persisted_config.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=404, detail="Widget not found")
-
-    persisted_config = await container.embed_config_repository.get_for_company_identifier(
-        SYSTEM_COMPANY_SUBDOMAIN,
-        config.embed_id,
-    )
-    if persisted_config is None:
-        raise HTTPException(status_code=404, detail="Configuration not found")
     if persisted_config.status != EmbedStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Widget is disabled")
     if persisted_config.flow_id != PUBLIC_SEARCH_FLOW_ID:
@@ -247,7 +237,7 @@ async def issue_public_search_session(
         }
 
     _ = await ensure_persisted_runtime_user(
-        container,
+        di.authz_service,
         user_id=session_user_id,
         company_id=SYSTEM_COMPANY_ID,
         name=session_user_name,
@@ -307,9 +297,9 @@ def _validate_public_search_guest() -> None:
 @router.post("/serp/more", response_model=MetaSearchResponse)
 async def public_search_serp_more(
     body: PublicSearchSerpMoreRequestBody,
-    container: ContainerDep,
+    di: Di,
 ) -> MetaSearchResponse:
-    _ = container
+    _ = di
     _validate_public_search_guest()
     search_body = MetaSearchSerpMoreRequest(
         serp_cache_key=body.serp_cache_key,
@@ -334,9 +324,9 @@ async def public_search_serp_more(
 @router.post("/serp/click", status_code=204)
 async def public_search_serp_click(
     body: SerpClickEvent,
-    container: ContainerDep,
+    di: Di,
 ) -> None:
-    _ = container
+    _ = di
     _validate_public_search_guest()
     client = ServiceClient()
     try:
@@ -353,7 +343,7 @@ async def public_search_serp_click(
 async def public_search_favicon(
     request: Request,
     domain: Annotated[str, Query(min_length=1, max_length=255)],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     host = domain.strip().lower()
     if host.startswith("www."):
@@ -361,7 +351,7 @@ async def public_search_favicon(
     if not _DOMAIN_RE.match(host):
         raise HTTPException(status_code=400, detail="invalid domain")
     await enforce_public_session_issue_rate_limit(
-        redis_client=container.redis_client,
+        redis_client=di.redis_client,
         request=request,
         scope="public_search_favicon",
     )

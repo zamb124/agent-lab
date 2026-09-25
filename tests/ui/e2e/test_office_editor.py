@@ -41,11 +41,11 @@ async def test_office_edit_in_onlyoffice(
     unique_id: str,
     auth_token_system: str,
     office_client_http,
-    auth_headers_system,
+    auth_headers_system, frontend_di,
 ) -> None:
     doc_title = f"OnlyOffice {unique_id}"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="edit")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="edit", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,
@@ -129,11 +129,11 @@ async def test_office_view_other_file_types(
     unique_id: str,
     office_client_http,
     auth_headers_system,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     txt_title = f"Notes {unique_id}.txt"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="view")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="view", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

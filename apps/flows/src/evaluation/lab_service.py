@@ -23,9 +23,9 @@ from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import Field
 
 import core.tracing.attributes as trace_attributes
-from apps.flows.src.db import EvaluationLabRepository, FlowRepository, NodeRepository
 from apps.flows.src.durable_execution import (
     ActivityLifecyclePayload,
+    DurableWorkflowRuntime,
     NodeCompletedPayload,
     NodeFailedPayload,
     NodeScheduledPayload,
@@ -139,6 +139,7 @@ from apps.flows.src.models.evaluation_lab import (
     EvaluationTraceWorkflowEvent,
     EvaluationTurn,
 )
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.node_config import NodeConfig
 from apps.flows.src.registry.nodes import NodeRegistry
 from apps.flows.src.runtime.effective_llm_config import (
@@ -146,8 +147,11 @@ from apps.flows.src.runtime.effective_llm_config import (
     llm_capability_from_node_config,
     resolve_effective_llm_config_for_node,
 )
+from apps.flows.src.runtime.execution_context import CodeRunnerRegistry
+from apps.flows.src.runtime.nodes import NodeConstructor, create_node
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
+from apps.flows.src.tools.registry import ToolRegistry
 from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
 from core.ai.resolver import resolve_ai_model
@@ -161,9 +165,8 @@ from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.state import ExecutionState
 from core.tracing.context import get_current_trace_context
-from core.tracing.models import TraceSearchResult, TraceSpanRecord
+from core.tracing.models import Span, TraceSearchResult
 from core.tracing.operation_span import traced_operation
-from core.tracing.repository import SpanRepository
 from core.types import (
     JsonObject,
     JsonValue,
@@ -211,6 +214,11 @@ TargetCallable = Callable[[ExecutionState], Awaitable[ExecutionState]]
 
 class EvaluationLabValidationError(ValueError):
     """Evaluation lab request is structurally valid but cannot be executed."""
+
+
+class EvaluationMonitorNotActive(EvaluationLabValidationError):
+    def __init__(self, state: str) -> None:
+        super().__init__(f"Evaluation monitor cannot sample from state: {state}")
 
 
 class EvaluationLlmJudgeResult(StrictBaseModel):
@@ -324,23 +332,21 @@ class EvaluationLabService:
     def __init__(
         self,
         *,
-        repository: EvaluationLabRepository,
-        flow_repository: FlowRepository,
         flow_factory: FlowFactory,
         node_registry: NodeRegistry,
-        node_repository: NodeRepository,
-        span_repository: SpanRepository,
+        workflow_runtime: DurableWorkflowRuntime,
+        tool_registry: ToolRegistry,
+        node_constructor: NodeConstructor,
     ):
-        self._repository: EvaluationLabRepository = repository
-        self._flow_repository: FlowRepository = flow_repository
         self._flow_factory: FlowFactory = flow_factory
         self._node_registry: NodeRegistry = node_registry
-        self._node_repository: NodeRepository = node_repository
-        self._span_repository: SpanRepository = span_repository
+        self._workflow_runtime: DurableWorkflowRuntime = workflow_runtime
+        self._tool_registry: ToolRegistry = tool_registry
+        self._node_constructor: NodeConstructor = node_constructor
         self._event_locks: dict[str, asyncio.Lock] = {}
 
     async def create_suite(self, request: EvaluationSuiteCreateRequest) -> EvaluationSuite:
-        flow = await self._flow_repository.get(request.flow_id)
+        flow = await FlowConfig.get_latest(request.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
@@ -353,7 +359,8 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_suite(suite)
+        _ = await EvaluationSuite.set(suite)
+        return suite
 
     async def update_suite(
         self,
@@ -369,7 +376,8 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_suite(updated)
+        _ = await EvaluationSuite.set(updated)
+        return updated
 
     async def archive_suite(self, suite_id: str) -> EvaluationSuite:
         existing = await self._require_suite(suite_id)
@@ -378,13 +386,14 @@ class EvaluationLabService:
         archived = existing.model_copy(
             update={"archived_at": _utc_now(), "updated_at": _utc_now()}
         )
-        return await self._repository.update_suite(archived)
+        _ = await EvaluationSuite.set(archived)
+        return archived
 
     async def get_suite(self, suite_id: str) -> EvaluationSuite:
         return await self._require_suite(suite_id)
 
     async def list_suites(self, flow_id: str) -> list[EvaluationSuite]:
-        return await self._repository.list_suites(flow_id)
+        return await EvaluationSuite.list_for_flow(flow_id)
 
     def list_builtin_evaluators(self) -> EvaluationBuiltinEvaluatorCatalog:
         return EvaluationBuiltinEvaluatorCatalog(
@@ -600,7 +609,8 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_case(case)
+        _ = await EvaluationCase.set(case)
+        return case
 
     async def update_case(
         self,
@@ -625,10 +635,14 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_case(updated)
+        _ = await EvaluationCase.set(updated)
+        return updated
 
     async def delete_case(self, suite_id: str, case_id: str) -> None:
-        deleted = await self._repository.delete_case(suite_id, case_id)
+        case = await EvaluationCase.get(case_id)
+        if case is None or case.suite_id != suite_id:
+            raise PlatformNotFoundError(f"Evaluation case not found: {case_id}")
+        deleted = await EvaluationCase.delete_by_id(case_id)
         if not deleted:
             raise PlatformNotFoundError(f"Evaluation case not found: {case_id}")
 
@@ -637,7 +651,7 @@ class EvaluationLabService:
 
     async def list_cases(self, suite_id: str) -> list[EvaluationCase]:
         _ = await self._require_suite(suite_id)
-        return await self._repository.list_cases(suite_id)
+        return await EvaluationCase.list_for_suite(suite_id)
 
     async def import_cases(
         self,
@@ -743,15 +757,14 @@ class EvaluationLabService:
         )
         curated_payload = dict(observation.payload)
         curated_payload["curated_case_id"] = case.case_id
-        updated_observation = await self._repository.update_monitor_observation(
-            observation.model_copy(
-                update={
-                    "state": EvaluationMonitorObservationState.CURATED,
-                    "curated_case_id": case.case_id,
-                    "payload": curated_payload,
-                }
-            )
+        updated_observation = observation.model_copy(
+            update={
+                "state": EvaluationMonitorObservationState.CURATED,
+                "curated_case_id": case.case_id,
+                "payload": curated_payload,
+            }
         )
+        _ = await EvaluationMonitorObservation.set(updated_observation)
         return EvaluationMonitorObservationCurationResult(
             case=case,
             observation=updated_observation,
@@ -761,7 +774,7 @@ class EvaluationLabService:
         self,
         request: EvaluationRubricCreateRequest,
     ) -> tuple[EvaluationRubric, EvaluationRubricVersion]:
-        flow = await self._flow_repository.get(request.flow_id)
+        flow = await FlowConfig.get_latest(request.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {request.flow_id}")
         now = _utc_now()
@@ -783,7 +796,8 @@ class EvaluationLabService:
             pass_threshold=request.pass_threshold,
             created_at=now,
         )
-        return await self._repository.create_rubric(rubric, version)
+        await EvaluationRubric.create_with_first_version(rubric, version)
+        return rubric, version
 
     async def update_rubric(
         self,
@@ -799,7 +813,8 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_rubric(updated)
+        _ = await EvaluationRubric.set(updated)
+        return updated
 
     async def archive_rubric(self, rubric_id: str) -> EvaluationRubric:
         rubric = await self._require_rubric(rubric_id)
@@ -808,13 +823,14 @@ class EvaluationLabService:
         archived = rubric.model_copy(
             update={"archived_at": _utc_now(), "updated_at": _utc_now()}
         )
-        return await self._repository.update_rubric(archived)
+        _ = await EvaluationRubric.set(archived)
+        return archived
 
     async def get_rubric(self, rubric_id: str) -> EvaluationRubric:
         return await self._require_rubric(rubric_id)
 
     async def list_rubrics(self, flow_id: str) -> list[EvaluationRubric]:
-        return await self._repository.list_rubrics(flow_id)
+        return await EvaluationRubric.list_for_flow(flow_id)
 
     async def create_rubric_version(
         self,
@@ -822,7 +838,7 @@ class EvaluationLabService:
         request: EvaluationRubricVersionCreateRequest,
     ) -> EvaluationRubricVersion:
         rubric = await self._require_rubric(rubric_id)
-        version_number = await self._repository.next_rubric_version(rubric_id)
+        version_number = await EvaluationRubricVersion.next_version(rubric_id)
         version = EvaluationRubricVersion(
             rubric_version_id=_new_id(),
             rubric_id=rubric.rubric_id,
@@ -832,16 +848,17 @@ class EvaluationLabService:
             pass_threshold=request.pass_threshold,
             created_at=_utc_now(),
         )
-        return await self._repository.create_rubric_version(version)
+        _ = await EvaluationRubricVersion.set(version)
+        return version
 
     async def list_rubric_versions(self, rubric_id: str) -> list[EvaluationRubricVersion]:
         _ = await self._require_rubric(rubric_id)
-        return await self._repository.list_rubric_versions(rubric_id)
+        return await EvaluationRubricVersion.list_for_rubric(rubric_id)
 
     async def create_run(self, request: EvaluationRunCreateRequest) -> EvaluationRunWithCases:
         suite = await self._require_suite(request.suite_id)
         if request.idempotency_key is not None:
-            existing_run = await self._repository.get_run_by_idempotency_key(
+            existing_run = await EvaluationRun.for_idempotency(
                 suite_id=suite.suite_id,
                 branch_id=request.branch_id,
                 idempotency_key=request.idempotency_key,
@@ -856,7 +873,7 @@ class EvaluationLabService:
         if not selected_cases:
             raise EvaluationLabValidationError("No enabled evaluation cases selected")
 
-        flow = await self._flow_repository.get(suite.flow_id)
+        flow = await FlowConfig.get_latest(suite.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {suite.flow_id}")
         flow_config_version = flow.version.strip()
@@ -871,7 +888,7 @@ class EvaluationLabService:
                     "Gate policy must belong to the requested suite and branch"
                 )
 
-        version_number = await self._repository.next_suite_version(suite.suite_id)
+        version_number = await EvaluationSuiteVersion.next_version(suite.suite_id)
         now = _utc_now()
         suite_version = EvaluationSuiteVersion(
             suite_version_id=_new_id(),
@@ -879,11 +896,11 @@ class EvaluationLabService:
             flow_id=suite.flow_id,
             flow_config_version=flow_config_version,
             version=version_number,
-            suite_snapshot=suite,
-            cases_snapshot=selected_cases,
+            suite_snapshot=suite.model_dump(mode="json"),
+            cases_snapshot=[case.model_dump(mode="json") for case in selected_cases],
             created_at=now,
         )
-        suite_version = await self._repository.create_suite_version(suite_version)
+        _ = await EvaluationSuiteVersion.set(suite_version)
 
         run = EvaluationRun(
             run_id=_new_id(),
@@ -904,7 +921,7 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        run = await self._repository.create_run(run)
+        _ = await EvaluationRun.set(run)
         _ = await self._append_event(
             run.run_id,
             None,
@@ -948,42 +965,42 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_run_job(job)
+        return await EvaluationRunJob.insert_for_run(job)
 
     async def get_run_job(self, run_id: str) -> EvaluationRunJob:
-        job = await self._repository.get_run_job_by_run_id(run_id)
+        job = await EvaluationRunJob.for_run(run_id)
         if job is None:
             raise PlatformNotFoundError(f"Evaluation run job not found: {run_id}")
         return job
 
     async def list_pending_run_jobs(self, limit: int) -> list[EvaluationRunJob]:
-        return await self._repository.list_pending_run_jobs(limit)
+        return await EvaluationRunJob.list_pending(limit)
 
     async def mark_run_job_enqueued(self, run_id: str) -> EvaluationRunJob:
         job = await self.get_run_job(run_id)
         now = _utc_now()
-        return await self._repository.update_run_job(
-            job.model_copy(
-                update={
-                    "state": EvaluationRunJobState.ENQUEUED,
-                    "error": None,
-                    "enqueued_at": now,
-                    "updated_at": now,
-                }
-            )
+        enqueued = job.model_copy(
+            update={
+                "state": EvaluationRunJobState.ENQUEUED,
+                "error": None,
+                "enqueued_at": now,
+                "updated_at": now,
+            }
         )
+        _ = await EvaluationRunJob.set(enqueued)
+        return enqueued
 
     async def mark_run_job_failed(self, run_id: str, error: str) -> EvaluationRunJob:
         job = await self.get_run_job(run_id)
-        return await self._repository.update_run_job(
-            job.model_copy(
-                update={
-                    "state": EvaluationRunJobState.FAILED,
-                    "error": error,
-                    "updated_at": _utc_now(),
-                }
-            )
+        failed = job.model_copy(
+            update={
+                "state": EvaluationRunJobState.FAILED,
+                "error": error,
+                "updated_at": _utc_now(),
+            }
         )
+        _ = await EvaluationRunJob.set(failed)
+        return failed
 
     async def set_run_taskiq_task_id(
         self,
@@ -994,21 +1011,21 @@ class EvaluationLabService:
             raise EvaluationLabValidationError("taskiq_task_id must be non-empty")
         run = await self._require_run_model(run_id)
         updated = run.model_copy(update={"taskiq_task_id": taskiq_task_id, "updated_at": _utc_now()})
-        return await self._repository.update_run(updated)
+        _ = await EvaluationRun.set(updated)
+        return updated
 
     async def mark_run_enqueue_failed(self, run_id: str, error: str) -> EvaluationRunWithCases:
         run = await self._require_run_model(run_id)
         now = _utc_now()
-        failed_run = await self._repository.update_run(
-            run.model_copy(
-                update={
-                    "state": EvaluationRunState.ERROR,
-                    "error_case_runs": run.total_case_runs,
-                    "finished_at": now,
-                    "updated_at": now,
-                }
-            )
+        failed_run = run.model_copy(
+            update={
+                "state": EvaluationRunState.ERROR,
+                "error_case_runs": run.total_case_runs,
+                "finished_at": now,
+                "updated_at": now,
+            }
         )
+        _ = await EvaluationRun.set(failed_run)
         _ = await self._append_event(
             run_id,
             None,
@@ -1052,7 +1069,7 @@ class EvaluationLabService:
             )
         suite_version = await self._require_suite_version(run.suite_version_id)
         now = _utc_now()
-        started_run = await self._repository.start_run_if_queued(
+        started_run = await EvaluationRun.start_if_queued(
             run.run_id,
             started_at=now,
             updated_at=now,
@@ -1084,8 +1101,8 @@ class EvaluationLabService:
                 return await self._run_case(run, case, trial_index)
 
         case_trial_tasks = [
-            execute_case_trial(case, trial_index)
-            for case in suite_version.cases_snapshot
+            execute_case_trial(EvaluationCase.model_validate(case_payload), trial_index)
+            for case_payload in suite_version.cases_snapshot
             for trial_index in range(1, run.trials + 1)
         ]
         for completed in asyncio.as_completed(case_trial_tasks):
@@ -1104,19 +1121,28 @@ class EvaluationLabService:
             run = await self._require_run_model(run.run_id)
         return EvaluationRunWithCases(run=run, case_runs=completed_case_runs, gate_result=gate_result)
 
+
+    async def get_run_with_cases(self, run_id: str) -> EvaluationRunWithCases | None:
+        run = await EvaluationRun.get(run_id)
+        if run is None:
+            return None
+        case_runs = await EvaluationCaseRun.list_for_run(run_id)
+        gate_result = await EvaluationGateResult.for_run(run_id)
+        return EvaluationRunWithCases(run=run, case_runs=case_runs, gate_result=gate_result)
+
     async def get_run(self, run_id: str) -> EvaluationRunWithCases:
-        run = await self._repository.get_run_with_cases(run_id)
+        run = await self.get_run_with_cases(run_id)
         if run is None:
             raise PlatformNotFoundError(f"Evaluation run not found: {run_id}")
         return run
 
     async def list_runs(self, suite_id: str, limit: int) -> list[EvaluationRun]:
         _ = await self._require_suite(suite_id)
-        return await self._repository.list_runs(suite_id, limit)
+        return await EvaluationRun.list_for_suite(suite_id, limit)
 
     async def list_events(self, run_id: str) -> list[EvaluationRunEvent]:
         _ = await self.get_run(run_id)
-        return await self._repository.list_events(run_id)
+        return await EvaluationRunEvent.list_for_run(run_id)
 
     async def list_events_page(
         self,
@@ -1126,7 +1152,7 @@ class EvaluationLabService:
         limit: int,
     ) -> EvaluationRunEventsPage:
         _ = await self.get_run(run_id)
-        rows = await self._repository.list_events_after_sequence(
+        rows = await EvaluationRunEvent.list_after(
             run_id,
             after_sequence=after_sequence,
             limit=limit + 1,
@@ -1142,7 +1168,7 @@ class EvaluationLabService:
 
     async def list_case_runs(self, run_id: str) -> list[EvaluationCaseRun]:
         _ = await self.get_run(run_id)
-        return await self._repository.list_case_runs(run_id)
+        return await EvaluationCaseRun.list_for_run(run_id)
 
     async def cancel_run(self, run_id: str) -> EvaluationRunWithCases:
         run_with_cases = await self.get_run(run_id)
@@ -1174,23 +1200,22 @@ class EvaluationLabService:
         billing_quantity = sum(case_run.billing_quantity for case_run in run_with_cases.case_runs)
         canceled = max(run.total_case_runs - passed - failed - errors, 0)
         now = _utc_now()
-        canceled_run = await self._repository.update_run(
-            run.model_copy(
-                update={
-                    "state": EvaluationRunState.CANCELED,
-                    "passed_case_runs": passed,
-                    "failed_case_runs": failed,
-                    "error_case_runs": errors,
-                    "canceled_case_runs": canceled,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "total_tokens": total_tokens,
-                    "billing_quantity": billing_quantity,
-                    "finished_at": now,
-                    "updated_at": now,
-                }
-            )
+        canceled_run = run.model_copy(
+            update={
+                "state": EvaluationRunState.CANCELED,
+                "passed_case_runs": passed,
+                "failed_case_runs": failed,
+                "error_case_runs": errors,
+                "canceled_case_runs": canceled,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "billing_quantity": billing_quantity,
+                "finished_at": now,
+                "updated_at": now,
+            }
         )
+        _ = await EvaluationRun.set(canceled_run)
         _ = await self._append_event(
             run_id,
             None,
@@ -1228,11 +1253,12 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_annotation(annotation)
+        _ = await EvaluationAnnotation.set(annotation)
+        return annotation
 
     async def list_annotations(self, run_id: str) -> list[EvaluationAnnotation]:
         _ = await self.get_run(run_id)
-        return await self._repository.list_annotations(run_id)
+        return await EvaluationAnnotation.list_for_run(run_id)
 
     async def update_annotation(
         self,
@@ -1248,10 +1274,11 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_annotation(updated)
+        _ = await EvaluationAnnotation.set(updated)
+        return updated
 
     async def delete_annotation(self, annotation_id: str) -> None:
-        deleted = await self._repository.delete_annotation(annotation_id)
+        deleted = await EvaluationAnnotation.delete_by_id(annotation_id)
         if not deleted:
             raise PlatformNotFoundError(f"Evaluation annotation not found: {annotation_id}")
 
@@ -1280,18 +1307,18 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.upsert_baseline(baseline)
+        return await EvaluationBaseline.upsert_by_suite_and_branch(baseline)
 
     async def get_baseline(self, suite_id: str, branch_id: str) -> EvaluationBaseline:
         _ = await self._require_suite(suite_id)
-        baseline = await self._repository.get_baseline(suite_id, branch_id)
+        baseline = await EvaluationBaseline.for_branch(suite_id, branch_id)
         if baseline is None:
             raise PlatformNotFoundError(f"Evaluation baseline not found: {branch_id}")
         return baseline
 
     async def list_baselines(self, suite_id: str) -> list[EvaluationBaseline]:
         _ = await self._require_suite(suite_id)
-        return await self._repository.list_baselines(suite_id)
+        return await EvaluationBaseline.list_for_suite(suite_id)
 
     async def create_gate_policy(
         self,
@@ -1317,7 +1344,8 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_gate_policy(policy)
+        _ = await EvaluationGatePolicy.set(policy)
+        return policy
 
     async def update_gate_policy(
         self,
@@ -1340,7 +1368,8 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_gate_policy(updated)
+        _ = await EvaluationGatePolicy.set(updated)
+        return updated
 
     async def archive_gate_policy(self, gate_policy_id: str) -> EvaluationGatePolicy:
         policy = await self._require_gate_policy(gate_policy_id)
@@ -1349,14 +1378,15 @@ class EvaluationLabService:
         archived = policy.model_copy(
             update={"archived_at": _utc_now(), "updated_at": _utc_now()}
         )
-        return await self._repository.update_gate_policy(archived)
+        _ = await EvaluationGatePolicy.set(archived)
+        return archived
 
     async def get_gate_policy(self, gate_policy_id: str) -> EvaluationGatePolicy:
         return await self._require_gate_policy(gate_policy_id)
 
     async def list_gate_policies(self, suite_id: str) -> list[EvaluationGatePolicy]:
         _ = await self._require_suite(suite_id)
-        return await self._repository.list_gate_policies(suite_id)
+        return await EvaluationGatePolicy.list_for_suite(suite_id)
 
     async def create_gate_policy_run(
         self,
@@ -1383,7 +1413,7 @@ class EvaluationLabService:
 
     async def get_gate_result(self, run_id: str) -> EvaluationGateResult:
         _ = await self._require_run_model(run_id)
-        gate_result = await self._repository.get_gate_result(run_id)
+        gate_result = await EvaluationGateResult.for_run(run_id)
         if gate_result is None:
             raise PlatformNotFoundError(f"Evaluation gate result not found: {run_id}")
         return gate_result
@@ -1432,7 +1462,7 @@ class EvaluationLabService:
         limit: int,
     ) -> EvaluationResultsMatrix:
         _ = await self._require_suite(suite_id)
-        all_cases = await self._repository.list_cases(suite_id)
+        all_cases = await EvaluationCase.list_for_suite(suite_id)
         cases = [
             EvaluationMatrixCase(
                 case_id=case.case_id,
@@ -1446,7 +1476,7 @@ class EvaluationLabService:
         ]
         runs = [
             run
-            for run in await self._repository.list_runs(suite_id, limit)
+            for run in await EvaluationRun.list_for_suite(suite_id, limit)
             if run.branch_id == branch_id
         ]
         matrix_runs = [
@@ -1469,7 +1499,7 @@ class EvaluationLabService:
         ]
         cells: list[EvaluationMatrixCell] = []
         for run in runs:
-            for case_run in await self._repository.list_case_runs(run.run_id):
+            for case_run in await EvaluationCaseRun.list_for_run(run.run_id):
                 cells.append(
                     EvaluationMatrixCell(
                         run_id=run.run_id,
@@ -1500,9 +1530,9 @@ class EvaluationLabService:
         if case_run.trace_id is not None:
             spans = [
                 self._trace_span(span)
-                for span in await self._span_repository.get_trace(case_run.trace_id)
+                for span in await Span.list_for_trace(case_run.trace_id)
             ]
-        workflow_records, _ = await self._flow_factory.container.workflow_runtime.get_state_history(
+        workflow_records, _ = await self._workflow_runtime.get_state_history(
             case_run.session_id,
             limit=1000,
         )
@@ -1545,7 +1575,8 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        return await self._repository.create_monitor(monitor)
+        _ = await EvaluationMonitor.set(monitor)
+        return monitor
 
     async def update_monitor(
         self,
@@ -1572,7 +1603,8 @@ class EvaluationLabService:
                 "updated_at": _utc_now(),
             }
         )
-        return await self._repository.update_monitor(updated)
+        _ = await EvaluationMonitor.set(updated)
+        return updated
 
     async def archive_monitor(self, monitor_id: str) -> EvaluationMonitor:
         monitor = await self._require_monitor(monitor_id)
@@ -1581,11 +1613,12 @@ class EvaluationLabService:
         archived = monitor.model_copy(
             update={"state": EvaluationMonitorState.ARCHIVED, "updated_at": _utc_now()}
         )
-        return await self._repository.update_monitor(archived)
+        _ = await EvaluationMonitor.set(archived)
+        return archived
 
     async def list_monitors(self, suite_id: str) -> list[EvaluationMonitor]:
         _ = await self._require_suite(suite_id)
-        return await self._repository.list_monitors(suite_id)
+        return await EvaluationMonitor.list_for_suite(suite_id)
 
     async def get_monitor(self, monitor_id: str) -> EvaluationMonitor:
         return await self._require_monitor(monitor_id)
@@ -1597,11 +1630,9 @@ class EvaluationLabService:
     ) -> EvaluationMonitorSampleResult:
         monitor = await self._require_monitor(monitor_id)
         if monitor.state != EvaluationMonitorState.ACTIVE:
-            raise EvaluationLabValidationError(
-                f"Evaluation monitor cannot sample from state: {monitor.state}"
-            )
+            raise EvaluationMonitorNotActive(str(monitor.state))
         limit = min(request.limit, monitor.max_traces_per_sample)
-        traces, _ = await self._span_repository.search_traces(
+        traces, _ = await Span.search_traces(
             user_id=monitor.filter.user_id,
             session_id=monitor.filter.session_id,
             flow_id=monitor.flow_id,
@@ -1615,7 +1646,7 @@ class EvaluationLabService:
             if not self._monitor_trace_is_sampled(trace.trace_id, monitor.sampling_rate):
                 continue
             observation = self._monitor_observation(monitor, trace)
-            observations.append(await self._repository.upsert_monitor_observation(observation))
+            observations.append(await EvaluationMonitorObservation.upsert_by_monitor_and_trace(observation))
         return EvaluationMonitorSampleResult(monitor=monitor, observations=observations)
 
     async def run_monitor_cycle(
@@ -1653,20 +1684,23 @@ class EvaluationLabService:
         trials: int,
         max_concurrency: int,
     ) -> list[EvaluationMonitorCycleResult]:
-        monitors = await self._repository.list_active_monitors(500)
+        monitors = await EvaluationMonitor.list_active(500)
         cycles: list[EvaluationMonitorCycleResult] = []
         for monitor in monitors:
-            cycles.append(
-                await self.run_monitor_cycle(
-                    monitor.monitor_id,
-                    EvaluationMonitorCycleRequest(
-                        limit=limit_per_monitor,
-                        enqueue_gate_run=enqueue_gate_runs,
-                        trials=trials,
-                        max_concurrency=max_concurrency,
-                    ),
+            try:
+                cycles.append(
+                    await self.run_monitor_cycle(
+                        monitor.monitor_id,
+                        EvaluationMonitorCycleRequest(
+                            limit=limit_per_monitor,
+                            enqueue_gate_run=enqueue_gate_runs,
+                            trials=trials,
+                            max_concurrency=max_concurrency,
+                        ),
+                    )
                 )
-            )
+            except EvaluationMonitorNotActive:
+                continue
         return cycles
 
     async def list_monitor_observations(
@@ -1675,7 +1709,7 @@ class EvaluationLabService:
         limit: int,
     ) -> list[EvaluationMonitorObservation]:
         _ = await self._require_monitor(monitor_id)
-        return await self._repository.list_monitor_observations(monitor_id, limit)
+        return await EvaluationMonitorObservation.list_for_monitor(monitor_id, limit)
 
     async def create_pairwise_judgment(
         self,
@@ -1729,14 +1763,15 @@ class EvaluationLabService:
             created_by=self._current_user_id(),
             created_at=now,
         )
-        return await self._repository.create_pairwise_judgment(judgment)
+        _ = await EvaluationPairwiseJudgment.set(judgment)
+        return judgment
 
     async def list_pairwise_judgments_for_case_run(
         self,
         case_run_id: str,
     ) -> list[EvaluationPairwiseJudgment]:
         _ = await self._require_case_run(case_run_id)
-        return await self._repository.list_pairwise_judgments_for_case_run(case_run_id)
+        return await EvaluationPairwiseJudgment.list_for_case_run(case_run_id)
 
     async def _run_case(
         self,
@@ -1758,7 +1793,7 @@ class EvaluationLabService:
             created_at=now,
             updated_at=now,
         )
-        case_run = await self._repository.create_case_run(case_run)
+        _ = await EvaluationCaseRun.set(case_run)
         _ = await self._append_event(
             run.run_id,
             case_run.case_run_id,
@@ -1778,7 +1813,7 @@ class EvaluationLabService:
                 "updated_at": started_at,
             }
         )
-        case_run = await self._repository.update_case_run(case_run)
+        _ = await EvaluationCaseRun.set(case_run)
 
         elapsed = self._elapsed_ms()
         dialog: list[EvaluationDialogMessage] = []
@@ -1807,14 +1842,13 @@ class EvaluationLabService:
                 run.flow_config_version,
             )
             session_id = f"{target_runtime.flow_id}:{context_id}"
-            case_run = await self._repository.update_case_run(
-                case_run.model_copy(
-                    update={
-                        "session_id": session_id,
-                        "updated_at": _utc_now(),
-                    }
-                )
+            case_run = case_run.model_copy(
+                update={
+                    "session_id": session_id,
+                    "updated_at": _utc_now(),
+                }
             )
+            _ = await EvaluationCaseRun.set(case_run)
             state = self._create_execution_state(
                 case=case,
                 target_runtime=target_runtime,
@@ -2076,27 +2110,27 @@ class EvaluationLabService:
         error: str | None,
     ) -> EvaluationCaseRun:
         finished_at = _utc_now()
-        return await self._repository.update_case_run(
-            case_run.model_copy(
-                update={
-                    "state": state,
-                    "duration_ms": duration_ms,
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                    "total_tokens": usage.total_tokens,
-                    "billing_quantity": usage.billing_quantity,
-                    "turns_count": turns_count,
-                    "scores": scores,
-                    "total_score": self._total_score(scores),
-                    "judge_feedback": judge_feedback,
-                    "dialog": dialog,
-                    "error": error,
-                    "started_at": started_at,
-                    "finished_at": finished_at,
-                    "updated_at": finished_at,
-                }
-            )
+        finished = case_run.model_copy(
+            update={
+                "state": state,
+                "duration_ms": duration_ms,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "total_tokens": usage.total_tokens,
+                "billing_quantity": usage.billing_quantity,
+                "turns_count": turns_count,
+                "scores": scores,
+                "total_score": self._total_score(scores),
+                "judge_feedback": judge_feedback,
+                "dialog": dialog,
+                "error": error,
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "updated_at": finished_at,
+            }
         )
+        _ = await EvaluationCaseRun.set(finished)
+        return finished
 
     async def _finish_run(
         self,
@@ -2136,25 +2170,24 @@ class EvaluationLabService:
         else:
             state = EvaluationRunState.PASSED
         now = _utc_now()
-        finished_run = await self._repository.update_run(
-            run.model_copy(
-                update={
-                    "state": state,
-                    "passed_case_runs": passed,
-                    "failed_case_runs": failed,
-                    "error_case_runs": errors,
-                    "canceled_case_runs": canceled,
-                    "average_score": average_score,
-                    "average_duration_ms": average_duration_ms,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "total_tokens": total_tokens,
-                    "billing_quantity": billing_quantity,
-                    "finished_at": now,
-                    "updated_at": now,
-                }
-            )
+        finished_run = run.model_copy(
+            update={
+                "state": state,
+                "passed_case_runs": passed,
+                "failed_case_runs": failed,
+                "error_case_runs": errors,
+                "canceled_case_runs": canceled,
+                "average_score": average_score,
+                "average_duration_ms": average_duration_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "billing_quantity": billing_quantity,
+                "finished_at": now,
+                "updated_at": now,
+            }
         )
+        _ = await EvaluationRun.set(finished_run)
         # CANCELED: terminal event уже пишет cancel_run (RUN_CANCELED).
         if state != EvaluationRunState.CANCELED:
             event_type = (
@@ -2208,9 +2241,9 @@ class EvaluationLabService:
             violations=violations,
             created_at=_utc_now(),
         )
-        result = await self._repository.create_gate_result(result)
+        _ = await EvaluationGateResult.set(result)
         updated_run = run.model_copy(update={"gate_state": gate_state, "updated_at": _utc_now()})
-        _ = await self._repository.update_run(updated_run)
+        _ = await EvaluationRun.set(updated_run)
         _ = await self._append_event(
             run.run_id,
             None,
@@ -2266,7 +2299,7 @@ class EvaluationLabService:
             violations.append("average_duration_above_threshold")
         if policy.max_average_duration_ms is not None and run.average_duration_ms is None:
             violations.append("average_duration_missing")
-        baseline = await self._repository.get_baseline(run.suite_id, run.branch_id)
+        baseline = await EvaluationBaseline.for_branch(run.suite_id, run.branch_id)
         if baseline is None:
             if (
                 policy.require_baseline
@@ -2418,7 +2451,7 @@ class EvaluationLabService:
         check: EvaluationCheckTraceAssertion,
         state: ExecutionState,
     ) -> CheckOutcome:
-        records, _ = await self._flow_factory.container.workflow_runtime.get_state_history(
+        records, _ = await self._workflow_runtime.get_state_history(
             state.session_id,
             limit=1000,
         )
@@ -2448,7 +2481,7 @@ class EvaluationLabService:
         response: str,
         dialog: list[EvaluationDialogMessage],
     ) -> CheckOutcome:
-        runner = self._flow_factory.container.get_code_runner(language=check.language)
+        runner = CodeRunnerRegistry().runner(check.language)
         dialog_payload: list[JsonValue] = [
             require_json_object(message.model_dump(mode="json"), "evaluation.dialog[]")
             for message in dialog
@@ -2625,7 +2658,7 @@ class EvaluationLabService:
         if isinstance(input_config, EvaluationInputText):
             return input_config.content
         if isinstance(input_config, EvaluationInputInlineCode):
-            runner = self._flow_factory.container.get_code_runner(language=input_config.language)
+            runner = CodeRunnerRegistry().runner(input_config.language)
             result = await runner.execute_tool(
                 input_config.source,
                 {},
@@ -2669,7 +2702,7 @@ class EvaluationLabService:
             )
             target_flow_config_version = flow_config_version
             if target_flow_id != case.flow_id:
-                target_flow = await self._flow_repository.get(target_flow_id)
+                target_flow = await FlowConfig.get_latest(target_flow_id)
                 if target_flow is None:
                     raise PlatformNotFoundError(f"Flow not found: {target_flow_id}")
                 target_flow_config_version = target_flow.version.strip()
@@ -2681,6 +2714,7 @@ class EvaluationLabService:
                 target_flow_id,
                 target_branch_id,
                 target_flow_config_version,
+                tool_registry=self._tool_registry,
             )
             if runtime_flow is None:
                 raise PlatformNotFoundError(f"Flow not found: {target_flow_id}")
@@ -2702,11 +2736,12 @@ class EvaluationLabService:
                 flow_config_version=target_flow_config_version,
             )
         node_config = NodeConfig.model_validate(case.target.node)
-        node_class = self._node_registry.get(node_config.type)
-        node = node_class.from_config(
+        node = await create_node(
             node_config.node_id,
-            node_config.model_dump(mode="json"),
-            container=self._flow_factory.container,
+            require_json_object(node_config.model_dump(mode="json"), "evaluation.node"),
+            node_constructor=self._node_constructor,
+            tool_registry=self._tool_registry,
+            flow_factory=self._flow_factory,
         )
 
         async def run_node(state: ExecutionState) -> ExecutionState:
@@ -2717,7 +2752,7 @@ class EvaluationLabService:
                 branch_id=branch_id,
             )
             state.current_nodes = [node_config.node_id]
-            runtime = self._flow_factory.container.workflow_runtime
+            runtime = self._workflow_runtime
             superstep_event = await runtime.record_state_event(
                 state.session_id,
                 state,
@@ -2806,7 +2841,7 @@ class EvaluationLabService:
             )
         if state.flow_config_version is None or not state.flow_config_version.strip():
             raise EvaluationLabValidationError("evaluation state requires flow_config_version")
-        runtime = self._flow_factory.container.workflow_runtime
+        runtime = self._workflow_runtime
         position = await runtime.get_active_execution_position(state.session_id)
         if position is not None:
             return
@@ -2831,7 +2866,7 @@ class EvaluationLabService:
         branch_id: str,
         scope: EvaluationRunScope,
     ) -> list[EvaluationCase]:
-        cases = await self._repository.list_cases(suite_id)
+        cases = await EvaluationCase.list_for_suite(suite_id)
         matching_cases = [case for case in cases if self._case_matches_branch(case, branch_id)]
         if isinstance(scope, EvaluationRunSuiteScope):
             return [case for case in matching_cases if case.enabled]
@@ -3080,19 +3115,19 @@ class EvaluationLabService:
         return turns
 
     async def _require_suite(self, suite_id: str) -> EvaluationSuite:
-        suite = await self._repository.get_suite(suite_id)
+        suite = await EvaluationSuite.get(suite_id)
         if suite is None:
             raise PlatformNotFoundError(f"Evaluation suite not found: {suite_id}")
         return suite
 
     async def _require_run_model(self, run_id: str) -> EvaluationRun:
-        run = await self._repository.get_run(run_id)
+        run = await EvaluationRun.get(run_id)
         if run is None:
             raise PlatformNotFoundError(f"Evaluation run not found: {run_id}")
         return run
 
     async def _require_suite_version(self, suite_version_id: str) -> EvaluationSuiteVersion:
-        suite_version = await self._repository.get_suite_version(suite_version_id)
+        suite_version = await EvaluationSuiteVersion.get(suite_version_id)
         if suite_version is None:
             raise PlatformNotFoundError(
                 f"Evaluation suite version not found: {suite_version_id}"
@@ -3100,13 +3135,13 @@ class EvaluationLabService:
         return suite_version
 
     async def _require_case(self, suite_id: str, case_id: str) -> EvaluationCase:
-        case = await self._repository.get_case(suite_id, case_id)
-        if case is None:
+        case = await EvaluationCase.get(case_id)
+        if case is None or case.suite_id != suite_id:
             raise PlatformNotFoundError(f"Evaluation case not found: {case_id}")
         return case
 
     async def _require_rubric(self, rubric_id: str) -> EvaluationRubric:
-        rubric = await self._repository.get_rubric(rubric_id)
+        rubric = await EvaluationRubric.get(rubric_id)
         if rubric is None:
             raise PlatformNotFoundError(f"Evaluation rubric not found: {rubric_id}")
         return rubric
@@ -3115,7 +3150,7 @@ class EvaluationLabService:
         self,
         rubric_version_id: str,
     ) -> EvaluationRubricVersion:
-        rubric_version = await self._repository.get_rubric_version(rubric_version_id)
+        rubric_version = await EvaluationRubricVersion.get(rubric_version_id)
         if rubric_version is None:
             raise PlatformNotFoundError(
                 f"Evaluation rubric version not found: {rubric_version_id}"
@@ -3123,13 +3158,13 @@ class EvaluationLabService:
         return rubric_version
 
     async def _require_gate_policy(self, gate_policy_id: str) -> EvaluationGatePolicy:
-        policy = await self._repository.get_gate_policy(gate_policy_id)
+        policy = await EvaluationGatePolicy.get(gate_policy_id)
         if policy is None:
             raise PlatformNotFoundError(f"Evaluation gate policy not found: {gate_policy_id}")
         return policy
 
     async def _require_monitor(self, monitor_id: str) -> EvaluationMonitor:
-        monitor = await self._repository.get_monitor(monitor_id)
+        monitor = await EvaluationMonitor.get(monitor_id)
         if monitor is None:
             raise PlatformNotFoundError(f"Evaluation monitor not found: {monitor_id}")
         return monitor
@@ -3139,7 +3174,7 @@ class EvaluationLabService:
         monitor_id: str,
         trace_id: str,
     ) -> EvaluationMonitorObservation:
-        observation = await self._repository.get_monitor_observation(monitor_id, trace_id)
+        observation = await EvaluationMonitorObservation.for_trace(monitor_id, trace_id)
         if observation is None:
             raise PlatformNotFoundError(
                 f"Evaluation monitor observation not found: {trace_id}"
@@ -3147,19 +3182,19 @@ class EvaluationLabService:
         return observation
 
     async def _require_annotation(self, annotation_id: str) -> EvaluationAnnotation:
-        annotation = await self._repository.get_annotation(annotation_id)
+        annotation = await EvaluationAnnotation.get(annotation_id)
         if annotation is None:
             raise PlatformNotFoundError(f"Evaluation annotation not found: {annotation_id}")
         return annotation
 
     async def _require_case_run(self, case_run_id: str) -> EvaluationCaseRun:
-        case_run = await self._repository.get_case_run(case_run_id)
+        case_run = await EvaluationCaseRun.get(case_run_id)
         if case_run is None:
             raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
         return case_run
 
-    async def _require_trace(self, trace_id: str) -> list[TraceSpanRecord]:
-        spans = await self._span_repository.get_trace(trace_id)
+    async def _require_trace(self, trace_id: str) -> list[Span]:
+        spans = await Span.list_for_trace(trace_id)
         if not spans:
             raise PlatformNotFoundError(f"Trace not found: {trace_id}")
         return spans
@@ -3205,7 +3240,7 @@ class EvaluationLabService:
         raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
 
     async def _run_id_for_case_run(self, case_run_id: str) -> str:
-        case_run = await self._repository.get_case_run(case_run_id)
+        case_run = await EvaluationCaseRun.get(case_run_id)
         if case_run is None:
             raise PlatformNotFoundError(f"Evaluation case run not found: {case_run_id}")
         return case_run.run_id
@@ -3251,7 +3286,7 @@ class EvaluationLabService:
                 payload=payload,
                 created_at=_utc_now(),
             )
-            event = await self._repository.append_event(event)
+            event = await EvaluationRunEvent.append(event)
         event_payload = require_json_object(
             event.model_dump(mode="json"),
             "evaluation_run_event",
@@ -3530,7 +3565,7 @@ class EvaluationLabService:
             return None
         return right.average_duration_ms - left.average_duration_ms
 
-    def _trace_span(self, span: TraceSpanRecord) -> EvaluationTraceSpan:
+    def _trace_span(self, span: Span) -> EvaluationTraceSpan:
         return EvaluationTraceSpan(
             span_id=span.span_id,
             trace_id=span.trace_id,
@@ -3681,13 +3716,13 @@ class EvaluationLabService:
             sampled_at=now,
         )
 
-    def _first_trace_task_id(self, spans: list[TraceSpanRecord]) -> str | None:
+    def _first_trace_task_id(self, spans: list[Span]) -> str | None:
         for span in spans:
             if span.task_id is not None and span.task_id.strip():
                 return span.task_id.strip()
         return None
 
-    def _first_trace_session_id(self, spans: list[TraceSpanRecord]) -> str | None:
+    def _first_trace_session_id(self, spans: list[Span]) -> str | None:
         for span in spans:
             if span.session_agent is not None and span.session_agent.strip():
                 return span.session_agent.strip()
@@ -3785,7 +3820,7 @@ class EvaluationLabService:
                 "You are a strict pairwise evaluator. Choose left, right, or tie under "
                 + "the rubric and return structured scores."
             )
-        flow = await self._flow_repository.get(left.flow_id)
+        flow = await FlowConfig.get_latest(left.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         state = self._case_run_resolution_state(left, flow.version)
@@ -3834,7 +3869,7 @@ class EvaluationLabService:
             node_payload = dict(payload)
             node_payload["node_id"] = node_id
             return NodeConfig.model_validate(node_payload)
-        node_config = await self._node_repository.get(node_id)
+        node_config = await NodeConfig.get(NodeConfig.row_id(node_id))
         if node_config is not None:
             return node_config
         raise PlatformNotFoundError(f"Evaluation node not found: {node_id}")
@@ -3878,7 +3913,7 @@ class EvaluationLabService:
                 "LLM pairwise judgment requires left case run context_id"
             )
         prompt = await self._pairwise_prompt(request, left)
-        flow = await self._flow_repository.get(left.flow_id)
+        flow = await FlowConfig.get_latest(left.flow_id)
         if flow is None:
             raise PlatformNotFoundError(f"Flow not found: {left.flow_id}")
         resolution_state = self._case_run_resolution_state(left, flow.version)

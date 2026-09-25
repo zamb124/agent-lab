@@ -6,8 +6,6 @@ E2E тесты для полного цикла переопределений.
 
 import pytest
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.models import FlowConfig
 from apps.flows.src.runtime.flow import Flow
 from core.state import ExecutionState
@@ -17,11 +15,10 @@ from tests.flows.durable_runtime_harness import run_flow, workflow_state
 _STATE_SEQUENCE = 0
 
 
-async def build_flow(config: JsonObject, variables: JsonObject) -> Flow:
-    container = as_flow_runtime_container(get_container())
+async def build_flow(config: JsonObject, variables: JsonObject, di) -> Flow:
     flow_config = FlowConfig.model_validate({**config, "variables": variables})
-    await container.flow_repository.set(flow_config)
-    return await container.flow_factory.get_flow(flow_config.flow_id)
+    await FlowConfig.create_version(flow_config)
+    return await di.flow_factory.get_flow(flow_config.flow_id, tool_registry=di.tool_registry)
 
 
 async def execute_flow(
@@ -38,14 +35,14 @@ async def execute_flow(
         content=content,
         **state_fields,
     )
-    return await run_flow(container=flow.container, flow=flow, state=state)
+    return await run_flow(di=flow.di, flow=flow, state=state)
 
 
 class TestCodeNodeOverrides:
     """E2E тесты переопределения function nodes."""
 
     @pytest.mark.asyncio
-    async def test_function_code_override_changes_behavior(self):
+    async def test_function_code_override_changes_behavior(self, di):
         """Переопределение code в function node меняет поведение."""
         flow_default = await build_flow(
             config={
@@ -61,7 +58,7 @@ class TestCodeNodeOverrides:
                 "edges": [{"from_node": "classifier", "to_node": None}],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_default, content="test")
         assert state['route'] == "default"
         flow_skill = await build_flow(
@@ -78,12 +75,12 @@ class TestCodeNodeOverrides:
                 "edges": [{"from_node": "classifier", "to_node": None}],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_skill, content="test")
         assert state['route'] == "custom"
 
     @pytest.mark.asyncio
-    async def test_conditional_routing_override(self):
+    async def test_conditional_routing_override(self, di):
         """Переопределение условий routing."""
         config_base = {
             "flow_id": "test_routing",
@@ -143,7 +140,7 @@ class TestCodeNodeOverrides:
                 {"from_node": "general", "to_node": None},
             ],
         }
-        flow_base = await build_flow(config=config_base, variables={})
+        flow_base = await build_flow(config=config_base, variables={}, di=di)
         state = await execute_flow(flow_base, content="у меня жалоба")
         assert state['route'] == "complaint"
         assert state['result'] == "complaint"
@@ -190,7 +187,7 @@ class TestCodeNodeOverrides:
                 {"from_node": "general", "to_node": None},
             ],
         }
-        flow_orders_only = await build_flow(config=config_orders_only, variables={})
+        flow_orders_only = await build_flow(config=config_orders_only, variables={}, di=di)
         state = await execute_flow(flow_orders_only, content="у меня жалоба")
         assert state['route'] == "general"
         assert state['result'] == "general"
@@ -200,7 +197,7 @@ class TestVariablesOverrideE2E:
     """E2E тесты переопределения variables."""
 
     @pytest.mark.asyncio
-    async def test_variables_accessible_in_function_node(self):
+    async def test_variables_accessible_in_function_node(self, di):
         """Переменные доступны в function node."""
         flow = await build_flow(
             config={
@@ -216,13 +213,13 @@ class TestVariablesOverrideE2E:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"company_name": "TestCorp", "max_length": 500},
-        )
+        di=di)
         state = await execute_flow(flow)
         assert state['company'] == "TestCorp"
         assert state['max_len'] == 500
 
     @pytest.mark.asyncio
-    async def test_skill_variables_override_base(self):
+    async def test_skill_variables_override_base(self, di):
         """Skill variables переопределяют base."""
         flow_base = await build_flow(
             config={
@@ -238,7 +235,7 @@ class TestVariablesOverrideE2E:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"max_length": 500},
-        )
+        di=di)
         state_base = await execute_flow(flow_base)
         assert state_base["max_len"] == 500
         flow_skill = await build_flow(
@@ -255,7 +252,7 @@ class TestVariablesOverrideE2E:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"max_length": 200},
-        )
+        di=di)
         state_skill = await execute_flow(flow_skill)
         assert state_skill["max_len"] == 200
 
@@ -264,7 +261,7 @@ class TestEntryOverrideE2E:
     """E2E тесты переопределения entry point."""
 
     @pytest.mark.asyncio
-    async def test_skill_entry_changes_start_node(self):
+    async def test_skill_entry_changes_start_node(self, di):
         """Skill entry меняет стартовую ноду."""
         config_nodes = {
             "default_start": {
@@ -288,7 +285,7 @@ class TestEntryOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_default)
         assert state['path'] == "default"
         flow_skill = await build_flow(
@@ -303,7 +300,7 @@ class TestEntryOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_skill)
         assert state['path'] == "skill"
 
@@ -312,7 +309,7 @@ class TestExternalApiNodeOverridesE2E:
     """E2E тесты переопределения external_api nodes (через function node симуляцию)."""
 
     @pytest.mark.asyncio
-    async def test_external_api_state_mapping_override(self):
+    async def test_external_api_state_mapping_override(self, di):
         """Переопределение state_mapping в external_api node."""
         flow = await build_flow(
             config={
@@ -328,7 +325,7 @@ class TestExternalApiNodeOverridesE2E:
                 "edges": [{"from_node": "mock_api", "to_node": None}],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow)
         assert state['cat_fact'] == "Cats sleep 16 hours"
         assert state['cat_fact_length'] == 20
@@ -338,7 +335,7 @@ class TestNestedOverridesE2E:
     """E2E тесты вложенных переопределений."""
 
     @pytest.mark.asyncio
-    async def test_nested_llm_config_override(self):
+    async def test_nested_llm_config_override(self, di):
         """Глубокое переопределение llm config."""
         flow = await build_flow(
             config={
@@ -354,7 +351,7 @@ class TestNestedOverridesE2E:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow)
         assert state['config_passed'] is True
 
@@ -363,7 +360,7 @@ class TestGraphOverridesE2E:
     """E2E тесты переопределений в графовых flows."""
 
     @pytest.mark.asyncio
-    async def test_fast_track_skill_skips_formatter(self):
+    async def test_fast_track_skill_skips_formatter(self, di):
         """Skill fast_track пропускает formatter node."""
         config_base = {
             "flow_id": "test_graph",
@@ -389,7 +386,7 @@ class TestGraphOverridesE2E:
                 {"from_node": "formatter", "to_node": None},
             ],
         }
-        flow_base = await build_flow(config=config_base, variables={})
+        flow_base = await build_flow(config=config_base, variables={}, di=di)
         state = await execute_flow(flow_base)
         assert state['step'] == ["classifier", "processor", "formatter"]
         config_fast = {
@@ -411,13 +408,13 @@ class TestGraphOverridesE2E:
                 {"from_node": "processor", "to_node": None},
             ],
         }
-        flow_fast = await build_flow(config=config_fast, variables={})
+        flow_fast = await build_flow(config=config_fast, variables={}, di=di)
         state = await execute_flow(flow_fast)
         assert state['step'] == ["classifier", "processor"]
         assert "formatter" not in state['step']
 
     @pytest.mark.asyncio
-    async def test_conditional_edge_override(self):
+    async def test_conditional_edge_override(self, di):
         """Переопределение условий в edges."""
         flow_all = await build_flow(
             config={
@@ -479,7 +476,7 @@ class TestGraphOverridesE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_all, input_route="b")
         assert state['result'] == "B"
         flow_redirect = await build_flow(
@@ -527,7 +524,7 @@ class TestGraphOverridesE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_redirect, input_route="b")
         assert state['result'] == "C"
 
@@ -536,7 +533,7 @@ class TestMultipleNodesOverrideE2E:
     """E2E тесты переопределения нескольких нод одновременно."""
 
     @pytest.mark.asyncio
-    async def test_override_multiple_nodes_in_pipeline(self):
+    async def test_override_multiple_nodes_in_pipeline(self, di):
         """Переопределение нескольких нод в pipeline."""
         flow_base = await build_flow(
             config={
@@ -564,7 +561,7 @@ class TestMultipleNodesOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_base)
         assert state['v1'] == "base1"
         assert state['v2'] == "base2"
@@ -595,14 +592,14 @@ class TestMultipleNodesOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_override)
         assert state['v1'] == "override1"
         assert state['v2'] == "base2"
         assert state['v3'] == "override3"
 
     @pytest.mark.asyncio
-    async def test_add_new_node_in_skill(self):
+    async def test_add_new_node_in_skill(self, di):
         """Skill добавляет новую ноду."""
         flow_base = await build_flow(
             config={
@@ -625,7 +622,7 @@ class TestMultipleNodesOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_base)
         assert state["steps"] == ["first", "last"]
         flow_with_middle = await build_flow(
@@ -654,6 +651,6 @@ class TestMultipleNodesOverrideE2E:
                 ],
             },
             variables={},
-        )
+        di=di)
         state = await execute_flow(flow_with_middle)
         assert state["steps"] == ["first", "middle", "last"]

@@ -13,8 +13,6 @@ from core.context.context import (
     set_context,
     set_current_channel,
 )
-from core.models.context_models import Context
-from core.models.identity_models import Company, User
 
 __all__ = [
     "set_context",
@@ -26,7 +24,17 @@ __all__ = [
     "reset_context",
     "set_current_channel",
     "get_current_channel",
-    "Context",
-    "User",
-    "Company",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Ленивый re-export моделей: eager-импорт даёт цикл через platform_model."""
+    if name == "Context":
+        from core.models.context_models import Context
+
+        return Context
+    if name in {"User", "Company"}:
+        from core.models.identity_models import Company, User
+
+        return {"User": User, "Company": Company}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

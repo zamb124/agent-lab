@@ -7,7 +7,7 @@ import {
     entityKind,
     relatedSubtitle,
     relatedTone,
-} from '../utils/related-entity-presenter.js';
+} from '../_helpers/related-entity-presenter.js';
 
 export class CRMRelatedEntityCards extends PlatformElement {
     static styles = [relatedEntityCardSharedStyles];

@@ -3,7 +3,7 @@
 from fastapi import Request
 
 from apps.agent.service import is_device_token_denied_shared
-from apps.flows.src.dependencies import ContainerDep
+from core.db.storage import SharedStorage
 from core.utils.tokens import TokenService
 from core.websocket import WsCommandError
 
@@ -30,7 +30,10 @@ def extract_device_id_from_bearer(request: Request) -> str | None:
     return device_id.strip()
 
 
-async def reject_revoked_device_bearer_if_present(request: Request, container: ContainerDep) -> None:
+async def reject_revoked_device_bearer_if_present(
+    request: Request,
+    shared_storage: SharedStorage,
+) -> None:
     """Отклоняет отозванный device JWT, если Authorization передан (optional auth)."""
     authorization = request.headers.get("Authorization")
     if authorization is None:
@@ -57,7 +60,7 @@ async def reject_revoked_device_bearer_if_present(request: Request, container: C
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
     if await is_device_token_denied_shared(
-        container.shared_storage,
+        shared_storage,
         device_id,
         device_jti=resolved_jti,
     ):
@@ -68,7 +71,10 @@ async def reject_revoked_device_bearer_if_present(request: Request, container: C
         )
 
 
-async def require_active_device_bearer(request: Request, container: ContainerDep) -> None:
+async def require_active_device_bearer(
+    request: Request,
+    shared_storage: SharedStorage,
+) -> None:
     """
     Проверяет Bearer device JWT и отклоняет отозванные токены.
     Контекст user/company должен быть уже установлен AuthMiddleware.
@@ -123,7 +129,7 @@ async def require_active_device_bearer(request: Request, container: ContainerDep
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
     if await is_device_token_denied_shared(
-        container.shared_storage,
+        shared_storage,
         device_id,
         device_jti=resolved_jti,
     ):

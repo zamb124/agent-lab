@@ -18,6 +18,7 @@ import uuid
 
 import pytest
 
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL, TASK_PROCESS_FLOW
 from core.clients.llm import LLMToolCall
 from core.state import ExecutionState, InterruptData
@@ -28,11 +29,9 @@ pytestmark = pytest.mark.real_taskiq
 
 
 @pytest.fixture(autouse=True)
-def require_taskiq_worker(taskiq_worker, container):
+def require_taskiq_worker(taskiq_worker):
     """Все тесты в этом модуле требуют реальный TaskIQ worker."""
-    container.use_worker = True
-    yield
-    container.use_worker = False
+    _ = taskiq_worker
 
 
 @pytest.mark.real_taskiq
@@ -60,7 +59,7 @@ class TestTaskIQToolExecution:
 
     @pytest.mark.asyncio
     async def test_tool_executes_via_taskiq_kiq(
-        self, app, container, calculator_tool_config, mock_context
+        self, app, di, calculator_tool_config, mock_context
     ):
         """Tool выполняется через TaskIQ enqueue + wait_result()."""
         import asyncio
@@ -95,7 +94,7 @@ class TestTaskIQToolExecution:
 
     @pytest.mark.asyncio
     async def test_multiple_tools_execute_parallel_via_taskiq(
-        self, app, container, calculator_tool_config, mock_context
+        self, app, di, calculator_tool_config, mock_context
     ):
         """Несколько tools кикаются параллельно и ждём все результаты."""
         import asyncio
@@ -127,7 +126,7 @@ class TestTaskIQToolExecution:
         assert results == expected
 
     @pytest.mark.asyncio
-    async def test_tool_receives_state(self, app, container, mock_context):
+    async def test_tool_receives_state(self, app, di, mock_context):
         """Tool получает state и может его использовать."""
         import asyncio
 
@@ -162,7 +161,7 @@ class TestTaskIQToolExecution:
 
     @pytest.mark.asyncio
     async def test_tools_results_merged_to_state(
-        self, app, container, calculator_tool_config, unique_id
+        self, app, di, calculator_tool_config, unique_id
     ):
         """Результаты tools мержатся в state.tool_results."""
         from apps.flows.src.models import NodeConfig
@@ -181,8 +180,8 @@ class TestTaskIQToolExecution:
                 "required": ["x"],
             },
         }
-        tool1 = await container.tool_registry.create_tool(calculator_tool_config)
-        tool2 = await container.tool_registry.create_tool(tool2_config)
+        tool1 = await di.tool_registry.create_tool(calculator_tool_config)
+        tool2 = await di.tool_registry.create_tool(tool2_config)
         node_config = NodeConfig(
             node_id="test_node", name="Test Node", type="llm_node", prompt="Test"
         )
@@ -191,7 +190,7 @@ class TestTaskIQToolExecution:
             tools=[tool1, tool2],
             llm=None,
             prompt="Test",
-            container=container,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         tool_calls = [
             LLMToolCall(
@@ -209,7 +208,7 @@ class TestTaskIQToolExecution:
             content="test",
         )
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=state.session_flow_id,
             branch_id=state.branch_id,
@@ -226,9 +225,8 @@ class TestTaskIQFlowExecution:
     """Тесты выполнения flow через TaskIQ."""
 
     @pytest.fixture
-    async def setup_simple_flow(self, app, container, unique_id):
+    async def setup_simple_flow(self, app, di, unique_id):
         """Создает простой flow для тестов."""
-        from apps.flows.src.models import FlowConfig
 
         flow_id = f"taskiq_simple_flow_{unique_id}"
         flow_config = FlowConfig(
@@ -250,12 +248,12 @@ class TestTaskIQFlowExecution:
                 {"from_node": "process", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_flow_executes_via_taskiq_kiq(
-        self, app, container, setup_simple_flow, unique_id, mock_context
+        self, app, di, setup_simple_flow, unique_id, mock_context
     ):
         """Agent выполняется через TaskIQ enqueue + wait_result()."""
         import asyncio
@@ -285,9 +283,8 @@ class TestTaskIQInterruptResume:
     """Тесты interrupt/resume через TaskIQ."""
 
     @pytest.fixture
-    async def setup_interrupt_flow(self, app, container, unique_id):
+    async def setup_interrupt_flow(self, app, di, unique_id):
         """Создает flow с interrupt для тестов."""
-        from apps.flows.src.models import FlowConfig
 
         flow_id = f"taskiq_interrupt_flow_{unique_id}"
         flow_config = FlowConfig(
@@ -309,12 +306,12 @@ class TestTaskIQInterruptResume:
                 {"from_node": "greet", "to_node": None},
             ],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio
     async def test_interrupt_via_taskiq(
-        self, app, container, setup_interrupt_flow, unique_id, mock_context
+        self, app, di, setup_interrupt_flow, unique_id, mock_context
     ):
         """Interrupt работает через TaskIQ."""
         import asyncio
@@ -342,7 +339,7 @@ class TestTaskIQInterruptResume:
 
     @pytest.mark.asyncio
     async def test_resume_via_taskiq(
-        self, app, container, setup_interrupt_flow, unique_id, mock_context
+        self, app, di, setup_interrupt_flow, unique_id, mock_context
     ):
         """Resume после interrupt работает через TaskIQ."""
         import asyncio
@@ -388,9 +385,8 @@ class TestTaskIQAPIIntegration:
     """Тесты интеграции API с TaskIQ."""
 
     @pytest.fixture
-    async def setup_api_flow(self, app, container, unique_id):
+    async def setup_api_flow(self, app, di, unique_id):
         """Создает flow для тестов API."""
-        from apps.flows.src.models import FlowConfig
 
         flow_id = f"taskiq_api_flow_{unique_id}_{uuid.uuid4().hex[:8]}"
         flow_config = FlowConfig(
@@ -405,7 +401,7 @@ class TestTaskIQAPIIntegration:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         return flow_id
 
     @pytest.mark.asyncio

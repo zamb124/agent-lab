@@ -70,8 +70,8 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `OPENFGA_API_TOKEN` |
 | `AUTH_JWT_SECRET` |
 | `SECRETS_ENCRYPTION_KEY` |
-| `SELECTEL_ACCESS_KEY` |
-| `SELECTEL_SECRET_KEY` |
+| `MINIO_ROOT_USER` |
+| `MINIO_ROOT_PASSWORD` |
 | `LIVEKIT_API_KEY` |
 | `LIVEKIT_API_SECRET` |
 | `TURN_SECRET` |

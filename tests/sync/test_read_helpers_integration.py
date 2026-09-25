@@ -6,12 +6,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.channel_lane_preview import ChannelLaneSummary
+from apps.sync.models.lane_preview import ChannelLaneSummary
 from apps.sync.channel_read_helpers import channel_read_from_entity
-from apps.sync.container import get_sync_container
-from apps.sync.db.models import SyncChannel
-from apps.sync.db.repositories.channel_repository import ChannelRepository
 from apps.sync.message_read_helpers import message_read_from_entity
+from apps.sync.models.channel import SyncChannel, SyncChannelMember
 from apps.sync.models.common import UserBrief
 from apps.sync.models.messages import (
     MessageContentModel,
@@ -24,12 +22,12 @@ from core.models.identity_models import User
 
 @pytest.mark.asyncio
 async def test_channel_read_direct_peer_without_user_repo(
-    channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
+    sync_di,
 ) -> None:
-    channel_access = get_sync_container().channel_access_service
+    channel_access = sync_di.channel_access_service
     ch_dir = f"{unique_id}_ch_dir"
     ch = SyncChannel(
         channel_id=ch_dir,
@@ -41,9 +39,9 @@ async def test_channel_read_direct_peer_without_user_repo(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="alice",
     )
-    await channel_repo.create(ch)
-    await channel_repo.ensure_member_row(ch_dir, "alice", company_id=company_id)
-    await channel_repo.ensure_member_row(ch_dir, "bob", company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    await SyncChannelMember.ensure_channel_member_row(ch_dir, "alice", company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(ch_dir, "bob", company_id=company_id)
     await channel_access.sync_channel_created(
         ch_dir,
         company_id=company_id,
@@ -54,9 +52,8 @@ async def test_channel_read_direct_peer_without_user_repo(
     read = await channel_read_from_entity(
         ch,
         viewer_user_id="alice",
-        channel_repository=channel_repo,
         channel_access=channel_access,
-        user_repository=None,
+        resolve_user=False,
         company_id=company_id,
     )
     assert read.peer is not None
@@ -66,15 +63,15 @@ async def test_channel_read_direct_peer_without_user_repo(
 
 @pytest.mark.asyncio
 async def test_channel_read_direct_peer_with_user_repository(
-    channel_repo: ChannelRepository,
     sync_user_repository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
+    sync_di,
 ) -> None:
-    channel_access = get_sync_container().channel_access_service
+    channel_access = sync_di.channel_access_service
     peer_id = f"sync_peer_{company_id}"
-    await sync_user_repository.set(
+    await User.set(
         User(
             user_id=peer_id,
             name="Peer Display Name",
@@ -94,9 +91,9 @@ async def test_channel_read_direct_peer_with_user_repository(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="viewer_x",
     )
-    await channel_repo.create(ch)
-    await channel_repo.ensure_member_row(ch_dir2, "viewer_x", company_id=company_id)
-    await channel_repo.ensure_member_row(ch_dir2, peer_id, company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    await SyncChannelMember.ensure_channel_member_row(ch_dir2, "viewer_x", company_id=company_id)
+    await SyncChannelMember.ensure_channel_member_row(ch_dir2, peer_id, company_id=company_id)
     await channel_access.sync_channel_created(
         ch_dir2,
         company_id=company_id,
@@ -107,9 +104,8 @@ async def test_channel_read_direct_peer_with_user_repository(
     read = await channel_read_from_entity(
         ch,
         viewer_user_id="viewer_x",
-        channel_repository=channel_repo,
         channel_access=channel_access,
-        user_repository=sync_user_repository,
+        resolve_user=True,
         company_id=company_id,
     )
     assert read.peer is not None
@@ -119,12 +115,12 @@ async def test_channel_read_direct_peer_with_user_repository(
 
 @pytest.mark.asyncio
 async def test_channel_read_topic_no_peer_lane_summary(
-    channel_repo: ChannelRepository,
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
+    sync_di,
 ) -> None:
-    channel_access = get_sync_container().channel_access_service
+    channel_access = sync_di.channel_access_service
     ch_top = f"{unique_id}_ch_top"
     ch = SyncChannel(
         channel_id=ch_top,
@@ -136,8 +132,8 @@ async def test_channel_read_topic_no_peer_lane_summary(
         created_at=datetime.now(tz=UTC),
         created_by_user_id="u1",
     )
-    await channel_repo.create(ch)
-    await channel_repo.ensure_member_row(ch_top, "u1", company_id=company_id)
+    _ = await SyncChannel.objects.create(instance=ch)
+    await SyncChannelMember.ensure_channel_member_row(ch_top, "u1", company_id=company_id)
     await channel_access.sync_channel_created(
         ch_top,
         company_id=company_id,
@@ -152,9 +148,8 @@ async def test_channel_read_topic_no_peer_lane_summary(
     read = await channel_read_from_entity(
         ch,
         viewer_user_id="u1",
-        channel_repository=channel_repo,
         channel_access=channel_access,
-        user_repository=None,
+        resolve_user=False,
         company_id=company_id,
         lane_summary=summ,
     )
@@ -164,7 +159,7 @@ async def test_channel_read_topic_no_peer_lane_summary(
 
 
 def test_message_read_from_entity_builds_read() -> None:
-    from apps.sync.db.models import SyncMessage
+    from apps.sync.models.message import SyncMessage
 
     m = SyncMessage(
         message_id="m1",
@@ -195,7 +190,7 @@ def test_message_read_from_entity_builds_read() -> None:
 
 
 def test_message_read_mentions_surface() -> None:
-    from apps.sync.db.models import SyncMessage
+    from apps.sync.models.message import SyncMessage
 
     m = SyncMessage(
         message_id="m2",

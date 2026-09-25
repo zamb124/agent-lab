@@ -8,13 +8,13 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import (
     op_flows_metadata_update,
     op_flows_nodes_bulk_delete,
     op_flows_preview_share,
     op_flows_voice_session_query,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.flow_api import (
     BulkDeleteNodesRequest,
     FlowMetadataRequest,
@@ -66,7 +66,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_voice_query_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -88,14 +88,14 @@ async def test_voice_query_rest_and_op_share_payload(
         op_res = await op_flows_voice_session_query(
             FlowVoiceSessionQueryRequest(flow_id=flow_id, branch_id="default"),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_res.model_dump(mode="json") == http_res.json()
 
 
 async def test_preview_share_rest_and_op_mint_share_url(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -123,13 +123,13 @@ async def test_preview_share_rest_and_op_mint_share_url(
                 guest_max_user_messages=10,
             ),
             user=user,
-            container=container,
+            di=di,
         )
         with pytest.raises(WsCommandError) as missing:
             _ = await op_flows_preview_share(
                 FlowPreviewShareRequest(flow_id=f"missing_{unique_id}", branch_id="default"),
                 user=user,
-                container=container,
+                di=di,
             )
     branch_id = f"skill_{unique_id}"
     branched = await client.post(
@@ -143,7 +143,7 @@ async def test_preview_share_rest_and_op_mint_share_url(
             _ = await op_flows_preview_share(
                 FlowPreviewShareRequest(flow_id=flow_id, branch_id="no_such_branch"),
                 user=user,
-                container=container,
+                di=di,
             )
     assert "/l/" in op_res.share_url
     assert missing.value.code == "forbidden"
@@ -152,7 +152,7 @@ async def test_preview_share_rest_and_op_mint_share_url(
 
 async def test_bulk_delete_and_metadata_rest_and_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -177,7 +177,7 @@ async def test_bulk_delete_and_metadata_rest_and_op(
         op_delete = await op_flows_nodes_bulk_delete(
             BulkDeleteNodesRequest(flow_id=op_id, node_ids=["extra"]),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_delete.model_dump(mode="json") == {
         **http_delete.json(),
@@ -197,7 +197,7 @@ async def test_bulk_delete_and_metadata_rest_and_op(
         op_meta = await op_flows_metadata_update(
             FlowMetadataRequest(flow_id=op_id, sticky_notes=notes),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_meta.model_dump(mode="json") == {
         **http_meta.json(),

@@ -24,7 +24,7 @@ def _minimal_base_prices() -> dict[str, dict[str, float]]:
 
 @pytest.mark.asyncio
 async def test_require_balance_zero_blocks(
-    frontend_container, unique_id, system_user_id, monkeypatch: pytest.MonkeyPatch
+    frontend_di, unique_id, system_user_id, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cid = f"co_zero_bal_{unique_id}"
     company = Company(
@@ -34,7 +34,7 @@ async def test_require_balance_zero_blocks(
         members={system_user_id: ["owner"]},
         balance=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     notify_calls: list[tuple[str, object]] = []
 
     async def _capture_notify(user_id: str, notification: object) -> None:
@@ -43,9 +43,6 @@ async def test_require_balance_zero_blocks(
     monkeypatch.setattr("core.billing.service.notify_user", _capture_notify)
 
     billing = BillingService(
-        frontend_container.company_repository,
-        frontend_container.user_repository,
-        frontend_container.usage_repository,
         tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
@@ -64,11 +61,8 @@ async def test_require_balance_zero_blocks(
 
 
 @pytest.mark.asyncio
-async def test_require_balance_system_exempt(frontend_container) -> None:
+async def test_require_balance_system_exempt(frontend_di) -> None:
     billing = BillingService(
-        frontend_container.company_repository,
-        frontend_container.user_repository,
-        frontend_container.usage_repository,
         tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
@@ -84,7 +78,7 @@ async def test_require_balance_system_exempt(frontend_container) -> None:
 
 
 @pytest.mark.asyncio
-async def test_require_balance_disabled_noop(frontend_container, unique_id, system_user_id) -> None:
+async def test_require_balance_disabled_noop(frontend_di, unique_id, system_user_id) -> None:
     cid = f"co_off_{unique_id}"
     company = Company(
         company_id=cid,
@@ -93,11 +87,8 @@ async def test_require_balance_disabled_noop(frontend_container, unique_id, syst
         members={system_user_id: ["owner"]},
         balance=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     billing = BillingService(
-        frontend_container.company_repository,
-        frontend_container.user_repository,
-        frontend_container.usage_repository,
         tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,
@@ -114,7 +105,7 @@ async def test_require_balance_disabled_noop(frontend_container, unique_id, syst
 
 @pytest.mark.asyncio
 async def test_require_balance_zero_blocks_guest_runtime(
-    frontend_container, unique_id, system_user_id, monkeypatch: pytest.MonkeyPatch
+    frontend_di, unique_id, system_user_id, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cid = f"co_zero_guest_{unique_id}"
     company = Company(
@@ -124,7 +115,7 @@ async def test_require_balance_zero_blocks_guest_runtime(
         members={system_user_id: ["owner"]},
         balance=0.0,
     )
-    await frontend_container.company_repository.set(company)
+    await Company.set(company)
     notify_calls: list[tuple[str, object]] = []
 
     async def _capture_notify(user_id: str, notification: object) -> None:
@@ -133,9 +124,6 @@ async def test_require_balance_zero_blocks_guest_runtime(
     monkeypatch.setattr("core.billing.service.notify_user", _capture_notify)
 
     billing = BillingService(
-        frontend_container.company_repository,
-        frontend_container.user_repository,
-        frontend_container.usage_repository,
         tariff_prices=DEFAULT_TARIFF_PRICES,
         resource_base_prices=_minimal_base_prices(),
         shared_storage=None,

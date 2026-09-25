@@ -11,8 +11,10 @@ import uuid
 from apps.flows.src.models import TriggerConfig
 from apps.flows.src.tasks.task_names import TASK_PROCESS_FLOW
 from apps.flows.src.triggers.input_mapper import InputMapper
-from core.context import Context, User, get_context
+from core.context import get_context
 from core.logging import get_logger
+from core.models.context_models import Context
+from core.models.identity_models import User
 from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
 

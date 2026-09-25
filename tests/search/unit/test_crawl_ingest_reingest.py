@@ -11,7 +11,7 @@ from apps.search.services.crawl.ingest_service import CrawlIngestService
 from core.clients.service_client import ServiceClientError
 from core.crawl.models import CrawlDomain, CrawlFetchResult
 from core.rag.models import RAGIngestTextResponse
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.search.index_models import SearchIndexDefinition
 from tests.search.unit.crawl_enrichment_fixtures import sample_enriched_page
 
 pytestmark = pytest.mark.unit
@@ -28,7 +28,6 @@ async def test_reingest_deletes_then_ingests_with_same_document_id() -> None:
         rag_collection_id="idx_test",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
@@ -102,7 +101,6 @@ async def test_reingest_continues_when_delete_returns_404() -> None:
         rag_collection_id="idx_test",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )

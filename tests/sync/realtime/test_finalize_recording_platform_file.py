@@ -12,6 +12,7 @@ from apps.sync.realtime.tasks import (
     _register_platform_file_record_for_call_recording,
 )
 from core.config import get_settings
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from tests.fixtures.s3 import require_s3_configured
 
 
@@ -33,10 +34,9 @@ async def test_call_recording_register_platform_file_then_download_ok(
         recording_id=recording_id,
     )
     payload = b"sync-test-recording-bytes"
-    bucket = get_settings().s3.default_bucket
-    if bucket == "":
-        pytest.fail("S3 default_bucket is required")
-    s3_client = s3_client_for_bucket(bucket)
+    if get_settings().s3.bucket_name == "":
+        pytest.fail("S3 bucket_name is required")
+    s3_client = s3_client_for_bucket(PLATFORM_STORAGE_ID)
     uploaded = await s3_client.upload_bytes(payload, s3_key, content_type="video/mp4")
     assert uploaded, "S3 upload_bytes вернул False"
     await s3_client.close()
@@ -65,6 +65,6 @@ async def test_call_recording_register_platform_file_then_download_ok(
         cleanup = s3_client_for_bucket(bucket)
         await cleanup.delete_file(s3_key)
         await cleanup.close()
-        from apps.sync.container import get_sync_container
+        from core.files.models import FileRecord
 
-        await get_sync_container().file_repository.delete(recording_id)
+        _ = await FileRecord.delete_by_id(recording_id)

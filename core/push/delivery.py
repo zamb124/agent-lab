@@ -5,11 +5,10 @@
 from __future__ import annotations
 
 from core.config import get_settings
-from core.db.models import PushSubscription
 from core.logging import get_logger
 from core.push.apns_service import get_apns_push_service
 from core.push.fcm_service import get_fcm_push_service
-from core.push.repository import PushSubscriptionRepository
+from core.push.models import PushSubscription
 from core.push.service import get_web_push_service
 from core.types import JsonObject
 
@@ -48,10 +47,7 @@ async def deliver_offline_push(
     ):
         return []
 
-    db_url = settings.database.shared_url
-
-    repo = PushSubscriptionRepository(db_url=db_url)
-    subscriptions = await repo.get_user_subscriptions(user_id)
+    subscriptions = await PushSubscription.list_for_user(user_id)
     if not subscriptions:
         return []
 
@@ -110,7 +106,7 @@ async def deliver_offline_push(
                 logger.warning("push.fcm.endpoint", endpoint=sub.endpoint[:32])
 
     for endpoint in expired_endpoints:
-        _ = await repo.delete_by_endpoint(endpoint)
+        _ = await PushSubscription.delete_by_endpoint(endpoint)
 
     if expired_endpoints:
         logger.info("push.push", expired_endpoints_count=len(expired_endpoints))

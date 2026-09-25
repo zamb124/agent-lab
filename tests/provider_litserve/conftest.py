@@ -17,6 +17,11 @@ def setup_database_before_tests():
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_default_test_user_authz():
+    yield
+
+
 @pytest.fixture(scope="session")
 def shared_silero_vad_engine():
     """Session-scoped реальный VAD-движок: модель Silero загружается один раз.

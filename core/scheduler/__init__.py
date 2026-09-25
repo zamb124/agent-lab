@@ -1,7 +1,7 @@
 """
 Модуль core scheduler.
 
-Предоставляет модели, репозиторий и сервис для scheduled tasks.
+Предоставляет модели и сервис для scheduled tasks.
 RedisScheduleSource — через get_schedule_source.
 
 Примечание: create_scheduler перенесён в apps/scheduler/dispatch.py
@@ -19,7 +19,6 @@ from core.scheduler.models import (
     ScheduledTaskInfo,
     ScheduledTaskStatus,
 )
-from core.scheduler.repository import SchedulerTaskRepository
 from core.scheduler.service import SchedulerService
 from core.scheduler.source import get_schedule_source, reset_schedule_source
 
@@ -35,7 +34,5 @@ __all__ = [
     "PlatformScheduleFilter",
     "PlatformScheduledTask",
     "PlatformRedisScheduleSnapshot",
-    "SchedulerTaskRepository",
     "SchedulerService",
 ]
-

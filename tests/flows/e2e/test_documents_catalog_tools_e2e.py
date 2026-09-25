@@ -17,7 +17,7 @@ from a2a.types import Message
 from docx import Document
 from fastapi import FastAPI
 
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.durable_execution import RunStartedPayload, WorkflowEventType
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
@@ -31,6 +31,7 @@ from apps.flows.tools.documents.documents_catalog import (
 )
 from core.a2a import mapping_from_struct
 from core.context import clear_context, set_context
+from core.di import require_di
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.state import ExecutionState
@@ -589,8 +590,8 @@ async def test_llm_node_runner_documents_catalog_tools(
     state.session_id = f"{flow_id}:{state.context_id}"
     state.content = "browse catalogs"
 
-    container = as_flow_runtime_container(app.state.container)
-    _ = await container.workflow_runtime.save_state(
+    di = require_di(app, FlowsDi)
+    _ = await di.workflow_runtime.save_state(
         state.session_id,
         state,
         event_type=WorkflowEventType.run_started,
@@ -598,7 +599,7 @@ async def test_llm_node_runner_documents_catalog_tools(
         snapshot=True,
     )
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
@@ -613,7 +614,7 @@ async def test_llm_node_runner_documents_catalog_tools(
         ],
         llm=mock_llm,
         prompt="Browse nested Documents catalogs with catalog tools.",
-        container=container,
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
     async for _ in runner.run({"content": "browse catalogs"}, state, InMemoryEmitter(state)):
         pass

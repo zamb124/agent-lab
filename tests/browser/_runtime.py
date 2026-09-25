@@ -6,10 +6,7 @@ from apps.browser.config import get_browser_settings
 from apps.browser.models.types import BrowserRuntimeSettingsView
 from apps.browser.services.runtime_facade import BrowserRuntimeFacade
 from core.clients.redis_client import RedisClient
-from core.context import get_context
-from core.db.storage import Storage
 from core.documents.placement import DocsBindResult, DocsPlacement
-from core.files.file_repository import FileRepository
 from core.files.service import FilesService
 
 
@@ -24,7 +21,7 @@ async def _test_docs_bind_hook(placement: DocsPlacement) -> DocsBindResult:
 
 def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
     """
-    Собрать фасад с теми же зависимостями, что и контейнер: RedisClient для состояния
+    Собрать фасад с теми же зависимостями, что и BrowserDi: RedisClient для состояния
     сессий и FilesService (S3) для артефактов. URL берутся из конфигурации сервиса.
     """
     settings = get_browser_settings()
@@ -35,9 +32,7 @@ def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
     if not shared_url:
         raise ValueError("database.shared_url обязателен для тестового фасада browser")
     redis_client = RedisClient(redis_url)
-    storage = Storage(db_url=shared_url, get_context_func=get_context)
     files_service = FilesService(
-        file_repository=FileRepository(storage=storage),
         files_route_segment="browser",
         docs_bind_hook=_test_docs_bind_hook,
     )

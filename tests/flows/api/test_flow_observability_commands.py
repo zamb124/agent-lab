@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from dataclasses import replace
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.observability_operations import (
     op_flows_logs_by_trace,
     op_flows_traces_by_trace,
     op_flows_traces_handoff_chain,
     op_flows_traces_search,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.observability_api import (
     ObservabilityLogsQueryPayload,
     ObservabilityTraceQueryPayload,
@@ -25,7 +26,7 @@ from core.context import reset_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import User
 from core.tracing import attributes as trace_attr
-from core.tracing.models import TraceSpanWrite
+from core.tracing.models import Span
 from core.websocket import WsCommandError
 from tests.fixtures.ai_provider_defaults import make_test_company
 from tests.flows.api.test_observability_logs_api import (
@@ -63,12 +64,13 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_logs_by_trace_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    app: object,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    had_key, previous = _swap_loki_client_cache(
-        container, MockLokiClient(entries=_SAMPLE_LOG_ENTRIES)
+    previous = _swap_loki_client_cache(
+        app, di, MockLokiClient(entries=_SAMPLE_LOG_ENTRIES)
     )
     try:
         http = await client.get(
@@ -80,20 +82,21 @@ async def test_logs_by_trace_rest_match_op(
             op_result = await op_flows_logs_by_trace(
                 ObservabilityLogsQueryPayload(trace_id="abc123"),
                 user=user,
-                container=container,
+                di=replace(di, loki_client=MockLokiClient(entries=_SAMPLE_LOG_ENTRIES)),
             )
         assert op_result.model_dump(mode="json") == http.json()
     finally:
-        _restore_loki_client_cache(container, had_key, previous)
+        _restore_loki_client_cache(app, previous)
 
 
 async def test_logs_loki_unconfigured_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    app: object,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    had_key, previous = _swap_loki_client_cache(container, None)
+    previous = _swap_loki_client_cache(app, di, MockLokiClient(configured=False))
     try:
         http = await client.get(
             "/flows/api/v1/observability/logs/by-trace/abc123",
@@ -106,20 +109,21 @@ async def test_logs_loki_unconfigured_rest_match_op(
                 _ = await op_flows_logs_by_trace(
                     ObservabilityLogsQueryPayload(trace_id="abc123"),
                     user=user,
-                    container=container,
+                    di=replace(di, loki_client=MockLokiClient(configured=False)),
                 )
         assert exc_info.value.code == "unavailable"
     finally:
-        _restore_loki_client_cache(container, had_key, previous)
+        _restore_loki_client_cache(app, previous)
 
 
 async def test_traces_by_trace_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    app: object,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    prev = _set_mock_tempo(container, MockTempoClient(spans=_SAMPLE_SPANS))
+    prev = _set_mock_tempo(app, di, MockTempoClient(spans=_SAMPLE_SPANS))
     try:
         http = await client.get(
             "/flows/api/v1/traces/trace/trace001",
@@ -130,20 +134,21 @@ async def test_traces_by_trace_rest_match_op(
             op_result = await op_flows_traces_by_trace(
                 ObservabilityTraceQueryPayload(trace_id="trace001"),
                 user=user,
-                container=container,
+                di=replace(di, tempo_client=MockTempoClient(spans=_SAMPLE_SPANS)),
             )
         assert op_result.model_dump(mode="json") == http.json()
     finally:
-        _restore_mock_tempo(container, prev)
+        _restore_mock_tempo(app, prev)
 
 
 async def test_traces_tempo_unavailable_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    app: object,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    prev = _set_mock_tempo(container, MockTempoClient(raise_error=True))
+    prev = _set_mock_tempo(app, di, MockTempoClient(raise_error=True))
     try:
         http = await client.get(
             "/flows/api/v1/traces/trace/trace001",
@@ -156,24 +161,24 @@ async def test_traces_tempo_unavailable_rest_match_op(
                 _ = await op_flows_traces_by_trace(
                     ObservabilityTraceQueryPayload(trace_id="trace001"),
                     user=user,
-                    container=container,
+                    di=replace(di, tempo_client=MockTempoClient(raise_error=True)),
                 )
         assert exc_info.value.code == "unavailable"
     finally:
-        _restore_mock_tempo(container, prev)
+        _restore_mock_tempo(app, prev)
 
 
 async def test_traces_search_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
     flow_id = f"obs_search_{unique_id}"
     now = datetime.now(timezone.utc)
-    await container.span_repository.save_span(
-        TraceSpanWrite(
+    await Span.insert_once(
+        Span(
             span_id=f"span-{unique_id}",
             trace_id=f"trace-{unique_id}",
             parent_span_id=None,
@@ -211,14 +216,14 @@ async def test_traces_search_rest_match_op(
         op_result = await op_flows_traces_search(
             ObservabilityTraceSearchPayload(flow_id=flow_id, limit=20),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_result.model_dump(mode="json") == body
 
 
 async def test_traces_handoff_missing_session_rest_match_op(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     unique_id: str,
     auth_headers_system: dict[str, str],
@@ -235,6 +240,6 @@ async def test_traces_handoff_missing_session_rest_match_op(
             _ = await op_flows_traces_handoff_chain(
                 ObservabilityTraceQueryPayload(parent_session_id=parent_session_id),
                 user=user,
-                container=container,
+                di=di,
             )
     assert exc_info.value.code == "not_found"

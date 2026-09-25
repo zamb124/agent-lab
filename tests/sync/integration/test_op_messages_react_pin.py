@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType
 from apps.sync.models.messages import (
     MessageContentModel,
@@ -26,9 +25,9 @@ from tests.sync.integration._helpers import seed_test_namespace
 
 
 async def _setup_message(
-    op_user: User, op_container: SyncContainer, unique_id: str
+    op_user: User, sync_di, unique_id: str
 ) -> tuple[str, str]:
-    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix="rp")
+    namespace = await seed_test_namespace(op_user, sync_di, unique_id, suffix="rp")
     ch = await op_channels_create(
         ChannelCreate(
             type=ChannelType.TOPIC,
@@ -37,7 +36,7 @@ async def _setup_message(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     msg = await op_messages_send(
         MessagesSendPayload(
@@ -53,7 +52,7 @@ async def _setup_message(
             ),
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return ch.channel_id, msg.message_id
 
@@ -61,25 +60,25 @@ async def _setup_message(
 @pytest.mark.asyncio
 async def test_op_messages_react_toggle(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    channel_id, message_id = await _setup_message(op_user, op_container, unique_id)
+    channel_id, message_id = await _setup_message(op_user, sync_di, unique_id)
     # Set reaction
     after_set = await op_messages_react(
         MessagesReactPayload(
             channel_id=channel_id, message_id=message_id, emoji=":fire:"
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert any(r.emoji == ":fire:" for r in after_set.reactions)
     # Remove (emoji=None)
     after_remove = await op_messages_react(
         MessagesReactPayload(channel_id=channel_id, message_id=message_id, emoji=None),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     user_reactions = [
         r for r in after_remove.reactions if r.user_id == op_user.user_id
@@ -90,15 +89,15 @@ async def test_op_messages_react_toggle(
 @pytest.mark.asyncio
 async def test_op_messages_pin_owner_only(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
-    channel_id, message_id = await _setup_message(op_user, op_container, unique_id)
+    channel_id, message_id = await _setup_message(op_user, sync_di, unique_id)
     pinned_channel = await op_messages_pin(
         MessagesPinPayload(channel_id=channel_id, message_id=message_id, action="add"),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert message_id in pinned_channel.pinned_message_ids
 
@@ -107,6 +106,6 @@ async def test_op_messages_pin_owner_only(
             channel_id=channel_id, message_id=message_id, action="remove"
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert message_id not in unpinned.pinned_message_ids

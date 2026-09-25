@@ -5,7 +5,7 @@ import { html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import { getPlatformBrandBootstrap } from '@platform/lib/utils/platform-brand.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';

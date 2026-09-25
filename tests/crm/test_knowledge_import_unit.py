@@ -30,13 +30,13 @@ def test_validate_chunk_max_chars_bounds() -> None:
 
 
 def test_split_empty_raises() -> None:
-    with pytest.raises(ValueError, match="пуст"):
+    with pytest.raises(ValueError, match="Import text is empty"):
         _ = split_knowledge_text("  \n\t  ")
 
 
 def test_split_too_long_raises() -> None:
     huge = "a" * (MAX_IMPORT_TEXT_CHARS + 1)
-    with pytest.raises(ValueError, match="превышает лимит"):
+    with pytest.raises(ValueError, match="exceeds the limit"):
         _ = split_knowledge_text(huge)
 
 

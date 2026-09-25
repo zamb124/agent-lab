@@ -6,11 +6,14 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
+from apps.frontend.di import FrontendDi
+from core.di import require_di
 from core.mail.models import (
+    INBOX_FOLDER,
     MailboxBindingCreatePayload,
     MailboxBindingKind,
+    StoredMailMessage,
 )
-from core.mail.repositories import INBOX_FOLDER, MailMessageRepository
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from core.types import JsonObject
@@ -35,14 +38,11 @@ def _auth_headers(*, user_id: str, company_id: str) -> dict[str, str]:
 
 @pytest.fixture()
 def inject_mail_service(frontend_app, mail_service: MailService):
-    container = frontend_app.state.container
-    previous = container.__dict__.get("_cached_mail_service")
-    container.__dict__["_cached_mail_service"] = mail_service
+    di = require_di(frontend_app, FrontendDi)
+    previous = di.mail_service
+    object.__setattr__(di, "mail_service", mail_service)
     yield mail_service
-    if previous is None:
-        container.__dict__.pop("_cached_mail_service", None)
-    else:
-        container.__dict__["_cached_mail_service"] = previous
+    object.__setattr__(di, "mail_service", previous)
 
 
 @pytest.mark.asyncio
@@ -50,7 +50,6 @@ async def test_api_sync_search_triage_and_members(
     frontend_client,
     inject_mail_service: MailService,
     recording_mail_port: RecordingMailServerPort,
-    mail_message_repository: MailMessageRepository,
     mail_member_context: MailMemberSeed,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -121,7 +120,7 @@ async def test_api_sync_search_triage_and_members(
     assert trash_resp.status_code == 200, trash_resp.text
     assert trash_resp.json()["destination_folder"] == "Trash"
     assert (
-        await mail_message_repository.get_by_uid(
+        await StoredMailMessage.by_binding_folder_uid(
             binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=1
         )
         is None
@@ -151,7 +150,7 @@ async def test_api_sync_search_triage_and_members(
     )
     assert star_resp.status_code == 200, star_resp.text
     assert star_resp.json()["flagged"] is True
-    starred = await mail_message_repository.get_by_uid(
+    starred = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=3
     )
     assert starred is not None
@@ -172,7 +171,7 @@ async def test_api_sync_search_triage_and_members(
     )
     assert delete_resp.status_code == 200, delete_resp.text
     assert (
-        await mail_message_repository.get_by_uid(
+        await StoredMailMessage.by_binding_folder_uid(
             binding.mailbox_binding_id, folder=INBOX_FOLDER, uid=4
         )
         is None

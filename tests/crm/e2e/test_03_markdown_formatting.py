@@ -55,7 +55,7 @@ def hello():
 
 *Следующая встреча:* 15 января"""
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": "meeting",
             "name": f"Markdown заметка {unique_id}",
@@ -81,7 +81,7 @@ def hello():
 - [GitHub](https://github.com/example/repo)
 - ![Диаграмма](https://example.com/diagram.png)"""
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Заметка со ссылками {unique_id}",
             "description": markdown_text,
@@ -107,7 +107,7 @@ def hello():
 | Разработка | Петр | 20.01 |
 | Тестирование | Анна | 25.01 |"""
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Заметка с таблицей {unique_id}",
             "description": markdown_text,
@@ -143,7 +143,7 @@ def get_data():
     return requests.get("https://api.example.com", headers=auth_headers_system)
 ```"""
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Заметка с кодом {unique_id}",
             "description": markdown_text,
@@ -185,7 +185,7 @@ def get_data():
 
 Следующая встреча через неделю."""
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": "meeting",
             "name": f"Сложная заметка {unique_id}",

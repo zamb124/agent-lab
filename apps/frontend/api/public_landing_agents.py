@@ -14,7 +14,7 @@ from apps.frontend.api.public_session_security import (
     enforce_public_session_issue_rate_limit,
     new_embed_session_id,
 )
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.services.landing_demo_seed import (
     ensure_system_landing_demo_embeds,
     public_landing_demo_card_url,
@@ -22,7 +22,6 @@ from apps.frontend.services.landing_demo_seed import (
 from core.identity.embed_guest_turns import EMBED_SESSION_ID_METADATA_KEY
 from core.identity.landing_public_demo import LANDING_PUBLIC_EMBED_SESSION_ISSUER
 from core.identity.runtime_users import ensure_persisted_runtime_user
-from core.identity.system_bootstrap import SYSTEM_COMPANY_SUBDOMAIN
 from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import SYSTEM_COMPANY_ID
@@ -86,15 +85,10 @@ def _origin_from_referer(referer: str) -> str:
 
 
 async def _landing_flow_config(
-    container: ContainerDep,
+    company_id: str,
     flow_id: str,
 ) -> FlowConfig | None:
-    flow_repo = container.flows_flow_repository
-    pair = await flow_repo.get_latest_by_flow_id_unscoped(flow_id)
-    if pair is None:
-        return None
-    cfg, _company_identifier = pair
-    return cfg
+    return await FlowConfig.get_current_for_company(company_id, flow_id)
 
 
 def _effective_landing_card_image_url(
@@ -113,14 +107,13 @@ def _effective_landing_card_image_url(
 
 
 async def _collect_landing_cards(
-    container: ContainerDep,
     configs: list[EmbedConfig],
 ) -> list[PublicLandingAgentCard]:
     cards: list[PublicLandingAgentCard] = []
     for c in configs:
         if c.status != EmbedStatus.ACTIVE or not c.landing_visible:
             continue
-        flow_cfg = await _landing_flow_config(container, c.flow_id)
+        flow_cfg = await _landing_flow_config(c.company_id, c.flow_id)
         img = _effective_landing_card_image_url(c, flow_cfg)
         if not img:
             continue
@@ -156,23 +149,22 @@ async def _collect_landing_cards(
 
 
 @router.get("", response_model=PublicLandingAgentsResponse)
-async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAgentsResponse:
-    await ensure_system_landing_demo_embeds(container)
-    repo = container.embed_config_repository
-    configs = await repo.list_for_company_identifier(
-        SYSTEM_COMPANY_SUBDOMAIN,
+async def list_public_landing_agents() -> PublicLandingAgentsResponse:
+    await ensure_system_landing_demo_embeds()
+    configs = await EmbedConfig.list_for_company(
+        SYSTEM_COMPANY_ID,
         limit=2000,
         offset=0,
     )
-    cards = await _collect_landing_cards(container, configs)
+    cards = await _collect_landing_cards(configs)
     if not cards:
-        await ensure_system_landing_demo_embeds(container)
-        configs = await repo.list_for_company_identifier(
-            SYSTEM_COMPANY_SUBDOMAIN,
+        await ensure_system_landing_demo_embeds()
+        configs = await EmbedConfig.list_for_company(
+            SYSTEM_COMPANY_ID,
             limit=2000,
             offset=0,
         )
-        cards = await _collect_landing_cards(container, configs)
+        cards = await _collect_landing_cards(configs)
     return PublicLandingAgentsResponse(items=cards)
 
 
@@ -180,25 +172,17 @@ async def list_public_landing_agents(container: ContainerDep) -> PublicLandingAg
 async def issue_public_landing_session(
     body: PublicLandingSessionRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> PublicLandingSessionResponse:
     embed_id = body.embed_id.strip()
-    mapping_repo = container.embed_mapping_repository
-    mapping = await mapping_repo.get(embed_id)
-    if mapping is None:
-        raise HTTPException(status_code=404, detail="Widget not found")
-    if mapping.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Widget not found")
-
-    embed_repo = container.embed_config_repository
-    config = await embed_repo.get_for_company_identifier(SYSTEM_COMPANY_SUBDOMAIN, embed_id)
-    if config is None:
+    config = await EmbedConfig.get(embed_id)
+    if config is None or config.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=404, detail="Configuration not found")
     if config.status != EmbedStatus.ACTIVE:
         raise HTTPException(status_code=403, detail="Widget is disabled")
     if not config.landing_visible:
         raise HTTPException(status_code=403, detail="Widget is not available for public chat")
-    session_flow_cfg = await _landing_flow_config(container, config.flow_id)
+    session_flow_cfg = await _landing_flow_config(config.company_id, config.flow_id)
     img = _effective_landing_card_image_url(config, session_flow_cfg)
     if not img:
         raise HTTPException(status_code=403, detail="Widget is not published in the catalog")
@@ -213,7 +197,7 @@ async def issue_public_landing_session(
         raise HTTPException(status_code=403, detail="origin is required for a public session")
 
     await enforce_public_session_issue_rate_limit(
-        redis_client=container.redis_client,
+        redis_client=di.redis_client,
         request=request,
         scope="public_landing_agents",
     )
@@ -222,7 +206,7 @@ async def issue_public_landing_session(
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
     _ = await ensure_persisted_runtime_user(
-        container,
+        di.authz_service,
         user_id=guest_id,
         company_id=SYSTEM_COMPANY_ID,
         name="Landing Guest",

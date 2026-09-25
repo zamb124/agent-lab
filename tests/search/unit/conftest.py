@@ -18,6 +18,11 @@ def setup_database_before_tests():
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_default_test_user_authz():
+    yield
+
+
 @pytest.fixture(autouse=True)
 def crawl_taxonomy_for_search_unit_tests(request: pytest.FixtureRequest) -> None:
     """Search taxonomy stub без параметра monkeypatch (см. tests/search/conftest.py)."""

@@ -7,6 +7,7 @@ from typing import cast
 import httpx
 from playwright.async_api import Page, expect
 
+from core.di.platform import PlatformDi
 from tests.ui.e2e.sync_e2e_helpers import (
     sync_e2e_activate_namespace_for_next_load,
     sync_e2e_seed_namespace,
@@ -32,11 +33,12 @@ async def wiki_e2e_open_with_namespace(
     page: Page,
     unique_id: str,
     *,
+    di: PlatformDi,
     suffix: str = "wiki",
 ) -> str:
     """Готовит пространство и открывает SPA сразу в нём."""
     company_id = ui_e2e_company_id()
-    namespace = await sync_e2e_seed_namespace(unique_id, suffix=suffix, company_id=company_id)
+    namespace = await sync_e2e_seed_namespace(di, unique_id, suffix=suffix, company_id=company_id)
     await sync_e2e_activate_namespace_for_next_load(page, namespace, company_id=company_id)
     await wiki_e2e_set_locale_ru(page)
     await wiki_ui.open(page)

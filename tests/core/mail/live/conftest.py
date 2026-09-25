@@ -26,13 +26,6 @@ from core.mail.models import (
     MailProvider,
 )
 from core.mail.ports import MailServerPort
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxFolderRepository,
-    MailboxSyncCursorRepository,
-    MailMessageRepository,
-)
 from core.mail.service import MailService
 
 _LIVE_PLACEHOLDERS = frozenset({"", "null", "changeme", "YOUR_PASSWORD", "placeholder"})
@@ -112,22 +105,15 @@ def mail_live_port(mail_live_settings: MailConfig) -> MailServerPort:
 @pytest.fixture()
 def mail_live_service(
     mail_live_settings: MailConfig,
-    container,
+    di,
 ) -> MailService:
     settings = get_settings()
     shared_url = settings.database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для mail live service tests")
     return MailService(
-        connection_repository=CompanyMailConnectionRepository(db_url=shared_url),
-        binding_repository=MailboxBindingRepository(db_url=shared_url),
-        sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
-        folder_repository=MailboxFolderRepository(db_url=shared_url),
-        message_repository=MailMessageRepository(db_url=shared_url),
         authz=build_authz_service(),
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        namespace_service=di.namespace_service,
         mail_config=mail_live_settings,
         port_override=None,
     )

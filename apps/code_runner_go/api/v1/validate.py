@@ -4,7 +4,7 @@ import traceback
 
 from fastapi import APIRouter
 
-from apps.code_runner_go.dependencies import ContainerDep
+from apps.code_runner_go.di import Di
 from apps.code_runner_go.services.executor import SERVICE_NAME
 from core.capabilities import (
     CodeValidationRequest,
@@ -17,11 +17,11 @@ router = APIRouter(prefix="/validate", tags=["code-validation"])
 
 @router.post("", response_model=CodeValidationResponse)
 async def validate_code(
-    container: ContainerDep,
+    di: Di,
     request: CodeValidationRequest,
 ) -> CodeValidationResponse:
     try:
-        return await container.executor.validate(request)
+        return await di.executor.validate(request)
     except Exception as exc:
         return code_validation_failed_response(
             request,

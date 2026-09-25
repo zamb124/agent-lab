@@ -10,8 +10,8 @@ import {
     fileListToPublicSearchFiles,
     setPendingPublicSearchRunFiles,
     takePendingPublicSearchFiles,
-} from '../utils/public-search-files.js';
-import { takePublicSearchLandingTransition } from '../utils/public-search-transition.js';
+} from '../_helpers/public-search-files.js';
+import { takePublicSearchLandingTransition } from '../_helpers/public-search-transition.js';
 import { redirectToLogin } from '@platform/lib/utils/auth-redirect.js';
 import { marketingPageHostStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
 import { bindInputVisibleInVisualViewport } from '@platform/lib/utils/ensure-input-visible-in-visual-viewport.js';

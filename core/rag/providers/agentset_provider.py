@@ -29,7 +29,7 @@ from core.rag.ttl import ensure_ttl_seconds_in_metadata
 from core.rag.upload_profile_binding import UploadProfileBinding
 from core.types import JsonObject, JsonValue, require_json_object
 
-# S3ClientFactory используется через базовый класс BaseRAGProvider
+# Object storage для RAG — через FileGate / BaseRAGProvider
 from core.utils.slug import slugify
 
 from ..base_provider import BaseRAGProvider, validate_metadata_filters
@@ -272,17 +272,13 @@ class AgentsetRAGProvider(BaseRAGProvider):
         2. Передаем публичный URL в Agentset через fileUrl
         3. Agentset скачивает и обрабатывает
         """
-        s3_key, bucket_name, original_filename = await self._upload_file_to_s3(
-            file_path, namespace_id, public=False
-        )
-        file_url = await self._generate_signed_url(s3_key)
+        stored = await self._upload_file_to_s3(file_path, namespace_id, public=False)
+        file_url = await self._signed_url_for_file(stored.file_id)
 
-        doc_name = document_name or original_filename
+        doc_name = document_name or stored.original_name
 
-        # Сохраняем s3_key в metadata для доступа к оригиналу
         doc_metadata = dict(metadata) if metadata is not None else {}
-        doc_metadata["s3_key"] = s3_key
-        doc_metadata["s3_bucket"] = bucket_name
+        doc_metadata["file_id"] = stored.file_id
 
         ingest_data = await self._create_ingest_job_from_url(
             namespace_id,
@@ -326,17 +322,18 @@ class AgentsetRAGProvider(BaseRAGProvider):
         if upload_profile is not None:
             raise ValueError('upload_profile is supported only by the pgvector provider')
 
-        # Генерируем signed URL на 24 часа для индексации Agentset
-        signed_url = await self._generate_signed_url(s3_key, expiration=86400)
-
-        doc_name = document_name or Path(s3_key).name
-
-        # Сохраняем оригинальный s3_key для генерации новых signed URL
         doc_metadata = ensure_ttl_seconds_in_metadata(
             dict(metadata or {}),
             default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
         )
-        doc_metadata["s3_key"] = s3_key
+        file_id = doc_metadata.get("file_id")
+        if isinstance(file_id, str) and file_id != "":
+            signed_url = await self._signed_url_for_file(file_id, expiration=86400)
+        else:
+            signed_url = await self._generate_signed_url(s3_key, expiration=86400)
+            doc_metadata["s3_key"] = s3_key
+
+        doc_name = document_name or Path(s3_key).name
 
         ingest_data = await self._create_ingest_job_from_url(
             namespace_id,
@@ -386,24 +383,21 @@ class AgentsetRAGProvider(BaseRAGProvider):
         doc_name = document_name or f"text_document_{len(text)}"
 
         # Загружаем текст в S3 через базовый метод
-        s3_key, bucket_name = await self._upload_text_to_s3(text, namespace_id, filename)
+        stored = await self._upload_text_to_s3(text, namespace_id, filename)
 
-        # Обновляем метаданные (канонический ``ttl_seconds`` для политики retention)
         doc_metadata = ensure_ttl_seconds_in_metadata(
             dict(metadata or {}),
             default_ttl_seconds=get_settings().rag.ttl.default_ttl_seconds,
         )
         doc_metadata.update({
             "original_text_length": len(text),
-            "s3_key": s3_key,
-            "s3_bucket": bucket_name,
+            "file_id": stored.file_id,
             "uploaded_via": "text_upload"
         })
 
-        # Используем существующий метод для загрузки из S3
         return await self.upload_document_from_s3(
             namespace_id=namespace_id,
-            s3_key=s3_key,
+            s3_key=stored.s3_key,
             document_name=doc_name,
             metadata=doc_metadata,
         )

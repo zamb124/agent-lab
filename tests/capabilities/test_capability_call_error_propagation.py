@@ -30,8 +30,8 @@ def _call_request() -> CapabilityCallRequest:
 
 @pytest.mark.asyncio
 async def test_call_capability_propagates_peer_422_detail() -> None:
-    container = MagicMock()
-    container.capability_registry.call = AsyncMock(
+    di = MagicMock()
+    di.capability_registry.call = AsyncMock(
         side_effect=ServiceClientError(
             'HTTP 422 при запросе к flows: {"detail":{"tool_id":"ask_user"}}',
             status_code=422,
@@ -40,7 +40,7 @@ async def test_call_capability_propagates_peer_422_detail() -> None:
     )
 
     with pytest.raises(HTTPException) as raised:
-        await call_capability(container, _call_request())
+        await call_capability(di, _call_request())
 
     assert raised.value.status_code == 422
     detail = raised.value.detail
@@ -51,8 +51,8 @@ async def test_call_capability_propagates_peer_422_detail() -> None:
 
 @pytest.mark.asyncio
 async def test_call_capability_keeps_peer_500_as_exception() -> None:
-    container = MagicMock()
-    container.capability_registry.call = AsyncMock(
+    di = MagicMock()
+    di.capability_registry.call = AsyncMock(
         side_effect=ServiceClientError(
             "HTTP 500 при запросе к flows: boom",
             status_code=500,
@@ -61,6 +61,6 @@ async def test_call_capability_keeps_peer_500_as_exception() -> None:
     )
 
     with pytest.raises(ServiceClientError) as raised:
-        await call_capability(container, _call_request())
+        await call_capability(di, _call_request())
 
     assert raised.value.status_code == 500

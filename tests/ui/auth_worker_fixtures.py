@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from core.authz.company_sync import sync_company_member_roles
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 from tests.fixtures.ai_provider_defaults import (
     company_with_test_ai_provider_defaults,
@@ -19,7 +19,7 @@ from tests.ui.e2e_worker import (
 
 
 async def _ensure_company_member(
-    frontend_container,
+    frontend_di,
     *,
     company_id: str,
     company_name: str,
@@ -28,7 +28,7 @@ async def _ensure_company_member(
     user_name: str,
     roles: list[str],
 ) -> str:
-    existing = await frontend_container.company_repository.get(company_id)
+    existing = await Company.get(company_id)
     if existing is None:
         company = make_test_company(
             company_id=company_id,
@@ -37,15 +37,14 @@ async def _ensure_company_member(
             members={user_id: roles},
             subdomain=subdomain,
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
     else:
         existing = company_with_test_ai_provider_defaults(existing)
         if user_id not in existing.members:
             existing.members[user_id] = roles
         if existing.subdomain != subdomain:
             existing.subdomain = subdomain
-        await frontend_container.company_repository.set(existing)
-    await frontend_container.subdomain_repository.set_mapping(subdomain, company_id)
+        await Company.set(existing)
 
     user = User(
         user_id=user_id,
@@ -54,9 +53,9 @@ async def _ensure_company_member(
         companies={company_id: roles},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=roles,
@@ -66,11 +65,11 @@ async def _ensure_company_member(
     return token_service.create_token(user_id, company_id=company_id, roles=roles)
 
 
-async def create_ui_e2e_owner_token(frontend_container) -> str:
+async def create_ui_e2e_owner_token(frontend_di) -> str:
     worker = ui_e2e_worker_id()
     company_id = ui_e2e_company_id()
     return await _ensure_company_member(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         company_name=f"UI E2E {company_id}",
         subdomain=ui_e2e_subdomain(),
@@ -80,11 +79,11 @@ async def create_ui_e2e_owner_token(frontend_container) -> str:
     )
 
 
-async def create_ui_e2e_member_token(frontend_container) -> str:
+async def create_ui_e2e_member_token(frontend_di) -> str:
     worker = ui_e2e_worker_id()
     company_id = ui_e2e_company_id()
     return await _ensure_company_member(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         company_name=f"UI E2E {company_id}",
         subdomain=ui_e2e_subdomain(),
@@ -94,11 +93,11 @@ async def create_ui_e2e_member_token(frontend_container) -> str:
     )
 
 
-async def create_ui_e2e_company2_owner_token(frontend_container) -> str:
+async def create_ui_e2e_company2_owner_token(frontend_di) -> str:
     worker = ui_e2e_worker_id()
     company_id = ui_e2e_company2_id()
     return await _ensure_company_member(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         company_name=f"UI E2E {company_id}",
         subdomain=ui_e2e_subdomain_company2(),
@@ -108,11 +107,11 @@ async def create_ui_e2e_company2_owner_token(frontend_container) -> str:
     )
 
 
-async def create_ui_e2e_company2_member_token(frontend_container) -> str:
+async def create_ui_e2e_company2_member_token(frontend_di) -> str:
     worker = ui_e2e_worker_id()
     company_id = ui_e2e_company2_id()
     return await _ensure_company_member(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         company_name=f"UI E2E {company_id}",
         subdomain=ui_e2e_subdomain_company2(),

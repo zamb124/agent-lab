@@ -11,7 +11,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from core.tracing.models import TraceSpanWrite
+from core.tracing.models import Span
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
@@ -34,8 +34,8 @@ def _span_payload(
     operation_name: str,
     start_time: datetime,
     company_id: str = "system",
-) -> TraceSpanWrite:
-    return TraceSpanWrite(
+) -> Span:
+    return Span(
         span_id=span_id,
         trace_id=trace_id,
         parent_span_id=None,
@@ -90,15 +90,14 @@ async def test_platform_tracing_substring_query_too_short_returns_400(
 @pytest.mark.asyncio
 async def test_platform_tracing_spans_system_filters_and_cursor(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ):
-    repo = frontend_container.span_repository
     svc = f"adm_{unique_id}"
     tid = f"tr_{unique_id}"
     base = datetime.now(timezone.utc)
     op = f"op.admin.{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_s1",
             trace_id=tid,
@@ -107,7 +106,7 @@ async def test_platform_tracing_spans_system_filters_and_cursor(
             start_time=base + timedelta(seconds=2),
         )
     )
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_s2",
             trace_id=tid,
@@ -151,13 +150,12 @@ async def test_platform_tracing_spans_system_filters_and_cursor(
 @pytest.mark.asyncio
 async def test_platform_tracing_trace_tree(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ):
-    repo = frontend_container.span_repository
     tid = f"tree_{unique_id}"
     t0 = datetime.now(timezone.utc)
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_root",
             trace_id=tid,
@@ -166,7 +164,7 @@ async def test_platform_tracing_trace_tree(
             start_time=t0,
         )
     )
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_child",
             trace_id=tid,
@@ -193,14 +191,13 @@ async def test_platform_tracing_trace_tree(
 @pytest.mark.asyncio
 async def test_platform_tracing_facet_users_scoped_by_company(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ):
-    repo = frontend_container.span_repository
     base = datetime.now(timezone.utc)
     co_x = f"api_co_x_{unique_id}"
     uid_x = f"api_user_{unique_id}"
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_fx",
             trace_id=f"{unique_id}_tfx",
@@ -210,7 +207,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
             company_id=co_x,
         ).model_copy(update={"user_id": uid_x}),
     )
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_fy",
             trace_id=f"{unique_id}_tfy",
@@ -240,7 +237,7 @@ async def test_platform_tracing_facet_users_scoped_by_company(
 @pytest.mark.asyncio
 async def test_platform_tracing_facet_users_finds_by_email_and_label(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from core.models.identity_models import User
@@ -253,10 +250,9 @@ async def test_platform_tracing_facet_users_finds_by_email_and_label(
         name=f"Facet By Mail {unique_id}",
         emails=[email],
     )
-    await frontend_container.user_repository.set(user)
-    repo = frontend_container.span_repository
+    await User.set(user)
     base = datetime.now(timezone.utc)
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_em",
             trace_id=f"{unique_id}_tem",
@@ -279,24 +275,23 @@ async def test_platform_tracing_facet_users_finds_by_email_and_label(
 @pytest.mark.asyncio
 async def test_platform_tracing_spans_resolve_user_id_query_email(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from core.models.identity_models import User
 
     email = f"spanres-{unique_id}@u.test"
     uid = f"u_spanres_{unique_id}"
-    await frontend_container.user_repository.set(
+    await User.set(
         User(
             user_id=uid,
             name="Span Res User",
             emails=[email],
         )
     )
-    repo = frontend_container.span_repository
     base = datetime.now(timezone.utc)
     sid = f"{unique_id}_uresem"
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=sid,
             trace_id=f"{unique_id}_turesem",
@@ -317,14 +312,13 @@ async def test_platform_tracing_spans_resolve_user_id_query_email(
 @pytest.mark.asyncio
 async def test_platform_tracing_spans_namespace_and_service_query(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ):
-    repo = frontend_container.span_repository
     base = datetime.now(timezone.utc)
     ns = f"api_ns_{unique_id}"
     svc = f"api_svc_{unique_id}_z"
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_nq",
             trace_id=f"{unique_id}_tnq",
@@ -352,12 +346,11 @@ async def test_platform_tracing_spans_namespace_and_service_query(
 @pytest.mark.asyncio
 async def test_platform_tracing_facet_companies_by_subdomain(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from core.models.identity_models import Company, TariffPlan
 
-    repo = frontend_container.span_repository
     cid = f"co_subfacet_{unique_id}"
     sub = f"subfacet-{unique_id}"
     co = Company(
@@ -368,10 +361,10 @@ async def test_platform_tracing_facet_companies_by_subdomain(
         status="active",
         tariff_plan=TariffPlan.FREE,
     )
-    await frontend_container.company_repository.set(co)
+    await Company.set(co)
 
     base = datetime.now(timezone.utc)
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=f"{unique_id}_sub",
             trace_id=f"{unique_id}_tsub",
@@ -393,12 +386,11 @@ async def test_platform_tracing_facet_companies_by_subdomain(
 @pytest.mark.asyncio
 async def test_platform_tracing_spans_resolve_company_id_query_subdomain(
     frontend_client_system,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     from core.models.identity_models import Company, TariffPlan
 
-    repo = frontend_container.span_repository
     cid = f"co_sresolve_{unique_id}"
     sub = f"sres-{unique_id}"
     co = Company(
@@ -409,11 +401,11 @@ async def test_platform_tracing_spans_resolve_company_id_query_subdomain(
         status="active",
         tariff_plan=TariffPlan.FREE,
     )
-    await frontend_container.company_repository.set(co)
+    await Company.set(co)
 
     base = datetime.now(timezone.utc)
     sid = f"{unique_id}_sp_res"
-    await repo.save_span(
+    await Span.insert_once(
         _span_payload(
             span_id=sid,
             trace_id=f"{unique_id}_tres",

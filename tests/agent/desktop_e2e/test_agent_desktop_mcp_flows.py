@@ -100,6 +100,7 @@ async def test_d_flow_03_desktop_mcp_interrupt_resume(
 @pytest.mark.e2e
 @pytest.mark.timeout(90, func_only=True)
 async def test_mcp_g_03_chat_select_platform_mcp_flow_tool(
+    di,
     agent_frontend_http_client: AsyncClient,
     auth_token: str,
     flows_client_http: AsyncClient,
@@ -129,7 +130,7 @@ async def test_mcp_g_03_chat_select_platform_mcp_flow_tool(
                 page,
                 agent_frontend_http_client,
                 auth_token,
-            )
+            di)
             await assert_platform_mcp_first_in_chat_picker(page)
             await send_chat_message(page, f"call flow {flow_id}")
     finally:
@@ -198,7 +199,7 @@ async def test_d12_device_mcp_audit(
     agent_frontend_http_client: AsyncClient,
     flows_client_http: AsyncClient,
     auth_token: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     humanitec_desktop_process_factory,
 ) -> None:
@@ -228,7 +229,7 @@ async def test_d12_device_mcp_audit(
         assert response.status_code == 200
         assert "result" in response.json()
         await assert_audit_event_in_redis(
-            frontend_container,
+            frontend_di,
             company_id=company_id,
             event_type="agent.platform_mcp.device_mcp",
         )

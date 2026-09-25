@@ -2,24 +2,23 @@
 API эндпоинты для авторизации.
 
 Общий роутер для авторизации, может использоваться в любом сервисе.
-Контейнер получается через request.app.state.container.
+Компоненты — ``PlatformDi`` процесса через ``di: Di``.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Annotated
-from typing import cast as type_cast
+from typing import Annotated
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 
-from core.app_state import PlatformAppState, get_request_token_data
+from core.app_state import get_request_token_data
 from core.config import get_settings
-from core.identity import AuthService
+from core.di.platform import Di, PlatformDi
 from core.logging import get_logger
 from core.models import AuthProvider, AuthRequest
 from core.types import JsonObject, require_json_object
@@ -28,10 +27,6 @@ from core.utils.tokens import TokenData, TokenService, get_token_service
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["auth"])
-
-if TYPE_CHECKING:
-    from core.container import BaseContainer
-
 
 class UserUpdate(BaseModel):
     """Обновление данных пользователя"""
@@ -56,29 +51,6 @@ class SwitchCompanyRequest(BaseModel):
 class DemoLoginRequest(BaseModel):
     email: str
     password: str
-
-
-def get_auth_service(request: Request) -> AuthService:
-    """Получает AuthService из контейнера приложения"""
-    return _auth_container(request).auth_service
-
-
-AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
-
-
-def _platform_app_state(request: Request) -> PlatformAppState:
-    app = type_cast(FastAPI, request.app)
-    if not hasattr(app.state, "container") or not hasattr(app.state, "settings"):
-        raise RuntimeError("Platform app state is not configured")
-    return type_cast(PlatformAppState, type_cast(object, app.state))
-
-
-def _auth_container(request: Request) -> BaseContainer:
-    return _platform_app_state(request).container
-
-
-def _oauth_callback_container(request: Request) -> BaseContainer:
-    return _platform_app_state(request).container
 
 
 def _request_token_data(request: Request) -> TokenData | None:
@@ -142,11 +114,11 @@ async def demo_auth_status():
 async def login_demo(
     request: Request,
     body: DemoLoginRequest,
-    auth_service: AuthServiceDep,
+    di: Di,
 ):
     """Вход демо-пользователя (cookies как после OAuth)."""
     settings = get_settings()
-    result = await auth_service.login_demo(body.email, body.password)
+    result = await di.auth_service.login_demo(body.email, body.password)
 
     if not result.success or not result.session or not result.token or not result.user:
         raise HTTPException(
@@ -191,9 +163,9 @@ async def login_demo(
 
 
 @router.get("/providers")
-async def get_auth_providers(auth_service: AuthServiceDep):
+async def get_auth_providers(di: Di):
     """Возвращает список доступных провайдеров авторизации"""
-    providers = auth_service.get_available_providers()
+    providers = di.auth_service.get_available_providers()
 
     return {
         "providers": [
@@ -211,7 +183,7 @@ async def get_auth_providers(auth_service: AuthServiceDep):
 async def start_auth(
     request: Request,
     provider_name: str,
-    auth_service: AuthServiceDep,
+    di: Di,
     redirect_uri: str | None = None,
     return_path: str | None = None,
 ):
@@ -263,7 +235,7 @@ async def start_auth(
     logger.info("auth.start", original_host=original_host, redirect_uri=redirect_uri)
 
     try:
-        auth_url = await auth_service.start_auth(
+        auth_url = await di.auth_service.start_auth(
             provider,
             redirect_uri,
             original_host=original_host,
@@ -283,7 +255,7 @@ async def _complete_oauth_callback(
     provider_name: str,
     code: str | None,
     state: str | None,
-    auth_service: AuthService,
+    di: PlatformDi,
     error: str | None = None,
     oauth_first_login_user_json: str | None = None,
 ) -> RedirectResponse:
@@ -302,10 +274,10 @@ async def _complete_oauth_callback(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider_name}")
 
-    auth_state = await auth_service.get_auth_state(state)
+    auth_state = await di.auth_service.get_auth_state(state)
     if not auth_state:
         if provider_name == AuthProvider.GOOGLE.value:
-            calendar_service = _oauth_callback_container(request).calendar_service
+            calendar_service = di.calendar_service
             try:
                 return_path = await calendar_service.complete_google_oauth(state=state, code=code)
             except ValueError as err:
@@ -335,7 +307,7 @@ async def _complete_oauth_callback(
         oauth_first_login_user_json=oauth_first_login_user_json,
     )
 
-    result = await auth_service.complete_auth(auth_request)
+    result = await di.auth_service.complete_auth(auth_request)
 
     logger.info("auth.callback_result", success=result.success, error=result.error_message)
 
@@ -357,7 +329,7 @@ async def _complete_oauth_callback(
         redirect_url = build_url(target_host, "/select-company?action=create")
     elif len(user.companies) == 1:
         company_id = list(user.companies.keys())[0]
-        company = await auth_service.get_company(company_id)
+        company = await di.auth_service.get_company(company_id)
         if not company or not company.subdomain:
             redirect_url = build_url(target_host, "/select-company?action=create")
         else:
@@ -365,7 +337,7 @@ async def _complete_oauth_callback(
     else:
         active_company_id = user.active_company_id
         if active_company_id and active_company_id in user.companies:
-            company = await auth_service.get_company(active_company_id)
+            company = await di.auth_service.get_company(active_company_id)
             if company and company.subdomain:
                 redirect_url = build_url(target_host, "/dashboard", company.subdomain)
             else:
@@ -416,7 +388,7 @@ async def auth_callback(
     provider_name: str,
     code: str,
     state: str,
-    auth_service: AuthServiceDep,
+    di: Di,
     error: str | None = None,
     user: str | None = None,
 ):
@@ -426,7 +398,7 @@ async def auth_callback(
         provider_name,
         code,
         state,
-        auth_service,
+        di,
         error=error,
         oauth_first_login_user_json=user,
     )
@@ -436,7 +408,7 @@ async def auth_callback(
 async def auth_callback_post(
     request: Request,
     provider_name: str,
-    auth_service: AuthServiceDep,
+    di: Di,
     code: Annotated[str, Form()],
     state: Annotated[str, Form()],
     error: Annotated[str | None, Form()] = None,
@@ -448,7 +420,7 @@ async def auth_callback_post(
         provider_name,
         code,
         state,
-        auth_service,
+        di,
         error=error,
         oauth_first_login_user_json=user,
     )
@@ -457,7 +429,7 @@ async def auth_callback_post(
 @router.post("/logout")
 async def logout(
     request: Request,
-    auth_service: AuthServiceDep,
+    di: Di,
     session_id: Annotated[str | None, Query()] = None,
 ):
     """
@@ -469,7 +441,7 @@ async def logout(
     if resolved_session_id is None and token_data is not None:
         resolved_session_id = token_data.session_id
     if resolved_session_id is not None:
-        _ = await auth_service.logout(resolved_session_id)
+        _ = await di.auth_service.logout(resolved_session_id)
 
     response = JSONResponse({"success": True, "message": "Сессия завершена"})
     _clear_platform_auth_cookies(response, request)
@@ -477,19 +449,19 @@ async def logout(
 
 
 @router.get("/me")
-async def get_current_user(request: Request, auth_service: AuthServiceDep):
+async def get_current_user(request: Request, di: Di):
     """
     Возвращает полную информацию о текущем авторизованном пользователе.
     """
     token_data = _require_token_data(request)
 
-    user = await auth_service.get_user(token_data.user_id)
+    user = await di.auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Sole PDP for UI admin mutate gates (not JWT roster roles).
-    can_admin = await _auth_container(request).authz_service.check_company_admin(
+    can_admin = await di.authz_service.check_company_admin(
         company_id=token_data.company_id,
         user_id=token_data.user_id,
     )
@@ -522,12 +494,12 @@ async def get_current_user(request: Request, auth_service: AuthServiceDep):
 async def switch_company(
     request: Request,
     payload: SwitchCompanyRequest,
-    auth_service: AuthServiceDep,
+    di: Di,
 ):
     """Переключает активную компанию пользователя и перевыпускает auth_token."""
     token_data = _require_token_data(request)
 
-    user = await auth_service.get_user(token_data.user_id)
+    user = await di.auth_service.get_user(token_data.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -535,7 +507,7 @@ async def switch_company(
         raise HTTPException(status_code=403, detail='No access to the selected company')
 
     user.active_company_id = payload.company_id
-    _ = await auth_service.save_user(user)
+    _ = await di.auth_service.save_user(user)
 
     company_roles = user.companies[payload.company_id]
     token_service = get_token_service()
@@ -563,14 +535,14 @@ async def switch_company(
 
 @router.put("/me")
 async def update_current_user(
-    request: Request, updates: "UserUpdate", auth_service: AuthServiceDep
+    request: Request, updates: "UserUpdate", di: Di
 ):
     """
     Обновляет данные текущего пользователя.
     """
     token_data = _require_token_data(request)
 
-    user = await auth_service.get_user(token_data.user_id)
+    user = await di.auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -607,14 +579,14 @@ async def update_current_user(
             user.name = " ".join(parts)
 
     user.updated_at = datetime.now(timezone.utc)
-    _ = await auth_service.save_user(user)
+    _ = await di.auth_service.save_user(user)
 
     return {"success": True, "message": "User updated"}
 
 
 @router.get("/me/attrs/{service}")
 async def get_service_attrs(
-    request: Request, service: str, auth_service: AuthServiceDep
+    request: Request, service: str, di: Di
 ) -> JsonObject:
     """
     Получает service-specific атрибуты для текущего пользователя.
@@ -624,7 +596,7 @@ async def get_service_attrs(
     """
     token_data = _require_token_data(request)
 
-    user = await auth_service.get_user(token_data.user_id)
+    user = await di.auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -637,7 +609,7 @@ async def get_service_attrs(
 
 @router.put("/me/attrs/{service}")
 async def update_service_attrs(
-    request: Request, service: str, attrs: JsonObject, auth_service: AuthServiceDep
+    request: Request, service: str, attrs: JsonObject, di: Di
 ) -> JsonObject:
     """
     Обновляет service-specific атрибуты для текущего пользователя (merge).
@@ -648,7 +620,7 @@ async def update_service_attrs(
     """
     token_data = _require_token_data(request)
 
-    user = await auth_service.get_user(token_data.user_id)
+    user = await di.auth_service.get_user(token_data.user_id)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -661,7 +633,7 @@ async def update_service_attrs(
 
     user.attributes[service] = {**service_attrs, **attrs}
     user.updated_at = datetime.now(timezone.utc)
-    _ = await auth_service.save_user(user)
+    _ = await di.auth_service.save_user(user)
 
     return {"success": True, "service": service, "attrs": user.attributes[service]}
 
@@ -694,10 +666,10 @@ async def grafana_auth_check(request: Request):
 
 
 @router.get("/status")
-async def auth_status(auth_service: AuthServiceDep):
+async def auth_status(di: Di):
     """Возвращает статус системы авторизации"""
     return {
-        "auth_enabled": auth_service.storage_configured,
-        "available_providers": [p.value for p in auth_service.get_available_providers()],
-        "total_providers": auth_service.provider_count,
+        "auth_enabled": di.auth_service.storage_configured,
+        "available_providers": [p.value for p in di.auth_service.get_available_providers()],
+        "total_providers": di.auth_service.provider_count,
     }

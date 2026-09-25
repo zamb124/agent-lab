@@ -23,6 +23,7 @@ class AuthzObjectType(StrEnum):
     FLOW_UI_SHARE = "flow_ui_share"
     AGENT_DEVICE = "agent_device"
     DATASOURCE = "datasource"
+    STOCK_WAREHOUSE = "stock_warehouse"
 
 
 class AuthzConsistency(StrEnum):

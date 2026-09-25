@@ -11,6 +11,8 @@ import json
 import pytest
 import pytest_asyncio
 
+from apps.flows.di import FlowsDi
+from apps.flows.src.clients.lara_client import LaraClient
 from apps.flows.tools.crm.crm_tools import (
     crm_analyze_note_text,
     crm_create_note,
@@ -61,6 +63,10 @@ def _tool_state(*, unique_id: str, system_user_id: str) -> ExecutionState:
     )
 
 
+def _crm_note(di: FlowsDi):
+    return crm_create_note.with_dependencies([LaraClient(di.lara_facade)])
+
+
 def _as_object(raw: JsonValue) -> JsonObject:
     if isinstance(raw, str):
         return require_json_object(json.loads(raw), "crm.tool.result")
@@ -74,12 +80,14 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     lara_crm_tool_context,
     unique_id: str,
     system_user_id: str,
+    di: FlowsDi,
 ) -> None:
     _ = crm_service
     _ = crm_client
     _ = lara_crm_tool_context
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    propose_raw = await crm_create_note._run_impl(
+    note_tool = _crm_note(di)
+    propose_raw = await note_tool._run_impl(
         {
             "name": f"Lara note {unique_id}",
             "description": "Тело заметки для теста тула.",
@@ -95,7 +103,7 @@ async def test_crm_create_note_tool_returns_blocks_for_chat(
     assert apply_button.action is not None
     assert apply_button.action.name == "apply_pending_action"
     assert apply_button.action.payload["capability"] == "crm.note"
-    raw = await crm_create_note._run_impl(
+    raw = await note_tool._run_impl(
         {
             "mode": "apply",
             "pending_action_id": proposed["pending_action_id"],
@@ -169,6 +177,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     system_user_id: str,
     mock_llm_redis,
     auth_headers_system: dict,
+    di: FlowsDi,
 ) -> None:
     _ = crm_service
     _ = crm_client
@@ -207,7 +216,8 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
     await mock_llm_redis([_slot, _slot, _slot, _slot, _slot, _slot])
 
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    create_propose_raw = await crm_create_note._run_impl(
+    note_tool = _crm_note(di)
+    create_propose_raw = await note_tool._run_impl(
         {
             "name": note_title,
             "description": "Текст заметки для AI-анализа.",
@@ -216,7 +226,7 @@ async def test_crm_analyze_note_text_tool_returns_blocks_for_chat(
         state,
     )
     create_proposed = _as_object(create_propose_raw)
-    create_raw = await crm_create_note._run_impl(
+    create_raw = await note_tool._run_impl(
         {
             "mode": "apply",
             "pending_action_id": create_proposed["pending_action_id"],

@@ -8,15 +8,13 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import FlowContainer, get_container
-from apps.voice.container import VoiceContainer, get_voice_container
+from apps.voice.di import VoiceDi
 from core.context import reset_context, set_context
+from core.di import require_di
 from core.models.context_models import Context
 from core.models.identity_models import User
-from core.models.voice_providers_catalog import (
-    VoiceProvidersCatalogPayload,
-    op_voice_providers_catalog,
-)
+from core.models.voice_providers_catalog import VoiceProvidersCatalogPayload
+from core.voice.operations import op_voice_providers_catalog
 from tests.fixtures.ai_provider_defaults import make_test_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
@@ -43,8 +41,8 @@ async def test_flows_voice_providers_catalog_rest_match_op(
     client: AsyncClient,
     system_user_id: str,
     auth_headers_system: dict[str, str],
+    di,
 ) -> None:
-    container: FlowContainer = get_container()
     http = await client.get(
         "/flows/api/v1/voice-providers/catalog",
         headers=auth_headers_system,
@@ -54,17 +52,18 @@ async def test_flows_voice_providers_catalog_rest_match_op(
         op_result = await op_voice_providers_catalog(
             VoiceProvidersCatalogPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert http.json() == op_result.model_dump(mode="json")
 
 
 async def test_voice_providers_catalog_rest_match_op(
     voice_client: AsyncClient,
+    voice_app: object,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
-    container: VoiceContainer = get_voice_container()
+    di = require_di(voice_app, VoiceDi)
     http = await voice_client.get(
         "/voice/api/v1/voice-providers/catalog",
         headers=auth_headers_system,
@@ -74,6 +73,6 @@ async def test_voice_providers_catalog_rest_match_op(
         op_result = await op_voice_providers_catalog(
             VoiceProvidersCatalogPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert http.json() == op_result.model_dump(mode="json")

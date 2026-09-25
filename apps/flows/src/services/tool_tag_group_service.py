@@ -7,8 +7,6 @@ import importlib
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from apps.flows.src.db.flow_repository import FlowRepository
-from apps.flows.src.db.tool_tag_group_repository import ToolTagGroupRepository
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.tool_tag_group import (
     ToolTagGroup,
@@ -33,22 +31,6 @@ _FLOW_SCAN_LIMIT = 200
 class ToolTagGroupService:
     """Platform catalog описаний tag-групп + idle LLM refresh."""
 
-    _repository: ToolTagGroupRepository
-    _flow_repository: FlowRepository
-
-    def __init__(
-        self,
-        *,
-        repository: ToolTagGroupRepository,
-        flow_repository: FlowRepository,
-    ) -> None:
-        self._repository = repository
-        self._flow_repository = flow_repository
-
-    async def list_groups(self, *, limit: int = 200, offset: int = 0) -> list[ToolTagGroup]:
-        groups = await self._repository.list(limit=limit, offset=offset)
-        return sorted(groups, key=lambda item: item.tag)
-
     async def describe_all_platform_tags(self) -> ToolTagGroupTickStats:
         tools_by_tag = self._collect_builtin_tools_by_tag()
         usage_by_tag = await self._sample_flow_usage_by_tag(tools_by_tag)
@@ -57,7 +39,7 @@ class ToolTagGroupService:
         for tag in sorted(tools_by_tag.keys()):
             tools = tools_by_tag[tag]
             content_hash = self._content_hash(tools)
-            existing = await self._repository.get(tag)
+            existing = await ToolTagGroup.get(tag)
             if existing is not None and existing.content_hash == content_hash:
                 skipped += 1
                 continue
@@ -73,7 +55,7 @@ class ToolTagGroupService:
                 content_hash=content_hash,
                 updated_at=datetime.now(timezone.utc),
             )
-            _ = await self._repository.set(record)
+            _ = await ToolTagGroup.set(record)
             updated += 1
             logger.info(
                 "tool_tag_group.described",
@@ -111,7 +93,7 @@ class ToolTagGroupService:
     ) -> dict[str, list[str]]:
         if len(tools_by_tag) == 0:
             return {}
-        flows = await self._flow_repository.list(limit=_FLOW_SCAN_LIMIT, offset=0)
+        flows = await FlowConfig.list_current(limit=_FLOW_SCAN_LIMIT, offset=0)
         tool_to_tags: dict[str, set[str]] = defaultdict(set)
         for tag, tool_pairs in tools_by_tag.items():
             for tool_id, _ in tool_pairs:

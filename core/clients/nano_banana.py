@@ -12,7 +12,8 @@ from core.ai.runtime import create_llm_client_from_ai_model
 from core.clients.llm.messages import build_a2a_message
 from core.config import get_settings
 from core.files.models import FileRecord
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -105,12 +106,14 @@ class NanoBananaClient:
                     continue
 
                 file_record = FileRecord.model_validate_json(file_data_json)
-
-                s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
-                try:
-                    file_bytes = await s3_client.download_bytes(file_record.s3_key)
-                finally:
-                    await s3_client.close()
+                if file_record.company_id is None or file_record.company_id == "":
+                    logger.warning("image.generate.file_missing_company", file_id=file_id)
+                    continue
+                handle = await FileGate().open_record(
+                    file_record,
+                    SystemPrincipal(company_id=file_record.company_id),
+                )
+                file_bytes = await handle.read_bytes()
 
                 if file_bytes:
                     if is_editing and idx == 0:

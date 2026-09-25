@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.config import get_settings
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.mcp_sync import ensure_default_mcp_servers_for_company
 from core.integrations.mcp import mcp_tool_reference_id
 
@@ -18,11 +17,11 @@ pytest_plugins = ["tests.search.conftest"]
 
 
 @pytest.mark.asyncio
-async def test_platform_search_mcp_test_endpoint(search_service, client, container) -> None:
+async def test_platform_search_mcp_test_endpoint(search_service, client, di) -> None:
     """Default server `search` → POST .../test возвращает 3 tools через Search MCP."""
     _ = search_service
-    runtime = as_flow_runtime_container(container)
-    servers = await ensure_default_mcp_servers_for_company(container=runtime)
+    runtime = di
+    servers = await ensure_default_mcp_servers_for_company(di=runtime)
     search_server = next(item for item in servers if item.server_id == "search")
     expected_url = f"{get_settings().server.get_service_url('search').rstrip('/')}/search/api/v1/mcp"
     assert search_server.url == expected_url
@@ -37,11 +36,11 @@ async def test_platform_search_mcp_test_endpoint(search_service, client, contain
 
 
 @pytest.mark.asyncio
-async def test_platform_search_mcp_sync_endpoint(search_service, client, container) -> None:
+async def test_platform_search_mcp_sync_endpoint(search_service, client, di) -> None:
     """Default server `search` → POST .../sync upsert'ит tool references."""
     _ = search_service
-    runtime = as_flow_runtime_container(container)
-    _ = await ensure_default_mcp_servers_for_company(container=runtime)
+    runtime = di
+    _ = await ensure_default_mcp_servers_for_company(di=runtime)
 
     sync_response = await client.post("/flows/api/v1/mcp/servers/search/sync")
     assert sync_response.status_code == 200, sync_response.text

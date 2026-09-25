@@ -35,7 +35,7 @@ fi
 
 BAD_INPUT='<input\b(?![^>]*\btype=["'\''](?:file|hidden|range|color|checkbox|radio|search)["'\''])(?![^>]*\bdata-canon=)[^>]*>'
 if rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >/dev/null 2>&1; then
-    fail "raw <input> в apps/<svc>/ui/{pages,modals,components}/**: только whitelist type=, либо data-canon, иначе <platform-field> (см. .cursor/rules/data-types.mdc)"
+    fail "raw <input> в apps/<svc>/ui/{pages,modals,components}/**: только whitelist type=, либо data-canon, иначе <platform-field> (см. .cursor/rules/ui_fields.mdc)"
     rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >&2 || true
 fi
 

@@ -1,10 +1,11 @@
 """Helpers for tests: secrets variables API payloads and service upsert."""
 
+
 from __future__ import annotations
+
 
 from typing import Any
 
-from apps.flows.src.container import FlowContainer
 from core.variables.models import VariableValueKind, VariableValuePayload, VariableValueSpec
 
 SECRETS_API_PREFIX = "/secrets/api/v1"
@@ -36,7 +37,7 @@ def static_variable_write_payload(
 
 
 async def upsert_static_variable_via_service(
-    container: FlowContainer,
+    di,
     variable_key: str,
     value: str,
     *,
@@ -55,11 +56,11 @@ async def upsert_static_variable_via_service(
         shared_for_execution=shared_for_execution,
         public=public,
     )
-    _ = await container.variables_service.upsert(request)
+    _ = await di.variables_service.upsert(request)
 
 
-async def delete_variable_via_service(container: FlowContainer, variable_key: str) -> None:
-    _ = await container.variables_service.delete_var(variable_key)
+async def delete_variable_via_service(di, variable_key: str) -> None:
+    _ = await di.variables_service.delete_var(variable_key)
 
 
 async def upsert_static_variable_via_secrets_http(

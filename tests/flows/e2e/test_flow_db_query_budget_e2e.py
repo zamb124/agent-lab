@@ -106,7 +106,7 @@ async def _execute_flow_once(client, flow_id: str, context_id: str) -> dict[str,
 
 
 @pytest.mark.asyncio
-async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_redis, unique_id):
+async def test_parallel_llm_flow_db_query_budget(client, di, mock_llm_redis, unique_id):
     """
     Проверяет ledger budget выполнения flow с параллельной волной LLM-нод.
 
@@ -131,11 +131,11 @@ async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_red
         task = await _execute_flow_once(client, flow_id, context_id)
         assert task["status"]["state"] == "TASK_STATE_COMPLETED"
 
-        persisted_state = await container.workflow_runtime.get_state(session_id)
+        persisted_state = await di.workflow_runtime.get_state(session_id)
         assert persisted_state is not None
         assert persisted_state.terminal_task_state == "completed"
 
-        (history, total_history) = await container.workflow_runtime.get_state_history(session_id)
+        (history, total_history) = await di.workflow_runtime.get_state_history(session_id)
         assert total_history >= 1
         assert history[-1].event_type is WorkflowEventType.run_terminal
 
@@ -148,5 +148,5 @@ async def test_parallel_llm_flow_db_query_budget(client, container, mock_llm_red
             f"(3 llm-ноды): {session_event_count}"
         )
     finally:
-        await container.workflow_runtime.delete_state(session_id)
+        await di.workflow_runtime.delete_state(session_id)
         await client.delete(f"/flows/api/v1/flows/{flow_id}")

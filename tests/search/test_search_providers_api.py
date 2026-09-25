@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.ai.company_settings import decrypt_secret
 from core.company_search import COMPANY_SEARCH_METADATA_KEY, CompanySearchProviders
+from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
 from tests.fixtures.clients import _PLATFORM_ASGI_BASE_URL, _PLATFORM_ASGI_HOST_HEADERS
 
@@ -35,7 +36,7 @@ def _company_id(auth_headers: dict[str, str]) -> str:
 
 
 @pytest.mark.asyncio
-async def test_search_providers_company_key_crud(search_company_client, search_container, auth_headers):
+async def test_search_providers_company_key_crud(search_company_client, search_di, auth_headers):
     """Search provider BYOK сохраняется за компанией, шифруется и отдаётся в UI только маской."""
     company_id = _company_id(auth_headers)
 
@@ -60,7 +61,7 @@ async def test_search_providers_company_key_crud(search_company_client, search_c
     )
     assert response.status_code == 200
 
-    company = await search_container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     settings = CompanySearchProviders.from_metadata(company.metadata)
     assert settings.tavily.credential_source == "company"
@@ -79,13 +80,13 @@ async def test_search_providers_company_key_crud(search_company_client, search_c
 
     reset = await search_company_client.delete(f"{PROVIDERS_URL}/tavily")
     assert reset.status_code == 200
-    company = await search_container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     assert COMPANY_SEARCH_METADATA_KEY not in company.metadata
 
 
 @pytest.mark.asyncio
-async def test_search_provider_order_is_company_scoped(search_company_client, search_container, auth_headers):
+async def test_search_provider_order_is_company_scoped(search_company_client, search_di, auth_headers):
     """Порядок Search providers хранится в metadata активной компании."""
     company_id = _company_id(auth_headers)
 
@@ -95,7 +96,7 @@ async def test_search_provider_order_is_company_scoped(search_company_client, se
     )
     assert response.status_code == 200
 
-    company = await search_container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     settings = CompanySearchProviders.from_metadata(company.metadata)
     assert settings.provider_order == ["tavily", "serper", "tinyfish", "linkup"]

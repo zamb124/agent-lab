@@ -9,8 +9,7 @@ import pytest
 from httpx import AsyncClient
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
@@ -70,31 +69,30 @@ def _lara_state(*, unique_id: str, user_id: str, suffix: str = "") -> ExecutionS
     )
 
 
-async def _seed_lara_skills(container: FlowContainer) -> None:
+async def _seed_lara_skills(di: FlowsDi) -> None:
     seeded = await seed_platform_assistant_skills(
-        container.agent_skill_service,
-        container.files_service,
+        di.files_service,
         "system",
     )
     assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
-async def _require_lara(container: FlowContainer) -> Flow:
-    _ = await ensure_lara_flow(container)
-    flow = await container.flow_factory.get_flow("lara", branch_id=_BRANCH)
+async def _require_lara(di: FlowsDi) -> Flow:
+    _ = await ensure_lara_flow(di)
+    flow = await di.flow_factory.get_flow("lara", branch_id=_BRANCH, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
-async def _run_lara(container: FlowContainer, *, state: ExecutionState) -> ExecutionState:
-    flow = await _require_lara(container)
+async def _run_lara(di: FlowsDi, *, state: ExecutionState) -> ExecutionState:
+    flow = await _require_lara(di)
     main_node = flow.nodes["main"]
     assert getattr(main_node, "agent_skill_ids", None) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_names = {tool.name for tool in await main_node.get_tools(state)}
     assert "load_agent_skill" in tool_names
     assert "sync_list_messages" not in tool_names
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -147,16 +145,16 @@ def _call(tool: str, **args: object) -> MockLLMQueuedResponse:
 
 async def _prepare_employee_channel(
     *,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     unique_id: str,
     flow_suffix: str,
 ) -> tuple[User, Company, str, str, str]:
     flow_id = f"lara_sync_{flow_suffix}_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di,
         flow_id=flow_id,
         company_id="system",
         name=f"Lara Sync {flow_suffix}",
@@ -165,7 +163,7 @@ async def _prepare_employee_channel(
     )
     employee_user_id = flow_employee_user_id(flow_id)
     namespace = f"lara_sync_{flow_suffix}_{unique_id}"
-    await seed_namespace_via_repo("system", namespace)
+    await seed_namespace_via_repo(frontend_di, "system", namespace)
     headers = {"Authorization": f"Bearer {auth_token_system}"}
     async with AsyncClient(base_url=_SYNC_BASE, timeout=60.0) as http:
         created = await http.post(
@@ -191,10 +189,10 @@ async def _prepare_employee_channel(
 
 @pytest.mark.asyncio
 async def test_lara_sync_skill_unlocks_tools_after_load(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     sync_service,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     mock_llm_with_queue: MockLLMQueue,
     mock_llm_capture,
@@ -202,7 +200,7 @@ async def test_lara_sync_skill_unlocks_tools_after_load(
 ) -> None:
     _ = flows_service, sync_service
     employee, company, employee_user_id, _channel_id, _ns = await _prepare_employee_channel(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         auth_token_system=auth_token_system,
         unique_id=unique_id,
         flow_suffix="unlock",
@@ -221,8 +219,8 @@ async def test_lara_sync_skill_unlocks_tools_after_load(
     )
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-unlock")
     with _employee_context(employee, company):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state)
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     calls = await mock_llm_capture()
@@ -240,10 +238,10 @@ async def test_lara_sync_skill_unlocks_tools_after_load(
 
 @pytest.mark.asyncio
 async def test_lara_sync_messaging_lifecycle(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     sync_service,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     system_user_id: str,
     mock_llm_with_queue: MockLLMQueue,
@@ -251,7 +249,7 @@ async def test_lara_sync_messaging_lifecycle(
 ) -> None:
     _ = flows_service, sync_service
     employee, company, employee_user_id, channel_id, _ns = await _prepare_employee_channel(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         auth_token_system=auth_token_system,
         unique_id=unique_id,
         flow_suffix="msg",
@@ -269,8 +267,8 @@ async def test_lara_sync_messaging_lifecycle(
     )
     state1 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-m1")
     with _employee_context(employee, company):
-        await _seed_lara_skills(container)
-        result1 = await _run_lara(container, state=state1)
+        await _seed_lara_skills(di)
+        result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     channels = _tool_json(result1.tool_results["sync_list_channels"])
@@ -317,7 +315,7 @@ async def test_lara_sync_messaging_lifecycle(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-m2")
     with _employee_context(employee, company):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     edited = _tool_json(result2.tool_results["sync_edit_message"])
@@ -332,10 +330,10 @@ async def test_lara_sync_messaging_lifecycle(
 
 @pytest.mark.asyncio
 async def test_lara_sync_channels_create_update_mute_delete(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     sync_service,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     system_user_id: str,
     mock_llm_with_queue: MockLLMQueue,
@@ -344,7 +342,7 @@ async def test_lara_sync_channels_create_update_mute_delete(
     _ = flows_service, sync_service
     employee, company, employee_user_id, _seed_channel_id, namespace = (
         await _prepare_employee_channel(
-            frontend_container=frontend_container,
+            frontend_di=frontend_di,
             auth_token_system=auth_token_system,
             unique_id=unique_id,
             flow_suffix="ch",
@@ -369,8 +367,8 @@ async def test_lara_sync_channels_create_update_mute_delete(
     )
     state1 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-c1")
     with _employee_context(employee, company):
-        await _seed_lara_skills(container)
-        result1 = await _run_lara(container, state=state1)
+        await _seed_lara_skills(di)
+        result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     dm = _tool_json(result1.tool_results["sync_create_channel"])
@@ -391,7 +389,7 @@ async def test_lara_sync_channels_create_update_mute_delete(
     )
     state_own = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-cown")
     with _employee_context(employee, company):
-        result_own = await _run_lara(container, state=state_own)
+        result_own = await _run_lara(di, state=state_own)
 
     assert result_own.interrupt is None
     owned = _tool_json(result_own.tool_results["sync_create_channel"])
@@ -423,7 +421,7 @@ async def test_lara_sync_channels_create_update_mute_delete(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-c2")
     with _employee_context(employee, company):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     updated = _tool_json(result2.tool_results["sync_update_channel"])
@@ -450,7 +448,7 @@ async def test_lara_sync_channels_create_update_mute_delete(
     )
     state3 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-c3")
     with _employee_context(employee, company):
-        result3 = await _run_lara(container, state=state3)
+        result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     deleted = _tool_json(result3.tool_results["sync_delete_message"])
@@ -461,17 +459,17 @@ async def test_lara_sync_channels_create_update_mute_delete(
 
 @pytest.mark.asyncio
 async def test_lara_sync_threads_flow(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
     sync_service,
-    frontend_container,
+    frontend_di,
     auth_token_system: str,
     mock_llm_with_queue: MockLLMQueue,
     unique_id: str,
 ) -> None:
     _ = flows_service, sync_service
     employee, company, employee_user_id, channel_id, _ns = await _prepare_employee_channel(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         auth_token_system=auth_token_system,
         unique_id=unique_id,
         flow_suffix="th",
@@ -489,8 +487,8 @@ async def test_lara_sync_threads_flow(
     )
     state1 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-t1")
     with _employee_context(employee, company):
-        await _seed_lara_skills(container)
-        result1 = await _run_lara(container, state=state1)
+        await _seed_lara_skills(di)
+        result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     root = _tool_json(result1.tool_results["sync_send_message"])
@@ -512,7 +510,7 @@ async def test_lara_sync_threads_flow(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-t2")
     with _employee_context(employee, company):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     thread = _tool_json(result2.tool_results["sync_create_thread"])
@@ -544,7 +542,7 @@ async def test_lara_sync_threads_flow(
     )
     state3 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-t3")
     with _employee_context(employee, company):
-        result3 = await _run_lara(container, state=state3)
+        result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     got = _tool_json(result3.tool_results["sync_get_thread"])

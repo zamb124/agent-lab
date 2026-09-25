@@ -154,7 +154,7 @@ async def test_company_voice_providers_put_vad_rejected(
         },
     )
     assert response.status_code == 410
-    assert "развёртывания" in response.json()["detail"]
+    assert "VAD is configured at deployment level" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -167,4 +167,4 @@ async def test_company_voice_providers_delete_vad_rejected(
         headers=auth_headers_system,
     )
     assert response.status_code == 410
-    assert "развёртывания" in response.json()["detail"]
+    assert "VAD is configured at deployment level" in response.json()["detail"]

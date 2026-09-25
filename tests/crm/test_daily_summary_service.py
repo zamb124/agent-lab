@@ -3,15 +3,20 @@ from __future__ import annotations
 import json
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 import apps.crm.services.entity_service as entity_service_module
+from apps.crm.models.crm_entity import CRMEntity
+from apps.crm.models.relationship import Relationship
 from apps.crm.services.entity_service import EntityService
 from core.clients.a2a_client import A2ATaskResult
-from core.context import Context, set_context
+from core.context import set_context
+from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.test_scope import LOG_TEST_SCOPE
 
 pytestmark = pytest.mark.no_crm_http
@@ -59,17 +64,7 @@ def _analyzed_note() -> SimpleNamespace:
     )
 
 
-def _build_service() -> EntityService:
-    entity_repo = AsyncMock()
-    entity_repo.list_by_entity_ids_ordered = AsyncMock(return_value=[])
-    entity_type_repo = AsyncMock()
-    entity_type_repo.get_by_type_id = AsyncMock(
-        return_value=SimpleNamespace(
-            namespace="default",
-            required_fields={},
-            optional_fields={},
-        )
-    )
+def _build_service(crm_di) -> EntityService:
     namespace_service = AsyncMock()
     namespace_service.get = AsyncMock(return_value=SimpleNamespace(name="default"))
     artifact_service = AsyncMock()
@@ -77,13 +72,9 @@ def _build_service() -> EntityService:
     artifact_service.get_daily_payload = AsyncMock(return_value=None)
     artifact_service.put_period_payload = AsyncMock()
     artifact_service.get_period_payload = AsyncMock(return_value=None)
-    relationship_repo = AsyncMock()
-    relationship_repo.get_neighbors = AsyncMock(return_value={})
     return EntityService(
-        entity_repo=entity_repo,
-        entity_type_repo=entity_type_repo,
-        relationship_type_repo=AsyncMock(),
-        relationship_repo=relationship_repo,
+        rag=get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        rerank_score_cache=MagicMock(),
         namespace_service=namespace_service,
         attachment_service=AsyncMock(),
         a2a_client=AsyncMock(),
@@ -91,16 +82,15 @@ def _build_service() -> EntityService:
         daily_summary_artifact_service=artifact_service,
         user_person_service=AsyncMock(),
         authz=AsyncMock(),
-        access_request_repo=AsyncMock(),
-        company_mapping_repo=AsyncMock(),
         entity_access=AsyncMock(),
+        crm_work_item_service=MagicMock(),
     )
 
 
 @pytest.mark.asyncio
-async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
+async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch, crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([_analyzed_note()], {"notes_count": 1, "max_updated_at": None})
     )
@@ -121,9 +111,10 @@ async def test_enqueue_daily_summary_rebuild_deduplicates(monkeypatch):
 async def test_enqueue_daily_summary_rebuild_isolates_mock_llm_scope(
     monkeypatch: pytest.MonkeyPatch,
     platform_test_scope: str,
+    crm_di,
 ) -> None:
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([_analyzed_note()], {"notes_count": 1, "max_updated_at": None})
     )
@@ -143,9 +134,9 @@ async def test_enqueue_daily_summary_rebuild_isolates_mock_llm_scope(
 
 
 @pytest.mark.asyncio
-async def test_rebuild_daily_summary_returns_stale_if_lock_busy():
+async def test_rebuild_daily_summary_returns_stale_if_lock_busy(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._daily_summary_cache_service.acquire_rebuild_lock = AsyncMock(return_value=False)
     service._daily_summary_cache_service.get_state = AsyncMock(
         return_value={
@@ -164,9 +155,9 @@ async def test_rebuild_daily_summary_returns_stale_if_lock_busy():
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_miss_enqueues_rebuild():
+async def test_get_daily_summary_cached_miss_enqueues_rebuild(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=(
             [_analyzed_note()],
@@ -188,9 +179,9 @@ async def test_get_daily_summary_cached_miss_enqueues_rebuild():
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch):
+async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch, crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([], {"notes_count": 0, "max_updated_at": None})
     )
@@ -218,9 +209,9 @@ async def test_get_daily_summary_cached_empty_day_no_enqueue(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_marks_stale_and_requeues():
+async def test_get_daily_summary_cached_marks_stale_and_requeues(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=(
             [_analyzed_note()],
@@ -250,9 +241,9 @@ async def test_get_daily_summary_cached_marks_stale_and_requeues():
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
+async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     ver = {"notes_count": 1, "max_updated_at": "2026-03-28T11:00:00+00:00"}
     service._collect_notes_and_source_version = AsyncMock(return_value=([_analyzed_note()], ver))
     service._daily_summary_cache_service.get_state = AsyncMock(return_value=None)
@@ -280,9 +271,9 @@ async def test_get_daily_summary_cached_hydrates_from_s3_when_redis_miss():
 
 
 @pytest.mark.asyncio
-async def test_get_period_summary_cached_long_period_clamps_to_max_days(monkeypatch):
+async def test_get_period_summary_cached_long_period_clamps_to_max_days(monkeypatch, crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
 
     def _tiny_period_settings():
         return SimpleNamespace(period_summary_max_days=1)
@@ -315,9 +306,9 @@ async def test_get_period_summary_cached_long_period_clamps_to_max_days(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_get_period_summary_cached_miss_enqueues_period_rebuild():
+async def test_get_period_summary_cached_miss_enqueues_period_rebuild(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([], {"notes_count": 0, "max_updated_at": None})
     )
@@ -341,9 +332,9 @@ async def test_get_period_summary_cached_miss_enqueues_period_rebuild():
 
 
 @pytest.mark.asyncio
-async def test_compute_period_summary_calls_merge_skill_for_range():
+async def test_compute_period_summary_calls_merge_skill_for_range(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([], {"notes_count": 0, "max_updated_at": None})
     )
@@ -368,9 +359,9 @@ async def test_compute_period_summary_calls_merge_skill_for_range():
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary_cached_force_rebuild_on_fresh_cache():
+async def test_get_daily_summary_cached_force_rebuild_on_fresh_cache(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     service._collect_notes_and_source_version = AsyncMock(
         return_value=(
             [_analyzed_note()],
@@ -404,9 +395,9 @@ async def test_get_daily_summary_cached_force_rebuild_on_fresh_cache():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_uses_structured_data_summary():
+async def test_compute_daily_summary_uses_structured_data_summary(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     note = SimpleNamespace(
         entity_id="n-1",
         updated_at=None,
@@ -449,9 +440,9 @@ async def test_compute_daily_summary_uses_structured_data_summary():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
+async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph(monkeypatch, crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     entity_id = "11111111-1111-1111-1111-111111111111"
     note = SimpleNamespace(
         entity_id="n-1",
@@ -465,28 +456,36 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
     service._collect_notes_and_source_version = AsyncMock(
         return_value=([note], {"notes_count": 1, "max_updated_at": None})
     )
-    service._relationship_repo.get_neighbors = AsyncMock(
-        return_value={
-            "n-1": [
+    monkeypatch.setattr(
+        Relationship,
+        "neighbors_for_entities",
+        AsyncMock(
+            return_value={
+                "n-1": [
+                    SimpleNamespace(
+                        source_entity_id="n-1",
+                        target_entity_id=entity_id,
+                        relationship_type="mentions",
+                    )
+                ]
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        CRMEntity,
+        "list_by_ids_in_order",
+        AsyncMock(
+            return_value=[
                 SimpleNamespace(
-                    source_entity_id="n-1",
-                    target_entity_id=entity_id,
-                    relationship_type="mentions",
+                    entity_id=entity_id,
+                    name="Yandex",
+                    entity_type="company",
+                    entity_subtype=None,
+                    namespace="sales",
+                    attributes={},
                 )
             ]
-        }
-    )
-    service._entity_repo.list_by_entity_ids_ordered = AsyncMock(
-        return_value=[
-            SimpleNamespace(
-                entity_id=entity_id,
-                name="Yandex",
-                entity_type="company",
-                entity_subtype=None,
-                namespace="sales",
-                attributes={},
-            )
-        ]
+        ),
     )
     service._a2a_client.send_task = AsyncMock(
         return_value=_a2a_response(
@@ -528,9 +527,9 @@ async def test_compute_daily_summary_adds_inline_entity_links_from_note_graph():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_uses_nested_structured_output_summary():
+async def test_compute_daily_summary_uses_nested_structured_output_summary(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     note = SimpleNamespace(
         entity_id="n-1",
         updated_at=None,
@@ -576,9 +575,9 @@ async def test_compute_daily_summary_uses_nested_structured_output_summary():
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entities_empty():
+async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entities_empty(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     note = SimpleNamespace(
         entity_id="n-1",
         updated_at=None,
@@ -618,9 +617,9 @@ async def test_compute_daily_summary_uses_entities_from_notes_when_payload_entit
 
 
 @pytest.mark.asyncio
-async def test_compute_daily_summary_raises_when_summary_empty():
+async def test_compute_daily_summary_raises_when_summary_empty(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     note = SimpleNamespace(
         entity_id="n-1",
         updated_at=None,
@@ -665,9 +664,9 @@ async def test_compute_daily_summary_raises_when_summary_empty():
         await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
 
 
-def test_extract_data_from_a2a_response_res_as_dict_not_string():
+def test_extract_data_from_a2a_response_res_as_dict_not_string(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     out = service._extract_data_from_a2a_response(
         _a2a_response(
             response="",
@@ -691,9 +690,9 @@ def test_extract_data_from_a2a_response_res_as_dict_not_string():
     assert out.get("summary") == "OK"
 
 
-def test_extract_data_from_a2a_response_skips_node_complete_telemetry():
+def test_extract_data_from_a2a_response_skips_node_complete_telemetry(crm_di):
     _set_test_context()
-    service = _build_service()
+    service = _build_service(crm_di)
     out = service._extract_data_from_a2a_response(
         _a2a_response(
             response="",
@@ -751,11 +750,11 @@ def test_extract_data_from_a2a_response_skips_node_complete_telemetry():
 
 
 @pytest.mark.asyncio
-async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
+async def test_update_entity_note_date_triggers_both_dates(monkeypatch, crm_di):
     _set_test_context()
     monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
     monkeypatch.setattr(entity_service_module, "publish_crm_entity_event", AsyncMock())
-    service = _build_service()
+    service = _build_service(crm_di)
     existing = SimpleNamespace(
         entity_id="e-1",
         entity_type="note",
@@ -769,13 +768,15 @@ async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
         attributes={},
         attachment_ids=[],
     )
-    service._entity_repo.get = AsyncMock(return_value=existing)
-    service._entity_repo.update = AsyncMock()
-    service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
-    service._relationship_repo.get_outgoing = AsyncMock(return_value=[])
-    service._relationship_repo.delete_outgoing_by_source_and_types = AsyncMock()
-    service._relationship_repo.create = AsyncMock()
+    monkeypatch.setattr(CRMEntity, "get", AsyncMock(return_value=existing))
+    monkeypatch.setattr(CRMEntity, "save_loaded", AsyncMock(return_value=existing))
 
+    async def _skip_crm_index(_rag: object, _entity: object, *, replace: bool) -> None:
+        _ = replace
+        return None
+
+    monkeypatch.setattr(entity_service_module, "index_crm_entity", _skip_crm_index)
+    service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
     await service.update_entity(
         entity_id="e-1",
         updates={"note_date": date.fromisoformat("2026-03-28"), "namespace": "support"},
@@ -793,11 +794,11 @@ async def test_update_entity_note_date_triggers_both_dates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_entity_note_triggers_rebuild(monkeypatch):
+async def test_delete_entity_note_triggers_rebuild(monkeypatch, crm_di):
     _set_test_context()
     monkeypatch.setattr(entity_service_module, "broadcast_crm_note_event", AsyncMock())
     monkeypatch.setattr(entity_service_module, "publish_crm_entity_event", AsyncMock())
-    service = _build_service()
+    service = _build_service(crm_di)
     entity = SimpleNamespace(
         entity_id="e-1",
         entity_type="note",
@@ -806,11 +807,9 @@ async def test_delete_entity_note_triggers_rebuild(monkeypatch):
         namespace="sales",
         attachment_ids=[],
     )
-    service._entity_repo.get = AsyncMock(return_value=entity)
-    service._relationship_repo.get_by_entity = AsyncMock(return_value=[])
-    service._relationship_repo.delete_by_entity = AsyncMock()
+    monkeypatch.setattr(CRMEntity, "get", AsyncMock(return_value=entity))
     service._attachment_service.delete_all_attachments = AsyncMock(return_value=0)
-    service._entity_repo.delete = AsyncMock()
+    monkeypatch.setattr(CRMEntity, "take_by_id", AsyncMock(return_value=None))
     service.enqueue_daily_summary_rebuild = AsyncMock(return_value=True)
 
     class DummySaga:

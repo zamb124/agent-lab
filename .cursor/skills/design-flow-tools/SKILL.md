@@ -44,12 +44,9 @@ description: "Проектировать, создавать, изменять �
 
 Дополнительно:
 
-- при аудите текущего runtime, UI или миграции прочитай
-  [current-platform-audit.md](references/current-platform-audit.md);
+- при аудите текущего runtime, UI или миграции — процедура скила `.cursor/skills/refactor-engineer/SKILL.md`;
 - при создании схемы, binding или нового API прочитай
   [contract-examples.md](references/contract-examples.md).
-
-Аудит — снимок, а не вечная истина. Перед исправлением каждой находки повторно проверь актуальный код и незакоммиченные изменения.
 
 ## Целевой паттерн
 
@@ -77,7 +74,7 @@ description: "Проектировать, создавать, изменять �
 - какой структурированный результат возвращается;
 - ожидаемые ошибки, retryability и поведение при повторном вызове;
 - trust/provenance, version, permissions и необходимость подтверждения.
-- Resource ACL / tool grants — OpenFGA через `AuthzService` (sole PDP); tool `permission` groups ≠ PDP, gate = `ToolAuthzGate`. Flow UI share wire = `viewer`|`editor` only. Dual-write create/delete tools+flows fail-closed; CI `check_authz_dual_write` / `check_authz_backfill_completeness`.
+- Права tool и flow — `.cursor/rules/authorization.mdc` и `.cursor/rules/tools.mdc` § Инварианты (п.5).
 
 Используй canonical JSON Schema Draft 2020-12. Требуй object root, `additionalProperties: false` у каждого объекта, descriptions, constraints и `output_schema`. Делай невозможные состояния невыразимыми через enum или discriminated union вместо связанных boolean-флагов.
 

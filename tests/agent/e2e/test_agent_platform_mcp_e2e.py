@@ -238,7 +238,6 @@ async def test_e2e_platform_mcp_context_id_continuity(
     auth_headers: dict[str, str],
     flows_service: None,
     flows_worker: None,
-    flows_container,
     mock_llm_with_queue: Callable[[list[Any]], Awaitable[None]],
     unique_id: str,
 ) -> None:
@@ -298,7 +297,7 @@ async def test_e2e_platform_mcp_audit_events(
     flows_client_http: AsyncClient,
     auth_headers: dict[str, str],
     auth_token: str,
-    frontend_container,
+    frontend_di,
     flows_service: None,
     flows_worker: None,
     unique_id: str,
@@ -324,7 +323,7 @@ async def test_e2e_platform_mcp_audit_events(
     assert response.status_code == 200
     assert "result" in response.json()
     await assert_audit_event_in_redis(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         event_type="agent.platform_mcp.tools_call",
     )

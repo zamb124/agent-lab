@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
 from core.files.retention import FileRetentionKind, FileRetentionSpec
@@ -34,15 +35,13 @@ def _flow_session_spec(*, session_id: str, flow_id: str = "flow_test") -> FileCr
 
 
 @pytest.mark.asyncio
-async def test_files_service_create_persists_record(app):
+async def test_files_service_create_persists_record(app, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
 
     require_s3_configured()
-    container = get_frontend_container()
 
     data = b"files service create payload"
-    record = await container.files_service.create(
+    record = await frontend_di.files_service.create(
         _platform_auxiliary_spec(is_public=True),
         data,
         original_name="svc.txt",
@@ -55,7 +54,7 @@ async def test_files_service_create_persists_record(app):
     assert record.is_public is True
     assert record.metadata["source_kind"] == FileSourceKind.PLATFORM_AUXILIARY.value
 
-    loaded = await container.files_service.get(record.file_id)
+    loaded = await frontend_di.files_service.get(record.file_id)
     assert loaded.file_id == record.file_id
 
 
@@ -67,35 +66,29 @@ def test_source_kind_metadata_value_accepts_enum_and_str() -> None:
 
 
 @pytest.mark.asyncio
-async def test_files_service_get_missing_raises(app):
+async def test_files_service_get_missing_raises(app, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
-
-    container = get_frontend_container()
     with pytest.raises(ValueError, match="file not found"):
-        await container.files_service.get("ffffffffffffffffffffffffffffffff")
+        await frontend_di.files_service.get("ffffffffffffffffffffffffffffffff")
 
 
 @pytest.mark.asyncio
-async def test_files_service_register_s3(app, s3_client, unique_id: str):
+async def test_files_service_register_s3(app, s3_client, unique_id: str, frontend_di):
     _ = app
-    from apps.frontend.container import get_frontend_container
     from core.config import get_settings
 
     settings = get_settings()
-    bucket = settings.s3.default_bucket
-    if bucket is None or bucket == "":
-        pytest.fail("S3 default_bucket is required")
+    if settings.s3.bucket_name == "":
+        pytest.fail("S3 bucket_name is required")
 
     s3_key = f"test/register-s3/{unique_id}.bin"
     payload = b"register s3 object bytes"
     _ = await s3_client.upload_bytes(payload, s3_key, content_type="application/octet-stream")
 
-    container = get_frontend_container()
-    record = await container.files_service.register_s3(
+    record = await frontend_di.files_service.register_s3(
         _platform_auxiliary_spec(),
         s3_key=s3_key,
-        s3_bucket=bucket,
+        storage_id=PLATFORM_STORAGE_ID,
         original_name=f"{unique_id}.bin",
         content_type="application/octet-stream",
         file_size=len(payload),
@@ -171,9 +164,8 @@ async def test_frontend_register_s3_http(frontend_client, auth_headers_system, s
     from core.config import get_settings
 
     settings = get_settings()
-    bucket = settings.s3.default_bucket
-    if bucket is None or bucket == "":
-        pytest.fail("S3 default_bucket is required")
+    if settings.s3.bucket_name == "":
+        pytest.fail("S3 bucket_name is required")
 
     s3_key = f"test/http-register/{unique_id}.txt"
     payload = b"http register s3"
@@ -186,7 +178,7 @@ async def test_frontend_register_s3_http(frontend_client, auth_headers_system, s
             "retention": {"kind": "platform_default"},
         },
         "s3_key": s3_key,
-        "s3_bucket": bucket,
+        "storage_id": PLATFORM_STORAGE_ID,
         "original_name": f"{unique_id}.txt",
         "content_type": "text/plain",
         "file_size": len(payload),

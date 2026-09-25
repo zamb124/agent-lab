@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
+from apps.flows.di import Di
 from apps.flows.realtime.browser_preview_operations import (
     BrowserPreviewClickPayload,
     BrowserPreviewKeyPayload,
@@ -28,7 +29,6 @@ from apps.flows.realtime.browser_preview_operations import (
     op_flows_browser_preview_takeover_release,
     op_flows_browser_preview_text,
 )
-from apps.flows.src.dependencies import ContainerDep
 from apps.flows.src.services.browser_preview import (
     BrowserPreviewActiveSessionResponse,
     BrowserPreviewTokenClaims,
@@ -123,12 +123,12 @@ def _raise_upstream_error(response: httpx.Response) -> None:
 async def browser_preview_status(
     session_id: str,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     status = await op_flows_browser_preview_status(
         BrowserPreviewSessionPayload(session_id=session_id, token=token),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=status.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -137,12 +137,12 @@ async def browser_preview_status(
 async def browser_preview_active_session(
     task_id: str,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     active = await op_flows_browser_preview_active_session(
         BrowserPreviewTaskPayload(task_id=task_id, token=token),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=active.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -184,7 +184,7 @@ async def browser_preview_click(
     session_id: str,
     body: ControlPointerClickBody,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     clicked = await op_flows_browser_preview_click(
         BrowserPreviewClickPayload(
@@ -198,7 +198,7 @@ async def browser_preview_click(
             click_count=body.click_count,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=clicked.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -208,12 +208,12 @@ async def browser_preview_takeover(
     session_id: str,
     body: ControlHumanTakeoverBody,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     takeover = await op_flows_browser_preview_takeover(
         BrowserPreviewTakeoverPayload(session_id=session_id, token=token, owner=body.owner),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=takeover.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -222,12 +222,12 @@ async def browser_preview_takeover(
 async def browser_preview_takeover_release(
     session_id: str,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     released = await op_flows_browser_preview_takeover_release(
         BrowserPreviewSessionPayload(session_id=session_id, token=token),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=released.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -237,12 +237,12 @@ async def browser_preview_key(
     session_id: str,
     body: ControlPointerKeyBody,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     pressed = await op_flows_browser_preview_key(
         BrowserPreviewKeyPayload(session_id=session_id, token=token, key=body.key),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=pressed.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 
@@ -252,12 +252,12 @@ async def browser_preview_text(
     session_id: str,
     body: ControlPointerTextBody,
     token: Annotated[str, Query()],
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     typed = await op_flows_browser_preview_text(
         BrowserPreviewTextPayload(session_id=session_id, token=token, text=body.text),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(content=typed.model_dump_json(), media_type="application/json", headers=_NO_STORE)
 

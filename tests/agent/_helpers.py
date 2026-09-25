@@ -16,10 +16,12 @@ from apps.agent.service import (
     TUNNEL_ONLINE_PREFIX,
     _audit_storage_key,
 )
-from apps.flows.src.container import get_container as get_flows_container
+from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.services.flows_loader import FlowsLoader, load_tools_to_db
-from core.context import Context, clear_context, set_context
+from core.context import clear_context, set_context
+from core.models.context_models import Context
 from core.models.i18n_models import Language
+from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
 
 _FLOWS_ROOT = Path(__file__).resolve().parents[2] / "apps" / "flows"
@@ -38,9 +40,9 @@ LLM_IMAGES_GENERATIONS_PATH = "/flows/api/v1/agent/llm/v1/images/generations"
 LLM_ONLYOFFICE_PROXY_PATH = "/flows/api/v1/agent/llm/v1/proxy"
 
 
-async def agent_base_url_from_token(auth_token: str, frontend_container) -> str:
+async def agent_base_url_from_token(auth_token: str, frontend_di) -> str:
     company_id = company_id_from_auth_token(auth_token)
-    company = await frontend_container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise AssertionError(f"company {company_id} not found")
     if not company.subdomain:
@@ -141,7 +143,7 @@ def company_id_from_auth_token(auth_token: str) -> str:
     return token_data.company_id
 
 
-async def ensure_company_public_flows(company_id: str) -> None:
+async def ensure_company_public_flows(company_id: str, di) -> None:
     """
     Материализует public flow ``lara`` в namespace компании.
 
@@ -151,13 +153,12 @@ async def ensure_company_public_flows(company_id: str) -> None:
         raise AssertionError("company_id обязателен")
     if company_id == "system":
         raise AssertionError("seed lara в company system запрещён в agent LLM proxy тестах")
-    container = get_flows_container()
-    company = await container.company_repository.get(company_id)
+    company = await Company.get(company_id)
     if company is None:
         raise AssertionError(f"company {company_id} not found")
     if company.owner_user_id is None or not company.owner_user_id.strip():
         raise AssertionError(f"company {company_id} без owner_user_id")
-    owner = await container.user_repository.get(company.owner_user_id)
+    owner = await User.get(company.owner_user_id)
     if owner is None:
         raise AssertionError(
             f"owner {company.owner_user_id!r} компании {company_id} не найден"
@@ -180,27 +181,23 @@ async def ensure_company_public_flows(company_id: str) -> None:
         )
     )
     try:
-        existing_lara = await container.flow_repository.get("lara")
+        existing_lara = await FlowConfig.get_latest("lara")
         if existing_lara is not None:
             return
         _ = await load_tools_to_db(
-        container.tool_repository,
-        flow_access_service=container.flow_access_service,
-    )
+            flow_access_service=di.flow_access_service,
+        )
         loader = FlowsLoader(
             bundles_dir=_FLOWS_BUNDLES_DIR,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=_FLOWS_REGISTRY_PATH,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
         loaded_flow_id = await loader.reload_flow_bundle("lara")
         if loaded_flow_id != "lara":
             raise AssertionError(
                 f"ожидали reload lara, получили {loaded_flow_id!r} для company {company_id}"
             )
-        lara_after = await container.flow_repository.get("lara")
+        lara_after = await FlowConfig.get_latest("lara")
         if lara_after is None:
             raise AssertionError(f"flow lara отсутствует в company {company_id} после seed")
     finally:
@@ -208,7 +205,7 @@ async def ensure_company_public_flows(company_id: str) -> None:
 
 
 async def seed_pairing_in_storage(
-    frontend_container,
+    frontend_di,
     *,
     pairing_code: str,
     user_id: str,
@@ -217,7 +214,7 @@ async def seed_pairing_in_storage(
 ) -> None:
     key = f"agent_pairing:{pairing_code}"
     payload = json.dumps({"user_id": user_id, "company_id": company_id})
-    await frontend_container.shared_storage.set(
+    await frontend_di.shared_storage.set(
         key,
         payload,
         ttl=ttl_seconds,
@@ -226,7 +223,7 @@ async def seed_pairing_in_storage(
 
 
 async def assert_audit_event_in_redis(
-    frontend_container,
+    frontend_di,
     *,
     company_id: str,
     event_type: str,
@@ -234,7 +231,7 @@ async def assert_audit_event_in_redis(
     from apps.agent.service import AUDIT_KEY_PREFIX
 
     audit_key = f"{AUDIT_KEY_PREFIX}{company_id}"
-    raw_items = await frontend_container.redis_client.lrange(audit_key, 0, -1)
+    raw_items = await frontend_di.redis_client.lrange(audit_key, 0, -1)
     for raw_item in raw_items:
         payload = json.loads(raw_item)
         if isinstance(payload, dict) and payload.get("event_type") == event_type:
@@ -296,9 +293,9 @@ async def ensure_example_react_flow(
     return flow_id
 
 
-async def reset_company_agent_ui_state(frontend_container, *, company_id: str) -> None:
+async def reset_company_agent_ui_state(frontend_di, *, company_id: str) -> None:
     """Очистить devices и audit компании перед UI-сценариями с пустым состоянием."""
-    records = await frontend_container.shared_storage.get_all_by_prefix(
+    records = await frontend_di.shared_storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=1000,
         force_global=True,
@@ -307,7 +304,7 @@ async def reset_company_agent_ui_state(frontend_container, *, company_id: str) -
         device = AgentDeviceRecord.model_validate_json(raw_value)
         if device.company_id != company_id:
             continue
-        await frontend_container.shared_storage.delete(storage_key, force_global=True)
+        await frontend_di.shared_storage.delete(storage_key, force_global=True)
         tunnel_key = f"{TUNNEL_ONLINE_PREFIX}{device.device_id}"
-        await frontend_container.shared_storage.delete(tunnel_key, force_global=True)
-    await frontend_container.redis_client.delete(_audit_storage_key(company_id))
+        await frontend_di.shared_storage.delete(tunnel_key, force_global=True)
+    await frontend_di.redis_client.delete(_audit_storage_key(company_id))

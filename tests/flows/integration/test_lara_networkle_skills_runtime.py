@@ -9,8 +9,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import TypeAdapter
 
-from apps.flows.src.container import FlowContainer
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.platform_assistant_skills import (
     LARA_PLATFORM_SKILL_ROOTS,
@@ -76,31 +75,30 @@ def _lara_state(*, unique_id: str, user_id: str, suffix: str = "") -> ExecutionS
     )
 
 
-async def _seed_lara_skills(container: FlowContainer) -> None:
+async def _seed_lara_skills(di: FlowsDi) -> None:
     seeded = await seed_platform_assistant_skills(
-        container.agent_skill_service,
-        container.files_service,
+        di.files_service,
         "system",
     )
     assert seeded == len(PLATFORM_ASSISTANT_SEED_SKILL_IDS)
 
 
-async def _require_lara(container: FlowContainer) -> Flow:
-    _ = await ensure_lara_flow(container)
-    flow = await container.flow_factory.get_flow("lara", branch_id=_BRANCH)
+async def _require_lara(di: FlowsDi) -> Flow:
+    _ = await ensure_lara_flow(di)
+    flow = await di.flow_factory.get_flow("lara", branch_id=_BRANCH, tool_registry=di.tool_registry)
     assert flow is not None
     return flow
 
 
-async def _run_lara(container: FlowContainer, *, state: ExecutionState) -> ExecutionState:
-    flow = await _require_lara(container)
+async def _run_lara(di: FlowsDi, *, state: ExecutionState) -> ExecutionState:
+    flow = await _require_lara(di)
     main_node = flow.nodes["main"]
     assert getattr(main_node, "agent_skill_ids", None) == list(LARA_PLATFORM_SKILL_ROOTS)
     tool_names = {tool.name for tool in await main_node.get_tools(state)}
     assert "load_agent_skill" in tool_names
     assert "crm_search_entities" not in tool_names
     return await run_flow(
-        container=as_flow_runtime_container(container),
+        di=di,
         flow=flow,
         state=state,
     )
@@ -133,17 +131,17 @@ def _call(tool: str, **args: object) -> MockLLMQueuedResponse:
 
 async def _prepare_employee(
     *,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     unique_id: str,
     flow_suffix: str,
 ) -> tuple[User, Company, str, str]:
     flow_id = f"lara_crm_{flow_suffix}_{unique_id}"
-    company = await frontend_container.company_repository.get("system")
+    company = await Company.get("system")
     assert company is not None
     employee = await ensure_flow_employee(
-        frontend_container,
+        frontend_di,
         flow_id=flow_id,
         company_id="system",
         name=f"Lara CRM {flow_suffix}",
@@ -190,9 +188,9 @@ def _captured_tool_names(call: JsonObject) -> set[str]:
 
 @pytest.mark.asyncio
 async def test_lara_networkle_unlock_skills(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     mock_llm_with_queue: MockLLMQueue,
@@ -201,7 +199,7 @@ async def test_lara_networkle_unlock_skills(
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         crm_client=crm_client,
         auth_headers_system=auth_headers_system,
         unique_id=unique_id,
@@ -223,8 +221,8 @@ async def test_lara_networkle_unlock_skills(
     )
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-unlock")
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state)
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     calls = await mock_llm_capture()
@@ -246,9 +244,9 @@ async def test_lara_networkle_unlock_skills(
 
 @pytest.mark.asyncio
 async def test_lara_networkle_entity_update_delete(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     mock_llm_with_queue: MockLLMQueue,
@@ -256,7 +254,7 @@ async def test_lara_networkle_entity_update_delete(
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         crm_client=crm_client,
         auth_headers_system=auth_headers_system,
         unique_id=unique_id,
@@ -277,8 +275,8 @@ async def test_lara_networkle_entity_update_delete(
     )
     state1 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-e1")
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result1 = await _run_lara(container, state=state1)
+        await _seed_lara_skills(di)
+        result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     created = _tool_json(result1.tool_results["crm_create_entity"])
@@ -297,7 +295,7 @@ async def test_lara_networkle_entity_update_delete(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-e2")
     with _employee_context(employee, company, namespace=namespace):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     got = _tool_json(result2.tool_results["crm_get_entity"])
@@ -310,9 +308,9 @@ async def test_lara_networkle_entity_update_delete(
 
 @pytest.mark.asyncio
 async def test_lara_networkle_note_list_and_discard_draft_path(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     mock_llm_with_queue: MockLLMQueue,
@@ -321,7 +319,7 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
     """Create note via entity API path (confirm-first skipped) + list_notes + discard empty draft."""
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         crm_client=crm_client,
         auth_headers_system=auth_headers_system,
         unique_id=unique_id,
@@ -345,8 +343,8 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
     )
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-n1")
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state)
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     created = _tool_json(result.tool_results["crm_create_entity"])
@@ -366,7 +364,7 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-n2")
     with _employee_context(employee, company, namespace=namespace):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
 
     assert result2.interrupt is None
     discarded = _tool_json(result2.tool_results["crm_discard_analysis_draft"])
@@ -376,9 +374,9 @@ async def test_lara_networkle_note_list_and_discard_draft_path(
 
 @pytest.mark.asyncio
 async def test_lara_networkle_graph_relationships(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     mock_llm_with_queue: MockLLMQueue,
@@ -386,7 +384,7 @@ async def test_lara_networkle_graph_relationships(
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         crm_client=crm_client,
         auth_headers_system=auth_headers_system,
         unique_id=unique_id,
@@ -402,8 +400,8 @@ async def test_lara_networkle_graph_relationships(
     )
     state1 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-g1")
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result1 = await _run_lara(container, state=state1)
+        await _seed_lara_skills(di)
+        result1 = await _run_lara(di, state=state1)
 
     assert result1.interrupt is None
     types = _tool_json(result1.tool_results["crm_list_relationship_types"])
@@ -421,7 +419,7 @@ async def test_lara_networkle_graph_relationships(
     )
     state2 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-g2")
     with _employee_context(employee, company, namespace=namespace):
-        result2 = await _run_lara(container, state=state2)
+        result2 = await _run_lara(di, state=state2)
     dst_id = _tool_json(result2.tool_results["crm_create_entity"])["entity"]["entity_id"]
 
     _ = mock_llm_with_queue(
@@ -441,7 +439,7 @@ async def test_lara_networkle_graph_relationships(
     )
     state3 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-g3")
     with _employee_context(employee, company, namespace=namespace):
-        result3 = await _run_lara(container, state=state3)
+        result3 = await _run_lara(di, state=state3)
 
     assert result3.interrupt is None
     rel = _tool_json(result3.tool_results["crm_create_relationship"])
@@ -459,7 +457,7 @@ async def test_lara_networkle_graph_relationships(
     )
     state4 = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-g4")
     with _employee_context(employee, company, namespace=namespace):
-        result4 = await _run_lara(container, state=state4)
+        result4 = await _run_lara(di, state=state4)
     assert result4.interrupt is None
     deleted_rel = _tool_json(result4.tool_results["crm_delete_relationship"])
     assert deleted_rel.get("relationship_id") == relationship_id
@@ -468,9 +466,9 @@ async def test_lara_networkle_graph_relationships(
 
 @pytest.mark.asyncio
 async def test_lara_networkle_activity_and_ops(
-    container: FlowContainer,
+    di: FlowsDi,
     flows_service,
-    frontend_container,
+    frontend_di,
     crm_client,
     auth_headers_system: dict[str, str],
     mock_llm_with_queue: MockLLMQueue,
@@ -478,7 +476,7 @@ async def test_lara_networkle_activity_and_ops(
 ) -> None:
     _ = flows_service
     employee, company, employee_user_id, namespace = await _prepare_employee(
-        frontend_container=frontend_container,
+        frontend_di=frontend_di,
         crm_client=crm_client,
         auth_headers_system=auth_headers_system,
         unique_id=unique_id,
@@ -500,8 +498,8 @@ async def test_lara_networkle_activity_and_ops(
     )
     state = _lara_state(unique_id=unique_id, user_id=employee_user_id, suffix="-ops")
     with _employee_context(employee, company, namespace=namespace):
-        await _seed_lara_skills(container)
-        result = await _run_lara(container, state=state)
+        await _seed_lara_skills(di)
+        result = await _run_lara(di, state=state)
 
     assert result.interrupt is None
     activity = _tool_json(result.tool_results["crm_create_activity_task"])

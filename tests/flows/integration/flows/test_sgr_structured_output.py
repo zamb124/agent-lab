@@ -16,9 +16,10 @@ Flow:
 
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models import Edge
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import (
     CodeNode,
@@ -50,7 +51,7 @@ class TestSGRWithStructuredOutput:
 
     @pytest.mark.asyncio
     async def test_sgr_full_flow_tool_function_exit(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue
+        self, di: FlowsDi, mock_llm_with_queue
     ):
         """
         Полный SGR flow: AgentSO -> tool1 -> AgentSO -> tool2(function) -> AgentSO -> done(exit).
@@ -106,7 +107,7 @@ Return JSON with next_action and reason.""",
                     "additionalProperties": False,
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Tool1 - CodeNode (CodeTool)
@@ -120,7 +121,7 @@ async def run(args, state):
 """,
                 "input_mapping": {},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # Tool2 - CodeNode: доступ через канонический state dict.
@@ -133,7 +134,7 @@ async def run(args, state):
         tool2_node = CodeNode(
             node_id="tool2",
             config={"type": NodeType.CODE.value, "code": tool2_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # Done - CodeNode (exit type): строгий доступ к полям
@@ -147,7 +148,7 @@ async def run(args, state):
         done_node = CodeNode(
             node_id="done",
             config={"type": NodeType.CODE.value, "code": done_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # Создаем Agent с conditional edges
@@ -174,12 +175,12 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Запускаем flow
         state = make_state(flow_id="sgr_test", unique_id="full-flow", content="Start the workflow")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # Проверяем что все шаги выполнились
         assert result.tool1_result == "Data fetched successfully"
@@ -192,7 +193,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_with_remote_flow(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample, unique_id
+        self, di: FlowsDi, mock_llm_with_queue, test_a2a_sample, unique_id
     ):
         """
         SGR flow с RemoteFlowNode.
@@ -233,7 +234,7 @@ async def run(args, state):
                     "required": ["next_action", "reason"],
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Tool1
@@ -244,7 +245,7 @@ async def run(args, state):
                 "code": "async def run(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
                 "input_mapping": {},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # RemoteAgent - реальный сервер из docker-compose
@@ -256,7 +257,7 @@ async def run(args, state):
                 "input_mapping": {"content": "@state:payload"},
                 "headers": {"X-API-Key": "test-api-key-12345"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Done - строгий доступ к полям
@@ -269,7 +270,7 @@ async def run(args, state):
     return {"final": f"Summary: {state['summary']}", "remote_result": state["response"]}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         flow = Flow(
@@ -292,7 +293,7 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = make_state(
@@ -300,7 +301,7 @@ async def run(args, state):
             unique_id=f"remote-flow-{unique_id}",
             content="Start remote flow",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # Проверки
         assert result.tool1_done is True
@@ -313,7 +314,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_loop_with_counter(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue
+        self, di: FlowsDi, mock_llm_with_queue
     ):
         """
         SGR с циклом: AgentSO вызывает action несколько раз пока не достигнет условия.
@@ -357,7 +358,7 @@ async def run(args, state):
                     "required": ["next_action", "reason"],
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Increment: инициализируем counter и history в начальном state
@@ -372,7 +373,7 @@ async def run(args, state):
     return {"counter": current + 1, "history": history + [f"inc_{current}"]}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # Done: строгий доступ
@@ -385,7 +386,7 @@ async def run(args, state):
     return {"response": f"Done! Counter={state['counter']}, History={state['history']}"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         flow = Flow(
@@ -409,12 +410,12 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # Начальный state с counter и history
         state = make_state(flow_id="sgr_loop", unique_id="loop", counter=0, history=[])
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # Проверяем что цикл выполнился 3 раза
         assert result.counter == 3
@@ -423,7 +424,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_conditional_branching(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue
+        self, di: FlowsDi, mock_llm_with_queue
     ):
         """
         SGR с условным ветвлением: AgentSO выбирает путь на основе данных.
@@ -464,7 +465,7 @@ async def run(args, state):
                     "required": ["next_action"],
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # fast_track: строгий доступ к state dict.
@@ -477,7 +478,7 @@ async def run(args, state):
     return {"processed_by": "FAST", "fast_result": f"Urgent handling: {state['priority']}"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         standard_track = CodeNode(
@@ -489,7 +490,7 @@ async def run(args, state):
     return {"processed_by": "STANDARD", "standard_result": "Normal handling"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # done: строгий доступ к state dict.
@@ -502,7 +503,7 @@ async def run(args, state):
     return {"response": f"Completed via {state['processed_by']}: {state['result']}"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         flow = Flow(
@@ -533,13 +534,13 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = make_state(
             flow_id="sgr_branch", unique_id="branch", content="URGENT: Fix critical bug"
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         assert result.processed_by == "FAST"
         assert result.priority == "HIGH"
@@ -548,7 +549,7 @@ async def run(args, state):
 
     @pytest.mark.asyncio
     async def test_sgr_all_node_types(
-        self, container: FlowRuntimeContainer, mock_llm_with_queue, test_a2a_sample, unique_id
+        self, di: FlowsDi, mock_llm_with_queue, test_a2a_sample, unique_id
     ):
         """
         Полный тест SGR со ВСЕМИ типами нод:
@@ -592,7 +593,7 @@ async def run(args, state):
                     "required": ["next_action", "step"],
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # 2. CodeNode - CodeTool
@@ -606,7 +607,7 @@ async def run(args, state):
 """,
                 "input_mapping": {},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # 3. CodeNode: строгий доступ к state.tool1_data
@@ -620,7 +621,7 @@ async def run(args, state):
     return {"tool2_executed": True, "tool2_data": f"processed_{prev}"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # 4. RemoteFlowNode (реальный test-a2a-agent из docker-compose)
@@ -632,7 +633,7 @@ async def run(args, state):
                 "input_mapping": {"content": "@state:tool2_data"},
                 "headers": {"X-API-Key": "test-api-key-12345"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         # 5. Exit CodeNode: строгий доступ ко всем полям
@@ -652,7 +653,7 @@ async def run(args, state):
     }
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         flow = Flow(
@@ -681,7 +682,7 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = make_state(
@@ -689,7 +690,7 @@ async def run(args, state):
             unique_id=f"all-types-{unique_id}",
             content="Execute all steps",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # === Assertions ===
 
@@ -717,7 +718,7 @@ async def run(args, state):
         assert result.steps_executed["tool3_response"] is not None
 
     @pytest.mark.asyncio
-    async def test_sgr_error_recovery(self, container: FlowRuntimeContainer, mock_llm_with_queue):
+    async def test_sgr_error_recovery(self, di: FlowsDi, mock_llm_with_queue):
         """
         SGR с восстановлением после ошибки.
 
@@ -763,7 +764,7 @@ async def run(args, state):
                     "required": ["next_action", "reason"],
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
 
         risky_node = CodeNode(
@@ -775,7 +776,7 @@ async def run(args, state):
     return {"error_occurred": True, "error_message": "Operation failed safely"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # recovery: строгий доступ к state dict.
@@ -788,7 +789,7 @@ async def run(args, state):
     return {"recovered": True, "recovery_log": f"Recovered from: {state['error_message']}"}
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         # done: строгий доступ ко всем полям
@@ -805,7 +806,7 @@ async def run(args, state):
     }
 """,
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
 
         flow = Flow(
@@ -830,11 +831,11 @@ async def run(args, state):
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = make_state(flow_id="sgr_recovery", unique_id="recovery", content="Start risky flow")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
 
         # Проверки
         assert result.error_occurred is True, "Error should have occurred"

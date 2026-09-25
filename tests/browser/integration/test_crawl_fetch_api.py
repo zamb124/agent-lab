@@ -17,10 +17,8 @@ def _build_browser_app(*, cdp_url: str) -> object:
     os.environ["BROWSER__CDP_URL"] = cdp_url
 
     from apps.browser.config import reset_browser_settings
-    from apps.browser.container import reset_browser_container
 
     reset_browser_settings()
-    reset_browser_container()
 
     import apps.browser.main as browser_main
 

@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.durable_execution import SideEffectPolicy
 from apps.flows.src.models import NodeConfig
 from apps.flows.src.models.enums import NodeType
@@ -20,7 +17,10 @@ from apps.flows.src.runtime.llm_context_memory import (
     write_runtime_memory_episode,
 )
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
+from apps.flows.src.streaming.emitter import EmitterFactory
+from apps.flows.src.tools.base import BaseTool
 from core.a2a import get_part_text
+from core.clients.redis_client import RedisClient
 from core.llm_context import (
     LLMContextBudget,
     LLMContextProfile,
@@ -32,6 +32,7 @@ from core.llm_context.memory import (
     LLMContextMemoryRecord,
 )
 from core.state import ExecutionState
+from core.text_transforms.service import TextTransformService
 from core.types import JsonObject
 
 
@@ -108,15 +109,21 @@ class RecordingWorkflowRuntime:
         return True
 
 
-class MemoryRuntimeContainer:
-    def __init__(
-        self,
-        *,
-        store: RecordingStore,
-        workflow_runtime: RecordingWorkflowRuntime,
-    ) -> None:
-        self.llm_context_memory_store = store
-        self.workflow_runtime = workflow_runtime
+class _ClosedToolRegistry:
+    def get(self, name: str) -> BaseTool | None:
+        raise RuntimeError(name)
+
+    def register_builtin_tools(self) -> None:
+        raise RuntimeError("unused")
+
+    async def materialize(self, tool_ref: object) -> BaseTool:
+        raise RuntimeError("unused")
+
+    async def create_tool(self, tool_ref: object) -> BaseTool:
+        raise RuntimeError("unused")
+
+    async def create_tools(self, tool_refs: object) -> list[BaseTool]:
+        raise RuntimeError("unused")
 
 
 def _command_from_decision(
@@ -156,10 +163,12 @@ def _runner(
         tools=[],
         llm=None,
         prompt="You are a memory writer.",
-        container=cast(
-            FlowRuntimeContainer,
-            MemoryRuntimeContainer(store=store, workflow_runtime=workflow_runtime),
-        ),
+        workflow_runtime=workflow_runtime,
+        memory_store=store,
+        text_transform_service=TextTransformService(),
+        emitter_factory=EmitterFactory.__new__(EmitterFactory),
+        redis_client=RedisClient.__new__(RedisClient),
+        tool_registry=_ClosedToolRegistry(),
         llm_context_policy=policy,
     )
 

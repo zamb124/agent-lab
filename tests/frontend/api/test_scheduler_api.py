@@ -22,7 +22,7 @@ from apps.rag_worker.tasks.task_names import (
 from apps.scheduler.main import (
     CRM_RECONCILE_DAILY_SUMMARY_CRON,
     SYSTEM_SCHEDULER_COMPANY_ID,
-    on_startup,
+    ensure_platform_schedules,
 )
 from core.config.models import (
     BillingConfig,
@@ -95,9 +95,7 @@ async def test_scheduler_startup_creates_calendar_sync_schedule_when_missing() -
             )()
 
     fake_service = _FakeSchedulerService()
-    fake_container = type("Container", (), {"scheduler_service": fake_service})()
-
-    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+    await ensure_platform_schedules(fake_service, _FakeSettings())
 
     assert len(fake_service.created_requests) == 8
     names = {r.task_name for r in fake_service.created_requests}
@@ -246,9 +244,7 @@ async def test_scheduler_startup_resumes_paused_calendar_sync_schedule() -> None
             )()
 
     fake_service = _FakeSchedulerService()
-    fake_container = type("Container", (), {"scheduler_service": fake_service})()
-
-    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+    await ensure_platform_schedules(fake_service, _FakeSettings())
 
     assert fake_service.resumed_schedule_task_id == "paused-1"
     assert fake_service.meeting_reminder_create is not None
@@ -294,9 +290,7 @@ async def test_scheduler_startup_creates_span_billing_schedule_when_enabled() ->
             )()
 
     fake_service = _FakeSchedulerService()
-    fake_container = type("Container", (), {"scheduler_service": fake_service})()
-
-    await on_startup(app=None, container=fake_container, settings=_FakeSettings())
+    await ensure_platform_schedules(fake_service, _FakeSettings())
 
     span_reqs = [
         r for r in fake_service.created_requests if r.task_name == TASK_SPAN_BILLING_SETTLEMENT_TICK.name

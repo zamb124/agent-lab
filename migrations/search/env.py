@@ -1,7 +1,7 @@
 """
-Alembic env для search БД.
+Alembic env для БД platform_search.
 
-Управляет таблицами: search_indexes, crawl_profiles, crawl_domains, crawl_urls, crawl_jobs.
+Search больше не держит SQLAlchemy-таблиц. Каталог пуст, чтобы autogenerate их не удалял.
 """
 
 import asyncio
@@ -16,14 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.search.db.models import (  # noqa: F401
-    Base,
-    CrawlDomainRow,
-    CrawlJobRow,
-    CrawlProfileRow,
-    CrawlUrlRow,
-    SearchIndexRow,
-)
+from core.db.models.base import Base  # noqa: F401 — metadata для autogenerate
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -33,13 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "search_indexes",
-    "crawl_profiles",
-    "crawl_domains",
-    "crawl_urls",
-    "crawl_jobs",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):
@@ -88,15 +75,15 @@ def run_migrations_online() -> None:
     connectable = config.attributes.get("connection", None)
     if connectable is not None:
         do_run_migrations(connectable)
-        return
+    else:
+        asyncio.run(_run_async())
 
-    async def run_async_migrations() -> None:
-        engine = create_async_engine(_get_url(), poolclass=pool.NullPool)
-        async with engine.connect() as connection:
-            await connection.run_sync(do_run_migrations)
-        await engine.dispose()
 
-    asyncio.run(run_async_migrations())
+async def _run_async() -> None:
+    engine = create_async_engine(_get_url(), poolclass=pool.NullPool)
+    async with engine.connect() as conn:
+        await conn.run_sync(do_run_migrations)
+    await engine.dispose()
 
 
 if context.is_offline_mode():

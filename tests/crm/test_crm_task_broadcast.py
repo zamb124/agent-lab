@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from pytest import MonkeyPatch
 
-from apps.crm.db.models import CRMTask
+from apps.crm.models.task import CRMTask
 from apps.crm.services import crm_task_broadcast as broadcast_mod
 from tests.crm.e2e._json_helpers import object_dict
 

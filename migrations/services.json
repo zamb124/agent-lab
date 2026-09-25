@@ -2,22 +2,22 @@
   "services": [
     {
       "name": "shared",
-      "models_module": "core.db.models.platform",
+      "models_module": "core.db.models.base",
       "database_url_key": "shared_url"
     },
     {
       "name": "flows",
-      "models_module": "apps.flows.src.db.models",
+      "models_module": "apps.flows.src.models.a2a_projection",
       "database_url_key": "flows_url"
     },
     {
       "name": "crm",
-      "models_module": "apps.crm.db.models",
+      "models_module": "apps.crm.db",
       "database_url_key": "crm_url"
     },
     {
       "name": "sync",
-      "models_module": "apps.sync.db.models",
+      "models_module": "apps.sync.models",
       "database_url_key": "sync_url"
     },
     {
@@ -32,33 +32,38 @@
     },
     {
       "name": "worktracker",
-      "models_module": "core.worktracker.db_models",
+      "models_module": "core.worktracker.models",
       "database_url_key": "worktracker_url"
     },
     {
       "name": "secrets",
-      "models_module": "core.secrets.db_models",
+      "models_module": "core.secrets.models",
       "database_url_key": "secrets_url"
     },
     {
       "name": "tracing",
-      "models_module": "core.db.models.tracing",
+      "models_module": "core.tracing.models",
       "database_url_key": "tracing_url"
     },
     {
       "name": "search",
-      "models_module": "apps.search.db.models",
+      "models_module": "core.crawl.models",
       "database_url_key": "search_url"
     },
     {
       "name": "wiki",
-      "models_module": "apps.wiki.db.models",
+      "models_module": "apps.wiki.models.domain",
       "database_url_key": "wiki_url"
     },
     {
       "name": "realtime",
       "models_module": "apps.realtime.db.models",
       "database_url_key": "realtime_url"
+    },
+    {
+      "name": "stock",
+      "models_module": "apps.stock.models",
+      "database_url_key": "stock_url"
     }
   ],
     "postgres": {
@@ -75,6 +80,7 @@
       "platform_secrets",
       "platform_wiki",
       "platform_realtime",
+      "platform_stock",
       "openfga"
     ],
     "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]

@@ -19,7 +19,7 @@ import {
     queueUnclaimed,
     workItemFromEventPayload,
     workItemAllowsSilentComplete,
-} from '../utils/work-item-detail-shared.js';
+} from '../_helpers/work-item-detail-shared.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { normalizeIsoDateTimeForField } from '@platform/lib/utils/format-platform-date.js';
 import { worktrackerDetailEditorLayoutStyles } from '../styles/worktracker-detail-editor-layout.styles.js';

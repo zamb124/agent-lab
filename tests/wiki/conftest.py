@@ -19,11 +19,5 @@ __all__ = ["API_PREFIX", "NAMESPACE_HEADER", "PAGES_URL"]
 
 @pytest.fixture(autouse=True)
 def _wiki_requires_openfga(openfga_settings: OpenFGAConfig) -> Iterator[None]:
-    from apps.wiki.container import reset_wiki_container
-
-    reset_wiki_container()
     _ = openfga_settings
-    try:
-        yield
-    finally:
-        reset_wiki_container()
+    yield

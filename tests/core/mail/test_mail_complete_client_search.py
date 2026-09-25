@@ -6,8 +6,7 @@ from collections.abc import Awaitable, Callable
 
 import pytest
 
-from core.mail.models import MailMessageListPayload, MailMessageSearchPayload
-from core.mail.repositories import INBOX_FOLDER
+from core.mail.models import INBOX_FOLDER, MailMessageListPayload, MailMessageSearchPayload
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from tests.core.mail.complete_client_helpers import (

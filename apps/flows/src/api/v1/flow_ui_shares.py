@@ -7,12 +7,12 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from apps.flows.di import Di
 from apps.flows.realtime.flow_ui_share_operations import (
     op_flows_flow_ui_shares_create,
     op_flows_flow_ui_shares_list,
     op_flows_flow_ui_shares_remove,
 )
-from apps.flows.src.dependencies import ContainerDep
 from core.context import require_context
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.flow_ui_share import (
@@ -46,7 +46,7 @@ def _exchange_origin(request: Request) -> str:
 async def create_flow_ui_share(
     body: FlowUIShareCreateRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowUIShareCreateResponse:
     host = request.headers.get("host")
     return await op_flows_flow_ui_shares_create(
@@ -54,32 +54,32 @@ async def create_flow_ui_share(
             {**body.model_dump(), "public_host": host if host is not None else ""}
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("", response_model=ListResponse[FlowUIShareGrant])
 async def list_flow_ui_shares(
-    container: ContainerDep,
+    di: Di,
     flow_id: Annotated[str, Query(min_length=1)],
     context_id: Annotated[str, Query(min_length=1)],
 ) -> ListResponse[FlowUIShareGrant]:
     return await op_flows_flow_ui_shares_list(
         FlowUIShareListPayload(flow_id=flow_id, context_id=context_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{grant_id}")
 async def revoke_flow_ui_share(
     grant_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowUIShareDeletedResponse:
     return await op_flows_flow_ui_shares_remove(
         FlowUIShareGrantIdPayload(grant_id=grant_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -87,10 +87,10 @@ async def revoke_flow_ui_share(
 async def exchange_flow_ui_share(
     grant_id: str,
     request: Request,
-    container: ContainerDep,
+    di: Di,
 ) -> FlowUIShareExchangeResponse:
     try:
-        return await container.flow_ui_share_service.exchange(
+        return await di.flow_ui_share_service.exchange(
             grant_id=grant_id,
             origin=_exchange_origin(request),
         )

@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.tool_operations import (
     op_flows_tools_contract,
     op_flows_tools_create,
@@ -18,7 +19,6 @@ from apps.flows.realtime.tool_operations import (
     op_flows_tools_remove,
     op_flows_tools_tag_groups,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.tool_contracts import ToolDefinition
 from apps.flows.src.models.tool_reference import (
     PickerCategory,
@@ -63,7 +63,7 @@ def _inline_schema() -> JsonObject:
 
 async def test_tools_list_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -75,13 +75,13 @@ async def test_tools_list_rest_and_op_share_payload(
     assert http_resp.status_code == 200, http_resp.text
     _ = OffsetPage[ToolResponse].model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
-        listed = await op_flows_tools_list(payload, user=user, container=container)
+        listed = await op_flows_tools_list(payload, user=user, di=di)
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_tools_create_get_remove_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -110,7 +110,7 @@ async def test_tools_create_get_remove_rest_and_op_share_payload(
     )
     assert http_get.status_code == 200, http_get.text
     with _system_scope(system_user_id) as user:
-        op_item = await op_flows_tools_item(item_payload, user=user, container=container)
+        op_item = await op_flows_tools_item(item_payload, user=user, di=di)
     assert op_item.model_dump(mode="json") == http_get.json()
 
     http_delete = await client.delete(
@@ -129,11 +129,11 @@ async def test_tools_create_get_remove_rest_and_op_share_payload(
         parameters_schema=_inline_schema(),
     )
     with _system_scope(system_user_id) as user:
-        created_op = await op_flows_tools_create(op_create, user=user, container=container)
+        created_op = await op_flows_tools_create(op_create, user=user, di=di)
         removed = await op_flows_tools_remove(
             ToolsToolIdPayload(tool_id=op_tool_id),
             user=user,
-            container=container,
+            di=di,
         )
     assert created_op.tool_id == op_tool_id
     assert removed.model_dump(mode="json") == {"status": "deleted", "tool_id": op_tool_id}
@@ -141,7 +141,7 @@ async def test_tools_create_get_remove_rest_and_op_share_payload(
 
 async def test_tools_list_all_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -171,14 +171,14 @@ async def test_tools_list_all_rest_and_op_share_payload(
     )
     assert http_resp.status_code == 200, http_resp.text
     with _system_scope(system_user_id) as user:
-        listed = await op_flows_tools_list_all(payload, user=user, container=container)
+        listed = await op_flows_tools_list_all(payload, user=user, di=di)
     assert listed.model_dump(mode="json") == http_resp.json()
     assert any(item.tool_id == tool_id for item in listed.items)
 
 
 async def test_tools_tag_groups_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -190,13 +190,13 @@ async def test_tools_tag_groups_rest_and_op_share_payload(
     assert http_resp.status_code == 200, http_resp.text
     _ = OffsetPage[ToolTagGroup].model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
-        listed = await op_flows_tools_tag_groups(payload, user=user, container=container)
+        listed = await op_flows_tools_tag_groups(payload, user=user, di=di)
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_tools_preview_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -212,13 +212,13 @@ async def test_tools_preview_rest_and_op_share_payload(
     assert http_resp.status_code == 200, http_resp.text
     _ = ToolPreviewResponse.model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
-        previewed = await op_flows_tools_preview(payload, user=user, container=container)
+        previewed = await op_flows_tools_preview(payload, user=user, di=di)
     assert previewed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_tools_contract_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -230,5 +230,5 @@ async def test_tools_contract_rest_and_op_share_payload(
     assert http_resp.status_code == 200, http_resp.text
     _ = ToolDefinition.model_validate(http_resp.json())
     with _system_scope(system_user_id) as user:
-        contract = await op_flows_tools_contract(payload, user=user, container=container)
+        contract = await op_flows_tools_contract(payload, user=user, di=di)
     assert contract.model_dump(mode="json") == http_resp.json()

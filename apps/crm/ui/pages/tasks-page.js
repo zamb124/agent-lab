@@ -3,7 +3,7 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
 import { isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';

@@ -33,7 +33,7 @@
  */
 
 import { html, css } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import { stripOuterMarkdownCodeFence } from '@platform/lib/utils/strip-outer-markdown-fence.js';
@@ -49,8 +49,8 @@ import {
     normalizeSummaryEntityLabelKey,
     resolveSummaryChipEntity,
     summaryChipUnresolvedIconName,
-} from '../utils/related-entity-presenter.js';
-import { openCrmLaraAssistant } from '../utils/open-crm-lara-assistant.js';
+} from '../_helpers/related-entity-presenter.js';
+import { openCrmLaraAssistant } from '../_helpers/open-crm-lara-assistant.js';
 
 const ENTITY_TYPES_RESOURCE = 'crm/entity_types';
 const SUMMARY_ENTITY_TOKEN_RE = /\[(@?[^\]]+)\]\(entity:([^)]+)\)/gi;

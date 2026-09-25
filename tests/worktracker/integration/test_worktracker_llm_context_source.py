@@ -10,7 +10,7 @@ from core.llm_context.sources import LLMContextSourceRequest
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.worktracker.context_source import WorkItemLLMContextSource
-from core.worktracker.models import SystemActor, WorkItemState
+from core.worktracker.models import SystemActor, WorkItem, WorkItemState
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
@@ -40,7 +40,7 @@ async def test_collect_returns_memory_block_for_active_items(
     )
     set_context(Context(user=user, active_company=company, trace_id=f"trace-{unique_id}"))
 
-    source = WorkItemLLMContextSource(worktracker_service)
+    source = WorkItemLLMContextSource()
     blocks = await source.collect(LLMContextSourceRequest())
     clear_context()
 
@@ -72,8 +72,8 @@ async def test_collect_empty_when_no_active_items(worktracker_service, unique_id
     )
     set_context(Context(user=user, active_company=company, trace_id=f"trace2-{unique_id}"))
 
-    source = WorkItemLLMContextSource(worktracker_service)
-    open_items = await worktracker_service.list("system", state=WorkItemState.OPEN, limit=5)
+    source = WorkItemLLMContextSource()
+    open_items = await WorkItem.list_work_items("system", state=WorkItemState.OPEN, limit=5)
     if not open_items:
         blocks = await source.collect(LLMContextSourceRequest())
         assert blocks == []

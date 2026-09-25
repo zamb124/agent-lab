@@ -15,7 +15,7 @@ from core.errors.boundary import PlatformAccessDeniedError
 
 @pytest.mark.asyncio
 async def test_revoke_device_non_owner_member_forbidden(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     company_id = f"agent_co_{unique_id}"
@@ -24,13 +24,13 @@ async def test_revoke_device_non_owner_member_forbidden(
     device_id = f"device_{unique_id}"
 
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=owner_id,
         roles=["member"],
     )
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=other_id,
         roles=["member"],
@@ -47,12 +47,12 @@ async def test_revoke_device_non_owner_member_forbidden(
         policy=DevicePolicy(),
         is_active=True,
     )
-    _ = await frontend_container.shared_storage.set(
+    _ = await frontend_di.shared_storage.set(
         f"{DEVICE_KEY_PREFIX}{device_id}",
         record.model_dump_json(),
         force_global=True,
     )
-    await frontend_container.authz_service.write(
+    await frontend_di.authz_service.write(
         [
             agent_device_company_link(device_id, company_id),
             agent_device_owner_tuple(device_id, owner_id),
@@ -61,7 +61,7 @@ async def test_revoke_device_non_owner_member_forbidden(
 
     with pytest.raises(PlatformAccessDeniedError) as exc_info:
         await revoke_device(
-            frontend_container,
+            frontend_di,
             device_id=device_id,
             company_id=company_id,
             actor_user_id=other_id,
@@ -71,7 +71,7 @@ async def test_revoke_device_non_owner_member_forbidden(
 
 @pytest.mark.asyncio
 async def test_list_devices_only_visible_to_owner(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     company_id = f"agent_list_co_{unique_id}"
@@ -80,13 +80,13 @@ async def test_list_devices_only_visible_to_owner(
     device_id = f"device_list_{unique_id}"
 
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=owner_id,
         roles=["member"],
     )
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=other_id,
         roles=["member"],
@@ -103,12 +103,12 @@ async def test_list_devices_only_visible_to_owner(
         policy=DevicePolicy(),
         is_active=True,
     )
-    _ = await frontend_container.shared_storage.set(
+    _ = await frontend_di.shared_storage.set(
         f"{DEVICE_KEY_PREFIX}{device_id}",
         record.model_dump_json(),
         force_global=True,
     )
-    await frontend_container.authz_service.write(
+    await frontend_di.authz_service.write(
         [
             agent_device_company_link(device_id, company_id),
             agent_device_owner_tuple(device_id, owner_id),
@@ -116,12 +116,12 @@ async def test_list_devices_only_visible_to_owner(
     )
 
     owner_items = await list_company_devices(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         viewer_user_id=owner_id,
     )
     other_items = await list_company_devices(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         viewer_user_id=other_id,
     )
@@ -131,7 +131,7 @@ async def test_list_devices_only_visible_to_owner(
 
 @pytest.mark.asyncio
 async def test_revoke_keeps_owner_list_and_fga_tuples(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     company_id = f"agent_rev_co_{unique_id}"
@@ -139,7 +139,7 @@ async def test_revoke_keeps_owner_list_and_fga_tuples(
     device_id = f"device_rev_{unique_id}"
 
     await sync_company_member_roles(
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=owner_id,
         roles=["member"],
@@ -156,12 +156,12 @@ async def test_revoke_keeps_owner_list_and_fga_tuples(
         policy=DevicePolicy(),
         is_active=True,
     )
-    _ = await frontend_container.shared_storage.set(
+    _ = await frontend_di.shared_storage.set(
         f"{DEVICE_KEY_PREFIX}{device_id}",
         record.model_dump_json(),
         force_global=True,
     )
-    await frontend_container.authz_service.write(
+    await frontend_di.authz_service.write(
         [
             agent_device_company_link(device_id, company_id),
             agent_device_owner_tuple(device_id, owner_id),
@@ -169,21 +169,21 @@ async def test_revoke_keeps_owner_list_and_fga_tuples(
     )
 
     await revoke_device(
-        frontend_container,
+        frontend_di,
         device_id=device_id,
         company_id=company_id,
         actor_user_id=owner_id,
     )
 
     items = await list_company_devices(
-        frontend_container,
+        frontend_di,
         company_id=company_id,
         viewer_user_id=owner_id,
     )
     matched = next(item for item in items if item.device_id == device_id)
     assert matched.is_active is False
     assert matched.is_tunnel_online is False
-    remaining = await frontend_container.authz_service.list_tuples(
+    remaining = await frontend_di.authz_service.list_tuples(
         AuthzObject.agent_device(device_id)
     )
     assert remaining

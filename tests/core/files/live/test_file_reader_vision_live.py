@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.frontend.container import FrontendContainer
 from core.ai.providers import AICapability
 from core.ai.requirements import AIRequestRequirements
 from core.ai.resolver import resolve_ai_model
@@ -52,16 +51,16 @@ def _require_live_vision() -> None:
 
 
 async def test_live_vision_png_prints_marker(
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
 ) -> None:
     token = f"LIVE_OCR_{unique_id}"
     with disable_testing_mode():
         _require_live_vision()
-    configure_file_reader_persist(frontend_container.files_service)
+    configure_file_reader_persist(frontend_di.files_service)
     raw = png_with_text(token, width=1200, height=400)
     file_ref = await store_golden_file(
-        frontend_container.files_service,
+        frontend_di.files_service,
         raw=raw,
         original_name=f"live_ocr_{unique_id}.png",
     )
@@ -74,16 +73,16 @@ async def test_live_vision_png_prints_marker(
 
 
 async def test_live_vision_scanned_pdf_prints_marker(
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
 ) -> None:
     token = f"LIVE_OCR_{unique_id}"
     with disable_testing_mode():
         _require_live_vision()
-    configure_file_reader_persist(frontend_container.files_service)
+    configure_file_reader_persist(frontend_di.files_service)
     raw = pdf_printed_page(token, width=1200, height=400)
     file_ref = await store_golden_file(
-        frontend_container.files_service,
+        frontend_di.files_service,
         raw=raw,
         original_name=f"live_ocr_{unique_id}.pdf",
     )

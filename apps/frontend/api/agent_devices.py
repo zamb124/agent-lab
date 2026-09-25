@@ -26,7 +26,7 @@ from apps.agent.service import (
     register_device,
     register_device_with_auth,
 )
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from core.app_state import get_request_token_data
 from core.config import get_settings
 from core.context import require_context
@@ -104,11 +104,11 @@ async def serve_local_release_artifact(platform: str) -> FileResponse:
 @router.get("/discover", response_model=AgentDiscoverResponse, tags=["agent", "public"])
 async def agent_discover(
     request: Request,
-    container: ContainerDep,
+    di: Di,
     origin: Annotated[str | None, Query(description="Opt-in override публичного origin (lvh.me dev)")] = None,
 ) -> AgentDiscoverResponse:
     return await fetch_agent_discover(
-        container,
+        di,
         origin_override=origin,
         request_host=request.headers.get("host"),
         url_scheme=request.url.scheme,
@@ -203,10 +203,10 @@ def _render_login_page(
 @router.get("/login", response_class=HTMLResponse)
 async def agent_login_page(
     request: Request,
-    container: ContainerDep,
+    di: Di,
     redirect: Annotated[str, Query()] = "humanitec://auth/callback",
 ) -> HTMLResponse:
-    _ = container
+    _ = di
     agent_product_name, platform_name = _resolve_agent_page_brand(request)
     token_data = get_request_token_data(request)
     if token_data is not None:
@@ -237,9 +237,9 @@ async def agent_login_page(
 
 @router.post("/auth/device-token")
 async def issue_device_token(
-    container: ContainerDep,
+    di: Di,
 ) -> dict[str, str]:
-    _ = container
+    _ = di
     context = require_context()
     user = context.user
     company = context.active_company
@@ -262,7 +262,7 @@ async def issue_device_token(
 async def register_agent_device_with_auth(
     body: DeviceRegisterWithAuthRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     origin: Annotated[str | None, Query(description="Opt-in override публичного origin (lvh.me dev)")] = None,
 ) -> DeviceRegisterResponse:
     context = require_context()
@@ -270,7 +270,7 @@ async def register_agent_device_with_auth(
     if company is None:
         raise HTTPException(status_code=400, detail="Company is not selected")
     return await register_device_with_auth(
-        container,
+        di,
         body,
         user_id=context.user.user_id,
         company_id=company.company_id,
@@ -284,13 +284,13 @@ async def register_agent_device_with_auth(
 async def register_agent_device(
     body: DeviceRegisterRequest,
     request: Request,
-    container: ContainerDep,
+    di: Di,
     origin: Annotated[str | None, Query(description="Opt-in override публичного origin (lvh.me dev)")] = None,
 ) -> DeviceRegisterResponse:
     client_host = request.client.host if request.client is not None else "unknown"
     client_key = f"{client_host}:{body.device_id}"
     return await register_device(
-        container,
+        di,
         body,
         client_key=client_key,
         origin_override=origin,

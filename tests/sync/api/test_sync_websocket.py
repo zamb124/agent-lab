@@ -10,6 +10,7 @@ import websockets
 from tests.realtime.centrifugo_ws import CENTRIFUGO_WS_URL, connect_centrifugo, wait_platform_event
 from tests.sync.api._helpers import seed_namespace_via_repo
 from tests.sync.api._realtime_helpers import send_ws_command
+from tests.sync.conftest import require_sync_di
 
 
 @pytest.mark.asyncio
@@ -22,7 +23,7 @@ async def test_ws_channels_create_via_command_router(
     unique_id: str,
 ) -> None:
     namespace = f"ns_{unique_id}_ws"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     event_id = uuid.uuid4().hex
     async with connect_centrifugo(sync_auth_token) as ws:
@@ -96,7 +97,7 @@ async def test_ws_two_commands_sequential(
     unique_id: str,
 ) -> None:
     namespace = f"ns_{unique_id}_seq"
-    await seed_namespace_via_repo(company_id, namespace)
+    await seed_namespace_via_repo(require_sync_di(), company_id, namespace)
 
     id1 = uuid.uuid4().hex
     id2 = uuid.uuid4().hex

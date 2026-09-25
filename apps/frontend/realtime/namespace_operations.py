@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from core.models import StrictBaseModel
 from core.models.identity_models import Namespace, NamespaceKind, User
 from core.namespace import TECHNICAL_NAMESPACE_NAME_PREFIXES, personal_namespace_name
@@ -34,28 +34,28 @@ class ConsoleNamespaceCreatePayload(StrictBaseModel):
 
 
 async def op_namespaces_console_list(
-    payload: ConsoleNamespacesListPayload, *, user: User, container: FrontendContainer
+    payload: ConsoleNamespacesListPayload, *, user: User, di: Di
 ) -> OffsetPage[Namespace]:
     _ = user
-    _ = await require_company_admin(container.authz_service)
+    _ = await require_company_admin(di.authz_service)
     kinds = frozenset(payload.kinds & CONSOLE_NAMESPACE_KINDS)
-    namespaces = await container.namespace_service.list(limit=payload.limit, offset=payload.offset, kinds=kinds)
-    total = await container.namespace_service.count(kinds=kinds)
+    namespaces = await di.namespace_service.list(limit=payload.limit, offset=payload.offset, kinds=kinds)
+    total = await di.namespace_service.count(kinds=kinds)
     return OffsetPage[Namespace](items=namespaces, total=total, limit=payload.limit, offset=payload.offset)
 
 
 async def op_namespaces_console_create(
-    payload: ConsoleNamespaceCreatePayload, *, user: User, container: FrontendContainer
+    payload: ConsoleNamespaceCreatePayload, *, user: User, di: Di
 ) -> Namespace:
     _ = user
-    _ = await require_company_admin(container.authz_service)
+    _ = await require_company_admin(di.authz_service)
     name = payload.name.strip()
     if name == "":
         raise_invalid(ValueError("name is required"))
     if name.startswith("user-") or any(name.startswith(prefix) for prefix in TECHNICAL_NAMESPACE_NAME_PREFIXES):
         raise_invalid(ValueError("reserved namespace name prefix"))
     try:
-        return await container.namespace_service.create(
+        return await di.namespace_service.create(
             name=name, description=payload.description, kind=NamespaceKind.COMPANY_WORKSPACE
         )
     except ValueError as exc:
@@ -63,12 +63,12 @@ async def op_namespaces_console_create(
 
 
 async def op_namespaces_personal(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> Namespace:
     """Personal namespace текущего пользователя в активной компании (ensure)."""
     _ = payload
     _ = require_company()
-    namespace = await container.namespace_service.ensure_personal_namespace(
+    namespace = await di.namespace_service.ensure_personal_namespace(
         user.user_id, display_name=user.name
     )
     if namespace.name != personal_namespace_name(user.user_id):

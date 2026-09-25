@@ -7,11 +7,10 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.di import Di
 from apps.flows.src.tasks.task_names import TASK_DISPATCH_EMAIL_TRIGGERS
 from apps.flows.src.triggers.handlers.email import dispatch_email_triggers_for_messages
-from core.mail.models import InboundMailMessage
+from core.mail.models import InboundMailMessage, MailboxBinding
 from core.tasks import platform_task
 from core.types import JsonObject
 
@@ -23,14 +22,15 @@ async def dispatch_email_triggers(
     mailbox_binding_id: str,
     messages: list[JsonObject],
     dedup_ttl_seconds: int,
+    di: Di,
 ) -> int:
-    container = get_container()
-    binding = await container.mailbox_binding_repository.get(mailbox_binding_id, company_id)
+    binding = await MailboxBinding.find_in_company(company_id, mailbox_binding_id)
     if binding is None:
         raise ValueError(f"mailbox_binding_id not found: {mailbox_binding_id}")
     inbound = [InboundMailMessage.model_validate(message) for message in messages]
     return await dispatch_email_triggers_for_messages(
-        container=as_flow_runtime_container(container),
+        redis_client=di.redis_client,
+        shared_storage=di.shared_storage,
         binding=binding,
         messages=inbound,
         dedup_ttl_seconds=dedup_ttl_seconds,

@@ -74,7 +74,7 @@ class TestApiKeysAPI:
         )
 
         assert response.status_code == 400
-        assert "Недопустимый scope" in response.json()["detail"]
+        assert "invalid scope" in response.json()["detail"]
 
     async def test_create_api_key_multiple_scopes(
         self,
@@ -103,7 +103,7 @@ class TestApiKeysAPI:
     async def test_create_api_key_as_viewer_forbidden(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Попытка создать ключ с ролью viewer (нет прав)"""
         import uuid
@@ -118,7 +118,7 @@ class TestApiKeysAPI:
             owner_id="owner_user",
             members={"viewer_user": ["viewer"]}
         )
-        await frontend_container.company_repository.set(company)
+        await Company.set(company)
 
         user = User(
             user_id="viewer_user",
@@ -126,7 +126,7 @@ class TestApiKeysAPI:
             companies={company_id: ["viewer"]},
             active_company_id=company_id
         )
-        await frontend_container.user_repository.set(user)
+        await User.set(user)
 
         token_service = get_token_service()
         token = token_service.create_token("viewer_user", company_id=company_id)
@@ -289,7 +289,7 @@ class TestApiKeysAPI:
     async def test_api_key_isolation_between_companies(
         self,
         frontend_client: AsyncClient,
-        frontend_container
+        frontend_di
     ):
         """Проверка изоляции API ключей между компаниями"""
         import uuid
@@ -314,8 +314,8 @@ class TestApiKeysAPI:
             members={"user2": ["owner"]}
         )
 
-        await frontend_container.company_repository.set(company1)
-        await frontend_container.company_repository.set(company2)
+        await Company.set(company1)
+        await Company.set(company2)
 
         user1 = User(
             user_id="user1",
@@ -330,18 +330,16 @@ class TestApiKeysAPI:
             active_company_id=company2_id
         )
 
-        await frontend_container.user_repository.set(user1)
-        await frontend_container.user_repository.set(user2)
+        await User.set(user1)
+        await User.set(user2)
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company1_id,
             user_id="user1",
             roles=["owner"],
         )
         await set_test_company_member_roles(
-            frontend_container.company_repository,
-            frontend_container.authz_service,
+            frontend_di.authz_service,
             company_id=company2_id,
             user_id="user2",
             roles=["owner"],

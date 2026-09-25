@@ -21,6 +21,7 @@ dependencies = [
     "linkify-it-py>=2.1.0",
     "asyncmy>=0.2.14",
     "clickhouse-connect>=1.7.1",
+    "oxyde>=0.8.0",
 ]
 [tool.uv]
 default-groups = [

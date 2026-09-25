@@ -5,13 +5,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
-from apps.crm.container import CRMContainer, get_crm_container
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_note_broadcast import broadcast_crm_note_event
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_FORMAT_NOTE_DESCRIPTION_MARKDOWN
 from core.config import get_settings
 from core.logging import get_logger
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from core.tasks import platform_task
 from core.text_transforms import TextTransformService
 from core.text_transforms.chunking import split_text_into_markdown_chunks
@@ -23,7 +27,6 @@ logger = get_logger(__name__)
 
 async def _journal_terminal_markdown(
     *,
-    container: CRMContainer,
     task_id: str | None,
     company_id: str,
     snapshot_user_id: str,
@@ -35,9 +38,8 @@ async def _journal_terminal_markdown(
 ) -> None:
     if not task_id:
         return
-    repo = container.task_repository
     now = datetime.now(timezone.utc)
-    await repo.patch_progress(
+    await CRMTask.patch_progress(
         task_id,
         company_id,
         status=status,
@@ -49,7 +51,6 @@ async def _journal_terminal_markdown(
     )
     await publish_crm_task_snapshot_for_user(
         user_id=snapshot_user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -64,22 +65,22 @@ async def format_note_description_markdown_task(
     user_id: str,
     interface_language: str,
     task_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Форматирует заметку через общий TextTransformService. Модель выбирается через
     company capability ``llm_format_markdown`` с платформенным humanitec_llm default-route.
     """
     await set_crm_context(company_id, namespace, auth_token, user_id, interface_language=interface_language)
-    container = get_crm_container()
-    repo = container.task_repository
     snapshot_user_id = user_id
 
     if task_id:
-        row = await repo.get_for_worker(task_id, company_id)
+        row = await CRMTask.by_company_and_task_id(company_id, task_id)
         if row is None:
             raise ValueError(f"CRM task not found: {task_id}")
         snapshot_user_id = row.user_id
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="running",
@@ -89,16 +90,14 @@ async def format_note_description_markdown_task(
         )
         await publish_crm_task_snapshot_for_user(
             user_id=snapshot_user_id,
-            repo=repo,
             task_id=task_id,
             company_id=company_id,
         )
 
-    entity = await container.entity_repository.get(note_id)
+    entity = await CRMEntity.get(note_id)
     if entity is None:
         msg = f"Заметка не найдена: {note_id}"
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -110,7 +109,6 @@ async def format_note_description_markdown_task(
         raise ValueError(msg)
     if entity.entity_type != NOTE_ROOT_ENTITY_TYPE_ID:
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -126,7 +124,6 @@ async def format_note_description_markdown_task(
             f"note_markdown_format company mismatch: entity={entity.company_id} task={company_id}"
         )
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -140,7 +137,6 @@ async def format_note_description_markdown_task(
     desc = entity.description
     if desc is None or not str(desc).strip():
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -162,7 +158,6 @@ async def format_note_description_markdown_task(
             error=str(exc),
         )
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -177,7 +172,6 @@ async def format_note_description_markdown_task(
     if not markdown:
         msg = "note_markdown_format: пустой markdown"
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -190,7 +184,7 @@ async def format_note_description_markdown_task(
 
     chunks_processed = chunks_total
     original_description = str(desc)
-    merged = await container.entity_repository.update_description_if_current(
+    merged = await CRMEntity.update_description_if_current(
         note_id,
         expected_description=original_description,
         description=markdown,
@@ -201,7 +195,6 @@ async def format_note_description_markdown_task(
             note_id=note_id,
         )
         await _journal_terminal_markdown(
-            container=container,
             task_id=task_id,
             company_id=company_id,
             snapshot_user_id=snapshot_user_id,
@@ -212,8 +205,12 @@ async def format_note_description_markdown_task(
         )
         return {"status": "skipped_stale", "note_id": note_id}
 
+    await index_crm_entity(
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+        merged,
+        replace=True,
+    )
     await _journal_terminal_markdown(
-        container=container,
         task_id=task_id,
         company_id=company_id,
         snapshot_user_id=snapshot_user_id,
@@ -235,7 +232,7 @@ async def format_note_description_markdown_task(
         note_date_iso=note_date_iso,
         action="updated",
         note=merged,
-                authz=container.authz_service,
+        authz=di.authz_service,
         skip_notification_center=False,
         markdown_format={
             "phase": "complete",

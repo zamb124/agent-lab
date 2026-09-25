@@ -30,7 +30,7 @@
 import { html, svg, css, unsafeCSS } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
-import { readMindmapView, writeMindmapView } from '../utils/mindmap-view-preference.js';
+import { readMindmapView, writeMindmapView } from '../_helpers/mindmap-view-preference.js';
 
 const LEVEL_GAP = 340;
 const LEAF_BLOCK = 58;

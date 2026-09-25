@@ -5,7 +5,7 @@ from __future__ import annotations
 from time import perf_counter
 
 from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.src.models.mcp import MCPServerConfig
 from core.datasources.models import (
     DatasourceConnection,
     DatasourceConnectorSpec,
@@ -19,9 +19,6 @@ from core.types import JsonObject, require_json_object
 
 
 class DatasourceMcpExecutor:
-    def __init__(self, container: FlowRuntimeContainer) -> None:
-        self._container: FlowRuntimeContainer = container
-
     async def run(
         self,
         *,
@@ -43,7 +40,7 @@ class DatasourceMcpExecutor:
         if server_id is None or not server_id.strip():
             raise ValueError("mcp datasource requires mcp_server_id")
         tool_name = _mcp_tool_name(spec, operation, as_test=as_test)
-        server = await self._container.mcp_server_repository.get(server_id)
+        server = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
         if server is None:
             raise ValueError(f"MCP server not found: {server_id}")
         arguments: JsonObject = {

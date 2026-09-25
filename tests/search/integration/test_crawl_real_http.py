@@ -7,7 +7,14 @@ import pytest
 
 from apps.search.config import get_search_settings
 from apps.search_worker.tasks.crawl_tasks import crawl_discover_domain, crawl_fetch_url
-from core.crawl.models import CrawlDomainSeed, CrawlProfileCreateRequest
+from core.crawl.models import (
+    CrawlDomain,
+    CrawlDomainSeed,
+    CrawlJob,
+    CrawlProfile,
+    CrawlProfileCreateRequest,
+    CrawlUrl,
+)
 from core.search.index_models import SearchIndexCreateRequest
 from tests.search.conftest import make_search_index_slug
 from tests.search.integration.snippet_support import strip_snippet_highlight
@@ -19,15 +26,15 @@ REAL_CRAWL_QUERY = "documentation examples"
 
 
 @pytest.mark.asyncio
-async def test_discover_sitemap_example_com_real_http(crawl_search_container, search_system_context, unique_id):
-    search_container = crawl_search_container
+async def test_discover_sitemap_example_com_real_http(crawl_search_di, search_system_context, unique_id):
+    search_di = crawl_search_di
     from apps.search.services.crawl.sitemap_parser import discover_sitemap_urls
     from core.crawl.url_filter import build_url_filter
 
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]
 
-    await search_container.search_index_service.create(
+    await search_di.search_index_service.create(
         SearchIndexCreateRequest(
             search_index_id=search_index_id,
             display_name=f"Crawl discover {unique_id}",
@@ -35,7 +42,7 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
             rag_collection_id=search_index_id,
         )
     )
-    await search_container.crawl_service.create_profile(
+    await search_di.crawl_service.create_profile(
         CrawlProfileCreateRequest(
             crawl_profile_id=crawl_profile_id,
             search_index_id=search_index_id,
@@ -44,12 +51,12 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
             browser_fallback_enabled=False,
         )
     )
-    await search_container.crawl_domain_repository.upsert_seed_batch(
+    await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         [CrawlDomainSeed(domain=REAL_CRAWL_DOMAIN, category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
-    due = await search_container.crawl_domain_repository.list_due(
+    due = await CrawlDomain.list_due(
         crawl_profile_id,
         now=datetime.now(UTC),
         limit=1,
@@ -57,7 +64,7 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
     assert due
     domain_row = due[0]
 
-    profile_bundle = await search_container.crawl_profile_repository.get_with_index(crawl_profile_id)
+    profile_bundle = await CrawlProfile.get_with_index(crawl_profile_id)
     entries = await discover_sitemap_urls(
         domain_row.domain,
         timeout_seconds=get_search_settings().crawl.http_timeout_seconds,
@@ -68,7 +75,7 @@ async def test_discover_sitemap_example_com_real_http(crawl_search_container, se
     assert entries
     assert any(entry.url.startswith("https://") for entry in entries)
 
-    stats = await search_container.crawl_url_repository.upsert_from_sitemap(
+    stats = await CrawlUrl.upsert_from_sitemap(
         domain_row.crawl_domain_id,
         entries,
     )
@@ -80,17 +87,17 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
     search_client,
     rag_worker,
     provider_litserve_service,
-    crawl_search_container,
+    crawl_search_di,
     search_system_context,
     unique_id,
 ):
-    search_container = crawl_search_container
+    search_di = crawl_search_di
     _ = rag_worker, provider_litserve_service
     search_index_id = make_search_index_slug(unique_id)
     crawl_profile_id = f"cr_{search_index_id}"[:64]
     rag_namespace_id = f"{search_index_id}:ns"
 
-    await search_container.search_index_service.create(
+    await search_di.search_index_service.create(
         SearchIndexCreateRequest(
             search_index_id=search_index_id,
             display_name=f"Crawl index {unique_id}",
@@ -98,7 +105,7 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
             rag_collection_id=search_index_id,
         )
     )
-    await search_container.crawl_service.create_profile(
+    await search_di.crawl_service.create_profile(
         CrawlProfileCreateRequest(
             crawl_profile_id=crawl_profile_id,
             search_index_id=search_index_id,
@@ -107,19 +114,19 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
             browser_fallback_enabled=False,
         )
     )
-    await search_container.crawl_domain_repository.upsert_seed_batch(
+    await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         [CrawlDomainSeed(domain=REAL_CRAWL_DOMAIN, category="docs", domain_rank=1)],
         next_crawl_after=datetime.now(UTC),
     )
-    due = await search_container.crawl_domain_repository.list_due(
+    due = await CrawlDomain.list_due(
         crawl_profile_id,
         now=datetime.now(UTC),
         limit=1,
     )
     assert due
     domain = due[0]
-    job = await search_container.crawl_job_repository.start(
+    job = await CrawlJob.start(
         crawl_profile_id,
         "manual",
         schedule_task_id=None,
@@ -129,6 +136,7 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
         domain.crawl_domain_id,
         job.crawl_job_id,
         crawl_profile_id,
+        di=search_di,
     )
     assert discover_result["status"] == "discovered"
 
@@ -137,10 +145,11 @@ async def test_crawl_fetch_indexes_example_com_and_search_finds_content(
         job.crawl_job_id,
         crawl_profile_id,
         1,
+        di=search_di,
     )
     assert fetch_result["status"] == "fetched"
 
-    job_after = await search_container.crawl_job_repository.get(job.crawl_job_id)
+    job_after = await CrawlJob.get(job.crawl_job_id)
     assert job_after.urls_indexed >= 1
 
     deadline = datetime.now(UTC).timestamp() + 90.0

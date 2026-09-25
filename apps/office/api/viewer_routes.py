@@ -10,15 +10,16 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
 from apps.office.config import get_office_settings
-from apps.office.container import OfficeContainer
-from apps.office.dependencies import ContainerDep
+from apps.office.db.models import OfficeDocumentBinding
+from apps.office.di import Di
 from apps.office.services.viewer_frame import render_viewer_frame_html
 from apps.office.services.viewer_handlers._urls import viewer_save_url, viewer_stream_url
 from apps.office.services.viewer_handlers.text_handler import TEXT_MAX_EDIT_BYTES
 from core.clients.onlyoffice import OnlyOfficeJwtError
 from core.documents.viewer.jwt import decode_viewer_save_token, decode_viewer_stream_token
 from core.documents.viewer.models import OfficeViewerSaveTokenClaims, OfficeViewerStreamTokenClaims
-from core.files.s3_client import S3ClientFactory
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import SignedFileGrant
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 
@@ -28,7 +29,7 @@ router = APIRouter(tags=["office-viewer"])
 
 @router.get("/viewer-stream")
 async def viewer_stream(
-    container: ContainerDep,
+    di: Di,
     token: Annotated[str, Query(description="JWT office_view")],
 ) -> Response:
     integ = get_office_settings().office
@@ -38,27 +39,28 @@ async def viewer_stream(
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
         raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
-    await _authorize_viewer_claims(container, claims)
-    meta = await container.files_service.get_optional(claims.file_id)
+    await _authorize_viewer_claims(claims)
+    meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != claims.company_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
+    handle = await FileGate().open_record(
+        meta,
+        SignedFileGrant(file_id=claims.file_id, company_id=claims.company_id),
+    )
     try:
-        body = await s3.download_bytes(meta.s3_key)
+        body = await handle.read_bytes()
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
         logger.warning(
             "office.viewer.stream.s3.error.file_id",
             file_id=claims.file_id,
-            bucket=meta.s3_bucket,
+            storage_id=meta.storage_id,
             key=meta.s3_key,
             code=code,
         )
         raise HTTPException(status_code=502, detail=f"S3 did not return the object: {code}") from exc
-    finally:
-        await s3.close()
     content_type = claims.content_type or meta.content_type or "application/octet-stream"
     disposition = "inline"
     if claims.handler == "binary":
@@ -72,7 +74,7 @@ async def viewer_stream(
 
 @router.get("/viewer-frame")
 async def viewer_frame(
-    container: ContainerDep,
+    di: Di,
     request: Request,
     token: Annotated[str, Query(description="JWT office_view")],
 ) -> HTMLResponse:
@@ -83,8 +85,8 @@ async def viewer_frame(
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
         raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
-    await _authorize_viewer_claims(container, claims)
-    meta = await container.files_service.get_optional(claims.file_id)
+    await _authorize_viewer_claims(claims)
+    meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     base = build_service_base_url(request)
@@ -122,7 +124,7 @@ async def viewer_frame(
 
 @router.post("/viewer-save")
 async def viewer_save(
-    container: ContainerDep,
+    di: Di,
     request: Request,
     token: Annotated[str, Query(description="JWT office_view_save")],
 ) -> Response:
@@ -133,7 +135,7 @@ async def viewer_save(
         claims = decode_viewer_save_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
         raise HTTPException(status_code=401, detail="Invalid viewer save token") from exc
-    await _authorize_viewer_claims(container, claims)
+    await _authorize_viewer_claims(claims)
     body = await request.body()
     if len(body) == 0:
         raise HTTPException(status_code=400, detail="Empty save body")
@@ -142,7 +144,7 @@ async def viewer_save(
             status_code=413,
             detail=f"Text size exceeds the limit {TEXT_MAX_EDIT_BYTES} bytes",
         )
-    meta = await container.files_service.get_optional(claims.file_id)
+    meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
         raise HTTPException(status_code=404, detail="File not found")
     if meta.company_id != claims.company_id:
@@ -150,29 +152,26 @@ async def viewer_save(
     content_type = meta.content_type or "text/plain"
     normalized_content_type = content_type.split(";", 1)[0].strip()
     digest = hashlib.sha256(body).hexdigest()
-    s3 = S3ClientFactory.create_client_for_bucket(meta.s3_bucket)
-    try:
-        _ = await s3.upload_bytes(
-            data=body,
-            key=meta.s3_key,
-            content_type=normalized_content_type,
-            public=meta.is_public,
-        )
-    finally:
-        await s3.close()
-    updated_meta = meta.model_copy(
-        update={"file_size": len(body), "checksum": digest},
+    s3 = await FileGate().client_for_storage_id(meta.storage_id, record=meta)
+    _ = await s3.upload_bytes(
+        data=body,
+        key=meta.s3_key,
+        content_type=normalized_content_type,
+        public=meta.is_public,
     )
-    _ = await container.files_service.save(updated_meta)
+    _ = await di.files_service.save_file_size_checksum(
+        meta,
+        file_size=len(body),
+        checksum=digest,
+    )
     return Response(status_code=204)
 
 
 async def _authorize_viewer_claims(
-    container: OfficeContainer,
     claims: OfficeViewerStreamTokenClaims | OfficeViewerSaveTokenClaims,
 ) -> None:
     if claims.public_link_token_hash is not None:
-        binding_row = await container.access_repository.get_binding_by_link_token_hash(
+        binding_row = await OfficeDocumentBinding.binding_by_enabled_link_token(
             claims.public_link_token_hash,
         )
         if binding_row is None:
@@ -186,7 +185,7 @@ async def _authorize_viewer_claims(
         return
 
     if claims.viewer_scope == "catalog":
-        binding_row = await container.document_binding_repository.get_by_file_and_company(
+        binding_row = await OfficeDocumentBinding.binding_for_company(
             claims.file_id,
             claims.company_id,
         )

@@ -20,13 +20,9 @@ from core.calendar.service import CalDavClient
 from core.config import get_settings
 from core.config.models import MailConfig, MailLivePersonalConfig
 from core.context import set_context
-from core.mail.models import MailboxSecret, PersonalMailboxConnectPayload
-from core.mail.repositories import (
-    CompanyMailConnectionRepository,
-    MailboxBindingRepository,
-    MailboxFolderRepository,
-    MailboxSyncCursorRepository,
-    MailMessageRepository,
+from core.mail.models import (
+    MailboxSecret,
+    PersonalMailboxConnectPayload,
 )
 from core.mail.service import MailService
 from core.models import (
@@ -44,24 +40,17 @@ pytestmark = pytest.mark.network
 @pytest.fixture()
 def mail_personal_service_with_calendar(
     mail_personal_live_settings: MailConfig,
-    container,
+    di,
 ) -> MailService:
     shared_url = get_settings().database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен для live calendar tests")
     return MailService(
-        connection_repository=CompanyMailConnectionRepository(db_url=shared_url),
-        binding_repository=MailboxBindingRepository(db_url=shared_url),
-        sync_cursor_repository=MailboxSyncCursorRepository(db_url=shared_url),
-        folder_repository=MailboxFolderRepository(db_url=shared_url),
-        message_repository=MailMessageRepository(db_url=shared_url),
         authz=build_authz_service(),
-        namespace_service=container.namespace_service,
-        company_repository=container.company_repository,
-        user_repository=container.user_repository,
+        namespace_service=di.namespace_service,
         mail_config=mail_personal_live_settings,
         port_override=None,
-        calendar_bridge=container.calendar_service,
+        calendar_bridge=di.calendar_service,
     )
 
 
@@ -98,7 +87,7 @@ async def test_mail_only_password_yields_needs_password_status(
     mail_personal_cfg: MailLivePersonalConfig,
     mail_personal_pair: tuple[MailboxSecret, MailboxSecret],
     mail_personal_company_ctx: tuple[str, str, Company, User],
-    container,
+    di,
 ) -> None:
     """
     Почтовый пароль Mail.ru CalDAV отклоняет: ящик подключается, календарь
@@ -135,7 +124,7 @@ async def test_mail_only_password_yields_needs_password_status(
         assert binding.calendar_autolink_detail is not None
         assert "app password" in binding.calendar_autolink_detail
 
-        integrations = await container.calendar_service.list_integrations(
+        integrations = await di.calendar_service.list_integrations(
             user_id=user_id,
             company_id=company_id,
         )
@@ -186,7 +175,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
     mail_personal_cfg: MailLivePersonalConfig,
     mail_personal_pair: tuple[MailboxSecret, MailboxSecret],
     mail_personal_company_ctx: tuple[str, str, Company, User],
-    container,
+    di,
 ) -> None:
     """
     Путь из настроек: пользователь вводит календарный пароль для своего ящика,
@@ -218,7 +207,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
         company_id=company_id,
     )
     try:
-        integration = await container.calendar_service.connect_integration(
+        integration = await di.calendar_service.connect_integration(
             user_id=user_id,
             company_id=company_id,
             payload=CalendarIntegrationConnectPayload(
@@ -234,7 +223,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
         assert integration.settings.default_calendar_id
 
         now = datetime.now(timezone.utc)
-        result = await container.calendar_service.run_sync(
+        result = await di.calendar_service.run_sync(
             user_id=user_id,
             company_id=company_id,
             start_at=now - timedelta(days=365),
@@ -243,7 +232,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
         )
         assert result["imported"] > 0
 
-        events = await container.calendar_service.list_events(
+        events = await di.calendar_service.list_events(
             company_id=company_id,
             user_id=user_id,
             start_at=now - timedelta(days=365),
@@ -259,7 +248,7 @@ async def test_manual_calendar_password_links_mailbox_and_imports_events(
             company_id=company_id,
         )
 
-    remaining = await container.calendar_service.list_integrations(
+    remaining = await di.calendar_service.list_integrations(
         user_id=user_id,
         company_id=company_id,
     )

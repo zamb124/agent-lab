@@ -1,0 +1,4 @@
+GROUP g05_docs rc=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 703 passed, 3 warnings in 151.26s (0:02:31) ==================

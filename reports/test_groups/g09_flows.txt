@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/viktor-shved/PycharmProjects/agent-lab
+configfile: pytest.ini
+plugins: hypothesis-6.153.4, cov-7.1.0, xdist-3.8.0, timeout-2.4.0, asyncio-1.4.0, schemathesis-4.20.1, rerunfailures-16.3, hydra-core-1.3.2, anyio-4.13.0
+timeout: 5.0s
+timeout method: thread
+timeout func_only: True
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 4/4 workers
+4 workers [1985 items]
+
+.............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................s...................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-25T06:53:28.843534Z", "message": "files.cairosvg.libcairo.svg"}
+
+=============================== warnings summary ===============================
+tests/flows/api/test_hitl_conversation_http.py::test_single_reply_complete_http_requires_resolution
+tests/flows/api/test_hitl_conversation_http.py::test_takeover_complete_http_allows_empty_resolution
+tests/flows/api/test_hitl_conversation_http.py::test_terminal_hitl_rejects_send_and_second_complete
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='state', input_value='done', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/flows/api/test_datasources.py::test_datasource_select_only_rejects_insert
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='allowed_operations', input_value='select', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/flows/e2e/test_evaluation_lab_api.py::TestEvaluationLabAPI::test_run_executes_flow_records_events_and_compare
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='annotation_type', input_value='issue', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/flows/e2e/test_evaluation_lab_api.py::TestEvaluationLabAPI::test_monitor_sampling_uses_real_tracing_repository
+  /Users/viktor-shved/PycharmProjects/agent-lab/.venv/lib/python3.14/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `enum` - serialized value may not be as expected [field_name='state', input_value='paused', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========== 1984 passed, 1 skipped, 6 warnings in 157.21s (0:02:37) ============

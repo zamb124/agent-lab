@@ -8,8 +8,9 @@
 from a2a.types import Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import (
     CodeNode,
     FlowNode,
@@ -27,24 +28,24 @@ def _typed_config(node_type: NodeType, config: JsonObject) -> JsonObject:
     return {"type": node_type.value, **config}
 
 
-def llm_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObject) -> LlmNode:
+def llm_node(di: FlowsDi, *, node_id: str, config: JsonObject) -> LlmNode:
     return LlmNode(
         node_id=node_id,
         config=_typed_config(NodeType.LLM_NODE, config),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
     )
 
 
-def flow_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObject) -> FlowNode:
+def flow_node(di: FlowsDi, *, node_id: str, config: JsonObject) -> FlowNode:
     return FlowNode(
         node_id=node_id,
         config=_typed_config(NodeType.FLOW, config),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, tool_registry=di.tool_registry, handoff_orchestrator_service=di.handoff_orchestrator_service,
     )
 
 
 def remote_flow_node(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     *,
     node_id: str,
     config: JsonObject,
@@ -52,25 +53,25 @@ def remote_flow_node(
     return RemoteFlowNode(
         node_id=node_id,
         config=_typed_config(NodeType.REMOTE_FLOW, config),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, a2a_client=di.node_constructor.a2a_client, emitter_factory=di.node_constructor.emitter_factory,
     )
 
 
-def code_node(container: FlowRuntimeContainer, *, node_id: str, config: JsonObject) -> CodeNode:
+def code_node(di: FlowsDi, *, node_id: str, config: JsonObject) -> CodeNode:
     return CodeNode(
         node_id=node_id,
         config=_typed_config(NodeType.CODE, config),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
 
 
 class TestBaseNodeInputMapping:
     """Тесты для BaseNode._resolve_inputs и _prepare_state."""
 
-    def test_no_mapping_returns_empty_dict(self, container: FlowRuntimeContainer, unique_id):
+    def test_no_mapping_returns_empty_dict(self, di: FlowsDi, unique_id):
         """Без input_mapping возвращается пустой dict"""
         node = llm_node(
-            container, node_id="test_agent", config={"prompt": "Test prompt", "input_mapping": None}
+            di, node_id="test_agent", config={"prompt": "Test prompt", "input_mapping": None}
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -86,10 +87,10 @@ class TestBaseNodeInputMapping:
 
         assert inputs == {}
 
-    def test_simple_state_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_simple_state_mapping(self, di: FlowsDi, unique_id):
         """Простой маппинг @state:field"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
@@ -115,11 +116,11 @@ class TestBaseNodeInputMapping:
         assert "user_query" not in inputs
 
     def test_llm_mapped_inputs_are_prompt_variables_with_explicit_precedence(
-        self, container: FlowRuntimeContainer,
+        self, di: FlowsDi,
         unique_id,
     ):
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Topic={topic}; company={company}",
@@ -142,10 +143,10 @@ class TestBaseNodeInputMapping:
         assert prepared.variables == {"topic": "mapped topic", "company": "ACME"}
         assert rendered == "Topic=mapped topic; company=ACME"
 
-    def test_nested_state_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_nested_state_mapping(self, di: FlowsDi, unique_id):
         """Маппинг с вложенными путями @state:user.profile.name"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
@@ -172,10 +173,10 @@ class TestBaseNodeInputMapping:
         assert inputs["user_name"] == "Иван"
         assert inputs["user_city"] == "Москва"
 
-    def test_var_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_var_mapping(self, di: FlowsDi, unique_id):
         """Маппинг с @var: для переменных"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
@@ -201,10 +202,10 @@ class TestBaseNodeInputMapping:
         assert inputs["company"] == "ACME Corp"
         assert inputs["api_key"] == "secret123"
 
-    def test_constant_values(self, container: FlowRuntimeContainer, unique_id):
+    def test_constant_values(self, di: FlowsDi, unique_id):
         """Маппинг с константами"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
@@ -232,10 +233,10 @@ class TestBaseNodeInputMapping:
         assert inputs["number"] == 42
         assert inputs["flag"] is True
 
-    def test_missing_path_returns_none(self, container: FlowRuntimeContainer, unique_id):
+    def test_missing_path_returns_none(self, di: FlowsDi, unique_id):
         """Отсутствующий путь -> None"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={
                 "prompt": "Test prompt",
@@ -260,10 +261,10 @@ class TestBaseNodeInputMapping:
 class TestPrepareState:
     """Тесты для BaseNode._prepare_state."""
 
-    def test_prepare_state_applies_inputs(self, container: FlowRuntimeContainer, unique_id):
+    def test_prepare_state_applies_inputs(self, di: FlowsDi, unique_id):
         """_prepare_state применяет inputs к state"""
         node = llm_node(
-            container,
+            di,
             node_id="test_agent",
             config={"prompt": "Test prompt", "input_mapping": {"content": "@state:query"}},
         )
@@ -288,10 +289,10 @@ class TestPrepareState:
 class TestAgentNodeInputMapping:
     """Тесты для FlowNode с input_mapping."""
 
-    def test_no_mapping_returns_empty_inputs(self, container: FlowRuntimeContainer, unique_id):
+    def test_no_mapping_returns_empty_inputs(self, di: FlowsDi, unique_id):
         """Без input_mapping inputs пустой"""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={"flow_id": "inner_flow", "input_mapping": None},
         )
@@ -310,10 +311,10 @@ class TestAgentNodeInputMapping:
         assert result.model_dump() == state.model_dump()
         assert result is not state
 
-    def test_simple_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_simple_mapping(self, di: FlowsDi, unique_id):
         """Простой маппинг"""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "inner_flow",
@@ -338,10 +339,10 @@ class TestAgentNodeInputMapping:
         assert result.context == {"key": "value"}
         assert result.variables == {"company": "ACME"}
 
-    def test_nested_paths(self, container: FlowRuntimeContainer, unique_id):
+    def test_nested_paths(self, di: FlowsDi, unique_id):
         """Вложенные пути"""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "inner_flow",
@@ -367,10 +368,10 @@ class TestAgentNodeInputMapping:
         assert result.name == "Иван"
         assert result.city == "Москва"
 
-    def test_var_mapping(self, container: FlowRuntimeContainer, unique_id):
+    def test_var_mapping(self, di: FlowsDi, unique_id):
         """Маппинг с @var:"""
         node = flow_node(
-            container,
+            di,
             node_id="test_subflow",
             config={
                 "flow_id": "inner_flow",
@@ -396,10 +397,10 @@ class TestAgentNodeInputMapping:
 class TestRemoteFlowNodeInputMapping:
     """Тесты для RemoteFlowNode с input_mapping."""
 
-    def test_input_mapping_simple(self, container: FlowRuntimeContainer, unique_id):
+    def test_input_mapping_simple(self, di: FlowsDi, unique_id):
         """input_mapping: {"content": "@state:field"}"""
         node = remote_flow_node(
-            container,
+            di,
             node_id="test_remote",
             config={"url": "http://agent:8080", "input_mapping": {"content": "@state:user_query"}},
         )
@@ -416,10 +417,10 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Привет, агент!"
 
-    def test_input_mapping_nested_path(self, container: FlowRuntimeContainer, unique_id):
+    def test_input_mapping_nested_path(self, di: FlowsDi, unique_id):
         """input_mapping с вложенным путём"""
         node = remote_flow_node(
-            container,
+            di,
             node_id="test_remote",
             config={
                 "url": "http://agent:8080",
@@ -439,10 +440,10 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Nested query"
 
-    def test_input_mapping_with_var(self, container: FlowRuntimeContainer, unique_id):
+    def test_input_mapping_with_var(self, di: FlowsDi, unique_id):
         """input_mapping с @var:"""
         node = remote_flow_node(
-            container,
+            di,
             node_id="test_remote",
             config={
                 "url": "http://agent:8080",
@@ -461,10 +462,10 @@ class TestRemoteFlowNodeInputMapping:
 
         assert inputs["content"] == "Default message"
 
-    def test_no_mapping_uses_state_content(self, container: FlowRuntimeContainer, unique_id):
+    def test_no_mapping_uses_state_content(self, di: FlowsDi, unique_id):
         """Без input_mapping используется state.content"""
         node = remote_flow_node(
-            container, node_id="test_remote", config={"url": "http://agent:8080"}
+            di, node_id="test_remote", config={"url": "http://agent:8080"}
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -523,10 +524,10 @@ class TestHeadersWithNestedVars:
 
         assert result == "Bearer eyJhbGciOiJIUzI1NiJ9.test"
 
-    def test_remote_flow_resolve_headers_dict(self, container: FlowRuntimeContainer, unique_id):
+    def test_remote_flow_resolve_headers_dict(self, di: FlowsDi, unique_id):
         """RemoteFlowNode._resolve_headers_dict с вложенными @var:"""
         node = remote_flow_node(
-            container,
+            di,
             node_id="test",
             config={
                 "url": "http://agent:8080",
@@ -715,10 +716,10 @@ class TestExternalAPIClientHeaders:
 class TestRealWorldScenarios:
     """Реальные сценарии использования input_mapping."""
 
-    def test_order_processing_agent(self, container: FlowRuntimeContainer, unique_id):
+    def test_order_processing_agent(self, di: FlowsDi, unique_id):
         """Агент обработки заказов с вложенными данными"""
         node = llm_node(
-            container,
+            di,
             node_id="order_agent",
             config={
                 "prompt": "Process order",
@@ -772,10 +773,10 @@ class TestRealWorldScenarios:
         assert headers["Authorization"] == "Bearer eyJ..."
         assert headers["X-API-Key"] == "pk_live_abc123"
 
-    def test_subflow_with_filtered_data(self, container: FlowRuntimeContainer, unique_id):
+    def test_subflow_with_filtered_data(self, di: FlowsDi, unique_id):
         """Subflow получает только нужные данные"""
         node = flow_node(
-            container,
+            di,
             node_id="analysis_subflow",
             config={
                 "flow_id": "document_analysis",
@@ -808,10 +809,10 @@ class TestRealWorldScenarios:
         assert result.metadata == {"author": "John", "date": "2024-01-01"}
         assert result.analysis_type == "sentiment"
 
-    def test_remote_flow_context_injection(self, container: FlowRuntimeContainer, unique_id):
+    def test_remote_flow_context_injection(self, di: FlowsDi, unique_id):
         """Remote agent получает контекст из переменных"""
         node = remote_flow_node(
-            container,
+            di,
             node_id="external_agent",
             config={
                 "url": "http://agent:8080",
@@ -842,10 +843,10 @@ class TestRealWorldScenarios:
 class TestMessagesFilter:
     """Тесты для фильтрации messages."""
 
-    def test_filter_all_returns_all_messages(self, container: FlowRuntimeContainer):
+    def test_filter_all_returns_all_messages(self, di: FlowsDi):
         """messages_filter='all' возвращает все сообщения"""
         node = llm_node(
-            container, node_id="test_node", config={"prompt": "Test", "messages_filter": "all"}
+            di, node_id="test_node", config={"prompt": "Test", "messages_filter": "all"}
         )
         messages = [
             Message(
@@ -884,11 +885,11 @@ class TestMessagesFilter:
         assert len(result) == 3
 
     def test_filter_own_returns_only_messages_tagged_with_node_id(
-        self, container: FlowRuntimeContainer
+        self, di: FlowsDi
     ):
         """messages_filter='own' — только сообщения с metadata.node_id == эта нода"""
         node = llm_node(
-            container, node_id="test_node", config={"prompt": "Test", "messages_filter": "own"}
+            di, node_id="test_node", config={"prompt": "Test", "messages_filter": "own"}
         )
         messages = [
             Message(
@@ -935,10 +936,10 @@ class TestMessagesFilter:
         assert result[0].message_id == "1"
         assert result[1].message_id == "2"
 
-    def test_filter_list_returns_specified_nodes(self, container: FlowRuntimeContainer):
+    def test_filter_list_returns_specified_nodes(self, di: FlowsDi):
         """messages_filter=['node1', 'node2'] — только сообщения с node_id из списка"""
         node = llm_node(
-            container,
+            di,
             node_id="test_node",
             config={"prompt": "Test", "messages_filter": ["node1", "node2"]},
         )
@@ -998,12 +999,12 @@ class TestMessagesFilter:
         assert "3" not in ids
         assert "5" not in ids
 
-    def test_own_filter_full_log_not_truncated(self, container: FlowRuntimeContainer):
+    def test_own_filter_full_log_not_truncated(self, di: FlowsDi):
         """messages_filter=own сужает только срез для LLM; полный лог в state накапливается."""
         from apps.flows.src.runtime.runners.llm_runner import new_assistant_message
 
         node = llm_node(
-            container,
+            di,
             node_id="test_node",
             config={"prompt": "Test", "messages_filter": "own"},
         )
@@ -1061,10 +1062,10 @@ class TestMessagesFilter:
 class TestSaveToMessages:
     """Тесты для save_to_messages."""
 
-    def test_append_to_messages_adds_message_with_node_id(self, container: FlowRuntimeContainer, unique_id):
+    def test_append_to_messages_adds_message_with_node_id(self, di: FlowsDi, unique_id):
         """_append_to_messages добавляет сообщение с node_id в metadata"""
         node = llm_node(
-            container, node_id="my_node", config={"prompt": "Test", "save_to_messages": True}
+            di, node_id="my_node", config={"prompt": "Test", "save_to_messages": True}
         )
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -1082,10 +1083,10 @@ class TestSaveToMessages:
         assert msg.metadata["node_id"] == "my_node"
         assert msg.parts[0].text == "Result text"
 
-    def test_output_mapping_from_config(self, container: FlowRuntimeContainer):
+    def test_output_mapping_from_config(self, di: FlowsDi):
         """output_mapping можно задать в config"""
         node = llm_node(
-            container,
+            di,
             node_id="my_agent",
             config={"prompt": "Test", "output_mapping": {"response": "agent_response"}},
         )
@@ -1096,11 +1097,11 @@ class TestSaveToMessages:
 class TestCodeNodeInputMapping:
     """Тесты для CodeNode с input_mapping."""
 
-    def test_function_node_resolves_inputs(self, container: FlowRuntimeContainer):
+    def test_function_node_resolves_inputs(self, di: FlowsDi):
         """CodeNode использует input_mapping для kwargs"""
 
         node = code_node(
-            container,
+            di,
             node_id="test_func",
             config={
                 "code": "async def run(args, state):\n    return {}",

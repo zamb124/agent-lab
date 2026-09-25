@@ -37,10 +37,10 @@ def test_specialized_urn_factories_use_canonical_entity_ids() -> None:
 
 
 def test_legacy_agent_and_skill_resource_types_are_rejected() -> None:
-    with pytest.raises(ValueError, match="Неизвестный тип ресурса"):
+    with pytest.raises(ValueError, match="Unknown resource type"):
         URN.parse("urn:iman:agent:customer_service")
 
-    with pytest.raises(ValueError, match="Неизвестный тип ресурса"):
+    with pytest.raises(ValueError, match="Unknown resource type"):
         URN.parse("urn:iman:skill:refund")
 
 

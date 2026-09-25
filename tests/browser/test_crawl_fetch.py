@@ -32,7 +32,7 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
         def release(self) -> None:
             return None
 
-    container = SimpleNamespace(
+    di = SimpleNamespace(
         authz_service=_StubAuthz(),
         browser_runtime=SimpleNamespace(
             settings=SimpleNamespace(crawl_fetch_max_inflight=2),
@@ -49,7 +49,7 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
             with pytest.raises(HTTPException) as exc_info:
                 await crawl_fetch_module.crawl_fetch(
                     BrowserCrawlFetchRequest(url="https://example.com/page"),
-                    container,  # pyright: ignore[reportArgumentType]
+                    di,  # pyright: ignore[reportArgumentType]
                 )
 
     assert exc_info.value.status_code == 429

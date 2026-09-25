@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -20,7 +21,7 @@ from core.billing.settlement_rules import (
     resolve_matched_rules,
     rule_matches_span,
 )
-from core.tracing.models import BillingSettlementSpan
+from core.tracing.models import Span
 from core.types import JsonObject
 
 
@@ -30,11 +31,12 @@ def _span(
     service_name: str = "flows",
     event_type: str | None = None,
     attributes: JsonObject | None = None,
-) -> BillingSettlementSpan:
-    return BillingSettlementSpan(
+) -> Span:
+    return Span(
         span_id="s1",
         trace_id="t1",
         operation_name=operation_name,
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
         service_name=service_name,
         event_type=event_type,
         attributes=attributes if attributes is not None else {},
@@ -75,7 +77,7 @@ def test_parse_settlement_rules_json_full_roundtrip() -> None:
 
 
 def test_parse_settlement_rules_json_root_not_object_raises() -> None:
-    with pytest.raises(ValueError, match="корень должен быть объектом"):
+    with pytest.raises(ValueError, match="root must be an object"):
         parse_settlement_rules_json("[1]")
 
 
@@ -212,7 +214,7 @@ def test_rule_matches_attribute_regex() -> None:
 
 
 def test_settlement_match_invalid_regex_raises() -> None:
-    with pytest.raises(ValidationError, match="невалидный regex"):
+    with pytest.raises(ValidationError, match="invalid regex"):
         SettlementRuleMatch(operation_name_regex="[")
 
 
@@ -234,10 +236,11 @@ def test_rule_matches_attribute_keys_present() -> None:
 
 def test_billing_settlement_span_rejects_non_object_attributes() -> None:
     with pytest.raises(ValidationError):
-        BillingSettlementSpan(
+        Span(
             span_id="s1",
             trace_id="t1",
             operation_name="x",
+            start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
             service_name="flows",
             attributes="not-a-dict",
         )
@@ -245,10 +248,11 @@ def test_billing_settlement_span_rejects_non_object_attributes() -> None:
 
 def test_billing_settlement_span_rejects_non_string_operation_name() -> None:
     with pytest.raises(ValidationError):
-        BillingSettlementSpan(
+        Span(
             span_id="s1",
             trace_id="t1",
             operation_name=123,
+            start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
             service_name="flows",
         )
 
@@ -441,22 +445,22 @@ def test_quantity_const_negative_raises() -> None:
 
 
 def test_quantity_attr_empty_key_raises() -> None:
-    with pytest.raises(ValueError, match="пустой ключ"):
+    with pytest.raises(ValueError, match="empty attribute key"):
         quantity_from_span("attr:", _span())
 
 
 def test_quantity_attr_whitespace_only_key_raises() -> None:
-    with pytest.raises(ValueError, match="пустой ключ"):
+    with pytest.raises(ValueError, match="empty attribute key"):
         quantity_from_span("attr:   ", _span())
 
 
 def test_quantity_from_invalid_format_raises() -> None:
-    with pytest.raises(ValueError, match="неизвестный формат"):
+    with pytest.raises(ValueError, match="unknown quantity_from format"):
         quantity_from_span("bad", _span())
 
 
 def test_quantity_attr_missing_raises() -> None:
-    with pytest.raises(ValueError, match="атрибут"):
+    with pytest.raises(ValueError, match="attribute 'platform.missing' is missing"):
         quantity_from_span("attr:platform.missing", _span(attributes={}))
 
 

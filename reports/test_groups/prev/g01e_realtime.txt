@@ -1,0 +1,661 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0
+rootdir: /Users/viktor-shved/PycharmProjects/agent-lab
+configfile: pytest.ini
+plugins: hypothesis-6.153.4, cov-7.1.0, xdist-3.8.0, timeout-2.4.0, asyncio-1.4.0, schemathesis-4.20.1, rerunfailures-16.3, hydra-core-1.3.2, anyio-4.13.0
+timeout: 5.0s
+timeout method: thread
+timeout func_only: True
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+created: 4/4 workers
+4 workers [658 items]
+
+....................................................................................................................................................................................................................FF........F..F.....F......F...........................................FFFF.................................................................................................................................................................F.F..F...............................FF..F.................F.......F............................................................F..............................................................................FFFF{"_cairosvg_error": "No module named 'cairosvg'", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.files.reader.vision", "level": "WARNING", "timestamp": "2026-09-24T17:45:23.027078Z", "message": "files.cairosvg.libcairo.svg"}
+
+=================================== FAILURES ===================================
+_____ test_flows_op_ws_rest_identical[flows/flows/preview_share_requested] _____
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_flows_commands.py:3005: in test_flows_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_flows_commands.py:2838: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+____ test_flows_op_ws_rest_identical[flows/nodes_catalog/remove_requested] _____
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:101: in map_httpcore_exceptions
+    yield
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:256: in handle_async_request
+    raise exc from None
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:236: in handle_async_request
+    response = await connection.handle_async_request(
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:101: in handle_async_request
+    raise exc
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:78: in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:124: in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_backends/auto.py:31: in connect_tcp
+    return await self._backend.connect_tcp(
+.venv/lib/python3.14/site-packages/httpcore/_backends/anyio.py:113: in connect_tcp
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpcore/_exceptions.py:14: in map_exceptions
+    raise to_exc(exc) from exc
+E   httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_flows_commands.py:3033: in test_flows_op_ws_rest_identical
+    rest_result = await _rest_command(
+tests/realtime/test_flows_commands.py:2921: in _rest_command
+    response = await client.request(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:393: in handle_async_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:118: in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+E   httpx.ConnectError: All connection attempts failed
+____ test_flows_op_ws_rest_identical[flows/registry/models_list_requested] _____
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:544: in __await_impl__
+    self.connection = await self.create_connection()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:470: in create_connection
+    _, connection = await loop.create_connection(factory, **kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1168: in create_connection
+    raise exceptions[0]
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1143: in create_connection
+    sock = await self._connect_sock(
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1042: in _connect_sock
+    await self.sock_connect(sock, address)
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:645: in sock_connect
+    return await fut
+           ^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:685: in _sock_connect_cb
+    raise OSError(err, f'Connect call failed {address}')
+E   TimeoutError: [Errno 60] Connect call failed ('127.0.0.1', 19000)
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_flows_commands.py:3005: in test_flows_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_flows_commands.py:2837: in _ws_command
+    async with connect_centrifugo(auth_token) as ws:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:137: in connect_centrifugo
+    async with websockets.connect(CENTRIFUGO_WS_URL) as connection:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:590: in __aenter__
+    return await self
+           ^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:581: in __await_impl__
+    raise TimeoutError("timed out during opening handshake") from exc
+E   TimeoutError: timed out during opening handshake
+__________ test_crm_op_ws_rest_identical[crm/notes/analyze_requested] __________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_crm_commands.py:1564: in test_crm_op_ws_rest_identical
+    rest_payload = await case.setup(rest_ctx)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:609: in _setup_analyze
+    note = await _setup_note_id(ctx)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:585: in _setup_note_id
+    note = await _create_entity(
+tests/realtime/test_crm_commands.py:207: in _create_entity
+    return await _expect_json(response, ok=(200, 201), label="create_entity")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:153: in _expect_json
+    assert response.status_code in ok, f"{label} {response.status_code}: {response.text}"
+E   AssertionError: create_entity 500: Internal server error
+E   assert 500 in (200, 201)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+________ test_flows_op_ws_rest_identical[flows/flows/remove_requested] _________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:101: in map_httpcore_exceptions
+    yield
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:256: in handle_async_request
+    raise exc from None
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:236: in handle_async_request
+    response = await connection.handle_async_request(
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:101: in handle_async_request
+    raise exc
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:78: in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:124: in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_backends/auto.py:31: in connect_tcp
+    return await self._backend.connect_tcp(
+.venv/lib/python3.14/site-packages/httpcore/_backends/anyio.py:113: in connect_tcp
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpcore/_exceptions.py:14: in map_exceptions
+    raise to_exc(exc) from exc
+E   httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_flows_commands.py:3003: in test_flows_op_ws_rest_identical
+    ws_payload = await case.setup(ws_ctx)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_flows_commands.py:318: in _setup_flow_id
+    created = await _create_flow(ctx)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_flows_commands.py:207: in _create_flow
+    response = await ctx.client.post(f"{_API}/flows/", headers=ctx.headers, json=body)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1859: in post
+    return await self.request(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:393: in handle_async_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:118: in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+E   httpx.ConnectError: All connection attempts failed
+______ test_flows_op_ws_rest_identical[flows/tool_runtime/call_requested] ______
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_flows_commands.py:3005: in test_flows_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_flows_commands.py:2838: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_______ test_flows_op_ws_rest_identical[flows/triggers/remove_requested] _______
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_flows_commands.py:3005: in test_flows_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_flows_commands.py:2838: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_______ test_crm_op_ws_rest_identical[crm/relationships/list_requested] ________
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_crm_commands.py:1536: in test_crm_op_ws_rest_identical
+    ws_payload = await case.setup(ws_ctx)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:628: in _setup_relationships_list
+    left = await _create_entity(ctx, name=f"Rel A {ctx.unique_id}-{ctx.suffix}")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:207: in _create_entity
+    return await _expect_json(response, ok=(200, 201), label="create_entity")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:153: in _expect_json
+    assert response.status_code in ok, f"{label} {response.status_code}: {response.text}"
+E   AssertionError: create_entity 500: Internal server error
+E   assert 500 in (200, 201)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+_____ test_flows_op_ws_rest_identical[flows/triggers/reregister_requested] _____
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_flows_commands.py:3005: in test_flows_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_flows_commands.py:2838: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_____ test_crm_op_ws_rest_identical[crm/entities/overview_graph_requested] _____
+[gw2] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_crm_commands.py:1536: in test_crm_op_ws_rest_identical
+    ws_payload = await case.setup(ws_ctx)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:570: in _setup_overview_graph
+    entity = await _create_entity(ctx)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:207: in _create_entity
+    return await _expect_json(response, ok=(200, 201), label="create_entity")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_crm_commands.py:153: in _expect_json
+    assert response.status_code in ok, f"{label} {response.status_code}: {response.text}"
+E   AssertionError: create_entity 500: Internal server error
+E   assert 500 in (200, 201)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+______ test_office_op_ws_rest_identical[office/documents/list_requested] _______
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:101: in map_httpcore_exceptions
+    yield
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:256: in handle_async_request
+    raise exc from None
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:236: in handle_async_request
+    response = await connection.handle_async_request(
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:101: in handle_async_request
+    raise exc
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:78: in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:124: in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_backends/auto.py:31: in connect_tcp
+    return await self._backend.connect_tcp(
+.venv/lib/python3.14/site-packages/httpcore/_backends/anyio.py:113: in connect_tcp
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpcore/_exceptions.py:14: in map_exceptions
+    raise to_exc(exc) from exc
+E   httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_office_commands.py:1208: in test_office_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_office_commands.py:1084: in _ws_command
+    stored = await realtime_session_client.get(f"/realtime/api/v1/events/{event_id}")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1768: in get
+    return await self.request(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:393: in handle_async_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:118: in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+E   httpx.ConnectError: All connection attempts failed
+____ test_office_op_ws_rest_identical[office/catalogs/rag_search_requested] ____
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_office_commands.py:1208: in test_office_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_office_commands.py:1059: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_____ test_office_op_ws_rest_identical[office/namespaces/create_requested] _____
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_office_commands.py:1208: in test_office_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_office_commands.py:1059: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_______ test_rag_op_ws_rest_identical[rag/documents/statuses_requested] ________
+[gw2] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:544: in __await_impl__
+    self.connection = await self.create_connection()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:470: in create_connection
+    _, connection = await loop.create_connection(factory, **kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1168: in create_connection
+    raise exceptions[0]
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1143: in create_connection
+    sock = await self._connect_sock(
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1042: in _connect_sock
+    await self.sock_connect(sock, address)
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:645: in sock_connect
+    return await fut
+           ^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:685: in _sock_connect_cb
+    raise OSError(err, f'Connect call failed {address}')
+E   TimeoutError: [Errno 60] Connect call failed ('127.0.0.1', 19000)
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_rag_commands.py:505: in test_rag_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_rag_commands.py:401: in _ws_command
+    async with connect_centrifugo(auth_token) as ws:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:137: in connect_centrifugo
+    async with websockets.connect(CENTRIFUGO_WS_URL) as connection:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:590: in __aenter__
+    return await self
+           ^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:581: in __await_impl__
+    raise TimeoutError("timed out during opening handshake") from exc
+E   TimeoutError: timed out during opening handshake
+____ test_search_op_ws_rest_identical[search/crawl_profiles/list_requested] ____
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:101: in map_httpcore_exceptions
+    yield
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:256: in handle_async_request
+    raise exc from None
+.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py:236: in handle_async_request
+    response = await connection.handle_async_request(
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:101: in handle_async_request
+    raise exc
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:78: in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_async/connection.py:124: in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpcore/_backends/auto.py:31: in connect_tcp
+    return await self._backend.connect_tcp(
+.venv/lib/python3.14/site-packages/httpcore/_backends/anyio.py:113: in connect_tcp
+    with map_exceptions(exc_map):
+         ^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpcore/_exceptions.py:14: in map_exceptions
+    raise to_exc(exc) from exc
+E   httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_search_commands.py:677: in test_search_op_ws_rest_identical
+    ws_payload = await case.setup(ws_ctx)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_search_commands.py:245: in _setup_profiles_list
+    _ = await _create_profile(ctx, "plist")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_search_commands.py:168: in _create_profile
+    search_index_id = await _create_index(ctx, kind)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_search_commands.py:153: in _create_index
+    response = await ctx.client.post(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1859: in post
+    return await self.request(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+.venv/lib/python3.14/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:393: in handle_async_request
+    with map_httpcore_exceptions():
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:162: in __exit__
+    self.gen.throw(value)
+.venv/lib/python3.14/site-packages/httpx/_transports/default.py:118: in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+E   httpx.ConnectError: All connection attempts failed
+---------------------------- Captured stdout setup -----------------------------
+{"user_email": "zambas124@yandex.ru", "service.name": "pytest", "service.version": "1.0.0", "deployment.environment": "test", "logger": "core.identity.system_bootstrap", "level": "WARNING", "timestamp": "2026-09-24T17:47:03.566253Z", "message": "identity.bootstrap.skipped.admin.grant.user"}
+------------------------------ Captured log setup ------------------------------
+WARNING  core.identity.system_bootstrap:system_bootstrap.py:102 {'user_email': 'zambas124@yandex.ru', 'service.name': 'pytest', 'service.version': '1.0.0', 'deployment.environment': 'test', 'logger': 'core.identity.system_bootstrap', 'level': 'WARNING', 'timestamp': '2026-09-24T17:47:03.566253Z', 'message': 'identity.bootstrap.skipped.admin.grant.user'}
+____ test_office_op_ws_rest_identical[office/data_tables/promote_requested] ____
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_office_commands.py:1234: in test_office_op_ws_rest_identical
+    rest_payload = await case.setup(rest_ctx)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_office_commands.py:701: in _setup_data_table_promote
+    payload = await _expect_json(created, ok=(200,), label="create_session_data_table")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/test_office_commands.py:146: in _expect_json
+    assert response.status_code in ok, f"{label} {response.status_code}: {response.text}"
+E   AssertionError: create_session_data_table 500: Internal server error
+E   assert 500 in (200,)
+E    +  where 500 = <Response [500 Internal Server Error]>.status_code
+_ test_search_op_ws_rest_identical[search/query/providers_snapshot_requested] __
+[gw2] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_search_commands.py:707: in test_search_op_ws_rest_identical
+    assert ws_result == rest_result, f"WS != REST для {canonical_type}\nWS: {ws_result}\nREST: {rest_result}"
+E   AssertionError: WS != REST для search/query/providers_snapshot_requested
+E     WS: {'provider_order': ['tinyfish', 'linkup', 'serper', 'tavily'], 'index_enabled': True, 'default_index_ids': ['runet'], 'search_index_ids': ['idx_dcreate_ccaf7762_rest', 'idx_dcreate_ccaf7762_ws', 'idx_dcreate_d4888ec4_ws', 'idx_dcreate_e252e94c_rest', 'idx_dcreate_e252e94c_ws', 'idx_dcreate_e575eaac_rest', 'idx_dcreate_e575eaac_ws', 'idx_dcreate_f756a933_rest', 'idx_dcreate_f756a933_ws', 'idx_dlist_14827e28_ws', 'idx_dlist_202df87d_ws', 'idx_dlist_b190b355_ws', 'idx_dlist_be60403f_ws', 'idx_drm_340496ef_rest', 'idx_drm_340496ef_ws', 'idx_drm_3cc77507_rest', 'idx_drm_3cc77507_ws', 'idx_drm_66307404_ws', 'idx_drm_90bdc521_rest', 'idx_drm_90bdc521_ws', 'idx_drun_5112b812_rest', 'idx_drun_5112b812_ws', 'idx_drun_9fa513db_rest', 'idx_drun_9fa513db_ws', 'idx_drun_9face47a_rest', 'idx_drun_9face47a_ws', 'idx_drun_f695abda_rest', 'idx_drun_f695abda_ws', 'idx_dupd_0ae4cc58_ws', 'idx_dupd_58427457_ws', 'idx_dupd_8efbd5b6_ws', 'idx_durls_4b21647a_ws', 'idx_durls_d418f715_rest', 'idx_durls_d418f715_ws', 'idx_durls_f3ee1067_rest', 'idx_durls_f3ee1067_ws', 'idx_ibatch_5cd9d314_ws', 'idx_ibatch_777fb506_ws', 'idx_ibatch_c86cffce_ws', 'idx_icreate_19fc5952_ws', 'idx_icreate_29905040_rest', 'idx_icreate_29905040_ws', 'idx_icreate_5b6d27b4_rest', 'idx_icreate_5b6d27b4_ws', 'idx_iget_61768b68_ws', 'idx_iget_b735040b_ws', 'idx_iget_d5e565c7_ws', 'idx_ilist_1cf42087_ws', 'idx_ilist_35a94f1b_ws', 'idx_ilist_7a1f19fc_ws', 'idx_ilist_b88cffdd_ws', 'idx_iupd_3c2de884_ws', 'idx_iupd_56cfa2d4_ws', 'idx_iupd_9e41452d_ws', 'idx_jget_6c211183_ws', 'idx_jget_9c204401_ws', 'idx_jget_b311bcd3_ws', 'idx_jlist_788568b2_ws', 'idx_jlist_a631a558_ws', 'idx_jlist_c864a8f9_ws', 'idx_jqueue_4b26b931_ws', 'idx_jqueue_71b32439_ws', 'idx_jqueue_81cc3204_ws', 'idx_jqueue_ac0fe74f_ws', 'idx_pcreate_0b0bf15d_rest', 'idx_pcreate_0b0bf15d_ws', 'idx_pcreate_11b3a2d4_rest', 'idx_pcreate_11b3a2d4_ws', 'idx_pcreate_b7bb35f5_rest', 'idx_pcreate_b7bb35f5_ws', 'idx_plist_10c05e3f_ws', 'idx_plist_12bd8398_ws', 'idx_plist_62dd5bfd_ws', 'idx_plist_7106b8cd_ws', 'idx_psum_3d7eccd4_ws', 'idx_psum_4d810379_ws', 'idx_psum_5a9747e9_ws', 'idx_psum_a64c28de_ws', 'idx_psum_d32d7c48_ws', 'idx_ptranco_714cafde_ws', 'idx_ptranco_834b0a96_ws', 'idx_ptranco_b9f29b44_ws', 'idx_ptranco_e19eb19e_ws', 'idx_pupd_00bf6889_ws', 'idx_pupd_69fdedc4_ws', 'idx_pupd_e14b5636_ws', 'idx_pupd_f8f6587c_ws', 'idx_qmore_202bc845_ws', 'idx_qmore_7b4ce9f7_ws', 'idx_qmore_9199bfe2_ws', 'idx_qmore_ce637336_ws', 'idx_qrefine_149e486f_ws', 'idx_qrefine_9cab197a_ws', 'idx_qrefine_bf5fc2bc_ws', 'idx_qrefine_ff9676e7_ws', 'idx_qsearch_26f2c6ba_ws', 'idx_qsearch_3b76d72c_ws', 'idx_qsearch_62485738_ws', 'idx_qsearch_fcd2a549_ws', 'idx_seed_358ef9e0_ws']}
+E     REST: {'provider_order': ['tinyfish', 'linkup', 'serper', 'tavily'], 'index_enabled': True, 'default_index_ids': ['runet'], 'search_index_ids': ['idx_dcreate_ccaf7762_rest', 'idx_dcreate_ccaf7762_ws', 'idx_dcreate_d4888ec4_ws', 'idx_dcreate_e252e94c_rest', 'idx_dcreate_e252e94c_ws', 'idx_dcreate_e575eaac_rest', 'idx_dcreate_e575eaac_ws', 'idx_dcreate_f756a933_rest', 'idx_dcreate_f756a933_ws', 'idx_dlist_14827e28_ws', 'idx_dlist_202df87d_ws', 'idx_dlist_b190b355_ws', 'idx_dlist_be60403f_ws', 'idx_drm_340496ef_rest', 'idx_drm_340496ef_ws', 'idx_drm_3cc77507_rest', 'idx_drm_3cc77507_ws', 'idx_drm_66307404_rest', 'idx_drm_66307404_ws', 'idx_drm_90bdc521_rest', 'idx_drm_90bdc521_ws', 'idx_drun_5112b812_rest', 'idx_drun_5112b812_ws', 'idx_drun_9fa513db_rest', 'idx_drun_9fa513db_ws', 'idx_drun_9face47a_rest', 'idx_drun_9face47a_ws', 'idx_drun_f695abda_rest', 'idx_drun_f695abda_ws', 'idx_dupd_0ae4cc58_ws', 'idx_dupd_58427457_ws', 'idx_dupd_8efbd5b6_ws', 'idx_durls_4b21647a_ws', 'idx_durls_d418f715_rest', 'idx_durls_d418f715_ws', 'idx_durls_f3ee1067_rest', 'idx_durls_f3ee1067_ws', 'idx_ibatch_5cd9d314_ws', 'idx_ibatch_777fb506_ws', 'idx_ibatch_c86cffce_ws', 'idx_icreate_19fc5952_ws', 'idx_icreate_29905040_rest', 'idx_icreate_29905040_ws', 'idx_icreate_5b6d27b4_rest', 'idx_icreate_5b6d27b4_ws', 'idx_iget_61768b68_ws', 'idx_iget_b735040b_ws', 'idx_iget_d5e565c7_ws', 'idx_ilist_1cf42087_ws', 'idx_ilist_35a94f1b_ws', 'idx_ilist_7a1f19fc_ws', 'idx_ilist_b88cffdd_ws', 'idx_iupd_3c2de884_ws', 'idx_iupd_56cfa2d4_ws', 'idx_iupd_9e41452d_ws', 'idx_jget_6c211183_ws', 'idx_jget_9c204401_ws', 'idx_jget_b311bcd3_ws', 'idx_jlist_788568b2_ws', 'idx_jlist_a631a558_ws', 'idx_jlist_c864a8f9_ws', 'idx_jqueue_4b26b931_ws', 'idx_jqueue_71b32439_ws', 'idx_jqueue_81cc3204_ws', 'idx_jqueue_ac0fe74f_ws', 'idx_pcreate_0b0bf15d_rest', 'idx_pcreate_0b0bf15d_ws', 'idx_pcreate_11b3a2d4_rest', 'idx_pcreate_11b3a2d4_ws', 'idx_pcreate_b7bb35f5_rest', 'idx_pcreate_b7bb35f5_ws', 'idx_plist_10c05e3f_ws', 'idx_plist_12bd8398_ws', 'idx_plist_62dd5bfd_ws', 'idx_plist_7106b8cd_ws', 'idx_psum_3d7eccd4_ws', 'idx_psum_4d810379_ws', 'idx_psum_5a9747e9_ws', 'idx_psum_a64c28de_ws', 'idx_psum_d32d7c48_ws', 'idx_ptranco_714cafde_ws', 'idx_ptranco_834b0a96_ws', 'idx_ptranco_b9f29b44_ws', 'idx_ptranco_e19eb19e_ws', 'idx_pupd_00bf6889_ws', 'idx_pupd_69fdedc4_ws', 'idx_pupd_e14b5636_ws', 'idx_pupd_f8f6587c_ws', 'idx_qmore_202bc845_ws', 'idx_qmore_7b4ce9f7_ws', 'idx_qmore_9199bfe2_ws', 'idx_qmore_ce637336_ws', 'idx_qrefine_149e486f_ws', 'idx_qrefine_9cab197a_ws', 'idx_qrefine_bf5fc2bc_ws', 'idx_qrefine_ff9676e7_ws', 'idx_qsearch_26f2c6ba_ws', 'idx_qsearch_3b76d72c_ws', 'idx_qsearch_62485738_ws', 'idx_qsearch_fcd2a549_ws']}
+E   assert {'default_ind...c_rest', ...]} == {'default_ind...c_rest', ...]}
+E     
+E     Omitting 3 identical items, use -vv to show
+E     Differing items:
+E     {'search_index_ids': ['idx_dcreate_ccaf7762_rest', 'idx_dcreate_ccaf7762_ws', 'idx_dcreate_d4888ec4_ws', 'idx_dcreate_e252e94c_rest', 'idx_dcreate_e252e94c_ws', 'idx_dcreate_e575eaac_rest', ...]} != {'search_index_ids': ['idx_dcreate_ccaf7762_rest', 'idx_dcreate_ccaf7762_ws', 'idx_dcreate_d4888ec4_ws', 'idx_dcreate_e252e94c_rest', 'idx_dcreate_e252e94c_ws', 'idx_dcreate_e575eaac_rest', ...]}
+E     Use -v to get more diff
+_______ test_search_op_ws_rest_identical[search/query/search_requested] ________
+[gw2] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_search_commands.py:709: in test_search_op_ws_rest_identical
+    assert _normalize(ws_result) == _normalize(rest_result), (
+E   AssertionError: WS != REST для search/query/search_requested
+E     WS: {'query': 'Документ платформенного индекса содержит уникальный маркер live_search_marker_a15b50c1_ws и длинный текст для chunking.', 'results': [], 'providers': {'index': {'ok': False, 'latency_ms': 35, 'results_count': 0, 'error': 'HTTP 404 while requesting rag: {"error_code": "not_found", "error_detail": "Namespace \'runet:platform\' not found", "detail": "Namespace \'runet:platform\' not found", "request_id": "fb0779940fe44ec4ad855047de57745e", "trace_id": "search:index:0e049c85e59a48cfb0a033fd038678f6", "service": "rag", "observability": {"logs_explore_url": "http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice%3D~%5C%22%28agents%7Cfrontend%7Cflows%7Cflows_worker%7Ccrm%7Ccrm_worker%7Crag%7Crag_worker%7Csync%7Csync_worker%7Coffice%7Cvoice%7Cscheduler%7Cbrowser%7Cidle_worker%7Cprovider_litserve%7Cguest-runtime%7C.%2Aflows.%2A%29%5C%22%7D%20%7C%20json%20%7C%20trace_id%3D%5C%22search%3Aindex%3A0e049c85e59a48cfb0a033fd038678f6%5C%22%22%2C%22queryType%22%3A%22range%22%2C%22datasource%22%3A%7B%22type%22%3A%22loki%22%2C%22uid%22%3A%22loki%22%7D%2C%22editorMode%22%3A%22code%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-24h%22%2C%22to%22%3A%22now%22%7D%7D"}}', 'selected': True, 'skipped': False, 'skip_reason': None, 'credential_source': 'platform', 'billing_resource_name': 'search:index'}}, 'total_count': 0, 'has_more': False, 'offset': 0, 'limit': 5, 'serp_cache_key': None, 'rank_stage': 'preview'}
+E     REST: {'query': 'Документ платформенного индекса содержит уникальный маркер live_search_marker_a15b50c1_ws и длинный текст для chunking.', 'results': [], 'providers': {'index': {'ok': False, 'latency_ms': 0, 'results_count': 0, 'error': 'HTTP 404 while requesting rag: {"error_code": "not_found", "error_detail": "Namespace \'runet:platform\' not found", "detail": "Namespace \'runet:platform\' not found", "request_id": "fb0779940fe44ec4ad855047de57745e", "trace_id": "search:index:0e049c85e59a48cfb0a033fd038678f6", "service": "rag", "observability": {"logs_explore_url": "http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22%3A%22loki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice%3D~%5C%22%28agen', 'selected': False, 'skipped': True, 'skip_reason': 'provider marked unavailable in redis', 'credential_source': 'platform', 'billing_resource_name': 'search:index'}}, 'total_count': 0, 'has_more': False, 'offset': 0, 'limit': 5, 'serp_cache_key': None, 'rank_stage': 'preview'}
+E   assert {'has_more': ...e, ...}}, ...} == {'has_more': ...e, ...}}, ...}
+E     
+E     Omitting 7 identical items, use -vv to show
+E     Differing items:
+E     {'providers': {'index': {'billing_resource_name': 'search:index', 'credential_source': 'platform', 'error': 'HTTP 404 ...l": "Namespace \'runet:platform\' not found", "detail": "Namespace \'runet:platform\' not found"}', 'ok': False, ...}}} != {'providers': {'index': {'billing_resource_name': 'search:index', 'credential_source': 'platform', 'error': 'HTTP 404 ...ki%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bservice%3D~%5C%22%28agen', 'ok': False, ...}}}
+E     Use -v to get more diff
+___________________ test_sweeper_publishes_deadline_exceeded ___________________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/queues.py:186: in get
+    await getter
+E   asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_sweeper.py:43: in test_sweeper_publishes_deadline_exceeded
+    failed = await wait_platform_event(
+tests/realtime/centrifugo_ws.py:167: in wait_platform_event
+    event = await client.recv_platform_event(timeout=remaining)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:60: in recv_platform_event
+    return await asyncio.wait_for(self._publications.get(), timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/timeouts.py:114: in __aexit__
+    raise TimeoutError from exc_val
+E   TimeoutError
+_ test_worktracker_op_ws_rest_identical[worktracker/work_queues/member_add_requested] _
+[gw0] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_worktracker_commands.py:644: in test_worktracker_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_worktracker_commands.py:487: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+____________ test_worktracker_create_empty_payload_failed_terminal _____________
+[gw3] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:544: in __await_impl__
+    self.connection = await self.create_connection()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:470: in create_connection
+    _, connection = await loop.create_connection(factory, **kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1168: in create_connection
+    raise exceptions[0]
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1143: in create_connection
+    sock = await self._connect_sock(
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/base_events.py:1042: in _connect_sock
+    await self.sock_connect(sock, address)
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:645: in sock_connect
+    return await fut
+           ^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/selector_events.py:685: in _sock_connect_cb
+    raise OSError(err, f'Connect call failed {address}')
+E   TimeoutError: [Errno 60] Connect call failed ('127.0.0.1', 19000)
+
+The above exception was the direct cause of the following exception:
+tests/realtime/test_worktracker_commands.py:713: in test_worktracker_create_empty_payload_failed_terminal
+    event = await _ws_command(
+tests/realtime/test_worktracker_commands.py:486: in _ws_command
+    async with connect_centrifugo(auth_token) as ws:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:137: in connect_centrifugo
+    async with websockets.connect(CENTRIFUGO_WS_URL) as connection:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:590: in __aenter__
+    return await self
+           ^^^^^^^^^^
+.venv/lib/python3.14/site-packages/websockets/asyncio/client.py:581: in __await_impl__
+    raise TimeoutError("timed out during opening handshake") from exc
+E   TimeoutError: timed out during opening handshake
+_ test_worktracker_op_ws_rest_identical[worktracker/work_queues/member_remove_requested] _
+[gw1] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_worktracker_commands.py:644: in test_worktracker_op_ws_rest_identical
+    ws_event = await _ws_command(
+tests/realtime/test_worktracker_commands.py:487: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+_________________ test_worktracker_get_missing_failed_terminal _________________
+[gw2] darwin -- Python 3.14.3 /Users/viktor-shved/PycharmProjects/agent-lab/.venv/bin/python3
+tests/realtime/test_worktracker_commands.py:693: in test_worktracker_get_missing_failed_terminal
+    event = await _ws_command(
+tests/realtime/test_worktracker_commands.py:487: in _ws_command
+    accepted = await rpc_platform_event(
+tests/realtime/centrifugo_ws.py:289: in rpc_platform_event
+    reply = await client.rpc("platform.event", event)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/realtime/centrifugo_ws.py:57: in rpc
+    return await asyncio.wait_for(future, timeout=15.0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.3-macos-aarch64-none/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   RuntimeError: Centrifugo command error: {'code': 100, 'message': 'internal server error', 'temporary': True}
+=========================== short test summary info ============================
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/flows/preview_share_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/nodes_catalog/remove_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/registry/models_list_requested]
+FAILED tests/realtime/test_crm_commands.py::test_crm_op_ws_rest_identical[crm/notes/analyze_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/flows/remove_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/tool_runtime/call_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/triggers/remove_requested]
+FAILED tests/realtime/test_crm_commands.py::test_crm_op_ws_rest_identical[crm/relationships/list_requested]
+FAILED tests/realtime/test_flows_commands.py::test_flows_op_ws_rest_identical[flows/triggers/reregister_requested]
+FAILED tests/realtime/test_crm_commands.py::test_crm_op_ws_rest_identical[crm/entities/overview_graph_requested]
+FAILED tests/realtime/test_office_commands.py::test_office_op_ws_rest_identical[office/documents/list_requested]
+FAILED tests/realtime/test_office_commands.py::test_office_op_ws_rest_identical[office/catalogs/rag_search_requested]
+FAILED tests/realtime/test_office_commands.py::test_office_op_ws_rest_identical[office/namespaces/create_requested]
+FAILED tests/realtime/test_rag_commands.py::test_rag_op_ws_rest_identical[rag/documents/statuses_requested]
+FAILED tests/realtime/test_search_commands.py::test_search_op_ws_rest_identical[search/crawl_profiles/list_requested]
+FAILED tests/realtime/test_office_commands.py::test_office_op_ws_rest_identical[office/data_tables/promote_requested]
+FAILED tests/realtime/test_search_commands.py::test_search_op_ws_rest_identical[search/query/providers_snapshot_requested]
+FAILED tests/realtime/test_search_commands.py::test_search_op_ws_rest_identical[search/query/search_requested]
+FAILED tests/realtime/test_sweeper.py::test_sweeper_publishes_deadline_exceeded
+FAILED tests/realtime/test_worktracker_commands.py::test_worktracker_op_ws_rest_identical[worktracker/work_queues/member_add_requested]
+FAILED tests/realtime/test_worktracker_commands.py::test_worktracker_create_empty_payload_failed_terminal
+FAILED tests/realtime/test_worktracker_commands.py::test_worktracker_op_ws_rest_identical[worktracker/work_queues/member_remove_requested]
+FAILED tests/realtime/test_worktracker_commands.py::test_worktracker_get_missing_failed_terminal
+================== 23 failed, 635 passed in 160.54s (0:02:40) ==================

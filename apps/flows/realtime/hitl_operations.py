@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import Di
 from apps.flows.src.models.hitl_conversation import (
     ConversationSnapshot,
     ConversationTurn,
@@ -28,12 +28,12 @@ async def op_flows_hitl_conversation_get(
     payload: HitlConversationWorkItemPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ConversationSnapshot:
     work_item_id = _require_work_item_id(payload.work_item_id)
     company_id = require_active_company().company_id
     try:
-        return await container.hitl_conversation_service.get_snapshot(
+        return await di.hitl_conversation_service.get_snapshot(
             company_id=company_id,
             work_item_id=work_item_id,
             operator_user_id=user.user_id,
@@ -46,12 +46,12 @@ async def op_flows_hitl_conversation_send(
     payload: OperatorMessageRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ConversationTurn:
     work_item_id = _require_work_item_id(payload.work_item_id)
     company_id = require_active_company().company_id
     try:
-        return await container.hitl_conversation_service.append_operator_message(
+        return await di.hitl_conversation_service.append_operator_message(
             company_id=company_id,
             work_item_id=work_item_id,
             operator_user_id=user.user_id,

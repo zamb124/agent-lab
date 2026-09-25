@@ -15,7 +15,6 @@ from apps.frontend.cookie_consent import (
     CookieConsentDecision,
 )
 from apps.frontend.models import CookieConsentCreateBody, CookieConsentRecord
-from apps.frontend.services.cookie_consent_repository import CookieConsentRepository
 from core.config.models import PlatformBrandConfig, PublicSiteConfig
 from core.errors.boundary import PlatformConflictError
 from core.logging.context import get_log_context
@@ -101,9 +100,6 @@ def _validate_decision(
 
 
 class CookieConsentService:
-    def __init__(self, repository: CookieConsentRepository) -> None:
-        self._repository: CookieConsentRepository = repository
-
     async def record(
         self,
         body: CookieConsentCreateBody,
@@ -144,4 +140,5 @@ class CookieConsentService:
             ip_hash=_hash_client_ip(_require_client_ip(request)),
             supersedes_cookie_consent_id=body.supersedes_cookie_consent_id,
         )
-        return await self._repository.create(record)
+        _ = await CookieConsentRecord.set(record)
+        return record

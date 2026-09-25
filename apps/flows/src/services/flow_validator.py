@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from apps.flows.src.models.flow_config import FlowConfig
+from apps.flows.src.models.node_config import NodeConfig
+from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.state.node_files import validate_node_files_list
 from core.flow_ui.templates import default_chat_document
 from core.logging import get_logger
@@ -25,8 +28,7 @@ from core.types import JsonObject, JsonValue, parse_json_object
 from core.urn import extract_resource_id
 
 if TYPE_CHECKING:
-    from apps.flows.src.container_contracts import RuntimeFlowProtocol
-    from apps.flows.src.db import FlowRepository, NodeRepository, ToolRepository
+    from apps.flows.src.contracts import RuntimeFlowProtocol
     from apps.flows.src.runtime.flow import Flow
 
 logger = get_logger(__name__)
@@ -171,14 +173,10 @@ class FlowValidator:
 
     def __init__(
         self,
-        flow_repository: "FlowRepository | None" = None,
-        tool_repository: "ToolRepository | None" = None,
-        node_repository: "NodeRepository | None" = None,
+        resolve_node_refs: bool = False,
         flow_builder: Callable[[JsonObject], Awaitable["Flow | RuntimeFlowProtocol"]] | None = None,
     ) -> None:
-        self.flow_repository: FlowRepository | None = flow_repository
-        self.tool_repository: ToolRepository | None = tool_repository
-        self.node_repository: NodeRepository | None = node_repository
+        self._resolve_node_refs: bool = resolve_node_refs
         self.flow_builder: Callable[[JsonObject], Awaitable[Flow | RuntimeFlowProtocol]] | None = (
             flow_builder
         )
@@ -580,8 +578,8 @@ class FlowValidator:
             # node_id для llm_node
             if node_type == "llm_node" and "node_id" in config:
                 ref_node_id = config["node_id"]
-                if isinstance(ref_node_id, str) and self.node_repository:
-                    node = await self.node_repository.get(ref_node_id)
+                if isinstance(ref_node_id, str) and self._resolve_node_refs:
+                    node = await NodeConfig.get(NodeConfig.row_id(ref_node_id))
                     if node is None:
                         result.add_error(
                             code="node_not_found",
@@ -610,18 +608,17 @@ class FlowValidator:
 
                 # Проверяем как tool, node или flow (flow может быть tool по ID)
                 tool_exists = False
-                if self.tool_repository:
-                    tool = await self.tool_repository.get(tool_ref)
-                    if tool:
-                        tool_exists = True
+                tool = await ToolReference.get(ToolReference.row_id(tool_ref))
+                if tool:
+                    tool_exists = True
 
-                if not tool_exists and self.node_repository:
-                    node = await self.node_repository.get(tool_ref)
+                if not tool_exists and self._resolve_node_refs:
+                    node = await NodeConfig.get(NodeConfig.row_id(tool_ref))
                     if node:
                         tool_exists = True
 
-                if not tool_exists and self.flow_repository:
-                    flow_cfg = await self.flow_repository.get(tool_ref)
+                if not tool_exists:
+                    flow_cfg = await FlowConfig.get_latest(tool_ref)
                     if flow_cfg:
                         tool_exists = True
 
@@ -638,20 +635,19 @@ class FlowValidator:
                 has_code = "code" in config
 
                 if isinstance(tool_id, str) and tool_id and not has_code:
-                    if self.tool_repository:
-                        tool = await self.tool_repository.get(tool_id)
-                        if tool is None:
-                            result.add_error(
-                                code="tool_not_found",
-                                message=f"Tool '{tool_id}' не найден",
-                                node_id=node_id,
-                            )
+                    tool = await ToolReference.get(ToolReference.row_id(tool_id))
+                    if tool is None:
+                        result.add_error(
+                            code="tool_not_found",
+                            message=f"Tool '{tool_id}' не найден",
+                            node_id=node_id,
+                        )
 
             # flow_id для ноды type: flow (вложенный flow)
             if node_type == "flow":
                 ref_flow_id = config.get("flow_id")
-                if isinstance(ref_flow_id, str) and ref_flow_id and self.flow_repository:
-                    callee = await self.flow_repository.get(ref_flow_id)
+                if isinstance(ref_flow_id, str) and ref_flow_id:
+                    callee = await FlowConfig.get_latest(ref_flow_id)
                     if callee is None:
                         result.add_error(
                             code="flow_not_found",

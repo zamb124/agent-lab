@@ -1,7 +1,6 @@
 """E2E: голосовой чат через voice-gateway + flows (mock LLM).
 
-Сценарий проверяет **чистую архитектуру** (voice.mdc, speech_providers.mdc,
-integrations.mdc):
+Сценарий проверяет **чистую архитектуру** (voice.mdc, integrations.mdc):
 
 1. Клиент (эмулятор bridge) открывает WebSocket к universal-media-gateway
    ``/voice/api/ws/session/{id}?company_id=...`` с mock-провайдерами
@@ -36,9 +35,9 @@ from fastapi.testclient import TestClient
 
 
 @contextmanager
-def _websocket_session(client: TestClient, url: str):
+def _websocket_session(client: TestClient, url: str, cookies: dict[str, str]):
     """Starlette TestClient: при выходе из сессии ``fut.result()`` после cancel даёт ``CancelledError``."""
-    cm = client.websocket_connect(url)
+    cm = client.websocket_connect(url, cookies=cookies)
     ws = cm.__enter__()
     try:
         yield ws
@@ -47,30 +46,41 @@ def _websocket_session(client: TestClient, url: str):
             cm.__exit__(None, None, None)
 
 
-def _mock_voice_tier_company_id(unique_id: str) -> str:
-    """company_id без строки в ``company_voice_providers`` — STT/TTS из deployment mock.
+def _receive_frame(ws: object) -> dict[str, object]:
+    msg = ws.receive()
+    if not isinstance(msg, dict):
+        raise AssertionError(f"voice websocket frame must be a dict, got {type(msg).__name__}")
+    if msg.get("type") == "websocket.close":
+        raise AssertionError(
+            f"voice websocket closed: code={msg.get('code')} reason={msg.get('reason')}"
+        )
+    return msg
 
-    У ``system`` в тестовой БД часто есть override (litserve), он сильнее
-    ``VOICE__*__PROVIDER=mock`` из ``voice_app`` и валит session resolve.
-    """
-    return f"voice_e2e_tier_{unique_id}"
+
+def _voice_session_url(session_id: str) -> str:
+    return (
+        f"/voice/api/ws/session/{session_id}"
+        "?company_id=system"
+        "&stt_provider_name=mock"
+        "&tts_provider_name=mock"
+        "&vad_provider_name=mock"
+    )
 
 
 @pytest.mark.e2e
-def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
+def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str, auth_token_system: str) -> None:
     """speak от клиента → PCM из mock TTS + tts_state переключается."""
-    company_id = _mock_voice_tier_company_id(unique_id)
     with TestClient(voice_app) as client:
-        url = (
-            f"/voice/api/ws/session/e2e-{unique_id}"
-            f"?company_id={company_id}"
-        )
-        with _websocket_session(client, url) as ws:
+        with _websocket_session(
+            client,
+            _voice_session_url(f"e2e-{unique_id}"),
+            {"auth_token": auth_token_system},
+        ) as ws:
             media_cfg = None
             for _ in range(10):
-                msg = ws.receive()
+                msg = _receive_frame(ws)
                 text = msg.get("text")
-                if text is None:
+                if not isinstance(text, str):
                     continue
                 payload = json.loads(text)
                 if payload.get("type") == "media_config":
@@ -93,11 +103,11 @@ def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
             saw_pcm = False
             saw_stopped = False
             for _ in range(120):
-                msg = ws.receive()
+                msg = _receive_frame(ws)
                 if msg.get("bytes"):
                     saw_pcm = True
                 text = msg.get("text")
-                if text:
+                if isinstance(text, str):
                     payload = json.loads(text)
                     if payload.get("type") == "tts_state":
                         if payload.get("state") == "playing":
@@ -111,9 +121,9 @@ def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
 
             ws.send_text(json.dumps({"type": "stop_playback"}))
             for _ in range(30):
-                msg = ws.receive()
+                msg = _receive_frame(ws)
                 text = msg.get("text")
-                if text:
+                if isinstance(text, str):
                     payload = json.loads(text)
                     if (
                         payload.get("type") == "tts_state"
@@ -126,7 +136,7 @@ def test_voice_chat_e2e_speak_roundtrip(voice_app, unique_id: str) -> None:
 
 @pytest.mark.e2e
 def test_voice_chat_e2e_binary_pcm_upload_smoke(
-    voice_app, unique_id: str
+    voice_app, unique_id: str, auth_token_system: str
 ) -> None:
     """Клиентский uplink PCM принимается без ошибок.
 
@@ -136,16 +146,15 @@ def test_voice_chat_e2e_binary_pcm_upload_smoke(
     живой (последующий ``speak`` всё ещё работает).
     """
     with TestClient(voice_app) as client:
-        company_id = _mock_voice_tier_company_id(unique_id)
-        url = (
-            f"/voice/api/ws/session/pcm-{unique_id}"
-            f"?company_id={company_id}"
-        )
-        with _websocket_session(client, url) as ws:
+        with _websocket_session(
+            client,
+            _voice_session_url(f"pcm-{unique_id}"),
+            {"auth_token": auth_token_system},
+        ) as ws:
             for _ in range(10):
-                msg = ws.receive()
+                msg = _receive_frame(ws)
                 text = msg.get("text")
-                if text and json.loads(text).get("type") == "media_config":
+                if isinstance(text, str) and json.loads(text).get("type") == "media_config":
                     break
 
             silence_frame = b"\x00" * 640
@@ -157,9 +166,9 @@ def test_voice_chat_e2e_binary_pcm_upload_smoke(
             )
             saw_playing = False
             for _ in range(60):
-                msg = ws.receive()
+                msg = _receive_frame(ws)
                 text = msg.get("text")
-                if text:
+                if isinstance(text, str):
                     payload = json.loads(text)
                     if (
                         payload.get("type") == "tts_state"

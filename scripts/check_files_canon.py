@@ -15,7 +15,7 @@ LEGACY_SYMBOLS: tuple[tuple[str, str], ...] = (
     (r"\bbuild_file_api_router\b", "build_file_api_router"),
     (r"\bpersist_uploaded\b", "persist_uploaded"),
     (r"\bupload_namespace_document\b", "upload_namespace_document"),
-    (r"\.file_processor\b", "container.file_processor"),
+    (r"\.file_processor\b", "file_processor"),
 )
 
 FORBIDDEN_FACTORY_NAMES: tuple[str, ...] = (
@@ -207,7 +207,7 @@ def _check_public_search_no_base64_upload() -> list[str]:
         / "apps"
         / "frontend"
         / "ui"
-        / "utils"
+        / "_helpers"
         / "public-search-files.js"
     )
     text = path.read_text(encoding="utf-8")

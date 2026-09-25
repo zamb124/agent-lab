@@ -13,10 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
-from apps.flows.src.models.mcp_catalog import MCPCatalogVerifyStatus
+from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
 from apps.flows.src.services.mcp_catalog_crawler import (
     crawl_mcp_registry,
     load_mcp_catalog_allowlist,
@@ -77,6 +75,7 @@ async def test_allowlist_yaml_loads_auth_template_from_real_file(tmp_path: Path)
 async def test_crawl_skips_stdio_and_http_only_remotes(
     local_mcp_registry_stub,
     unique_id: str,
+    di,
 ) -> None:
     """
     Crawl не создаёт catalog entries для stdio/npm и non-HTTPS remotes.
@@ -107,49 +106,48 @@ async def test_crawl_skips_stdio_and_http_only_remotes(
             "metadata": {},
         }
     ]
-    container = as_flow_runtime_container(get_container())
     with mcp_catalog_settings(
         registry_base_url=registry_base_url,
         max_verify_per_crawl=10,
         auto_provision="disabled",
     ):
-        stats = await crawl_mcp_registry(container=container)
+        stats = await crawl_mcp_registry(di=di)
 
     assert stats.fetched == 1
     assert stats.upserted == 1
     assert stats.verify_failed == 1
 
-    unreachable_entry = await container.mcp_catalog_repository.get(unreachable_catalog_id)
+    unreachable_entry = await MCPCatalogEntry.get(unreachable_catalog_id)
     assert unreachable_entry is not None
     assert unreachable_entry.verify_status == MCPCatalogVerifyStatus.UNREACHABLE
     assert unreachable_entry.is_deprecated is False
 
-    stdio_entry = await container.mcp_catalog_repository.get(
+    stdio_entry = await MCPCatalogEntry.get(
         catalog_id_from_registry_name(f"test.local/stdio_{unique_id}")
     )
-    http_only_entry = await container.mcp_catalog_repository.get(
+    http_only_entry = await MCPCatalogEntry.get(
         catalog_id_from_registry_name(f"test.local/http_only_{unique_id}")
     )
     assert stdio_entry is None
     assert http_only_entry is None
 
-    _ = await container.mcp_catalog_repository.delete(unreachable_catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(unreachable_catalog_id)
 
 
 @pytest.mark.asyncio
 async def test_crawl_deprecates_catalog_entries_missing_from_registry(
     local_mcp_registry_stub,
     unique_id: str,
+    di,
 ) -> None:
     """Запись, исчезнувшая из registry snapshot, помечается `is_deprecated=true`."""
     registry_base_url, state = local_mcp_registry_stub
     catalog_id = f"crawl_dep_{unique_id}"
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url="https://127.0.0.1:9/mcp",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     state.pages = [{"servers": [], "metadata": {}}]
     with mcp_catalog_settings(
@@ -157,34 +155,34 @@ async def test_crawl_deprecates_catalog_entries_missing_from_registry(
         max_verify_per_crawl=0,
         auto_provision="disabled",
     ):
-        stats = await crawl_mcp_registry(container=container)
+        stats = await crawl_mcp_registry(di=di)
 
     assert stats.deprecated == 1
-    stored = await container.mcp_catalog_repository.get(catalog_id)
+    stored = await MCPCatalogEntry.get(catalog_id)
     assert stored is not None
     assert stored.is_deprecated is True
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
 async def test_crawl_preserves_verify_status_when_upstream_unchanged(
     local_mcp_registry_stub,
     unique_id: str,
+    di,
 ) -> None:
     """Повторный crawl с тем же upstream не сбрасывает verified статус."""
     registry_base_url, state = local_mcp_registry_stub
     registry_name = f"test.local/preserve_{unique_id}"
     catalog_id = catalog_id_from_registry_name(registry_name)
     upstream_url = "https://127.0.0.1:9/mcp"
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=upstream_url,
         registry_name=registry_name,
         title="Preserve Verify Title",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     state.pages = [
         {
@@ -203,19 +201,19 @@ async def test_crawl_preserves_verify_status_when_upstream_unchanged(
         max_verify_per_crawl=5,
         auto_provision="disabled",
     ):
-        stats = await crawl_mcp_registry(container=container)
+        stats = await crawl_mcp_registry(di=di)
 
     assert stats.fetched == 1
     assert stats.upserted == 1
     assert stats.verify_failed == 0
     assert stats.verified == 0
 
-    stored = await container.mcp_catalog_repository.get(catalog_id)
+    stored = await MCPCatalogEntry.get(catalog_id)
     assert stored is not None
     assert stored.verify_status == MCPCatalogVerifyStatus.VERIFIED
     assert stored.tool_count_snapshot == entry.tool_count_snapshot
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -223,6 +221,7 @@ async def test_crawl_applies_allowlist_auth_template_to_catalog_entry(
     local_mcp_registry_stub,
     tmp_path: Path,
     unique_id: str,
+    di,
 ) -> None:
     """Crawl мержит allowlist yaml в catalog entry до verify."""
     registry_base_url, state = local_mcp_registry_stub
@@ -253,18 +252,17 @@ async def test_crawl_applies_allowlist_auth_template_to_catalog_entry(
             "metadata": {},
         }
     ]
-    container = as_flow_runtime_container(get_container())
     with mcp_catalog_settings(
         registry_base_url=registry_base_url,
         allowlist_path=str(allowlist_path),
         max_verify_per_crawl=0,
         auto_provision="disabled",
     ):
-        stats = await crawl_mcp_registry(container=container)
+        stats = await crawl_mcp_registry(di=di)
 
     assert stats.fetched == 1
     assert stats.upserted == 1
-    stored = await container.mcp_catalog_repository.get(catalog_id)
+    stored = await MCPCatalogEntry.get(catalog_id)
     assert stored is not None
     assert stored.platform_approved is True
     assert stored.auth_template == {"Authorization": "Bearer @var:registry_token"}
@@ -272,7 +270,7 @@ async def test_crawl_applies_allowlist_auth_template_to_catalog_entry(
     assert stored.title == f"Crawl Allow Title {unique_id}"
     assert stored.verify_status == MCPCatalogVerifyStatus.PENDING
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -280,16 +278,16 @@ async def test_provision_all_verified_adds_server_with_full_http_contract(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Provision создаёт catalog-сервер, синкает tools, GET отражает полный контракт."""
     catalog_id = f"prov_add_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.added == 1
     assert stats.sync_ok == 1
@@ -324,7 +322,6 @@ async def test_provision_all_verified_adds_server_with_full_http_contract(
     assert mcp_tools[0]["mcp_schema_version"] == MCP_PROTOCOL_VERSION
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -336,20 +333,20 @@ async def test_provision_approved_only_skips_unapproved_entry(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """При `approved_only` запись без `platform_approved` не provision'ится."""
     catalog_id = f"prov_skip_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=False,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="approved_only"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.added == 0
     assert stats.updated == 0
@@ -357,7 +354,7 @@ async def test_provision_approved_only_skips_unapproved_entry(
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
     assert get_response.status_code == 404
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -366,6 +363,7 @@ async def test_provision_approved_only_provisions_platform_approved_entry(
     local_mcp_http_url: str,
     tmp_path: Path,
     unique_id: str,
+    di,
 ) -> None:
     """При `approved_only` provision создаёт только `platform_approved=true` entries."""
     catalog_id = f"prov_allow_{unique_id}"
@@ -383,14 +381,13 @@ async def test_provision_approved_only_provisions_platform_approved_entry(
             }
         ],
     )
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=True,
         auth_template={"Authorization": "Bearer @var:mcp_token"},
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(
         allowlist_path=str(allowlist_path),
@@ -398,7 +395,7 @@ async def test_provision_approved_only_provisions_platform_approved_entry(
     ):
         allowlist = load_mcp_catalog_allowlist()
         assert catalog_id in allowlist
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.added == 1
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
@@ -409,7 +406,6 @@ async def test_provision_approved_only_provisions_platform_approved_entry(
     assert body["catalog_auto_provisioned"] is True
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -421,23 +417,23 @@ async def test_provision_updates_unlocked_server_when_catalog_snapshot_changes(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Unlocked catalog-сервер получает managed fields из обновлённого catalog snapshot."""
     catalog_id = f"prov_upd_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        first_stats = await provision_mcp_catalog_for_company(container=container)
+        first_stats = await provision_mcp_catalog_for_company(di=di)
         assert first_stats.added == 1
 
         updated_entry = entry.model_copy(update={"title": f"Updated Title {unique_id}"})
         updated_entry.catalog_snapshot_hash = updated_entry.recompute_snapshot_hash()
-        _ = await persist_catalog_entry(container=container, entry=updated_entry)
+        _ = await persist_catalog_entry(entry=updated_entry)
 
-        second_stats = await provision_mcp_catalog_for_company(container=container)
+        second_stats = await provision_mcp_catalog_for_company(di=di)
 
     assert second_stats.updated == 1
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
@@ -446,7 +442,6 @@ async def test_provision_updates_unlocked_server_when_catalog_snapshot_changes(
     assert get_response.json()["catalog_snapshot_hash"] == updated_entry.catalog_snapshot_hash
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -458,16 +453,16 @@ async def test_provision_skips_override_locked_server(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Provisioner не перезаписывает managed fields у `override_locked=true`."""
     catalog_id = f"prov_lock_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
     put_response = await client.put(
         f"/flows/api/v1/mcp/servers/{server_id}",
@@ -481,10 +476,10 @@ async def test_provision_skips_override_locked_server(
 
     updated_entry = entry.model_copy(update={"title": f"Catalog New Title {unique_id}"})
     updated_entry.catalog_snapshot_hash = updated_entry.recompute_snapshot_hash()
-    _ = await persist_catalog_entry(container=container, entry=updated_entry)
+    _ = await persist_catalog_entry(entry=updated_entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.skipped_locked == 1
 
@@ -496,7 +491,6 @@ async def test_provision_skips_override_locked_server(
     assert body["override_locked"] is True
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -508,23 +502,23 @@ async def test_provision_deprecates_active_catalog_server_when_entry_removed_fro
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Если catalog entry больше не provisionable, активный unlocked сервер деактивируется."""
     catalog_id = f"prov_dep_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
     deprecated_entry = entry.model_copy(update={"is_deprecated": True})
     deprecated_entry.catalog_snapshot_hash = deprecated_entry.recompute_snapshot_hash()
-    _ = await persist_catalog_entry(container=container, entry=deprecated_entry)
+    _ = await persist_catalog_entry(entry=deprecated_entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.deprecated == 1
 
@@ -533,7 +527,6 @@ async def test_provision_deprecates_active_catalog_server_when_entry_removed_fro
     assert get_response.json()["is_active"] is False
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -545,6 +538,7 @@ async def test_provision_does_not_touch_manual_server(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Manual MCP сервер не изменяется catalog provisioner."""
     manual_server_id = f"manual_{unique_id}"
@@ -562,9 +556,8 @@ async def test_provision_does_not_touch_manual_server(
     manual_before = create_response.json()
     assert manual_before["source"] == "manual"
 
-    container = as_flow_runtime_container(get_container())
     with mcp_catalog_settings(auto_provision="all_verified"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{manual_server_id}")
     assert get_response.status_code == 200
@@ -581,23 +574,23 @@ async def test_reset_catalog_defaults_restores_snapshot_and_resyncs_tools(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """POST reset восстанавливает catalog snapshot и пересинкает tools."""
     catalog_id = f"reset_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
     variable_key = f"mcp_token_{unique_id}"
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         auth_template={"Authorization": f"Bearer @var:{variable_key}"},
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     from tests.fixtures.variables_helpers import upsert_static_variable_via_service
 
     await upsert_static_variable_via_service(
-        get_container(),
+        di,
         variable_key,
         "catalog-reset-secret",
         secret=True,
@@ -605,7 +598,7 @@ async def test_reset_catalog_defaults_restores_snapshot_and_resyncs_tools(
     )
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
     put_response = await client.put(
         f"/flows/api/v1/mcp/servers/{server_id}",
@@ -633,12 +626,11 @@ async def test_reset_catalog_defaults_restores_snapshot_and_resyncs_tools(
     assert len(body["cached_tools"]) == 1
     assert body["last_sync_at"] is not None
 
-    stored = await container.mcp_server_repository.get(server_id)
+    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     assert stored is not None
     assert stored.catalog_snapshot_hash == entry.catalog_snapshot_hash
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -678,26 +670,26 @@ async def test_resync_catalog_tools_for_company_refreshes_cached_tools(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Resync job обновляет cached_tools у unlocked catalog сервера."""
     catalog_id = f"resync_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
-    before = await container.mcp_server_repository.get(server_id)
+    before = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     assert before is not None
     assert len(before.cached_tools) == 1
     before_sync_at = before.last_sync_at
 
-    sync_ok, _sync_failed = await resync_catalog_tools_for_company(container=container)
+    sync_ok, _sync_failed = await resync_catalog_tools_for_company(di=di)
     assert sync_ok >= 1
 
-    after = await container.mcp_server_repository.get(server_id)
+    after = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     assert after is not None
     assert len(after.cached_tools) == 1
     assert after.last_sync_at is not None
@@ -705,7 +697,6 @@ async def test_resync_catalog_tools_for_company_refreshes_cached_tools(
         assert after.last_sync_at >= before_sync_at
 
     await cleanup_catalog_and_server(
-        container=container,
         client=client,
         catalog_id=catalog_id,
         server_id=server_id,
@@ -717,13 +708,13 @@ async def test_mcp_catalog_provision_companies_task_aggregates_stats(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """TaskIQ provision task обходит компании и агрегирует stats без mocks."""
     catalog_id = f"task_prov_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="all_verified", enabled=True):
         result = await mcp_catalog_provision_companies_task(
@@ -741,7 +732,7 @@ async def test_mcp_catalog_provision_companies_task_aggregates_stats(
     assert get_response.json()["source"] == "catalog"
     assert get_response.json()["catalog_id"] == catalog_id
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
     delete_response = await client.delete(f"/flows/api/v1/mcp/servers/{server_id}")
     assert delete_response.status_code == 200
 
@@ -750,26 +741,26 @@ async def test_mcp_catalog_provision_companies_task_aggregates_stats(
 async def test_mcp_catalog_auto_provision_disabled_is_noop(
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """`auto_provision=disabled` — provisioner и task не создают серверы."""
     catalog_id = f"disabled_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(catalog_id=catalog_id, upstream_url=local_mcp_http_url)
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="disabled"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
         task_result = await mcp_catalog_provision_companies_task(schedule_task_id=f"disabled-{unique_id}")
 
     assert stats.added == 0
     assert stats.updated == 0
     assert task_result["added"] == 0
 
-    stored = await container.mcp_server_repository.get(server_id)
+    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     assert stored is None
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 def test_mcp_catalog_config_model_default_auto_provision() -> None:
@@ -784,17 +775,17 @@ async def test_provision_does_not_deactivate_opt_in_installed_server(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Opt-in MCP Store сервер не деактивируется auto-provisioner при approved_only."""
     catalog_id = f"opt_in_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=False,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     install_response = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert install_response.status_code == 200, install_response.text
@@ -803,10 +794,10 @@ async def test_provision_does_not_deactivate_opt_in_installed_server(
 
     deprecated_entry = entry.model_copy(update={"is_deprecated": True})
     deprecated_entry.catalog_snapshot_hash = deprecated_entry.recompute_snapshot_hash()
-    _ = await persist_catalog_entry(container=container, entry=deprecated_entry)
+    _ = await persist_catalog_entry(entry=deprecated_entry)
 
     with mcp_catalog_settings(auto_provision="approved_only"):
-        stats = await provision_mcp_catalog_for_company(container=container)
+        stats = await provision_mcp_catalog_for_company(di=di)
 
     assert stats.deprecated == 0
     get_response = await client.get(f"/flows/api/v1/mcp/servers/{server_id}")
@@ -815,7 +806,7 @@ async def test_provision_does_not_deactivate_opt_in_installed_server(
 
     uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert uninstall_response.status_code == 200
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -823,18 +814,18 @@ async def test_mcp_catalog_store_list_install_uninstall_api(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """MCP Store API: list tier=store, install, uninstall."""
     catalog_id = f"store_api_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=False,
         title=f"Store API {unique_id}",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     list_response = await client.get(
         "/flows/api/v1/mcp/catalog",
@@ -878,7 +869,7 @@ async def test_mcp_catalog_store_list_install_uninstall_api(
     ]
     assert len(mcp_tools_after) == 0
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -933,9 +924,9 @@ async def test_mcp_catalog_lists_platform_curated_without_search(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     catalog_id = f"context7_catalog_{unique_id}"
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
@@ -943,7 +934,7 @@ async def test_mcp_catalog_lists_platform_curated_without_search(
         title=f"Context7 {unique_id}",
         description="Up-to-date library documentation for LLM",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     empty_search_response = await client.get(
         "/flows/api/v1/mcp/catalog",
@@ -961,7 +952,7 @@ async def test_mcp_catalog_lists_platform_curated_without_search(
     assert curated_item["platform_curated"] is True
     assert curated_item["installed"] is False
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -969,30 +960,30 @@ async def test_auto_provisioned_catalog_entry_allows_store_uninstall(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Даже legacy auto-tier catalog сервер снимается через MCP Store uninstall."""
     catalog_id = f"auto_tier_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=True,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     with mcp_catalog_settings(auto_provision="approved_only"):
-        _ = await provision_mcp_catalog_for_company(container=container)
+        _ = await provision_mcp_catalog_for_company(di=di)
 
-    stored = await container.mcp_server_repository.get(server_id)
+    stored = await MCPServerConfig.get(MCPServerConfig.row_id(server_id))
     assert stored is not None
     assert stored.catalog_auto_provisioned is True
 
     uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert uninstall_response.status_code == 200, uninstall_response.text
-    assert await container.mcp_server_repository.get(server_id) is None
+    assert await MCPServerConfig.get(MCPServerConfig.row_id(server_id)) is None
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1000,17 +991,17 @@ async def test_mcp_catalog_install_is_idempotent(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     """Повторный POST install возвращает тот же server без дублей."""
     catalog_id = f"idempotent_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=False,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     first = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     second = await client.post(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
@@ -1024,7 +1015,7 @@ async def test_mcp_catalog_install_is_idempotent(
     assert server_ids.count(server_id) == 1
 
     _ = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1039,8 +1030,8 @@ async def test_mcp_catalog_store_pagination_offset(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
-    container = as_flow_runtime_container(get_container())
     catalog_ids: list[str] = []
     for index in range(3):
         catalog_id = f"store_page_{index}_{unique_id}"
@@ -1051,7 +1042,7 @@ async def test_mcp_catalog_store_pagination_offset(
             platform_approved=False,
             title=f"Store Page {index} {unique_id}",
         )
-        _ = await persist_catalog_entry(container=container, entry=entry)
+        _ = await persist_catalog_entry(entry=entry)
 
     first_page = await client.get(
         "/flows/api/v1/mcp/catalog",
@@ -1072,7 +1063,7 @@ async def test_mcp_catalog_store_pagination_offset(
     assert first_body["items"][0]["catalog_id"] != second_body["items"][0]["catalog_id"]
 
     for catalog_id in catalog_ids:
-        _ = await container.mcp_catalog_repository.delete(catalog_id)
+        _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1080,9 +1071,9 @@ async def test_mcp_catalog_search_matches_registry_name_and_description(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     catalog_id = f"registry_search_{unique_id}"
-    container = as_flow_runtime_container(get_container())
     registry_name = f"registry.search.{unique_id}/tool"
     description = f"Description marker {unique_id}"
     entry = build_verified_catalog_entry(
@@ -1093,7 +1084,7 @@ async def test_mcp_catalog_search_matches_registry_name_and_description(
         title=f"Title {unique_id}",
         description=description,
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     registry_response = await client.get(
         "/flows/api/v1/mcp/catalog",
@@ -1110,7 +1101,7 @@ async def test_mcp_catalog_search_matches_registry_name_and_description(
     assert registry_response.json()["items"][0]["catalog_id"] == catalog_id
     assert description_response.json()["items"][0]["catalog_id"] == catalog_id
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1118,17 +1109,17 @@ async def test_mcp_catalog_install_and_uninstall_platform_curated(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
     catalog_id = f"curated_install_{unique_id}"
     server_id = server_id_from_catalog_id(catalog_id)
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=local_mcp_http_url,
         platform_approved=True,
         title=f"Curated {unique_id}",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
 
     list_response = await client.get(
         "/flows/api/v1/mcp/catalog",
@@ -1151,9 +1142,9 @@ async def test_mcp_catalog_install_and_uninstall_platform_curated(
 
     uninstall_response = await client.delete(f"/flows/api/v1/mcp/catalog/{catalog_id}/install")
     assert uninstall_response.status_code == 200, uninstall_response.text
-    assert await container.mcp_server_repository.get(server_id) is None
+    assert await MCPServerConfig.get(MCPServerConfig.row_id(server_id)) is None
 
-    _ = await container.mcp_catalog_repository.delete(catalog_id)
+    _ = await MCPCatalogEntry.delete_by_id(catalog_id)
 
 
 @pytest.mark.asyncio
@@ -1161,8 +1152,8 @@ async def test_mcp_servers_search_matches_context7_alias(
     client,
     local_mcp_http_url: str,
     unique_id: str,
+    di,
 ) -> None:
-    container = get_container()
     server_id = f"alias_ctx7_{unique_id}"
     server = MCPServerConfig(
         server_id=server_id,
@@ -1172,7 +1163,7 @@ async def test_mcp_servers_search_matches_context7_alias(
         source=MCPServerSource.MANUAL,
         catalog_id="context7_catalog",
     )
-    _ = await container.mcp_server_repository.set(server)
+    _ = await MCPServerConfig.set(server)
 
     search_response = await client.get(
         "/flows/api/v1/mcp/servers",
@@ -1182,4 +1173,4 @@ async def test_mcp_servers_search_matches_context7_alias(
     matched_ids = [item["server_id"] for item in search_response.json()["items"]]
     assert server_id in matched_ids
 
-    _ = await container.mcp_server_repository.delete(server_id)
+    _ = await MCPServerConfig.delete_by_id(MCPServerConfig.row_id(server_id))

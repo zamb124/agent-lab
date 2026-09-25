@@ -1,159 +1,67 @@
 ---
-description: "Конфигурация: каскад ENV/conf.json/Pydantic, секции, секреты"
+description: "Конфигурация: каскад ENV → conf.local.json → conf.json → Pydantic, объявленные ключи, секреты, бренды, переменные и @var:. Читать при правке conf.json и Settings"
+globs:
+  - "conf.json"
+  - "core/config/**"
+  - "apps/*/config.py"
+  - "core/platform_brand/**"
+  - "core/variables/**"
+  - "core/secrets/**"
+  - "apps/secrets/**"
 alwaysApply: false
 ---
+
 # Конфигурация
 
-## Приоритет
+Настройки процесса — Pydantic Settings (`core/config/models.py`, `apps/<svc>/config.py`), загрузка — `core/config/loader.py`.
 
-1. **ENV** (высший)
-2. **`conf.local.json`** (корень репо, не в git)
-3. **`conf.json`** (корень репо)
-4. Дефолты в **Pydantic** (`core/config/models.py`)
+## Канон
 
-Загрузка — `core/config/loader.py`: мерж файлов, затем слой `services.<сервис>` поверх общего (для `load_merged_config(service_name="flows")`), ключ `services` из результата убирается. Отдельных `apps/*/conf.json` нет.
+1. Приоритет: ENV → `conf.local.json` (корень, вне git) → `conf.json` (корень) → дефолты Pydantic. Файл `apps/*/conf.json` не существует.
+2. `load_merged_config(service_name=...)` накладывает слой `services.<svc>` поверх общего; `services.<svc>` содержит только отличия от общего слоя, секция `database` в нём не дублируется.
+3. Каждый ключ `conf.json` объявлен полем Settings: `extra="forbid"`, необъявленный ключ валит старт. Слой `services.<name>` соответствует единственному классу Settings в `apps/<name>/config.py`; воркер без своего `config.py` использует Settings владельца.
+4. ENV — вложенность через `__`, секции в верхнем регистре (`DATABASE__SHARED_URL`, `LLM__OPENROUTER__API_KEY`); пустое ENV не перетирает JSON; `.env` читается с `dotenv_filtering="only_existing"`.
+5. Код читает конфиг только через Settings: `get_<svc>_settings()` — метод `ServiceSettingsCache` (`core/config/service_settings.py`), общий процессу — `core.config.settings`. `os.getenv`/`os.environ` в `apps/` и `core/` запрещён.
+6. Компонент DI принимает нужную секцию (`DatabaseConfig`, `OpenFGAConfig`, …), а не весь settings → `architecture.mdc` § Service Kit DI.
+7. Хосты, порты и URL в коде не хардкодятся: межсервисные URL — `server.*_service_url` (`settings.server.get_service_url(...)`), публичный origin — `server.platform_public_base_url`.
+8. Воркеры настраиваются через ENV; плейсхолдеры `${...}` в JSON запрещены.
+9. Комментарии в JSON (`_docs_*`) запрещены; объяснение ключа — в правиле-владельце секции.
+10. Kubernetes монтирует `deploy/helm/agent-lab/files/app-conf.json`, собранный `deploy/scripts/render_helm_app_conf.py` из `conf.json` и `app-conf.k8s-overlay.json`; `server.*_service_url` в кластере задаёт Helm ENV, а не overlay.
+11. Кука сессии — домен из `get_cookie_domain()` (`core/utils/domain.py`); исходящий HTTP и OAuth — `ProxyStrategy` (`core/http/client.py`) → `integrations.mdc`.
 
-**Каждый ключ конфига объявлен в Pydantic.** `BaseSettings.model_config` — `extra="forbid"`: ключ `conf.json`/`conf.local.json` без поля в Settings валит старт сервиса. Имя слоя `services.<name>` обязано соответствовать `apps/<name>/config.py` с единственным классом Settings (для `<svc>_worker` без своего config — `apps/<svc>/config.py`, как `sync_worker` → `SyncSettings`). Статический гейт — `scripts/check_conf_keys_declared.py` (`make lint`): рекурсивно сверяет корень и каждый сервисный слой `conf.json` с `model_fields`, ловит и ключи, которые вложенная модель с `extra="ignore"` отбросила бы молча. Комментарии в JSON (`_docs_*`) запрещены — документация живёт в rules. `.env` читается с `dotenv_filtering="only_existing"`: переменные других инструментов (ключи деплоя, App Store) в `.env` разработчика не ломают загрузку.
+### Бренды
 
-## Kubernetes: ConfigMap `app-conf`
+1. Один код обслуживает несколько apex-доменов: `platform_brands.<apex>` в `conf.json`, резолв — `resolve_brand(host)` / `resolve_brand_domain` (`core/platform_brand/resolver.py`). Бренд определяется по `Host`; хардкод домена или имени бренда в сервисах запрещён.
+2. `primary_platform_domain` — primary apex `linnex.io` для дефолтных публичных URL и OAuth callback; второй apex — `humanitec.ru`.
+3. Имена в тексте: продукт — «Платформа»; desktop-агент — LinnexAgent (HumanitecAgent — только на бренде `humanitec.ru`); подписи UI по бренду — поля `platform_brands.*`.
+4. Технические идентификаторы не переименовываются: `humanitec_llm`, `humanitec_agent.mdc`, `apps/agent/desktop/distro/humanitec.json`, workflows `humanitec-agent-build*.yml`, `humanitecToolkitsSync.ts`, toolkit id `humanitec_core`, pronunciation seed «Humanitec → хуманитэк».
+5. Реквизиты `legal` — общий слой; бренд переопределяет `platform_brands.<apex>.legal`.
 
-Поды читают смонтированный `deploy/helm/agent-lab/files/app-conf.json`. Файл собирается из `conf.json` + узкого `deploy/helm/agent-lab/files/app-conf.k8s-overlay.json`. Overlay не трогает `server.*_service_url` (их в кластере задаёт Helm ENV `SERVER__*_SERVICE_URL` в `templates/_helpers.tpl`); в overlay только дельты вида `services.<app>.browser` (например `null` для удаления `cdp_endpoints.lightpanda`). Артефакт пишет `deploy/scripts/render_helm_app_conf.py` (`.gitignore`); перед `helm` без `make k8s-*` — `make render-helm-app-conf`. CI и `make k8s-lint` делают то же.
+### Секреты и переменные
 
-## ENV
+1. Секрет живёт только в ENV или Kubernetes Secret `platform-secrets`; в `conf.json` — плейсхолдер `YOUR_*`. Прод: GitHub Secrets → `platform-secrets` → ENV через `valueFrom.secretKeyRef` (`deploy/helm/agent-lab/templates/_helpers.tpl`).
+2. Переменные и секреты компании — сервис `apps/secrets`: каталог `SECRETS_OPERATIONS` (`apps/secrets/realtime/command_router.py`), REST `/secrets/api/v1/variables*`, UI-фабрики `secrets-*` в `core/frontend/static/lib/events/resources/` на `transport: 'ws'`; доменный слой — `core/secrets/`, `VariablesService` (`core/variables/service.py`).
+3. `@var:` резолвит `VarResolver` (`core/variables/resolver.py`): `resolve_ref`, `resolve_text`, `resolve_deep`; неразрешимая ссылка — `VariableResolutionError`; строка `@var:...` в результат не попадает.
+4. Резолв `@var:` вне готового state (конфиг триггера, проверка черновика) — `get_resolved_variables_map` (`apps/flows/src/services/flow_factory.py`).
 
-**Корень репозитория:** `AGENT_LAB_PROJECT_ROOT` — если не задан, ищется первый каталог с `pyproject.toml`/`core/`/`apps/` вверх от `core/config/loader.py` (нужно для `documentation-dist/`, `conf.json`, миграций при запуске из `.venv`).
+## Запреты
 
-Вложенность через `__`, секции в верхнем регистре:
+1. Секрет или ключ формы провайдера в `conf.json` и в git.
+2. Необъявленный ключ `conf.json`, `_docs_*`, `${...}` в JSON.
+3. `os.getenv`/`os.environ` в `apps/` и `core/`, ручной ENV-оверлей в `config.py`.
+4. Хардкод apex-домена, бренда, хоста или порта в коде.
 
-```
-DATABASE__SHARED_URL=...
-DATABASE__FLOWS_URL=...
-DATABASE__REDIS_URL=...
-LLM__OPENROUTER__API_KEY=...
-LLM__YANDEX__API_KEY=...
-LLM__YANDEX__FOLDER_ID=...
-VOICE__STT__CLOUD_RU__API_KEY=...
-SERVER__PORT=8001
-SERVER__FLOWS_SERVICE_URL=http://localhost:8001
-TASKS__BROKER_URL=redis://...
-TASKS__DEFAULT_RETRY_COUNT=3
-LEGAL__COMPANY_NAME_RU=...
-```
+## Исключения
 
-`DATABASE__URL` — алиас к `shared_url` (обратная совместимость).
+- Исключение: `os.environ` читают `core/config/loader.py`, entrypoint процесса и тесты; остальное — ratchet `os_environ`.
+- Исключение: `calls.turn_secret` — единственный путь секрета в allowlist `scripts/check_conf_secrets.py`.
+- Исключение: сборка `state.variables` из секции `variables` flow (`FlowFactory._resolve_variables`) кладёт `None` для отсутствующей переменной компании. `[без гейта]`
 
-**Push (офлайн):** `PUSH__ENABLED`, `PUSH__VAPID_*`. **APNs:** в `conf.json` обязателен `push.apns_bundle_id`. Если `push.apns_*` пусты, для APNs подставляются `auth.providers.apple.apple_team_id` / `apple_key_id` / `apple_private_key` (тот же `.p8` ключ, при условии что в Apple Developer у ключа включено APNs). Сессионный JWT пользователя к APNs не используется. См. `core/push/apns_credentials.py`, `PushConfig`.
+## Гейты
 
-## Структура `conf.json` (общий слой)
-
-| Секция | Что |
-|---|---|
-| **`database`** | `shared_url`, `flows_url`, `crm_url`, `sync_url`, `rag_url`, `office_url`, `worktracker_url`, `tracing_url`, `redis_url`. Не дублировать в `services.*`. `DATABASE__OFFICE_URL` → `platform_office`; `DATABASE__WORKTRACKER_URL` → `platform_worktracker` (ядро задач WorkItem, см. `worktracker.mdc`); `DATABASE__TRACING_URL` → `platform_tracing` (см. `migrations.mdc`, `tracing.mdc`). `.env` и `DATABASE__*` в окружении **перекрывают** JSON. |
-| **`server`** | Плоские URL межсервисных вызовов (`flows_service_url`, `crm_service_url`, …). `voice` локально — `http://localhost:8015`. Вложенного `server.services.*` нет. **`platform_public_base_url`** — публичный origin без слэша на конце (дефолт primary apex, прод Helm `publicBaseHost` → `SERVER__PLATFORM_PUBLIC_BASE_URL`, не `.Values.domain`). **`deployment_version`** — метка релиза в JSON `health` (PWA при смене чистит Cache Storage). |
-| **`primary_platform_domain`** | Primary registrable apex (`linnex.io`). Используется для дефолтных публичных URL, OAuth primary callbacks, smoke. |
-| **`platform_brands`** | Per-apex бренд: `platform_name`, `support_email`, `agent_product_name` (LinnexAgent / HumanitecAgent), `models_product_name`, `legal`, `embed_*`, `auth_apple_client_id`, `vapid_email`. Ключ — registrable apex (`linnex.io`, `humanitec.ru`, …). Runtime: `core/platform_brand/resolver.py` (`resolve_brand`, `resolve_brand_domain`). **Не хардкодить** один домен/бренд в сервисах — резолвить по `Host`. |
-| **`calendar_sync`** | Фоновая синхронизация (`CalendarSyncConfig`), в т.ч. `sync_meeting_reminder_*` — напоминания о встречах Sync за ~15 минут. |
-| **`mail_sync`** | Фоновая IMAP-синхронизация курсоров (`MailSyncConfig`): `mail_sync_tick`, notify о новых письмах INBOX. |
-| **`voice`** | Deployment-default провайдеров речи: `voice.stt`, `voice.tts`, `voice.vad`. Ключ cloud.ru STT — `VOICE__STT__CLOUD_RU__API_KEY`. |
-| **`media_transcriber`** | Единый ffmpeg-pipeline чанкования/таймаутов (Sync batch STT и файловый слой). |
-| **`calls`** | LiveKit/TURN. `calls.speech_to_chat` (`SpeechToChatConfig`). Finalize записи: `finalize_recording_egress_poll_interval_seconds`, `finalize_recording_egress_wait_timeout_seconds`. |
-| **`transcribe_audio_redis_lock_ttl_seconds`** | TTL Redis lock авто-STT в sync worker. |
-| **`llm`** | `provider`, `default_model`, `openrouter`/`bothub`/`yandex`/…. Опционально `llm.models` — только переопределение `temperature`/`max_tokens` по id; **каталог цен в JSON не храним**. |
-| **`llm_context`** | Platform-default профили/бюджеты контекстного слоя (`core.llm_context.models.LLMContextConfig`). Company default хранится не здесь, а в `CompanyAIProviders.llm_context`. |
-| **`openfga`** | Единый PDP. Поля: `enabled`, `api_url`, `store_id`, `authorization_model_id`, `api_token`, `timeout_ms`, `default_consistency` (`MINIMIZE_LATENCY` \| `HIGHER_CONSISTENCY`). ENV: `OPENFGA__*`. Один store на платформу; `enabled=true` без `store_id`/`authorization_model_id` → `AuthzConfigError` на старте. Нет `enabled_object_types` / `OPENFGA__ENABLED_OBJECT_TYPES`. Local/test pin — `reports/openfga-dev.env` / `openfga-test.env` через `scripts/openfga_env_bootstrap.py`. Канон → **`authorization.mdc`**. |
-
-`llm.models.<model>.context_length` — опциональное знание платформы о реальном окне модели. Если задано, LLM context layer использует его для hard clamp prompt budget; это не лимит ответа (`max_tokens`) и не должно подменяться эвристикой в call-site.
-| **`billing`** | См. ниже. |
-| **`payment_providers`** | Интернет-эквайринг Т-Банка (`tinkoff_main`). `terminal_key`/`password` — секреты ENV/Helm, не git. Чек 54-ФЗ: `receipt_enabled`, `taxation`. Канон протокола → **`billing.mdc`**. |
-| **`provider_litserve`** | LitServe OpenAI-совместимый API (`api.base_url` корнем `…/v1`, процесс `apps/provider_litserve/main`). Для RAG-клиентов — `infra.gateway_port`. |
-| **`rag`** | `embedding`/`reranker` — `provider` + вложенный `api`. Локальные веса — `provider: provider_litserve`. `providers.agentset` — `api_key`, `base_url`, опц. `embedding_api_key`. См. `rag.mdc`. |
-| **`legal`** | Публичные реквизиты оператора для `/policy`/`/terms` и футера лендинга. Поля: `company_name_ru/en`, `legal_form_ru/en`, `inn`, `kpp`, `ogrn`, `legal_address_ru/en`, `contact_email`, `support_email`, `dpo_email`, `phone`, `min_age`, `retention_*`, `cloud_provider`, `cloud_region`, `analytics_tools`, `billing_provider`, банк (`bank_name_ru/en`, `bank_account`, `bank_bik`, `bank_correspondent_account`, `bank_inn`, `bank_address_ru/en`). Per-brand — `platform_brands.<apex>.legal` (юрлицо одно, email бренда свои). Прод-значения через ENV `LEGAL__*` или `conf.local.json`. |
-| **`auth.providers.apple`** | Sign in with Apple (web): `client_id` = Services ID; `apple_team_id`, `apple_key_id` — открытые. **`apple_private_key`** — секрет; в проде через GitHub Secret `AUTH_APPLE_PRIVATE_KEY` → Kubernetes Secret `platform-secrets` → ENV `AUTH__PROVIDERS__APPLE__APPLE_PRIVATE_KEY`. Callback: `https://<host>/auth/callback/apple`. |
-| **`auth.providers.amocrm`** | CRM → AmoCRM OAuth. Включить через `AUTH__PROVIDERS__AMOCRM__ENABLED|CLIENT_ID|CLIENT_SECRET`. Callback платформы — `OAuthService.build_auth_url`: `{platform_public_base_url}/{server.name}/api/v1/integrations/oauth/callback`. У процесса CRM `server.name = "crm"`. |
-| **`auth.demo`** | Демо-вход. `login_enabled: true/false`. При `true` — обязателен непустой `auth.demo.password` (или ENV `AUTH__DEMO__PASSWORD`). Опц. переопределяются `email`, `company_id`, `subdomain`, `company_name`. |
-
-`services.<имя>` содержит **только отличия** от общего слоя (порт, свой `llm` для flows, override `rag.providers` у rag и т.д.).
-
-Воркеры (rag_worker и др.) настраиваются через ENV, **не** через плейсхолдеры `${...}` в JSON.
-
-## `billing`
-
-- **`resource_base_prices`**: «категория → {имя_ресурса → число}». Число — **рубли за единицу** в смысле правил списания (`SettlementRulesDocument` per company): для **llm** — за токен (или `platform.billing.quantity`), для **livekit** — за минуту (`livekit:room_minute`, `egress_composite_minute`, `egress_segmented_minute` — см. `core/calls/livekit_usage_spans.py`). Ключ `"*"` внутри категории — дефолт. Итог = значение × множитель тарифа компании (`DEFAULT_TARIFF_PRICES` в `core/models/billing_models.py`). Merge поверх — глобально `billing:resource_base_prices_json`, для компании `billing:company:{company_id}:resource_base_prices_json`. Категория `tool` в прайсе не используется (тулы flows бесплатны).
-  - **`llm`** — трейсы `llm.*`, `flows.llm_resource.*`, `flows.llm.*`.
-  - **`embedding`** — `rag.embed.*`.
-  - **`billing`** — например `rub` (1 ₽ за `platform.billing.settlement_quantity_rub`; OpenRouter — USD из ответа × курс ЦБ РФ).
-  - **`livekit`** — `room_minute`, `egress_composite_minute`, `egress_segmented_minute`.
-- **`usd_to_rub_rate`**: положительное число; **fallback** USD/RUB. Платформа при старте опрашивает ЦБ РФ и обновляет курс каждые 5 минут (`get_cbr_usd_to_rub_rate(fallback=settings.billing.usd_to_rub_rate)`); fallback используется до первого успешного ответа.
-- **`span_settlement`**: idle worker job `span_billing_settlement_tick` — `enabled`, `cron`, `lookback_minutes`, `batch_limit`, `fallback_user_id`. Детали — `billing.mdc`.
-- **`balance_enforcement_enabled`**: pre-flight перед операциями с `pending_settlement` (`billing.mdc`).
-- **`balance_enforcement_exempt_company_ids`**: список без проверки баланса (дефолт включает `system`).
-- В `conf.json` внутри `billing` допустим массив `_docs_ru` (текст для разработчиков, `json.load`/Pydantic игнорируют).
-
-## `payment_providers`
-
-Единственный провайдер — Т-Банк nonPCI (`provider_type: tinkoff`), ключ реестра `tinkoff_main`.
-
-| Поле | Назначение |
-|---|---|
-| `default_provider` | `tinkoff_main` |
-| `sync_enabled` / `sync_cron` | Запасная сверка pending через `POST /v2/CheckOrder` (`payment_sync_tick`) |
-| `sync_pending_max_age_hours` | Окно возраста pending для CheckOrder (дефолт 24). Старше окна — один CheckOrder, затем `failed` |
-| `sync_check_order_limit` | Потолок CheckOrder за один тик (дефолт 50) |
-| `providers.tinkoff_main.terminal_key` | TerminalKey терминала (не Merchant_id / Terminal_id) |
-| `password` | Пароль терминала для Token |
-| `api_url` | Дефолт `https://securepay.tinkoff.ru/v2` (DEMO тоже сюда) |
-| `receipt_enabled` | Передавать `Receipt` в Init и в Cancel (нужна онлайн-касса) |
-| `taxation` | СНО чека; АУСН доходы минус расходы — `usn_income_outcome` |
-
-Секреты не коммитить: ENV `PAYMENT_PROVIDERS__PROVIDERS__TINKOFF_MAIN__TERMINAL_KEY` / `__PASSWORD` (Helm `tinkoff-terminal-key` / `tinkoff-terminal-password`, GitHub `TINKOFF_TERMINAL_KEY` / `TINKOFF_TERMINAL_PASSWORD`). Плейсхолдеры в `conf.json`: `YOUR_TINKOFF_TERMINAL_KEY` / `YOUR_TINKOFF_TERMINAL_PASSWORD`. Протокол пополнения — **`billing.mdc`**.
-
-## Инфраструктурные настройки
-
-БД, Redis, брокер, URL сервисов, порты, S3 — секции в `core/config/models.py`. В `apps/` и `core/` — только `settings`/`*Settings`; не `os.getenv` (исключения: `loader.py`, entrypoint, тесты). Хосты/URL/порты в коде не хардкодить. Новое поле: Pydantic → JSON → опц. ENV/`conf.local.json`.
-
-## Использование
-
-```python
-from core.config import settings
-
-settings.database.shared_url
-settings.llm.openrouter.api_key
-settings.auth.jwt_secret_key
-settings.server.get_service_url("flows")
-```
-
-Сервисный `get_<svc>_settings` / `reset_<svc>_settings` в `apps/<svc>/config.py` — методы одного `core.config.service_settings.ServiceSettingsCache("<svc>", <Svc>Settings)` (`register_platform_settings=True`, если процесс регистрирует их как платформенные через `set_settings`). ENV-каскад применяется pydantic-settings при `model_validate(merged)` — ручные `os.getenv`-оверлеи в `config.py` запрещены. Глобальные (не сервисные) секции вроде `agent` читаются как `get_settings().agent`; `reset` для тестов — `tests/agent/fixtures/settings.py`.
-
-## Секреты
-
-Только в ENV / секрет-хранилище, не в коммитимом `conf.json`. Прод (GitHub Actions → Helm): `LLM_BOTHUB_API_KEY` / `LLM_OPENROUTER_API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` в GitHub Secrets → Kubernetes Secret `platform-secrets` → ENV `LLM__BOTHUB__API_KEY` / `LLM__OPENROUTER__API_KEY` / `LLM__YANDEX__API_KEY` / `LLM__YANDEX__FOLDER_ID` через `valueFrom.secretKeyRef` в `agentlab.appEnv` (`.github/workflows/deploy.yml`, `deploy/helm/agent-lab/templates/_helpers.tpl`). Пустое ENV не перетирает JSON (`env_ignore_empty`, `remove_env_overridden_values`).
-
-## Куки auth и тенанты
-
-`get_cookie_domain()` (`core/utils/domain.py`): для прод-доменов и `*.lvh.me` — префикс `.{base}` (кука на всех субдоменах). Для `*.localhost` — `Domain=localhost`, чтобы после смены компании (редирект `a.localhost` → `b.localhost`) браузер продолжал слать `auth_token`/`session_id`. Для IP dev-хоста — host-only.
-
-## Прокси и исходящие OAuth
-
-`httpx` в `core/http/client.py` создаётся с `trust_env=False`: `HTTP_PROXY`/`HTTPS_PROXY` из окружения **не** подхватываются.
-
-Исходящие вызовы: только явный `strategy=` у `get_httpx_client` / `SmartProxyClient` (`ProxyStrategy` в `core/http/client.py`). Аргумент `proxy=` **запрещён** (ValueError). Типично для внешних API — **`ProxyStrategy.SMART`**: сначала прямой канал, при `ConnectError`/`ConnectTimeout` на прямом или HTTP-триггерах (403/429/451; опционально 401 — `proxy.retry_http_401_via_proxy`) при активном `settings.proxy` — повтор через egress с ротацией URL; успешный проход через прокси запоминается в Redis (`platform:http_egress:prefer_proxy:{origin}`, TTL `proxy.prefer_proxy_ttl_seconds`) с инвалидацией при откате на успешный прямой. **`ProxyStrategy.PROXY_ONLY`** — точечно, где нужен гарантированно только egress (например средний шаг в `request_public_oauth` или второй запрос во `ExternalAPIClient` после 401/403 с прямого канала).
-
-Вызовы к Yandex/Google/GitHub/Apple (обмен `code`, userinfo, refresh) идут через `request_public_oauth`: несколько попыток **без** прокси, затем один блок через `get_httpx_client(strategy=PROXY_ONLY)`, затем снова без.
-
-В проде за корпоративным прокси — секция `proxy` (`enabled` + `proxies`, `prefer_proxy_ttl_seconds`, см. `ProxyConfig`).
-
-## Переменные flow и `@var:`
-
-`FlowFactory._resolve_variables` мержит секцию `variables` с переменными компании из БД через `VarResolver.resolve_for_flow_variable` (`core/variables/resolver.py`): если корневого ключа нет, пути не существует или цепочка `@var:` не сходится — в `state.variables` попадает `None`, а не строка `@var:...` и не «полустрока». Строки без `@var:` не меняются. Строгий резолв в рантайме маппингов (`MappingResolver`, `ExternalAPIClient`) — `VarResolver.resolve_ref`/`resolve_text` с `VariableResolutionError`. Резолв `@var` вне готового `state` (конфиг триггера, verify черновика) — `get_resolved_variables_map` + `resolve_at_var_for_flow` (тот же механизм эффективных variables для `flow_id`+`branch_id`).
-
-## Типичные ошибки
-
-- Неверное имя ENV (одинарное `_`, нижний регистр секций).
-- Дублирование `database` в `services.*` без причины.
-- Поля JSON без объявления в Pydantic (игнорируются).
-- `/documents` таймаут — часто не запущен `office` на 8008 или открыт хост без `:8002`. См. `office.mdc`.
-- OnlyOffice: `services.office.office.document_server_public_url` — origin `api.js` в браузере (тот же host, что страница `/documents`). `server.document_server_dev_upstream_url` — куда `DevInterServiceProxyMiddleware` шлёт `/web-apps`, `/common`, … (`http://localhost:8088` при DS в compose). `jwt_secret`, `callback_public_base_url` — `office.mdc`. Прод: Deployment `onlyoffice` в Helm (`deploy/helm/agent-lab/templates/60-external/onlyoffice.yaml`), секрет `ONLYOFFICE_JWT_SECRET`.
-
-## Миграции БД
-
-Деревья `migrations/<сервис>/`, манифест `migrations/services.json`. Это не блок `migration` в `conf.json`. Подробно — `migrations.mdc`.
+- `scripts/check_conf_secrets.py` (`make lint`) — секреты `conf.json` только `YOUR_*`.
+- `scripts/check_conf_keys_declared.py` (`make lint`) — каждый ключ `conf.json` объявлен в Settings.
+- `scripts/check_repo_hygiene.py` (`make lint`) — корень репозитория без дампов, ключей и документов.
+- `scripts/check_platform_brand_hardcode.py` (`make lint`) — нет хардкода apex-домена.
+- `scripts/check_variables_legacy.sh` (`make lint`) — нет старого API переменных.
+- `scripts/check_ratchet_counts.py` (`make lint`) — ratchet `os_environ`.

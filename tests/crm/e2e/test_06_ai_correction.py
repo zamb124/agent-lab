@@ -121,7 +121,7 @@ class TestAICorrection:
             })
         })
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
             "description": "Встретился с Иваном",
@@ -135,7 +135,7 @@ class TestAICorrection:
             "name": "Иван",
             "attributes": {"role": "менеджер"},
         }
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": extracted_entity.get("entity_type"),
             "name": extracted_entity.get("name"),
             "attributes": extracted_entity.get("attributes", {}),
@@ -164,19 +164,19 @@ class TestAICorrection:
     async def test_add_missing_relationship(self, crm_client: AsyncClient, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Добавление связи, которую AI не нашел"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Контакт 1 {unique_id}"
         }, headers=auth_headers_system)
         entity1_id = object_str(_http_json(entity1_resp).get("entity_id"), field="entity_id")
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project",
             "name": f"Проект {unique_id}"
         }, headers=auth_headers_system)
         entity2_id = object_str(_http_json(entity2_resp).get("entity_id"), field="entity_id")
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": "related_to"
@@ -216,7 +216,7 @@ class TestAICorrection:
             })
         })
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
             "description": "Встретился с контактом",
@@ -234,7 +234,7 @@ class TestAICorrection:
         incorrect_entity_id = None
         for entity_data in entities:
             entity_name = object_str(entity_data.get("name"), field="entity.name")
-            create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+            create_resp = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": entity_data.get("entity_type"),
                 "name": entity_name,
             }, headers=auth_headers_system)
@@ -257,14 +257,14 @@ class TestAICorrection:
     async def test_merge_duplicate_entities(self, crm_client: AsyncClient, unique_id: str, auth_headers_system: dict[str, str],
     ):
         """Объединение дублирующихся entities"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Иван {unique_id}",
             "attributes": {"email": "ivan1@example.com"}
         }, headers=auth_headers_system)
         entity1_id = object_str(_http_json(entity1_resp).get("entity_id"), field="entity_id")
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Иван Иванов {unique_id}",
             "attributes": {"phone": "+79991234567"}
@@ -306,7 +306,7 @@ class TestAICorrection:
             })
         })
 
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Встреча {unique_id}",
             "description": "Встреча прошла",
@@ -317,7 +317,7 @@ class TestAICorrection:
         note_data = object_dict(analyze_resp.json().get("note"), field="note")
 
         # Создаём note на основе AI анализа
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": note_data.get("entity_type"),
             "entity_subtype": note_data.get("entity_subtype"),
             "name": note_data.get("name"),

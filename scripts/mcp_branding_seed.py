@@ -1,4 +1,4 @@
-"""Seed MCP branding icons из git-бандла в S3 + MCPServerBrandingRepository."""
+"""Seed MCP branding icons из git-бандла в S3 и таблицу ``mcp_server_branding``."""
 
 from __future__ import annotations
 
@@ -6,25 +6,23 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from apps.flows.src.container import FlowContainer, get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
+from apps.flows.config import get_settings
+from apps.flows.di import FlowsDi
 from apps.flows.src.services.mcp_branding_seed import seed_mcp_branding_from_bundle
-from core.context import Context, clear_context, set_context
+from core.authz.service import AuthzService
+from core.context import clear_context, set_context
+from core.di import ProcessIdentity, open_di
 from core.identity.system_bootstrap import ensure_system_admin_membership
 from core.logging import get_logger
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
 
 
-async def _system_context(container: FlowContainer) -> Context:
-    company, user = await ensure_system_admin_membership(
-        company_repository=container.company_repository,
-        subdomain_repository=container.subdomain_repository,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
-    )
+async def _system_context(authz: AuthzService) -> Context:
+    company, user = await ensure_system_admin_membership(authz=authz)
     if user is None:
         raise ValueError("system admin user is required for MCP branding seed")
     if company.company_id != "system":
@@ -70,21 +68,28 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    container = get_container()
-    runtime = as_flow_runtime_container(container)
-    system_context = await _system_context(container)
-    set_context(system_context)
-    try:
-        server_ids = frozenset(args.server_ids) if args.server_ids else None
-        stats = await seed_mcp_branding_from_bundle(
-            runtime,
-            force=args.force,
-            server_ids=server_ids,
-            dry_run=args.dry_run,
-            manifest_path=args.manifest_path,
-        )
-    finally:
-        clear_context()
+    settings = get_settings()
+    identity = ProcessIdentity(service_name="flows", files_route_segment="flows")
+    async with open_di(
+        FlowsDi,
+        settings=settings,
+        identity=identity,
+        database="flows_url",
+    ) as di:
+        system_context = await _system_context(di.authz_service)
+        set_context(system_context)
+        try:
+            server_ids = frozenset(args.server_ids) if args.server_ids else None
+            stats = await seed_mcp_branding_from_bundle(
+                files_service=di.files_service,
+                mcp_branding_service=di.mcp_branding_service,
+                force=args.force,
+                server_ids=server_ids,
+                dry_run=args.dry_run,
+                manifest_path=args.manifest_path,
+            )
+        finally:
+            clear_context()
 
     print(
         "mcp branding seed:",

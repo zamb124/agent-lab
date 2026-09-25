@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from apps.guest_runtime.container import GuestRuntimeContainer
 from apps.guest_runtime.services.farm_service import GuestFarmService
 from apps.guest_runtime.services.identity import guest_identity_scope
 from core.guest_runtime.models import GuestInvokeKind, GuestLanguage
+from core.models.identity_models import Company, User
 from tests.fixtures.s3 import require_s3_configured
 from tests.guest_runtime.http_helpers import (
     code_agent_headers,
@@ -26,7 +26,6 @@ async def test_lease_recreate_when_slots_empty(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    guest_runtime_container: GuestRuntimeContainer,
     guest_farm_service: tuple[GuestFarmService, list[tuple[str, str]]],
     auth_headers_system: dict[str, str],
     system_user_id: str,
@@ -68,8 +67,8 @@ async def test_lease_recreate_when_slots_empty(
         flows_client_http, headers, flow_id=flow_id, node_id=node_id
     )
     assert status_catalog_id == catalog_id
-    user = await guest_runtime_container.user_repository.get(system_user_id)
-    company = await guest_runtime_container.company_repository.get("system")
+    user = await User.get(system_user_id)
+    company = await Company.get("system")
     if user is None:
         raise RuntimeError("system user required")
     if company is None:

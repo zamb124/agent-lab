@@ -8,13 +8,13 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import (
     op_flows_exception_absorb_allow_names,
     op_flows_execution_limits,
     op_flows_node_types,
     op_flows_resource_types,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
 from apps.flows.src.models.execution_limits import get_graph_max_iterations
 from apps.flows.src.models.flow_api import (
@@ -52,7 +52,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_node_types_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -69,14 +69,14 @@ async def test_node_types_rest_and_op_share_payload(
         listed = await op_flows_node_types(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_resource_types_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -93,14 +93,14 @@ async def test_resource_types_rest_and_op_share_payload(
         listed = await op_flows_resource_types(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_exception_absorb_allow_names_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -115,14 +115,14 @@ async def test_exception_absorb_allow_names_rest_and_op_share_payload(
         listed = await op_flows_exception_absorb_allow_names(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_execution_limits_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -137,6 +137,6 @@ async def test_execution_limits_rest_and_op_share_payload(
         listed = await op_flows_execution_limits(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert listed.model_dump(mode="json") == http_resp.json()

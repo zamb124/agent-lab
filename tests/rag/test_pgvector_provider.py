@@ -13,14 +13,16 @@ Unit-тесты PgVectorProvider.
 """
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-from sqlalchemy import func, or_, select
+from oxyde import execute_raw
 
-from core.db.models import VectorDocument
+from core.db.models.rag import VectorDocument
 from core.rag.models import RAGSearchOptions
 from core.rag_indexing_schema import SearchChannelsDefaults
+from core.types import require_json_object
 
 
 def _upload_metadata(company_id: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -34,37 +36,21 @@ HYBRID_RRF_SEARCH_OPTIONS = RAGSearchOptions(
 )
 
 
-async def _vector_chunk_count(
-    session_factory, namespace_id: str, company_id: str
-) -> int:
-    async with session_factory() as session:
-        stmt = (
-            select(func.count())
-            .select_from(VectorDocument)
-            .where(
-                VectorDocument.namespace_id == namespace_id,
-                VectorDocument.company_id == company_id,
-            )
-        )
-        result = await session.execute(stmt)
-        return int(result.scalar() or 0)
-
-
-async def _vector_document_rows_ordered(
-    session_factory, namespace_id: str, document_id: str, company_id: str
-) -> list[VectorDocument]:
-    async with session_factory() as session:
-        stmt = (
-            select(VectorDocument)
-            .where(
-                VectorDocument.namespace_id == namespace_id,
-                VectorDocument.document_id == document_id,
-                VectorDocument.company_id == company_id,
-            )
-            .order_by(VectorDocument.chunk_index)
-        )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
+async def _vector_chunk_count(namespace_id: str, company_id: str) -> int:
+    rows = await execute_raw(
+        """
+        SELECT COUNT(*)::int AS cnt
+        FROM vector_documents
+        WHERE namespace_id = $1 AND company_id = $2
+        """,
+        [namespace_id, company_id],
+        using="rag",
+    )
+    parsed = require_json_object(rows[0], "chunk_count")
+    count = parsed["cnt"]
+    if isinstance(count, bool) or not isinstance(count, int):
+        raise TypeError("chunk count must be an integer")
+    return count
 
 
 # -- Namespace CRUD --
@@ -83,8 +69,7 @@ async def test_create_namespace(rag_provider_pgvector, ns_name, rag_company_id):
         "created_at": None,
         "metadata": {},
     }
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_chunk_count(sf, ns_name, rag_company_id) == 0
+    assert await _vector_chunk_count(ns_name, rag_company_id) == 0
 
 
 @pytest.mark.asyncio
@@ -92,8 +77,7 @@ async def test_get_namespace_empty(rag_provider_pgvector, rag_company_id):
     """get_namespace для несуществующего namespace возвращает None."""
     result = await rag_provider_pgvector.get_namespace("nonexistent_ns_123")
     assert result is None
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_chunk_count(sf, "nonexistent_ns_123", rag_company_id) == 0
+    assert await _vector_chunk_count("nonexistent_ns_123", rag_company_id) == 0
 
 
 @pytest.mark.asyncio
@@ -118,8 +102,7 @@ async def test_list_namespaces(rag_provider_pgvector, ns_name, rag_company_id):
     }
     assert matching[0]["document_count"] == 1
 
-    sf = rag_provider_pgvector._session_factory
-    rows = await _vector_document_rows_ordered(sf, ns_name, doc.document_id, rag_company_id)
+    rows = await VectorDocument.chunks_for_document(ns_name, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == ns_name for r in rows)
     assert all(r.company_id == rag_company_id for r in rows)
@@ -141,9 +124,8 @@ async def test_delete_namespace(rag_provider_pgvector, ns_name, rag_company_id):
         document_name="temp.txt",
         metadata=_upload_metadata(company_id),
     )
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_chunk_count(sf, namespace_id, company_id) == doc.metadata["total_chunks"]
-    chunks_in_db = await _vector_document_rows_ordered(sf, namespace_id, doc.document_id, company_id)
+    assert await _vector_chunk_count(namespace_id, company_id) == doc.metadata["total_chunks"]
+    chunks_in_db = await VectorDocument.chunks_for_document(namespace_id, doc.document_id)
     assert len(chunks_in_db) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in chunks_in_db)
     assert all(r.document_name == "temp.txt" for r in chunks_in_db)
@@ -154,18 +136,17 @@ async def test_delete_namespace(rag_provider_pgvector, ns_name, rag_company_id):
 
     ns = await rag_provider_pgvector.get_namespace(namespace_id)
     assert ns is None
-    assert await _vector_chunk_count(sf, namespace_id, company_id) == 0
-    assert await _vector_document_rows_ordered(sf, namespace_id, doc.document_id, company_id) == []
+    assert await _vector_chunk_count(namespace_id, company_id) == 0
+    assert await VectorDocument.chunks_for_document(namespace_id, doc.document_id) == []
 
 
 @pytest.mark.asyncio
 async def test_delete_namespace_nonexistent(rag_provider_pgvector, rag_company_id):
     """delete_namespace для пустого namespace возвращает False."""
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_chunk_count(sf, "no_such_ns_99", rag_company_id) == 0
+    assert await _vector_chunk_count("no_such_ns_99", rag_company_id) == 0
     deleted = await rag_provider_pgvector.delete_namespace("no_such_ns_99")
     assert deleted is False
-    assert await _vector_chunk_count(sf, "no_such_ns_99", rag_company_id) == 0
+    assert await _vector_chunk_count("no_such_ns_99", rag_company_id) == 0
 
 
 # -- Document CRUD --
@@ -191,10 +172,9 @@ async def test_upload_and_get_document(rag_provider_pgvector, ns_name, rag_compa
     }
     assert doc.metadata["lang"] == "en"
 
-    sf = rag_provider_pgvector._session_factory
-    rows = await _vector_document_rows_ordered(sf, ns_name, doc.document_id, rag_company_id)
+    rows = await VectorDocument.chunks_for_document(ns_name, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
-    assert all(r.metadata_.get("lang") == "en" for r in rows)
+    assert all(r.metadata.get("lang") == "en" for r in rows)
     assert all(r.company_id == rag_company_id for r in rows)
     assert all(r.document_name == "python.txt" for r in rows)
     assert "programming language" in "".join(r.content for r in rows).lower()
@@ -231,8 +211,7 @@ async def test_get_document_nonexistent(rag_provider_pgvector, ns_name, rag_comp
     """get_document для несуществующего документа возвращает None."""
     result = await rag_provider_pgvector.get_document(ns_name, "no_such_doc")
     assert result is None
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_document_rows_ordered(sf, ns_name, "no_such_doc", rag_company_id) == []
+    assert await VectorDocument.chunks_for_document(ns_name, "no_such_doc") == []
 
 
 @pytest.mark.asyncio
@@ -262,12 +241,11 @@ async def test_list_documents(rag_provider_pgvector, ns_name, rag_company_id):
         {"name": "second.txt", "namespace": ns_name, "status": "completed", "content": None},
     ]
 
-    sf = rag_provider_pgvector._session_factory
-    r1 = await _vector_document_rows_ordered(sf, ns_name, first.document_id, rag_company_id)
-    r2 = await _vector_document_rows_ordered(sf, ns_name, second.document_id, rag_company_id)
+    r1 = await VectorDocument.chunks_for_document(ns_name, first.document_id)
+    r2 = await VectorDocument.chunks_for_document(ns_name, second.document_id)
     assert len(r1) == first.metadata["total_chunks"]
     assert len(r2) == second.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, ns_name, rag_company_id) == (
+    assert await _vector_chunk_count(ns_name, rag_company_id) == (
         first.metadata["total_chunks"] + second.metadata["total_chunks"]
     )
     assert first.document_id != second.document_id
@@ -287,12 +265,10 @@ async def test_delete_document(rag_provider_pgvector, ns_name, rag_company_id):
         document_name="bye.txt",
         metadata=_upload_metadata(company_id),
     )
-    sf = rag_provider_pgvector._session_factory
-    chunks_before_delete = await _vector_document_rows_ordered(
-        sf, namespace_id, doc.document_id, company_id
-    )
+    chunks_before_delete = await VectorDocument.chunks_for_document(
+        namespace_id, doc.document_id)
     assert len(chunks_before_delete) == doc.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, namespace_id, company_id) == doc.metadata["total_chunks"]
+    assert await _vector_chunk_count(namespace_id, company_id) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in chunks_before_delete)
 
     deleted = await rag_provider_pgvector.delete_document(namespace_id, doc.document_id)
@@ -300,17 +276,16 @@ async def test_delete_document(rag_provider_pgvector, ns_name, rag_company_id):
 
     fetched = await rag_provider_pgvector.get_document(namespace_id, doc.document_id)
     assert fetched is None
-    assert await _vector_document_rows_ordered(sf, namespace_id, doc.document_id, company_id) == []
+    assert await VectorDocument.chunks_for_document(namespace_id, doc.document_id) == []
 
 
 @pytest.mark.asyncio
 async def test_delete_document_nonexistent(rag_provider_pgvector, ns_name, rag_company_id):
     """delete_document для несуществующего документа возвращает False."""
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_document_rows_ordered(sf, ns_name, "no_doc_here", rag_company_id) == []
+    assert await VectorDocument.chunks_for_document(ns_name, "no_doc_here") == []
     deleted = await rag_provider_pgvector.delete_document(ns_name, "no_doc_here")
     assert deleted is False
-    assert await _vector_document_rows_ordered(sf, ns_name, "no_doc_here", rag_company_id) == []
+    assert await VectorDocument.chunks_for_document(ns_name, "no_doc_here") == []
 
 
 # -- Upload + Search --
@@ -326,10 +301,9 @@ async def test_upload_text_and_search(rag_provider_pgvector, ns_name, rag_compan
         metadata=_upload_metadata(rag_company_id),
     )
 
-    sf = rag_provider_pgvector._session_factory
     namespace_id = ns_name
     company_id = rag_company_id
-    rows = await _vector_document_rows_ordered(sf, namespace_id, doc.document_id, company_id)
+    rows = await VectorDocument.chunks_for_document(namespace_id, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
     blob = " ".join(r.content.lower() for r in rows)
@@ -357,8 +331,7 @@ async def test_upload_text_and_search(rag_provider_pgvector, ns_name, rag_compan
 @pytest.mark.asyncio
 async def test_search_empty_namespace(rag_provider_pgvector, ns_name, rag_company_id):
     """Поиск в пустом namespace возвращает пустой список."""
-    sf = rag_provider_pgvector._session_factory
-    assert await _vector_chunk_count(sf, ns_name, rag_company_id) == 0
+    assert await _vector_chunk_count(ns_name, rag_company_id) == 0
     results = await rag_provider_pgvector.search(ns_name, "anything")
     assert [r.model_dump() for r in results] == []
 
@@ -388,8 +361,7 @@ async def test_chunking(rag_provider_pgvector, ns_name, rag_company_id):
         {"document_id": doc.document_id} for _ in results
     ]
 
-    sf = rag_provider_pgvector._session_factory
-    rows = await _vector_document_rows_ordered(sf, ns_name, doc.document_id, rag_company_id)
+    rows = await VectorDocument.chunks_for_document(ns_name, doc.document_id)
     assert len(rows) == total_chunks
     assert [r.chunk_index for r in rows] == list(range(len(rows)))
     assert all(r.total_chunks == len(rows) for r in rows)
@@ -415,19 +387,18 @@ async def test_search_with_filters(rag_provider_pgvector, ns_name, rag_company_i
         metadata=_upload_metadata(rag_company_id, {"category": "ml"}),
     )
 
-    sf = rag_provider_pgvector._session_factory
-    web_rows = await _vector_document_rows_ordered(sf, ns_name, web_doc.document_id, rag_company_id)
-    ml_rows = await _vector_document_rows_ordered(sf, ns_name, ml_doc.document_id, rag_company_id)
+    web_rows = await VectorDocument.chunks_for_document(ns_name, web_doc.document_id)
+    ml_rows = await VectorDocument.chunks_for_document(ns_name, ml_doc.document_id)
     assert len(web_rows) == web_doc.metadata["total_chunks"]
     assert len(ml_rows) == ml_doc.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, ns_name, rag_company_id) == (
+    assert await _vector_chunk_count(ns_name, rag_company_id) == (
         web_doc.metadata["total_chunks"] + ml_doc.metadata["total_chunks"]
     )
     for row in web_rows:
-        assert row.metadata_.get("category") == "web"
+        assert row.metadata.get("category") == "web"
         assert row.company_id == rag_company_id
     for row in ml_rows:
-        assert row.metadata_.get("category") == "ml"
+        assert row.metadata.get("category") == "ml"
         assert row.company_id == rag_company_id
 
     results = await rag_provider_pgvector.search(
@@ -453,19 +424,18 @@ async def test_list_documents_with_filters(rag_provider_pgvector, ns_name, rag_c
         metadata=_upload_metadata(rag_company_id, {"priority": "low"}),
     )
 
-    sf = rag_provider_pgvector._session_factory
-    alpha_rows = await _vector_document_rows_ordered(sf, ns_name, alpha.document_id, rag_company_id)
-    beta_rows = await _vector_document_rows_ordered(sf, ns_name, beta.document_id, rag_company_id)
+    alpha_rows = await VectorDocument.chunks_for_document(ns_name, alpha.document_id)
+    beta_rows = await VectorDocument.chunks_for_document(ns_name, beta.document_id)
     assert len(alpha_rows) == alpha.metadata["total_chunks"]
     assert len(beta_rows) == beta.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, ns_name, rag_company_id) == (
+    assert await _vector_chunk_count(ns_name, rag_company_id) == (
         alpha.metadata["total_chunks"] + beta.metadata["total_chunks"]
     )
     for row in alpha_rows:
-        assert row.metadata_.get("priority") == "high"
+        assert row.metadata.get("priority") == "high"
         assert row.company_id == rag_company_id
     for row in beta_rows:
-        assert row.metadata_.get("priority") == "low"
+        assert row.metadata.get("priority") == "low"
         assert row.company_id == rag_company_id
 
     docs = await rag_provider_pgvector.list_documents_with_filters(
@@ -562,7 +532,7 @@ async def test_search_with_invalid_chroma_filter_raises(rag_provider_pgvector, n
         metadata=_upload_metadata(rag_company_id, {"category": "web", "year": 2024}),
     )
 
-    with pytest.raises(ValueError, match="неподдерживаемый оператор"):
+    with pytest.raises(ValueError, match="unsupported operator"):
         await rag_provider_pgvector.search(
             ns_name,
             "token",
@@ -570,7 +540,7 @@ async def test_search_with_invalid_chroma_filter_raises(rag_provider_pgvector, n
             filters={"category": {"$contains": "web"}},
         )
 
-    with pytest.raises(ValueError, match="должен быть массивом минимум из 2 условий"):
+    with pytest.raises(ValueError, match="must be an array of at least 2 conditions"):
         await rag_provider_pgvector.search(
             ns_name,
             "token",
@@ -658,7 +628,7 @@ async def test_list_documents_with_nested_filters_matrix(rag_provider_pgvector, 
     )
     assert {doc.name for doc in docs} == {"d1.txt", "d2.txt", "d3.txt"}
 
-    with pytest.raises(ValueError, match="должен содержать ровно один оператор"):
+    with pytest.raises(ValueError, match="must contain exactly one operator"):
         await rag_provider_pgvector.list_documents_with_filters(
             ns_name,
             where={"year": {"$gte": 2020, "$lte": 2024}},
@@ -685,15 +655,14 @@ async def test_namespace_isolation(rag_provider_pgvector, ns_name, ns_name_2, ra
         metadata=_upload_metadata(company_id),
     )
 
-    sf = rag_provider_pgvector._session_factory
-    for row in await _vector_document_rows_ordered(sf, ns_name, d1.document_id, company_id):
+    for row in await VectorDocument.chunks_for_document(ns_name, d1.document_id):
         assert row.namespace_id == ns_name
         assert row.company_id == company_id
-    for row in await _vector_document_rows_ordered(sf, ns_name_2, d2.document_id, company_id):
+    for row in await VectorDocument.chunks_for_document(ns_name_2, d2.document_id):
         assert row.namespace_id == ns_name_2
         assert row.company_id == company_id
-    assert await _vector_chunk_count(sf, ns_name, company_id) == d1.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, ns_name_2, company_id) == d2.metadata["total_chunks"]
+    assert await _vector_chunk_count(ns_name, company_id) == d1.metadata["total_chunks"]
+    assert await _vector_chunk_count(ns_name_2, company_id) == d2.metadata["total_chunks"]
 
     results_ns1 = await rag_provider_pgvector.search(ns_name, "container", limit=10)
     results_ns2 = await rag_provider_pgvector.search(ns_name_2, "Italian", limit=10)
@@ -741,10 +710,9 @@ async def test_document_overwrite(rag_provider_pgvector, ns_name, rag_company_id
     results_check = await rag_provider_pgvector.search(namespace_id, "Old content", limit=20)
     assert [("Old content" in r.content) for r in results_check] == [False] * len(results_check)
 
-    sf = rag_provider_pgvector._session_factory
-    rows = await _vector_document_rows_ordered(sf, namespace_id, doc_id, company_id)
+    rows = await VectorDocument.chunks_for_document(namespace_id, doc_id)
     assert len(rows) == doc_new.metadata["total_chunks"]
-    assert await _vector_chunk_count(sf, namespace_id, company_id) == doc_new.metadata["total_chunks"]
+    assert await _vector_chunk_count(namespace_id, company_id) == doc_new.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
     joined = "".join(r.content for r in rows)
     assert "Brand new content after overwrite" in joined
@@ -760,10 +728,9 @@ async def test_search_hybrid_rrf_returns_provenance(rag_provider_pgvector, ns_na
         document_name="hybrid.txt",
         metadata=_upload_metadata(rag_company_id),
     )
-    sf = rag_provider_pgvector._session_factory
     namespace_id = ns_name
     company_id = rag_company_id
-    rows = await _vector_document_rows_ordered(sf, namespace_id, doc.document_id, company_id)
+    rows = await VectorDocument.chunks_for_document(namespace_id, doc.document_id)
     assert len(rows) == doc.metadata["total_chunks"]
     assert all(r.namespace_id == namespace_id and r.company_id == company_id for r in rows)
     assert "unique_hybrid_token_zeta" in "".join(r.content for r in rows)
@@ -800,14 +767,13 @@ async def test_search_multiple_namespaces_hybrid_rrf_per_namespace(
         document_name="b.txt",
         metadata=_upload_metadata(company_id),
     )
-    sf = rag_provider_pgvector._session_factory
-    rows_a = await _vector_document_rows_ordered(sf, ns_name, da.document_id, company_id)
-    rows_b = await _vector_document_rows_ordered(sf, ns_name_2, db.document_id, company_id)
+    rows_a = await VectorDocument.chunks_for_document(ns_name, da.document_id)
+    rows_b = await VectorDocument.chunks_for_document(ns_name_2, db.document_id)
     assert len(rows_a) == da.metadata["total_chunks"]
     assert len(rows_b) == db.metadata["total_chunks"]
-    for r in await _vector_document_rows_ordered(sf, ns_name, da.document_id, company_id):
+    for r in await VectorDocument.chunks_for_document(ns_name, da.document_id):
         assert r.namespace_id == ns_name and r.company_id == company_id
-    for r in await _vector_document_rows_ordered(sf, ns_name_2, db.document_id, company_id):
+    for r in await VectorDocument.chunks_for_document(ns_name_2, db.document_id):
         assert r.namespace_id == ns_name_2 and r.company_id == company_id
 
     out = await rag_provider_pgvector.search_multiple_namespaces(
@@ -868,7 +834,6 @@ async def test_provider_name(rag_provider_pgvector):
 
 
 async def _insert_vector_row(
-    session_factory,
     *,
     id_: str,
     namespace_id: str,
@@ -877,21 +842,17 @@ async def _insert_vector_row(
     embedding_model: str | None,
 ) -> None:
     """Прямая вставка строки в ``vector_documents`` (без embedding) для тестов reembed."""
-    async with session_factory() as session:
-        row = VectorDocument(
-            id=id_,
-            namespace_id=namespace_id,
-            company_id=company_id,
-            document_id=f"doc_{id_}",
-            document_name=f"doc_{id_}.txt",
-            content=content,
-            embedding=None,
-            embedding_model=embedding_model,
-            chunk_index=0,
-            total_chunks=1,
-        )
-        session.add(row)
-        await session.commit()
+    now = datetime.now(timezone.utc)
+    _ = await execute_raw(
+        """
+        INSERT INTO vector_documents (
+            id, namespace_id, company_id, document_id, document_name, content,
+            embedding_model, chunk_index, total_chunks, metadata, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 1, '{}'::jsonb, $8, $8)
+        """,
+        [id_, namespace_id, company_id, f"doc_{id_}", f"doc_{id_}.txt", content, embedding_model, now],
+        using="rag",
+    )
 
 
 async def _stale_chunks_for_company(
@@ -919,19 +880,18 @@ async def test_fetch_stale_chunks_includes_only_non_null_company(
     и пустую строку; берёт только stale (``embedding_model IS NULL`` или != target).
     Доп. проверка: orphan-строки не появляются в общей выборке вообще.
     """
-    sf = rag_provider_pgvector._session_factory
     target = "target/model-1"
 
-    await _insert_vector_row(sf, id_=f"r1_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r1_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="ok stale",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"r2_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r2_{rag_company_id}", namespace_id=ns_name,
                              company_id=None, content="orphan null",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"r3_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r3_{rag_company_id}", namespace_id=ns_name,
                              company_id="", content="orphan empty",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"r4_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r4_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="not stale",
                              embedding_model=target)
 
@@ -957,12 +917,11 @@ async def test_fetch_stale_chunks_includes_only_non_null_company(
 async def test_fetch_stale_chunks_skips_empty_content(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
-    sf = rag_provider_pgvector._session_factory
     target = "target/model-2"
-    await _insert_vector_row(sf, id_=f"r1_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r1_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"r2_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r2_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="kept",
                              embedding_model=None)
     own = await _stale_chunks_for_company(
@@ -979,9 +938,8 @@ async def test_fetch_stale_chunks_takes_rows_with_other_embedding_model(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
     """Чанки с моделью != target тоже считаются stale."""
-    sf = rag_provider_pgvector._session_factory
     target = "target/model-new"
-    await _insert_vector_row(sf, id_=f"r_old_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"r_old_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="legacy chunk",
                              embedding_model="target/model-old")
     own = await _stale_chunks_for_company(
@@ -1008,24 +966,24 @@ async def test_fetch_stale_chunks_rejects_zero_limit(rag_provider_pgvector):
 # сходимость достигаем повторными batch-вызовами (семантика maintenance-тика).
 
 
-async def _count_orphan_rows_for_suffix(session_factory, suffix: str) -> int:
-    async with session_factory() as session:
-        result = await session.execute(
-            select(VectorDocument.id).where(
-                VectorDocument.id.like(f"orphan_%_{suffix}"),
-                or_(
-                    VectorDocument.company_id.is_(None),
-                    VectorDocument.company_id == "",
-                ),
-            )
-        )
-        return len(result.all())
+async def _count_orphan_rows_for_suffix(suffix: str) -> int:
+    rows = await execute_raw(
+        """
+        SELECT id
+        FROM vector_documents
+        WHERE id LIKE $1
+          AND (company_id IS NULL OR company_id = '')
+        """,
+        [f"orphan_%_{suffix}"],
+        using="rag",
+    )
+    return len(rows)
 
 
-async def _delete_orphans_until_suffix_gone(provider, session_factory, suffix: str) -> None:
+async def _delete_orphans_until_suffix_gone(provider, suffix: str) -> None:
     """Повторяет глобальный batch-delete, пока собственные orphan-строки не исчезнут."""
     for _ in range(200):
-        if await _count_orphan_rows_for_suffix(session_factory, suffix) == 0:
+        if await _count_orphan_rows_for_suffix(suffix) == 0:
             return
         _ = await provider.delete_orphan_company_chunks(limit=1000)
     raise AssertionError(f"orphan rows with suffix {suffix} were not deleted after 200 batches")
@@ -1036,28 +994,24 @@ async def test_delete_orphan_company_chunks_removes_null_and_empty(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
     """Удаляет только строки с NULL или пустым ``company_id``, не трогает остальные."""
-    sf = rag_provider_pgvector._session_factory
-    await _insert_vector_row(sf, id_=f"keep_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"keep_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="keep me",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"orphan_null_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"orphan_null_{rag_company_id}", namespace_id=ns_name,
                              company_id=None, content="drop null",
                              embedding_model=None)
-    await _insert_vector_row(sf, id_=f"orphan_empty_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"orphan_empty_{rag_company_id}", namespace_id=ns_name,
                              company_id="", content="drop empty",
                              embedding_model=None)
 
-    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, sf, rag_company_id)
+    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, rag_company_id)
 
-    async with sf() as session:
-        ids_left = {
-            row[0]
-            for row in (
-                await session.execute(
-                    select(VectorDocument.id).where(VectorDocument.id.like(f"%_{rag_company_id}"))
-                )
-            ).all()
-        }
+    left_rows = await execute_raw(
+        "SELECT id FROM vector_documents WHERE id LIKE $1",
+        [f"%_{rag_company_id}"],
+        using="rag",
+    )
+    ids_left = {str(require_json_object(row, "vector_document_id")["id"]) for row in left_rows}
     assert f"keep_{rag_company_id}" in ids_left
     assert f"orphan_null_{rag_company_id}" not in ids_left
     assert f"orphan_empty_{rag_company_id}" not in ids_left
@@ -1068,16 +1022,15 @@ async def test_delete_orphan_company_chunks_respects_limit(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
     """Limit — верхняя граница на batch; удаление собственных строк проверяем сходимостью."""
-    sf = rag_provider_pgvector._session_factory
     for i in range(3):
-        await _insert_vector_row(sf, id_=f"orphan_{i}_{rag_company_id}", namespace_id=ns_name,
+        await _insert_vector_row(id_=f"orphan_{i}_{rag_company_id}", namespace_id=ns_name,
                                  company_id=None, content=f"c{i}",
                                  embedding_model=None)
-    assert await _count_orphan_rows_for_suffix(sf, rag_company_id) == 3
+    assert await _count_orphan_rows_for_suffix(rag_company_id) == 3
     deleted_first = await rag_provider_pgvector.delete_orphan_company_chunks(limit=2)
     assert 0 <= deleted_first <= 2
-    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, sf, rag_company_id)
-    assert await _count_orphan_rows_for_suffix(sf, rag_company_id) == 0
+    await _delete_orphans_until_suffix_gone(rag_provider_pgvector, rag_company_id)
+    assert await _count_orphan_rows_for_suffix(rag_company_id) == 0
 
 
 @pytest.mark.asyncio
@@ -1085,18 +1038,16 @@ async def test_delete_orphan_company_chunks_keeps_owned_rows(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
     """Строки с company_id не считаются orphan и переживают cleanup."""
-    sf = rag_provider_pgvector._session_factory
-    await _insert_vector_row(sf, id_=f"only_keep_{rag_company_id}", namespace_id=ns_name,
+    await _insert_vector_row(id_=f"only_keep_{rag_company_id}", namespace_id=ns_name,
                              company_id=rag_company_id, content="keep",
                              embedding_model=None)
     _ = await rag_provider_pgvector.delete_orphan_company_chunks(limit=1000)
-    async with sf() as session:
-        row = (
-            await session.execute(
-                select(VectorDocument.id).where(VectorDocument.id == f"only_keep_{rag_company_id}")
-            )
-        ).first()
-    assert row is not None
+    kept = await execute_raw(
+        "SELECT id FROM vector_documents WHERE id = $1",
+        [f"only_keep_{rag_company_id}"],
+        using="rag",
+    )
+    assert kept
 
 
 @pytest.mark.asyncio
@@ -1112,9 +1063,8 @@ async def test_delete_orphan_company_chunks_rejects_zero_limit(rag_provider_pgve
 async def test_write_reembed_chunk_embeddings_updates_vector_and_model(
     rag_provider_pgvector, ns_name, rag_company_id
 ):
-    sf = rag_provider_pgvector._session_factory
     chunk_id = f"writeback_{rag_company_id}"
-    await _insert_vector_row(sf, id_=chunk_id, namespace_id=ns_name,
+    await _insert_vector_row(id_=chunk_id, namespace_id=ns_name,
                              company_id=rag_company_id, content="payload",
                              embedding_model=None)
 
@@ -1126,14 +1076,18 @@ async def test_write_reembed_chunk_embeddings_updates_vector_and_model(
     )
     assert written == 1
 
-    async with sf() as session:
-        row = (
-            await session.execute(
-                select(VectorDocument).where(VectorDocument.id == chunk_id)
-            )
-        ).scalar_one()
-    assert row.embedding_model == target
-    assert row.embedding is not None
+    stored = await execute_raw(
+        """
+        SELECT embedding_model, embedding IS NOT NULL AS has_embedding
+        FROM vector_documents
+        WHERE id = $1
+        """,
+        [chunk_id],
+        using="rag",
+    )
+    stored_row = require_json_object(stored[0], "reembed_chunk")
+    assert stored_row["embedding_model"] == target
+    assert stored_row["has_embedding"] is True
 
 
 @pytest.mark.asyncio

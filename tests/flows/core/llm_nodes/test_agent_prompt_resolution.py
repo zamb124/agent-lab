@@ -14,7 +14,6 @@ from datetime import datetime
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
@@ -36,14 +35,14 @@ def flow_config():
 
 
 @pytest.fixture
-def runner(flow_config):
+def runner(flow_config, di):
     """LlmNodeRunner для тестирования."""
     return LlmNodeRunner(
         node_config=flow_config,
         tools=[],
         llm=None,
         prompt="",
-        container=get_container(),  # pyright: ignore[reportArgumentType]
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,  # pyright: ignore[reportArgumentType]
     )
 
 

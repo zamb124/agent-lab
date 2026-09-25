@@ -5,7 +5,7 @@
 
 from fastapi import APIRouter, Response
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.api import (
     AttachmentAttachRequest,
     AttachmentAttachResponse,
@@ -29,12 +29,12 @@ router = APIRouter(tags=["Attachments"])
 async def attach_file(
     entity_id: str,
     body: AttachmentAttachRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> AttachmentAttachResponse:
     return await op_attachments_attach(
         CrmAttachmentsAttachPayload(entity_id=entity_id, file_id=body.file_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -44,12 +44,12 @@ async def attach_file(
 )
 async def list_attachments(
     entity_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> ListResponse[EntityAttachment]:
     return await op_attachments_list(
         CrmEntityIdPayload(entity_id=entity_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -57,11 +57,11 @@ async def list_attachments(
 async def delete_attachment(
     entity_id: str,
     attachment_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     await op_attachments_remove(
         CrmAttachmentsRemovePayload(entity_id=entity_id, attachment_id=attachment_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)

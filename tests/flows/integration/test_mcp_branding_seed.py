@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from apps.flows.src.container import get_container
-from apps.flows.src.container_contracts import as_flow_runtime_container
 from apps.flows.src.services.mcp_branding_seed import seed_mcp_branding_from_bundle
 from core.context import Context, clear_context, set_context
 from core.models.i18n_models import Language
@@ -70,15 +68,15 @@ async def test_mcp_branding_seed_catalog_generic_reuse_and_skip(
     tmp_path: Path,
     unique_id: str,
     app,
+    di,
 ):
     _ = app
     manifest_path = _write_test_bundle(tmp_path)
     catalog_id_a = f"seedGenA{unique_id}"
     catalog_id_b = f"seedGenB{unique_id}"
 
-    container = get_container()
-    runtime = as_flow_runtime_container(container)
-    branding_repo = container.mcp_server_branding_repository
+    runtime = di
+    branding_repo = di.mcp_server_branding_repository
 
     entry_a = build_verified_catalog_entry(
         catalog_id=catalog_id_a,
@@ -88,8 +86,8 @@ async def test_mcp_branding_seed_catalog_generic_reuse_and_skip(
         catalog_id=catalog_id_b,
         upstream_url="https://example.test/mcp-b",
     )
-    _ = await persist_catalog_entry(container=runtime, entry=entry_a)
-    _ = await persist_catalog_entry(container=runtime, entry=entry_b)
+    _ = await persist_catalog_entry(entry=entry_a)
+    _ = await persist_catalog_entry(entry=entry_b)
 
     for server_id in ("browser", "search", catalog_id_a, catalog_id_b):
         existing = await branding_repo.get(server_id)

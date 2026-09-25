@@ -1,50 +1,36 @@
 ---
-description: "AgentPlan — flat execution checklist in ExecutionState; tools write/get; UI platform-agent-plan"
+description: "AgentPlan: чеклист шагов в ExecutionState.agent_plan, tools agent_plan_write/get, skill agent-planning, UI. Не WorkItem. Читать при правке планирования llm_node"
 globs:
   - "core/agent_plan/**"
   - "apps/flows/tools/flows/agent_plan_tools.py"
   - "apps/flows/bundles/_seed/agent_skills/agent-planning/**"
   - "core/frontend/static/lib/components/platform-agent-plan.js"
-  - "core/frontend/static/lib/flow-ui/catalog/**"
 alwaysApply: false
 ---
+
 # AgentPlan
 
-Structured flat checklist for multi-step `llm_node` runs. **Not** WorkItem, **not** `reason.plan` prose.
+Плоский чеклист микро-шагов одного выполнения `llm_node`. Долговременная назначаемая работа — `WorkItem` (→ `worktracker.mdc`).
 
-## Model
+## Модель
 
-- `core/agent_plan/models.py`: `AgentPlan`, `AgentPlanStep`, `AgentPlanStepStatus`
-- Storage: **`ExecutionState.agent_plan: AgentPlan | None`** (system / frozen field; tools may overwrite)
-- Ids: `agent_plan_id`, `step_id` (tool args use `id` → mapped to `step_id`)
-- Statuses: `pending` | `in_progress` | `completed` | `need_help` | `failed` (at most one `in_progress`)
+- `AgentPlan`, `AgentPlanStep`, `AgentPlanStepStatus` (`core/agent_plan/models.py`); ids — `agent_plan_id`, `step_id`.
+- Хранение — `ExecutionState.agent_plan: AgentPlan | None` (системное поле, пишут только tools).
+- Статусы шага: `pending`, `in_progress`, `completed`, `need_help`, `failed`; `in_progress` — не больше одного.
 
-## Tools
+## Инварианты
 
-| Tool | Behavior |
-|---|---|
-| `agent_plan_write` | Full replace of `state.agent_plan` from `steps[]`; returns `{ agent_plan_id, plan, blocks: [{ type: agent_plan, plan }] }` |
-| `agent_plan_get` | Read current plan; `raise` if missing |
+1. `agent_plan_write` полностью заменяет план из `steps[]` (аргумент `id` → `step_id`), `agent_plan_id` сохраняет сервер; возвращает `{agent_plan_id, plan, blocks}`.
+2. `agent_plan_get` читает текущий план; плана нет — `raise`.
+3. Merge и patch плана нет.
+4. Tools подключаются skill `agent-planning` (`tool_refs` write + get, child `platform-workspace`), не standing tools.
+5. UI — `<platform-agent-plan .plan=${...}>`, i18n `platform.agent_plan.*` ru/en.
 
-No merge/patch. No `agent_plan_id` in LLM args (server keeps id across overwrites).
+## Запреты
 
-Builtin specs: `apps/flows/tools/flows/agent_plan_tools.py` + `builtin_specs.py`.
+1. Хранение плана строками `WorkItem`; `todo` как имя сущности.
+2. `agent_plan_id` в аргументах LLM.
 
-## Skill
+## Гейты
 
-Seed: `apps/flows/bundles/_seed/agent_skills/agent-planning/` (`tool_refs`: write + get).  
-Child of `platform-workspace`. Attach/load on any `llm_node` — do **not** put write/get in standing tools by default.
-
-## UI
-
-- Core: `<platform-agent-plan .plan=${...}>` (`core/frontend/static/lib/components/platform-agent-plan.js`)
-- Flow UI catalog: AgentPlan surface/component renders the same core host
-- i18n: `platform.agent_plan.*` (ru/en)
-
-## Boundaries
-
-| Use AgentPlan | Use WorkItem |
-|---|---|
-| Micro-steps of a run | Durable assignable work / HITL / boards |
-
-Worktracker detail embed / promote — future bridge; do not store plan as WorkItem rows.
+- `scripts/check_tool_contracts.py` (`make lint`) — контракт builtin tools `agent_plan_*`.

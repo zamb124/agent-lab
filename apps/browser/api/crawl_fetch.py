@@ -12,7 +12,7 @@ from playwright._impl._errors import is_target_closed_error
 from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from apps.browser.dependencies import ContainerDep
+from apps.browser.di import Di
 from apps.browser.models.types import (
     BrowserAcquireRequest,
     BrowserFetchRequest,
@@ -47,12 +47,12 @@ _crawl_fetch_inflight_semaphore: asyncio.Semaphore | None = None
 _crawl_fetch_inflight_limit: int | None = None
 
 
-async def _require_company_view_when_user_context(container: ContainerDep) -> None:
+async def _require_company_view_when_user_context(di: Di) -> None:
     context = get_context()
     if context is None or context.active_company is None:
         return
     company_id = context.active_company.company_id
-    await container.authz_service.require_can_view(AuthzObject.company(company_id))
+    await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
 def _crawl_fetch_semaphore(max_inflight: int) -> asyncio.Semaphore:
@@ -85,10 +85,10 @@ async def _post_navigate_crawl_signals(page: BrowserPage) -> None:
 @router.post("/fetch", response_model=BrowserCrawlFetchResponse)
 async def crawl_fetch(
     body: BrowserCrawlFetchRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> BrowserCrawlFetchResponse:
-    await _require_company_view_when_user_context(container)
-    runtime = container.browser_runtime
+    await _require_company_view_when_user_context(di)
+    runtime = di.browser_runtime
     settings = runtime.settings
     semaphore = _crawl_fetch_semaphore(settings.crawl_fetch_max_inflight)
     try:

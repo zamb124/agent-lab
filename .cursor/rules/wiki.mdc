@@ -1,123 +1,70 @@
 ---
-description: Wiki — база знаний платформы (apps/wiki, порт 8023, БД platform_wiki). Дерево страниц внутри namespace, блочный редактор ProseMirror, лексический и смысловой поиск, доступ и публичные ссылки
+description: "Wiki (apps/wiki): дерево WikiPage, схема ProseMirror и markdown, доступ и публичный сайт, RAG-индекс, UI, tools Lara. Читать при правке apps/wiki"
+globs:
+  - "apps/wiki/**"
+  - "core/clients/wiki_client.py"
+  - "apps/flows/tools/wiki/**"
+  - "tests/wiki/**"
 alwaysApply: false
 ---
-# Wiki — база знаний платформы
 
-Сервис **wiki** (порт 8023, БД `platform_wiki`, префикс REST `/wiki/api/v1/`, SPA `/wiki`). Страницы живут внутри рабочего пространства компании и связаны в дерево.
+# Wiki
 
-Команды с сессией — `WIKI_OPERATIONS` / `op_*` (`apps/wiki/realtime/`): REST и Centrifugo RPC `platform.event` зовут одну функцию. Публичный сайт `/public/*` и выгрузка markdown-файла остаются HTTP. Namespace на WS — `PlatformEvent.meta.namespace` → `Context.active_namespace`.
-
-Каноническое имя сущности — **`WikiPage` / `wiki_page_id`**. `document_id` занят RAG, `file_id` — платформенным файлом; страница базы знаний ими не называется.
-
-## Границы запроса
-
-Компания, пользователь и пространство — `core.request_scope.require_namespace` (имя из `Context.active_namespace`: HTTP `X-Platform-Namespace`, WS `PlatformEvent.meta.namespace`). Несуществующее пространство — ошибка, не молчаливый уход в `default`. Аноним (`user_id == "anonymous"`) — 403. В `op_*` `_scope` после `require_namespace` делает Check `require_can_view(platform_namespace)`. Публичные маршруты `/public/*` — без этой границы. Страница на чтение — `WikiService.require_viewable_page`, ответ с `can_edit`/`can_admin` — `WikiService.page_response`.
-
-UI обязан слать заголовок сам: фабрики используют `platformNamespaceHeader(ctx)` из `@platform/lib/utils/platform-namespace-header.js`.
+База знаний компании: дерево страниц внутри platform `Namespace` (`company_workspace`), блочный редактор ProseMirror, лексический и смысловой поиск. REST — `/wiki/api/v1/`, SPA — `/wiki`.
 
 ## Модель
 
-| Сущность | Каноническое имя | Заметки |
-|---|---|---|
-| Страница | `wiki_page_id`, `WikiPage` | `content` (ProseMirror) — источник правды; `text_markdown` производный, его пишет только `WikiService`. `root_page_id` и `depth` денормализованы для дешёвых запросов по разделу и фильтров RAG, пересчитываются при перемещении |
-| Узел дерева | `WikiPageSummary` | Без содержимого: дерево пространства может быть большим |
-| Версия | `wiki_revision_id`, `WikiRevisionSummary` | Список истории — без содержимого |
-| Комментарий | `wiki_comment_id`, `WikiComment` | `anchor_text` — процитированный фрагмент: позиции ProseMirror смещаются при правках. Удаление отсутствующего комментария — `not_found` |
-| Пространство | `namespace`, `Namespace` | Только `kind=company_workspace` попадает в продуктовый список. `GET /namespaces` — `OffsetPage[Namespace]`, как у RAG/CRM/Office. Списки без пагинации — `ListResponse[T]` из `core/pagination` |
+- `WikiPage` (`wiki_page_id`, таблица `wiki_pages`): `namespace`, `parent_page_id`, `root_page_id`, `depth`, `position`, `title`, `icon`, `cover_url`, `content` (ProseMirror — источник правды), `text_markdown` (производный, пишет только `WikiService`), `company_visible`, `is_published`, `is_full_width`; `root_page_id` и `depth` пересчитываются при перемещении.
+- Узел дерева — `WikiPageSummary` без содержимого; версия — `wiki_revision_id` (`WikiRevisionSummary` без содержимого в списке); комментарий — `wiki_comment_id` (`WikiComment`, `anchor_text` — цитата, не позиция).
+- Имена `document_id` (RAG) и `file_id` (файл) для страницы запрещены.
+- Схема содержимого — `apps/wiki/content/schema.py` (`WIKI_NODES`); браузерная — генерируемый `core/frontend/static/assets/prosemirror/wiki-schema.json`.
 
-## Схема содержимого
+## Инварианты
 
-Источник правды — Python (`apps/wiki/content/schema.py`, `WIKI_NODES`). Браузерная схема генерируется в `core/frontend/static/assets/prosemirror/wiki-schema.json` скриптом `scripts/generate_wiki_prosemirror_schema.py` (гейт `--check`).
+1. Граница запроса: `require_namespace` (имя из `Context.active_namespace`: HTTP `X-Platform-Namespace` через `platformNamespaceHeader(ctx)`, WS `PlatformEvent.meta.namespace`) + Check `platform_namespace` viewer в `_scope`; несуществующее пространство — ошибка; аноним — 403.
+2. Порядок узлов схемы значим: `paragraph` сразу после `doc` (первый узел группы — заполнитель пустого контейнера).
+3. Новый узел или марка — вся цепочка в одном изменении: `schema.py` → регенерация JSON → `DOM_SPECS`/`MARK_DOM_SPECS` (`wiki-schema-builder.js`) → `markdown_serializer` → `markdown_parser` → команда и slash-пункт → стили → ключи `platform.editor.block.*` ru+en.
+4. Markdown (CommonMark 0.31 + GFM + callout/toggle `> [!TONE]`, сноски, формулы, упоминания `@[имя](user:id)`, `platform-file:`) конвертируется только в Python (`apps/wiki/content/`); UI markdown не разбирает.
+5. Разбор терпим, но не молчалив: `parse_markdown` → `WikiMarkdownParseResult(document, notices)`; сырой HTML — whitelist `markdown_html.py`, `<script>`/`<iframe>`/`<style>` отбрасываются с заметкой; упоминание без цели — `WikiMarkdownError` (400); `md → doc → md → md` стабилен.
+6. Front matter (`title`, `icon`, `cover_url`) — граница файла (`markdown_file.py`), в `document_to_markdown` и RAG его нет.
+7. Доступ — только OpenFGA `wiki_page` через `WikiAccessService` (tuples) → `authorization.mdc`: `owner` при создании, `company_viewer` при `company_visible=true` (не каскадирует), `viewer`/`editor` каскадируют через `parent`; `can_edit`/`can_admin` ответа — всегда из `AuthzService`.
+8. `company_visible` меняет только `PATCH /pages/{id}/access/company-visible`; участники — только при `company_visible=false`, включение видимости удаляет участников; дочерняя страница копирует `company_visible` родителя при создании.
+9. Удаление страницы снимает все её tuples (`sync_pages_deleted`); корзина закрыта только `_scope`; восстановление пересобирает tuples по флагам.
+10. Публичный сайт: `link_token` на корне поддерева (в БД — SHA-256, сырой URL известен один раз, дальше — только перевыпуск); корень отдаётся при `link_enabled` и `is_published`, ветка обрезается на первом неопубликованном; URL — `{origin}/wiki/s/{raw_token}` от `build_service_base_url(request)`; `WikiLinkPermission` — `viewer`/`editor`, публичный API только читает.
+11. Медиа публичного ответа переписываются на `/wiki/api/v1/public/pages/{token}/files/{file_id}` (`public_media.py`) → `files.mdc` § Исключения.
+12. RAG: общие страницы — namespace пространства, ограниченные — `wiki-restricted-{namespace}` (`kind=technical`, создаётся `NamespaceService.get_or_create` перед первой записью); смысловой поиск идёт в ограниченный namespace только при праве; до регистрации слоя wiki к нему не обращается; 404 при удалении индекса после успешного Check — штатный исход. Метаданные — `apps/wiki/services/rag_metadata.py`.
 
-**Порядок узлов значим и не сортируется.** ProseMirror берёт первый узел группы как заполнитель пустого контейнера: при алфавитной сортировке первым блоком становится `blockquote` (`content: block+`), и авто-заполнение ячейки таблицы уходит в бесконечную рекурсию. `paragraph` идёт сразу после `doc`.
+## Контракты
 
-Атрибуты — скаляры (`string`/`int`/`float`/`bool`), кроме `colwidth` у `table_cell`/`table_header`: в prosemirror-tables это `number[] | null` (`WikiAttrKind.INT_LIST`). Табличные узлы в браузере собирает `pm.tableNodes(...)`, а не ручной JSON attrs.
+- Команды — `WIKI_OPERATIONS` (`apps/wiki/realtime/`), DI — `WikiDi` (`wiki_service`); HTTP без команды — `/public/*` и выгрузка markdown-файла.
+- Markdown: `GET /pages/{id}/markdown` (JSON без шапки), `GET /pages/{id}/markdown/file`, `POST /pages/import/markdown`, `POST /pages/{id}/import/markdown`, `POST /pages/markdown/parse`.
+- Списки — `OffsetPage[Namespace]` для пространств, `ListResponse[T]` без пагинации.
 
-Enum-поля моделей наследуют `WikiBaseModel` (`use_enum_values=False`) — иначе перечисления превращались бы в строки и ломали сравнения по типу.
+## Интеграции
 
-Добавление узла или марки — цепочка целиком, иначе редактор не поднимется или упадёт первое же сохранение: `schema.py` → регенерация JSON → `DOM_SPECS`/`MARK_DOM_SPECS` в `wiki-schema-builder.js` → ветка в `markdown_serializer` → разбор в `markdown_parser` → команда и slash-пункт в `wiki-editor-plugins.js` → стили в `prosemirror.css` → ключи `platform.editor.block.*` в ru+en. Полноту сериализации держит `tests/wiki/test_wiki_markdown_coverage.py`: каждый узел схемы, кроме `BLOCK_NODES_WITHOUT_MARKDOWN`, обязан иметь ветку.
-
-## Markdown
-
-Диалект — CommonMark 0.31 + GFM + то, что де-факто понимает GitHub. Конвертация живёт **только в Python** (`apps/wiki/content/`): схема там же, и вторая реализация в браузере разошлась бы с ней. UI markdown не разбирает и не собирает — ходит в ту же `op_*` через WS RPC и REST.
-
-- Поддержано в обе стороны: заголовки h1–h6, абзацы, цитаты, fenced и отступный код с языком, списки (маркированные, нумерованные со `start`, задачи, вложенные), таблицы с выравниванием, разделители, изображения, ссылки, автоссылки (linkify), `code`, `strong`, `em`, `strike`, `==highlight==`, сноски `[^label]`, формулы `$...$` и `$$...$$`, упоминания `@[имя](user:id)`, карточки файлов `platform-file:`, callout и toggle в синтаксисе `> [!TONE]`.
-- **Разбор терпим, но не молчалив.** `parse_markdown` возвращает `WikiMarkdownParseResult(document, notices)`. Сырой HTML переводится в узлы по whitelist (`markdown_html.py`): `<br>`, `<b>`, `<i>`, `<s>`, `<code>`, `<mark>`, `<a>`, `<img>`, `<p>`, `<h1>..<h6>`, `<ul>/<ol>/<li>`, `<pre>`, `<hr>`, `<table>`, `<blockquote>`, `<details>/<summary>` → toggle. Обёртки вроде `<div>` разворачиваются, `<script>`/`<iframe>`/`<style>` отбрасываются с содержимым. Всё это попадает в `notices` — молча терять текст пользователя нельзя.
-- `markdown_to_document` — та же реализация без отчёта, для вызовов, которым некуда его показать (создание и правка страницы по markdown, в том числе агентами). Заметки там пишет в лог сервис.
-- Фатальным остаётся только сломанный документ: упоминание без цели даёт `WikiMarkdownError` и 400.
-- `image` и `platform_file` в схеме блочные, поэтому абзац «текст ![картинка] текст» разбивается на блоки в исходном порядке с заметкой `image_extracted`.
-- Определения сносок сериализуются в конец файла: определение посреди текста markdown не прочитает как отдельный блок.
-- Front matter — граница файла, а не содержимое (`markdown_file.py`). Импорт берёт из шапки `title`, `icon`, `cover_url`, экспорт их туда пишет. В `document_to_markdown` шапки нет: тот же текст идёт в `text_markdown` и в RAG.
-- Маршруты: `GET /pages/{id}/markdown` (JSON, тело без шапки — для агентов), `GET /pages/{id}/markdown/file` (файл с шапкой и `Content-Disposition`), `POST /pages/import/markdown` (новая страница), `POST /pages/{id}/import/markdown` (замена содержимого), `POST /pages/markdown/parse` (разбор без записи — для вставки в редактор).
-- Гарантия устойчивости: `md → doc → md → md` не меняется. Корпус реальных файлов — `tests/wiki/fixtures/markdown/`, проверки в `tests/wiki/test_wiki_markdown_corpus.py`.
-- Вне схемы и потому в заметках: списки определений, `<u>`, `<sup>`, `<sub>`. Формулы хранятся точно, но показываются моноширинно — вёрстки TeX в редакторе нет.
-
-## Доступ
-
-Единственный PDP — **OpenFGA** (`AuthzService` через `WikiAccessService`, `apps/wiki/services/wiki_access_service.py`; тип `wiki_page` в `core/authz/model.fga`). SQL-поля `visibility`/`permission` удалены; wire-контракт — `company_visible: bool` + members `{user_id, relation}`.
-
-| Relation | Как хранится | Смысл |
-|---|---|---|
-| `owner` | `[user]`, ставится при создании (`sync_page_created`) | `can_admin`; отдельно admin-участника добавлять не нужно |
-| `company` | `[company]`, tenancy, всегда при create | сам доступ не даёт |
-| `company_viewer` | `[company#member]`, **прямой (не каскадирующий)** | `company_visible=true` даёт всей компании `can_view` (не `can_edit`); НЕ наследуется через `parent` |
-| `parent` | `[wiki_page]` TTU | `viewer`/`editor` каскадируют вниз по поддереву через `viewer from parent` / `editor from parent` |
-| `viewer` / `editor` | `[user]` явные tuples на странице | Участники, видны в `GET /pages/{id}/access.members` как `{user_id, relation}` |
-
-- `company_visible` — прямой флаг страницы, не производное поле и не наследуется в FGA. Новая дочерняя страница **снимает снимок** `company_visible` родителя на момент создания (`create_page`), но дальше живёт независимо: изменение родителя не переписывает существующих потомков.
-- `PATCH /pages/{id}/access/company-visible` `{company_visible}` — единственный способ переключить видимость. Участников (`POST/DELETE …/access/members`, `relation: viewer|editor`) можно добавлять только при `company_visible=false` (400 иначе); включение `company_visible=true` обратно **удаляет всех участников** (`replace_members`/`clear_members`).
-- Права публичной ссылки — отдельная ось `WikiLinkPermission` (`viewer | editor`), не связана с FGA member relations. Обе роли на публичном API сейчас read-only (`/public/*` без write); `editor` зарезервирован для будущих публичных мутаций, не legacy `comment`/`view`.
-- `inherited_from_page_id` в `GET /pages/{id}/access` — ближайший предок (включая себя), у которого `company_visible=false`; поле только для UI дерева (не PDP-решение): `company_viewer` не каскадирует, поэтому страница может формально остаться видимой (свой `company_visible=true`), даже если предок выше по дереву ограничен позже.
-- Владелец получает `can_admin`/`can_edit`/`can_view` через `owner` сразу при создании. `WikiPageResponse.can_edit` / `can_admin` всегда из `AuthzService` (GET и mutating POST/PUT/PATCH). Удаление страницы (`delete_page`) зачищает **все** FGA-tuples страницы (`sync_pages_deleted`), поэтому корзина (`GET /pages/deleted`) не фильтруется по FGA-видимости — доступ к ней даёт только `_scope` (`require_namespace` + `platform_namespace` viewer), как в Documents. Восстановление (`restore_page`) пересобирает `owner`/`parent`/`company` tenancy и `company_viewer` по флагу `company_visible`.
-- Публичная ссылка (`link_token`) живёт на корне сайта: анонимное чтение всего опубликованного поддерева через `/wiki/api/v1/public/pages/{link_token}` и SPA `/wiki/s/:token` (+ `/wiki/s/:token/p/:pageId` для потомка). User-facing URL — `{origin}/wiki/s/{raw_token}`, где `origin` = `build_service_base_url(request)` (Host / `X-Forwarded-*` браузера). `get_service_url("frontend")` / `SERVER__FRONTEND_SERVICE_URL` — только межсервисный internal URL, в публичную ссылку не подставлять. В БД лежит только SHA-256 хеш, поэтому сырой URL известен ровно один раз — сразу после выпуска. Позже ссылку можно только перевыпустить, и прежняя перестаёт работать; это свойство модели, а не пробел в UI. В модалке `wiki.page_access` действия Copy link / Open site — `platform-button icon-only` (`copy`, `external-link`) рядом с URL, не крупные текстовые кнопки.
-- Публичный корень отдаётся только при `link_enabled` **и** `is_published`: включённая ссылка на черновик → 404. Условие собрано одним запросом в `WikiRepository.get_public_page_by_link_token`, сервисная точка входа — `WikiService.get_public_page`.
-- Поддерево: `list_public_subtree` / `get_public_site_tree` / `get_public_site_page` — обход как у `list_subtree`, но ветка обрезается на первом `is_published=False`. Страница вне опубликованного поддерева → 404. Роуты: `GET .../tree`, `GET .../pages/{wiki_page_id}`, `GET .../pages/{wiki_page_id}/markdown`, `GET .../files/{file_id}`.
-- Медиа: файлы платформы приватны, поэтому публичный ответ переписывает `image.src` (и обложку) на `/wiki/api/v1/public/pages/{token}/files/{file_id}` через `apps/wiki/content/public_media.py`. Роут файла проверяет, что `file_id` встречается в контенте страницы опубликованного поддерева, и стримит через `files_service`. Чип `platform_file` не переписывается в JSON — базу ссылки подставляет редактор (`file-url-base`).
-- Публичная страница ставит `document.title` из заголовка. OG-разметки и индексации нет намеренно: ссылка секретная, wiki отдаётся под `noindex`, а без SSR краулер увидит пустой каркас.
-- Оси «только участники пространства» в модели нет: namespace — граница данных, а не уровень доступа.
-
-## RAG
-
-Страницы индексируются в общий RAG с богатыми метаданными (`apps/wiki/services/rag_metadata.py`): пространство, раздел, глубина, автор, публикация, ограниченность. Приватность обеспечивается **фильтрами и раздельными namespace**, а не постфильтрацией результатов:
-
-- общие страницы — namespace пространства;
-- ограниченные — отдельный `wiki-restricted-{namespace}` (`kind=technical`), который создаётся лениво через `NamespaceService.get_or_create` перед первой записью (persist → OpenFGA). RAG HTTP `POST /namespaces` для этого слоя не используется: он требует `company_admin` и дублирует registry. Пока слоя нет в registry, wiki не вызывает RAG DELETE/search по нему — Check-first на незарегистрированном namespace даёт **403**. Swallow 403 запрещён.
-- смысловой поиск обращается к ограниченному namespace только когда у пользователя есть на это право.
-
-Удаление индекса идемпотентно: отсутствие записи (**404** от RAG после успешного Check) — штатный исход при переносе между пространствами.
+- Файлы страницы (обложка, image, file) — `platform.file_picker` + `platform/file_create` с `FileSourceKind.WIKI_PAGE` (`buildWikiPageFileCreateSpecJson`), browse — фабрики `office/*`; BFF-клона нет.
+- Lara: Tier-1 skill `wiki-platform`; builtins `wiki_*` (`apps/flows/tools/wiki/wiki_tools.py`) — тонкие обёртки над `WikiClient`; тело для агента — markdown; ограничение — `wiki_set_company_visible(false)`, затем `wiki_set_member`; code-нода — capability `wiki.*`.
 
 ## UI
 
-SPA `/wiki`, `defaultI18nNamespace = 'wiki'`, ассистент `serviceId/branchId = wiki`.
+1. Дерево — общий `platform-tree`; раскладка — `platform-resizable-split`, на мобиле bottom-sheet `wiki.tree` и `wiki.outline`; контент — `platform-island` со скроллом в страницах.
+2. Страница `wiki-page-view`: обложка, иконка, заголовок, `platform-rich-editor`; крошки — `.trail` по `parent_page_id`; правая панель `wiki-page-panel` (оглавление, обратные ссылки, комментарии, история) грузит вкладки лениво.
+3. Сохранение отложенное (900 мс) с досохранением при уходе; неудача оставляет правки в pending.
+4. Маршруты: `wiki_home`, `wiki_page`, `wiki_page_history`, `wiki_search`, `wiki_public_preview`, `wiki_public_page`; i18n-бандл `wiki`.
 
-- Раскладка — `platform-resizable-split` (ширина дерева в `platform:wiki:split.tree`), на мобиле дерево уезжает в bottom-sheet `wiki.tree`, правая панель — в `wiki.outline`.
-- Сворачивание дерева: `wiki-sidebar` читает `readShellSidebarCollapsed()` в конструкторе и переизлучает `collapse-change`; `wiki-app` переводит split в `collapsed`, и тот берёт ширину из `collapsed-size` (72px), не затирая сохранённую пользовательскую ширину и убирая ручку. Свёрнутое состояние переживает перезагрузку, как в остальных сервисах. Блок Recent в сайдбаре сворачивается отдельно (`platform:wiki:sidebar.recent` → `{ collapsed }`); заголовок — кнопка с шевроном.
-- Контент справа лежит в `platform-island` (`padding="none"`, `content-no-scroll`) как в остальных сервисах: скролл держат сами страницы. Публичный маршрут `wiki_public_preview` — без острова и без сайдбара.
-- Дерево страниц — общий `platform-tree` (перетаскивание, контекстное меню, клавиатура). Отдельного дерева у сервиса нет. У узла с детьми шеврон (twisty) всегда видим и контрастный: клик по шеврону раскрывает/сворачивает, клик по строке открывает страницу.
-- Страница — `wiki-page-view`: обложка, иконка через `platform-emoji-picker`, заголовок как первый элемент документа (`:host input.title-input` — иначе `:host input { font: inherit }` из baseStyles съедает font-size), `platform-rich-editor` с подсказкой `platform:editor.placeholder`.
-- Медиа страницы (обложка, `/image`, `/file`) — только через модалку `platform.file_picker` и `platform/file_create` со `FileSourceKind.WIKI_PAGE` (`buildWikiPageFileCreateSpecJson`). Путь в Documents: `Wiki/{namespace}/{wiki_page_id}`. `window.prompt` и `platform_auxiliary` для wiki page media запрещены. Browse Documents из wiki — owner-фабрики `@platform` `office/catalogs_list`, `office/documents_list`, `office/documents_search` (`op_catalogs_list` / `op_documents_list` / `op_documents_search`). HTTP BFF-клона `wiki/*` нет. Обложка — `acceptMimePrefix: 'image/'`, `cover_url` = `/{segment}/api/v1/files/download/{file_id}` (обычно `/wiki/...`); на обложке overlay Change/Remove. Узел `platform_file` в редакторе — `.pm-file-attachment` + `openFile` (не голый download-chip).
-- Крошки страницы получают полный путь вложенности: `wiki-page-view` собирает `.trail` для `platform-breadcrumbs` из `wiki/pages` по `parent_page_id` от текущей страницы к корню.
-- В шапке вместо голого статуса — «Изменено ‹кто› ‹когда›» (`platform-user-chip` по `last_edited_by_user_id`); клик открывает вкладку истории.
-- Шапка (`.topbar`) — по всей ширине рабочей области и `position: sticky`, а не внутри колонки текста: путь начинается от левого края области, действия прижаты к правому. В `.paper` шапки нет.
-- Правая панель — `wiki-page-panel`, по умолчанию закрыта: она же даёт основной запас ширины текста. Вкладки (`WIKI_PANEL_TABS`) — оглавление, обратные ссылки, комментарии, история; переключение через `platform-segmented-control`, состояние `{ open, tab }` живёт в `platform:wiki:page.panel`. Данные вкладки грузятся лениво, по её открытию. На узком экране тот же компонент рендерится с атрибутом `embedded` внутри bottom-sheet `wiki.outline` — второго набора листов на каждую вкладку нет. Переход по оглавлению — `platform-rich-editor.scrollToPosition` через `nodeDOM(pos)` и scroll-контейнер `[data-wiki-page-scroll]` (не `domAtPos` + голый `scrollIntoView`).
-- История версий видна из панели: timeline с автором и временем, просмотр текста ревизии, «Восстановить», переход к полному сравнению на `wiki_page_history`.
-- Импорт и экспорт markdown — в меню страницы. Импорт заменяет содержимое, поэтому у непустой страницы спрашивает подтверждение; заметки о том, что не перенеслось, показывает модалка `wiki.import_report` (только когда они есть). Экспорт — обычная ссылка на файловый роут: выгрузка не состояние. Редактор принимает `.markdownParser` (разбор на сервере) и отдаёт наверх `markdown-file-drop` для брошенного `.md`; `Mod-Shift-v` вставляет буфер как markdown.
-- Боковые отступы `.paper` — ровно `--wiki-block-gutter` (4rem под кнопки 28px): в левой полосе стоят plus и grip редактора, правая держит колонку текста по центру. Второго отступа сверх него нет. Перестановка блоков — ручка вне contenteditable: `dragstart` выставляет `NodeSelection` + `view.dragging` (как встроенный DnD ProseMirror), drop/dropcursor работают штатно. Ширина колонки — `--wiki-page-max-width`, ширина панели — `--wiki-outline-width` (оба в `tokens.css`). Полноширинный режим — свойство страницы `is_full_width` (PATCH `wiki/page_properties`); переключатель — `platform-switch` в sticky-topbar страницы (`data-wiki-full-width`), не в меню «⋯»; в верстке `.paper[data-full-width]` снимает `max-width`.
-- Публичный сайт — `wiki-public-preview-page`: слева readonly `platform-tree` по `wiki/public_tree`, сверху sticky-шапка с крошками (`trail` → `wiki_public_page`), контент уважает `is_full_width`, на `≤767px` дерево в bottom-sheet `wiki.public_tree`.
-- Сохранение отложенное (900 мс) с досохранением при уходе со страницы; состояние показывает строка `.save-state`. Неудача сохранения резолвится в `null` (контракт `OpController`) — правки остаются в pending, `_page` не затирается.
-- Cmd+K — `platform-command-palette` с провайдером поверх `wiki/search`.
-- Маршруты: `wiki_home` (`''`), `wiki_page` (`p/:pageId`), `wiki_page_history` (`p/:pageId/history`), `wiki_search` (`search`), `wiki_public_preview` (`s/:token`), `wiki_public_page` (`s/:token/p/:pageId`, parent `wiki_public_preview`).
+## Запреты
 
-Wiki входит в `FACTORY_CANON_SERVICES` (`scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py`) — pages и modals ходят в состояние только через helpers `PlatformElement`, у каждой операции есть REST-зеркало.
+1. Вторая реализация markdown в браузере; молчаливая потеря текста при разборе.
+2. `is_public=True` для файлов wiki; OG-разметка и индексация публичного сайта.
+3. Swallow 403 от RAG; RAG HTTP `POST /namespaces` для ограниченного слоя.
+4. `window.prompt` и `platform_auxiliary` для медиа страницы.
 
-## Lara
+## Исключения
 
-Tier-1 skill `wiki-platform` (children `wiki-pages`, `wiki-access`, `wiki-discovery`). Builtins `wiki_*` в `apps/flows/tools/wiki/wiki_tools.py` — тонкие обёртки над `core.clients.wiki_client.WikiClient` (не прямой REST в теле тула). Eval / `code_node`: `await wiki.create_page(...)` через capability-gateway (`wiki.*`, `sdk_namespace="wiki"`). Тело страницы для агента — markdown (`wiki_get_markdown` / `wiki_update_markdown` / `wiki_import_markdown`), не ProseMirror JSON. Ограничение доступа — `wiki_set_company_visible(company_visible=false)` первым шагом, затем `wiki_set_member(relation=viewer|editor)`; снятие ограничения — `wiki_set_company_visible(company_visible=true)`. Публичная ссылка — `wiki_rotate_public_link` (raw URL один раз).
+- Исключение: пакет `apps/wiki/content/` (схема ProseMirror, markdown, публичные медиа) — чистые функции формата без базы и прав вне дерева `main.mdc` § Стандарт сервиса. `[без гейта]`
 
-## Тесты
+## Гейты
 
-- Backend: `tests/wiki/**` — реальная БД, реальный RAG, без моков (`pytest.mark.no_test_doubles`).
-- Схема: `tests/wiki/test_wiki_schema_parity.py` держит Python и сгенерированный JSON в согласии.
-- Markdown: `test_wiki_markdown_roundtrip.py` (конструкции), `test_wiki_markdown_corpus.py` (реальные файлы, устойчивость, заметки), `test_wiki_markdown_coverage.py` (полнота покрытия схемы), `test_wiki_markdown_api.py` (импорт, экспорт, разбор).
-- UI: `tests/frontend_core/browser/wiki/**`, e2e — `tests/ui/e2e/test_wiki_workspace.py` (порт 9023, фикстура `wiki_ui`, helpers `tests/ui/e2e/wiki_e2e_helpers.py`).
+- `scripts/generate_wiki_prosemirror_schema.py --check` + `tests/wiki/test_wiki_schema_parity.py` — Python ≡ JSON схемы.
+- `tests/wiki/test_wiki_markdown_coverage.py` (каждый узел, кроме `BLOCK_NODES_WITHOUT_MARKDOWN`), `test_wiki_markdown_corpus.py`, `test_wiki_markdown_roundtrip.py`.
+- `scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py` (`make check-events-canon`) — wiki в `FACTORY_CANON_SERVICES`; `tests/wiki/**` — реальная БД и RAG.

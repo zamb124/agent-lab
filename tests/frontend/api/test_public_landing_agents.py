@@ -7,7 +7,6 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.frontend.services.landing_demo_seed import (
     ensure_system_landing_demo_embeds,
@@ -19,19 +18,19 @@ from core.identity.embed_guest_turns import (
     EMBED_SESSION_ID_METADATA_KEY,
 )
 from core.models.context_models import Context
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
-from core.models.identity_models import SYSTEM_COMPANY_ID, User
+from core.models.embed_models import EmbedConfig, EmbedStatus
+from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from core.utils.tokens import get_token_service
 
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
 
 
 @pytest_asyncio.fixture
-async def system_landing_embed(frontend_container):
+async def system_landing_embed():
     """Виджет system с landing_visible для публичного API."""
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
-    admin_user = await frontend_container.user_repository.get(
+    admin_user = await User.get(
         "user_zambas124_yandex_ru_001",
     )
     user_for_ctx = (
@@ -56,6 +55,7 @@ async def system_landing_embed(frontend_container):
     embed_id = f"embed_landing_{uuid.uuid4().hex[:12]}"
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=SYSTEM_COMPANY_ID,
         name="Demo lawyer",
         flow_id="universal_agent",
         branch_id="default",
@@ -66,10 +66,7 @@ async def system_landing_embed(frontend_container):
         landing_sort_order=10,
         created_by="test",
     )
-    await frontend_container.embed_config_repository.set(config)
-    await frontend_container.embed_mapping_repository.set(
-        EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID)
-    )
+    await EmbedConfig.set(config)
     clear_context()
     yield embed_id, config
     set_context(
@@ -80,18 +77,17 @@ async def system_landing_embed(frontend_container):
             channel="test",
         )
     )
-    await frontend_container.embed_config_repository.delete(embed_id)
-    await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
+    await EmbedConfig.delete_by_id(embed_id)
     clear_context()
 
 
 @pytest_asyncio.fixture
-async def system_landing_embed_guest_capped(frontend_container, unique_id):
+async def system_landing_embed_guest_capped(di, unique_id):
     """Виджет system с landing_visible и лимитом гостевых сообщений (Redis в flows)."""
     _ = unique_id
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
-    admin_user = await frontend_container.user_repository.get(
+    admin_user = await User.get(
         "user_zambas124_yandex_ru_001",
     )
     user_for_ctx = (
@@ -113,7 +109,6 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
             channel="test",
         )
     )
-    flows_container = get_container()
     flow_id = f"landing_guest_cap_{uuid.uuid4().hex[:12]}"
     agent = FlowConfig(
         flow_id=flow_id,
@@ -131,8 +126,8 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
         },
         edges=[{"from_node": "main", "to_node": None}],
     )
-    await flows_container.flow_repository.set(agent)
-    await flows_container.flow_access_service.sync_flow_saved(
+    await FlowConfig.create_version(agent)
+    await di.flow_access_service.sync_flow_saved(
         agent,
         company_id=SYSTEM_COMPANY_ID,
         owner_user_id=user_for_ctx.user_id,
@@ -140,6 +135,7 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
     embed_id = f"embed_landing_cap_{uuid.uuid4().hex[:12]}"
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=SYSTEM_COMPANY_ID,
         name="Demo guest cap",
         flow_id=flow_id,
         branch_id="default",
@@ -151,10 +147,7 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
         guest_max_user_messages=5,
         created_by="test",
     )
-    await frontend_container.embed_config_repository.set(config)
-    await frontend_container.embed_mapping_repository.set(
-        EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID)
-    )
+    await EmbedConfig.set(config)
     clear_context()
     yield embed_id
     set_context(
@@ -165,24 +158,22 @@ async def system_landing_embed_guest_capped(frontend_container, unique_id):
             channel="test",
         )
     )
-    await frontend_container.embed_config_repository.delete(embed_id)
-    await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
-    await flows_container.flow_access_service.sync_flow_deleted(
+    await EmbedConfig.delete_by_id(embed_id)
+    await di.flow_access_service.sync_flow_deleted(
         flow_id, company_id=SYSTEM_COMPANY_ID, branch_ids=[]
     )
-    await flows_container.flow_repository.delete(flow_id)
+    await FlowConfig.delete_by_flow_id(flow_id)
     clear_context()
 
 
 @pytest.mark.asyncio
 async def test_public_landing_agents_exposes_voice_flags(
     frontend_client: AsyncClient,
-    frontend_container,
     unique_id,
 ):
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
-    admin_user = await frontend_container.user_repository.get(
+    admin_user = await User.get(
         "user_zambas124_yandex_ru_001",
     )
     user_for_ctx = (
@@ -207,6 +198,7 @@ async def test_public_landing_agents_exposes_voice_flags(
     embed_id = f"embed_landing_voice_{unique_id}"
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=SYSTEM_COMPANY_ID,
         name="Voice demo",
         flow_id="lawyer",
         branch_id="default",
@@ -219,10 +211,7 @@ async def test_public_landing_agents_exposes_voice_flags(
         voice_enabled=True,
         voice_default_on=True,
     )
-    await frontend_container.embed_config_repository.set(config)
-    await frontend_container.embed_mapping_repository.set(
-        EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID)
-    )
+    await EmbedConfig.set(config)
     clear_context()
 
     r = await frontend_client.get("/frontend/api/public/landing-agents")
@@ -240,8 +229,7 @@ async def test_public_landing_agents_exposes_voice_flags(
             channel="test",
         )
     )
-    await frontend_container.embed_config_repository.delete(embed_id)
-    await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
+    await EmbedConfig.delete_by_id(embed_id)
     clear_context()
 
 
@@ -269,7 +257,6 @@ async def test_public_landing_agents_lists_visible_only(
 @pytest.mark.asyncio
 async def test_public_landing_session_mints_token(
     frontend_client: AsyncClient,
-    frontend_container,
     system_landing_embed,
 ):
     embed_id, _config = system_landing_embed
@@ -295,7 +282,7 @@ async def test_public_landing_session_mints_token(
     assert token_data.metadata["allowed_origin"] == "http://testserver"
     assert isinstance(token_data.metadata[EMBED_SESSION_ID_METADATA_KEY], str)
 
-    guest = await frontend_container.user_repository.get(token_data.user_id)
+    guest = await User.get(token_data.user_id)
     assert guest is not None
     assert guest.active_company_id == SYSTEM_COMPANY_ID
     assert guest.companies[SYSTEM_COMPANY_ID] == ["guest"]
@@ -320,11 +307,10 @@ async def test_public_landing_session_rejects_non_existent(
 @pytest.mark.asyncio
 async def test_public_landing_agents_seeds_demo_when_catalog_empty(
     frontend_client: AsyncClient,
-    frontend_container,
 ):
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
-    admin_user = await frontend_container.user_repository.get(
+    admin_user = await User.get(
         "user_zambas124_yandex_ru_001",
     )
     user_for_ctx = (
@@ -348,8 +334,7 @@ async def test_public_landing_agents_seeds_demo_when_catalog_empty(
     )
     try:
         for eid in landing_demo_embed_ids():
-            await frontend_container.embed_config_repository.delete(eid)
-            await frontend_container.embed_mapping_repository.delete_by_embed_id(eid)
+            await EmbedConfig.delete_by_id(eid)
     finally:
         clear_context()
 
@@ -360,21 +345,20 @@ async def test_public_landing_agents_seeds_demo_when_catalog_empty(
     flow_ids = {x["flow_id"] for x in body["items"]}
     assert "lawyer" in flow_ids
 
-    await ensure_system_landing_demo_embeds(frontend_container)
+    await ensure_system_landing_demo_embeds()
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(120, func_only=True)
 async def test_public_landing_agents_resolves_card_from_flow_store_url(
     frontend_client: AsyncClient,
-    frontend_container,
     app,
     unique_id,
 ):
     _ = app
-    company = await frontend_container.company_repository.get(SYSTEM_COMPANY_ID)
+    company = await Company.get(SYSTEM_COMPANY_ID)
     assert company is not None
-    admin_user = await frontend_container.user_repository.get(
+    admin_user = await User.get(
         "user_zambas124_yandex_ru_001",
     )
     user_for_ctx = (
@@ -399,6 +383,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
     embed_id = f"embed_landing_flow_card_{unique_id}"
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=SYSTEM_COMPANY_ID,
         name="Card from flow",
         flow_id="lawyer",
         branch_id="default",
@@ -409,10 +394,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
         landing_sort_order=5,
         created_by="test",
     )
-    await frontend_container.embed_config_repository.set(config)
-    await frontend_container.embed_mapping_repository.set(
-        EmbedMapping(embed_id=embed_id, company_id=SYSTEM_COMPANY_ID)
-    )
+    await EmbedConfig.set(config)
     clear_context()
 
     r = await frontend_client.get("/frontend/api/public/landing-agents")
@@ -430,8 +412,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
             channel="test",
         )
     )
-    await frontend_container.embed_config_repository.delete(embed_id)
-    await frontend_container.embed_mapping_repository.delete_by_embed_id(embed_id)
+    await EmbedConfig.delete_by_id(embed_id)
     clear_context()
 
 
@@ -440,7 +421,7 @@ async def test_public_landing_agents_resolves_card_from_flow_store_url(
 async def test_embed_guest_limit_on_public_landing_session(
     frontend_client: AsyncClient,
     flows_client: AsyncClient,
-    container,
+    di,
     system_landing_embed_guest_capped,
     unique_id,
 ):
@@ -506,4 +487,4 @@ async def test_embed_guest_limit_on_public_landing_session(
         assert "лимит" in err_body["error"]["message"].lower()
     finally:
         if key:
-            await container.redis_client.delete(key)
+            await di.redis_client.delete(key)

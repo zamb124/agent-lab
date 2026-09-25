@@ -322,7 +322,7 @@ def test_compute_platform_free_record_scores_skips_disabled_overlay() -> None:
 
 
 def test_compute_platform_free_record_scores_requires_catalog() -> None:
-    with pytest.raises(ValueError, match="отсутствует в каталоге"):
+    with pytest.raises(ValueError, match="is missing from the catalog"):
         compute_platform_free_record_scores(
             [
                 PlatformFreeModelRecord(

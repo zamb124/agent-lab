@@ -5,11 +5,15 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Collection
 from enum import Enum
-from typing import ClassVar, Literal, Self, cast
+from typing import ClassVar, Literal, Self, cast, override
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from oxyde import Field as DbField
+from oxyde import Q
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from core.context.context import get_context
 from core.integrations.mcp import (
     MCPDiscoveredTool,
     mcp_parameters_schema_hash,
@@ -18,6 +22,7 @@ from core.integrations.mcp import (
     validate_mcp_parameters_schema,
 )
 from core.models import StrictBaseModel
+from core.models.platform_model import CompanyScopedModel
 from core.types import JsonObject, JsonValue, require_json_object
 
 from .enums import CodeMode, ReactToolRole
@@ -25,57 +30,72 @@ from .enums import CodeMode, ReactToolRole
 ToolIndexMcpFilter = Literal["all", "exclude", "only"]
 
 
-class ToolReference(BaseModel):
-    """Инструмент с inline кодом"""
+class ToolReference(CompanyScopedModel):
+    """Инструмент компании. Таблица ``tools`` в базе flows."""
+
+    __database_alias__: ClassVar[str | None] = "flows"
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        json_schema_extra={"storage_prefix": "tool"},
         extra="forbid",
         use_enum_values=False,
     )
 
-    tool_id: str = Field(..., description="ID инструмента")
-    name: str | None = Field(
+    class Meta:
+        is_table: bool = True
+        table_name: str = "tools"
+        unique_together: list[tuple[str, str]] = [("company_id", "tool_id")]
+
+    tool_id: str = DbField(min_length=1, db_index=True, db_type="TEXT", description="ID инструмента")
+    company_id: str = DbField(default="", db_index=True)
+    tool_row_id: str = DbField(default="", db_pk=True, db_type="TEXT")
+    name: str | None = DbField(
         default=None,
+        db_type="TEXT",
         description="Подпись в UI (flows editor, модалки). Если не задана — title или tool_id.",
     )
-    title: str | None = Field(default=None, description="Название для отображения")
-    description: str | None = Field(default=None, description="Описание инструмента")
-    parameters_schema: JsonObject | None = Field(
+    title: str | None = DbField(default=None, db_type="TEXT", description="Название для отображения")
+    description: str | None = DbField(default=None, db_type="TEXT", description="Описание инструмента")
+    parameters_schema: JsonObject | None = DbField(
+        db_type="JSONB",
         default=None,
         description=(
             "Полная JSON Schema объекта параметров для LLM "
             "(type: object, properties, required, minLength, default, items и т.д.)."
         ),
     )
-    params: JsonObject = Field(default_factory=dict, description="Параметры инструмента")
-    resources: JsonObject = Field(
+    params: JsonObject = DbField(default_factory=dict, db_type="JSONB", description="Параметры инструмента")
+    resources: JsonObject = DbField(
+        db_type="JSONB",
         default_factory=dict,
         description="Декларативные ресурсы tool для runtime-политик",
     )
-    language: str = Field(default="python", description="Язык исполнения code tool")
-    entrypoint: str | None = Field(
+    language: str = DbField(default="python", db_type="TEXT", description="Язык исполнения code tool")
+    entrypoint: str | None = DbField(
+        db_type="TEXT",
         default=None,
         description="Имя entrypoint-функции code tool; None = первая функция в source",
     )
-    code: str | None = Field(default=None, description="Код инструмента")
+    code: str | None = DbField(default=None, db_type="TEXT", description="Код инструмента")
     permission: list[str] = Field(
         default_factory=list,
         description="Группы с доступом к tool. Пустой список = доступ для всех",
     )
-    input_mapping: JsonObject = Field(
+    input_mapping: JsonObject = DbField(
         default_factory=dict,
+        db_type="JSONB",
         description=(
             "Маппинг входов при открытии tool как ноды в редакторе / node-as-tool: "
             "target -> @state/@var или JSON-константа"
         ),
     )
-    output_mapping: dict[str, str] | None = Field(
+    output_mapping: dict[str, str] | None = DbField(
         default=None,
+        db_type="JSONB",
         description="Маппинг выходов tool-as-node в state; None = без remapping",
     )
-    state_mapping: JsonObject = Field(
+    state_mapping: JsonObject = DbField(
         default_factory=dict,
+        db_type="JSONB",
         description="Дополнительный state mapping tool-as-node (MCP/editor)",
     )
 
@@ -225,6 +245,118 @@ class ToolReference(BaseModel):
             return self
         _ = self.require_mcp_contract()
         return self
+
+    @classmethod
+    def row_id(cls, tool_id: str) -> str:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None or ctx.active_company.company_id == "":
+            raise ValueError("tool_id requires an active company")
+        company_id = ctx.active_company.company_id
+        if tool_id == "" or ":" in company_id:
+            raise ValueError("tool_id is required and company_id must not contain ':'")
+        return f"{len(company_id)}:{company_id}:{tool_id}"
+
+    @model_validator(mode="after")
+    def bind_company(self) -> Self:
+        ctx = get_context()
+        if ctx is None or ctx.active_company is None:
+            return self
+        company_id = ctx.active_company.company_id
+        if company_id == "":
+            raise ValueError("company_id is required")
+        if self.company_id == "":
+            self.company_id = company_id
+        elif self.company_id != company_id:
+            raise ValueError("company_id does not match the active company")
+        expected = type(self).row_id(self.tool_id)
+        if self.tool_row_id == "":
+            self.tool_row_id = expected
+        elif self.tool_row_id != expected:
+            raise ValueError("tool_row_id does not match company_id and tool_id")
+        return self
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        expected = type(self).row_id(self.tool_id)
+        if self.company_id == "" or self.tool_row_id != expected:
+            raise ValueError("tool_row_id does not match the active company")
+        _ = is_create, update_fields
+
+    @classmethod
+    async def list_in_tool_id_order(cls, *, limit: int, offset: int = 0) -> list[Self]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        if offset < 0:
+            raise ValueError("offset must be >= 0")
+        return await cls.objects.order_by("tool_id").limit(limit).offset(offset).all()
+
+    @classmethod
+    async def by_tool_ids(cls, tool_ids: list[str]) -> dict[str, Self]:
+        if len(tool_ids) == 0:
+            return {}
+        for tool_id in tool_ids:
+            if tool_id == "":
+                raise ValueError("tool_id is required")
+        rows = await cls.objects.filter(tool_id__in=tool_ids).all()
+        found: dict[str, Self] = {}
+        for row in rows:
+            if row.tool_id in found:
+                raise RuntimeError(f"tool_id {row.tool_id} has more than one row in the company")
+            found[row.tool_id] = row
+        return found
+
+    @classmethod
+    def _indexed(
+        cls,
+        *,
+        mcp: ToolIndexMcpFilter,
+        exclude_tool_ids: Collection[str] | None,
+    ):
+        query = cls.objects
+        if mcp == "only":
+            query = query.filter(_mcp_tools())
+        elif mcp == "exclude":
+            query = query.filter(~_mcp_tools())
+        if exclude_tool_ids:
+            query = query.exclude(tool_id__in=list(exclude_tool_ids))
+        return query.order_by("tool_id")
+
+    @classmethod
+    async def list_index(
+        cls,
+        *,
+        mcp: ToolIndexMcpFilter = "all",
+        exclude_tool_ids: Collection[str] | None = None,
+    ) -> list[ToolListIndexItem]:
+        rows = await cls._indexed(mcp=mcp, exclude_tool_ids=exclude_tool_ids).all()
+        return [
+            ToolListIndexItem(
+                tool_id=row.tool_id,
+                title=row.title,
+                description=row.description,
+                tags=list(row.tags),
+                code_mode=row.code_mode,
+                mcp_server_id=row.mcp_server_id,
+            )
+            for row in rows
+        ]
+
+    @classmethod
+    async def count_index(
+        cls,
+        *,
+        mcp: ToolIndexMcpFilter = "all",
+        exclude_tool_ids: Collection[str] | None = None,
+    ) -> int:
+        return await cls._indexed(mcp=mcp, exclude_tool_ids=exclude_tool_ids).count()
+
+
+def _mcp_tools():
+    return (
+        Q(code_mode=CodeMode.MCP_TOOL)
+        | Q(tool_id__startswith="mcp:")
+        | (Q(mcp_server_id__isnull=False) & ~Q(mcp_server_id=""))
+    )
 
 
 class ToolListIndexItem(StrictBaseModel):

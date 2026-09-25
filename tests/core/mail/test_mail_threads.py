@@ -13,6 +13,7 @@ from core.mail.models import (
     MailboxBindingKind,
     MailProvider,
     MailThreadPayload,
+    StoredMailMessage,
 )
 from core.mail.service import MailService
 from core.mail.threads import (
@@ -139,13 +140,10 @@ async def test_get_thread_merges_inbox_and_sent_marks_inbox_seen(
     assert all(item.unread is False for item in inbox_items)
     assert sorted(result.marked_seen_uids) == ["1", "3"]
 
-    message_repo = mail_service._message_repository
-    if message_repo is None:
-        raise RuntimeError("mail_message_repository required")
-    stored_root = await message_repo.get_by_uid(
+    stored_root = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=1
     )
-    stored_anchor = await message_repo.get_by_uid(
+    stored_anchor = await StoredMailMessage.by_binding_folder_uid(
         binding.mailbox_binding_id, folder="INBOX", uid=3
     )
     if stored_root is None or stored_anchor is None:

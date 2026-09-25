@@ -2,11 +2,10 @@ import argparse
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
 
 from core.config import get_settings
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.storage import Storage
+from core.db.oxyde_runtime import close_oxyde_databases, init_oxyde_databases
+from core.models.identity_models import Company
 
 
 @dataclass(frozen=True)
@@ -18,66 +17,47 @@ class TopupResult:
     balance_after: float
 
 
-def _iter_pages(*, page_size: int) -> Iterable[tuple[int, int]]:
-    if page_size <= 0:
-        raise ValueError("page_size должен быть > 0")
-    offset = 0
-    while True:
-        yield offset, page_size
-        offset += page_size
-
-
-def _is_company_root_key(key: str) -> bool:
-    if not key.startswith("company:"):
-        return False
-    parts = key.split(":")
-    return len(parts) == 2 and parts[0] == "company" and parts[1] != ""
-
-
 async def _run(*, amount: float, apply: bool, page_size: int) -> list[TopupResult]:
     if amount <= 0:
-        raise ValueError("amount должен быть > 0")
+        raise ValueError("amount must be > 0")
+    if page_size <= 0:
+        raise ValueError("page_size must be > 0")
 
     settings = get_settings()
     shared_url = settings.database.shared_url
-    if not shared_url:
-        raise RuntimeError("settings.database.shared_url не задан (проверьте conf.local.json)")
+    if shared_url is None or shared_url == "":
+        raise RuntimeError("database.shared_url is required")
 
-    storage = Storage(db_url=shared_url)
-    repo = CompanyRepository(storage=storage)
-
+    await init_oxyde_databases(default_url=shared_url, shared_url=shared_url)
     results: list[TopupResult] = []
     now = datetime.now(timezone.utc)
-
-    for offset, limit in _iter_pages(page_size=page_size):
-        raw = await storage._get_all_by_prefix_and_table("company:", "storage", limit, offset)
-        if not raw:
-            break
-
-        for key, value_json in raw.items():
-            if not _is_company_root_key(key):
-                continue
-            company_id = key.split(":", 1)[1]
-            company = await repo.get(company_id)
-            if company is None:
-                continue
-            before = float(company.balance)
-            after = before + float(amount)
-            results.append(
-                TopupResult(
-                    company_id=company.company_id,
-                    subdomain=company.subdomain,
-                    name=company.name,
-                    balance_before=before,
-                    balance_after=after,
+    offset = 0
+    try:
+        while True:
+            companies = await Company.list(limit=page_size, offset=offset)
+            if len(companies) == 0:
+                break
+            for company in companies:
+                before = company.balance
+                after = before + amount
+                results.append(
+                    TopupResult(
+                        company_id=company.company_id,
+                        subdomain=company.subdomain,
+                        name=company.name,
+                        balance_before=before,
+                        balance_after=after,
+                    )
                 )
-            )
-
-            if apply:
-                company.balance = after
-                company.updated_at = now
-                await repo.set(company)
-
+                if apply:
+                    company.balance = after
+                    company.updated_at = now
+                    _ = await Company.set(company)
+            if len(companies) < page_size:
+                break
+            offset += page_size
+    finally:
+        await close_oxyde_databases()
     return results
 
 
@@ -100,11 +80,13 @@ def main() -> None:
     delta = float(args.amount) * total
     mode = "APPLY" if args.apply else "DRY-RUN"
     print(f"[{mode}] companies={total} amount={float(args.amount):.2f} total_delta={delta:.2f}")
-    for r in results:
-        sub = r.subdomain if r.subdomain else "-"
-        print(f"{r.company_id} subdomain={sub} {r.balance_before:.2f} -> {r.balance_after:.2f} name={r.name}")
+    for result in results:
+        subdomain = result.subdomain if result.subdomain else "-"
+        print(
+            f"{result.company_id} subdomain={subdomain} "
+            f"{result.balance_before:.2f} -> {result.balance_after:.2f} name={result.name}"
+        )
 
 
 if __name__ == "__main__":
     main()
-

@@ -21,7 +21,10 @@ from core.clients.vad_client import MockVADClient
 
 
 def _voice_ws_url(session_id: str) -> str:
-    return f"/voice/api/ws/session/{session_id}?company_id=test-company"
+    return (
+        f"/voice/api/ws/session/{session_id}?company_id=system"
+        "&stt_provider_name=mock&tts_provider_name=mock&vad_provider_name=mock"
+    )
 
 
 @pytest.mark.asyncio
@@ -47,11 +50,15 @@ async def test_health_providers_returns_json(voice_client: AsyncClient) -> None:
     assert set(data.keys()) >= {"vad", "checked_at"}
 
 
-def test_voice_ws_session_accepts_binary_frames(voice_app, unique_id: str) -> None:
+def test_voice_ws_session_accepts_binary_frames(
+    voice_app, unique_id: str, auth_token_system: str
+) -> None:
     """WebSocket принимает бинарные PCM-фреймы и не падает."""
     with TestClient(voice_app) as client:
         session_id = f"ws-binary-{unique_id}"
-        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
+        with client.websocket_connect(
+            _voice_ws_url(session_id), cookies={"auth_token": auth_token_system}
+        ) as ws:
             # Отправляем несколько PCM-фреймов (16-bit mono 16kHz, 20ms каждый)
             pcm_frame = b"\x01\x00" * 320
             ws.send_bytes(pcm_frame)
@@ -60,35 +67,49 @@ def test_voice_ws_session_accepts_binary_frames(voice_app, unique_id: str) -> No
             # Соединение должно оставаться живым
 
 
-def test_voice_ws_session_accepts_silence_frames(voice_app, unique_id: str) -> None:
+def test_voice_ws_session_accepts_silence_frames(
+    voice_app, unique_id: str, auth_token_system: str
+) -> None:
     """WebSocket принимает тишину и не зависает."""
     with TestClient(voice_app) as client:
         session_id = f"ws-silence-{unique_id}"
-        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
+        with client.websocket_connect(
+            _voice_ws_url(session_id), cookies={"auth_token": auth_token_system}
+        ) as ws:
             silence = b"\x00\x00" * 320
             for _ in range(15):
                 ws.send_bytes(silence)
 
 
-def test_voice_ws_session_distinct_session_ids(voice_app, unique_id: str) -> None:
+def test_voice_ws_session_distinct_session_ids(
+    voice_app, unique_id: str, auth_token_system: str
+) -> None:
     """Каждый session_id независим — два соединения не конфликтуют."""
     with TestClient(voice_app) as client:
         sid1 = f"sess-a-{unique_id}"
         sid2 = f"sess-b-{unique_id}"
 
-        with client.websocket_connect(_voice_ws_url(sid1)) as ws1:
+        with client.websocket_connect(
+            _voice_ws_url(sid1), cookies={"auth_token": auth_token_system}
+        ) as ws1:
             ws1.send_bytes(b"\x00" * 64)
 
-        with client.websocket_connect(_voice_ws_url(sid2)) as ws2:
+        with client.websocket_connect(
+            _voice_ws_url(sid2), cookies={"auth_token": auth_token_system}
+        ) as ws2:
             ws2.send_bytes(b"\x00" * 64)
 
 
-def test_voice_ws_stt_pipeline_produces_no_error(voice_app, unique_id: str) -> None:
+def test_voice_ws_stt_pipeline_produces_no_error(
+    voice_app, unique_id: str, auth_token_system: str
+) -> None:
     """STT pipeline с mock-провайдером не бросает исключений при реальных фреймах."""
     with TestClient(voice_app) as client:
         session_id = f"stt-pipeline-{unique_id}"
 
-        with client.websocket_connect(_voice_ws_url(session_id)) as ws:
+        with client.websocket_connect(
+            _voice_ws_url(session_id), cookies={"auth_token": auth_token_system}
+        ) as ws:
             speech = b"\x01\x00" * 320
             silence = b"\x00\x00" * 320
 

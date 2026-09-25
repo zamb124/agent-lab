@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.models import FlowConfig
 from tests.flows.e2e.llm_context.harness import (
     cleanup_flow_context,
     context_config,
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_mock_capture_includes_content_free_llm_context_trace(
     app,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_capture,
     mock_llm_with_queue,
@@ -27,7 +28,7 @@ async def test_mock_capture_includes_content_free_llm_context_trace(
     _ = app
     flow_id = f"ctx-trace-{unique_id}"
     context_id = f"context-trace-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         single_node_flow(
             flow_id=flow_id,
             prompt="Trace metadata probe.",
@@ -41,7 +42,7 @@ async def test_mock_capture_includes_content_free_llm_context_trace(
     )
     try:
         call, _ = await run_context_flow(
-            container=container,
+            di=di,
             flow_id=flow_id,
             query=f"QUERY_TRACE_{unique_id}",
             response="trace ok",
@@ -66,7 +67,7 @@ async def test_mock_capture_includes_content_free_llm_context_trace(
         assert f"OLD_TRACE_{unique_id}" not in serialized
     finally:
         await cleanup_flow_context(
-            container=container,
+            di=di,
             flow_id=flow_id,
             namespaces=[],
             auth_headers_system=auth_headers_system,

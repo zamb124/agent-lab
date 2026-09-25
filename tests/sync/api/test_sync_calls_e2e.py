@@ -34,6 +34,7 @@ from tests.sync.api._realtime_helpers import (
     wait_frame,
     wait_sync_ws_online,
 )
+from tests.sync.conftest import require_sync_di
 
 
 def _user_id_from_token(token: str) -> str:
@@ -415,7 +416,7 @@ async def test_call_invite_with_solo_member_immediately_active(
     `op_calls_invite` ветка `len(member_ids) <= 1`: переводит звонок в
     `active`, без необходимости accept'а.
     """
-    namespace = await seed_namespace_via_repo(company_id, f"ns_{unique_id}_solo")
+    namespace = await seed_namespace_via_repo(require_sync_di(), company_id, f"ns_{unique_id}_solo")
     async with http_owner(sync_auth_token) as http:
         cr = await http.post(
             "/sync/api/v1/channels/",

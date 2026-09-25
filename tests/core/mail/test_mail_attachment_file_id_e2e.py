@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 import pytest
 from httpx import AsyncClient
 
-from core.mail.models import InboundMailMessage, MailAttachment
-from core.mail.repositories import INBOX_FOLDER
+from apps.frontend.di import FrontendDi
+from core.di import require_di
+from core.mail.models import INBOX_FOLDER, InboundMailMessage, MailAttachment
 from core.mail.service import MailService
 from core.models.identity_models import Company, User
 from core.types import JsonObject, require_json_array, require_json_object
@@ -34,14 +35,11 @@ def _auth_headers(*, user_id: str, company_id: str) -> dict[str, str]:
 
 @pytest.fixture()
 def inject_mail_service(frontend_app, mail_service: MailService):
-    container = frontend_app.state.container
-    previous = container.__dict__.get("_cached_mail_service")
-    container.__dict__["_cached_mail_service"] = mail_service
+    di = require_di(frontend_app, FrontendDi)
+    previous = di.mail_service
+    object.__setattr__(di, "mail_service", mail_service)
     yield mail_service
-    if previous is None:
-        container.__dict__.pop("_cached_mail_service", None)
-    else:
-        container.__dict__["_cached_mail_service"] = previous
+    object.__setattr__(di, "mail_service", previous)
 
 
 @pytest.mark.asyncio

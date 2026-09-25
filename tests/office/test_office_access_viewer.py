@@ -115,7 +115,7 @@ async def test_public_open_view_permission_viewer_save_forbidden(
 
     save_response = await office_client.post(save_url, content=b"tampered")
     assert save_response.status_code == 403
-    assert "запрещено" in (save_response.json().get("detail") or "").lower()
+    assert "forbidden" in (save_response.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio

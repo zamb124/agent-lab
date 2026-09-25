@@ -7,16 +7,17 @@ import asyncio
 import sys
 from typing import cast
 
-from sqlalchemy import text
-
 from apps.wiki.authz.tuples import (
     wiki_page_company_link,
     wiki_page_company_viewer_tuple,
     wiki_page_owner_tuple,
     wiki_page_parent_tuple,
 )
-from apps.wiki.container import get_wiki_container
+from apps.wiki.di import WikiDi
+from apps.wiki.models.domain import WikiPage
+from core.authz.service import AuthzService
 from core.config import get_settings
+from core.di import ProcessIdentity, open_di
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -27,34 +28,32 @@ async def backfill_wiki_authz(*, limit: int | None = None) -> int:
     if not settings.openfga.enabled:
         raise RuntimeError("openfga.enabled must be true for Wiki authz backfill")
 
-    container = get_wiki_container()
-    authz = container.authz_service
-    db = container.wiki_db
+    identity = ProcessIdentity(service_name="wiki", files_route_segment="wiki")
+    async with open_di(
+        WikiDi,
+        settings=settings,
+        identity=identity,
+        database="wiki_url",
+    ) as di:
+        return await _write_page_tuples(di.authz_service, limit=limit)
 
+
+async def _write_page_tuples(authz: AuthzService, *, limit: int | None) -> int:
     pages_written = 0
-
-    async with db.session() as session:
-        page_sql = (
-            "SELECT wiki_page_id, company_id, parent_page_id, created_by_user_id, "
-            "company_visible "
-            "FROM wiki_pages WHERE deleted_at IS NULL ORDER BY created_at ASC"
-        )
-        if limit is not None:
-            page_sql += f" LIMIT {int(limit)}"
-        page_rows = list((await session.execute(text(page_sql))).mappings().all())
+    page_rows = await WikiPage.list_alive_by_created_at(limit=limit)
 
     for row in page_rows:
-        wiki_page_id = cast(str, row["wiki_page_id"])
-        company_id = cast(str, row["company_id"])
-        owner_user_id = cast(str, row["created_by_user_id"])
+        wiki_page_id = row.wiki_page_id
+        company_id = row.company_id
+        owner_user_id = row.created_by_user_id
         writes = [
             wiki_page_owner_tuple(wiki_page_id, owner_user_id),
             wiki_page_company_link(wiki_page_id, company_id),
         ]
-        parent_page_id = cast(str | None, row["parent_page_id"])
+        parent_page_id = row.parent_page_id
         if parent_page_id is not None:
             writes.append(wiki_page_parent_tuple(wiki_page_id, parent_page_id))
-        if bool(cast(bool, row["company_visible"])):
+        if row.company_visible:
             writes.append(wiki_page_company_viewer_tuple(wiki_page_id, company_id))
         await authz.write(writes)
         pages_written += 1

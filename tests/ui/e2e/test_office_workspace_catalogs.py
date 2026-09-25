@@ -36,14 +36,14 @@ async def test_office_workspace_and_catalogs(
     scenario: ScenarioRecorder,
     office_ui: AppUI,
     ui_page_system: Page,
-    unique_id: str,
+    unique_id: str, frontend_di,
 ) -> None:
     root_title = f"Корень {unique_id}"
     child_title = f"Подкаталог {unique_id}"
     renamed_title = f"Архив {unique_id}"
 
     namespace = await office_e2e_open_with_namespace(
-        office_ui, ui_page_system, unique_id, suffix="cat"
+        office_ui, ui_page_system, unique_id, suffix="cat", di=frontend_di
     )
     await scenario.step(
         "Выбрано рабочее пространство",

@@ -2,7 +2,7 @@
 Универсальный механизм авторизации внешних интеграций.
 
 OAuthService — единый OAuth2 flow (start, complete, refresh, get_valid_token).
-IntegrationCredentialRepository — хранение per-user OAuth токенов.
+IntegrationCredential — хранение per-user OAuth токенов.
 Company-owned credentials — user_id=COMPANY_INTEGRATION_USER_ID (__company__).
 """
 
@@ -27,7 +27,6 @@ from core.integrations.models import (
 )
 from core.integrations.oauth_service import OAuthService, set_oauth_credential_saved_hook
 from core.integrations.providers.amocrm import parse_amocrm_subdomain_from_referer
-from core.integrations.repository import IntegrationCredentialRepository
 
 __all__ = [
     "COMPANY_INTEGRATION_USER_ID",
@@ -38,7 +37,6 @@ __all__ = [
     "GoogleWorkspaceCompanyCredentialPut",
     "GoogleWorkspaceSystemReconcileResult",
     "IntegrationCredential",
-    "IntegrationCredentialRepository",
     "IntegrationProvider",
     "OAuthProviderConfig",
     "OAuthService",

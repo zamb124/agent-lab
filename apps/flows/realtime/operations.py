@@ -14,7 +14,8 @@ import yaml
 from pydantic import Field, TypeAdapter, field_validator
 
 from apps.flows.config import get_settings
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import Di
+from apps.flows.src.contracts import RuntimeFlowProtocol
 from apps.flows.src.models import (
     BranchConfig,
     BranchCreateRequest,
@@ -28,9 +29,11 @@ from apps.flows.src.models import (
     FlowVariableConfig,
     GraphNodeConfig,
     NodeConfig,
+    ToolReference,
     TriggerConfig,
     branch_payload_to_config,
 )
+from apps.flows.src.models.agent_toolkit import AgentToolkit
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.exception_absorb_allow import list_exception_absorb_allow_values
 from apps.flows.src.models.execution_limits import get_graph_max_iterations
@@ -59,11 +62,6 @@ from apps.flows.src.models.flow_api import (
     ValidationErrorResponse,
 )
 from apps.flows.src.models.flow_speech_settings import FlowSpeechSettings
-from apps.flows.src.services.agent_toolkit_service import (
-    get_toolkit_ids_for_flow,
-    set_flow_toolkit_membership,
-    toolkit_ids_by_flow_ids,
-)
 from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
 from apps.flows.src.services.flow_employee_provisioning import (
     remove_flow_employee,
@@ -91,7 +89,7 @@ from core.identity.flow_preview_handoff import store_flow_preview_handoff
 from core.identity.runtime_users import ensure_persisted_runtime_user
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
-from core.models.embed_models import EmbedConfig, EmbedMapping, EmbedStatus
+from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import User
 from core.pagination import ListResponse, OffsetPage
 from core.request_scope import CompanyScope, require_company
@@ -201,10 +199,10 @@ def _flow_obj(flow_id: str, company_id: str) -> AuthzObject:
     return AuthzObject.flow(flow_id, company_id=company_id)
 
 
-async def require_company_member(container: FlowContainer) -> CompanyScope:
+async def require_company_member(di: Di) -> CompanyScope:
     scope = company_scope()
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.company(scope.company_id),
             user_id=scope.user_id,
         )
@@ -213,10 +211,10 @@ async def require_company_member(container: FlowContainer) -> CompanyScope:
     return scope
 
 
-async def require_view_flow(container: FlowContainer, flow_id: str) -> CompanyScope:
+async def require_view_flow(di: Di, flow_id: str) -> CompanyScope:
     scope = company_scope()
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             _flow_obj(flow_id, scope.company_id),
             user_id=scope.user_id,
         )
@@ -225,10 +223,10 @@ async def require_view_flow(container: FlowContainer, flow_id: str) -> CompanySc
     return scope
 
 
-async def require_edit_flow(container: FlowContainer, flow_id: str) -> CompanyScope:
+async def require_edit_flow(di: Di, flow_id: str) -> CompanyScope:
     scope = company_scope()
     try:
-        await container.authz_service.require_can_edit(
+        await di.authz_service.require_can_edit(
             _flow_obj(flow_id, scope.company_id),
             user_id=scope.user_id,
         )
@@ -237,10 +235,10 @@ async def require_edit_flow(container: FlowContainer, flow_id: str) -> CompanySc
     return scope
 
 
-async def require_view_tool(container: FlowContainer, tool_id: str) -> CompanyScope:
+async def require_view_tool(di: Di, tool_id: str) -> CompanyScope:
     scope = company_scope()
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.tool(tool_id, company_id=scope.company_id),
             user_id=scope.user_id,
         )
@@ -249,9 +247,9 @@ async def require_view_tool(container: FlowContainer, tool_id: str) -> CompanySc
     return scope
 
 
-async def require_view_tool_or_flow(container: FlowContainer, object_id: str) -> CompanyScope:
+async def require_view_tool_or_flow(di: Di, object_id: str) -> CompanyScope:
     scope = company_scope()
-    allowed = await container.authz_service.batch_check(
+    allowed = await di.authz_service.batch_check(
         [
             AuthzCheckItem(
                 subject=AuthzSubject.user(scope.user_id),
@@ -272,10 +270,10 @@ async def require_view_tool_or_flow(container: FlowContainer, object_id: str) ->
     return scope
 
 
-async def require_share_flow(container: FlowContainer, flow_id: str) -> CompanyScope:
+async def require_share_flow(di: Di, flow_id: str) -> CompanyScope:
     scope = company_scope()
     try:
-        await container.authz_service.require_relation(
+        await di.authz_service.require_relation(
             AuthzRelation.CAN_SHARE,
             _flow_obj(flow_id, scope.company_id),
             user_id=scope.user_id,
@@ -285,7 +283,7 @@ async def require_share_flow(container: FlowContainer, flow_id: str) -> CompanyS
     return scope
 
 
-async def authorize_reload_from_bundle(container: FlowContainer, flow_id: str) -> bool:
+async def authorize_reload_from_bundle(di: Di, flow_id: str) -> bool:
     """
     Перезапись существующего flow — ``can_edit``.
 
@@ -294,37 +292,37 @@ async def authorize_reload_from_bundle(container: FlowContainer, flow_id: str) -
     """
     scope = company_scope()
     flow_obj = _flow_obj(flow_id, scope.company_id)
-    if await container.authz_service.can_edit(flow_obj, user_id=scope.user_id):
+    if await di.authz_service.can_edit(flow_obj, user_id=scope.user_id):
         return False
-    existing_tuples = await container.authz_service.list_tuples(flow_obj)
+    existing_tuples = await di.authz_service.list_tuples(flow_obj)
     if existing_tuples:
         try:
-            await container.authz_service.require_can_edit(flow_obj, user_id=scope.user_id)
+            await di.authz_service.require_can_edit(flow_obj, user_id=scope.user_id)
         except AuthzDenied as exc:
             raise_forbidden(exc)
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return True
 
 
-async def _sync_flow_authz(container: FlowContainer, flow_config: FlowConfig) -> None:
+async def _sync_flow_authz(di: Di, flow_config: FlowConfig) -> None:
     scope = company_scope()
-    await container.flow_access_service.sync_flow_saved(
+    await di.flow_access_service.sync_flow_saved(
         flow_config,
         company_id=scope.company_id,
         owner_user_id=scope.user_id,
     )
 
 
-async def persist_flow_with_authz(container: FlowContainer, flow_config: FlowConfig) -> None:
-    previous = await container.flow_repository.get(flow_config.flow_id)
-    _ = await container.flow_repository.set(flow_config)
+async def persist_flow_with_authz(di: Di, flow_config: FlowConfig) -> None:
+    previous = await FlowConfig.get_latest(flow_config.flow_id)
+    _ = await FlowConfig.create_version(flow_config)
     try:
-        await _sync_flow_authz(container, flow_config)
+        await _sync_flow_authz(di, flow_config)
     except Exception:
         if previous is None:
-            _ = await container.flow_repository.delete(flow_config.flow_id)
+            _ = await FlowConfig.delete_by_flow_id(flow_config.flow_id)
         else:
-            _ = await container.flow_repository.set(previous)
+            _ = await FlowConfig.create_version(previous)
         raise
 
 
@@ -417,6 +415,8 @@ def _flow_semantic_payload(flow_cfg: FlowConfig) -> JsonObject:
         flow_cfg.model_dump_json(
             exclude={
                 "version",
+                "flow_row_id",
+                "is_current",
                 "created_at",
                 "updated_at",
                 "source",
@@ -483,7 +483,7 @@ def build_bundle_index(flows_root: Path) -> dict[str, str]:
 
 async def get_bundle_update_flags(
     flows: list[FlowConfig],
-    container: FlowContainer,
+    di: Di,
     flows_root: Path,
 ) -> dict[str, bool]:
     flags: dict[str, bool] = {flow_cfg.flow_id: False for flow_cfg in flows}
@@ -494,11 +494,8 @@ async def get_bundle_update_flags(
     flow_to_bundle = build_bundle_index(flows_root)
     loader = FlowsLoader(
         bundles_dir=flows_root / "bundles",
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=flows_root / "registry.yaml",
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     loader.load_registry_yaml()
     for flow_cfg in file_flows:
@@ -515,23 +512,23 @@ async def get_bundle_update_flags(
 
 
 async def inline_tools_list(
-    tools: Sequence[JsonValue], container: FlowContainer
+    tools: Sequence[JsonValue], di: Di
 ) -> list[JsonValue]:
     inlined: list[JsonValue] = []
     for tool in tools:
-        inlined.append(await _inline_single_tool(tool, container))
+        inlined.append(await _inline_single_tool(tool, di))
     return inlined
 
 
-async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> JsonObject:
+async def _inline_single_tool(tool: JsonValue, di: Di) -> JsonObject:
     if isinstance(tool, str):
-        tool_ref = await container.tool_repository.get(tool)
+        tool_ref = await ToolReference.get(ToolReference.row_id(tool))
         if tool_ref is not None:
             return parse_json_object(tool_ref.model_dump_json(), "tool")
-        node = await container.node_repository.get(tool)
+        node = await NodeConfig.get(NodeConfig.row_id(tool))
         if node is not None:
-            return await _node_to_inline_tool(node, container)
-        flow_cfg = await container.flow_repository.get(tool)
+            return await _node_to_inline_tool(node, di)
+        flow_cfg = await FlowConfig.get_latest(tool)
         if flow_cfg is not None:
             return _flow_config_to_inline_tool(flow_cfg)
         raise_invalid(ValueError(f"Tool '{tool}' not found in library"))
@@ -547,7 +544,7 @@ async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> Json
             flow_ref = FlowToolReference.model_validate(tool_obj)
         except ValueError as exc:
             raise_invalid(exc)
-        flow_cfg = await container.flow_repository.get(flow_ref.flow_id)
+        flow_cfg = await FlowConfig.get_latest(flow_ref.flow_id)
         if flow_cfg is None:
             raise_invalid(ValueError(f"Flow tool target '{flow_ref.flow_id}' not found"))
         if flow_ref.branch_id != "default" and flow_ref.branch_id not in flow_cfg.branches:
@@ -565,11 +562,11 @@ async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> Json
     if tool_obj.get("type") == "llm_node" or tool_obj.get("prompt"):
         nested_tools = tool_obj.get("tools")
         if isinstance(nested_tools, list):
-            tool_obj["tools"] = await inline_tools_list(nested_tools, container)
+            tool_obj["tools"] = await inline_tools_list(nested_tools, di)
         return tool_obj
 
     if isinstance(tool_id, str) and tool_id and "code" not in tool_obj:
-        tool_ref = await container.tool_repository.get(tool_id)
+        tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
         if tool_ref is not None and tool_ref.code:
             merged = parse_json_object(tool_ref.model_dump_json(), "tool")
             merged.update(tool_obj)
@@ -577,7 +574,7 @@ async def _inline_single_tool(tool: JsonValue, container: FlowContainer) -> Json
     return tool_obj
 
 
-async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> JsonObject:
+async def _node_to_inline_tool(node: NodeConfig, di: Di) -> JsonObject:
     result: JsonObject = {
         "tool_id": node.node_id,
         "type": node.type.value,
@@ -596,7 +593,7 @@ async def _node_to_inline_tool(node: NodeConfig, container: FlowContainer) -> Js
                 tools_list.append(tool)
             else:
                 tools_list.append(parse_json_object(tool.model_dump_json(), "node.tools[]"))
-        result["tools"] = await inline_tools_list(tools_list, container)
+        result["tools"] = await inline_tools_list(tools_list, di)
     return result
 
 
@@ -614,12 +611,12 @@ def _flow_config_to_inline_tool(flow_cfg: FlowConfig) -> JsonObject:
 
 
 async def inline_tools_in_nodes(
-    nodes: dict[str, JsonObject], container: FlowContainer
+    nodes: dict[str, JsonObject], di: Di
 ) -> dict[str, JsonObject]:
     for node_id, node_config in nodes.items():
         tools = node_config.get("tools", [])
         if isinstance(tools, list) and tools:
-            node_config["tools"] = await inline_tools_list(tools, container)
+            node_config["tools"] = await inline_tools_list(tools, di)
         if (
             node_config.get("type") == "code"
             and node_config.get("tool_id")
@@ -628,7 +625,7 @@ async def inline_tools_in_nodes(
             tool_id = node_config["tool_id"]
             if not isinstance(tool_id, str):
                 raise_invalid(ValueError(f"nodes.{node_id}.tool_id must be a string"))
-            tool_ref = await container.tool_repository.get(tool_id)
+            tool_ref = await ToolReference.get(ToolReference.row_id(tool_id))
             if tool_ref is not None and tool_ref.code:
                 node_config["code"] = tool_ref.code
                 if tool_ref.parameters_schema:
@@ -639,26 +636,32 @@ async def inline_tools_in_nodes(
     return nodes
 
 
-async def validate_tool_nodes(nodes: dict[str, JsonObject], container: FlowContainer) -> None:
+async def _build_validation_flow(
+    di: Di,
+    config: JsonObject,
+) -> RuntimeFlowProtocol:
+    return await di.flow_factory.create_validation_flow(
+        config,
+        tool_registry=di.tool_registry,
+    )
+
+
+async def validate_tool_nodes(nodes: dict[str, JsonObject]) -> None:
     for node_config in nodes.values():
         if node_config.get("type") != "code":
             continue
         tool_id = node_config.get("tool_id")
         has_code = "code" in node_config and node_config.get("code")
         if isinstance(tool_id, str) and tool_id and not has_code:
-            tool = await container.tool_repository.get(tool_id)
+            tool = await ToolReference.get(ToolReference.row_id(tool_id))
             if tool is not None:
                 continue
-            node = await container.node_repository.get(tool_id)
+            node = await NodeConfig.get(NodeConfig.row_id(tool_id))
             if node is not None:
                 continue
-            flow_cfg = await container.flow_repository.get(tool_id)
+            flow_cfg = await FlowConfig.get_latest(tool_id)
             if flow_cfg is None:
                 raise_invalid(ValueError(f"Tool '{tool_id}' not found in library"))
-
-
-async def flow_agent_toolkit_ids(container: FlowContainer, flow_id: str) -> list[str]:
-    return await get_toolkit_ids_for_flow(container.agent_toolkit_repository, flow_id)
 
 
 def _flow_item_response(
@@ -704,15 +707,15 @@ async def op_flows_list(
     payload: FlowsListPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> OffsetPage[FlowResponse]:
     _ = user
     scope = company_scope()
-    index = await container.flow_repository.list_index()
+    index = await FlowConfig.list_index()
     if payload.type is not None:
         index = [row for row in index if row.type == payload.type]
     catalog_ids = [row.flow_id for row in index]
-    page_ids = await container.flow_access_service.page_viewable_flow_ids(
+    page_ids = await di.flow_access_service.page_viewable_flow_ids(
         catalog_ids,
         user_id=scope.user_id,
         company_id=scope.company_id,
@@ -720,11 +723,11 @@ async def op_flows_list(
         limit=payload.limit,
     )
     total = len(catalog_ids)
-    by_id = await container.flow_repository.get_many(page_ids)
+    by_id = await FlowConfig.latest_by_flow_ids(page_ids)
     flows = [by_id[flow_id] for flow_id in page_ids if flow_id in by_id]
     bundle_update_flags, toolkit_ids_by_flow = await asyncio.gather(
-        get_bundle_update_flags(flows, container, _flows_root()),
-        toolkit_ids_by_flow_ids(container.agent_toolkit_repository, page_ids),
+        get_bundle_update_flags(flows, di, _flows_root()),
+        AgentToolkit.toolkit_ids_by_flow_ids(page_ids),
     )
     result: list[FlowResponse] = []
     for flow_cfg in flows:
@@ -746,18 +749,18 @@ async def op_flows_item(
     payload: FlowsFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowResponse:
     _ = user
-    _ = await require_view_flow(container, payload.flow_id)
-    flow_cfg = await container.flow_repository.get(payload.flow_id)
+    _ = await require_view_flow(di, payload.flow_id)
+    flow_cfg = await FlowConfig.get_latest(payload.flow_id)
     if flow_cfg is None:
         raise_not_found(PlatformNotFoundError("Flow not found"))
-    bundle_flags = await get_bundle_update_flags([flow_cfg], container, _flows_root())
+    bundle_flags = await get_bundle_update_flags([flow_cfg], di, _flows_root())
     has_bundle_update = bundle_flags[flow_cfg.flow_id]
     return _flow_item_response(
         flow_cfg,
-        agent_toolkit_ids=await flow_agent_toolkit_ids(container, flow_cfg.flow_id),
+        agent_toolkit_ids=await AgentToolkit.get_toolkit_ids_for_flow(flow_cfg.flow_id),
         has_bundle_update=has_bundle_update,
     )
 
@@ -766,22 +769,20 @@ async def op_flows_create(
     payload: FlowCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowResponse:
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     try:
         variables = flow_variable_models(payload.variables, "variables")
     except ValueError as exc:
         raise_invalid(exc)
     request_nodes = graph_nodes_payload(payload.nodes)
-    await validate_tool_nodes(request_nodes, container)
-    nodes = await inline_tools_in_nodes(request_nodes, container)
+    await validate_tool_nodes(request_nodes)
+    nodes = await inline_tools_in_nodes(request_nodes, di)
     validator = FlowValidator(
-        flow_repository=container.flow_repository,
-        tool_repository=container.tool_repository,
-        node_repository=container.node_repository,
-        flow_builder=container.flow_factory.create_validation_flow,
+        resolve_node_refs=True,
+        flow_builder=lambda config: _build_validation_flow(di, config),
     )
     validation_result = await validator.validate(
         nodes=nodes,
@@ -817,10 +818,9 @@ async def op_flows_create(
         interface=interface,
         employee=payload.employee,
     )
-    await persist_flow_with_authz(container, flow_config)
-    await sync_flow_employee(container, flow_config)
-    await set_flow_toolkit_membership(
-        container.agent_toolkit_repository,
+    await persist_flow_with_authz(di, flow_config)
+    await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
+    await AgentToolkit.set_flow_toolkit_membership(
         flow_id=flow_config.flow_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
@@ -835,11 +835,11 @@ async def op_flows_update(
     payload: FlowCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowResponse:
     _ = user
-    _ = await require_edit_flow(container, payload.flow_id)
-    existing = await container.flow_repository.get(payload.flow_id)
+    _ = await require_edit_flow(di, payload.flow_id)
+    existing = await FlowConfig.get_latest(payload.flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError("Flow not found"))
     try:
@@ -850,7 +850,7 @@ async def op_flows_update(
         branch_id: branch_payload_to_config(branch_req)
         for branch_id, branch_req in payload.branches.items()
     }
-    nodes = await inline_tools_in_nodes(graph_nodes_payload(payload.nodes), container)
+    nodes = await inline_tools_in_nodes(graph_nodes_payload(payload.nodes), di)
     speech_merged = payload.speech if payload.speech is not None else existing.speech
     interface_merged = payload.interface if payload.interface is not None else existing.interface
     assert_interface_publishable(interface_merged)
@@ -875,10 +875,9 @@ async def op_flows_update(
         interface=interface_merged,
         employee=payload.employee,
     )
-    await persist_flow_with_authz(container, flow_config)
-    await sync_flow_employee(container, flow_config)
-    await set_flow_toolkit_membership(
-        container.agent_toolkit_repository,
+    await persist_flow_with_authz(di, flow_config)
+    await sync_flow_employee(di.authz_service, di.mail_service, flow_config)
+    await AgentToolkit.set_flow_toolkit_membership(
         flow_id=payload.flow_id,
         toolkit_ids=list(payload.agent_toolkit_ids),
     )
@@ -898,19 +897,19 @@ async def op_flows_remove(
     payload: FlowsFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowDeletedResponse:
     _ = user
-    scope = await require_edit_flow(container, payload.flow_id)
-    existing = await container.flow_repository.get(payload.flow_id)
-    deleted = await container.flow_repository.delete(payload.flow_id)
+    scope = await require_edit_flow(di, payload.flow_id)
+    existing = await FlowConfig.get_latest(payload.flow_id)
+    deleted = await FlowConfig.delete_by_flow_id(payload.flow_id)
     if not deleted:
         raise_not_found(PlatformNotFoundError("Flow not found"))
     branch_ids = list(existing.branches.keys()) if existing is not None else []
-    await container.flow_access_service.sync_flow_deleted(
+    await di.flow_access_service.sync_flow_deleted(
         payload.flow_id, company_id=scope.company_id, branch_ids=branch_ids
     )
-    await remove_flow_employee(container, payload.flow_id)
+    await remove_flow_employee(di.authz_service, di.mail_service, payload.flow_id)
     await publish_event_to_user(
         user_id=scope.user_id,
         type="flows/flow/deleted",
@@ -936,11 +935,11 @@ async def op_flows_store_bundles(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[FlowStoreBundleResponse]:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     flows_root = _flows_root()
     registry_path = flows_root / "registry.yaml"
     bundles_dir = flows_root / "bundles"
@@ -994,7 +993,7 @@ async def op_flows_store_bundles(
         description = raw_flow.get("description")
         if description is not None and not isinstance(description, str):
             raise_internal(RuntimeError(f"Bundle '{bundle_id}' field 'description' must be string"))
-        installed = await container.flow_repository.get(flow_id) is not None
+        installed = await FlowConfig.get_latest(flow_id) is not None
         result.append(
             FlowStoreBundleResponse(
                 bundle_id=bundle_id,
@@ -1012,18 +1011,16 @@ async def op_flows_validate(
     payload: FlowValidateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowValidateResponse:
     _ = user
     if payload.flow_id is not None:
-        _ = await require_view_flow(container, payload.flow_id)
+        _ = await require_view_flow(di, payload.flow_id)
     else:
-        _ = await require_company_member(container)
+        _ = await require_company_member(di)
     validator = FlowValidator(
-        flow_repository=container.flow_repository,
-        tool_repository=container.tool_repository,
-        node_repository=container.node_repository,
-        flow_builder=container.flow_factory.create_validation_flow,
+        resolve_node_refs=True,
+        flow_builder=lambda config: _build_validation_flow(di, config),
     )
     result = await validator.validate(
         nodes=graph_nodes_payload(payload.nodes),
@@ -1053,22 +1050,18 @@ async def op_flows_reload_from_bundle(
     payload: FlowsFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ReloadFlowFromBundleResponse:
     _ = user
-    catalog_install = await authorize_reload_from_bundle(container, payload.flow_id)
+    catalog_install = await authorize_reload_from_bundle(di, payload.flow_id)
     _ = await load_tools_to_db(
-        container.tool_repository,
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     flows_root = _flows_root()
     loader = FlowsLoader(
         bundles_dir=flows_root / "bundles",
-        flow_repository=container.flow_repository,
-        node_repository=container.node_repository,
-        tool_repository=container.tool_repository,
         registry_path=flows_root / "registry.yaml",
-        flow_access_service=container.flow_access_service,
+        flow_access_service=di.flow_access_service,
     )
     try:
         loaded_id = await loader.reload_flow_bundle(payload.flow_id)
@@ -1079,7 +1072,7 @@ async def op_flows_reload_from_bundle(
                 raise_forbidden(exc)
             raise_not_found(exc)
         raise_invalid(exc)
-    reloaded_cfg = await container.flow_repository.get(loaded_id)
+    reloaded_cfg = await FlowConfig.get_latest(loaded_id)
     if reloaded_cfg is None:
         raise_internal(RuntimeError(f"Flow '{loaded_id}' missing after reload-from-bundle"))
     await publish_event_to_user(
@@ -1097,11 +1090,11 @@ async def op_flows_versions_list(
     payload: FlowsFlowIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[str]:
     _ = user
-    _ = await require_view_flow(container, payload.flow_id)
-    versions = await container.flow_repository.list_versions(payload.flow_id)
+    _ = await require_view_flow(di, payload.flow_id)
+    versions = await FlowConfig.list_versions(payload.flow_id)
     return ListResponse[str](items=versions)
 
 
@@ -1109,16 +1102,16 @@ async def op_flows_version_item(
     payload: FlowsFlowVersionPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowResponse:
     _ = user
-    _ = await require_view_flow(container, payload.flow_id)
-    version_cfg = await container.flow_repository.get_version(payload.flow_id, payload.version)
+    _ = await require_view_flow(di, payload.flow_id)
+    version_cfg = await FlowConfig.get_version(payload.flow_id, payload.version)
     if version_cfg is None:
         raise_not_found(PlatformNotFoundError("Version not found"))
     return _flow_item_response(
         version_cfg,
-        agent_toolkit_ids=await flow_agent_toolkit_ids(container, version_cfg.flow_id),
+        agent_toolkit_ids=await AgentToolkit.get_toolkit_ids_for_flow(version_cfg.flow_id),
         has_bundle_update=False,
     )
 
@@ -1127,11 +1120,11 @@ async def op_flows_version_rollback(
     payload: FlowsFlowVersionPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowVersionRollbackResponse:
     _ = user
-    _ = await require_edit_flow(container, payload.flow_id)
-    success = await container.flow_repository.rollback_to_version(payload.flow_id, payload.version)
+    _ = await require_edit_flow(di, payload.flow_id)
+    success = await FlowConfig.rollback_to_version(payload.flow_id, payload.version)
     if not success:
         raise_not_found(PlatformNotFoundError("Version not found"))
     return FlowVersionRollbackResponse(
@@ -1149,20 +1142,18 @@ def _require_path_id(value: str, field_name: str) -> str:
 
 
 async def _validate_merged_branch(
-    container: FlowContainer,
+    di: Di,
     flow_config: FlowConfig,
     branch_id: str,
 ) -> None:
     assert_branch_interfaces_publishable(flow_config.branches)
-    effective = container.flow_factory.apply_branch(flow_config, branch_id)
+    effective = di.flow_factory.apply_branch(flow_config, branch_id)
     entry = effective["entry"]
     if entry is None:
         raise_invalid(ValueError(f"Flow '{flow_config.flow_id}' has no entry"))
     validator = FlowValidator(
-        flow_repository=container.flow_repository,
-        tool_repository=container.tool_repository,
-        node_repository=container.node_repository,
-        flow_builder=container.flow_factory.create_validation_flow,
+        resolve_node_refs=True,
+        flow_builder=lambda config: _build_validation_flow(di, config),
     )
     validation_result = await validator.validate(
         nodes=effective["nodes"],
@@ -1190,20 +1181,20 @@ async def op_flows_branch_create(
     payload: BranchCreateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> BranchMutationResponse:
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
-    _ = await require_edit_flow(container, flow_id)
-    flow_config = await container.flow_repository.get(flow_id)
+    _ = await require_edit_flow(di, flow_id)
+    flow_config = await FlowConfig.get_latest(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if payload.branch_id in flow_config.branches:
         raise_conflict(PlatformConflictError(f"branch {payload.branch_id!r} already exists"))
     candidate = flow_config.model_copy(deep=True)
     candidate.branches[payload.branch_id] = branch_payload_to_config(payload)
-    await _validate_merged_branch(container, candidate, payload.branch_id)
-    await persist_flow_with_authz(container, candidate)
+    await _validate_merged_branch(di, candidate, payload.branch_id)
+    await persist_flow_with_authz(di, candidate)
     await publish_event_to_user(
         user_id=company_scope().user_id,
         type="flows/branch/created",
@@ -1220,21 +1211,21 @@ async def op_flows_branch_update(
     payload: BranchUpdateRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> BranchMutationResponse:
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
     branch_id = _require_path_id(payload.branch_id, "branch_id")
-    _ = await require_edit_flow(container, flow_id)
-    flow_config = await container.flow_repository.get(flow_id)
+    _ = await require_edit_flow(di, flow_id)
+    flow_config = await FlowConfig.get_latest(flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     if branch_id not in flow_config.branches:
         raise_not_found(PlatformNotFoundError(f"Branch '{branch_id}' not found. Use POST to create."))
     candidate = flow_config.model_copy(deep=True)
     candidate.branches[branch_id] = branch_payload_to_config(payload)
-    await _validate_merged_branch(container, candidate, branch_id)
-    await persist_flow_with_authz(container, candidate)
+    await _validate_merged_branch(di, candidate, branch_id)
+    await persist_flow_with_authz(di, candidate)
     await publish_event_to_user(
         user_id=company_scope().user_id,
         type="flows/branch/updated",
@@ -1251,25 +1242,25 @@ async def op_flows_branch_remove(
     payload: FlowsBranchIdPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> BranchMutationResponse:
     _ = user
-    scope = await require_edit_flow(container, payload.flow_id)
-    flow_config = await container.flow_repository.get(payload.flow_id)
+    scope = await require_edit_flow(di, payload.flow_id)
+    flow_config = await FlowConfig.get_latest(payload.flow_id)
     if flow_config is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     if payload.branch_id not in flow_config.branches:
         raise_not_found(PlatformNotFoundError(f"branch {payload.branch_id!r} not found"))
     candidate = flow_config.model_copy(deep=True)
     del candidate.branches[payload.branch_id]
-    _ = await container.flow_repository.set(candidate)
+    _ = await FlowConfig.create_version(candidate)
     try:
-        await container.flow_access_service.sync_branch_deleted(
+        await di.flow_access_service.sync_branch_deleted(
             payload.flow_id, payload.branch_id, company_id=scope.company_id
         )
-        await _sync_flow_authz(container, candidate)
+        await _sync_flow_authz(di, candidate)
     except Exception:
-        _ = await container.flow_repository.set(flow_config)
+        _ = await FlowConfig.create_version(flow_config)
         raise
     await publish_event_to_user(
         user_id=scope.user_id,
@@ -1292,11 +1283,11 @@ async def op_flows_voice_session_query(
     payload: FlowVoiceSessionQueryRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowVoiceSessionQueryResponse:
     _ = user
-    scope = await require_view_flow(container, payload.flow_id)
-    cfg = await container.flow_repository.get(payload.flow_id)
+    scope = await require_view_flow(di, payload.flow_id)
+    cfg = await FlowConfig.get_latest(payload.flow_id)
     if cfg is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
@@ -1325,12 +1316,12 @@ async def op_flows_preview_share(
     payload: FlowPreviewShareRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowPreviewShareResponse:
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
-    scope = await require_share_flow(container, flow_id)
-    flow_cfg = await container.flow_repository.get(flow_id)
+    scope = await require_share_flow(di, flow_id)
+    flow_cfg = await FlowConfig.get_latest(flow_id)
     if flow_cfg is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     branch_id = _require_path_id(payload.branch_id, "branch_id")
@@ -1344,6 +1335,7 @@ async def op_flows_preview_share(
     embed_id = f"pshare_{uuid.uuid4().hex}"
     config = EmbedConfig(
         embed_id=embed_id,
+        company_id=scope.company_id,
         name=f"[preview] {assistant_title}",
         flow_id=flow_id,
         branch_id=branch_id,
@@ -1361,15 +1353,13 @@ async def op_flows_preview_share(
         guest_max_user_messages=payload.guest_max_user_messages,
         created_by=scope.user_id,
     )
-    _ = await container.embed_config_repository.set(config)
-    mapping = EmbedMapping(embed_id=embed_id, company_id=scope.company_id)
-    _ = await container.embed_mapping_repository.set(mapping)
+    _ = await EmbedConfig.set(config)
 
     guest_id = f"flow_preview_{uuid.uuid4().hex}"
     embed_session_id = f"embsess_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS)
     _ = await ensure_persisted_runtime_user(
-        container,
+        di.authz_service,
         user_id=guest_id,
         company_id=scope.company_id,
         name="Flow Preview Guest",
@@ -1413,12 +1403,12 @@ async def op_flows_preview_share(
         "company_id": scope.company_id,
     }
     await store_flow_preview_handoff(
-        redis=container.redis_client,
+        redis=di.redis_client,
         handoff_id=handoff_id,
         payload=handoff_payload,
         ttl_seconds=_FLOW_PREVIEW_SHARE_TTL_SECONDS,
     )
-    share_url = await container.short_link_service.mint_flow_preview_embed(handoff_id, expires_at)
+    share_url = await di.short_link_service.mint_flow_preview_embed(handoff_id, expires_at)
     logger.info(
         "flows.preview_share_minted",
         flow_id=flow_id,
@@ -1433,12 +1423,12 @@ async def op_flows_nodes_bulk_delete(
     payload: BulkDeleteNodesRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> BulkDeleteNodesResponse:
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
-    scope = await require_edit_flow(container, flow_id)
-    existing = await container.flow_repository.get(flow_id)
+    scope = await require_edit_flow(di, flow_id)
+    existing = await FlowConfig.get_latest(flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     nodes = existing.nodes
@@ -1460,7 +1450,7 @@ async def op_flows_nodes_bulk_delete(
     updated = existing.model_copy(
         update={"nodes": new_nodes, "edges": new_edges, "entry": new_entry}
     )
-    _ = await persist_flow_with_authz(container, updated)
+    _ = await persist_flow_with_authz(di, updated)
     await publish_event_to_user(
         user_id=scope.user_id,
         type="flows/flow/updated",
@@ -1477,25 +1467,25 @@ async def op_flows_metadata_update(
     payload: FlowMetadataRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowMetadataResponse:
     _ = user
     flow_id = _require_path_id(payload.flow_id, "flow_id")
-    _ = await require_edit_flow(container, flow_id)
-    existing = await container.flow_repository.get(flow_id)
+    _ = await require_edit_flow(di, flow_id)
+    existing = await FlowConfig.get_latest(flow_id)
     if existing is None:
         raise_not_found(PlatformNotFoundError(f"Flow '{flow_id}' not found"))
     metadata: JsonObject = dict(existing.metadata)
     if payload.sticky_notes is not None:
         metadata["sticky_notes"] = payload.sticky_notes
     updated = existing.model_copy(update={"metadata": metadata})
-    _ = await persist_flow_with_authz(container, updated)
+    _ = await persist_flow_with_authz(di, updated)
     return FlowMetadataResponse(flow_id=flow_id, metadata=metadata)
 
 
 async def _attach_nested_dataflow_for_editor(
     nodes: dict[str, JsonObject],
-    container: FlowContainer,
+    di: Di,
     *,
     seen_flow_ids: set[str],
 ) -> dict[str, JsonObject]:
@@ -1508,7 +1498,7 @@ async def _attach_nested_dataflow_for_editor(
             raise_invalid(ValueError(f"nodes.{node_id}.flow_id is required"))
         if nested_flow_id in seen_flow_ids:
             continue
-        nested_cfg = await container.flow_repository.get(nested_flow_id)
+        nested_cfg = await FlowConfig.get_latest(nested_flow_id)
         if nested_cfg is None:
             raise_not_found(PlatformNotFoundError(f"Flow '{nested_flow_id}' not found"))
         raw_nested_branch_id = node.get("branch_id")
@@ -1518,13 +1508,13 @@ async def _attach_nested_dataflow_for_editor(
             raise_invalid(ValueError(f"nodes.{node_id}.branch_id must be a non-empty string"))
         else:
             nested_branch_id = raw_nested_branch_id
-        nested_effective = container.flow_factory.apply_branch(nested_cfg, nested_branch_id)
+        nested_effective = di.flow_factory.apply_branch(nested_cfg, nested_branch_id)
         nested_graph_nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(nested_effective["nodes"])
         nested_nodes = graph_nodes_payload(nested_graph_nodes)
-        nested_nodes = await inline_tools_in_nodes(copy.deepcopy(nested_nodes), container)
+        nested_nodes = await inline_tools_in_nodes(copy.deepcopy(nested_nodes), di)
         nested_nodes = await _attach_nested_dataflow_for_editor(
             nested_nodes,
-            container,
+            di,
             seen_flow_ids={*seen_flow_ids, nested_flow_id},
         )
         node["__dataflow_nested"] = parse_json_object(
@@ -1548,7 +1538,7 @@ async def op_flows_dataflow_inspect(
     payload: FlowDataflowInspectRequest,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> DataflowInspectResult:
     _ = user
     nodes = payload.nodes
@@ -1560,11 +1550,11 @@ async def op_flows_dataflow_inspect(
     if not nodes:
         if payload.flow_id is None:
             raise_invalid(ValueError("nodes or flow_id is required"))
-        _ = await require_view_flow(container, payload.flow_id)
-        flow_cfg = await container.flow_repository.get(payload.flow_id)
+        _ = await require_view_flow(di, payload.flow_id)
+        flow_cfg = await FlowConfig.get_latest(payload.flow_id)
         if flow_cfg is None:
             raise_not_found(PlatformNotFoundError(f"Flow '{payload.flow_id}' not found"))
-        effective = container.flow_factory.apply_branch(flow_cfg, payload.branch_id)
+        effective = di.flow_factory.apply_branch(flow_cfg, payload.branch_id)
         nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(effective["nodes"])
         edges = effective["edges"]
         entry = effective["entry"]
@@ -1574,9 +1564,9 @@ async def op_flows_dataflow_inspect(
             interface = flow_cfg.interface_for_branch(payload.branch_id)
 
     node_payloads = graph_nodes_payload(nodes)
-    node_payloads = await inline_tools_in_nodes(copy.deepcopy(node_payloads), container)
+    node_payloads = await inline_tools_in_nodes(copy.deepcopy(node_payloads), di)
     node_payloads = await _attach_nested_dataflow_for_editor(
-        node_payloads, container, seen_flow_ids=set()
+        node_payloads, di, seen_flow_ids=set()
     )
     nodes = _GRAPH_NODE_MAP_ADAPTER.validate_python(node_payloads)
     return inspect_flow_dataflow(
@@ -1611,13 +1601,13 @@ async def op_flows_node_types(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[FlowNodeTypeCard]:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     cards = list(FLOW_NODE_TYPE_CARDS)
-    for spec in await container.datasource_service.list_connectors():
+    for spec in await di.datasource_service.list_connectors():
         cards.append(_datasource_palette_card(spec))
     return ListResponse(items=cards)
 
@@ -1626,11 +1616,11 @@ async def op_flows_resource_types(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[FlowResourceTypeCard]:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(items=list(FLOW_RESOURCE_TYPE_CARDS))
 
 
@@ -1638,11 +1628,11 @@ async def op_flows_exception_absorb_allow_names(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> ListResponse[str]:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return ListResponse(items=list_exception_absorb_allow_values())
 
 
@@ -1650,9 +1640,9 @@ async def op_flows_execution_limits(
     payload: EmptyPayload,
     *,
     user: User,
-    container: FlowContainer,
+    di: Di,
 ) -> FlowExecutionLimits:
     _ = payload
     _ = user
-    _ = await require_company_member(container)
+    _ = await require_company_member(di)
     return FlowExecutionLimits(graph_max_iterations=get_graph_max_iterations())

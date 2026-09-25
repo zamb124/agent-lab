@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import (
     AIProvidersCapabilityUpdate,
     CustomProviderCreate,
@@ -37,67 +37,67 @@ router = APIRouter(prefix="/api/settings/ai-providers", tags=["settings", "ai-pr
 
 
 @router.get("")
-async def get_ai_providers(request: Request, container: ContainerDep) -> JsonObject:
+async def get_ai_providers(request: Request, di: Di) -> JsonObject:
     return await op_ai_providers_snapshot(
         AIProvidersSnapshotPayload(public_host=request.headers.get("host")),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.put("/llm-context", response_model=AIProvidersMutationResult)
-async def put_llm_context(payload: LLMContextPatch, container: ContainerDep) -> AIProvidersMutationResult:
-    return await op_ai_providers_llm_context_update(payload, user=require_context().user, container=container)
+async def put_llm_context(payload: LLMContextPatch, di: Di) -> AIProvidersMutationResult:
+    return await op_ai_providers_llm_context_update(payload, user=require_context().user, di=di)
 
 
 @router.delete("/llm-context", response_model=AIProvidersMutationResult)
-async def delete_llm_context(container: ContainerDep) -> AIProvidersMutationResult:
+async def delete_llm_context(di: Di) -> AIProvidersMutationResult:
     return await op_ai_providers_llm_context_remove(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.put("/{capability}", response_model=AIProvidersMutationResult)
 async def put_capability(
-    capability: str, payload: AIProvidersCapabilityUpdate, container: ContainerDep
+    capability: str, payload: AIProvidersCapabilityUpdate, di: Di
 ) -> AIProvidersMutationResult:
     return await op_ai_providers_capability_update(
         AIProvidersCapabilityPayload.model_validate({"capability": capability, **payload.model_dump()}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{capability}", response_model=AIProvidersMutationResult)
-async def delete_capability(capability: str, container: ContainerDep) -> AIProvidersMutationResult:
+async def delete_capability(capability: str, di: Di) -> AIProvidersMutationResult:
     return await op_ai_providers_capability_remove(
-        AIProvidersCapabilityIdPayload(capability=capability), user=require_context().user, container=container
+        AIProvidersCapabilityIdPayload(capability=capability), user=require_context().user, di=di
     )
 
 
 @router.post("/custom", response_model=CustomProviderCreated)
-async def create_custom_provider(payload: CustomProviderCreate, container: ContainerDep) -> CustomProviderCreated:
-    return await op_ai_providers_custom_create(payload, user=require_context().user, container=container)
+async def create_custom_provider(payload: CustomProviderCreate, di: Di) -> CustomProviderCreated:
+    return await op_ai_providers_custom_create(payload, user=require_context().user, di=di)
 
 
 @router.patch("/custom/{provider_id}", response_model=AIProvidersMutationResult)
 async def update_custom_provider(
-    provider_id: str, payload: CustomProviderUpdate, container: ContainerDep
+    provider_id: str, payload: CustomProviderUpdate, di: Di
 ) -> AIProvidersMutationResult:
     return await op_ai_providers_custom_update(
         CustomProviderUpdatePayload.model_validate({"provider_id": provider_id, **payload.model_dump()}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/custom/{provider_id}", response_model=AIProvidersMutationResult)
-async def delete_custom_provider(provider_id: str, container: ContainerDep) -> AIProvidersMutationResult:
+async def delete_custom_provider(provider_id: str, di: Di) -> AIProvidersMutationResult:
     return await op_ai_providers_custom_remove(
-        CustomProviderIdPayload(provider_id=provider_id), user=require_context().user, container=container
+        CustomProviderIdPayload(provider_id=provider_id), user=require_context().user, di=di
     )
 
 
 @router.get("/resolved")
-async def get_resolved(container: ContainerDep) -> JsonObject:
-    return await op_ai_providers_resolved(EmptyPayload(), user=require_context().user, container=container)
+async def get_resolved(di: Di) -> JsonObject:
+    return await op_ai_providers_resolved(EmptyPayload(), user=require_context().user, di=di)

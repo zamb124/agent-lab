@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.llm_model_scores_operations import (
     LLMModelScoreDeletePayload,
     LLMModelScoreDeleteResponse,
@@ -29,37 +29,37 @@ router = APIRouter(
 
 
 @router.get("", response_model=LLMModelScoreListResponse)
-async def list_llm_model_scores(container: ContainerDep) -> LLMModelScoreListResponse:
-    return await op_llm_model_scores_list(EmptyPayload(), user=require_context().user, container=container)
+async def list_llm_model_scores(di: Di) -> LLMModelScoreListResponse:
+    return await op_llm_model_scores_list(EmptyPayload(), user=require_context().user, di=di)
 
 
 @router.put("", response_model=LLMModelScoreMutationResponse)
 async def upsert_llm_model_score(
-    payload: LLMModelScoreUpsertRequest, container: ContainerDep
+    payload: LLMModelScoreUpsertRequest, di: Di
 ) -> LLMModelScoreMutationResponse:
-    return await op_llm_model_scores_upsert(payload, user=require_context().user, container=container)
+    return await op_llm_model_scores_upsert(payload, user=require_context().user, di=di)
 
 
 @router.delete("/{capability}/{provider}/{model_id:path}", response_model=LLMModelScoreDeleteResponse)
 async def delete_llm_model_score(
-    capability: AICapability, provider: str, model_id: str, container: ContainerDep
+    capability: AICapability, provider: str, model_id: str, di: Di
 ) -> LLMModelScoreDeleteResponse:
     return await op_llm_model_scores_delete(
         LLMModelScoreDeletePayload(capability=capability, provider=provider, model_id=model_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/refresh-cache")
-async def refresh_llm_model_scores_cache(container: ContainerDep) -> JsonObject:
+async def refresh_llm_model_scores_cache(di: Di) -> JsonObject:
     return await op_llm_model_scores_refresh_cache(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )
 
 
 @router.post("/probe-providers", response_model=LLMModelScoreListResponse)
-async def probe_llm_model_score_providers(container: ContainerDep) -> LLMModelScoreListResponse:
+async def probe_llm_model_score_providers(di: Di) -> LLMModelScoreListResponse:
     return await op_llm_model_scores_probe_providers(
-        EmptyPayload(), user=require_context().user, container=container
+        EmptyPayload(), user=require_context().user, di=di
     )

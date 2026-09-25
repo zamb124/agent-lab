@@ -1,0 +1,70 @@
+---
+description: "Поля форм — только <platform-field>: модель диспетчера, whitelist сырых тегов, pill-стили, core-виджеты, новый тип данных. Читать при правке форм и полей"
+globs:
+  - "core/frontend/static/lib/components/fields/**"
+  - "core/frontend/static/lib/styles/shared/field-pill.styles.js"
+  - "core/frontend/static/lib/styles/shared/form.styles.js"
+  - "apps/*/ui/pages/**"
+  - "apps/*/ui/modals/**"
+  - "apps/*/ui/components/**"
+alwaysApply: false
+---
+
+# Поля форм
+
+`<platform-field>` (`core/frontend/static/lib/components/fields/platform-field.js`) — единственный способ ввести и показать поле формы в любом сервисе: имя, email, url, пароль, запрос, описание, комментарий, типизированный атрибут CRM. Модалки и формы → `ui_components.mdc` § Модалки; состояние формы → `ui_factories.mdc` (`createForm`).
+
+## Модель
+
+- Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.js` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.js`. Импорт `@platform/lib/components/fields/platform-field.js` подключает все подкомпоненты.
+- Props, слоты (`prefix`, `suffix`) и события (`change`, `platform-field-managed-focus-in|out`) — файл компонента и UIKDS-карточки `tests/ui/design-system/components/platform-field*/`.
+- `@change` отдаёт типизированный `detail.value`: `number` для `number`/`integer`, `boolean`, `Array` для `array`.
+- `mode="edit"` — ввод, `mode="view"` — показ. Диспетчер рисует одну pill-оболочку (`.field-pill` + `.field-pill-label`), подкомпонент её не дублирует; `pill-embed` убирает вторую плашку внутри `.form-group` или карточки.
+
+## Инварианты
+
+1. Поле формы в `apps/<svc>/ui/{pages,modals,components}/**` — только `<platform-field>`. Запрещены `<input type="text">` для строки, числа, даты и enum; `<input type="checkbox">` вместо `platform-field-boolean`; нативный `date`/`datetime-local` вместо `platform-field-date`; свой select или dropdown вместо `platform-field-enum`.
+2. Значение атрибута на экране — `<platform-field mode="view" .type .value>`; интерполяция `${value}` и `JSON.stringify(value)` в шаблоне запрещены. `[без гейта]`
+3. `enum` с техническими id (`flow_id`, provider) — `config.values` из `{ value, label }`; массив строк — только для читаемых значений. `enum` в edit — searchable combobox, не `<select>`. `[без гейта]`
+4. Описание поля — `.hint` (hover-tooltip `<platform-help-hint>` рядом с label); постоянный `<div class="hint">` под полем запрещён, класс `.hint` — только для описаний вне полей. `[без гейта]`
+5. Недопустимые `inputType` и `pillDensity` — `throw` в компоненте; подстановка значения по умолчанию запрещена.
+
+### Сырые теги
+
+Сырой тег в `apps/<svc>/ui/{pages,modals,components}/**` — только по whitelist `scripts/check_field_canon.sh`:
+
+| Тег | Только |
+|---|---|
+| `<input>` | `type` ∈ `file`, `hidden`, `range`, `color`, `checkbox`, `radio`, `search` или атрибут `data-canon` |
+| `<textarea>` | с атрибутом `data-canon` |
+| `<select>` | с атрибутом `data-canon` |
+
+- Значение `data-canon` — `composer`, `mention`, `inline-edit`, `search-as-you-type`, `combobox`; у `<select>` — только `combobox`. `[без гейта]`
+- Класс `form-input` или `field-pill-input` на сыром теге его не легализует.
+- В `apps/flows/ui/{pages,modals,components}/**` сырые `checkbox` и `radio` запрещены: `platform-field type="boolean"` или `platform-segmented-control`.
+
+### Стили
+
+- Классы `.field-pill*` и `.form-*` задают только `core/frontend/static/lib/styles/shared/field-pill.styles.js` (`fieldPillStyles`) и `form.styles.js` (`formStyles`, входит в `PlatformElement.styles`); настройка — токены `--field-pill-*` в `core/frontend/static/assets/css/tokens.css`.
+- Локальные CSS-правила `.form-input|textarea|select|group|label` и `.field-pill*` в `apps/**` запрещены.
+- Список вложений поля — классы `.field-pill-file-ref-*` и `.field-pill-file-refs-*` из `fieldPillStyles`; свои `.file-*` стили в `apps/**` запрещены. `[без гейта]`
+- Подкомпонент стилизуется `PlatformElement.styles` и узким `css` в `static styles`; pill-режим единственный — атрибут `flat` у `<tag-input>` и подкомпонентов запрещён. `[без гейта]`
+- Импорт `@platform/lib/components/glass-input.js` и `@platform/lib/components/glass-textarea.js` запрещён.
+
+### Core-виджеты
+
+- Собственный UI вне поля — только `<platform-date-picker>`, `<platform-switch>`, `<platform-cron-field>`, `<platform-timezone-picker>`, `<platform-icon-picker>`, `<platform-palette-color-picker>`, `<tag-input>` (внутри `platform-field-array`), `<platform-help-hint>`, `<platform-modal-search-field>`. `[без гейта]`
+- Поиск в шапке, тулбаре или сайдбаре модалки — только `<platform-modal-search-field>` (`layout="header|toolbar|fill"`, `@change` → `detail.value`); локальные `.header-search` и pill-override запрещены. `[без гейта]`
+
+### Новый тип данных
+
+1. Подкомпонент `platform-field-<type>.js` в `core/frontend/static/lib/components/fields/` и ключ в `FIELD_TYPE_MAP`.
+2. Подписи — `platform:platform_field.*` в ru и en → `frontend.mdc` § i18n.
+3. Тип атрибута CRM — каталог типов и серверная проверка значения → `crm.mdc` § Модель.
+4. UIKDS-карточка `tests/ui/design-system/components/platform-field-<type>/` → `ui_components.mdc` § UI Kit Documentation System.
+
+## Гейты
+
+- `scripts/check_field_canon.sh` (`make check-field-canon`, в `make lint-ts`) — сырые `<input>`, `<textarea>`, `<select>` вне whitelist.
+- `scripts/check_ui_canon.sh` (`make check-ui-canon`) — п.17 локальные `.form-*`/`.field-pill*` CSS в `apps/**`, п.18 импорт `glass-input`/`glass-textarea`, п.32 сырые checkbox/radio во flows.
+- `scripts/check_ui_kit_docs.py` (`make lint-ts`) — карточки `platform-field*` в UIKDS.

@@ -206,7 +206,7 @@ async def test_imip_invite_creates_calendar_event(
     mail_live_port: MailServerPort,
     mail_live_settings: MailConfig,
     mail_quota_sweeper: list[str],
-    container,
+    di,
     unique_id: str,
 ) -> None:
     prefix = mail_live_settings.live_test.mailbox_prefix
@@ -260,7 +260,7 @@ async def test_imip_invite_creates_calendar_event(
         assert payload.mailbox_binding_id == att.mailbox_binding_id
 
         company_id = "system"
-        event = await container.calendar_service.upsert_event(
+        event = await di.calendar_service.upsert_event(
             event_id=None,
             payload=payload,
             user_id=f"organizer_{unique_id}",

@@ -11,15 +11,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import core.tracing.attributes as trace_attributes
-from apps.crm.container import get_crm_container
-from apps.crm.db.repositories.task_repository import TaskRepository
 from apps.crm.models.api import NoteProcessingConfig
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_task_broadcast import publish_crm_task_snapshot_for_user
 from apps.crm.services.file_text_reader import load_text_from_stored_file_id
 from apps.crm.services.knowledge_import_text_redis import (
     delete_pending_import_text,
     get_pending_import_text,
 )
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_RUN_KNOWLEDGE_IMPORT
 from core.logging import get_logger
@@ -74,7 +74,6 @@ def _payload_bool(data: JsonObject, key: str, *, default: bool) -> bool:
 
 async def notify_task_user(
     user_id: str,
-    repo: TaskRepository,
     company_id: str,
     *,
     task_id: str,
@@ -105,7 +104,6 @@ async def notify_task_user(
     )
     await publish_crm_task_snapshot_for_user(
         user_id=user_id,
-        repo=repo,
         task_id=task_id,
         company_id=company_id,
     )
@@ -118,10 +116,10 @@ async def run_knowledge_import_task(
     company_id: str,
     auth_token: str | None,
     interface_language: str,
+    *,
+    di: Di,
 ) -> JsonObject:
-    container = get_crm_container()
-    repo = container.task_repository
-    row = await repo.get_for_worker(task_id, company_id)
+    row = await CRMTask.by_company_and_task_id(company_id, task_id)
     if row is None:
         raise ValueError(f"Task not found: {task_id}")
 
@@ -134,7 +132,7 @@ async def run_knowledge_import_task(
         row.user_id,
         interface_language=interface_language,
     )
-    entity_service = container.entity_service
+    entity_service = di.entity_service
 
     created_entity_ids: list[str] = []
     created_relationship_ids: list[str] = []
@@ -155,7 +153,7 @@ async def run_knowledge_import_task(
         if not text.strip():
             raise ValueError("Collected import text is empty")
 
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             stage="splitting",
@@ -163,7 +161,6 @@ async def run_knowledge_import_task(
         )
         await publish_crm_task_snapshot_for_user(
             user_id=row.user_id,
-            repo=repo,
             task_id=task_id,
             company_id=company_id,
         )
@@ -175,9 +172,9 @@ async def run_knowledge_import_task(
         )
         total_chunks = len(chunks)
 
-        pre = await repo.get_for_worker(task_id, company_id)
+        pre = await CRMTask.by_company_and_task_id(company_id, task_id)
         if pre is not None and pre.cancel_requested:
-            await repo.patch_progress(
+            await CRMTask.patch_progress(
                 task_id,
                 company_id,
                 status="cancelled",
@@ -187,7 +184,6 @@ async def run_knowledge_import_task(
             )
             await notify_task_user(
                 row.user_id,
-                repo,
                 company_id,
                 task_id=task_id,
                 task_type="knowledge_import",
@@ -200,7 +196,7 @@ async def run_knowledge_import_task(
             )
             return {"status": "cancelled", "task_id": task_id}
 
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             stage="processing_chunks",
@@ -208,7 +204,6 @@ async def run_knowledge_import_task(
         )
         await publish_crm_task_snapshot_for_user(
             user_id=row.user_id,
-            repo=repo,
             task_id=task_id,
             company_id=company_id,
         )
@@ -229,11 +224,11 @@ async def run_knowledge_import_task(
 
             for idx, chunk in enumerate(chunks):
                 last_chunk_index = idx
-                fresh = await repo.get_for_worker(task_id, company_id)
+                fresh = await CRMTask.by_company_and_task_id(company_id, task_id)
                 if fresh is None:
                     raise RuntimeError("Task row disappeared during execution")
                 if fresh.cancel_requested:
-                    await repo.patch_progress(
+                    await CRMTask.patch_progress(
                         task_id,
                         company_id,
                         status="cancelled",
@@ -250,7 +245,6 @@ async def run_knowledge_import_task(
                     )
                     await notify_task_user(
                         row.user_id,
-                        repo,
                         company_id,
                         task_id=task_id,
                         task_type="knowledge_import",
@@ -277,7 +271,7 @@ async def run_knowledge_import_task(
                 notes_created += 1
 
                 chunk_pct = 40 + int(40 * (idx + 1) / max(total_chunks, 1))
-                await repo.patch_progress(
+                await CRMTask.patch_progress(
                     task_id,
                     company_id,
                     stage="processing_chunks",
@@ -292,24 +286,23 @@ async def run_knowledge_import_task(
                 )
                 await publish_crm_task_snapshot_for_user(
                     user_id=row.user_id,
-                    repo=repo,
                     task_id=task_id,
                     company_id=company_id,
                 )
 
             if mode == "graph":
-                pipeline = container.note_processing_service
+                pipeline = di.note_processing_service
                 graph_config = NoteProcessingConfig(
                     extract_entity_types=_optional_payload_str_list(data, "extract_entity_types"),
                 )
 
                 for idx, note_id in enumerate(import_note_ids):
                     last_chunk_index = idx
-                    fresh = await repo.get_for_worker(task_id, company_id)
+                    fresh = await CRMTask.by_company_and_task_id(company_id, task_id)
                     if fresh is None:
                         raise RuntimeError("Task row disappeared during execution")
                     if fresh.cancel_requested:
-                        await repo.patch_progress(
+                        await CRMTask.patch_progress(
                             task_id,
                             company_id,
                             status="cancelled",
@@ -326,7 +319,6 @@ async def run_knowledge_import_task(
                         )
                         await notify_task_user(
                             row.user_id,
-                            repo,
                             company_id,
                             task_id=task_id,
                             task_type="knowledge_import",
@@ -353,7 +345,7 @@ async def run_knowledge_import_task(
                     relationships_created += len(result.created_relationship_ids)
 
                     graph_pct = 80 + int(15 * (idx + 1) / max(len(import_note_ids), 1))
-                    await repo.patch_progress(
+                    await CRMTask.patch_progress(
                         task_id,
                         company_id,
                         stage="processing_chunks",
@@ -368,12 +360,11 @@ async def run_knowledge_import_task(
                     )
                     await publish_crm_task_snapshot_for_user(
                         user_id=row.user_id,
-                        repo=repo,
                         task_id=task_id,
                         company_id=company_id,
                     )
 
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="completed",
@@ -390,7 +381,6 @@ async def run_knowledge_import_task(
         )
         await notify_task_user(
             row.user_id,
-            repo,
             company_id,
             task_id=task_id,
             task_type="knowledge_import",
@@ -411,7 +401,7 @@ async def run_knowledge_import_task(
     except Exception as exc:
         err_text = str(exc)
         logger.exception("crm.knowledge_import", task_id=task_id)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="failed",
@@ -430,7 +420,6 @@ async def run_knowledge_import_task(
         )
         await notify_task_user(
             row.user_id,
-            repo,
             company_id,
             task_id=task_id,
             task_type="knowledge_import",

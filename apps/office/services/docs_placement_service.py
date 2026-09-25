@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from apps.office.db.repositories.catalog_repository import CatalogRepository
-from apps.office.db.repositories.document_binding_repository import DocumentBindingRepository
+from datetime import datetime, timezone
+
+from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from apps.office.services.office_access_service import OfficeAccessService
 from core.documents.placement import DocsBindResult, DocsPlacement
@@ -17,13 +18,9 @@ class DocsPlacementService:
     def __init__(
         self,
         *,
-        catalog_repository: CatalogRepository,
-        document_binding_repository: DocumentBindingRepository,
         files_service: FilesService,
         office_access_service: OfficeAccessService,
     ) -> None:
-        self._catalog_repository: CatalogRepository = catalog_repository
-        self._document_binding_repository: DocumentBindingRepository = document_binding_repository
         self._files_service: FilesService = files_service
         self._office_access_service: OfficeAccessService = office_access_service
 
@@ -32,7 +29,7 @@ class DocsPlacementService:
         if record.company_id != company_id:
             raise ValueError("file does not belong to company")
 
-        existing = await self._document_binding_repository.get(
+        existing = await OfficeDocumentBinding.binding_in_namespace(
             placement.file_id,
             company_id,
             placement.namespace,
@@ -68,15 +65,20 @@ class DocsPlacementService:
             record.original_name,
             record.content_type.split(";", 1)[0].strip(),
         )
-        row = await self._document_binding_repository.create(
-            company_id=company_id,
-            namespace=placement.namespace,
-            catalog_id=catalog_id,
-            file_id=placement.file_id,
-            file_category=file_category,
-            onlyoffice_document_type=onlyoffice_document_type,
-            title=title,
-            created_by_user_id=user_id,
+        now = datetime.now(timezone.utc)
+        row = await OfficeDocumentBinding.create_binding(
+            OfficeDocumentBinding(
+                file_id=placement.file_id,
+                company_id=company_id,
+                namespace=placement.namespace,
+                catalog_id=catalog_id,
+                file_category=file_category,
+                onlyoffice_document_type=onlyoffice_document_type,
+                title=title,
+                created_by_user_id=user_id,
+                created_at=now,
+                updated_at=now,
+            )
         )
         try:
             await self._office_access_service.sync_document_created(
@@ -84,8 +86,10 @@ class DocsPlacementService:
                 owner_user_id=user_id,
             )
         except Exception:
-            _ = await self._document_binding_repository.delete_binding(
-                row.file_id, company_id, placement.namespace
+            _ = await OfficeDocumentBinding.delete_binding_in_namespace(
+                row.file_id,
+                company_id,
+                placement.namespace,
             )
             raise
         _ = await self._files_service.promote_retention(
@@ -110,11 +114,11 @@ class DocsPlacementService:
     ) -> str:
         parent_id: str | None = None
         for segment in segments:
-            catalog, created = await self._catalog_repository.get_or_create_child_by_title(
+            catalog, created = await OfficeDocumentCatalog.ensure_child_catalog(
                 company_id=company_id,
                 namespace=namespace,
                 parent_catalog_id=parent_id,
-                title=segment,
+                title=segment.strip(),
                 owner_user_id=user_id,
             )
             if created:
@@ -125,8 +129,10 @@ class DocsPlacementService:
                         company_visible=True,
                     )
                 except Exception:
-                    _ = await self._catalog_repository.delete_catalog(
-                        catalog.catalog_id, company_id, namespace
+                    _ = await OfficeDocumentCatalog.delete_catalog_in_namespace(
+                        catalog.catalog_id,
+                        company_id,
+                        namespace,
                     )
                     raise
             else:

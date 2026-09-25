@@ -1,123 +1,57 @@
 ---
-description: "Platform Index Search: apps/search + search_worker, БД platform_search, crawl pipeline, ranking canon, runet index"
+description: "Platform Index Search (apps/search, search_worker): реестр индексов, meta-search и runet, ранжирование, crawl pipeline, команды. Читать при правке поиска и краула"
+globs:
+  - "apps/search/**"
+  - "apps/search_worker/**"
+  - "core/search/**"
+  - "core/crawl/**"
+  - "apps/scheduler/crawl_schedule_bootstrap.py"
 alwaysApply: false
 ---
+
 # Platform Index Search
 
-Ownership: `apps/search` + `apps/search_worker` + `platform_search`.
+`apps/search` (порт 8010, внутренний, без ingress) + `search_worker` (очередь `search`) владеют реестром индексов и краулом; векторы индекса живут в RAG (→ `rag.mdc`). Flows ищет только через tools `index_search`/`runet_search` → `SearchClient`.
 
-- Registry и crawl state — БД `platform_search` (`DATABASE__SEARCH_URL`).
-- Read path: `IndexSearchProvider` → `RagClient.search` по `search_indexes`.
-- Crawl pipeline: `CrawlOrchestratorService` + TaskIQ queue `search`.
-- flows интегрируется через tool `index_search` / `runet_search` → `SearchClient`.
+## Модель
 
-Запрещено в flows: import `apps.search.db`, crawl API, прямой доступ к `platform_search`.
+- БД `platform_search` (`DATABASE__SEARCH_URL`): `SearchIndexDefinition` (`core/search/index_models.py`, реестр `search_indexes` с `SearchIndexRetrievalConfig` и `indexing_profile_key`), `CrawlProfile`, `CrawlDomain`, `CrawlUrl`, `CrawlJob` (`core/crawl/models.py`).
+- Read path: `IndexSearchProvider` → `RagClient.search` по namespace индекса; meta-search — `MetaSearchService` с провайдерами компании (`Company.metadata.search_providers`).
+- Профиль индексации `runet_web` — `rag.index_profiles.runet_web` через `resolve_index_profile` (`split.strategy=semantic`, lexical включён).
 
-## Runet search path
+## Инварианты
 
-- Alias `runet` в meta-search → provider `index` + `index_ids=["runet"]` (см. `index_resolver.preprocess_meta_search_request`).
-- `public_search` flow: `search_providers: ["runet"]` во всех ветках (`quick` / `deep` / `research`) — только platform index, без SERP fallback.
-- **Fail-closed:** если после merge/rank `ranked` пустой → `MetaSearchProviderStatus(ok=false, error="index returned no results")`. В том числе когда RAG вернул chunks без `metadata.source_url`.
-- `providers: ["auto"]` + `first_available`: index fail-closed → fallback на следующий provider из `provider_order`. `providers: ["runet"]` — fallback запрещён (единственный provider).
+1. Alias `runet` → провайдер `index` + `index_ids=["runet"]` (`preprocess_meta_search_request`); `public_search` flow использует только `runet`; пустой ranked-результат (включая чанки без `metadata.source_url`) — `MetaSearchProviderStatus(ok=false, ...)`; fallback — только при `providers: ["auto"]` + `first_available`.
+2. Ранжирование индекса = RRF × freshness × domain authority (+ rerank top `rerank_max_candidates` через `core.ai.runtime.rerank_scores` с `RerankScoreCache`); все веса — `SearchIndexRetrievalConfig`; изменение формулы или весов — только через конфиг и прогон eval.
+3. Recency-запрос (`is_recency_sensitive_query`) передаёт в RAG `freshness_recency_half_life_days`; FTS — `to_tsvector('russian', ...)` с весами A/B/D, запрос `websearch_to_tsquery('russian')`, `LEXICAL_TS_CONFIG` совпадает с колонкой; сниппет — `provenance.headline` → `page_summary` → content.
+4. Fetch: HTTP (`CrawlFetchService._fetch_http_markdown`: httpx + trafilatura + BS4, без LLM); browser fallback (`BrowserFetchClient` → `/browser/api/v1/control/crawl/fetch`) только при `browser_fallback_enabled`.
+5. LLM enrichment — opt-in `crawl_profiles.llm_enrichment_enabled`: raw markdown индексируется сразу, затем `crawl_enrich_url` → `CrawlPageEnrichmentService` (`resolve_ai_model(AICapability.LLM_CHAT)`, пул `humanitec_llm`, `free_only`, taxonomy whitelist индекса) → `reingest_enriched_page`; сбой enrichment не снимает `indexed`; LLM в scrape и extraction запрещён.
+6. Crawl cycle: тик — cron (`crawl_orchestrator_tick` раз в час, `crawl_reclaim_stale_fetching` каждые 15 минут, bootstrap `apps/scheduler/crawl_schedule_bootstrap.py`) + один стартовый тик при pending + handoff из fetch при вычерпанном домене; цикл `run_tick → enqueue tick` при pending запрещён.
+7. Параллелизм — N задач `crawl_fetch_url` (одна задача — один URL, `parallel = min(batch, http_concurrency)`), не `--workers N` воркера.
+8. Порядок fetch — `claim_pending_batch` по `sitemap_lastmod DESC NULLS LAST, created_at DESC`; изменившийся lastmod возвращает URL в `pending`; интервал домена — adaptive refresh (`crawl.adaptive_refresh_*`); 404/410 — удаление из индекса и `CrawlUrl.mark_gone`.
+9. Politeness — `CrawlPolitenessService`: robots `Disallow` → skip, `Crawl-delay` + `fetch_min_interval_seconds` → rate limit через Redis, user agent `crawl.robots_user_agent`.
+10. Контекст воркера — `load_system_admin_membership` (только чтение); `ensure_rag_namespace` — один create на namespace за жизнь процесса; Tranco seed — append-only.
+11. Bootstrap воркера — `CrawlBootstrapService.ensure_crawl_pipeline_ready()` (закрыть зависшие jobs, импорт Tranco при пустом профиле и `bootstrap_tranco_on_empty`, иначе тик при pending).
 
-## Ranking canon (retrieval)
+## Контракты
 
-Финальный порядок index-результатов = гибридный RRF × freshness × domain authority (+ опциональный rerank). Все параметры — retrieval-конфиг в `search_indexes` (`core/search/index_models.py::SearchIndexRetrievalConfig`): `rrf_k`, `per_channel_top_k`, `rerank_enabled`, `rerank_max_candidates`, `freshness_weight`, `freshness_half_life_days`, `freshness_recency_half_life_days`, `domain_authority_weight`. Runet: rerank top-30, `per_channel_top_k=120`, `freshness_weight=0.5`, half-life 180d (recency-запросы — 30d), authority 0.1 (миграция `search_0014`).
+- Команды — `SEARCH_OPERATIONS` (`apps/search/realtime/`), REST `/search/api/v1/**`: `search/query/*` (meta-search, доступен гостю публичного поиска), `search/providers/*` (`require_company_admin`), crawl-админка и реестр индексов (`require_system_admin`).
+- Crawl report — страница frontend `frontend-crawl-report-page` через фабрики `search-crawl-report.resource.js` (`search/crawl_*`, `transport: 'ws'`), без BFF-прокси.
+- `apps/search/api/mcp.py` — MCP JSON-RPC, не команда.
 
-- **Freshness decay** — в `pgvector_provider._hybrid_search_rrf`, множитель `(1 - weight) + weight * 0.5^(age/half_life)` поверх RRF-скора полного пула кандидатов. Возраст: `metadata.date_modified` → `date_published` → `vector_documents.created_at`. Для `freshness_relevance=evergreen` half-life растягивается в `FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR` (4x).
-- **Recency-sensitive запросы** — эвристика `is_recency_sensitive_query` (`apps/search/providers/index.py`, `_RECENCY_QUERY_RE`: годы/«новости»/«сегодня»/«последние»…) → провайдер передаёт в RAG `freshness_recency_half_life_days` вместо базового.
-- **Русская морфология FTS** — `content_tsv` = `to_tsvector('russian', ...)` с `setweight`: A (`page_title`/`document_name`), B (`heading_trail`), D (content) — generated column (миграция `rag_0006`, `core/db/models/rag.py`). Запрос — `websearch_to_tsquery('russian')`, ранг — `ts_rank_cd`. `LEXICAL_TS_CONFIG` обязан совпадать с конфигом колонки.
-- **Сниппеты** — `ts_headline` (подсветка `**…**`) пишется в `provenance.headline`; `IndexSearchProvider._resolve_index_snippet` берёт headline → `page_summary` → content.
-- **Domain authority** — Tranco `metadata.domain_rank`, log10-нормировка (`_DOMAIN_AUTHORITY_LOG_CEILING`), мультипликативный boost с весом `domain_authority_weight` в `IndexSearchProvider` после RAG.
-- **Rerank** — только top `rerank_max_candidates` после RRF+freshness, через `core.ai.runtime.rerank_scores`; Redis-кэш скорингов `RerankScoreCache` по `(query_hash, chunk_id)` (`core/rag/post_retrieval_rerank.py`); rerank-скор умножается на freshness-множитель из provenance.
-- **Query instruct** — `rag.embedding.api.query_instruction` (conf) → asymmetric префикс `Instruct: {task}\nQuery: {query}` только для query-эмбеддингов (Qwen3-Embedding), документы embed'ятся без префикса (`PgVectorProvider._query_embedding_text`).
+## Интеграции
 
-Менять формулу/веса — только через retrieval-конфиг и прогон eval (см. Quality loop), не хардкодом в провайдере.
+- Наблюдаемость crawl — события `crawl.*` (`core/logging/attributes.py`, `core/crawl/logging_events.py`), дашборд `crawl-indexing`; SERP — `search.serp.served`/`search.serp.click` (`core/search/logging_events.py`), дашборд `search-quality`.
+- Клик SERP: `frontend/public_search_serp_click` → `POST /frontend/api/public/search/serp/click` → `POST /search/api/v1/search/serp/click` (`SerpClickEvent`).
+- Quality loop: `conf/search_eval/runet_golden.json` + `scripts/eval_search_quality.py` (NDCG@10, MRR@10, Recall@50) до и после изменения ранжирования.
 
-## Crawl fetch stack
+## Запреты
 
-- **HTTP (primary):** `CrawlFetchService._fetch_http_markdown` — httpx + trafilatura + BS4. Детерминированно, без LLM.
-- **Browser fallback:** при `browser_fallback_enabled=true` и ошибке HTTP или `len(markdown) < min_extract_chars` → `BrowserFetchClient` → `POST /browser/api/v1/control/crawl/fetch` (Playwright, `page_mode=crawl`, block images/CSS/fonts). Fail-closed без флага.
-- **LLM enrichment (opt-in, two-stage):** при `crawl_profiles.llm_enrichment_enabled=true` layer 1 всегда ingest raw markdown в RAG (`crawl_fetch_url`); поиск работает сразу. Layer 0: `extract_structural_signals` (JSON-LD/OG/meta) persist в `crawl_urls.extract_structural_signals`. После `mark_indexed` → `kiq(crawl_enrich_url)`. Layer 2: `CrawlPageEnrichmentService` → `resolve_ai_model(AICapability.LLM_CHAT)` + `humanitec_llm` free pool (`search.crawl.enrichment`, `prompt_version=structured`, taxonomy whitelist per `search_index_id` из `search.crawl.taxonomy_files` / `taxonomies`, `free_only`, без paid fallback) → structured JSON (`body`, `filter_metadata`, `retrieval_augment`, строго 1 chunk) → `reingest_enriched_page` (delete+ingest). Fail enrichment не сбрасывает `indexed`; backfill — `list_indexed_missing_enrichment` + `enqueue_enrichment_backfill`.
-- **Skip:** dual hash — `extract_content_hash` (raw markdown) + `enriched_content_hash` + `enrichment_prompt_version`. LitServe/humanitec_llm для scrape/extraction по-прежнему запрещены; LLM только enrichment layer и query-time (`public_search`, insights).
+1. Импорт моделей search и crawl, crawl API и доступ к `platform_search` из flows.
+2. In-process SemanticChunker/sentence-transformers на ingest.
+3. Хардкод весов ранжирования в провайдере.
 
-## Indexing profile `runet_web`
+## Гейты
 
-- Ключ в `search_indexes.indexing_profile_key` → `core.rag.index_profile_registry.resolve_index_profile`.
-- Конфиг: `conf.json` → `rag.index_profiles.runet_web` (`split.strategy=semantic` = RecursiveChunker, lexical enabled). In-process SemanticChunker/sentence-transformers на ingest запрещены.
-- Ingest: `CrawlIngestService` кладёт `metadata.index_profile_config` для `pgvector_provider`; при enrichment — filter metadata (`content_type`, dates, `primary_topic`, `topic_tags`, `category_path`, `language`, `audience`, `freshness_relevance`, `page_title`, `page_summary`), `enrichment_model`, `enriched_content_hash`. Questions/keywords/contextual_prefix — только embed-текст (`to_ingest_markdown`), не RAG metadata.
-
-## Crawl cycle
-
-- Частота тика = cron + один startup-tick при pending + handoff из fetch, когда домен вычерпан. Tight loop `run_tick → enqueue tick` при `pending_urls > 0` запрещён.
-- `run_tick`: планирует домены (`list_with_pending_urls`, затем `list_due`), enqueue discover/fetch. Pending в профиле **не** ставит следующий tick.
-- `fetch_one_url`: domain `pending==0`, profile `pending>0` → `kiq crawl_orchestrator_tick` (handoff на следующий домен).
-- `fetch_one_url`: domain `pending>0` → `kiq crawl_fetch_url` (цепочка внутри домена).
-- `CrawlBootstrapService`: worker startup → `finish_stale_running_jobs`; при pending → один `kiq crawl_orchestrator_tick`.
-- `crawl_reclaim_stale_fetching`: reclaim + requeue failed + `finish_stale_running_jobs`; pending → `kiq crawl_orchestrator_tick`.
-- Cron: `crawl_orchestrator_tick` (`0 * * * *`), `crawl_reclaim_stale_fetching` (`*/15 * * * *`) — idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (`reconcile_cron`, `company_id=system`).
-- `ensure_rag_namespace`: POST create один раз на `rag_namespace_id` за жизнь процесса воркера (memo на инстансе оркестратора). Не list всех namespace.
-- Worker context: `_enter_worker_context` → `load_system_admin_membership` (read-only, без FGA Write). `run_tick` контекст не ставит и не сбрасывает.
-- `CrawlDomainRepository.list_due` — домены с `next_crawl_after <= now`; backlog-first через `list_with_pending_urls`.
-- После tick/fetch домен уходит в «сон» (`schedule_next` + adaptive refresh, см. ниже).
-- Tranco seed — append-only (`upsert_seed_batch` не сбрасывает `next_crawl_after` у existing domains).
-
-## Crawl freshness & politeness
-
-- **Приоритет fetch** — `claim_pending_batch`: `ORDER BY sitemap_lastmod DESC NULLS LAST, created_at DESC` (не FIFO); новые/обновлённые URL первыми.
-- **Re-fetch по lastmod** — `upsert_from_sitemap`: изменившийся `sitemap_lastmod` у уже indexed URL → `crawl_status='pending'`.
-- **Adaptive refresh** — `_adaptive_refresh_interval` (orchestrator): интервал домена подстраивается по `domain_change_stats` (доля изменившихся URL за lookback); конфиг `crawl.adaptive_refresh_*` (`enabled`, `min_seconds` 1h, `max_seconds` 7d, `min_samples`, `lookback_factor`). Мало наблюдений — базовый `refresh_interval_seconds`.
-- **Гигиена индекса** — 404/410 при re-fetch → `rag.delete_namespace_document` + `CrawlUrlRepository.mark_gone` (status `skipped`, outcome `gone`, документ из индекса удалён).
-- **Politeness** — `CrawlPolitenessService` (`apps/search/services/crawl/politeness_service.py`): robots.txt `Disallow` → skip (`robots_disallowed`), `Crawl-delay` + `fetch_min_interval_seconds` → per-domain rate limit через Redis Lua slot; robots-парсер кэшируется в Redis (`robots_cache_ttl_seconds`). Конфиг `crawl.politeness_enabled`, `crawl.robots_user_agent` (default `LinnexBot`).
-
-## Parallel fetch enqueue
-
-- Параллелизм crawl = **N задач `crawl_fetch_url` в Redis queue `search`**, не `--workers N` у TaskIQ worker (prod: `--workers 1`).
-- `_enqueue_domain_fetch`: `batch = min(url_budget, max_urls_per_batch, pending)`, `parallel = min(batch, http_concurrency)`.
-- Enqueue `parallel` TaskIQ tasks `crawl_fetch_url` с `url_budget=1` each. Один URL — одна задача.
-- Профиль `runet_platform`: `max_domains_per_tick`, `http_concurrency` задают in-flight pool через kiq на tick + self-re-enqueue после fetch.
-
-## REST
-
-- `POST /search/api/v1/search` — meta search (`index_ids`, `providers`)
-- `/search/api/v1/search-indexes` — registry CRUD
-- `/search/api/v1/crawl/*` — crawl admin
-- `POST /search/api/v1/crawl/domains/{crawl_domain_id}/run?crawl_profile_id=...` — ручной перезапуск одного домена (discover или fetch)
-- `POST /search/api/v1/crawl/profiles/{id}/seed/tranco` — append Tranco seed
-
-## Worker tasks
-
-- `crawl_orchestrator_tick`
-- `crawl_discover_domain`
-- `crawl_fetch_url` — одна TaskIQ-задача на один URL
-- `crawl_import_seed_domains`
-- `crawl_reclaim_stale_fetching`
-
-## Bootstrap
-
-- `search_worker` startup → `CrawlBootstrapService.ensure_crawl_pipeline_ready()`: `finish_stale_running_jobs`; если у `default_crawl_profile_id` нет доменов и `bootstrap_tranco_on_empty=true` — `kiq crawl_import_seed_domains` (Tranco, async, default limit 2000); если домены есть и pending → `kiq crawl_orchestrator_tick`.
-- `crawl_import_seed_domains` после `imported > 0` → `kiq crawl_orchestrator_tick`.
-- Cron schedules: idempotent bootstrap в `apps/scheduler/crawl_schedule_bootstrap.py` (rollout/restart `scheduler-api`).
-
-## Команды (`SEARCH_OPERATIONS`)
-
-`apps/search/realtime/{command_router,operations}.py` — `search` в `_OWNER_BY_SCOPE` и `COMMAND_WS_SERVICES`; REST-зеркало `/search/api/v1/**` (crawl, search-indexes, search, providers/company) зовёт те же `op_*`. Crawl-администрирование и реестр индексов — `require_system_admin` (компания `system` + FGA `company#admin`); настройки провайдеров компании (`search/providers/*`, `Company.metadata.search_providers`) — `require_company_admin`; meta-поиск (`search/query/*`) доступен гостю публичного поиска. Каталог метаданных провайдеров (label/logo/docs_url + i18n `settings_page.search_providers.catalog.*`) живёт в UI, бэкенд отдаёт только `CompanySearchProvidersResponse`. `apps/search/api/mcp.py` — MCP JSON-RPC, не команда. Сервис внутренний: `/search` на ingress и dev-proxy — публичная страница поиска frontend, REST-зеркало доступно in-cluster и в тестовом стеке (`:9010`). Live identity WS=REST — `tests/realtime/test_search_commands.py`.
-
-## Crawl report
-
-- Admin UI: `/frontend` → Crawl report (`frontend-crawl-report-page`): summary, domains/URLs/jobs, фильтры, transport badge, **LLM enriched** badge (`enriched_content_hash`), **Run** per domain, auto-refresh 15s при активном крауле. Фабрики — `@platform/lib/events/resources/search-crawl-report.resource.js` (`search/crawl_*`, `transport: 'ws'`), BFF-прокси во frontend нет.
-- `crawl_urls.fetch_transport`: `http` | `browser` — UI badge в Crawl Report.
-- Job counters: `urls_enriched`, `urls_enrichment_failed`.
-
-## Crawl observability (Loki / Grafana)
-
-- Structured crawl events — `core/logging/attributes.py` (`crawl.tick.*`, `crawl.url.outcome`, `crawl.fetch.*`, `crawl.ingest.*`, `crawl.enrich.*`, …) и эмиссия через `core/crawl/logging_events.py`.
-- Grafana dashboard **Crawl / RuNet Indexing** (`deploy/helm/agent-lab/files/dashboards/11-crawl-indexing.json`, uid `crawl-indexing`): throughput, failures, fetch transport, ingest/enrichment latency, reclaim/seed, TaskIQ crawl tasks.
-- Loki `service` label: `search-worker` (pipeline), `browser` (fallback fetch), `rag` (ingest path), `scheduler-api` (cron schedules).
-
-## Quality loop (eval + SERP telemetry)
-
-- **Golden eval** — `conf/search_eval/runet_golden.json` (запросы + relevant URL-подстроки, grade 0-3) + `scripts/eval_search_quality.py`: NDCG@10, MRR@10, Recall@50 против живого `POST /search/api/v1/search`. Прогон до/после любого изменения ранжирования: `uv run python -m scripts.eval_search_quality --base-url http://localhost:8010 --label <stage>`.
-- **SERP telemetry** — structured events `search.serp.served` (каждая финальная выдача, `MetaSearchService._finalize_paged_response`) и `search.serp.click` (клик по результату) через `core/search/logging_events.py`; ключи `serp_*` в `core/logging/attributes.py`.
-- **Click chain** — UI `search-page` → op `frontend/public_search_serp_click` (public search session token) → `POST /frontend/api/public/search/serp/click` (guest validation, RouteRule `context_type=api`) → `POST /search/api/v1/search/serp/click` (`SerpClickEvent`: query, mode, url, position, provider, `serp_cache_key`) → Loki.
-- **Grafana dashboard Search Quality / SERP** (`deploy/helm/agent-lab/files/dashboards/13-search-quality.json`, uid `search-quality`, Loki `service=search`): served/clicks per min, CTR %, avg/p50/p90 click position, zero-result %, clicks by provider.
+- `tests/realtime/test_search_commands.py` — WS ≡ REST `SEARCH_OPERATIONS`.
+- Ранжирование — `scripts/eval_search_quality.py` `[без гейта]`.

@@ -12,7 +12,6 @@ from collections.abc import Sequence
 
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.flow_config import Edge, FlowConfig
 from core.clients.flow_ui_client import task_state, task_text, task_ui_events
 from core.context import require_context
@@ -137,12 +136,12 @@ async def ensure_flow(
     interface: FlowUIDocument | None = None,
     code: str = ECHO_CODE,
     owner_user_id: str | None = None,
+    di,
 ) -> FlowConfig:
     """Code-flow из одной ноды с явным интерфейсом; authz синхронизируется как при сохранении."""
     context = require_context()
     resolved_flow_id = flow_id if flow_id is not None else f"flow-ui-{uuid.uuid4().hex}"
-    container = get_container()
-    config = await container.flow_repository.get(resolved_flow_id)
+    config = await FlowConfig.get_latest(resolved_flow_id)
     if config is None:
         config = FlowConfig(
             flow_id=resolved_flow_id,
@@ -153,10 +152,10 @@ async def ensure_flow(
         )
         if interface is not None:
             config.interface = interface
-        _ = await container.flow_repository.set(config)
+        _ = await FlowConfig.create_version(config)
     if context.active_company is None:
         raise AssertionError("active company required for flow authz sync")
-    await container.flow_access_service.sync_flow_saved(
+    await di.flow_access_service.sync_flow_saved(
         config,
         company_id=context.active_company.company_id,
         owner_user_id=owner_user_id if owner_user_id is not None else context.user.user_id,
@@ -164,8 +163,8 @@ async def ensure_flow(
     return config
 
 
-async def load_flow_ui_state(session_id: str) -> ExecutionState:
-    state = await get_container().workflow_runtime.get_state(session_id)
+async def load_flow_ui_state(session_id: str, di) -> ExecutionState:
+    state = await di.workflow_runtime.get_state(session_id)
     if state is None:
         raise AssertionError(f"Flow UI session missing: {session_id}")
     return state
@@ -188,8 +187,8 @@ def text_of(task: JsonObject, name: str) -> str:
     return task_text(task, name)
 
 
-def _parts(container: JsonObject) -> list[JsonObject]:
-    parts = container.get("parts")
+def _parts(di: JsonObject) -> list[JsonObject]:
+    parts = di.get("parts")
     if not isinstance(parts, list):
         raise AssertionError("parts must be a list")
     return [require_json_object(part, "parts[]") for part in parts]

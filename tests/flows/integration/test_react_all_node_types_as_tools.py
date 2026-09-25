@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.enums import NodeType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import LlmNode
 from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from core.a2a import mapping_from_struct
@@ -38,7 +38,7 @@ def make_state(*, flow_id: str = "test-agent", **kwargs) -> ExecutionState:
 
 
 async def run_react_node(node: LlmNode, state: ExecutionState) -> ExecutionState:
-    return await run_node(container=node.container, node=node, state=state)
+    return await run_node(di=node.di, node=node, state=state)
 
 
 def reflection_policy() -> CriticPolicy:
@@ -66,7 +66,7 @@ class TestReactToolsModifyState:
     """
 
     @pytest.mark.asyncio
-    async def test_each_tool_call_modifies_state(self, mock_llm_with_queue):
+    async def test_each_tool_call_modifies_state(self, mock_llm_with_queue, di):
         """
         3 tool calls подряд - каждый записывает в state.
         После каждого tool_results обновляется.
@@ -116,7 +116,7 @@ class TestReactToolsModifyState:
                 "prompt": "Execute steps in order.",
                 "tools": [tool1, tool2, tool3],
             },
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="Run pipeline")
         result = await run_react_node(llm_node, state)
@@ -131,7 +131,7 @@ class TestReactToolsModifyState:
         assert "step3_tool" in result.tool_results
 
     @pytest.mark.asyncio
-    async def test_tool_reads_previous_tool_state_changes(self, mock_llm_with_queue):
+    async def test_tool_reads_previous_tool_state_changes(self, mock_llm_with_queue, di):
         """
         Tool 2 ЧИТАЕТ изменения которые сделал Tool 1.
         Это доказывает что state передается между tools.
@@ -177,7 +177,7 @@ class TestReactToolsModifyState:
                 "prompt": "Process list.",
                 "tools": [init_tool, append_tool, sum_tool],
             },
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="Process list")
         result = await run_react_node(llm_node, state)
@@ -192,7 +192,7 @@ class TestCodeNodeWithNamedParams:
     """CodeNode получает именованные параметры."""
 
     @pytest.mark.asyncio
-    async def test_all_param_types(self, mock_llm_with_queue):
+    async def test_all_param_types(self, mock_llm_with_queue, di):
         """Все типы параметров передаются корректно."""
         tool = {
             "tool_id": "typed_tool",
@@ -238,7 +238,7 @@ class TestCodeNodeWithNamedParams:
         llm_node = LlmNode(
             node_id="param_tester",
             config={"type": "llm_node", "prompt": "Test.", "tools": [tool]},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="Test params")
         result = await run_react_node(llm_node, state)
@@ -255,12 +255,11 @@ class TestAgentSkillsAsTools:
     """Разные skills агента как tools."""
 
     @pytest.mark.asyncio
-    async def test_different_skills_modify_state(self, mock_llm_with_queue, app):
+    async def test_different_skills_modify_state(self, mock_llm_with_queue, app, di):
         """
         Вызываем разные skills одного агента.
         КАЖДЫЙ skill ДОЛЖЕН изменить state.
         """
-        container = get_container()
         flow_config = FlowConfig(
             flow_id="skills_agent",
             name="Skills Agent",
@@ -294,7 +293,7 @@ class TestAgentSkillsAsTools:
                 },
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         math_tool = {
             "tool_id": "do_math",
             "type": "flow",
@@ -329,7 +328,7 @@ class TestAgentSkillsAsTools:
         llm_node = LlmNode(
             node_id="skill_coordinator",
             config={"type": "llm_node", "prompt": "Use skills.", "tools": [math_tool, text_tool]},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="Use skills")
         result = await run_react_node(llm_node, state)
@@ -337,7 +336,7 @@ class TestAgentSkillsAsTools:
         assert result.math_result == 30, "math: 10+20=30"
         assert result.text_executed is True, "text skill должен был выполниться"
         assert result.text_result == "HELLO", "text: hello -> HELLO"
-        await container.flow_repository.delete("skills_agent")
+        await FlowConfig.delete_by_flow_id("skills_agent")
 
 
 class TestAllNodeTypesAsToolsWithStateChange:
@@ -347,7 +346,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
     """
 
     @pytest.mark.asyncio
-    async def test_code_node_as_tool_modifies_state(self, mock_llm_with_queue):
+    async def test_code_node_as_tool_modifies_state(self, mock_llm_with_queue, di):
         """CODE node как tool изменяет state."""
         tool = {
             "tool_id": "code_tool",
@@ -368,14 +367,14 @@ class TestAllNodeTypesAsToolsWithStateChange:
         react = LlmNode(
             "test",
             config={"type": "llm_node", "prompt": "Use tool.", "tools": [tool]},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         result = await run_react_node(react, make_state(content="test"))
         assert result.code_executed is True, "CODE должен изменить state"
         assert result.code_result == 500, "CODE: 5*100=500"
 
     @pytest.mark.asyncio
-    async def test_llm_node_as_tool_modifies_state(self, mock_llm_with_queue):
+    async def test_llm_node_as_tool_modifies_state(self, mock_llm_with_queue, di):
         """LLM_NODE (subagent) как tool изменяет state."""
         subagent_tool = {
             "tool_id": "subagent",
@@ -403,16 +402,15 @@ class TestAllNodeTypesAsToolsWithStateChange:
         react = LlmNode(
             "main",
             config={"type": "llm_node", "prompt": "Use subagent.", "tools": [subagent_tool]},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         result = await run_react_node(react, make_state(content="test"))
         assert result.helper_flag is True, "LLM_NODE subagent должен изменить state"
         assert result.helper_value == 42, "LLM_NODE: helper_value=42"
 
     @pytest.mark.asyncio
-    async def test_agent_node_as_tool_modifies_state(self, mock_llm_with_queue, app):
+    async def test_agent_node_as_tool_modifies_state(self, mock_llm_with_queue, app, di):
         """AGENT (skill) как tool изменяет state."""
-        container = get_container()
         flow_config = FlowConfig(
             flow_id="skill_test_agent",
             name="Skill Agent",
@@ -434,7 +432,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
                 }
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         tool = {
             "tool_id": "skill_tool",
             "type": "flow",
@@ -456,15 +454,15 @@ class TestAllNodeTypesAsToolsWithStateChange:
         react = LlmNode(
             "main",
             config={"type": "llm_node", "prompt": "Use skill.", "tools": [tool]},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         result = await run_react_node(react, make_state(content="test"))
         assert result.skill_executed is True, "AGENT skill должен изменить state"
         assert result.skill_result == "skill:test_value", "AGENT: skill_result"
-        await container.flow_repository.delete("skill_test_agent")
+        await FlowConfig.delete_by_flow_id("skill_test_agent")
 
     @pytest.mark.asyncio
-    async def test_external_api_node_as_tool_modifies_state(self, mock_llm_with_queue):
+    async def test_external_api_node_as_tool_modifies_state(self, mock_llm_with_queue, di):
         """EXTERNAL_API как tool изменяет state."""
         tool = {
             "tool_id": "api_tool",
@@ -495,14 +493,14 @@ class TestAllNodeTypesAsToolsWithStateChange:
             react = LlmNode(
                 "main",
                 config={"type": "llm_node", "prompt": "Use API.", "tools": [tool]},
-                container=get_container(),
+                execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
             )
             result = await run_react_node(react, make_state(content="test"))
             assert mock_api.called, "EXTERNAL_API должен быть вызван"
             assert "api_tool" in result.tool_results, "EXTERNAL_API результат в tool_results"
 
     @pytest.mark.asyncio
-    async def test_remote_flow_node_as_tool_modifies_state(self, mock_llm_with_queue):
+    async def test_remote_flow_node_as_tool_modifies_state(self, mock_llm_with_queue, di):
         """REMOTE_FLOW (A2A) как tool изменяет state."""
         tool = {
             "tool_id": "remote_tool",
@@ -532,14 +530,14 @@ class TestAllNodeTypesAsToolsWithStateChange:
             react = LlmNode(
                 "main",
                 config={"type": "llm_node", "prompt": "Use remote.", "tools": [tool]},
-                container=get_container(),
+                execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
             )
             result = await run_react_node(react, make_state(content="test"))
             assert mock_remote.called, "REMOTE_FLOW должен быть вызван"
             assert "remote_tool" in result.tool_results, "REMOTE_FLOW результат в tool_results"
 
     @pytest.mark.asyncio
-    async def test_mcp_node_as_tool_modifies_state(self, mock_llm_with_queue):
+    async def test_mcp_node_as_tool_modifies_state(self, mock_llm_with_queue, di):
         """MCP как tool изменяет state."""
         tool = {
             "tool_id": "mcp_tool",
@@ -570,7 +568,7 @@ class TestAllNodeTypesAsToolsWithStateChange:
             react = LlmNode(
                 "main",
                 config={"type": "llm_node", "prompt": "Use MCP.", "tools": [tool]},
-                container=get_container(),
+                execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
             )
             result = await run_react_node(react, make_state(content="test"))
             assert mock_mcp.called, "MCP должен быть вызван"
@@ -584,7 +582,7 @@ class TestAgentCallsOwnSkillsAsTools:
     """
 
     @pytest.mark.asyncio
-    async def test_agent_calls_own_skills_as_tools(self, mock_llm_with_queue, app):
+    async def test_agent_calls_own_skills_as_tools(self, mock_llm_with_queue, app, di):
         """
         Агент вызывает СВОИ ЖЕ скиллы как tools.
 
@@ -593,7 +591,6 @@ class TestAgentCallsOwnSkillsAsTools:
         - skill_a: CodeNode - вычисление
         - skill_b: CodeNode - текст
         """
-        container = get_container()
         flow_config = FlowConfig(
             flow_id="self_skill_agent",
             name="Self Skill Agent",
@@ -658,7 +655,7 @@ class TestAgentCallsOwnSkillsAsTools:
                 },
             },
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "use_skill_a", "args": {"number": 5}},
@@ -666,24 +663,23 @@ class TestAgentCallsOwnSkillsAsTools:
                 {"type": "text", "content": "Used both my skills!"},
             ]
         )
-        agent = await container.flow_factory.get_flow("self_skill_agent")
+        agent = await di.flow_factory.get_flow("self_skill_agent", tool_registry=di.tool_registry)
         assert agent is not None
         state = make_state(flow_id="self_skill_agent", content="Use your skills")
-        result = await run_flow(container=container, flow=agent, state=state)
+        result = await run_flow(di=di, flow=agent, state=state)
         assert result.skill_a_executed is True, "Skill A должен выполниться"
         assert result.skill_a_result == 25, "Skill A: 5^2 = 25"
         assert result.skill_b_executed is True, "Skill B должен выполниться"
         assert result.skill_b_result == "HELLO!!!", "Skill B: hello -> HELLO!!!"
-        await container.flow_repository.delete("self_skill_agent")
+        await FlowConfig.delete_by_flow_id("self_skill_agent")
 
     @pytest.mark.asyncio
-    async def test_agent_calls_own_and_other_agent_skills(self, mock_llm_with_queue, app):
+    async def test_agent_calls_own_and_other_agent_skills(self, mock_llm_with_queue, app, di):
         """
         Агент вызывает:
         1. СВОЙ скилл
         2. Скилл ДРУГОГО агента
         """
-        container = get_container()
         helper_config = FlowConfig(
             flow_id="helper_agent",
             name="Helper Agent",
@@ -705,7 +701,7 @@ class TestAgentCallsOwnSkillsAsTools:
                 }
             },
         )
-        await container.flow_repository.set(helper_config)
+        await FlowConfig.create_version(helper_config)
         main_config = FlowConfig(
             flow_id="main_agent",
             name="Main Agent",
@@ -758,7 +754,7 @@ class TestAgentCallsOwnSkillsAsTools:
                 }
             },
         )
-        await container.flow_repository.set(main_config)
+        await FlowConfig.create_version(main_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "my_skill", "args": {"value": 7}},
@@ -766,16 +762,16 @@ class TestAgentCallsOwnSkillsAsTools:
                 {"type": "text", "content": "Done with both!"},
             ]
         )
-        agent = await container.flow_factory.get_flow("main_agent")
+        agent = await di.flow_factory.get_flow("main_agent", tool_registry=di.tool_registry)
         assert agent is not None
         state = make_state(flow_id="main_agent", content="Use skills")
-        result = await run_flow(container=container, flow=agent, state=state)
+        result = await run_flow(di=di, flow=agent, state=state)
         assert result.own_skill_executed is True, "Own skill должен выполниться"
         assert result.own_result == 70, "Own skill: 7*10=70"
         assert result.helper_executed is True, "Helper skill должен выполниться"
         assert "help me" in result.helper_response, "Helper обработал запрос"
-        await container.flow_repository.delete("main_agent")
-        await container.flow_repository.delete("helper_agent")
+        await FlowConfig.delete_by_flow_id("main_agent")
+        await FlowConfig.delete_by_flow_id("helper_agent")
 
 
 class TestParallelToolExecution:
@@ -785,7 +781,7 @@ class TestParallelToolExecution:
     """
 
     @pytest.mark.asyncio
-    async def test_parallel_tools_all_results_in_messages(self, mock_llm_with_queue):
+    async def test_parallel_tools_all_results_in_messages(self, mock_llm_with_queue, di):
         """
         LLM возвращает 3 tool_calls ОДНОВРЕМЕННО.
         Все 3 должны выполниться ПАРАЛЛЕЛЬНО.
@@ -837,7 +833,7 @@ class TestParallelToolExecution:
         llm_node = LlmNode(
             node_id="parallel_test",
             config={"type": "llm_node", "prompt": "Execute tools.", "tools": [tool1, tool2, tool3]},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="Run parallel")
         result = await run_react_node(llm_node, state)
@@ -862,7 +858,7 @@ class TestParallelToolExecution:
         )
 
     @pytest.mark.asyncio
-    async def test_parallel_execution_is_actually_parallel(self, mock_llm_with_queue):
+    async def test_parallel_execution_is_actually_parallel(self, mock_llm_with_queue, di):
         """
         Проверяем что tools РЕАЛЬНО выполняются параллельно.
         Sleep в remote code_runner: пересечение окон started_at/finished_at — главный критерий.
@@ -907,7 +903,7 @@ class TestParallelToolExecution:
         llm_node = LlmNode(
             node_id="timing_test",
             config={"type": "llm_node", "prompt": "Run.", "tools": tools},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         state = make_state(content="test")
         result = await run_react_node(llm_node, state)
@@ -934,7 +930,7 @@ class TestParallelToolExecution:
         assert result.tool_2_done is True
 
     @pytest.mark.asyncio
-    async def test_parallel_tools_state_merge_last_wins(self, mock_llm_with_queue):
+    async def test_parallel_tools_state_merge_last_wins(self, mock_llm_with_queue, di):
         """
         При параллельном выполнении если tools пишут в одно поле,
         побеждает тот кто закончил последним.
@@ -966,7 +962,7 @@ class TestParallelToolExecution:
         llm_node = LlmNode(
             node_id="merge_test",
             config={"type": "llm_node", "prompt": "Write.", "tools": [tool1, tool2]},
-            container=get_container(),
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, flow_factory=di.flow_factory, llm_context_memory_store=di.node_constructor.llm_context_memory_store, namespace_service=di.node_constructor.namespace_service, authz_service=di.node_constructor.authz_service, tool_registry=di.tool_registry, workflow_runtime=di.node_constructor.workflow_runtime, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory,
         )
         result = await run_react_node(llm_node, make_state(content="test"))
         assert result.first_wrote is True

@@ -35,6 +35,7 @@ _lint-py:
 	uv run python scripts/audit_wider_repo_strictness.py
 	@echo "=== lint: files canon ==="
 	uv run python scripts/check_files_canon.py
+	uv run python scripts/check_object_store_canon.py
 	@bash scripts/check_files_ui_canon.sh
 	@echo "=== lint: tool tags taxonomy ==="
 	uv run python scripts/check_tool_tags.py
@@ -58,6 +59,8 @@ _lint-py:
 	uv run python scripts/check_repo_hygiene.py
 	@echo "=== lint: ratchet counts ==="
 	uv run python scripts/check_ratchet_counts.py
+	@echo "=== lint: dependency injection canon ==="
+	uv run python scripts/check_dependency_injection_canon.py
 	@echo "=== lint: backend error i18n ==="
 	uv run python scripts/check_backend_error_i18n.py
 

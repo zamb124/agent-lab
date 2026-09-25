@@ -156,8 +156,8 @@ def _wiki_image_spec() -> FileCreateSpec:
     )
 
 
-async def _upload_private_image(wiki_container, payload: bytes, name: str) -> str:
-    record = await wiki_container.files_service.create(
+async def _upload_private_image(wiki_di, payload: bytes, name: str) -> str:
+    record = await wiki_di.files_service.create(
         _wiki_image_spec(),
         payload,
         original_name=name,
@@ -189,13 +189,13 @@ async def _put_image_content(wiki_client: AsyncClient, wiki_page_id: str, file_i
 
 
 async def test_image_of_published_page_is_served_by_token(
-    wiki_client, wiki_client_anonymous, wiki_container, wiki_domain_context, create_page, unique_id
+    wiki_client, wiki_client_anonymous, wiki_di, wiki_domain_context, create_page, unique_id
 ):
     _ = wiki_domain_context
     require_s3_configured()
     page = await create_page(f"Раздел {unique_id}")
     payload = f"wiki-public-image-{unique_id}".encode("utf-8")
-    file_id = await _upload_private_image(wiki_container, payload, f"cover-{unique_id}.png")
+    file_id = await _upload_private_image(wiki_di, payload, f"cover-{unique_id}.png")
     await _put_image_content(wiki_client, page["wiki_page_id"], file_id)
     token = await _issue_link(wiki_client, page["wiki_page_id"])
 
@@ -211,13 +211,13 @@ async def test_image_of_published_page_is_served_by_token(
 
 
 async def test_file_outside_site_content_is_not_served(
-    wiki_client, wiki_client_anonymous, wiki_container, wiki_domain_context, create_page, unique_id
+    wiki_client, wiki_client_anonymous, wiki_di, wiki_domain_context, create_page, unique_id
 ):
     _ = wiki_domain_context
     require_s3_configured()
     page = await create_page(f"Раздел {unique_id}")
     stranger_file_id = await _upload_private_image(
-        wiki_container, f"stranger-{unique_id}".encode("utf-8"), f"stranger-{unique_id}.png"
+        wiki_di, f"stranger-{unique_id}".encode("utf-8"), f"stranger-{unique_id}.png"
     )
     token = await _issue_link(wiki_client, page["wiki_page_id"])
 
@@ -227,14 +227,14 @@ async def test_file_outside_site_content_is_not_served(
 
 
 async def test_image_becomes_unavailable_when_page_is_unpublished(
-    wiki_client, wiki_client_anonymous, wiki_container, wiki_domain_context, create_page, unique_id
+    wiki_client, wiki_client_anonymous, wiki_di, wiki_domain_context, create_page, unique_id
 ):
     _ = wiki_domain_context
     require_s3_configured()
     root = await create_page(f"Раздел {unique_id}")
     child = await create_page(f"Глава {unique_id}", parent_page_id=root["wiki_page_id"])
     file_id = await _upload_private_image(
-        wiki_container, f"child-image-{unique_id}".encode("utf-8"), f"child-{unique_id}.png"
+        wiki_di, f"child-image-{unique_id}".encode("utf-8"), f"child-{unique_id}.png"
     )
     await _put_image_content(wiki_client, child["wiki_page_id"], file_id)
     token = await _issue_link(wiki_client, root["wiki_page_id"])

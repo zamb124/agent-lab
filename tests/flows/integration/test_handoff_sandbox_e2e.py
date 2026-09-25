@@ -14,32 +14,32 @@ from tests.flows.durable_runtime_harness import run_flow, workflow_state
 pytestmark = [pytest.mark.timeout(120, func_only=True)]
 
 
-async def _run(container, flow_id, unique_id, content, mock_responses, **extra):
+async def _run(di, flow_id, unique_id, content, mock_responses, **extra):
     setup_mock_responses(response_queue=mock_responses)
     state = workflow_state(flow_id=flow_id, unique_id=unique_id, content=content, **extra)
-    flow = await container.flow_factory.get_flow(flow_id)
-    return await run_flow(container=container, flow=flow, state=state)
+    flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
+    return await run_flow(di=di, flow=flow, state=state)
 
 
-async def _save_flow(container, flow_config):
-    return await container.flow_repository.set(FlowConfig.model_validate(flow_config))
+async def _save_flow(di, flow_config):
+    return await FlowConfig.create_version(FlowConfig.model_validate(flow_config))
 
 
 class TestHandoffViaSandbox:
     """Handoff через node-as-tool call_type=handoff (контракт wrapper → HandoffInterrupt)."""
 
     @pytest.mark.asyncio
-    async def test_j1_flow_tool_call_type_handoff_raises_interrupt(self, container, unique_id):
+    async def test_j1_flow_tool_call_type_handoff_raises_interrupt(self, di, unique_id):
         parent_fid = f"ht-sb-{unique_id}"
         child_fid = f"ht-sbc-{unique_id}"
 
-        await _save_flow(container, {
+        await _save_flow(di, {
             "flow_id": child_fid, "name": "Child", "entry": "main",
             "nodes": {"main": {"type": "llm_node", "node_id": "c", "prompt": "c", "llm": {"model": "mock-gpt-4"}, "tools": [{"tool_id": "handback_to_parent", "description": "HB"}]}},
             "edges": [{"from_node": "main", "to_node": None}],
         })
 
-        await _save_flow(container, {
+        await _save_flow(di, {
             "flow_id": parent_fid, "name": "Parent", "entry": "main",
             "nodes": {
                 "main": {
@@ -60,7 +60,7 @@ class TestHandoffViaSandbox:
             "edges": [{"from_node": "main", "to_node": None}],
         })
 
-        result = await _run(container, parent_fid, f"ps-j1-{unique_id}", "handoff", [
+        result = await _run(di, parent_fid, f"ps-j1-{unique_id}", "handoff", [
             {"type": "tool_call", "tool": "child_handoff", "args": {}},
         ])
 
@@ -77,7 +77,7 @@ class TestHandoffViaSandboxCode:
     @pytest.mark.asyncio
     async def test_j2_code_node_calls_handoff_via_capability(
         self,
-        container,
+        di,
         unique_id,
         sandbox_services,
         auth_token_system,
@@ -105,7 +105,7 @@ class TestHandoffViaSandboxCode:
         parent_fid = f"ht-sb2-{unique_id}"
         child_fid = f"ht-sbc2-{unique_id}"
 
-        await _save_flow(container, {
+        await _save_flow(di, {
             "flow_id": child_fid, "name": "Child", "entry": "main",
             "nodes": {"main": {"type": "llm_node", "node_id": "c", "prompt": "c", "llm": {"model": "mock-gpt-4"}, "tools": [{"tool_id": "handback_to_parent", "description": "HB"}]}},
             "edges": [{"from_node": "main", "to_node": None}],
@@ -117,7 +117,7 @@ class TestHandoffViaSandboxCode:
             + "    return {'handoff': 'requested'}\n"
         )
 
-        await _save_flow(container, {
+        await _save_flow(di, {
             "flow_id": parent_fid, "name": "Parent", "entry": "main",
             "nodes": {
                 "main": {
@@ -138,7 +138,7 @@ class TestHandoffViaSandboxCode:
         })
 
         result = await _run(
-            container,
+            di,
             parent_fid,
             f"ps-j2-{unique_id}",
             "handoff via sandbox",

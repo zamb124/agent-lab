@@ -14,8 +14,8 @@
 
 import pytest
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, TriggerConfig, TriggerStatus, TriggerType
+from apps.flows.src.runtime.execution_context import execution_context_for
 from core.authz.company_sync import sync_company_member_roles
 from tests.flows.conftest import persist_owned_flow
 from tests.flows.durable_runtime_harness import run_flow, workflow_state
@@ -165,9 +165,9 @@ class TestTriggerRegistry:
     """Тесты TriggerRegistry."""
 
     @pytest.mark.asyncio
-    async def test_sync_triggers_registers_new(self, app, container, unique_id):
+    async def test_sync_triggers_registers_new(self, app, di, unique_id):
         """sync_triggers регистрирует новые триггеры."""
-        registry = container.trigger_registry
+        registry = di.trigger_registry
         flow_id = f"trigger_test_{unique_id}"
         old_config = None
         trigger = TriggerConfig(
@@ -191,9 +191,9 @@ class TestTriggerRegistry:
         assert "/triggers/webhook/" in result.triggers["webhook_1"].webhook_url
 
     @pytest.mark.asyncio
-    async def test_sync_triggers_cron_without_handler_is_error(self, app, container, unique_id):
+    async def test_sync_triggers_cron_without_handler_is_error(self, app, di, unique_id):
         """cron без handler в registry → status=error (пока runtime не реализован)."""
-        registry = container.trigger_registry
+        registry = di.trigger_registry
         flow_id = f"cron_sync_{unique_id}"
         trigger = TriggerConfig(
             trigger_id="daily",
@@ -215,9 +215,9 @@ class TestTriggerRegistry:
         assert result.triggers["daily"].last_error is not None
 
     @pytest.mark.asyncio
-    async def test_sync_triggers_unregisters_removed(self, app, container, unique_id):
+    async def test_sync_triggers_unregisters_removed(self, app, di, unique_id):
         """sync_triggers снимает удаленные триггеры."""
-        registry = container.trigger_registry
+        registry = di.trigger_registry
         flow_id = f"trigger_test_{unique_id}"
         trigger = TriggerConfig(
             trigger_id="to_remove",
@@ -244,9 +244,9 @@ class TestTriggerRegistry:
         assert "to_remove" not in result.triggers
 
     @pytest.mark.asyncio
-    async def test_sync_triggers_updates_changed(self, app, container, unique_id):
+    async def test_sync_triggers_updates_changed(self, app, di, unique_id):
         """sync_triggers перерегистрирует измененные триггеры."""
-        registry = container.trigger_registry
+        registry = di.trigger_registry
         flow_id = f"trigger_test_{unique_id}"
         old_trigger = TriggerConfig(
             trigger_id="changing",
@@ -285,7 +285,7 @@ class TestTriggersAPI:
     """Тесты Triggers API."""
 
     @pytest.mark.asyncio
-    async def test_list_triggers_empty(self, app, client, container, unique_id):
+    async def test_list_triggers_empty(self, app, client, di, unique_id):
         """GET /flows/api/v1/flows/{id}/triggers возвращает пустой список."""
         flow_id = f"api_test_{unique_id}"
         agent = FlowConfig(
@@ -294,15 +294,15 @@ class TestTriggersAPI:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers")
         assert response.status_code == 200
         data = response.json()
         assert data == {"items": []}
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_create_trigger(self, app, client, container, unique_id):
+    async def test_create_trigger(self, app, client, di, unique_id):
         """POST /flows/{id}/triggers создает триггер."""
         flow_id = f"api_test_{unique_id}"
         agent = FlowConfig(
@@ -311,7 +311,7 @@ class TestTriggersAPI:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers",
             json={
@@ -332,12 +332,12 @@ class TestTriggersAPI:
         assert data["trigger_id"] == "new_trigger"
         assert data["name"] == "New Trigger"
         assert data["type"] == "webhook"
-        saved = await container.flow_repository.get(flow_id)
+        saved = await FlowConfig.get_latest(flow_id)
         assert "new_trigger" in saved.triggers
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_get_trigger(self, app, client, container, unique_id):
+    async def test_get_trigger(self, app, client, di, unique_id):
         """GET /flows/{id}/triggers/{trigger_id} возвращает триггер."""
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
@@ -353,16 +353,16 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"my_trigger": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers/my_trigger")
         assert response.status_code == 200
         data = response.json()
         assert data["trigger_id"] == "my_trigger"
         assert data["name"] == "My Trigger"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_update_trigger(self, app, client, container, unique_id):
+    async def test_update_trigger(self, app, client, di, unique_id):
         """PUT /flows/{id}/triggers/{trigger_id} обновляет триггер."""
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
@@ -379,7 +379,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"update_me": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.put(
             f"/flows/api/v1/flows/{flow_id}/triggers/update_me",
             json={"name": "Updated Name", "enabled": False},
@@ -388,13 +388,13 @@ class TestTriggersAPI:
         data = response.json()
         assert data["name"] == "Updated Name"
         assert data["enabled"] is False
-        saved = await container.flow_repository.get(flow_id)
+        saved = await FlowConfig.get_latest(flow_id)
         assert saved.triggers["update_me"].name == "Updated Name"
         assert saved.triggers["update_me"].enabled is False
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_delete_trigger(self, app, client, container, unique_id):
+    async def test_delete_trigger(self, app, client, di, unique_id):
         """DELETE /flows/{id}/triggers/{trigger_id} удаляет триггер."""
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(trigger_id="delete_me", name="To Delete", type=TriggerType.WEBHOOK)
@@ -405,17 +405,17 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"delete_me": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.delete(f"/flows/api/v1/flows/{flow_id}/triggers/delete_me")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "deleted"
-        saved = await container.flow_repository.get(flow_id)
+        saved = await FlowConfig.get_latest(flow_id)
         assert "delete_me" not in saved.triggers
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_test_trigger_endpoint(self, app, client, container, unique_id):
+    async def test_test_trigger_endpoint(self, app, client, di, unique_id):
         """POST /flows/{id}/triggers/{trigger_id}/test тестирует маппинг."""
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
@@ -432,7 +432,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"test_mapping": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/test_mapping/test",
             json={
@@ -447,10 +447,10 @@ class TestTriggersAPI:
         assert data["mapped_data"]["triggers"]["test_mapping"]["context"]["chat_id"] == 12345
         assert "triggers" in data["mapped_data"]
         assert "test_mapping" in data["mapped_data"]["triggers"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_get_trigger_redacts_secrets_in_response(self, app, client, container, unique_id):
+    async def test_get_trigger_redacts_secrets_in_response(self, app, client, di, unique_id):
         """GET триггера: secret_token в ответе заменён, остальные поля — нет."""
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
@@ -466,17 +466,17 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"redact_t": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.get(f"/flows/api/v1/flows/{flow_id}/triggers/redact_t")
         assert response.status_code == 200
         data = response.json()
         assert data["config"]["secret_token"] == "(redacted)"
         assert data["config"]["plain"] == "visible"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_verify_telegram_substitutes_api_redacted_placeholder_from_stored_trigger(
-        self, app, client, container, unique_id, notification_server
+        self, app, client, di, unique_id, notification_server
     ):
         """POST verify: (redacted) → bot_token из БД/@var → реальный getMe через api_base."""
         (server, base_url) = notification_server
@@ -496,7 +496,7 @@ class TestTriggersAPI:
             variables={"bot_tok": resolved_token},
             triggers={"tg_one": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/verify",
             json={
@@ -516,11 +516,11 @@ class TestTriggersAPI:
         get_me = server.get_requests("telegram_get_me")
         assert len(get_me) == 1
         assert resolved_token in get_me[0]["token"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_reregister_telegram_ok_with_api_base(
-        self, app, client, container, unique_id, notification_server
+        self, app, client, di, unique_id, notification_server
     ):
         """reregister → setWebhook на локальный api_base (NotificationServer), без mock."""
         (server, base_url) = notification_server
@@ -543,7 +543,7 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_reg": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/flows/{flow_id}/triggers/tg_reg/reregister"
         )
@@ -556,10 +556,10 @@ class TestTriggersAPI:
         assert bot_token in set_hooks[0]["token"]
         assert isinstance(set_hooks[0]["data"].get("url"), str)
         assert set_hooks[0]["data"]["url"].strip() != ""
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_reregister_409_without_handler(self, app, client, container, unique_id):
+    async def test_reregister_409_without_handler(self, app, client, di, unique_id):
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
             trigger_id="cron_t",
@@ -575,13 +575,13 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"cron_t": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(f"/flows/api/v1/flows/{flow_id}/triggers/cron_t/reregister")
         assert response.status_code == 409
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_reregister_400_when_disabled(self, app, client, container, unique_id):
+    async def test_reregister_400_when_disabled(self, app, client, di, unique_id):
         flow_id = f"api_test_{unique_id}"
         trigger = TriggerConfig(
             trigger_id="tg_off",
@@ -597,10 +597,10 @@ class TestTriggersAPI:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_off": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(f"/flows/api/v1/flows/{flow_id}/triggers/tg_off/reregister")
         assert response.status_code == 400
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestTriggerExecutor:
@@ -608,7 +608,7 @@ class TestTriggerExecutor:
 
     @pytest.mark.asyncio
     async def test_executor_creates_correct_state(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """TriggerExecutor создает правильный ExecutionState."""
         from apps.flows.src.triggers.executor import TriggerExecutor
@@ -621,7 +621,7 @@ class TestTriggerExecutor:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Echo: {{content}}"}},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         trigger = TriggerConfig(
             trigger_id="exec_trigger",
             name="Executor Trigger",
@@ -636,14 +636,14 @@ class TestTriggerExecutor:
         )
         assert "task_id" in result
         assert result["status"] == "started"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestTelegramWebhookEndpoint:
     """Тесты Telegram webhook endpoint."""
 
     @pytest.mark.asyncio
-    async def test_telegram_webhook_validates_trigger_type(self, app, client, container, unique_id):
+    async def test_telegram_webhook_validates_trigger_type(self, app, client, di, unique_id):
         """Telegram webhook отклоняет не-Telegram триггеры."""
         flow_id = f"tg_test_{unique_id}"
         trigger = TriggerConfig(
@@ -656,17 +656,17 @@ class TestTelegramWebhookEndpoint:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"wrong_type": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/wrong_type",
             json={"update_id": 123, "message": {"text": "test"}},
         )
         assert response.status_code == 400
         assert "Not a Telegram trigger" in response.json()["detail"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_telegram_webhook_validates_secret_token(self, app, client, container, unique_id):
+    async def test_telegram_webhook_validates_secret_token(self, app, client, di, unique_id):
         """Telegram webhook проверяет secret_token."""
         flow_id = f"tg_test_{unique_id}"
         trigger = TriggerConfig(
@@ -682,7 +682,7 @@ class TestTelegramWebhookEndpoint:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_secure": trigger},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/tg_secure",
             json={
@@ -706,11 +706,11 @@ class TestTelegramWebhookEndpoint:
             headers={"X-Telegram-Bot-Api-Secret-Token": "correct_token"},
         )
         assert response.status_code != 403
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_callback_query_ok(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """Webhook принимает callback_query при allowed_updates и секрете."""
         mock_llm_with_queue(["ok"])
@@ -731,7 +731,7 @@ class TestTelegramWebhookEndpoint:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         payload = {
             "update_id": 1,
             "callback_query": {
@@ -748,7 +748,7 @@ class TestTelegramWebhookEndpoint:
         )
         assert response.status_code == 200
         assert response.json().get("status") == "ok"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_404_for_unknown_agent(self, app, client):
@@ -761,7 +761,7 @@ class TestTelegramWebhookEndpoint:
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_404_for_unknown_trigger(
-        self, app, client, container, unique_id
+        self, app, client, di, unique_id
     ):
         """Telegram webhook возвращает 404 для несуществующего триггера."""
         flow_id = f"tg_test_{unique_id}"
@@ -771,13 +771,13 @@ class TestTelegramWebhookEndpoint:
             entry="main",
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/nonexistent_trigger",
             json={"update_id": 123, "message": {"text": "test"}},
         )
         assert response.status_code == 404
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestTelegramTriggerHandler:
@@ -785,7 +785,7 @@ class TestTelegramTriggerHandler:
 
     @pytest.mark.asyncio
     async def test_handler_validates_allowed_users(
-        self, app, container, unique_id, mock_llm_with_queue
+        self, app, di, unique_id, mock_llm_with_queue
     ):
         """TelegramTriggerHandler проверяет allowed_users."""
         from apps.flows.src.triggers import TriggerValidationError
@@ -807,8 +807,8 @@ class TestTelegramTriggerHandler:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
-        handler = TelegramTriggerHandler(base_url="http://test", container=container)
+        await persist_owned_flow(di, agent)
+        handler = TelegramTriggerHandler(base_url="http://test", flow_factory=di.flow_factory)
         payload_denied = {
             "update_id": 2,
             "message": {"text": "hello", "from": {"id": 333}, "chat": {"id": 999}},
@@ -816,10 +816,10 @@ class TestTelegramTriggerHandler:
         with pytest.raises(TriggerValidationError) as exc_info:
             await handler.handle(flow_id, "allowed_trigger", payload_denied)
         assert "not allowed" in str(exc_info.value)
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
-    async def test_handler_validates_commands(self, app, container, unique_id, mock_llm_with_queue):
+    async def test_handler_validates_commands(self, app, di, unique_id, mock_llm_with_queue):
         """TelegramTriggerHandler проверяет commands."""
         from apps.flows.src.triggers import TriggerValidationError
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
@@ -840,8 +840,8 @@ class TestTelegramTriggerHandler:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
-        handler = TelegramTriggerHandler(base_url="http://test", container=container)
+        await persist_owned_flow(di, agent)
+        handler = TelegramTriggerHandler(base_url="http://test", flow_factory=di.flow_factory)
         payload_wrong = {
             "update_id": 1,
             "message": {"text": "/unknown", "from": {"id": 111}, "chat": {"id": 999}},
@@ -849,13 +849,13 @@ class TestTelegramTriggerHandler:
         with pytest.raises(TriggerValidationError) as exc_info:
             await handler.handle(flow_id, "cmd_trigger", payload_wrong)
         assert "Command not matched" in str(exc_info.value)
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    def test_handler_generates_webhook_url(self, container):
+    def test_handler_generates_webhook_url(self, di):
         """TelegramTriggerHandler генерирует правильный webhook URL."""
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 
-        handler = TelegramTriggerHandler(base_url="https://example.com", container=container)
+        handler = TelegramTriggerHandler(base_url="https://example.com", flow_factory=di.flow_factory)
         url = handler.generate_webhook_url("my_agent", "my_trigger")
         assert url == "https://example.com/flows/api/v1/triggers/telegram/my_agent/my_trigger"
 
@@ -865,7 +865,7 @@ class TestTelegramTriggerHandler:
     ])
     def test_handler_generates_webhook_url_brand_host(
         self,
-        container,
+        di,
         host: str,
         expected_origin: str,
     ) -> None:
@@ -877,7 +877,7 @@ class TestTelegramTriggerHandler:
 
         handler = TelegramTriggerHandler(
             base_url="https://fallback.example.com",
-            container=container,
+            flow_factory=di.flow_factory,
         )
         set_context(
             Context(
@@ -896,11 +896,11 @@ class TestTelegramTriggerHandler:
             f"{expected_origin}/flows/api/v1/triggers/telegram/my_agent/my_trigger"
         )
 
-    def test_handler_verify_secret_token(self, container):
+    def test_handler_verify_secret_token(self, di):
         """TelegramTriggerHandler верифицирует secret_token."""
         from apps.flows.src.triggers.handlers.telegram import TelegramTriggerHandler
 
-        handler = TelegramTriggerHandler(base_url="http://test", container=container)
+        handler = TelegramTriggerHandler(base_url="http://test", flow_factory=di.flow_factory)
         trigger = TriggerConfig(
             trigger_id="test",
             name="Test",
@@ -926,7 +926,7 @@ class TestTelegramTriggerE2E:
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_triggers_agent_execution(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """
         Полный цикл:
@@ -965,7 +965,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         telegram_update = {
             "update_id": 123456789,
             "message": {
@@ -996,11 +996,11 @@ class TestTelegramTriggerE2E:
         data = response.json()
         assert data["status"] == "ok"
         assert "task_id" in data
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_trigger_with_tool_call(
-        self, app, client, container, unique_id, mock_llm_with_queue, inline_tools
+        self, app, client, di, unique_id, mock_llm_with_queue, inline_tools
     ):
         """
         E2E с tool call:
@@ -1040,7 +1040,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         telegram_update = {
             "update_id": 111,
             "message": {
@@ -1059,11 +1059,11 @@ class TestTelegramTriggerE2E:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_trigger_filters_by_allowed_users(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """
         Триггер с allowed_users фильтрует неразрешенных пользователей.
@@ -1089,7 +1089,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response_allowed = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/filtered",
             json={
@@ -1123,11 +1123,11 @@ class TestTelegramTriggerE2E:
         assert response_denied.status_code == 200
         assert response_denied.json()["status"] == "skipped"
         assert "not allowed" in response_denied.json()["reason"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_trigger_filters_by_commands(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """
         Триггер с commands реагирует только на указанные команды.
@@ -1153,7 +1153,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         response_start = await client.post(
             f"/flows/api/v1/triggers/telegram/{flow_id}/commands",
             json={
@@ -1186,11 +1186,11 @@ class TestTelegramTriggerE2E:
         )
         assert response_text.status_code == 200
         assert response_text.json()["status"] == "skipped"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_input_mapping_extracts_all_telegram_fields(
-        self, app, client, container, unique_id, mock_llm_with_queue
+        self, app, client, di, unique_id, mock_llm_with_queue
     ):
         """
         Проверяем что output_mapping правильно извлекает все поля из Telegram Update.
@@ -1224,7 +1224,7 @@ class TestTelegramTriggerE2E:
                 )
             },
         )
-        await persist_owned_flow(container, agent)
+        await persist_owned_flow(di, agent)
         telegram_update = {
             "update_id": 999888,
             "message": {
@@ -1258,7 +1258,7 @@ class TestTelegramTriggerE2E:
         assert ctx["date"] == 1705512345
         assert ctx["source"] == "telegram"
         assert "full_mapping" in mapped["triggers"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestChannelRegistry:
@@ -1424,11 +1424,11 @@ class TestOutputActionExecutor:
         assert evaluate_output_action_condition("@state:has_file == false", state) is True
 
     @pytest.mark.asyncio
-    async def test_resolve_mapping(self, container):
+    async def test_resolve_mapping(self, di):
         """Резолвинг маппинга."""
         from apps.flows.src.triggers import OutputActionExecutor
 
-        executor = OutputActionExecutor(container=container)
+        executor = OutputActionExecutor(channel_registry=di.channel_registry, mail_service=di.mail_service)
         state = {
             "response": "Hello world",
             "triggers": {"t1": {"payload": {}, "context": {"chat_id": 12345}}},
@@ -1448,7 +1448,7 @@ class TestOutputActionExecutor:
 class TestChannelNode:
     """Тесты ChannelNode."""
 
-    def test_channel_node_creation(self, container):
+    def test_channel_node_creation(self, di):
         """ChannelNode создается корректно."""
         from apps.flows.src.models.enums import ChannelType, NodeType
         from apps.flows.src.runtime.nodes import ChannelNode
@@ -1461,7 +1461,7 @@ class TestChannelNode:
                 "action": "send_message",
                 "channel_config": {"bot_token": "test_token"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, channel_registry=di.channel_registry, mail_service=di.mail_service,
         )
         assert node.channel == ChannelType.TELEGRAM
         assert node.action == "send_message"
@@ -1527,7 +1527,7 @@ class TestAgentWithChannelNode:
         assert agent.nodes["send_reply"]["type"] == "channel"
 
     @pytest.mark.asyncio
-    async def test_create_channel_node_from_config(self, container):
+    async def test_create_channel_node_from_config(self, di):
         """create_node создает ChannelNode."""
         from apps.flows.src.runtime.nodes import ChannelNode, create_node
 
@@ -1537,7 +1537,7 @@ class TestAgentWithChannelNode:
             "action": "send_payload",
             "channel_config": {"url": "https://example.com/callback"},
         }
-        node = await create_node("test_channel", config, container=container)
+        node = await create_node("test_channel", config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
         assert isinstance(node, ChannelNode)
         assert node.action == "send_payload"
 
@@ -1546,12 +1546,11 @@ class TestTriggerWithOutputActionsE2E:
     """E2E тесты триггера с output_actions."""
 
     @pytest.mark.asyncio
-    async def test_agent_with_trigger_output_actions(self, unique_id):
+    async def test_agent_with_trigger_output_actions(self, unique_id, di):
         """Агент с триггером и output_actions сохраняется."""
         from apps.flows.src.models.channel_config import OutputAction
         from apps.flows.src.models.enums import ChannelType
 
-        container = get_container()
         flow_id = f"output_agent_{unique_id}"
         output_action = OutputAction(
             channel=ChannelType.TELEGRAM,
@@ -1579,15 +1578,15 @@ class TestTriggerWithOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Test"}},
             triggers={"tg_with_output": trigger},
         )
-        await persist_owned_flow(container, agent)
-        loaded = await container.flow_repository.get(flow_id)
+        await persist_owned_flow(di, agent)
+        loaded = await FlowConfig.get_latest(flow_id)
         assert loaded is not None
         assert "tg_with_output" in loaded.triggers
         assert len(loaded.triggers["tg_with_output"].output_actions) == 1
         loaded_action = loaded.triggers["tg_with_output"].output_actions[0]
         assert loaded_action.channel == ChannelType.TELEGRAM
         assert loaded_action.action == "send_message"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestWebhookChannelE2E:
@@ -1831,7 +1830,7 @@ class TestChannelNodeE2E:
 
     @pytest.mark.asyncio
     async def test_channel_node_sends_webhook_notification(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """ChannelNode реально отправляет webhook уведомление."""
         (server, base_url) = notification_server
@@ -1862,23 +1861,23 @@ class TestChannelNodeE2E:
             ],
             variables={},
         )
-        await persist_owned_flow(container, flow_config)
-        agent = await container.flow_factory.get_flow(flow_id)
+        await persist_owned_flow(di, flow_config)
+        agent = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Test with webhook",
             variables={"notification_url": f"{base_url}/notify"},
         )
-        final_state = await run_flow(container=container, flow=agent, state=state)
+        final_state = await run_flow(di=di, flow=agent, state=state)
         assert final_state.response == "Processing complete"
         requests = server.get_requests("notify")
         assert len(requests) >= 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_channel_node_sends_telegram_message(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """ChannelNode реально отправляет Telegram сообщение."""
         (server, base_url) = notification_server
@@ -1912,22 +1911,22 @@ class TestChannelNodeE2E:
                 {"from_node": "send_telegram", "to_node": None},
             ],
         )
-        await persist_owned_flow(container, flow_config)
-        agent = await container.flow_factory.get_flow(flow_id)
+        await persist_owned_flow(di, flow_config)
+        agent = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Test telegram notification",
             variables={"chat_id": "987654321"},
         )
-        await run_flow(container=container, flow=agent, state=state)
+        await run_flow(di=di, flow=agent, state=state)
         requests = server.get_requests("telegram_send_message")
         assert len(requests) >= 1
         last_request = requests[-1]
         assert "e2e_test_bot_token" in last_request["token"]
         assert last_request["data"]["chat_id"] == "987654321"
         assert "Your request has been processed" in last_request["data"]["text"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestTriggerOutputActionsE2E:
@@ -1939,7 +1938,7 @@ class TestTriggerOutputActionsE2E:
 
     @pytest.mark.asyncio
     async def test_trigger_output_action_sends_webhook(
-        self, notification_server, unique_id, container, client, mock_llm_with_queue
+        self, notification_server, unique_id, di, client, mock_llm_with_queue
     ):
         """
         Полный E2E:
@@ -1979,7 +1978,7 @@ class TestTriggerOutputActionsE2E:
             },
             triggers={"webhook_trigger": trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
@@ -1989,11 +1988,11 @@ class TestTriggerOutputActionsE2E:
         assert result.get("status") == "started"
         notif = server.get_requests("notify")
         assert len(notif) >= 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_trigger_multiple_output_actions(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """Триггер с несколькими output_actions выполняет все."""
         from apps.flows.src.models.channel_config import OutputAction
@@ -2034,17 +2033,17 @@ class TestTriggerOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Answer briefly."}},
             triggers={"multi_trigger": trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
         payload = {"message": "Test multi-action", "chat_id": "111222333"}
         await executor.execute(flow_id=flow_id, trigger=trigger, payload=payload)
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_output_action_with_condition_executes(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """Output action с condition=true выполняется."""
         from apps.flows.src.models.channel_config import OutputAction
@@ -2077,7 +2076,7 @@ class TestTriggerOutputActionsE2E:
             nodes={"main": {"type": "llm_node", "prompt": "Answer."}},
             triggers={"cond_trigger": trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         from apps.flows.src.triggers.executor import TriggerExecutor
 
         executor = TriggerExecutor()
@@ -2085,7 +2084,7 @@ class TestTriggerOutputActionsE2E:
         await executor.execute(
             flow_id=flow_id, trigger=trigger, payload={"message": "Test", "notify": True}
         )
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestProcessTaskTriggerOutput:
@@ -2095,7 +2094,7 @@ class TestProcessTaskTriggerOutput:
 
     @pytest.mark.asyncio
     async def test_telegram_output_after_trigger_metadata(
-        self, app, container, unique_id, mock_context, mock_llm_with_queue, notification_server
+        self, app, di, unique_id, mock_context, mock_llm_with_queue, notification_server
     ):
         from apps.flows.src.tasks.flow_tasks import process_flow_task
         from core.context import set_context
@@ -2121,7 +2120,7 @@ class TestProcessTaskTriggerOutput:
             nodes={"main": {"type": "llm_node", "prompt": "Кратко ответь."}},
             triggers={trigger_id: trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         payload = {
             "update_id": 1,
             "message": {
@@ -2153,6 +2152,7 @@ class TestProcessTaskTriggerOutput:
             metadata=metadata,
             is_resume=False,
             context_data=ctx.to_dict(),
+            di=di,
         )
         assert result.get("task_state") == "completed"
         tg_req = server.get_requests("telegram_send_message")
@@ -2161,11 +2161,11 @@ class TestProcessTaskTriggerOutput:
         assert tg_req[0]["data"]["chat_id"] in (999888777, "999888777")
         assert "Ответ агента" in tg_req[0]["data"]["text"]
         set_context(mock_context)
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_no_telegram_output_when_post_flow_disabled(
-        self, app, container, unique_id, mock_context, mock_llm_with_queue, notification_server
+        self, app, di, unique_id, mock_context, mock_llm_with_queue, notification_server
     ):
         from apps.flows.src.tasks.flow_tasks import process_flow_task
         from core.context import set_context
@@ -2192,7 +2192,7 @@ class TestProcessTaskTriggerOutput:
             nodes={"main": {"type": "llm_node", "prompt": "x"}},
             triggers={trigger_id: trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         payload = {
             "message": {
                 "text": "a",
@@ -2220,10 +2220,11 @@ class TestProcessTaskTriggerOutput:
             context_id=context_id,
             metadata=metadata,
             context_data=ctx.to_dict(),
+            di=di,
         )
         assert len(server.get_requests("telegram_send_message")) == 0
         set_context(mock_context)
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestFullTriggerFlowE2E:
@@ -2235,7 +2236,7 @@ class TestFullTriggerFlowE2E:
 
     @pytest.mark.asyncio
     async def test_full_telegram_trigger_webhook_to_agent(
-        self, unique_id, container, client, mock_llm_with_queue, notification_server
+        self, unique_id, di, client, mock_llm_with_queue, notification_server
     ):
         """
         Полный сценарий Telegram webhook -> Agent:
@@ -2273,7 +2274,7 @@ class TestFullTriggerFlowE2E:
             },
             triggers={trigger_id: trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         telegram_payload = {
             "update_id": 123456789,
             "message": {
@@ -2297,11 +2298,11 @@ class TestFullTriggerFlowE2E:
         assert "full_flow_bot_token" in tg_req[-1]["token"]
         assert tg_req[-1]["data"]["chat_id"] in (999888777, "999888777")
         assert "Здравствуйте" in tg_req[-1]["data"]["text"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_code_agent_with_channel_node_full_flow(
-        self, notification_server, unique_id, container
+        self, notification_server, unique_id, di
     ):
         """
         Code агент → ChannelNode → реальный HTTP запрос.
@@ -2334,19 +2335,19 @@ class TestFullTriggerFlowE2E:
                 {"from_node": "send_result", "to_node": None},
             ],
         )
-        await persist_owned_flow(container, flow_config)
-        agent = await container.flow_factory.get_flow(flow_id)
+        await persist_owned_flow(di, flow_config)
+        agent = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="5 + 3",
             variables={"a": 5, "b": 3, "callback_url": f"{base_url}/notify"},
         )
-        final_state = await run_flow(container=container, flow=agent, state=state)
+        final_state = await run_flow(di=di, flow=agent, state=state)
         assert "Result: 8" in final_state.response
         requests = server.get_requests("notify")
         assert len(requests) >= 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestReactAgentWithChannelToolE2E:
@@ -2359,7 +2360,7 @@ class TestReactAgentWithChannelToolE2E:
 
     @pytest.mark.asyncio
     async def test_react_agent_uses_channel_tool_to_send_webhook(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """
         LlmNode агент с ChannelNode tool:
@@ -2420,31 +2421,31 @@ class TestReactAgentWithChannelToolE2E:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        _ = await container.flow_repository.set(flow_config)
-        agent = await container.flow_factory.get_flow(flow_id)
+        _ = await FlowConfig.create_version(flow_config)
+        agent = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Отправь уведомление на webhook",
         )
         await sync_company_member_roles(
-            container.authz_service,
+            di.authz_service,
             company_id="system",
             user_id=state.user_id,
             roles=["owner", "admin"],
         )
-        await run_flow(container=container, flow=agent, state=state)
+        await run_flow(di=di, flow=agent, state=state)
         requests = server.get_requests("notify")
         assert len(requests) >= 1, (
             f"Expected webhook request. Server received: {server.received_requests}"
         )
         last_request = requests[-1]["data"]
         assert last_request["text"] == "Notification sent by agent"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_react_agent_uses_telegram_channel_tool(
-        self, notification_server, unique_id, container, mock_llm_with_queue
+        self, notification_server, unique_id, di, mock_llm_with_queue
     ):
         """
         LlmNode с Telegram ChannelNode tool:
@@ -2501,27 +2502,27 @@ class TestReactAgentWithChannelToolE2E:
             },
             edges=[{"from_node": "main", "to_node": None}],
         )
-        _ = await container.flow_repository.set(flow_config)
-        agent = await container.flow_factory.get_flow(flow_id)
+        _ = await FlowConfig.create_version(flow_config)
+        agent = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = workflow_state(
             flow_id=flow_id,
             unique_id=unique_id,
             content="Отправь сообщение в Telegram",
         )
         await sync_company_member_roles(
-            container.authz_service,
+            di.authz_service,
             company_id="system",
             user_id=state.user_id,
             roles=["owner", "admin"],
         )
-        await run_flow(container=container, flow=agent, state=state)
+        await run_flow(di=di, flow=agent, state=state)
         requests = server.get_requests("telegram_send_message")
         assert len(requests) >= 1
         last_request = requests[-1]
         assert "react_tool_bot_token" in last_request["token"]
         assert last_request["data"]["chat_id"] == "123456789"
         assert last_request["data"]["text"] == "Hello from agent via Telegram!"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestFullWebhookToChannelE2E:
@@ -2535,7 +2536,7 @@ class TestFullWebhookToChannelE2E:
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_triggers_react_agent_which_sends_webhook(
-        self, notification_server, unique_id, container, client, mock_llm_redis
+        self, notification_server, unique_id, di, client, mock_llm_redis
     ):
         """
         Полный flow:
@@ -2607,7 +2608,7 @@ class TestFullWebhookToChannelE2E:
             edges=[{"from_node": "main", "to_node": None}],
             triggers={trigger_id: trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         telegram_payload = {
             "update_id": 999888777,
             "message": {
@@ -2634,11 +2635,11 @@ class TestFullWebhookToChannelE2E:
         assert len(requests) >= 1, f"No webhook requests received! Got: {server.received_requests}"
         last_request = requests[-1]["data"]
         assert "Processed" in last_request["text"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     @pytest.mark.asyncio
     async def test_telegram_webhook_triggers_react_agent_which_replies_to_telegram(
-        self, notification_server, unique_id, container, client, mock_llm_redis
+        self, notification_server, unique_id, di, client, mock_llm_redis
     ):
         """
         Полный Telegram flow:
@@ -2714,7 +2715,7 @@ class TestFullWebhookToChannelE2E:
             edges=[{"from_node": "main", "to_node": None}],
             triggers={trigger_id: trigger},
         )
-        await persist_owned_flow(container, flow_config)
+        await persist_owned_flow(di, flow_config)
         telegram_payload = {
             "update_id": 123123123,
             "message": {
@@ -2743,4 +2744,4 @@ class TestFullWebhookToChannelE2E:
         assert "reply_bot_token_123" in last_tg["token"]
         assert last_tg["data"]["chat_id"] == "777888999"
         assert "Привет" in last_tg["data"]["text"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)

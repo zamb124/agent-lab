@@ -9,11 +9,13 @@ from typing import cast
 import pytest
 from httpx import AsyncClient, Response
 
-from apps.crm.container import CRMContainer
-from apps.crm.db.models import CRMEntity, CRMTask
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
+from apps.crm.models.task import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from tests.crm.e2e._json_helpers import json_object
 
 pytestmark = pytest.mark.timeout(20, func_only=True)
@@ -46,7 +48,7 @@ async def test_lara_namespace_summary_zeros(
 @pytest.mark.asyncio
 async def test_lara_namespace_summary_import_awaiting_review(
     crm_client: AsyncClient,
-    crm_container: CRMContainer,
+    crm_di,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
@@ -86,7 +88,7 @@ async def test_lara_namespace_summary_import_awaiting_review(
     )
     set_context(ctx)
     try:
-        _ = await crm_container.task_repository.create(row)
+        _ = await CRMTask.create(row)
     finally:
         clear_context()
 
@@ -102,7 +104,7 @@ async def test_lara_namespace_summary_import_awaiting_review(
 @pytest.mark.asyncio
 async def test_lara_namespace_summary_note_draft_not_applied(
     crm_client: AsyncClient,
-    crm_container: CRMContainer,
+    crm_di,
     auth_headers_system: dict[str, str],
     unique_id: str,
     system_user_id: str,
@@ -124,11 +126,15 @@ async def test_lara_namespace_summary_note_draft_not_applied(
             entity_type="note",
             name=f"Lara summary note {unique_id}",
             description="body",
-            search_vector="",
             user_id=system_user_id,
             attributes={"ai_analysis_draft": {"draft_version": 1, "entities": []}},
         )
-        _ = await crm_container.entity_repository.create(note)
+        note = await CRMEntity.create(note)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            note,
+            replace=False,
+        )
     finally:
         clear_context()
 

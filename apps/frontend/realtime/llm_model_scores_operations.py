@@ -8,7 +8,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from core.ai.free_pool import (
     catalog_record_map,
     fetch_platform_free_model_records,
@@ -16,12 +16,12 @@ from core.ai.free_pool import (
     refresh_platform_free_models_cache,
     rescore_cached_platform_free_models,
 )
-from core.ai.models import AIModelRecord
+from core.ai.models import EDITORIAL_PRIOR_CAP, AIModelRecord, LLMModelScore
 from core.ai.providers import PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER, AICapability
 from core.ai.scoring import (
-    EDITORIAL_PRIOR_CAP,
     PlatformModelScoreOverlay,
     compute_platform_model_score,
+    platform_model_score_overlays,
 )
 from core.clients.llm.provider_runtime_status import (
     LLMModelRuntimeStatus,
@@ -30,7 +30,6 @@ from core.clients.llm.provider_runtime_status import (
     probe_platform_free_providers,
 )
 from core.config import get_settings
-from core.db.models.platform import LLMModelScore
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.identity_models import User
@@ -145,7 +144,6 @@ def _item_from_catalog(
 
 
 async def _catalog_records_for_capability(
-    container: FrontendContainer,
     capability: AICapability,
 ) -> list[AIModelRecord]:
     settings = get_settings()
@@ -153,7 +151,7 @@ async def _catalog_records_for_capability(
     for provider_slug in PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER:
         if not provider_is_configured_for_free_pool(settings, provider_slug):
             continue
-        provider_records = await container.ai_model_catalog_repository.list_by_provider_capability(
+        provider_records = await AIModelRecord.list_by_provider_capability(
             provider_slug,
             capability,
         )
@@ -161,22 +159,22 @@ async def _catalog_records_for_capability(
     return records
 
 
-async def _build_score_catalog_rows(container: FrontendContainer) -> list[_ScoreCatalogRow]:
+async def _build_score_catalog_rows() -> list[_ScoreCatalogRow]:
     settings = get_settings()
     capability = AICapability.LLM_CHAT
-    catalog_records = await _catalog_records_for_capability(container, capability)
+    catalog_records = await _catalog_records_for_capability(capability)
     catalog_by_key = catalog_record_map(catalog_records)
-    overlays = await container.llm_model_score_repository.list_overlays(capability)
+    score_rows = await LLMModelScore.rows_for_capability(capability)
+    overlays = platform_model_score_overlays(score_rows)
     db_rows = {
         (row.provider, row.model_id): row
-        for row in await container.llm_model_score_repository.list_all()
+        for row in await LLMModelScore.list_all()
         if row.capability == capability.value
     }
 
     pool_records = await fetch_platform_free_model_records(
         settings,
-        container.ai_model_catalog_repository,
-        model_score_provider=container.llm_model_score_repository,
+        overlays=overlays,
     )
     seen: set[tuple[str, str]] = set()
     rows: list[_ScoreCatalogRow] = []
@@ -248,33 +246,31 @@ async def _score_list_response(rows: list[_ScoreCatalogRow]) -> LLMModelScoreLis
     return LLMModelScoreListResponse(items=items, providers=providers)
 
 
-async def _rescore_cache(container: FrontendContainer) -> JsonObject:
+async def _rescore_cache(di: Di) -> JsonObject:
     return await rescore_cached_platform_free_models(
-        container.redis_client,
+        di.redis_client,
         get_settings(),
-        container.ai_model_catalog_repository,
-        model_score_provider=container.llm_model_score_repository,
     )
 
 
 async def op_llm_model_scores_list(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> LLMModelScoreListResponse:
     _ = payload, user
-    _ = await require_system_admin(container.authz_service)
-    return await _score_list_response(await _build_score_catalog_rows(container))
+    _ = await require_system_admin(di.authz_service)
+    return await _score_list_response(await _build_score_catalog_rows())
 
 
 async def op_llm_model_scores_upsert(
-    payload: LLMModelScoreUpsertRequest, *, user: User, container: FrontendContainer
+    payload: LLMModelScoreUpsertRequest, *, user: User, di: Di
 ) -> LLMModelScoreMutationResponse:
-    _ = await require_system_admin(container.authz_service)
-    catalog_record = await container.ai_model_catalog_repository.get_provider_model(
+    _ = await require_system_admin(di.authz_service)
+    catalog_record = await AIModelRecord.get_provider_model(
         payload.provider, payload.model_id
     )
     if catalog_record is None:
         raise_invalid(ValueError("model not found in catalog"))
-    result = await container.llm_model_score_repository.upsert_overlay(
+    result = await LLMModelScore.upsert_overlay(
         provider=payload.provider,
         model_id=payload.model_id,
         capability=payload.capability,
@@ -283,7 +279,7 @@ async def op_llm_model_scores_upsert(
         note=payload.note,
         updated_by_user_id=user.user_id,
     )
-    cache_rescore = await _rescore_cache(container)
+    cache_rescore = await _rescore_cache(di)
     overlay = PlatformModelScoreOverlay(
         enabled=bool(result.row.enabled),
         editorial_prior=float(result.row.editorial_prior),
@@ -308,13 +304,13 @@ async def op_llm_model_scores_upsert(
 
 
 async def op_llm_model_scores_delete(
-    payload: LLMModelScoreDeletePayload, *, user: User, container: FrontendContainer
+    payload: LLMModelScoreDeletePayload, *, user: User, di: Di
 ) -> LLMModelScoreDeleteResponse:
-    _ = await require_system_admin(container.authz_service)
-    deleted = await container.llm_model_score_repository.delete(
+    _ = await require_system_admin(di.authz_service)
+    deleted = await LLMModelScore.delete_overlay(
         provider=payload.provider, model_id=payload.model_id, capability=payload.capability
     )
-    cache_rescore = await _rescore_cache(container)
+    cache_rescore = await _rescore_cache(di)
     logger.info(
         "frontend.llm_model_score_deleted",
         provider=payload.provider,
@@ -327,15 +323,13 @@ async def op_llm_model_scores_delete(
 
 
 async def op_llm_model_scores_refresh_cache(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> JsonObject:
     _ = payload
-    _ = await require_system_admin(container.authz_service)
+    _ = await require_system_admin(di.authz_service)
     result = await refresh_platform_free_models_cache(
-        container.redis_client,
+        di.redis_client,
         get_settings(),
-        container.ai_model_catalog_repository,
-        model_score_provider=container.llm_model_score_repository,
     )
     logger.info(
         "frontend.llm_model_score_cache_refreshed",
@@ -347,10 +341,10 @@ async def op_llm_model_scores_refresh_cache(
 
 
 async def op_llm_model_scores_probe_providers(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> LLMModelScoreListResponse:
     _ = payload
-    _ = await require_system_admin(container.authz_service)
+    _ = await require_system_admin(di.authz_service)
     snapshots = await probe_platform_free_providers(settings=get_settings())
     logger.info("frontend.llm_model_score_providers_probed", actor_user_id=user.user_id, count=len(snapshots))
-    return await _score_list_response(await _build_score_catalog_rows(container))
+    return await _score_list_response(await _build_score_catalog_rows())

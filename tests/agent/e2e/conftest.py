@@ -43,11 +43,6 @@ def flows_worker(taskiq_worker):
     return taskiq_worker
 
 
-@pytest.fixture
-def flows_container(container):
-    return container
-
-
 @pytest_asyncio.fixture
 async def mock_llm_with_queue(
     mock_llm_redis: Callable[[list[Any]], Awaitable[None]],

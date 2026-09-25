@@ -106,8 +106,9 @@ async def schedule_cron_task(
     description: str | None = None,
     *,
     state: ExecutionState,
+    schedule_client: FlowScheduleClient,
 ) -> JsonObject:
-    client = FlowScheduleClient()
+    client = schedule_client
     ct = ContentType(content_type)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
 
@@ -143,8 +144,9 @@ async def schedule_interval_task(
     description: str | None = None,
     *,
     state: ExecutionState,
+    schedule_client: FlowScheduleClient,
 ) -> JsonObject:
-    client = FlowScheduleClient()
+    client = schedule_client
     ct = ContentType(content_type)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
 
@@ -180,8 +182,9 @@ async def schedule_one_time_task(
     description: str | None = None,
     *,
     state: ExecutionState,
+    schedule_client: FlowScheduleClient,
 ) -> JsonObject:
-    client = FlowScheduleClient()
+    client = schedule_client
     ct = ContentType(content_type)
     run_at_dt = datetime.fromisoformat(run_at)
     flow_id, session_id, user_id = _extract_ids_from_state(state)
@@ -212,8 +215,9 @@ async def schedule_one_time_task(
 async def list_scheduled_tasks(
     *,
     state: ExecutionState,
+    schedule_client: FlowScheduleClient,
 ) -> JsonObject:
-    client = FlowScheduleClient()
+    client = schedule_client
     _, session_id, _ = _extract_ids_from_state(state)
     tasks = await client.list_tasks(session_id=session_id)
     return {
@@ -233,8 +237,9 @@ async def cancel_scheduled_task(
     schedule_task_id: str,
     *,
     state: ExecutionState,
+    schedule_client: FlowScheduleClient,
 ) -> JsonObject:
-    client = FlowScheduleClient()
+    client = schedule_client
     success = await client.cancel_task(schedule_task_id)
     if not success:
         raise ValueError(

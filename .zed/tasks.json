@@ -14,11 +14,5 @@
     "reveal": "always",
     "hide": "never",
     "allow_concurrent_runs": false
-  },
-  {
-    "label": "zed-search: check",
-    "command": "make zed-search-check",
-    "reveal": "always",
-    "hide": "on_success"
   }
 ]

@@ -7,14 +7,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
 
-from apps.crm.dependencies import ContainerDep
+from apps.crm.di import Di
 from apps.crm.models.api import (
     RelationshipCreate,
-    RelationshipResponse,
     RelationshipTypeCreate,
-    RelationshipTypeResponse,
 )
 from apps.crm.models.graph import ShortestPathResponse
+from apps.crm.models.relationship import Relationship
+from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.realtime.operations import (
     CrmOffsetPagePayload,
     CrmRelationshipIdPayload,
@@ -34,16 +34,16 @@ from core.pagination import CursorPage, OffsetPage
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
 
-@router.get("", response_model=CursorPage[RelationshipResponse])
+@router.get("", response_model=CursorPage[Relationship])
 async def list_relationships(
-    container: ContainerDep,
+    di: Di,
     entity_id: Annotated[
         str | None, Query(description="Фильтр по entity (source или target)")
     ] = None,
     namespace: Annotated[str | None, Query(description="Фильтр по namespace")] = None,
     cursor: Annotated[str | None, Query(description="Cursor для следующей страницы")] = None,
     limit: Annotated[int, Query(ge=1, le=1000, description="Размер страницы")] = 200,
-) -> CursorPage[RelationshipResponse]:
+) -> CursorPage[Relationship]:
     return await op_relationships_list(
         CrmRelationshipsListPayload(
             entity_id=entity_id,
@@ -52,71 +52,71 @@ async def list_relationships(
             limit=limit,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
-@router.get("/{relationship_id}", response_model=RelationshipResponse)
+@router.get("/{relationship_id}", response_model=Relationship)
 async def get_relationship(
     relationship_id: str,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_relationships_item(
         CrmRelationshipIdPayload(relationship_id=relationship_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
-@router.post("", response_model=RelationshipResponse)
+@router.post("", response_model=Relationship)
 async def create_relationship(
     data: RelationshipCreate,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_relationships_create(
-        data, user=require_context().user, container=container
+        data, user=require_context().user, di=di
     )
 
 
 @router.delete("/{relationship_id}", status_code=204)
 async def delete_relationship(
     relationship_id: str,
-    container: ContainerDep,
+    di: Di,
 ) -> Response:
     await op_relationships_remove(
         CrmRelationshipIdPayload(relationship_id=relationship_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
     return Response(status_code=204)
 
 
-@router.get("/types/", response_model=OffsetPage[RelationshipTypeResponse])
+@router.get("/types/", response_model=OffsetPage[RelationshipType])
 async def list_relationship_types(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[RelationshipTypeResponse]:
+) -> OffsetPage[RelationshipType]:
     return await op_relationship_types_list(
         CrmOffsetPagePayload(limit=limit, offset=offset),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
-@router.post("/types/", response_model=RelationshipTypeResponse)
+@router.post("/types/", response_model=RelationshipType)
 async def create_relationship_type(
     data: RelationshipTypeCreate,
-    container: ContainerDep,
+    di: Di,
 ):
     return await op_relationship_types_create(
-        data, user=require_context().user, container=container
+        data, user=require_context().user, di=di
     )
 
 
 @router.get("/path/", response_model=ShortestPathResponse)
 async def find_shortest_path(
-    container: ContainerDep,
+    di: Di,
     source_entity_id: Annotated[str, Query(description="ID начальной сущности")],
     target_entity_id: Annotated[str, Query(description="ID конечной сущности")],
     max_depth: Annotated[int, Query(ge=1, le=20)] = 10,
@@ -136,5 +136,5 @@ async def find_shortest_path(
             include_all_namespaces=include_all_namespaces,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

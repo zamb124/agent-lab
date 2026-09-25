@@ -10,7 +10,7 @@ from apps.flows.src.models.flow_speech_settings import (
     FlowSpeechVadBlock,
 )
 from core.clients.speech_override import SpeechOverride
-from core.context import Context
+from core.models.context_models import Context
 from core.types import JsonObject, require_json_object
 
 PLATFORM_FLOW_SPEECH_LAYERS_KEY = "platform_flow_speech_layers"

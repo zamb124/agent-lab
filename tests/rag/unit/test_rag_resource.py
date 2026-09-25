@@ -4,25 +4,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from apps.flows.src.container import FlowContainer
+from apps.flows.di import FlowsDi
 from core.clients.service_client import ServiceClient
 from core.models.identity_models import Namespace, NamespaceKind
 from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.rag.rag_resource import RAGResource
 
 
-@pytest.fixture
-def flow_container_for_rag_unit() -> FlowContainer:
-    return FlowContainer(
-        db_url="postgresql://unused:unused@127.0.0.1:5432/unused_flows",
-        shared_db_url="postgresql://unused:unused@127.0.0.1:5432/unused_shared",
-    )
-
-
 @pytest.mark.asyncio
 async def test_search_posts_to_rag_api_with_search_options(
     monkeypatch,
-    flow_container_for_rag_unit: FlowContainer,
+    di: FlowsDi,
 ) -> None:
     captured: dict = {}
 
@@ -52,7 +44,7 @@ async def test_search_posts_to_rag_api_with_search_options(
         namespace="ns-a",
         company_id="system",
         search_options={"channels": {"semantic": True, "lexical": True}},
-        container=flow_container_for_rag_unit,
+        namespace_service=di.namespace_service,
     )
     await r.search("q", top_k=3)
 
@@ -77,7 +69,7 @@ async def test_search_posts_to_rag_api_with_search_options(
 
 @pytest.mark.asyncio
 async def test_add_document_passes_metadata_through(
-    flow_container_for_rag_unit: FlowContainer,
+    di: FlowsDi,
 ) -> None:
     doc = MagicMock()
     doc.document_id = "fid"
@@ -90,15 +82,12 @@ async def test_add_document_passes_metadata_through(
         )
     )
 
+    namespace_service = di.namespace_service
     with (
-        patch.object(
-            flow_container_for_rag_unit.namespace_repository,
-            "get",
-            mock_namespace_get,
-        ),
+        patch.object(namespace_service, "get_or_create", mock_namespace_get),
         patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
     ):
-        r = RAGResource(namespace="ns-a", container=flow_container_for_rag_unit)
+        r = RAGResource(namespace="ns-a", namespace_service=namespace_service)
         await r.add_document(
             "fid",
             "hello",
@@ -114,7 +103,7 @@ async def test_add_document_passes_metadata_through(
 
 @pytest.mark.asyncio
 async def test_add_document_merges_index_profile_config(
-    flow_container_for_rag_unit: FlowContainer,
+    di: FlowsDi,
 ) -> None:
     doc = MagicMock()
     doc.document_id = "fid"
@@ -127,17 +116,14 @@ async def test_add_document_merges_index_profile_config(
         )
     )
 
+    namespace_service = di.namespace_service
     with (
-        patch.object(
-            flow_container_for_rag_unit.namespace_repository,
-            "get",
-            mock_namespace_get,
-        ),
+        patch.object(namespace_service, "get_or_create", mock_namespace_get),
         patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
     ):
         r = RAGResource(
             namespace="ns-a",
-            container=flow_container_for_rag_unit,
+            namespace_service=namespace_service,
             index_profile_config={"split": {"chunk_size": 256}},
         )
         await r.add_document(

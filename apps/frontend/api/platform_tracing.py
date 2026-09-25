@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.models import (
     PlatformTracingFacetItemsResponse,
     PlatformTracingFacetsResponse,
@@ -29,7 +29,8 @@ from apps.frontend.realtime.platform_tracing_operations import (
 )
 from core.context import require_context
 from core.pagination import CursorPage
-from core.tracing.repository import ADMIN_FACETS_MAX_LIMIT, ADMIN_SPANS_MAX_LIMIT
+from core.tracing.facet_query import ADMIN_FACETS_MAX_LIMIT
+from core.tracing.models import ADMIN_SPANS_MAX_LIMIT
 
 router = APIRouter(prefix="/api/platform-tracing", tags=["platform-tracing"])
 
@@ -39,16 +40,16 @@ FacetLimit = Annotated[int, Query(ge=1, le=ADMIN_FACETS_MAX_LIMIT)]
 
 @router.get("/facets/companies", response_model=PlatformTracingFacetItemsResponse)
 async def facet_companies(
-    container: ContainerDep, q: FacetQuery = None, limit: FacetLimit = 20
+    di: Di, q: FacetQuery = None, limit: FacetLimit = 20
 ) -> PlatformTracingFacetItemsResponse:
     return await op_platform_tracing_facet_companies(
-        TracingFacetPayload(q=q, limit=limit), user=require_context().user, container=container
+        TracingFacetPayload(q=q, limit=limit), user=require_context().user, di=di
     )
 
 
 @router.get("/facets/users", response_model=PlatformTracingFacetItemsResponse)
 async def facet_users(
-    container: ContainerDep,
+    di: Di,
     q: FacetQuery = None,
     company_id: FacetQuery = None,
     namespace: FacetQuery = None,
@@ -57,13 +58,13 @@ async def facet_users(
     return await op_platform_tracing_facet_users(
         TracingFacetPayload(q=q, company_id=company_id, namespace=namespace, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/facets/services", response_model=PlatformTracingFacetsResponse)
 async def facet_services(
-    container: ContainerDep,
+    di: Di,
     q: FacetQuery = None,
     company_id: FacetQuery = None,
     namespace: FacetQuery = None,
@@ -72,13 +73,13 @@ async def facet_services(
     return await op_platform_tracing_facet_services(
         TracingFacetPayload(q=q, company_id=company_id, namespace=namespace, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/facets/event-types", response_model=PlatformTracingFacetsResponse)
 async def facet_event_types(
-    container: ContainerDep,
+    di: Di,
     q: FacetQuery = None,
     company_id: FacetQuery = None,
     namespace: FacetQuery = None,
@@ -87,24 +88,24 @@ async def facet_event_types(
     return await op_platform_tracing_facet_event_types(
         TracingFacetPayload(q=q, company_id=company_id, namespace=namespace, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/facets/namespaces", response_model=PlatformTracingFacetsResponse)
 async def facet_namespaces(
-    container: ContainerDep, q: FacetQuery = None, company_id: FacetQuery = None, limit: FacetLimit = 20
+    di: Di, q: FacetQuery = None, company_id: FacetQuery = None, limit: FacetLimit = 20
 ) -> PlatformTracingFacetsResponse:
     return await op_platform_tracing_facet_namespaces(
         TracingFacetPayload(q=q, company_id=company_id, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/facets/operations", response_model=PlatformTracingFacetsResponse)
 async def facet_operations(
-    container: ContainerDep,
+    di: Di,
     q: FacetQuery = None,
     company_id: FacetQuery = None,
     namespace: FacetQuery = None,
@@ -113,13 +114,13 @@ async def facet_operations(
     return await op_platform_tracing_facet_operations(
         TracingFacetPayload(q=q, company_id=company_id, namespace=namespace, limit=limit),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/spans", response_model=CursorPage[PlatformTracingSpanItem])
 async def list_spans(
-    container: ContainerDep,
+    di: Di,
     service_name: FacetQuery = None,
     company_id: FacetQuery = None,
     user_id: FacetQuery = None,
@@ -153,12 +154,12 @@ async def list_spans(
             limit=limit,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.get("/traces/{trace_id}", response_model=TracingTraceTree)
-async def get_trace_tree(trace_id: str, container: ContainerDep) -> TracingTraceTree:
+async def get_trace_tree(trace_id: str, di: Di) -> TracingTraceTree:
     return await op_platform_tracing_trace_tree(
-        TracingTraceIdPayload(trace_id=trace_id), user=require_context().user, container=container
+        TracingTraceIdPayload(trace_id=trace_id), user=require_context().user, di=di
     )

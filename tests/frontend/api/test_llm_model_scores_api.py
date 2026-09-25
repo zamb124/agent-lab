@@ -4,7 +4,7 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
-from core.ai.models import AIModelRecord
+from core.ai.models import AIModelRecord, LLMModelScore
 from core.ai.provider_error import AIProviderErrorClass
 from core.ai.providers import PLATFORM_FREE_MODEL_CANDIDATE_PROVIDER_ORDER, AICapability
 from core.clients.llm.candidate_cooldown import cooldown_redis_key, set_candidate_cooldown
@@ -42,13 +42,12 @@ async def test_llm_model_scores_api_is_system_admin_only(
 @pytest.mark.asyncio
 async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     frontend_client: AsyncClient,
-    frontend_container,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     provider = "openrouter"
     model_id = f"unit/test-score-{unique_id}"
-    await frontend_container.ai_model_catalog_repository.set(
+    await AIModelRecord.set(
         AIModelRecord(
             provider=provider,
             model_id=model_id,
@@ -92,7 +91,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     assert "score_dimensions" not in body["item"]
     assert "cache_rescore" in body
 
-    row = await frontend_container.llm_model_score_repository.get(
+    row = await LLMModelScore.overlay_row(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -128,7 +127,7 @@ async def test_llm_model_scores_api_upserts_lists_and_deletes_real_shared_row(
     )
     assert delete_response.status_code == 200
     assert delete_response.json()["deleted"] is True
-    assert await frontend_container.llm_model_score_repository.get(
+    assert await LLMModelScore.overlay_row(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -177,14 +176,12 @@ async def test_llm_model_score_editorial_prior_outside_cap_is_422(
 
 @pytest.mark.asyncio
 async def test_llm_model_score_overlay_upsert_updates_existing_row(
-    frontend_container,
     unique_id: str,
 ) -> None:
     provider = "github"
     model_id = f"unit/overlay-{unique_id}"
-    repo = frontend_container.llm_model_score_repository
 
-    created = await repo.upsert_overlay(
+    created = await LLMModelScore.upsert_overlay(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -196,7 +193,7 @@ async def test_llm_model_score_overlay_upsert_updates_existing_row(
     assert created.row.editorial_prior == 1.0
     assert created.row.note == "initial"
 
-    updated = await repo.upsert_overlay(
+    updated = await LLMModelScore.upsert_overlay(
         provider=provider,
         model_id=model_id,
         capability="llm_chat",
@@ -204,26 +201,25 @@ async def test_llm_model_score_overlay_upsert_updates_existing_row(
         editorial_prior=-1.0,
         note="forced",
     )
-    row = await repo.get(provider=provider, model_id=model_id, capability="llm_chat")
+    row = await LLMModelScore.overlay_row(provider=provider, model_id=model_id, capability="llm_chat")
     assert updated.created is False
     assert row is not None
     assert row.editorial_prior == -1.0
     assert row.enabled is False
     assert row.note == "forced"
 
-    _ = await repo.delete(provider=provider, model_id=model_id, capability="llm_chat")
+    _ = await LLMModelScore.delete_overlay(provider=provider, model_id=model_id, capability="llm_chat")
 
 
 @pytest.mark.asyncio
 async def test_llm_model_scores_list_reads_redis_cooldown(
     frontend_client: AsyncClient,
-    frontend_container,
     auth_headers_system,
     unique_id: str,
 ) -> None:
     provider = "openrouter"
     model_id = f"unit/test-cooldown-{unique_id}"
-    await frontend_container.ai_model_catalog_repository.set(
+    await AIModelRecord.set(
         AIModelRecord(
             provider=provider,
             model_id=model_id,
@@ -286,7 +282,7 @@ async def test_llm_model_scores_list_reads_redis_cooldown(
         assert provider_chip["availability"] in {"available", "cooldown"}
     finally:
         _ = await redis.delete(*(cooldown_redis_key(candidate) for candidate in configs))
-        _ = await frontend_container.llm_model_score_repository.delete(
+        _ = await LLMModelScore.delete_overlay(
             provider=provider,
             model_id=model_id,
             capability="llm_chat",

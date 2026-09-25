@@ -7,7 +7,6 @@ from collections.abc import Mapping
 import pytest
 from httpx import AsyncClient
 
-from apps.frontend.container import FrontendContainer
 from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.config import get_settings
 from core.files.create_spec import FileCreateSpec
@@ -17,7 +16,8 @@ from core.guest_runtime.models import (
     GuestLanguage,
     GuestLeaseCapError,
 )
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
+from core.tracing.models import Span
 from core.utils.tokens import get_token_service
 from tests.files.chunked_upload_helpers import code_agent_source_upload_spec_json
 from tests.fixtures.ai_provider_defaults import make_test_company
@@ -79,7 +79,7 @@ async def _seed_echo_node(
 
 
 async def _wait_span_ops(
-    frontend_container: FrontendContainer,
+    frontend_di,
     flow_id: str,
     ops: set[str],
     *,
@@ -87,12 +87,12 @@ async def _wait_span_ops(
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        spans = await frontend_container.span_repository.get_spans_by_flow(flow_id, limit=100)
+        spans = await Span.list_by_flow_id(flow_id, limit=100)
         names = {span.operation_name for span in spans}
         if ops <= names:
             return
         await asyncio.sleep(0.2)
-    spans = await frontend_container.span_repository.get_spans_by_flow(flow_id, limit=100)
+    spans = await Span.list_by_flow_id(flow_id, limit=100)
     names = {span.operation_name for span in spans}
     raise AssertionError(f"missing span ops {sorted(ops - names)} in {sorted(names)}")
 
@@ -142,7 +142,7 @@ async def test_code_agent_rebuild_and_drop_write_billing_spans(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    frontend_container: FrontendContainer,
+    frontend_di,
     auth_headers_system: dict[str, str],
     system_user_id: str,
     unique_id: str,
@@ -160,7 +160,7 @@ async def test_code_agent_rebuild_and_drop_write_billing_spans(
         node_id=node_id,
         invoke_argv=invoke_argv,
     )
-    await _wait_span_ops(frontend_container, flow_id, {_BUILD_OP})
+    await _wait_span_ops(frontend_di, flow_id, {_BUILD_OP})
     digest_again = await rebuild_code_agent(
         flows_client_http,
         headers,
@@ -169,7 +169,7 @@ async def test_code_agent_rebuild_and_drop_write_billing_spans(
         invoke_argv=invoke_argv,
     )
     _ = digest_again
-    spans_after_skip = await frontend_container.span_repository.get_spans_by_flow(
+    spans_after_skip = await Span.list_by_flow_id(
         flow_id, limit=100
     )
     build_count = sum(1 for span in spans_after_skip if span.operation_name == _BUILD_OP)
@@ -189,7 +189,7 @@ async def test_code_agent_rebuild_and_drop_write_billing_spans(
     farm = GuestRuntimeClient()
     _ = await farm.ensure_lease(body)
     await farm.drop(flow_id, node_id)
-    await _wait_span_ops(frontend_container, flow_id, {_BUILD_OP, _START_OP, _SESSION_OP})
+    await _wait_span_ops(frontend_di, flow_id, {_BUILD_OP, _START_OP, _SESSION_OP})
 
 
 @pytest.mark.timeout(600, func_only=True)
@@ -197,7 +197,7 @@ async def test_code_agent_idle_reaper_bills_session(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    frontend_container: FrontendContainer,
+    frontend_di,
     auth_headers_system: dict[str, str],
     system_user_id: str,
     unique_id: str,
@@ -238,7 +238,7 @@ async def test_code_agent_idle_reaper_bills_session(
         await asyncio.sleep(0.5)
     else:
         raise AssertionError("idle reaper did not drop the lease")
-    await _wait_span_ops(frontend_container, flow_id, {_SESSION_OP})
+    await _wait_span_ops(frontend_di, flow_id, {_SESSION_OP})
 
 
 @pytest.mark.timeout(600, func_only=True)
@@ -246,7 +246,7 @@ async def test_code_agent_third_lease_http_409(
     flows_client_http: AsyncClient,
     office_service: object,
     guest_runtime_service: object,
-    frontend_container: FrontendContainer,
+    frontend_di,
     unique_id: str,
 ) -> None:
     _ = office_service, guest_runtime_service
@@ -269,11 +269,10 @@ async def test_code_agent_third_lease_http_409(
         active_company_id=company_id,
         groups=["admin"],
     )
-    await frontend_container.company_repository.set(company)
-    await frontend_container.user_repository.set(user)
+    await Company.set(company)
+    await User.set(user)
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["owner", "admin"],

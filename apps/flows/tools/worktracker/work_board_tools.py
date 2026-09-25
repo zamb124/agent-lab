@@ -111,10 +111,11 @@ async def work_board_list(
     namespace: str | None = None,
     *,
     state: "ExecutionState",
+    worktracker_client: WorktrackerClient,
 ) -> JsonObject:
     _ = state
     args = WorkBoardListArgs(namespace=namespace)
-    boards = await WorktrackerClient().list_boards(
+    boards = await worktracker_client.list_boards(
         require_active_company().company_id,
         namespace=args.namespace,
     )
@@ -134,10 +135,11 @@ async def work_board_get(
     board_id: str,
     *,
     state: "ExecutionState",
+    worktracker_client: WorktrackerClient,
 ) -> JsonObject:
     _ = state
     args = WorkBoardGetArgs(board_id=board_id)
-    board = await WorktrackerClient().get_board(
+    board = await worktracker_client.get_board(
         require_active_company().company_id,
         args.board_id,
     )
@@ -160,6 +162,7 @@ async def work_board_create(
     columns: list[BoardColumnInput] | None = None,
     *,
     state: "ExecutionState",
+    worktracker_client: WorktrackerClient,
 ) -> JsonObject:
     _ = state
     args = WorkBoardCreateArgs(
@@ -168,7 +171,7 @@ async def work_board_create(
         board_key=board_key,
         columns=columns if columns is not None else [],
     )
-    board = await WorktrackerClient().create_board(
+    board = await worktracker_client.create_board(
         company_id=require_active_company().company_id,
         name=args.name,
         columns=_columns_from_input(args.columns),
@@ -193,13 +196,14 @@ async def work_board_update(
     columns: list[BoardColumnInput] | None = None,
     *,
     state: "ExecutionState",
+    worktracker_client: WorktrackerClient,
 ) -> JsonObject:
     _ = state
     args = WorkBoardUpdateArgs(board_id=board_id, name=name, columns=columns)
     resolved_columns = (
         _columns_from_input(args.columns) if args.columns is not None else None
     )
-    board = await WorktrackerClient().update_board(
+    board = await worktracker_client.update_board(
         company_id=require_active_company().company_id,
         board_id=args.board_id,
         name=args.name,

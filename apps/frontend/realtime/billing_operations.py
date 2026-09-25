@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from apps.frontend.models import (
     BillingPlanChangeResponse,
     BillingSubscription,
@@ -20,7 +20,7 @@ from core.errors.boundary import PlatformUnavailableError
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.billing_models import TariffPlan
-from core.models.identity_models import User
+from core.models.identity_models import Company, User
 from core.models.payment_models import CreatePaymentResponse, TransactionResponse
 from core.pagination import ListResponse
 from core.request_scope import require_company, require_company_admin
@@ -37,9 +37,9 @@ class BillingTopupPayload(StrictBaseModel):
 
 
 async def op_billing_subscription(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> BillingSubscription:
-    _ = payload, user, container
+    _ = payload, user, di
     _ = require_company()
     company = require_active_company()
     return BillingSubscription(
@@ -52,22 +52,22 @@ async def op_billing_subscription(
 
 
 async def op_billing_usage(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> BillingUsage:
     _ = payload, user
     scope = require_company()
-    stats = await container.billing_service.get_company_usage_stats(scope.company_id)
+    stats = await di.billing_service.get_company_usage_stats(scope.company_id)
     return BillingUsage.model_validate(stats)
 
 
 async def op_billing_plan_change(
-    payload: ChangePlanRequest, *, user: User, container: FrontendContainer
+    payload: ChangePlanRequest, *, user: User, di: Di
 ) -> BillingPlanChangeResponse:
     """Смена тарифа — только owner компании (FGA relation `owner`)."""
     scope = require_company()
     company = require_active_company()
     try:
-        await container.authz_service.require_relation(
+        await di.authz_service.require_relation(
             AuthzRelation.OWNER, AuthzObject.company(scope.company_id), user_id=user.user_id
         )
     except AuthzDenied as exc:
@@ -79,30 +79,30 @@ async def op_billing_plan_change(
     if tariff == company.tariff_plan:
         raise_invalid(ValueError("company already uses this tariff"))
     company.tariff_plan = tariff
-    _ = await container.company_repository.set(company)
+    _ = await Company.set(company)
     logger.info("billing.plan_changed", company_id=company.company_id, plan=tariff.value)
     return BillingPlanChangeResponse(success=True, plan=tariff.value, message=f"Тариф успешно изменен на {tariff.value}")
 
 
 async def op_billing_topup(
-    payload: BillingTopupPayload, *, user: User, container: FrontendContainer
+    payload: BillingTopupPayload, *, user: User, di: Di
 ) -> CreatePaymentResponse:
-    _ = await require_company_admin(container.authz_service)
+    _ = await require_company_admin(di.authz_service)
     company = require_active_company()
     provider = PaymentProviderFactory.get_default_provider()
     if provider is None:
         raise PlatformUnavailableError("Payment provider is not configured", error_code='unavailable')
-    return await container.payment_service.create_payment(
+    return await di.payment_service.create_payment(
         company=company, user=user, amount=payload.amount, provider=provider, host=payload.public_host.strip()
     )
 
 
 async def op_billing_payment_history(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> ListResponse[TransactionResponse]:
     _ = payload, user
     scope = require_company()
-    transactions = await container.payment_service.get_company_transactions(company_id=scope.company_id)
+    transactions = await di.payment_service.get_company_transactions(company_id=scope.company_id)
     return ListResponse[TransactionResponse](
         items=[
             TransactionResponse(

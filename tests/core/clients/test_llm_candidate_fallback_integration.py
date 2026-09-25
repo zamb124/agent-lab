@@ -698,7 +698,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_tools() -> N
             platform_paid_fallback_enabled=False,
         )
 
-        with pytest.raises(RuntimeError, match="совместимых"):
+        with pytest.raises(RuntimeError, match="compatible with request parameters"):
             await client.chat(
                 [_message("hello")],
                 tools=[
@@ -1261,7 +1261,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_files() -> N
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=False,
         )
-        with pytest.raises(RuntimeError, match="совместимых"):
+        with pytest.raises(RuntimeError, match="compatible with request parameters"):
             await client.chat(
                 [
                     Message(
@@ -1303,7 +1303,7 @@ async def test_platform_free_pool_raises_when_no_candidate_supports_response_for
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=False,
         )
-        with pytest.raises(RuntimeError, match="совместимых"):
+        with pytest.raises(RuntimeError, match="compatible with request parameters"):
             async for _event in client.stream(
                 [_message("hello")],
                 response_format={"type": "json_object"},
@@ -1391,7 +1391,7 @@ async def test_paid_without_tools_does_not_guess() -> None:
             platform_default_free_pool=True,
             platform_paid_fallback_enabled=True,
         )
-        with pytest.raises(RuntimeError, match="совместимых"):
+        with pytest.raises(RuntimeError, match="compatible with request parameters"):
             await client.chat([_message("hello")], tools=_tools_payload())
         assert server.requests == []
     finally:
@@ -1486,7 +1486,7 @@ async def test_empty_candidates_platform_pool_without_paid_raises() -> None:
         platform_default_free_pool=True,
         platform_paid_fallback_enabled=False,
     )
-    with pytest.raises(RuntimeError, match="нет доступных бесплатных моделей"):
+    with pytest.raises(RuntimeError, match="no available free models"):
         await client.chat([_message("hello")])
 
 

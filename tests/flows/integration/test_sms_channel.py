@@ -17,9 +17,9 @@ from granian.constants import Interfaces
 from granian.server.embed import Server as GranianEmbedServer
 from pydantic import ValidationError
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.channels.registry import create_default_channel_registry
 from apps.flows.src.channels.sms import SmsChannelHandler
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.channel_config import ChannelNodeConfig
 from apps.flows.src.models.enums import ChannelType
 from apps.flows.src.runtime.nodes import create_node
@@ -448,7 +448,7 @@ class TestSmsChannelNode:
     async def test_channel_node_sms_resolves_state(
         self,
         sms_http_server: str,
-        container: FlowRuntimeContainer,
+        di: FlowsDi,
         unique_id: str,
     ) -> None:
         flow_id = f"sms_channel_node_{unique_id}"
@@ -473,7 +473,7 @@ class TestSmsChannelNode:
                 },
                 "input_mapping": {},
             },
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
         phone = f"+7999{unique_id}"
         response_text = f"node-sms-{unique_id}"
@@ -484,7 +484,7 @@ class TestSmsChannelNode:
             response=response_text,
             variables={"sms_token": f"tok-{unique_id}"},
         )
-        result_state = await run_node(container=container, node=node, state=state)
+        result_state = await run_node(di=di, node=node, state=state)
         channel_result = require_json_object(
             result_state["channel_result"],
             "channel_result",

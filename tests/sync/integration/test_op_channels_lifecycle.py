@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.sync.container import SyncContainer
 from apps.sync.models.channels import ChannelCreate, ChannelType, ChannelUpdate
 from apps.sync.realtime.operations import (
     ChannelsAddMemberPayload,
@@ -32,13 +31,13 @@ from tests.sync.integration._helpers import seed_test_namespace
 
 async def _create_topic(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     unique_id: str,
     *,
     suffix: str,
     name: str,
 ) -> tuple[str, str]:
-    namespace = await seed_test_namespace(op_user, op_container, unique_id, suffix=suffix)
+    namespace = await seed_test_namespace(op_user, sync_di, unique_id, suffix=suffix)
     channel = await op_channels_create(
         ChannelCreate(
             type=ChannelType.TOPIC,
@@ -47,7 +46,7 @@ async def _create_topic(
             is_private=False,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     return channel.channel_id, namespace
 
@@ -55,17 +54,17 @@ async def _create_topic(
 @pytest.mark.asyncio
 async def test_op_channels_create_topic_and_list(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     channel_id, namespace = await _create_topic(
-        op_user, op_container, unique_id, suffix="chl", name=f"Topic {unique_id}"
+        op_user, sync_di, unique_id, suffix="chl", name=f"Topic {unique_id}"
     )
     listing = await op_channels_list(
         ChannelsListPayload(namespace=namespace, limit=10, offset=0),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert any(c.channel_id == channel_id for c in listing.items)
 
@@ -73,30 +72,30 @@ async def test_op_channels_create_topic_and_list(
 @pytest.mark.asyncio
 async def test_op_channels_list_excludes_settings_row_without_fga(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     channel_id, namespace = await _create_topic(
-        op_user, op_container, unique_id, suffix="nofga", name=f"NoFGA {unique_id}"
+        op_user, sync_di, unique_id, suffix="nofga", name=f"NoFGA {unique_id}"
     )
     listing = await op_channels_list(
         ChannelsListPayload(namespace=namespace, limit=10, offset=0),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert any(c.channel_id == channel_id for c in listing.items)
 
-    tuples = await op_container.authz_service.list_tuples(
+    tuples = await sync_di.authz_service.list_tuples(
         AuthzObject.sync_channel(channel_id)
     )
     if tuples:
-        await op_container.authz_service.delete(tuples)
+        await sync_di.authz_service.delete(tuples)
 
     listing_after = await op_channels_list(
         ChannelsListPayload(namespace=namespace, limit=10, offset=0),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert not any(c.channel_id == channel_id for c in listing_after.items)
 
@@ -105,7 +104,7 @@ async def test_op_channels_list_excludes_settings_row_without_fga(
 async def test_op_channels_create_direct_with_peer(
     op_user: User,
     op_user2: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     sync_auth_token_user2: str,
     unique_id: str,
@@ -118,7 +117,7 @@ async def test_op_channels_create_direct_with_peer(
             is_private=True,
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert direct.type == ChannelType.DIRECT
     assert direct.peer is not None
@@ -130,7 +129,7 @@ async def test_op_channels_create_direct_with_peer(
 async def test_op_channels_create_direct_second_call_reuses_same_channel(
     op_user: User,
     op_user2: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     sync_auth_token_user2: str,
     unique_id: str,
@@ -142,8 +141,8 @@ async def test_op_channels_create_direct_second_call_reuses_same_channel(
         member_ids=[op_user2.user_id],
         is_private=True,
     )
-    first = await op_channels_create(create_direct, user=op_user, container=op_container)
-    second = await op_channels_create(create_direct, user=op_user, container=op_container)
+    first = await op_channels_create(create_direct, user=op_user, di=sync_di)
+    second = await op_channels_create(create_direct, user=op_user, di=sync_di)
     assert first.channel_id == second.channel_id
     assert first.type == ChannelType.DIRECT
     assert second.type == ChannelType.DIRECT
@@ -152,12 +151,12 @@ async def test_op_channels_create_direct_second_call_reuses_same_channel(
 @pytest.mark.asyncio
 async def test_op_channels_update_renames_channel(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     channel_id, _ = await _create_topic(
-        op_user, op_container, unique_id, suffix="upch", name=f"OldName {unique_id}"
+        op_user, sync_di, unique_id, suffix="upch", name=f"OldName {unique_id}"
     )
     updated = await op_channels_update(
         ChannelsUpdatePayload(
@@ -165,7 +164,7 @@ async def test_op_channels_update_renames_channel(
             body=ChannelUpdate(name=f"NewName {unique_id}"),
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert updated.name == f"NewName {unique_id}"
 
@@ -173,17 +172,17 @@ async def test_op_channels_update_renames_channel(
 @pytest.mark.asyncio
 async def test_op_channels_mark_read_no_op_when_no_messages(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     unique_id: str,
 ) -> None:
     channel_id, _ = await _create_topic(
-        op_user, op_container, unique_id, suffix="mr", name=f"MRCh {unique_id}"
+        op_user, sync_di, unique_id, suffix="mr", name=f"MRCh {unique_id}"
     )
     result = await op_channels_mark_read(
         ChannelsMarkReadPayload(channel_id=channel_id),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert result is None
 
@@ -192,20 +191,20 @@ async def test_op_channels_mark_read_no_op_when_no_messages(
 async def test_op_channels_typing_requires_membership(
     op_user: User,
     op_user2: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     sync_auth_token_user2: str,
     unique_id: str,
 ) -> None:
     _ = sync_auth_token_user2
     channel_id, _ = await _create_topic(
-        op_user, op_container, unique_id, suffix="typ", name=f"Typ {unique_id}"
+        op_user, sync_di, unique_id, suffix="typ", name=f"Typ {unique_id}"
     )
     with pytest.raises(WsCommandError) as exc_info:
         await op_channels_typing(
             ChannelsTypingPayload(channel_id=channel_id, typing=True, thread_id=None),
             user=op_user2,
-            container=op_container,
+            di=sync_di,
         )
     assert exc_info.value.code == "forbidden"
 
@@ -214,28 +213,28 @@ async def test_op_channels_typing_requires_membership(
 async def test_op_channels_add_member_then_list_members(
     op_user: User,
     op_user2: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
     sync_auth_token_user2: str,
     unique_id: str,
 ) -> None:
     _ = sync_auth_token_user2
     channel_id, _ = await _create_topic(
-        op_user, op_container, unique_id, suffix="am", name=f"AMCh {unique_id}"
+        op_user, sync_di, unique_id, suffix="am", name=f"AMCh {unique_id}"
     )
     member = await op_channels_add_member(
         ChannelsAddMemberPayload(
             channel_id=channel_id, user_id=op_user2.user_id, role="member"
         ),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     assert member.user_id == op_user2.user_id
 
     listing = await op_channels_list_members(
         ChannelsListMembersPayload(channel_id=channel_id),
         user=op_user,
-        container=op_container,
+        di=sync_di,
     )
     user_ids = {m.user_id for m in listing.items}
     assert op_user.user_id in user_ids
@@ -245,7 +244,7 @@ async def test_op_channels_add_member_then_list_members(
 @pytest.mark.asyncio
 async def test_op_channels_update_not_found_raises(
     op_user: User,
-    op_container: SyncContainer,
+    sync_di,
     op_context: None,
 ) -> None:
     with pytest.raises((WsCommandError, ValueError, PermissionError)):
@@ -255,5 +254,5 @@ async def test_op_channels_update_not_found_raises(
                 body=ChannelUpdate(name="X"),
             ),
             user=op_user,
-            container=op_container,
+            di=sync_di,
         )

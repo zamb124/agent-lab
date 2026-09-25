@@ -2,25 +2,32 @@ from __future__ import annotations
 
 import pytest
 
-from core.db.repositories.company_repository import CompanyRepository
 from core.models.identity_models import Company
 
 
-class _FakeStorage:
-    async def get_all_by_prefix_and_table(self, prefix: str, table_name: str, limit: int, offset: int):
-        assert prefix == "company:"
-        assert table_name == "storage"
-        return {
-            "company:smr": Company(company_id="smr", name="SMR").model_dump_json(),
-            "company:smr:embed_config:embed_a9c63630203b4f1f": '{"name":"Test","theme":"dark"}',
-        }
+@pytest.mark.asyncio
+async def test_company_get_returns_saved_company(unique_id: str) -> None:
+    company_id = f"co_list_{unique_id}"
+    saved = Company(company_id=company_id, name=f"List {unique_id}")
+    _ = await Company.set(saved)
+
+    found = await Company.get(company_id)
+
+    assert found is not None
+    assert found.company_id == company_id
+    assert found.name == saved.name
 
 
 @pytest.mark.asyncio
-async def test_company_repository_list_skips_nested_company_prefix_entities() -> None:
-    repo = CompanyRepository(storage=_FakeStorage())  # pyright: ignore[reportArgumentType]
+async def test_by_subdomain_returns_own_row(unique_id: str) -> None:
+    company_id = f"co_sub_{unique_id}"
+    subdomain = f"sub{unique_id}"
+    saved = Company(company_id=company_id, name=f"Sub {unique_id}", subdomain=subdomain)
+    _ = await Company.set(saved)
 
-    companies = await repo.list(limit=100, offset=0)
-
-    assert len(companies) == 1
-    assert companies[0].company_id == "smr"
+    found = await Company.by_subdomain(subdomain)
+    assert found is not None
+    assert found.company_id == company_id
+    assert await Company.by_subdomain(f"missing{unique_id}") is None
+    with pytest.raises(ValueError, match="subdomain is required"):
+        _ = await Company.by_subdomain("")

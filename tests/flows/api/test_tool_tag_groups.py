@@ -11,7 +11,7 @@ from apps.flows.src.services.tool_tag_group_service import ToolTagGroupService
 
 
 @pytest.mark.asyncio
-async def test_list_tool_tag_groups_empty(client, container, unique_id):
+async def test_list_tool_tag_groups_empty(client, di, unique_id):
     tag = f"empty_{unique_id}"
     response = await client.get("/flows/api/v1/tools/tag-groups?limit=200&offset=0")
     assert response.status_code == 200
@@ -21,7 +21,7 @@ async def test_list_tool_tag_groups_empty(client, container, unique_id):
 
 
 @pytest.mark.asyncio
-async def test_list_tool_tag_groups_returns_stored(client, container, unique_id):
+async def test_list_tool_tag_groups_returns_stored(client, di, unique_id):
     tag = f"math_{unique_id}"
     record = ToolTagGroup(
         tag=tag,
@@ -30,7 +30,7 @@ async def test_list_tool_tag_groups_returns_stored(client, container, unique_id)
         content_hash="abc",
         updated_at=datetime.now(timezone.utc),
     )
-    await container.tool_tag_group_repository.set(record)
+    await ToolTagGroup.set(record)
     response = await client.get("/flows/api/v1/tools/tag-groups?limit=200&offset=0")
     assert response.status_code == 200
     body = response.json()
@@ -41,13 +41,13 @@ async def test_list_tool_tag_groups_returns_stored(client, container, unique_id)
 
 
 @pytest.mark.asyncio
-async def test_describe_skips_unchanged_hash(container, monkeypatch):
-    service = container.tool_tag_group_service
+async def test_describe_skips_unchanged_hash(di, monkeypatch):
+    service = di.tool_tag_group_service
     tools_by_tag = service._collect_builtin_tools_by_tag()
     assert "misc" in tools_by_tag
     misc_tools = tools_by_tag["misc"]
     content_hash = service._content_hash(misc_tools)
-    await container.tool_tag_group_repository.set(
+    await ToolTagGroup.set(
         ToolTagGroup(
             tag="misc",
             description_ru="старое",
@@ -80,8 +80,8 @@ async def test_describe_skips_unchanged_hash(container, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_describe_writes_llm_result(container, monkeypatch):
-    service = container.tool_tag_group_service
+async def test_describe_writes_llm_result(di, monkeypatch):
+    service = di.tool_tag_group_service
     tools = [("calculator", "Math expressions")]
     content_hash = service._content_hash(tools)
 
@@ -109,7 +109,7 @@ async def test_describe_writes_llm_result(container, monkeypatch):
 
     stats = await service.describe_all_platform_tags()
     assert stats.tags_updated == 1
-    stored = await container.tool_tag_group_repository.get("misc")
+    stored = await ToolTagGroup.get("misc")
     assert stored is not None
     assert stored.description_ru == "Счёт и формулы"
     assert stored.description_en == "Calc and formulas"
@@ -118,10 +118,7 @@ async def test_describe_writes_llm_result(container, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_content_hash_stable_order():
-    service = ToolTagGroupService(
-        repository=None,  # type: ignore[arg-type]
-        flow_repository=None,  # type: ignore[arg-type]
-    )
+    service = ToolTagGroupService()
     a = service._content_hash([("a", "1"), ("b", "2")])
     b = service._content_hash([("a", "1"), ("b", "2")])
     c = service._content_hash([("b", "2"), ("a", "1")])

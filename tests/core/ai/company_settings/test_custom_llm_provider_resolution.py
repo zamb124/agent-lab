@@ -13,7 +13,9 @@ from core.ai.company_settings import (
 from core.ai.providers import AICapability
 from core.ai.requirements import AISelection
 from core.ai.resolver import resolve_ai_model
-from core.context import Company, Context, User, clear_context, set_context
+from core.context import clear_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.text_transforms.service import TextTransformService
 
 

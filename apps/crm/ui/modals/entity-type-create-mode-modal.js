@@ -6,7 +6,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
-import { CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN } from '../utils/entity-type-create-events.js';
+import { CRM_ENTITY_TYPE_CREATE_MODE_CHOSEN } from '../_helpers/entity-type-create-events.js';
 
 export class CRMEntityTypeCreateModeModal extends PlatformModal {
     static modalKind = 'crm.entity_type_create_mode';

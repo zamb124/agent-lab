@@ -156,11 +156,13 @@ class LokiClient:
     Whitelist-шаблоны LogQL на сервере; по trace_id — расширенный набор service-лейблов.
     """
 
-    def __init__(self, base_url: str, timeout: float = 15.0) -> None:
-        if not base_url:
-            raise ValueError("LokiClient: base_url is required")
-        self._base_url: str = base_url.rstrip("/")
+    def __init__(self, base_url: str | None, timeout: float = 15.0) -> None:
+        self._base_url: str | None = base_url.rstrip("/") if base_url else None
         self._timeout: float = timeout
+
+    @property
+    def is_configured(self) -> bool:
+        return self._base_url is not None
 
     async def _query_range(
         self,
@@ -169,6 +171,8 @@ class LokiClient:
         time_to: datetime | None,
         limit: int,
     ) -> list[LokiLogEntry]:
+        if self._base_url is None:
+            raise LokiClientError("Loki query API is not configured")
         end = time_to if time_to is not None else datetime.now(timezone.utc)
         start = time_from if time_from is not None else end - _DEFAULT_QUERY_LOOKBACK
         params: dict[str, str | int] = {

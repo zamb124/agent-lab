@@ -40,7 +40,7 @@ def _state_with(file_ref) -> ExecutionState:
 async def test_read_file_auto_detects_lane(
     relative_path: str,
     expected_lane: ReadLane,
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
@@ -48,7 +48,7 @@ async def test_read_file_auto_detects_lane(
     entry = next(e for e in POSITIVE if e.relative_path == relative_path)
     if entry.uses_vision_llm or expected_lane == ReadLane.VISION:
         mock_llm_with_queue(["MOCK_VISION"])
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
         await read_file.run({"names": [file_ref.original_name]}, state),
@@ -61,14 +61,14 @@ async def test_read_file_auto_detects_lane(
 @pytest.mark.timeout(120)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_on_image_auto_uses_vision(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "img/example.jpg")
     mock_llm_with_queue(["MOCK_VISION"])
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
         await read_file.run({"names": [file_ref.original_name]}, state),
@@ -83,12 +83,12 @@ async def test_read_file_on_image_auto_uses_vision(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_pdf_text_page_range(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "pdf/multi-column-2p.pdf")
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
         await read_file.run(
@@ -106,12 +106,12 @@ async def test_read_file_pdf_text_page_range(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_large_pdf_text_extraction(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "pdf/DA-1p.pdf")
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
     payload = require_json_object(
         await read_file.run(
@@ -129,12 +129,12 @@ async def test_read_file_large_pdf_text_extraction(
 @pytest.mark.timeout(180)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_audio_uses_stt_lane(
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "CantinaBand3.wav")
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
 
     payload = require_json_object(

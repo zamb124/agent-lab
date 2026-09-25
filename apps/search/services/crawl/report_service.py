@@ -4,19 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from apps.search.db.crawl_repositories import (
-    CrawlDomainRepository,
-    CrawlJobRepository,
-    CrawlProfileRepository,
-    CrawlUrlRepository,
-)
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.crawl.models import (
     CrawlDomain,
     CrawlJob,
+    CrawlProfile,
     CrawlProfileSummary,
     CrawlProfileWithIndex,
+    CrawlUrl,
     CrawlUrlDetail,
     CrawlUrlIndexedContent,
     CrawlUrlListItem,
@@ -29,22 +25,11 @@ logger = get_logger(__name__)
 
 
 class CrawlReportService:
-    def __init__(
-        self,
-        crawl_profile_repository: CrawlProfileRepository,
-        crawl_domain_repository: CrawlDomainRepository,
-        crawl_url_repository: CrawlUrlRepository,
-        crawl_job_repository: CrawlJobRepository,
-        rag_client: RagClient,
-    ) -> None:
-        self._crawl_profile_repository: CrawlProfileRepository = crawl_profile_repository
-        self._crawl_domain_repository: CrawlDomainRepository = crawl_domain_repository
-        self._crawl_url_repository: CrawlUrlRepository = crawl_url_repository
-        self._crawl_job_repository: CrawlJobRepository = crawl_job_repository
+    def __init__(self, rag_client: RagClient) -> None:
         self._rag_client: RagClient = rag_client
 
     async def list_profiles(self, *, limit: int, offset: int) -> OffsetPage[CrawlProfileWithIndex]:
-        return await self._crawl_profile_repository.list_page(limit=limit, offset=offset)
+        return await CrawlProfile.list_page(limit=limit, offset=offset)
 
     async def list_domains(
         self,
@@ -54,8 +39,8 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlDomain]:
-        _ = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
-        return await self._crawl_domain_repository.list_page(
+        _ = await CrawlProfile.get_with_index(crawl_profile_id)
+        return await CrawlDomain.list_page(
             crawl_profile_id=crawl_profile_id,
             status=status,
             limit=limit,
@@ -63,24 +48,18 @@ class CrawlReportService:
         )
 
     async def get_profile_summary(self, crawl_profile_id: str) -> CrawlProfileSummary:
-        profile = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
+        profile = await CrawlProfile.get_with_index(crawl_profile_id)
         now = datetime.now(UTC)
-        domain_counts = await self._crawl_domain_repository.count_by_status(crawl_profile_id)
-        url_counts = await self._crawl_url_repository.count_by_status_for_profile(crawl_profile_id)
-        domains_total = await self._crawl_domain_repository.count_for_profile(crawl_profile_id)
-        domains_due = await self._crawl_domain_repository.count_due(crawl_profile_id, now=now)
-        running_job = await self._crawl_job_repository.get_running(crawl_profile_id)
-        latest_job = await self._crawl_job_repository.get_latest(crawl_profile_id)
-        content_type_counts = await self._crawl_url_repository.count_by_enrichment_content_type(
-            crawl_profile_id
-        )
-        primary_topic_counts = await self._crawl_url_repository.count_by_enrichment_primary_topic(
-            crawl_profile_id
-        )
-        urls_enriched_total = await self._crawl_url_repository.count_enriched_for_profile(
-            crawl_profile_id
-        )
-        urls_enrichment_pending = await self._crawl_url_repository.count_enrichment_pending_for_profile(
+        domain_counts = await CrawlDomain.count_by_status(crawl_profile_id)
+        url_counts = await CrawlUrl.count_by_status_for_profile(crawl_profile_id)
+        domains_total = await CrawlDomain.count_for_profile(crawl_profile_id)
+        domains_due = await CrawlDomain.count_due(crawl_profile_id, now=now)
+        running_job = await CrawlJob.active_for_profile(crawl_profile_id)
+        latest_job = await CrawlJob.latest_for_profile(crawl_profile_id)
+        content_type_counts = await CrawlUrl.count_by_enrichment_content_type(crawl_profile_id)
+        primary_topic_counts = await CrawlUrl.count_by_enrichment_primary_topic(crawl_profile_id)
+        urls_enriched_total = await CrawlUrl.count_enriched_for_profile(crawl_profile_id)
+        urls_enrichment_pending = await CrawlUrl.count_enrichment_pending_for_profile(
             crawl_profile_id,
             llm_enrichment_enabled=profile.profile.llm_enrichment_enabled,
         )
@@ -106,8 +85,8 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlJob]:
-        _ = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
-        return await self._crawl_job_repository.list_page(
+        _ = await CrawlProfile.get_with_index(crawl_profile_id)
+        return await CrawlJob.list_page(
             crawl_profile_id=crawl_profile_id,
             status=status,
             limit=limit,
@@ -126,8 +105,8 @@ class CrawlReportService:
         limit: int,
         offset: int,
     ) -> OffsetPage[CrawlUrlListItem]:
-        _ = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
-        return await self._crawl_url_repository.list_page_for_profile(
+        _ = await CrawlProfile.get_with_index(crawl_profile_id)
+        return await CrawlUrl.list_page_for_profile(
             crawl_profile_id=crawl_profile_id,
             crawl_status=crawl_status,
             domain=domain,
@@ -143,8 +122,8 @@ class CrawlReportService:
         crawl_url_id: str,
         crawl_profile_id: str,
     ) -> CrawlUrlDetail:
-        profile = await self._crawl_profile_repository.get_with_index(crawl_profile_id)
-        url_item, extract_title, extract_markdown = await self._crawl_url_repository.get_for_profile(
+        profile = await CrawlProfile.get_with_index(crawl_profile_id)
+        url_item, extract_title, extract_markdown = await CrawlUrl.get_for_profile(
             crawl_url_id,
             crawl_profile_id,
         )

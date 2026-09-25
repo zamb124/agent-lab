@@ -18,6 +18,7 @@ from core.mail.exceptions import (
     MailTransportError,
 )
 from core.mail.models import (
+    INBOX_FOLDER,
     CompanyMailConnectionUpsertPayload,
     MailboxBindingCreatePayload,
     MailboxBindingKind,
@@ -31,9 +32,9 @@ from core.mail.models import (
     MailProvider,
     MailSyncNowPayload,
     OutboundMailMessage,
+    StoredMailMessage,
 )
 from core.mail.ports import MailServerPort
-from core.mail.repositories import INBOX_FOLDER, MailMessageRepository
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
@@ -47,7 +48,7 @@ async def _seed_live_company_binding(
     mail_live_service: MailService,
     mail_live_settings: MailConfig,
     mail_quota_sweeper: list[str],
-    container,
+    di,
     *,
     unique_id: str,
     suffix: str,
@@ -80,8 +81,8 @@ async def _seed_live_company_binding(
         owner_user_id=user_id,
         members={user_id: ["owner", "admin"]},
     )
-    await container.user_repository.set(user)
-    await container.company_repository.set(company)
+    await User.set(user)
+    await Company.set(company)
     set_context(
         Context(
             user=user,
@@ -130,7 +131,7 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
     mail_live_port: MailServerPort,
     mail_live_settings: MailConfig,
     mail_quota_sweeper: list[str],
-    container,
+    di,
     unique_id: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -138,7 +139,7 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
         mail_live_service,
         mail_live_settings,
         mail_quota_sweeper,
-        container,
+        di,
         unique_id=unique_id,
         suffix="a",
     )
@@ -146,13 +147,13 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
         mail_live_service,
         mail_live_settings,
         mail_quota_sweeper,
-        container,
+        di,
         unique_id=unique_id,
         suffix="b",
     )
     # Restore context to A (seed B overwrote it).
-    company_a = await container.company_repository.get(company_id)
-    user_a = await container.user_repository.get(user_id)
+    company_a = await Company.get(company_id)
+    user_a = await User.get(user_id)
     assert company_a is not None and user_a is not None
     set_context(
         Context(
@@ -184,8 +185,8 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
     assert found is not None
 
     # Context for B company to sync/search.
-    company_b = await container.company_repository.get(binding_b.company_id)
-    user_b = await container.user_repository.get(binding_b.user_id or "")
+    company_b = await Company.get(binding_b.company_id)
+    user_b = await User.get(binding_b.user_id or "")
     assert company_b is not None and user_b is not None
     set_context(
         Context(
@@ -320,9 +321,9 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
         companies={binding_b.company_id: ["member"]},
         active_company_id=binding_b.company_id,
     )
-    await container.user_repository.set(outsider)
+    await User.set(outsider)
     company_b.members[outsider.user_id] = ["member"]
-    await container.company_repository.set(company_b)
+    await Company.set(company_b)
     set_context(
         Context(
             user=outsider,
@@ -353,8 +354,8 @@ async def test_live_complete_client_sync_triage_search_drafts_role(
     shared_url = get_settings().database.shared_url
     if shared_url is None:
         raise RuntimeError("DATABASE__SHARED_URL обязателен")
-    message_repo = MailMessageRepository(db_url=shared_url)
-    _ = await message_repo.delete_folder(
+    # messages via StoredMailMessage
+    _ = await StoredMailMessage.delete_folder(
         binding_b.mailbox_binding_id, folder=INBOX_FOLDER
     )
     wiped_local = await mail_live_service.list_messages(

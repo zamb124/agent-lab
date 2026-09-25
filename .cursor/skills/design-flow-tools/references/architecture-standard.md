@@ -281,7 +281,7 @@ Raw JSON Schema оставляйте как advanced mode. Основной пу
 tool handler → operation-specific application port → domain service/repository
 ```
 
-Не возвращайте handler общий service locator, container или raw platform HTTP.
+Не возвращайте handler общий service locator или raw platform HTTP.
 Например, `CreateCrmNotePort.create(command, actor)` безопаснее, чем
 `get_crm_service()` с десятками методов.
 

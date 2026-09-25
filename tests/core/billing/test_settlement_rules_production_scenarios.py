@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from core.billing.settlement_rules import (
     SettlementApplicationMode,
@@ -16,7 +17,7 @@ from core.billing.settlement_rules import (
     resolve_matched_rules,
     rule_matches_span,
 )
-from core.tracing.models import BillingSettlementSpan
+from core.tracing.models import Span
 from core.types import JsonObject
 
 
@@ -26,11 +27,12 @@ def _span(
     service_name: str = "flows",
     event_type: str | None = None,
     attributes: JsonObject | None = None,
-) -> BillingSettlementSpan:
-    return BillingSettlementSpan(
+) -> Span:
+    return Span(
         span_id="s1",
         trace_id="t1",
         operation_name=operation_name,
+        start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
         service_name=service_name,
         event_type=event_type,
         attributes=attributes if attributes is not None else {},

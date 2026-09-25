@@ -12,7 +12,7 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from apps.frontend.dependencies import ContainerDep
+from apps.frontend.di import Di
 from apps.frontend.realtime.company_operations import (
     InviteGenerated,
     InviteGeneratePayload,
@@ -26,6 +26,7 @@ from core.identity.company_membership import (
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
+from core.short_links.models import PlatformShortLink
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.invite_tokens import (
     burn_invite_token,
@@ -86,14 +87,14 @@ def _require_invite_user() -> User:
 
 
 @router.post("/generate", response_model=InviteGenerated)
-async def generate_invite(body: InviteGeneratePayload, container: ContainerDep) -> InviteGenerated:
-    return await op_invites_generate(body, user=require_context().user, container=container)
+async def generate_invite(body: InviteGeneratePayload, di: Di) -> InviteGenerated:
+    return await op_invites_generate(body, user=require_context().user, di=di)
 
 
 @router.post("/preview", response_model=PreviewInviteResponse)
 async def preview_invite(
     body: PreviewInviteRequest,
-    container: ContainerDep,
+    di: Di,
 ) -> PreviewInviteResponse:
     """
     Возвращает данные приглашения для экрана /join без авторизации.
@@ -103,7 +104,7 @@ async def preview_invite(
     if code == "":
         raise HTTPException(status_code=400, detail="Invite code is not set")
 
-    short = container.short_link_service
+    short = di.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
         raise HTTPException(status_code=404, detail="Invite link not found or expired")
@@ -119,13 +120,11 @@ async def preview_invite(
     if await invite_jti_already_used(invite.jti):
         raise HTTPException(status_code=410, detail="Invite link has already been used")
 
-    company_repo = container.company_repository
-    company = await company_repo.get(invite.company_id)
+    company = await Company.get(invite.company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found or was deleted")
 
-    user_repo = container.user_repository
-    inviter = await user_repo.get(invite.invited_by)
+    inviter = await User.get(invite.invited_by)
     if not inviter:
         raise HTTPException(status_code=404, detail="Invite initiator not found")
 
@@ -142,7 +141,7 @@ async def accept_invite(
     body: AcceptInviteRequest,
     request: Request,
     response: Response,
-    container: ContainerDep,
+    di: Di,
 ) -> AcceptInviteResponse:
     """
     Принимает инвайт-токен и добавляет пользователя в компанию.
@@ -156,7 +155,7 @@ async def accept_invite(
     if code == "":
         raise HTTPException(status_code=400, detail="Invite code is not set")
 
-    short = container.short_link_service
+    short = di.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
         raise HTTPException(status_code=404, detail="Invite link not found or expired")
@@ -169,8 +168,7 @@ async def accept_invite(
     except (jwt.InvalidTokenError, ValueError):
         raise HTTPException(status_code=403, detail="Invalid invite link")
 
-    company_repo = container.company_repository
-    company = await company_repo.get(invite.company_id)
+    company = await Company.get(invite.company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found or was deleted")
 
@@ -180,13 +178,12 @@ async def accept_invite(
         roles_list = list(company.members[user.user_id])
         logger.info("frontend.event", user_id=user.user_id, company_id=company.company_id)
         await sync_existing_company_member(
-            authz=container.authz_service,
+            authz=di.authz_service,
             company_id=company.company_id,
             user_id=user.user_id,
             roles=roles_list,
         )
         new_session_token, _ = await rebind_session_to_company(
-            container=container,
             user=user,
             company=company,
             roles=roles_list,
@@ -213,18 +210,16 @@ async def accept_invite(
     # Добавляем пользователя в компанию
     roles = [invite.role]
     roles = await set_company_member_roles(
-        company_repository=company_repo,
-        user_repository=container.user_repository,
-        authz=container.authz_service,
+        authz=di.authz_service,
         company=company,
         user=user,
         roles=roles,
     )
     user.active_company_id = company.company_id
-    _ = await container.user_repository.set(user)
+    _ = await User.set(user)
 
     await ensure_personal_namespace_for_user(
-        container.namespace_service,
+        di.namespace_service,
         user,
         company=company,
     )
@@ -236,10 +231,9 @@ async def accept_invite(
         role=invite.role,
     )
 
-    _ = await short.delete_by_code(code)
+    _ = await PlatformShortLink.delete_by_id(code)
 
     new_session_token, _ = await rebind_session_to_company(
-        container=container,
         user=user,
         company=company,
         roles=roles,

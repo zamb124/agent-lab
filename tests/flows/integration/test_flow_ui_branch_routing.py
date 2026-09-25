@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container
+from apps.flows.src.models import FlowConfig
 from apps.flows.src.models.flow_config import BranchConfig
 from core.context import require_context
 from core.flow_ui.document import FlowUIConversation, FlowUIDocument, FlowUIMarkdownText, FlowUIPage
@@ -46,27 +46,26 @@ def _interface_showing(field: str) -> FlowUIDocument:
     )
 
 
-async def _seed_branch_interface(*, flow_id: str, branch_id: str) -> None:
+async def _seed_branch_interface(*, flow_id: str, branch_id: str, di) -> None:
     config = await ensure_flow(
-        flow_id=flow_id, interface=_interface_showing("base_note"), code=_NOTES_CODE
+        flow_id=flow_id, interface=_interface_showing("base_note"), code=_NOTES_CODE, di=di
     )
     config.branches = {
         branch_id: BranchConfig(name="CRM", interface=_interface_showing("branch_note"))
     }
-    container = get_container()
-    await container.flow_repository.set(config)
+    await FlowConfig.create_version(config)
     ctx = require_context()
     if ctx.active_company is None:
         raise AssertionError("active company required for flow authz sync")
-    await container.flow_access_service.sync_flow_saved(
+    await di.flow_access_service.sync_flow_saved(
         config,
         company_id=ctx.active_company.company_id,
         owner_user_id=ctx.user.user_id,
     )
 
 
-async def _session_branch(session_id: str) -> str:
-    state = await get_container().workflow_runtime.get_state(session_id)
+async def _session_branch(session_id: str, di) -> str:
+    state = await di.workflow_runtime.get_state(session_id)
     assert state is not None, f"missing session {session_id}"
     return state.branch_id
 
@@ -74,11 +73,11 @@ async def _session_branch(session_id: str) -> str:
 @pytest.mark.asyncio
 async def test_turn_projects_state_by_the_requested_branch_interface(
     client: AsyncClient,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     flow_id = f"branch_ui_{unique_id}"
     branch_id = f"crm_{unique_id}"
-    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id)
+    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id, di=di)
 
     branch_context = f"ctx-branch-{unique_id}"
     branch_task = await a2a_send(
@@ -90,7 +89,7 @@ async def test_turn_projects_state_by_the_requested_branch_interface(
     assert branch_task["contextId"] == branch_context
     assert branch_task["status"]["state"] == "TASK_STATE_COMPLETED", branch_task
     assert state_from_task(branch_task) == {"branch_note": "branch"}
-    assert await _session_branch(f"{flow_id}:{branch_context}") == branch_id
+    assert await _session_branch(f"{flow_id}:{branch_context}", di=di) == branch_id
 
     base_context = f"ctx-base-{unique_id}"
     base_task = await a2a_send(
@@ -100,16 +99,16 @@ async def test_turn_projects_state_by_the_requested_branch_interface(
         branch_id="default",
     )
     assert state_from_task(base_task) == {"base_note": "base"}
-    assert await _session_branch(f"{flow_id}:{base_context}") == "default"
+    assert await _session_branch(f"{flow_id}:{base_context}", di=di) == "default"
 
 
 @pytest.mark.asyncio
 async def test_turn_without_branch_metadata_uses_base(
     client: AsyncClient,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     flow_id = f"branch_ui_default_{unique_id}"
-    await _seed_branch_interface(flow_id=flow_id, branch_id=f"crm_{unique_id}")
+    await _seed_branch_interface(flow_id=flow_id, branch_id=f"crm_{unique_id}", di=di)
     context_id = f"ctx-nobranch-{unique_id}"
     task = await a2a_send(
         client,
@@ -117,19 +116,19 @@ async def test_turn_without_branch_metadata_uses_base(
         message=text_message(context_id=context_id, text="hi"),
     )
     assert state_from_task(task) == {"base_note": "base"}
-    assert await _session_branch(f"{flow_id}:{context_id}") == "default"
+    assert await _session_branch(f"{flow_id}:{context_id}", di=di) == "default"
 
 
 @pytest.mark.asyncio
 async def test_second_branch_cannot_take_over_a_live_session(
     client: AsyncClient,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     """Сессия владеет своей веткой: другая ветка на том же context отклоняется."""
     flow_id = f"branch_ui_takeover_{unique_id}"
     branch_id = f"crm_{unique_id}"
     other_branch_id = f"support_{unique_id}"
-    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id)
+    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id, di=di)
     context_id = f"ctx-conflict-{unique_id}"
     _ = await a2a_send(
         client,
@@ -145,18 +144,18 @@ async def test_second_branch_cannot_take_over_a_live_session(
         branch_id=other_branch_id,
     )
     assert other_branch_id in str(error), error
-    assert await _session_branch(f"{flow_id}:{context_id}") == branch_id
+    assert await _session_branch(f"{flow_id}:{context_id}", di=di) == branch_id
 
 
 @pytest.mark.asyncio
 async def test_session_deep_link_without_branch_keeps_running_its_branch(
     client: AsyncClient,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     """URL сессии может не нести ветку: ``default`` не сбрасывает сессию."""
     flow_id = f"branch_ui_deeplink_{unique_id}"
     branch_id = f"crm_{unique_id}"
-    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id)
+    await _seed_branch_interface(flow_id=flow_id, branch_id=branch_id, di=di)
     context_id = f"ctx-deeplink-{unique_id}"
     _ = await a2a_send(
         client,
@@ -172,4 +171,4 @@ async def test_session_deep_link_without_branch_keeps_running_its_branch(
     )
     assert reopened["status"]["state"] == "TASK_STATE_COMPLETED", reopened
     assert state_from_task(reopened) == {"branch_note": "branch"}
-    assert await _session_branch(f"{flow_id}:{context_id}") == branch_id
+    assert await _session_branch(f"{flow_id}:{context_id}", di=di) == branch_id

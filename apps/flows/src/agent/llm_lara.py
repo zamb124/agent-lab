@@ -9,8 +9,7 @@ from a2a.types.a2a_pb2 import ROLE_USER
 from google.protobuf.json_format import MessageToDict
 
 from apps.flows.src.channels.a2a import A2AChannel
-from apps.flows.src.container_contracts import as_flow_runtime_container
-from apps.flows.src.dependencies import ContainerDep
+from apps.flows.src.models.flow_config import FlowConfig
 from core.a2a import extract_text_from_task_json, struct_from_mapping
 from core.context import get_context
 from core.office.ai_settings import LARA_DOCUMENTS_MODEL_ID, parse_lara_branch_model_id
@@ -40,8 +39,8 @@ def list_lara_branch_model_ids(branch_ids: list[str]) -> list[str]:
     return models
 
 
-async def load_lara_branch_ids(container: ContainerDep) -> list[str]:
-    flow_config = await container.flow_repository.get(_LARA_FLOW_ID)
+async def load_lara_branch_ids() -> list[str]:
+    flow_config = await FlowConfig.get_latest(_LARA_FLOW_ID)
     if flow_config is None:
         raise WsCommandError(
             "unavailable",
@@ -97,7 +96,7 @@ def _extract_task_text(task_payload: JsonObject) -> str:
 
 
 async def run_lara_chat_completion(
-    container: ContainerDep,
+    channel: A2AChannel,
     *,
     model_id: str,
     openai_messages: list[JsonObject],
@@ -112,7 +111,7 @@ async def run_lara_chat_completion(
             error_params={"model": model_id},
         )
 
-    flow_config = await container.flow_repository.get(_LARA_FLOW_ID)
+    flow_config = await FlowConfig.get_latest(_LARA_FLOW_ID)
     if flow_config is None:
         raise WsCommandError(
             "unavailable",
@@ -157,11 +156,7 @@ async def run_lara_chat_completion(
         message=a2a_message,
         metadata=struct_from_mapping(metadata),
     )
-    channel = A2AChannel(
-        _LARA_FLOW_ID,
-        context=context,
-        container=as_flow_runtime_container(container),
-    )
+    task = await channel.on_message_send(params)
     task = await channel.on_message_send(params)
     task_payload = require_json_object(MessageToDict(task), "lara.task.payload")
     status_value = task_payload.get("status")

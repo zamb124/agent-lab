@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 
-from core.app_state import require_platform_app_state
 from core.context import get_context
+from core.di.platform import Di
 from core.mail.enqueue import (
     enqueue_mail_archive,
     enqueue_mail_delete,
@@ -71,18 +71,10 @@ from core.mail.models import (
     PersonalMailboxConnectPayload,
     PersonalMailboxHealthcheckPayload,
 )
-from core.mail.service import MailService
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.pagination import ListResponse
 
 router = APIRouter(tags=["mail"])
-
-
-def _get_mail_service(request: Request) -> MailService:
-    return require_platform_app_state(request).container.mail_service
-
-
-MailServiceDep = Annotated[MailService, Depends(_get_mail_service)]
 
 
 def _raise_http_for_mail_error(error: Exception) -> NoReturn:
@@ -116,9 +108,9 @@ def _raise_http_for_mail_error(error: Exception) -> NoReturn:
 
 
 @router.get("/connection", response_model=CompanyMailConnection)
-async def get_mail_connection(mail_service: MailServiceDep) -> CompanyMailConnection:
+async def get_mail_connection(di: Di) -> CompanyMailConnection:
     try:
-        connection = await mail_service.get_connection()
+        connection = await di.mail_service.get_connection()
     except Exception as exc:
         _raise_http_for_mail_error(exc)
     if connection is None:
@@ -129,22 +121,22 @@ async def get_mail_connection(mail_service: MailServiceDep) -> CompanyMailConnec
 @router.put("/connection", response_model=CompanyMailConnection)
 async def put_mail_connection(
     payload: CompanyMailConnectionUpsertPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> CompanyMailConnection:
     try:
-        await mail_service.require_company_admin()
-        connection = await mail_service.upsert_connection(payload)
+        await di.mail_service.require_company_admin()
+        connection = await di.mail_service.upsert_connection(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
     return connection
 
 
 @router.get("/bindings", response_model=ListResponse[MailboxBinding])
-async def list_mail_bindings(mail_service: MailServiceDep) -> ListResponse[MailboxBinding]:
+async def list_mail_bindings(di: Di) -> ListResponse[MailboxBinding]:
     try:
-        await mail_service.require_company_admin()
-        bindings = await mail_service.list_bindings()
-        items = [await mail_service.public_binding(item) for item in bindings]
+        await di.mail_service.require_company_admin()
+        bindings = await di.mail_service.list_bindings()
+        items = [await di.mail_service.public_binding(item) for item in bindings]
     except Exception as exc:
         _raise_http_for_mail_error(exc)
     return ListResponse(items=items)
@@ -152,12 +144,12 @@ async def list_mail_bindings(mail_service: MailServiceDep) -> ListResponse[Mailb
 
 @router.get("/bindings/me", response_model=MailboxBindingsMeResponse)
 async def list_my_mail_bindings(
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBindingsMeResponse:
     try:
-        bindings = await mail_service.list_my_bindings()
-        items = [await mail_service.public_binding(item) for item in bindings]
-        can_admin = await mail_service.check_company_admin()
+        bindings = await di.mail_service.list_my_bindings()
+        items = [await di.mail_service.public_binding(item) for item in bindings]
+        can_admin = await di.mail_service.check_company_admin()
     except Exception as exc:
         _raise_http_for_mail_error(exc)
     return MailboxBindingsMeResponse(items=items, can_admin=can_admin)
@@ -166,35 +158,35 @@ async def list_my_mail_bindings(
 @router.post("/bindings", response_model=MailboxBinding)
 async def create_mail_binding(
     payload: MailboxBindingCreatePayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        await mail_service.require_company_admin()
-        binding = await mail_service.bind_mailbox(payload)
+        await di.mail_service.require_company_admin()
+        binding = await di.mail_service.bind_mailbox(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.post("/bindings/personal", response_model=MailboxBinding)
 async def connect_personal_mail_binding(
     payload: PersonalMailboxConnectPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        binding = await mail_service.connect_personal_mailbox(payload)
+        binding = await di.mail_service.connect_personal_mailbox(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.post("/bindings/personal/healthcheck", response_model=MailServerHealth)
 async def healthcheck_personal_mail_binding(
     payload: PersonalMailboxHealthcheckPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailServerHealth:
     try:
-        return await mail_service.healthcheck_personal_credentials(payload)
+        return await di.mail_service.healthcheck_personal_credentials(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -206,10 +198,10 @@ async def healthcheck_personal_mail_binding(
 async def healthcheck_mail_binding(
     mailbox_binding_id: str,
     payload: MailboxBindingHealthcheckPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailServerHealth:
     try:
-        return await mail_service.healthcheck_binding(mailbox_binding_id, payload)
+        return await di.mail_service.healthcheck_binding(mailbox_binding_id, payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -218,34 +210,34 @@ async def healthcheck_mail_binding(
 async def patch_mail_binding(
     mailbox_binding_id: str,
     payload: MailboxBindingPatchPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        binding = await mail_service.patch_binding(mailbox_binding_id, payload)
+        binding = await di.mail_service.patch_binding(mailbox_binding_id, payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.put("/bindings/{mailbox_binding_id}/default", response_model=MailboxBinding)
 async def set_default_mail_binding(
     mailbox_binding_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        binding = await mail_service.set_default_binding(mailbox_binding_id)
+        binding = await di.mail_service.set_default_binding(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.delete("/bindings/{mailbox_binding_id}", status_code=204)
 async def delete_mail_binding(
     mailbox_binding_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> None:
     try:
-        await mail_service.unbind_mailbox(mailbox_binding_id)
+        await di.mail_service.unbind_mailbox(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -256,13 +248,13 @@ async def delete_mail_binding(
 )
 async def autolink_mail_binding_calendar(
     mailbox_binding_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        binding = await mail_service.relink_mailbox_calendar(mailbox_binding_id)
+        binding = await di.mail_service.relink_mailbox_calendar(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.delete(
@@ -271,22 +263,22 @@ async def autolink_mail_binding_calendar(
 )
 async def unlink_mail_binding_calendar(
     mailbox_binding_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBinding:
     try:
-        binding = await mail_service.unlink_mailbox_calendar(mailbox_binding_id)
+        binding = await di.mail_service.unlink_mailbox_calendar(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
-    return await mail_service.public_binding(binding)
+    return await di.mail_service.public_binding(binding)
 
 
 @router.get("/folders", response_model=MailFolderListResult)
 async def list_mail_folders(
-    mail_service: MailServiceDep,
+    di: Di,
     mailbox_binding_id: Annotated[str, Query(min_length=1)],
 ) -> MailFolderListResult:
     try:
-        return await mail_service.list_folders(mailbox_binding_id)
+        return await di.mail_service.list_folders(mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -294,10 +286,10 @@ async def list_mail_folders(
 @router.post("/folders/ensure", response_model=MailFolderListResult)
 async def ensure_mail_folders(
     payload: MailFoldersEnsurePayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailFolderListResult:
     try:
-        return await mail_service.ensure_standard_folders(payload.mailbox_binding_id)
+        return await di.mail_service.ensure_standard_folders(payload.mailbox_binding_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -305,10 +297,10 @@ async def ensure_mail_folders(
 @router.put("/folders/order", response_model=MailFolderListResult)
 async def reorder_mail_folders(
     payload: MailFoldersReorderPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailFolderListResult:
     try:
-        return await mail_service.reorder_folders(payload)
+        return await di.mail_service.reorder_folders(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -316,10 +308,10 @@ async def reorder_mail_folders(
 @router.post("/messages/list", response_model=MailMessageListResult)
 async def list_mail_messages(
     payload: MailMessageListPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageListResult:
     try:
-        return await mail_service.list_messages(payload)
+        return await di.mail_service.list_messages(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -327,10 +319,10 @@ async def list_mail_messages(
 @router.post("/messages/search", response_model=MailMessageListResult)
 async def search_mail_messages(
     payload: MailMessageSearchPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageListResult:
     try:
-        return await mail_service.search_messages(payload)
+        return await di.mail_service.search_messages(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -338,10 +330,10 @@ async def search_mail_messages(
 @router.post("/sync", response_model=MailSyncNowResult)
 async def sync_mail_now(
     payload: MailSyncNowPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailSyncNowResult:
     try:
-        return await mail_service.request_sync_now(payload)
+        return await di.mail_service.request_sync_now(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -349,10 +341,10 @@ async def sync_mail_now(
 @router.post("/messages/thread", response_model=MailThreadResult)
 async def get_mail_thread(
     payload: MailThreadPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailThreadResult:
     try:
-        result = await mail_service.get_thread(payload)
+        result = await di.mail_service.get_thread(payload)
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             raise MailConfigError("active_company is required for mail operations")
@@ -371,12 +363,12 @@ async def get_mail_thread(
 @router.get("/messages/{uid}", response_model=InboundMailMessage)
 async def get_mail_message(
     uid: str,
-    mail_service: MailServiceDep,
+    di: Di,
     mailbox_binding_id: Annotated[str, Query(min_length=1)],
     folder: Annotated[str, Query()] = "INBOX",
 ) -> InboundMailMessage:
     try:
-        result = await mail_service.get_message(
+        result = await di.mail_service.get_message(
             mailbox_binding_id=mailbox_binding_id,
             uid=uid,
             folder=folder,
@@ -398,10 +390,10 @@ async def get_mail_message(
 @router.post("/messages/mark_unseen", response_model=MailMessageFlagResult)
 async def mark_mail_message_unseen(
     payload: MailMessageFlagPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageFlagResult:
     try:
-        result = await mail_service.mark_message_unseen_local(payload)
+        result = await di.mail_service.mark_message_unseen_local(payload)
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             raise MailConfigError("active_company is required for mail operations")
@@ -419,10 +411,10 @@ async def mark_mail_message_unseen(
 @router.post("/messages/mark_seen", response_model=MailMessageFlagResult)
 async def mark_mail_message_seen(
     payload: MailMessageFlagPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageFlagResult:
     try:
-        result = await mail_service.mark_message_seen_local(payload)
+        result = await di.mail_service.mark_message_seen_local(payload)
         ctx = get_context()
         if ctx is None or ctx.active_company is None:
             raise MailConfigError("active_company is required for mail operations")
@@ -440,18 +432,18 @@ async def mark_mail_message_seen(
 @router.post("/messages/send", response_model=MailSendResult)
 async def send_mail_message(
     payload: MailSendPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailSendResult:
     try:
         company_id = _require_company_context()
         send_payload = payload
         if payload.message_id is None or not payload.message_id.strip():
-            message_id = await mail_service.allocate_outbound_message_id(
+            message_id = await di.mail_service.allocate_outbound_message_id(
                 payload.mailbox_binding_id,
                 company_id=company_id,
             )
             send_payload = payload.model_copy(update={"message_id": message_id})
-        result = await mail_service.prepare_send_local(send_payload, company_id=company_id)
+        result = await di.mail_service.prepare_send_local(send_payload, company_id=company_id)
         await enqueue_mail_send(
             company_id=company_id,
             payload=send_payload.model_dump(mode="json"),
@@ -471,11 +463,11 @@ def _require_company_context() -> str:
 @router.post("/messages/move", response_model=MailMessageMoveResult)
 async def move_mail_message(
     payload: MailMessageMovePayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageMoveResult:
     try:
         company_id = _require_company_context()
-        result = await mail_service.move_message_local(payload)
+        result = await di.mail_service.move_message_local(payload)
         await enqueue_mail_move(
             company_id=company_id,
             payload=payload.model_dump(mode="json"),
@@ -488,11 +480,11 @@ async def move_mail_message(
 @router.post("/messages/trash", response_model=MailMessageMoveResult)
 async def trash_mail_message(
     payload: MailMessageFlagPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageMoveResult:
     try:
         company_id = _require_company_context()
-        trash = await mail_service.resolve_folder_name_for_role(
+        trash = await di.mail_service.resolve_folder_name_for_role(
             payload.mailbox_binding_id, MailFolderRole.TRASH
         )
         move_payload = MailMessageMovePayload(
@@ -501,7 +493,7 @@ async def trash_mail_message(
             uid=payload.uid,
             destination_folder=trash,
         )
-        result = await mail_service.move_message_local(move_payload)
+        result = await di.mail_service.move_message_local(move_payload)
         await enqueue_mail_trash(
             company_id=company_id,
             payload=payload.model_dump(mode="json"),
@@ -514,11 +506,11 @@ async def trash_mail_message(
 @router.post("/messages/archive", response_model=MailMessageMoveResult)
 async def archive_mail_message(
     payload: MailMessageFlagPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageMoveResult:
     try:
         company_id = _require_company_context()
-        archive = await mail_service.resolve_folder_name_for_role(
+        archive = await di.mail_service.resolve_folder_name_for_role(
             payload.mailbox_binding_id, MailFolderRole.ARCHIVE
         )
         move_payload = MailMessageMovePayload(
@@ -527,7 +519,7 @@ async def archive_mail_message(
             uid=payload.uid,
             destination_folder=archive,
         )
-        result = await mail_service.move_message_local(move_payload)
+        result = await di.mail_service.move_message_local(move_payload)
         await enqueue_mail_archive(
             company_id=company_id,
             payload=payload.model_dump(mode="json"),
@@ -540,11 +532,11 @@ async def archive_mail_message(
 @router.post("/messages/delete", response_model=MailMessageFlagResult)
 async def delete_mail_message(
     payload: MailMessageFlagPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageFlagResult:
     try:
         company_id = _require_company_context()
-        result = await mail_service.delete_message_local(payload)
+        result = await di.mail_service.delete_message_local(payload)
         await enqueue_mail_delete(
             company_id=company_id,
             payload=payload.model_dump(mode="json"),
@@ -557,11 +549,11 @@ async def delete_mail_message(
 @router.post("/messages/star", response_model=MailMessageStarResult)
 async def star_mail_message(
     payload: MailMessageStarPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageStarResult:
     try:
         company_id = _require_company_context()
-        result = await mail_service.star_message_local(payload)
+        result = await di.mail_service.star_message_local(payload)
         await enqueue_mail_star(
             company_id=company_id,
             payload=payload.model_dump(mode="json"),
@@ -574,10 +566,10 @@ async def star_mail_message(
 @router.post("/messages/rag-index", response_model=MailMessageRagIndexResult)
 async def rag_index_mail_message(
     payload: MailMessageRagIndexPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailMessageRagIndexResult:
     try:
-        return await mail_service.request_rag_index(payload)
+        return await di.mail_service.request_rag_index(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -585,10 +577,10 @@ async def rag_index_mail_message(
 @router.post("/messages/drafts", response_model=MailDraftSaveResult)
 async def save_mail_draft(
     payload: MailDraftSavePayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailDraftSaveResult:
     try:
-        return await mail_service.save_draft(payload)
+        return await di.mail_service.save_draft(payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -599,10 +591,10 @@ async def save_mail_draft(
 )
 async def list_mail_binding_members(
     mailbox_binding_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> ListResponse[MailboxBindingMember]:
     try:
-        items = await mail_service.list_binding_members(mailbox_binding_id)
+        items = await di.mail_service.list_binding_members(mailbox_binding_id)
         return ListResponse(items=items)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
@@ -615,10 +607,10 @@ async def list_mail_binding_members(
 async def add_mail_binding_member(
     mailbox_binding_id: str,
     payload: MailboxBindingMemberPayload,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> MailboxBindingMember:
     try:
-        return await mail_service.add_binding_member(mailbox_binding_id, payload)
+        return await di.mail_service.add_binding_member(mailbox_binding_id, payload)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
@@ -627,32 +619,32 @@ async def add_mail_binding_member(
 async def remove_mail_binding_member(
     mailbox_binding_id: str,
     user_id: str,
-    mail_service: MailServiceDep,
+    di: Di,
 ) -> None:
     try:
-        await mail_service.remove_binding_member(mailbox_binding_id, user_id)
+        await di.mail_service.remove_binding_member(mailbox_binding_id, user_id)
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
 
 @router.post("/connection/healthcheck", response_model=MailServerHealth)
-async def mail_connection_healthcheck(mail_service: MailServiceDep) -> MailServerHealth:
+async def mail_connection_healthcheck(di: Di) -> MailServerHealth:
     try:
-        await mail_service.require_company_admin()
-        return await mail_service.healthcheck()
+        await di.mail_service.require_company_admin()
+        return await di.mail_service.healthcheck()
     except Exception as exc:
         _raise_http_for_mail_error(exc)
 
 
 @router.post("/system/reconcile", response_model=MailReconcileResult)
-async def mail_system_reconcile(mail_service: MailServiceDep) -> MailReconcileResult:
+async def mail_system_reconcile(di: Di) -> MailReconcileResult:
     ctx = get_context()
     if ctx is None or ctx.active_company is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     if ctx.active_company.company_id != SYSTEM_COMPANY_ID:
         raise HTTPException(status_code=403, detail="system reconcile requires company_id=system")
     try:
-        await mail_service.require_company_admin(SYSTEM_COMPANY_ID)
-        return await mail_service.reconcile_system()
+        await di.mail_service.require_company_admin(SYSTEM_COMPANY_ID)
+        return await di.mail_service.reconcile_system()
     except Exception as exc:
         _raise_http_for_mail_error(exc)

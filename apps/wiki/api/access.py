@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from apps.wiki.dependencies import ContainerDep
+from apps.wiki.di import Di
 from apps.wiki.models.api import (
     WikiCompanyVisibleRequest,
     WikiMemberUpsertRequest,
@@ -31,17 +31,17 @@ router = APIRouter(prefix="/pages", tags=["wiki-access"])
 
 
 @router.get("/{wiki_page_id}/access", response_model=WikiPageAccess)
-async def get_access(container: ContainerDep, wiki_page_id: str) -> WikiPageAccess:
+async def get_access(di: Di, wiki_page_id: str) -> WikiPageAccess:
     return await op_pages_access(
         WikiPageIdPayload(wiki_page_id=wiki_page_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.patch("/{wiki_page_id}/access/company-visible", response_model=WikiPageAccess)
 async def patch_company_visible(
-    container: ContainerDep,
+    di: Di,
     wiki_page_id: str,
     body: WikiCompanyVisibleRequest,
 ) -> WikiPageAccess:
@@ -50,13 +50,13 @@ async def patch_company_visible(
             wiki_page_id=wiki_page_id, company_visible=body.company_visible
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{wiki_page_id}/access/members", response_model=WikiPageAccess)
 async def upsert_member(
-    container: ContainerDep, wiki_page_id: str, request: WikiMemberUpsertRequest
+    di: Di, wiki_page_id: str, request: WikiMemberUpsertRequest
 ) -> WikiPageAccess:
     return await op_pages_member_add(
         WikiMemberUpsertPayload(
@@ -65,24 +65,24 @@ async def upsert_member(
             relation=request.relation,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.delete("/{wiki_page_id}/access/members/{member_user_id}", response_model=WikiPageAccess)
 async def remove_member(
-    container: ContainerDep, wiki_page_id: str, member_user_id: str
+    di: Di, wiki_page_id: str, member_user_id: str
 ) -> WikiPageAccess:
     return await op_pages_member_remove(
         WikiMemberRemovePayload(wiki_page_id=wiki_page_id, member_user_id=member_user_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
 @router.post("/{wiki_page_id}/access/link", response_model=WikiPublicLinkResponse)
 async def rotate_public_link(
-    container: ContainerDep,
+    di: Di,
     wiki_page_id: str,
     http_request: Request,
     body: WikiPublicLinkRequest,
@@ -96,5 +96,5 @@ async def rotate_public_link(
             origin=origin,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

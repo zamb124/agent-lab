@@ -8,8 +8,7 @@ from pydantic import Field
 
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
-from core.container.base import BaseContainer
-from core.errors.boundary import PlatformNotFoundError
+from core.di.platform import PlatformDi
 from core.models.base import StrictBaseModel
 from core.models.identity_models import Namespace, NamespaceKind, NamespaceSyncSettings, User
 from core.pagination import OffsetPage
@@ -38,21 +37,21 @@ async def op_namespaces_list(
     payload: NamespacesListPayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> OffsetPage[Namespace]:
     _ = user
     scope = require_company()
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.company(scope.company_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
     namespaces, total = await asyncio.gather(
-        container.namespace_service.list(
+        di.namespace_service.list(
             limit=payload.limit, offset=payload.offset, kinds=payload.kinds
         ),
-        container.namespace_service.count(kinds=payload.kinds),
+        di.namespace_service.count(kinds=payload.kinds),
     )
     return OffsetPage[Namespace](
         items=namespaces, total=total, limit=payload.limit, offset=payload.offset
@@ -63,19 +62,17 @@ async def op_namespaces_sync_settings_update(
     payload: NamespaceSyncSettingsUpdatePayload,
     *,
     user: User,
-    container: BaseContainer,
+    di: PlatformDi,
 ) -> Namespace:
     """Sync владеет только секцией `Namespace.sync_settings`; имя/описание/crm_settings — CRM."""
     _ = user
     scope = require_company()
     try:
-        await container.authz_service.require_can_view(
+        await di.authz_service.require_can_view(
             AuthzObject.company(scope.company_id), user_id=scope.user_id
         )
     except AuthzDenied as exc:
         raise_forbidden(exc)
-    existing = await container.namespace_service.get(payload.name)
-    if existing is None:
-        raise PlatformNotFoundError(f"Namespace {payload.name} not found", error_code="not_found")
-    existing.sync_settings = payload.sync_settings
-    return await container.namespace_service.save(existing)
+    return await di.namespace_service.set_sync_settings(
+        payload.name, payload.sync_settings
+    )

@@ -7,6 +7,7 @@
 import pytest
 
 from apps.flows.src.models import Edge
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import CodeNode, create_node
 from core.flow_ui.templates import default_chat_document
@@ -32,13 +33,13 @@ class TestCodeNodeInAgent:
     """Тесты CodeNode в контексте Agent."""
 
     @pytest.mark.asyncio
-    async def test_flow_with_inline_tool_node(self, container, unique_id):
+    async def test_flow_with_inline_tool_node(self, di, unique_id):
         """Agent с inline CodeNode."""
         prepare_code = '\nasync def run(args, state):\n    state["value"] = 10\n    state["multiplier"] = 3\n    return state\n'
         prepare_node = CodeNode(
             node_id="prepare",
             config={"type": "code", "code": prepare_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         multiply_code = (
             "\nasync def run(args, state):\n    return {'result': args['x'] * args['factor']}\n"
@@ -50,13 +51,13 @@ class TestCodeNodeInAgent:
                 "code": multiply_code,
                 "input_mapping": {"x": "@state:value", "factor": "@state:multiplier"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         format_code = '\nasync def run(args, state):\n    state["response"] = f"Результат: {state[\'result\']}"\n    return state\n'
         format_node = CodeNode(
             node_id="format",
             config={"type": "code", "code": format_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="test_flow",
@@ -70,16 +71,16 @@ class TestCodeNodeInAgent:
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
 
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="test")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.result == 30
         assert result.response == "Результат: 30"
 
     @pytest.mark.asyncio
-    async def test_flow_with_tool_node_and_variables(self, container, unique_id):
+    async def test_flow_with_tool_node_and_variables(self, di, unique_id):
         """Agent с CodeNode и переменными из variables."""
         greet_code = "\nasync def run(args, state):\n    return {'greeting': f\"Добро пожаловать в {args['company']}, {args['name']}!\"}\n"
         tool_node = CodeNode(
@@ -89,7 +90,7 @@ class TestCodeNodeInAgent:
                 "code": greet_code,
                 "input_mapping": {"company": "@var:company_name", "name": "@state:user_name"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="greet_flow",
@@ -99,30 +100,30 @@ class TestCodeNodeInAgent:
             edges=[Edge(from_node="greet", to_node=None)],
             variables={"company_name": "Platform Corp"},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(
             flow_id=flow.flow_id,
             unique_id=unique_id,
             user_name="Алексей",
         )
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.greeting == "Добро пожаловать в Platform Corp, Алексей!"
 
     @pytest.mark.asyncio
-    async def test_flow_with_conditional_tool_node(self, container, unique_id):
+    async def test_flow_with_conditional_tool_node(self, di, unique_id):
         """Agent с условным переходом к CodeNode."""
         classifier_code = '\nasync def run(args, state):\n    content = state.get("content") or ""\n    state["needs_calc"] = "=" in content\n    state["expr"] = content.replace("=", "").strip()\n    return state\n'
         classifier_node = CodeNode(
             node_id="classifier",
             config={"type": "code", "code": classifier_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         calc_code = "\nasync def run(args, state):\n    parts = args['expr'].split('+')\n    return {'calc_result': sum(int(p.strip()) for p in parts)}\n"
         calc_node = CodeNode(
             node_id="calculate",
             config={"type": "code", "code": calc_code, "input_mapping": {"expr": "@state:expr"}},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         skip_code = (
             '\nasync def run(args, state):\n    state["calc_result"] = "N/A"\n    return state\n'
@@ -130,7 +131,7 @@ class TestCodeNodeInAgent:
         skip_node = CodeNode(
             node_id="skip",
             config={"type": "code", "code": skip_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="conditional_flow",
@@ -163,21 +164,21 @@ class TestCodeNodeInAgent:
             ],
             variables={},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state1 = workflow_state(
             flow_id=flow.flow_id,
             unique_id=f"{unique_id}-calc",
             content="2 + 3 =",
         )
-        result1 = await run_flow(container=container, flow=flow, state=state1)
+        result1 = await run_flow(di=di, flow=flow, state=state1)
         assert result1["calc_result"] == 5
         state2 = workflow_state(
             flow_id=flow.flow_id,
             unique_id=f"{unique_id}-skip",
             content="просто текст",
         )
-        result2 = await run_flow(container=container, flow=flow, state=state2)
+        result2 = await run_flow(di=di, flow=flow, state=state2)
         assert result2["calc_result"] == "N/A"
 
 
@@ -185,7 +186,7 @@ class TestCodeNodeFromConfig:
     """Тесты создания CodeNode через create_node."""
 
     @pytest.mark.asyncio
-    async def test_create_node_with_inline_code(self, container, unique_id):
+    async def test_create_node_with_inline_code(self, di, unique_id):
         """create_node создает CodeNode из inline кода."""
         config = {
             "type": "code",
@@ -199,18 +200,18 @@ class TestCodeNodeFromConfig:
             },
             "input_mapping": {"a": 7},
         }
-        node = await create_node("square_node", config, container=container)
+        node = await create_node("square_node", config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
         assert isinstance(node, CodeNode)
         assert node.node_id == "square_node"
         result = await run_node(
-            container=container,
+            di=di,
             node=node,
             state=workflow_state(flow_id="square_node_flow", unique_id=unique_id),
         )
         assert result.squared == 49
 
     @pytest.mark.asyncio
-    async def test_flow_from_config_with_tool_node(self, container, unique_id):
+    async def test_flow_from_config_with_tool_node(self, di, unique_id):
         """Agent из конфига с CodeNode."""
         flow_config = {
             "flow_id": "config_flow",
@@ -239,9 +240,9 @@ class TestCodeNodeFromConfig:
             "variables": {},
             "interface": default_chat_document().model_dump(mode="json"),
         }
-        flow = await Flow.from_config(flow_config, container=container)
+        flow = await Flow.from_config(flow_config, node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result["processed"] == 50
         assert result["response"] == "Processed: 50"
 
@@ -250,7 +251,7 @@ class TestCodeNodeWithSkillVariables:
     """Тесты CodeNode с переменными из skill."""
 
     @pytest.mark.asyncio
-    async def test_tool_node_uses_skill_variables(self, container, unique_id):
+    async def test_tool_node_uses_skill_variables(self, di, unique_id):
         """CodeNode использует переменные из текущего skill."""
         format_code = "\nasync def run(args, state):\n    return {'formatted_id': f\"{args['prefix']}{args['id']}\"}\n"
         tool_node = CodeNode(
@@ -260,7 +261,7 @@ class TestCodeNodeWithSkillVariables:
                 "code": format_code,
                 "input_mapping": {"prefix": "@var:prefix", "id": "@state:entity_id"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="skill_flow",
@@ -270,14 +271,14 @@ class TestCodeNodeWithSkillVariables:
             edges=[Edge(from_node="format", to_node=None)],
             variables={"prefix": "ORDER-"},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=f"{unique_id}-order", entity_id="12345")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.formatted_id == "ORDER-12345"
         flow.variables = {"prefix": "TICKET-"}
         state2 = workflow_state(flow_id=flow.flow_id, unique_id=f"{unique_id}-ticket", entity_id="67890")
-        result2 = await run_flow(container=container, flow=flow, state=state2)
+        result2 = await run_flow(di=di, flow=flow, state=state2)
         assert result2.formatted_id == "TICKET-67890"
 
 
@@ -285,14 +286,14 @@ class TestCodeNodeChaining:
     """Тесты цепочки CodeNode."""
 
     @pytest.mark.asyncio
-    async def test_chain_of_tool_nodes(self, container, unique_id):
+    async def test_chain_of_tool_nodes(self, di, unique_id):
         """Цепочка CodeNode передает данные через state."""
         double_code = "\nasync def run(args, state):\n    return {'doubled': args['x'] * 2}\n"
         add_code = "\nasync def run(args, state):\n    return {'final': args['a'] + args['b']}\n"
         node1 = CodeNode(
             node_id="step1",
             config={"type": "code", "code": double_code, "input_mapping": {"x": "@state:input"}},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node2 = CodeNode(
             node_id="step2",
@@ -301,7 +302,7 @@ class TestCodeNodeChaining:
                 "code": add_code,
                 "input_mapping": {"a": "@state:doubled", "b": "@var:bonus"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="chain_flow",
@@ -311,10 +312,10 @@ class TestCodeNodeChaining:
             edges=[Edge(from_node="step1", to_node="step2"), Edge(from_node="step2", to_node=None)],
             variables={"bonus": 100},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, input=25)
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result["doubled"] == 50
         assert result["final"] == 150
 
@@ -328,7 +329,7 @@ class TestCodeNodeDynamicDataAgent:
     """
 
     @pytest.mark.asyncio
-    async def test_dynamic_state_flow_with_all_mapping_types(self, container, unique_id):
+    async def test_dynamic_state_flow_with_all_mapping_types(self, di, unique_id):
         """
         Цепочка CodeNode с @state:, @var: и константами.
         """
@@ -343,7 +344,7 @@ class TestCodeNodeDynamicDataAgent:
         node1 = CodeNode(
             node_id="init_node",
             config={"type": "code", "code": init_code, "input_mapping": {"initial": 10}},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node2 = CodeNode(
             node_id="multiply_node",
@@ -352,7 +353,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": multiply_code,
                 "input_mapping": {"value": "@state:base_value", "factor": "@var:multiplier"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node3 = CodeNode(
             node_id="add_node",
@@ -361,7 +362,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": add_const_code,
                 "input_mapping": {"value": "@state:multiplied", "const": 50},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node4 = CodeNode(
             node_id="final_node",
@@ -374,7 +375,7 @@ class TestCodeNodeDynamicDataAgent:
                     "bonus": "@var:bonus",
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="dynamic_flow",
@@ -394,17 +395,17 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"multiplier": 3, "bonus": 5},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.base_value == 10
         assert result.multiplied == 30
         assert result.added == 80
         assert result.final_result == 95
 
     @pytest.mark.asyncio
-    async def test_dynamic_nested_state_modification(self, container, unique_id):
+    async def test_dynamic_nested_state_modification(self, di, unique_id):
         """Тест с вложенными структурами в state."""
         setup_code = "async def run(args, state):\n    return {'user': {'data': {'score': args['initial_score'], 'name': args['name']}}}"
         boost_code = "async def run(args, state):\n    return {'boosted_score': args['score'] + args['boost']}"
@@ -416,7 +417,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": setup_code,
                 "input_mapping": {"initial_score": 100, "name": "@var:player_name"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node2 = CodeNode(
             node_id="boost_node",
@@ -425,7 +426,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": boost_code,
                 "input_mapping": {"score": "@state:user.data.score", "boost": "@var:boost_amount"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node3 = CodeNode(
             node_id="format_node",
@@ -438,7 +439,7 @@ class TestCodeNodeDynamicDataAgent:
                     "final_score": "@state:boosted_score",
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="nested_flow",
@@ -452,17 +453,17 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"player_name": "Alice", "boost_amount": 50},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.user["data"]["score"] == 100
         assert result.user["data"]["name"] == "Alice"
         assert result.boosted_score == 150
         assert result.formatted_result == "Player Alice: 150"
 
     @pytest.mark.asyncio
-    async def test_tool_modifies_state_for_next_tool(self, container, unique_id):
+    async def test_tool_modifies_state_for_next_tool(self, di, unique_id):
         """Тест где каждый tool записывает результат который читает следующий."""
         extract_code = "async def run(args, state):\n    return {'extracted_data': {'items': args['raw'].split(','), 'count': len(args['raw'].split(','))}}"
         transform_code = "async def run(args, state):\n    return {'transformed_data': [item.strip().upper() for item in args['data']['items']]}"
@@ -471,7 +472,7 @@ class TestCodeNodeDynamicDataAgent:
         node1 = CodeNode(
             node_id="extract_node",
             config={"type": "code", "code": extract_code, "input_mapping": {"raw": "@state:raw_input"}},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node2 = CodeNode(
             node_id="transform_node",
@@ -480,7 +481,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": transform_code,
                 "input_mapping": {"data": "@state:extracted_data"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node3 = CodeNode(
             node_id="validate_node",
@@ -492,7 +493,7 @@ class TestCodeNodeDynamicDataAgent:
                     "min_count": "@var:min_items",
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         node4 = CodeNode(
             node_id="save_node",
@@ -505,7 +506,7 @@ class TestCodeNodeDynamicDataAgent:
                     "source": "api",
                 },
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="pipeline_flow",
@@ -525,10 +526,10 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"min_items": 2},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, raw_input="apple, banana, cherry")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result["extracted_data"]["count"] == 3
         assert result["transformed_data"] == ["APPLE", "BANANA", "CHERRY"]
         assert result["is_valid"] is True
@@ -537,7 +538,7 @@ class TestCodeNodeDynamicDataAgent:
         assert result["saved_result"]["source"] == "api"
 
     @pytest.mark.asyncio
-    async def test_mixed_function_and_tool_nodes_data_flow(self, container, unique_id):
+    async def test_mixed_function_and_tool_nodes_data_flow(self, di, unique_id):
         """Тест смешанного flow: CodeNode передают данные друг другу."""
         init_code = '\nasync def run(args, state):\n    state["x_value"] = 7\n    state["y_value"] = 8\n    return state\n'
         multiply_code = "async def run(args, state):\n    return {'product': args['x'] * args['y']}"
@@ -546,7 +547,7 @@ class TestCodeNodeDynamicDataAgent:
         init_func = CodeNode(
             node_id="init_func",
             config={"type": "code", "code": init_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         tool_node1 = CodeNode(
             node_id="multiply_node",
@@ -555,12 +556,12 @@ class TestCodeNodeDynamicDataAgent:
                 "code": multiply_code,
                 "input_mapping": {"x": "@state:x_value", "y": "@state:y_value"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         process_func = CodeNode(
             node_id="process_func",
             config={"type": "code", "code": process_code},
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         tool_node2 = CodeNode(
             node_id="finalize_node",
@@ -569,7 +570,7 @@ class TestCodeNodeDynamicDataAgent:
                 "code": finalize_code,
                 "input_mapping": {"value": "@state:processed_value", "bonus": "@var:bonus_text"},
             },
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
         )
         flow = Flow(
             flow_id="mixed_flow",
@@ -589,10 +590,10 @@ class TestCodeNodeDynamicDataAgent:
             ],
             variables={"bonus_text": "+VIP"},
             interface=default_chat_document(),
-            container=container,
+            execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id, content="start")
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result.x_value == 7
         assert result.y_value == 8
         assert result.product == 56

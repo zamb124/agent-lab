@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import math
 
+from core.clients.rag_client import RagClient
 from core.config import get_settings
 from core.llm_context import LLMContextBlock, LLMContextSourceRequest
 from core.llm_context.retrieval_rag_bridge import rag_search_options_override_from_retrieval
 from core.rag.models import RAGMetadataFilter, RAGSearchOptions, RAGSearchResult
+from core.rag.rag_http_namespace_search import merge_search_request_options
 from core.rag.rag_resource_bind import RagResourceBindParams
-from core.rag.repository import RAGRepository
 from core.rag.search_options_resolver import resolve_platform_search_options
 from core.types import JsonObject, JsonValue, require_json_object
 
@@ -20,14 +21,14 @@ class RAGLLMContextSource:
     def __init__(
         self,
         *,
-        repository: RAGRepository,
         bind: RagResourceBindParams,
+        rag_client: RagClient | None = None,
         name: str | None = None,
         filters: RAGMetadataFilter | None = None,
         timeout: float = 30.0,
     ) -> None:
-        self.repository: RAGRepository = repository
         self.bind: RagResourceBindParams = bind
+        self.rag_client: RagClient = rag_client if rag_client is not None else RagClient()
         self.name: str = _source_name(name or f"rag.{self.bind.namespace}")
         self.filters: RAGMetadataFilter | None = dict(filters) if filters else None
         self.timeout: float = timeout
@@ -37,12 +38,27 @@ class RAGLLMContextSource:
         if request.policy.retrieval.mode == "off" or not query:
             return []
 
-        response = await self.repository.search_namespace(
+        search_options = merge_search_request_options(
+            self.bind.search_options,
+            _search_options_from_policy(request),
+        )
+        if search_options is None:
+            search_options = RAGSearchOptions()
+        merged_filters = _merge_filters(self.filters, self.bind)
+        response = await self.rag_client.search(
+            namespace_id=self.bind.namespace,
             query=query,
             limit=request.policy.retrieval.top_k,
-            filters=self.filters,
-            bind=self.bind,
-            search_options=_search_options_from_policy(request),
+            filters=merged_filters,
+            provider=self.bind.provider,
+            channels=search_options.channels,
+            rrf_k=search_options.rrf_k,
+            per_channel_top_k=search_options.per_channel_top_k,
+            rerank=search_options.rerank,
+            rerank_max_candidates=search_options.rerank_max_candidates,
+            retrieval=search_options.retrieval,
+            freshness_weight=search_options.freshness_weight,
+            freshness_half_life_days=search_options.freshness_half_life_days,
             timeout=self.timeout,
         )
         results = _coerce_results(response)
@@ -50,6 +66,18 @@ class RAGLLMContextSource:
             _result_to_block(result, rank=index + 1, source_name=self.name)
             for index, result in enumerate(results)
         ]
+
+
+def _merge_filters(
+    filters: RAGMetadataFilter | None,
+    bind: RagResourceBindParams,
+) -> RAGMetadataFilter | None:
+    if not bind.filters:
+        return filters
+    merged = dict(bind.filters)
+    if filters:
+        merged.update(filters)
+    return merged
 
 
 def _search_options_from_policy(request: LLMContextSourceRequest) -> RAGSearchOptions:

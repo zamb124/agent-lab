@@ -25,7 +25,6 @@ from core.integrations.constants import (
     TOKEN_TYPE_SERVICE_ACCOUNT,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
-from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.models.identity_models import SYSTEM_COMPANY_ID
@@ -130,17 +129,14 @@ def _normalize_impersonate_email(impersonate_email: str | None) -> str | None:
 class CompanyIntegrationCredentialService:
     """CRUD company-owned credentials на integration_credentials."""
 
-    _repository: IntegrationCredentialRepository
     _google_workspace_config: GoogleWorkspaceConfig
     _authz: AuthzService
 
     def __init__(
         self,
-        repository: IntegrationCredentialRepository,
         google_workspace_config: GoogleWorkspaceConfig,
         authz: AuthzService,
     ) -> None:
-        self._repository = repository
         self._google_workspace_config = google_workspace_config
         self._authz = authz
 
@@ -157,11 +153,12 @@ class CompanyIntegrationCredentialService:
         company_id: str,
     ) -> GoogleWorkspaceCompanyCredentialPublic:
         can_admin = await self._authz.check_company_admin(company_id=company_id)
-        credential = await self._repository.get_by_user_provider_service(
+        credential = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,
             provider=IntegrationProvider.GOOGLE,
             service=GOOGLE_OAUTH_SERVICE_CANONICAL,
+            mailbox_binding_id=None,
         )
         if credential is None:
             return GoogleWorkspaceCompanyCredentialPublic(
@@ -188,11 +185,12 @@ class CompanyIntegrationCredentialService:
         self,
         company_id: str,
     ) -> GoogleAuthMaterial | None:
-        credential = await self._repository.get_by_user_provider_service(
+        credential = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,
             provider=IntegrationProvider.GOOGLE,
             service=GOOGLE_OAUTH_SERVICE_CANONICAL,
+            mailbox_binding_id=None,
         )
         if credential is None:
             return None
@@ -215,11 +213,12 @@ class CompanyIntegrationCredentialService:
         sa_json = _validate_service_account_json(payload.service_account_json)
         impersonate = _normalize_impersonate_email(payload.impersonate_email)
         now = utcnow()
-        existing = await self._repository.get_by_user_provider_service(
+        existing = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,
             provider=IntegrationProvider.GOOGLE,
             service=GOOGLE_OAUTH_SERVICE_CANONICAL,
+            mailbox_binding_id=None,
         )
         metadata: JsonObject = {}
         if impersonate is not None:
@@ -240,7 +239,7 @@ class CompanyIntegrationCredentialService:
             created_at=existing.created_at if existing is not None else now,
             updated_at=now,
         )
-        await self._repository.upsert(credential)
+        await IntegrationCredential.upsert_by_credential_id(credential)
         logger.info(
             "integrations.company_google_workspace.upserted",
             company_id=company_id,
@@ -260,7 +259,7 @@ class CompanyIntegrationCredentialService:
             )
         if not allow_system:
             await self._require_company_admin(company_id)
-        deleted = await self._repository.delete_by_user_provider_service(
+        deleted = await IntegrationCredential.delete_by_user_provider_service(
             company_id=company_id,
             user_id=COMPANY_INTEGRATION_USER_ID,
             provider=IntegrationProvider.GOOGLE,

@@ -12,7 +12,6 @@ from typing import Any
 import pytest
 from a2a.helpers.proto_helpers import get_message_text
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig
 from core.clients.google_docs_client import GoogleDocsClient
 from core.state import ExecutionState
@@ -100,9 +99,9 @@ async def _run_single_tool_flow(
     tool_call_args: dict[str, Any],
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
+    di,
 ) -> tuple[dict[str, Any], ExecutionState]:
     flow_id = f"gdocs_emu_{flow_suffix}_{unique_id}"
-    container = get_container()
     flow_config = FlowConfig(
         flow_id=flow_id,
         name=f"GDocs emu {flow_suffix}",
@@ -123,16 +122,16 @@ async def _run_single_tool_flow(
             {"type": "text", "content": "Готово."},
         ]
     )
-    flow = await container.flow_factory.create_flow(flow_config)
+    flow = await di.flow_factory.create_flow(flow_config, tool_registry=di.tool_registry)
     state = _make_state(unique_id, flow_id, google_api_emulator)
     await ensure_workflow_started(
-        container=container,
+        di=di,
         state=state,
         flow_id=flow_id,
         branch_id=state.branch_id,
     )
     final_state = await flow.run(state)
-    _ = await container.flow_factory.delete_flow(flow_id)
+    _ = await di.flow_factory.delete_flow(flow_id)
     return final_state, final_state
 
 
@@ -142,6 +141,7 @@ async def test_create_document_via_llm_node(
     unique_id: str,
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
+    di,
 ) -> None:
     _ = app
     result, state = await _run_single_tool_flow(
@@ -152,6 +152,7 @@ async def test_create_document_via_llm_node(
         {"title": f"Agent Doc {unique_id}"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert result["response"] == "Готово."
     payload = _tool_payloads_from_state(state)[0]
@@ -165,6 +166,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
     mock_llm_with_queue: Any,
     google_api_emulator: GoogleApiEmulatorHandle,
     gdocs_client: GoogleDocsClient,
+    di,
 ) -> None:
     _ = app
     doc = await gdocs_client.create_document(f"Ops {unique_id}")
@@ -179,6 +181,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert "Hello world." in str(_tool_payloads_from_state(state)[0]["text"])
 
@@ -190,6 +193,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id, "text": " More."},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
@@ -201,6 +205,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id, "text": "X", "index": 1},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
@@ -212,6 +217,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id, "find": "world", "replace": "planet"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert "occurrences_changed" in _tool_payloads_from_state(state)[0]
 
@@ -223,6 +229,7 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id, "start_index": 1, "end_index": 2},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id
 
@@ -234,5 +241,6 @@ async def test_read_append_insert_find_delete_share_via_llm_node(
         {"document_id": doc_id, "anyone": True, "role": "reader"},
         mock_llm_with_queue,
         google_api_emulator,
+        di=di,
     )
     assert _tool_payloads_from_state(state)[0]["document_id"] == doc_id

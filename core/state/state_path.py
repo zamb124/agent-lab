@@ -28,14 +28,14 @@ def assign_state_path(state: ExecutionState, path: str, value: JsonValue) -> Non
         state[segments[0]] = value
         return
     root = state.get(segments[0])
-    container = _object_copy(root, path)
-    current = container
+    copied_root = _object_copy(root, path)
+    current = copied_root
     for segment in segments[1:-1]:
-        next_container = _object_copy(current.get(segment), path)
-        current[segment] = next_container
-        current = next_container
+        copied_child = _object_copy(current.get(segment), path)
+        current[segment] = copied_child
+        current = copied_child
     current[segments[-1]] = value
-    state[segments[0]] = container
+    state[segments[0]] = copied_root
 
 
 __all__ = ["assign_state_path"]

@@ -19,6 +19,7 @@ from tests.agent.desktop_e2e.helpers import connect_desktop_browser, find_main_a
 
 @pytest.mark.asyncio
 async def test_goose_plat_01_analyze_directory(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -40,6 +41,7 @@ async def test_goose_plat_01_analyze_directory(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             await wait_for_goosed_tools(page, session_id, name_suffix="analyze")
             tools = await goosed_tools_list(page, session_id, extension_name="analyze")
@@ -57,6 +59,7 @@ async def test_goose_plat_01_analyze_directory(
 
 @pytest.mark.asyncio
 async def test_goose_plat_02_todo_write(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -75,6 +78,7 @@ async def test_goose_plat_02_todo_write(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             tools = await goosed_tools_list(page, session_id, extension_name="todo")
             todo_tool = resolve_tool_name(tools, "todo_write")
@@ -91,6 +95,7 @@ async def test_goose_plat_02_todo_write(
 
 @pytest.mark.asyncio
 async def test_goose_plat_03_apps_list(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -109,6 +114,7 @@ async def test_goose_plat_03_apps_list(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             tools = await goosed_tools_list(page, session_id, extension_name="apps")
             list_tool = resolve_tool_name(tools, "list_apps")
@@ -120,6 +126,7 @@ async def test_goose_plat_03_apps_list(
 
 @pytest.mark.asyncio
 async def test_goose_plat_09_extensionmanager_search(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -138,6 +145,7 @@ async def test_goose_plat_09_extensionmanager_search(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             tools = await goosed_tools_list(page, session_id, extension_name="extensionmanager")
             search_tool = resolve_tool_name(tools, "search_available_extensions")
@@ -154,6 +162,7 @@ async def test_goose_plat_09_extensionmanager_search(
 
 @pytest.mark.asyncio
 async def test_goose_plat_11_summon_load(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -172,6 +181,7 @@ async def test_goose_plat_11_summon_load(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             tools = await goosed_tools_list(page, session_id, extension_name="summon")
             load_tool = resolve_tool_name(tools, "load")
@@ -245,6 +255,7 @@ async def test_goose_plat_13_summarize_tools_list(
 
 @pytest.mark.asyncio
 async def test_goose_plat_14_skills_tools_list(
+    di,
     humanitec_desktop_process_factory,
 
     agent_frontend_http_client,
@@ -263,6 +274,7 @@ async def test_goose_plat_14_skills_tools_list(
                 desktop=desktop,
                 agent_frontend_http_client=agent_frontend_http_client,
                 auth_token=auth_token,
+                di=di,
             )
             tools = await goosed_tools_list(page, session_id, extension_name="skills")
             load_skill_tool = resolve_tool_name(tools, "load_skill")

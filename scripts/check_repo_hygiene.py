@@ -90,6 +90,7 @@ ALLOWED_ROOT_DIRS: frozenset[str] = frozenset(
 ALLOWED_GENERATED_ROOT_DIRS: frozenset[str] = frozenset(
     {
         ".cache",
+        ".devin",
         ".electron-packager-tmp",
         ".git",
         ".hypothesis",

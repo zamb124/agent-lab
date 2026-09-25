@@ -15,7 +15,6 @@ import time
 
 from a2a.types import TaskArtifactUpdateEvent
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models import FlowConfig, ReactLoopMode
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig, ReactConfig
@@ -91,7 +90,7 @@ INLINE_CUSTOM_COMPLETE = {
 
 async def run_flow_state(flow: Flow | None, state: ExecutionState) -> ExecutionState:
     assert flow is not None
-    return await run_flow(container=flow.container, flow=flow, state=state)
+    return await run_flow(di=flow.di, flow=flow, state=state)
 
 
 def make_flow_state(flow_id: str, content: str | None = None) -> ExecutionState:
@@ -108,10 +107,9 @@ class TestAutoModeWithoutReason:
     Агент завершается когда LLM возвращает текст без tool_calls.
     """
 
-    async def test_text_response_exits_immediately(self, app, unique_id, mock_llm_with_queue):
+    async def test_text_response_exits_immediately(self, app, unique_id, mock_llm_with_queue, di):
         """Текстовый ответ сразу завершает агента."""
         flow_id = f"auto_no_reason_text_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto No Reason Text",
@@ -125,9 +123,9 @@ class TestAutoModeWithoutReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Привет! Я готов помочь."}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -138,12 +136,11 @@ class TestAutoModeWithoutReason:
         result = await run_flow_state(flow, state)
         assert result["response"] == "Привет! Я готов помочь."
         assert not result.reasoning_history
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_tool_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_tool_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Tool call → результат → текст = завершение."""
         flow_id = f"auto_no_reason_tool_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto No Reason Tool",
@@ -157,14 +154,14 @@ class TestAutoModeWithoutReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "7+3"}},
                 {"type": "text", "content": "Результат: 10"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -175,12 +172,11 @@ class TestAutoModeWithoutReason:
         result = await run_flow_state(flow, state)
         assert "10" in result["response"]
         assert not result.reasoning_history
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_multiple_tools_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_multiple_tools_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Несколько tool calls → текст = завершение."""
         flow_id = f"auto_no_reason_multi_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto No Reason Multi",
@@ -194,7 +190,7 @@ class TestAutoModeWithoutReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
@@ -202,7 +198,7 @@ class TestAutoModeWithoutReason:
                 {"type": "text", "content": "2+2=4, 4*3=12"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -212,7 +208,7 @@ class TestAutoModeWithoutReason:
         )
         result = await run_flow_state(flow, state)
         assert "12" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestAutoModeWithReason:
@@ -221,10 +217,9 @@ class TestAutoModeWithReason:
     Агент может использовать reason для рассуждений, завершается при текстовом ответе.
     """
 
-    async def test_reason_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_reason_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Reason → текст = завершение + reasoning сохранен."""
         flow_id = f"auto_reason_text_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Reason Text",
@@ -238,7 +233,7 @@ class TestAutoModeWithReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -255,7 +250,7 @@ class TestAutoModeWithReason:
                 {"type": "text", "content": "5+5 = 10"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -270,12 +265,11 @@ class TestAutoModeWithReason:
         assert (
             result.reasoning_history[0]["observation"] == "Пользователь спрашивает про вычисление"
         )
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_multiple_reasons_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_multiple_reasons_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Несколько reason → текст = завершение + все reasoning сохранены."""
         flow_id = f"auto_multi_reason_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Multi Reason",
@@ -289,7 +283,7 @@ class TestAutoModeWithReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -316,7 +310,7 @@ class TestAutoModeWithReason:
                 {"type": "text", "content": "10+10 = 20"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -330,12 +324,11 @@ class TestAutoModeWithReason:
         assert len(result.reasoning_history) == 2
         assert result.reasoning_history[0]["observation"] == "Первое наблюдение"
         assert result.reasoning_history[1]["observation"] == "Получил 20"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_reason_only_then_text_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_reason_only_then_text_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Reason без других tools → текст = завершение."""
         flow_id = f"auto_reason_only_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Reason Only",
@@ -349,7 +342,7 @@ class TestAutoModeWithReason:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -365,7 +358,7 @@ class TestAutoModeWithReason:
                 {"type": "text", "content": "Ответ на вопрос"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -377,7 +370,7 @@ class TestAutoModeWithReason:
         assert result["response"] == "Ответ на вопрос"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestExplicitModeWithExitOnly:
@@ -386,10 +379,9 @@ class TestExplicitModeWithExitOnly:
     Агент завершается ТОЛЬКО при вызове exit tool.
     """
 
-    async def test_exit_tool_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_exit_tool_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Exit tool сразу завершает агента."""
         flow_id = f"explicit_exit_only_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Exit Only",
@@ -404,11 +396,11 @@ class TestExplicitModeWithExitOnly:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [{"type": "tool_call", "tool": "finish", "args": {"answer": "Готово!"}}]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -419,12 +411,11 @@ class TestExplicitModeWithExitOnly:
         result = await run_flow_state(flow, state)
         assert result["response"] == "Готово!"
         assert not result.reasoning_history
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_tool_then_exit_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_tool_then_exit_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Tool → exit = завершение с результатом."""
         flow_id = f"explicit_tool_exit_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Tool Exit",
@@ -439,14 +430,14 @@ class TestExplicitModeWithExitOnly:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "8*8"}},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "8*8 = 64"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -457,12 +448,11 @@ class TestExplicitModeWithExitOnly:
         result = await run_flow_state(flow, state)
         assert "64" in result["response"]
         assert not result.reasoning_history
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_text_without_exit_adds_reminder(self, app, unique_id, mock_llm_with_queue):
+    async def test_text_without_exit_adds_reminder(self, app, unique_id, mock_llm_with_queue, di):
         """Текст без exit → reminder → exit = завершение."""
         flow_id = f"explicit_text_reminder_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Text Reminder",
@@ -477,14 +467,14 @@ class TestExplicitModeWithExitOnly:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "text", "content": "Неправильный текст"},
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Теперь правильно!"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -494,12 +484,11 @@ class TestExplicitModeWithExitOnly:
         )
         result = await run_flow_state(flow, state)
         assert result["response"] == "Теперь правильно!"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_multiple_tools_then_exit(self, app, unique_id, mock_llm_with_queue):
+    async def test_multiple_tools_then_exit(self, app, unique_id, mock_llm_with_queue, di):
         """Несколько tools → exit = завершение."""
         flow_id = f"explicit_multi_tool_exit_{unique_id}"
-        container = get_container()
         step1 = {
             "tool_id": "step1",
             "description": "Шаг 1",
@@ -526,7 +515,7 @@ class TestExplicitModeWithExitOnly:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "step1", "args": {}},
@@ -534,7 +523,7 @@ class TestExplicitModeWithExitOnly:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Оба шага выполнены"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -544,7 +533,7 @@ class TestExplicitModeWithExitOnly:
         )
         result = await run_flow_state(flow, state)
         assert "выполнены" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestExplicitModeWithReasonAndExit:
@@ -553,10 +542,9 @@ class TestExplicitModeWithReasonAndExit:
     Агент рассуждает через reason, завершается ТОЛЬКО через exit.
     """
 
-    async def test_reason_then_exit_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_reason_then_exit_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Reason → exit = завершение + reasoning сохранен."""
         flow_id = f"explicit_reason_exit_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Reason Exit",
@@ -571,7 +559,7 @@ class TestExplicitModeWithReasonAndExit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -587,7 +575,7 @@ class TestExplicitModeWithReasonAndExit:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Готово!"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -600,12 +588,11 @@ class TestExplicitModeWithReasonAndExit:
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
         assert result.reasoning_history[0]["observation"] == "Нужно ответить"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_reason_tool_then_exit_exits(self, app, unique_id, mock_llm_with_queue):
+    async def test_reason_tool_then_exit_exits(self, app, unique_id, mock_llm_with_queue, di):
         """Reason → tool → reason → exit = завершение + все reasoning."""
         flow_id = f"explicit_reason_tool_exit_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Reason Tool Exit",
@@ -620,7 +607,7 @@ class TestExplicitModeWithReasonAndExit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -647,7 +634,7 @@ class TestExplicitModeWithReasonAndExit:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "15-5 = 10"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         context_id = f"reason-exit-{unique_id}"
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -662,12 +649,11 @@ class TestExplicitModeWithReasonAndExit:
         assert len(result.reasoning_history) == 2
         assert result.reasoning_history[0]["observation"] == "Нужно вычислить"
         assert result.reasoning_history[1]["observation"] == "Получил 10"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_text_with_reason_still_needs_exit(self, app, unique_id, mock_llm_with_queue):
+    async def test_text_with_reason_still_needs_exit(self, app, unique_id, mock_llm_with_queue, di):
         """Reason → текст → reminder → exit = завершение (strict mode)."""
         flow_id = f"explicit_reason_text_exit_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Explicit Reason Text Exit",
@@ -682,7 +668,7 @@ class TestExplicitModeWithReasonAndExit:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -699,7 +685,7 @@ class TestExplicitModeWithReasonAndExit:
                 {"type": "tool_call", "tool": "finish", "args": {"answer": "Правильный ответ"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -711,7 +697,7 @@ class TestExplicitModeWithReasonAndExit:
         assert result["response"] == "Правильный ответ"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestCustomReasonAndExitTools:
@@ -720,10 +706,9 @@ class TestCustomReasonAndExitTools:
     Проверяет что react_role корректно определяется.
     """
 
-    async def test_custom_reason_tool_works(self, app, unique_id, mock_llm_with_queue):
+    async def test_custom_reason_tool_works(self, app, unique_id, mock_llm_with_queue, di):
         """Кастомный reason tool (think_step) работает."""
         flow_id = f"custom_reason_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Custom Reason Agent",
@@ -737,7 +722,7 @@ class TestCustomReasonAndExitTools:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "think_step", "args": {"thought": "Надо посчитать"}},
@@ -745,7 +730,7 @@ class TestCustomReasonAndExitTools:
                 {"type": "text", "content": "3*3 = 9"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         context_id = f"custom-reason-{unique_id}"
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -759,12 +744,11 @@ class TestCustomReasonAndExitTools:
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
         assert result.reasoning_history[0]["thought"] == "Надо посчитать"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_custom_exit_tool_works(self, app, unique_id, mock_llm_with_queue):
+    async def test_custom_exit_tool_works(self, app, unique_id, mock_llm_with_queue, di):
         """Кастомный exit tool (complete) работает."""
         flow_id = f"custom_exit_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Custom Exit Agent",
@@ -779,14 +763,14 @@ class TestCustomReasonAndExitTools:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {"type": "tool_call", "tool": "calculator", "args": {"expression": "6/2"}},
                 {"type": "tool_call", "tool": "complete", "args": {"result": "6/2 = 3"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         context_id = f"custom-exit-{unique_id}"
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -797,12 +781,11 @@ class TestCustomReasonAndExitTools:
         )
         result = await run_flow_state(flow, state)
         assert "3" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_custom_reason_and_exit_together(self, app, unique_id, mock_llm_with_queue):
+    async def test_custom_reason_and_exit_together(self, app, unique_id, mock_llm_with_queue, di):
         """Кастомные reason (think_step) + exit (complete) вместе."""
         flow_id = f"custom_both_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Custom Both Agent",
@@ -817,7 +800,7 @@ class TestCustomReasonAndExitTools:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -834,7 +817,7 @@ class TestCustomReasonAndExitTools:
                 {"type": "tool_call", "tool": "complete", "args": {"result": "100/4 = 25"}},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         context_id = f"custom-both-{unique_id}"
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
@@ -849,16 +832,15 @@ class TestCustomReasonAndExitTools:
         assert len(result.reasoning_history) == 2
         assert result.reasoning_history[0]["thought"] == "Анализирую задачу"
         assert result.reasoning_history[1]["thought"] == "Результат получен"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestEdgeCases:
     """Граничные случаи и особые сценарии."""
 
-    async def test_empty_tools_auto_mode(self, app, unique_id, mock_llm_with_queue):
+    async def test_empty_tools_auto_mode(self, app, unique_id, mock_llm_with_queue, di):
         """AUTO режим без tools - текст сразу завершает."""
         flow_id = f"edge_empty_tools_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Empty Tools Agent",
@@ -866,9 +848,9 @@ class TestEdgeCases:
             nodes={"agent": {"type": "llm_node", "prompt": "Просто отвечай.", "tools": []}},
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Простой ответ"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -878,12 +860,11 @@ class TestEdgeCases:
         )
         result = await run_flow_state(flow, state)
         assert result["response"] == "Простой ответ"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_exit_tool_auto_injected_in_explicit(self, app, unique_id, mock_llm_with_queue):
+    async def test_exit_tool_auto_injected_in_explicit(self, app, unique_id, mock_llm_with_queue, di):
         """В EXPLICIT режиме exit tool инъектируется автоматически если отсутствует."""
         flow_id = f"edge_auto_inject_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Auto Inject Exit Agent",
@@ -898,7 +879,7 @@ class TestEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -908,7 +889,7 @@ class TestEdgeCases:
                 }
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -918,12 +899,11 @@ class TestEdgeCases:
         )
         result = await run_flow_state(flow, state)
         assert "Auto-injected" in result["response"]
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
-    async def test_strict_false_allows_text_exit(self, app, unique_id, mock_llm_with_queue):
+    async def test_strict_false_allows_text_exit(self, app, unique_id, mock_llm_with_queue, di):
         """strict=False позволяет текстовый ответ в EXPLICIT режиме."""
         flow_id = f"edge_strict_false_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Strict False Agent",
@@ -938,9 +918,9 @@ class TestEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue([{"type": "text", "content": "Текстовый ответ без finish"}])
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -950,14 +930,13 @@ class TestEdgeCases:
         )
         result = await run_flow_state(flow, state)
         assert result["response"] == "Текстовый ответ без finish"
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
     async def test_reason_without_other_actions_then_text(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """Reason tool используется только для рассуждений, без других actions."""
         flow_id = f"edge_reason_alone_{unique_id}"
-        container = get_container()
         flow_config = FlowConfig(
             flow_id=flow_id,
             name="Reason Alone Agent",
@@ -971,7 +950,7 @@ class TestEdgeCases:
             },
             edges=[],
         )
-        await container.flow_repository.set(flow_config)
+        await FlowConfig.create_version(flow_config)
         mock_llm_with_queue(
             [
                 {
@@ -987,7 +966,7 @@ class TestEdgeCases:
                 {"type": "text", "content": "Прямой ответ"},
             ]
         )
-        flow = await container.flow_factory.get_flow(flow_id)
+        flow = await di.flow_factory.get_flow(flow_id, tool_registry=di.tool_registry)
         state = ExecutionState(
             task_id=f"test-task-{unique_id}",
             context_id=f"test-context-{unique_id}",
@@ -999,7 +978,7 @@ class TestEdgeCases:
         assert result["response"] == "Прямой ответ"
         assert result.reasoning_history
         assert len(result.reasoning_history) == 1
-        await container.flow_repository.delete(flow_id)
+        await FlowConfig.delete_by_flow_id(flow_id)
 
 
 class TestExplicitModeStreaming:
@@ -1011,8 +990,8 @@ class TestExplicitModeStreaming:
     """
 
     async def test_text_artifacts_not_streamed_before_exit_tool(
-        self, app, unique_id, mock_llm_with_queue
-    ):
+        self, app, unique_id, mock_llm_with_queue,
+    di):
         """
         Текстовые артефакты НЕ стримятся до вызова exit_tool.
 
@@ -1023,7 +1002,6 @@ class TestExplicitModeStreaming:
         Ожидание: текстовые артефакты первого ответа НЕ должны быть в событиях.
         """
         flow_id = f"explicit_streaming_{unique_id}"
-        container = get_container()
         finish_tool = CodeTool(
             tool_id="finish",
             code="async def execute(args: dict, state: dict = None):\n    return args.get('answer', '')",
@@ -1055,12 +1033,12 @@ class TestExplicitModeStreaming:
             tools=[finish_tool],
             llm=None,
             prompt="Отвечай через finish.",
-            container=container,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         state = make_flow_state(flow_id)
         state.messages = []
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=flow_id,
             branch_id=state.branch_id,
@@ -1079,14 +1057,13 @@ class TestExplicitModeStreaming:
         )
         assert state["response"] == "Финальный ответ"
 
-    async def test_auto_mode_streams_text_artifacts(self, app, unique_id, mock_llm_with_queue):
+    async def test_auto_mode_streams_text_artifacts(self, app, unique_id, mock_llm_with_queue, di):
         """
         В AUTO режиме текстовые артефакты ДОЛЖНЫ стримиться.
 
         Контрольный тест: AUTO режим работает как раньше.
         """
         flow_id = f"auto_streaming_{unique_id}"
-        container = get_container()
         node_config = NodeConfig(
             node_id=flow_id,
             type="llm_node",
@@ -1102,12 +1079,12 @@ class TestExplicitModeStreaming:
             tools=[],
             llm=None,
             prompt="Отвечай как хочешь.",
-            container=container,
+            workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
         )
         state = make_flow_state(flow_id)
         state.messages = []
         await ensure_workflow_started(
-            container=container,
+            di=di,
             state=state,
             flow_id=flow_id,
             branch_id=state.branch_id,

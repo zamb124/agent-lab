@@ -7,18 +7,17 @@ from httpx import AsyncClient
 
 from core.context import clear_context, set_context
 from core.models.context_models import Context
-from core.models.identity_models import NamespaceKind, User
+from core.models.identity_models import Company, NamespaceKind, User
 from core.namespace import personal_namespace_name
 from core.utils.tokens import get_token_service
 
 
-async def _viewer_headers(frontend_container, *, unique_id: str, company_id: str) -> dict[str, str]:
+async def _viewer_headers(frontend_di, *, unique_id: str, company_id: str) -> dict[str, str]:
     from tests.fixtures.auth import set_test_company_member_roles
 
     viewer_id = f"ns_viewer_{unique_id}"
     await set_test_company_member_roles(
-        frontend_container.company_repository,
-        frontend_container.authz_service,
+        frontend_di.authz_service,
         company_id=company_id,
         user_id=viewer_id,
         roles=["viewer"],
@@ -30,7 +29,7 @@ async def _viewer_headers(frontend_container, *, unique_id: str, company_id: str
         companies={company_id: ["viewer"]},
         active_company_id=company_id,
     )
-    await frontend_container.user_repository.set(user)
+    await User.set(user)
     token = get_token_service().create_token(
         viewer_id, company_id=company_id, roles=["viewer"]
     )
@@ -42,7 +41,7 @@ async def test_console_list_includes_workspace_and_personal_excludes_technical(
     frontend_client: AsyncClient,
     auth_headers: dict[str, str],
     auth_token: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     token_service = get_token_service()
@@ -54,8 +53,8 @@ async def test_console_list_includes_workspace_and_personal_excludes_technical(
         headers=auth_headers,
     )
 
-    company = await frontend_container.company_repository.get(owner.company_id)
-    user = await frontend_container.user_repository.get(owner.user_id)
+    company = await Company.get(owner.company_id)
+    user = await User.get(owner.user_id)
     assert company is not None and user is not None
     set_context(
         Context(
@@ -67,13 +66,13 @@ async def test_console_list_includes_workspace_and_personal_excludes_technical(
     )
     try:
         tech_name = f"office-catalog-{unique_id}"
-        _ = await frontend_container.namespace_service.get_or_create(
+        _ = await frontend_di.namespace_service.get_or_create(
             tech_name,
             description="tech",
             kind=NamespaceKind.TECHNICAL,
         )
         ws_name = f"ws_{unique_id}"
-        _ = await frontend_container.namespace_service.create(
+        _ = await frontend_di.namespace_service.create(
             name=ws_name,
             description="workspace",
             kind=NamespaceKind.COMPANY_WORKSPACE,
@@ -160,13 +159,13 @@ async def test_console_create_rejects_reserved_prefixes(
 async def test_console_namespaces_forbidden_for_viewer(
     frontend_client: AsyncClient,
     auth_token: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     owner = get_token_service().validate_token(auth_token)
     assert owner is not None
     viewer_headers = await _viewer_headers(
-        frontend_container, unique_id=unique_id, company_id=owner.company_id
+        frontend_di, unique_id=unique_id, company_id=owner.company_id
     )
     listed = await frontend_client.get(
         "/frontend/api/namespaces",

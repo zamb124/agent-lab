@@ -16,6 +16,7 @@ from core.documents.viewer.resolver import (
 )
 from core.documents.viewer.text_presentation import resolve_text_presentation
 from core.errors.boundary import PlatformUnavailableError
+from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.models import FileRecord
 from core.files.types import FileCategory
 
@@ -28,7 +29,7 @@ def _sample_file_record(**overrides: object) -> FileRecord:
         "content_type": "application/json",
         "file_size": 1200,
         "checksum": "abc",
-        "s3_bucket": "b",
+        "storage_id": PLATFORM_STORAGE_ID,
         "s3_key": "k",
         "download_url": "/files/download/f-json",
         "company_id": "c1",
@@ -261,12 +262,11 @@ def test_resolve_file_category_viz() -> None:
 def test_image_handler_capabilities() -> None:
     file_record = FileRecord(
         file_id="f1",
-        provider="minio",
-        original_name="a.png",
+                original_name="a.png",
         content_type="image/png",
         file_size=100,
         checksum="abc",
-        s3_bucket="b",
+        storage_id=PLATFORM_STORAGE_ID,
         s3_key="k",
         download_url="/files/download/f1",
         company_id="c1",
@@ -282,12 +282,11 @@ def test_image_handler_capabilities() -> None:
 def test_text_handler_edit_disabled_for_large_file() -> None:
     file_record = FileRecord(
         file_id="f2",
-        provider="minio",
-        original_name="big.txt",
+                original_name="big.txt",
         content_type="text/plain",
         file_size=900_000,
         checksum="abc",
-        s3_bucket="b",
+        storage_id=PLATFORM_STORAGE_ID,
         s3_key="k",
         download_url="/files/download/f2",
         company_id="c1",
@@ -302,12 +301,11 @@ def test_text_handler_edit_disabled_for_large_file() -> None:
 def test_binary_handler_capabilities() -> None:
     file_record = FileRecord(
         file_id="f3",
-        provider="minio",
-        original_name="archive.zip",
+                original_name="archive.zip",
         content_type="application/zip",
         file_size=10,
         checksum="abc",
-        s3_bucket="b",
+        storage_id=PLATFORM_STORAGE_ID,
         s3_key="k",
         download_url="/files/download/f3",
         company_id="c1",

@@ -5,9 +5,9 @@ from typing import ClassVar
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.container import get_container
 from apps.flows.src.models.enums import NodeType
 from apps.flows.src.models.node_config import NodeConfig, NodeLLMConfig
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import BaseNode
 from apps.flows.src.runtime.runners.llm_runner import LlmNodeRunner
 from apps.flows.src.tools.base import BaseTool
@@ -64,7 +64,7 @@ class _FailingNode(BaseNode):
 
 
 @pytest.mark.asyncio
-async def test_llm_runner_absorbs_tool_error_when_enabled(app, unique_id: str) -> None:
+async def test_llm_runner_absorbs_tool_error_when_enabled(app, unique_id: str, di) -> None:
     _ = app
     cfg = NodeConfig(
         node_id="agent1",
@@ -80,11 +80,11 @@ async def test_llm_runner_absorbs_tool_error_when_enabled(app, unique_id: str) -
         tools=[_FailingTool()],
         llm=None,
         prompt="p",
-        container=get_container(),
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(
-        container=get_container(),
+        di=di,
         state=state,
         flow_id=state.session_flow_id,
         branch_id=state.branch_id,
@@ -103,7 +103,7 @@ async def test_llm_runner_absorbs_tool_error_when_enabled(app, unique_id: str) -
 
 
 @pytest.mark.asyncio
-async def test_llm_runner_raises_when_policy_off(app, unique_id: str) -> None:
+async def test_llm_runner_raises_when_policy_off(app, unique_id: str, di) -> None:
     _ = app
     from core.errors import ToolExecutionError
 
@@ -120,11 +120,11 @@ async def test_llm_runner_raises_when_policy_off(app, unique_id: str) -> None:
         tools=[_FailingTool()],
         llm=None,
         prompt="p",
-        container=get_container(),
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(
-        container=get_container(),
+        di=di,
         state=state,
         flow_id=state.session_flow_id,
         branch_id=state.branch_id,
@@ -138,7 +138,8 @@ async def test_llm_runner_raises_when_policy_off(app, unique_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_llm_runner_absorbs_arg_validation_error_when_policy_off(
-    app, unique_id: str
+    app, unique_id: str,
+    di,
 ) -> None:
     """Невалидные args tool — всегда tool result, даже при exception_as_response=false."""
     _ = app
@@ -155,11 +156,11 @@ async def test_llm_runner_absorbs_arg_validation_error_when_policy_off(
         tools=[_strict_args_tool],
         llm=None,
         prompt="p",
-        container=get_container(),
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
     state = _minimal_state(unique_id)
     await ensure_workflow_started(
-        container=get_container(),
+        di=di,
         state=state,
         flow_id=state.session_flow_id,
         branch_id=state.branch_id,
@@ -184,12 +185,12 @@ def test_read_agent_skill_reference_description_excludes_documents() -> None:
 
 
 @pytest.mark.asyncio
-async def test_base_node_absorbs_run_impl_error_when_enabled(app, unique_id: str) -> None:
+async def test_base_node_absorbs_run_impl_error_when_enabled(app, unique_id: str, di) -> None:
     _ = app
     node = _FailingNode(
         "n1",
         {"type": "test_failing", "exception_as_response": True, "exception_allow_types": []},
-        container=get_container(),
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
     state = _minimal_state(unique_id)
     await node.execute(state)
@@ -201,12 +202,12 @@ async def test_base_node_absorbs_run_impl_error_when_enabled(app, unique_id: str
 
 
 @pytest.mark.asyncio
-async def test_base_node_raises_when_whitelist_mismatch(app, unique_id: str) -> None:
+async def test_base_node_raises_when_whitelist_mismatch(app, unique_id: str, di) -> None:
     _ = app
     node = _FailingNode(
         "n1",
         {"type": "test_failing", "exception_as_response": True, "exception_allow_types": ["RuntimeError"]},
-        container=get_container(),
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
     state = _minimal_state(unique_id)
     with pytest.raises(ValueError, match="node failed"):

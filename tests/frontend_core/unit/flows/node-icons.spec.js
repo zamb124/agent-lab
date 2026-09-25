@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datasourceIconName } from '../../../../apps/flows/ui/constants/node-icons.js';
+import { datasourceIconName } from '../../../../apps/flows/ui/_helpers/node-icons.js';
 
 describe('datasourceIconName', () => {
     it('maps platform connector_id to brand icon', () => {

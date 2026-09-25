@@ -9,8 +9,6 @@ per-test toolkit через API `/flows/api/v1/agent/toolkits/manage`.
 import pytest
 from httpx import AsyncClient
 
-from apps.flows.src.container import get_container as get_flows_container
-
 PLATFORM_MCP_PATH = "/flows/api/v1/agent/platform-mcp"
 TOOLKITS_MANAGE_PATH = "/flows/api/v1/agent/toolkits/manage"
 
@@ -194,6 +192,7 @@ async def test_platform_mcp_flow_sticky_context_id(
     flows_client: AsyncClient,
     auth_headers: dict[str, str],
     unique_id: str,
+    di,
 ) -> None:
     session_id = f"mcp-session-{unique_id}"
     flow_id = f"missing_flow_{unique_id}"
@@ -212,14 +211,13 @@ async def test_platform_mcp_flow_sticky_context_id(
     first = await flows_client.post(PLATFORM_MCP_PATH, headers=headers, json=call_payload)
     assert first.status_code == 200
 
-    container = get_flows_container()
     redis_key = f"agent_mcp_session:{session_id}:flow:{flow_id}"
-    stored_after_first = await container.redis_client.get(redis_key)
+    stored_after_first = await di.redis_client.get(redis_key)
     assert stored_after_first
 
     second = await flows_client.post(PLATFORM_MCP_PATH, headers=headers, json=call_payload)
     assert second.status_code == 200
-    stored_after_second = await container.redis_client.get(redis_key)
+    stored_after_second = await di.redis_client.get(redis_key)
     assert stored_after_second == stored_after_first
 
 

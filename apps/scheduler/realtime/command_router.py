@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.scheduler.container import SchedulerContainer, get_scheduler_container
+from apps.scheduler.di import SchedulerDi
 from apps.scheduler.realtime.operations import (
     SchedulerTaskIdPayload,
     op_schedule_tasks_cancel,
@@ -14,13 +14,10 @@ from apps.scheduler.realtime.operations import (
     op_schedule_tasks_resume,
     op_schedule_tasks_run_now,
 )
-from core.logging import get_logger
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleFilter
-from core.websocket import Operation, RegisteredOperation, register_service_operations
+from core.websocket import Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-SCHEDULER_OPERATIONS: dict[str, RegisteredOperation[SchedulerContainer]] = {
+SCHEDULER_OPERATIONS: dict[str, RegisteredOperation[SchedulerDi]] = {
     "scheduler/schedule_tasks/list_requested": Operation(
         payload_model=PlatformScheduleFilter, fn=op_schedule_tasks_list
     ),
@@ -46,8 +43,3 @@ SCHEDULER_OPERATIONS: dict[str, RegisteredOperation[SchedulerContainer]] = {
         payload_model=SchedulerTaskIdPayload, fn=op_schedule_tasks_redis_snapshot
     ),
 }
-
-
-def register_scheduler_ws_commands() -> None:
-    register_service_operations(SCHEDULER_OPERATIONS, get_scheduler_container)
-    logger.info("command_router.registered", service="scheduler", operations=len(SCHEDULER_OPERATIONS))

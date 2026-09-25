@@ -42,7 +42,7 @@ class TestSagaRollback:
     ) -> None:
         """Удаление entity → автоматически удаляются attachments"""
         note_name = f"Note с вложениями {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -74,19 +74,19 @@ class TestSagaRollback:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление entity → автоматически удаляются relationships"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
         entity1_id = _entity_id(entity1_resp)
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Contact {unique_id}",
         }, headers=auth_headers_system)
         entity2_id = _entity_id(entity2_resp)
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": "mentions",
@@ -108,7 +108,7 @@ class TestSagaRollback:
     ) -> None:
         """Удаление entity с attachments + relationships одновременно"""
         note_name = f"Complex entity {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -125,13 +125,13 @@ class TestSagaRollback:
             content_type="text/plain",
         )
 
-        related_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        related_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Related {unique_id}",
         }, headers=auth_headers_system)
         related_id = _entity_id(related_resp)
 
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity_id,
             "target_entity_id": related_id,
             "relationship_type": "mentions",
@@ -165,7 +165,7 @@ class TestSagaRollback:
         - exclusive_a, shared_a, keeper и связь shared_a->keeper остаются.
         """
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Note {unique_id}"},
             headers=auth_headers_system,
         )
@@ -173,7 +173,7 @@ class TestSagaRollback:
         note_id = _entity_id(note_resp)
 
         exclusive_a_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"Exclusive A {unique_id}"},
             headers=auth_headers_system,
         )
@@ -181,7 +181,7 @@ class TestSagaRollback:
         exclusive_a_id = _entity_id(exclusive_a_resp)
 
         shared_a_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "organization", "name": f"Shared A {unique_id}"},
             headers=auth_headers_system,
         )
@@ -189,7 +189,7 @@ class TestSagaRollback:
         shared_a_id = _entity_id(shared_a_resp)
 
         keeper_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "contact", "name": f"Keeper {unique_id}"},
             headers=auth_headers_system,
         )
@@ -197,7 +197,7 @@ class TestSagaRollback:
         keeper_id = _entity_id(keeper_resp)
 
         note_to_exclusive_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": note_id,
                 "target_entity_id": exclusive_a_id,
@@ -209,7 +209,7 @@ class TestSagaRollback:
         note_to_exclusive_rel_id = _relationship_id(note_to_exclusive_resp)
 
         note_to_shared_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": note_id,
                 "target_entity_id": shared_a_id,
@@ -221,7 +221,7 @@ class TestSagaRollback:
         note_to_shared_rel_id = _relationship_id(note_to_shared_resp)
 
         shared_to_keeper_resp = await crm_client.post(
-            "/crm/api/v1/relationships/",
+            "/crm/api/v1/relationships",
             json={
                 "source_entity_id": shared_a_id,
                 "target_entity_id": keeper_id,
@@ -282,7 +282,7 @@ class TestSagaRollback:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Симуляция rollback при ошибке удаления"""
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Entity for rollback test {unique_id}",
         }, headers=auth_headers_system)

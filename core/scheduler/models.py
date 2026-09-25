@@ -2,10 +2,14 @@
 
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from typing import ClassVar, Self, override
 
+from oxyde import Field as DbField
+from oxyde import Index
 from pydantic import Field, field_validator, model_validator
 
 from core.models import FlexibleBaseModel
+from core.models.platform_model import PlatformModel
 from core.types import JsonObject
 
 
@@ -114,33 +118,163 @@ class PlatformScheduleFilter(FlexibleBaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class PlatformScheduledTask(FlexibleBaseModel):
-    """Сущность расписания платформенного scheduler."""
+class PlatformScheduledTask(PlatformModel):
+    """Расписание. Таблица ``scheduler_tasks`` в ``platform_shared``.
 
-    schedule_task_id: str
-    company_id: str
-    schedule_id: str | None = None
-    target_service: str
-    task_name: str
-    queue_name: str | None = None
-    schedule_type: PlatformScheduleType
-    cron: str | None = None
-    interval_seconds: int | None = None
-    run_at: datetime | None = None
-    timezone: str = "UTC"
-    payload: JsonObject = Field(default_factory=dict)
-    status: ScheduledTaskStatus = ScheduledTaskStatus.PENDING
-    created_by_user_id: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    last_run_at: datetime | None = None
-    next_run_at: datetime | None = None
-    error_message: str | None = None
+    ``__global_model__``: сборка мусора читает ``schedule_id`` всех компаний.
+    Методы одной компании фильтруют ``company_id``.
+    """
+
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+
+    schedule_task_id: str = DbField(db_pk=True, max_length=255)
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "scheduler_tasks"
+        indexes: list[Index] = [
+            Index(("company_id", "status")),
+            Index(("company_id", "target_service")),
+            Index(("company_id", "task_name")),
+            Index(("company_id", "next_run_at")),
+        ]
+
+    company_id: str = DbField(db_index=True, max_length=255)
+    schedule_id: str | None = DbField(default=None, db_index=True, max_length=255)
+    target_service: str = DbField(db_index=True, max_length=64)
+    task_name: str = DbField(db_index=True, max_length=255)
+    queue_name: str | None = DbField(default=None, max_length=128)
+    schedule_type: PlatformScheduleType = DbField(db_index=True, max_length=32)
+    cron: str | None = DbField(default=None, max_length=128)
+    interval_seconds: int | None = DbField(default=None)
+    run_at: datetime | None = DbField(default=None)
+    timezone: str = DbField(default="UTC", max_length=64)
+    payload: JsonObject = DbField(default_factory=dict, db_type="JSONB")
+    status: ScheduledTaskStatus = DbField(default=ScheduledTaskStatus.PENDING, db_index=True, max_length=32)
+    created_by_user_id: str | None = DbField(default=None, db_index=True, max_length=255)
+    created_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+    last_run_at: datetime | None = DbField(default=None)
+    next_run_at: datetime | None = DbField(default=None, db_index=True)
+    error_message: str | None = DbField(default=None, db_type="TEXT")
+
+    @field_validator("run_at", "created_at", "updated_at", "last_run_at", "next_run_at", mode="after")
+    @classmethod
+    def _bind_utc(cls, value: datetime | None) -> datetime | None:
+        """Колонки timestamp без зоны хранят UTC: строка базы читается без tzinfo."""
+        if value is None or value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=timezone.utc)
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = is_create, update_fields
+        if self.schedule_task_id == "" or self.company_id == "":
+            raise ValueError("schedule_task_id and company_id are required")
+        self.updated_at = datetime.now(timezone.utc)
 
     def next_run_for_interval(self) -> datetime:
         if self.interval_seconds is None:
             raise ValueError("interval_seconds is required for interval schedules")
         return datetime.now(timezone.utc) + timedelta(seconds=self.interval_seconds)
+
+    @classmethod
+    async def upsert_by_schedule_task_id(cls, task: Self) -> Self:
+        existing = await cls.find_in_company(task.company_id, task.schedule_task_id)
+        if existing is None:
+            return await cls.objects.create(instance=task)
+        _ = await task.save()
+        return task
+
+    @classmethod
+    async def find_in_company(
+        cls, company_id: str, schedule_task_id: str
+    ) -> Self | None:
+        return await cls.objects.filter(
+            company_id=_required_schedule_field(company_id, "company_id"),
+            schedule_task_id=_required_schedule_field(schedule_task_id, "schedule_task_id"),
+        ).get_or_none()
+
+    @classmethod
+    async def list_for_company(
+        cls, company_id: str, filters: PlatformScheduleFilter
+    ) -> list[Self]:
+        return await (
+            cls._filtered_schedule_tasks(company_id, filters)
+            .order_by("-created_at")
+            .limit(filters.limit)
+            .offset(filters.offset)
+            .all()
+        )
+
+    @classmethod
+    async def count(cls, company_id: str, filters: PlatformScheduleFilter) -> int:
+        return await cls._filtered_schedule_tasks(company_id, filters).count()
+
+    @classmethod
+    async def list_all_schedule_ids(cls) -> frozenset[str]:
+        rows = await cls.objects.exclude(schedule_id=None).all()
+        schedule_ids: list[str] = []
+        for row in rows:
+            schedule_id = row.schedule_id
+            if schedule_id is None or schedule_id.strip() == "":
+                continue
+            schedule_ids.append(schedule_id)
+        return frozenset(schedule_ids)
+
+    @classmethod
+    async def update_status(
+        cls,
+        company_id: str,
+        schedule_task_id: str,
+        status: ScheduledTaskStatus | str,
+        *,
+        schedule_id: str | None = None,
+        last_run_at: datetime | None = None,
+        next_run_at: datetime | None = None,
+        error_message: str | None = None,
+    ) -> bool:
+        task = await cls.find_in_company(company_id, schedule_task_id)
+        if task is None:
+            return False
+        task.status = _schedule_status(status)
+        if schedule_id is not None:
+            task.schedule_id = schedule_id
+        if last_run_at is not None:
+            task.last_run_at = last_run_at
+        if next_run_at is not None:
+            task.next_run_at = next_run_at
+        if error_message is not None:
+            task.error_message = error_message
+        task.updated_at = datetime.now(timezone.utc)
+        _ = await task.save()
+        return True
+
+    @classmethod
+    def _filtered_schedule_tasks(cls, company_id: str, filters: PlatformScheduleFilter):
+        query = cls.objects.filter(
+            company_id=_required_schedule_field(company_id, "company_id")
+        )
+        if filters.status is not None:
+            query = query.filter(status=filters.status)
+        if filters.target_service is not None:
+            query = query.filter(target_service=filters.target_service)
+        if filters.task_name is not None:
+            query = query.filter(task_name=filters.task_name)
+        return query
+
+
+def _required_schedule_field(value: str, field_name: str) -> str:
+    if value == "":
+        raise ValueError(f"{field_name} cannot be empty.")
+    return value
+
+
+def _schedule_status(status: ScheduledTaskStatus | str) -> ScheduledTaskStatus:
+    if isinstance(status, ScheduledTaskStatus):
+        return status
+    return ScheduledTaskStatus(status)
 
 
 class PlatformRedisScheduleSnapshot(FlexibleBaseModel):

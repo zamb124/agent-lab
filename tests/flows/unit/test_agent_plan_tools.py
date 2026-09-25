@@ -27,8 +27,9 @@ def execution_state() -> ExecutionState:
 @pytest_asyncio.fixture(autouse=True)
 async def _agent_plan_tools_authz_context(
     execution_state: ExecutionState,
+    di,
 ) -> AsyncIterator[None]:
-    async for _ in bind_flow_tool_authz_context(extra_user_ids=[execution_state.user_id]):
+    async for _ in bind_flow_tool_authz_context(extra_user_ids=[execution_state.user_id], di=di):
         yield
 
 

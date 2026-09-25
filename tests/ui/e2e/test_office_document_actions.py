@@ -38,12 +38,12 @@ async def test_office_document_actions(
     unique_id: str,
     office_client_http,
     auth_headers_system,
-    auth_token_system: str,
+    auth_token_system: str, frontend_di,
 ) -> None:
     original_title = f"Draft {unique_id}"
     renamed_title = f"Final {unique_id}"
 
-    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="act")
+    namespace = await office_e2e_open_with_namespace(office_ui, ui_page_system, unique_id, suffix="act", di=frontend_di)
     catalog_id = await office_api_create_catalog(
         office_ui.origin,
         auth_token_system,

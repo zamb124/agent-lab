@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from apps.crm.container import get_crm_container
-from apps.crm.db.models import CRMTask
+from apps.crm.models.task import CRMTask
+from apps.crm_worker.di import Di
 from apps.crm_worker.tasks.crm_context import set_crm_context
 from apps.crm_worker.tasks.task_names import CRM_GENERATE_NAMESPACE_SUGGESTS
 from core.logging import get_logger
@@ -19,6 +19,8 @@ async def crm_generate_namespace_suggests_tick(
     company_id: str,
     namespace: str,
     schedule_task_id: str | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """Генерация саджестов (дубли/пропущенные) для namespace по крону."""
     logger.info(
@@ -28,11 +30,9 @@ async def crm_generate_namespace_suggests_tick(
         namespace=namespace,
     )
 
-    container = get_crm_container()
-    repo = container.task_repository
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    _ = await repo.create(
+    _ = await CRMTask.create(
         CRMTask(
             task_id=task_id,
             task_type="namespace_suggests_tick",
@@ -50,13 +50,13 @@ async def crm_generate_namespace_suggests_tick(
     await set_crm_context(company_id=company_id, namespace=namespace, interface_language=None)
 
     try:
-        summary = await container.suggest_service.generate_namespace_suggests(
+        summary = await di.suggest_service.generate_namespace_suggests(
             company_id=company_id,
             namespace=namespace,
         )
         summary_patch: JsonObject = {key: value for key, value in summary.items()}
         done = datetime.now(timezone.utc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="completed",
@@ -75,7 +75,7 @@ async def crm_generate_namespace_suggests_tick(
         return summary_patch
     except Exception as exc:
         failed_at = datetime.now(timezone.utc)
-        await repo.patch_progress(
+        await CRMTask.patch_progress(
             task_id,
             company_id,
             status="failed",

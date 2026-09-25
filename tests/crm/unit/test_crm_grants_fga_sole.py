@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.crm.db.models import CRMEntity
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
 from apps.crm.services.access_grant_service import AccessGrantService
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.services.namespace_notification_recipients import (
@@ -16,19 +16,19 @@ from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.identity.company_membership import set_company_member_roles
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
 async def _seed_company_users(
-    crm_container,
+    crm_di,
     authz_service: AuthzService,
     *,
     company_id: str,
     owner_id: str,
     member_id: str,
 ) -> Company:
-    company_repository = crm_container.company_repository
-    user_repository = crm_container.user_repository
     company = Company(
         company_id=company_id,
         name="CRM Grants",
@@ -37,28 +37,24 @@ async def _seed_company_users(
     )
     owner = User(user_id=owner_id, name="Owner", companies={})
     member = User(user_id=member_id, name="Member", companies={})
-    _ = await company_repository.set(company)
-    _ = await user_repository.set(owner)
-    _ = await user_repository.set(member)
+    _ = await Company.set(company)
+    _ = await User.set(owner)
+    _ = await User.set(member)
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=owner,
         roles=["owner"],
     )
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     _ = await set_company_member_roles(
-        company_repository=company_repository,
-        user_repository=user_repository,
         authz=authz_service,
         company=company,
         user=member,
         roles=["member"],
     )
-    company = await company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     return company
 
@@ -66,7 +62,7 @@ async def _seed_company_users(
 @pytest.mark.asyncio
 async def test_share_requires_can_share(
     authz_service: AuthzService,
-    crm_container,
+    crm_di,
     unique_id: str,
 ) -> None:
     company_id = f"co-share-{unique_id}"
@@ -77,7 +73,7 @@ async def test_share_requires_can_share(
     entity_id = f"ent-{unique_id}"
 
     _ = await _seed_company_users(
-        crm_container,
+        crm_di,
         authz_service,
         company_id=company_id,
         owner_id=owner_id,
@@ -91,15 +87,14 @@ async def test_share_requires_can_share(
         name="Shared",
         user_id=owner_id,
     )
-    _ = await crm_container.entity_repository.create(entity)
-    access = CrmEntityAccessService(
-        entity_type_repo=crm_container.entity_type_repository,
-        authz=authz_service,
+    entity = await CRMEntity.create(entity)
+    await index_crm_entity(
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), entity, replace=False,
     )
+    access = CrmEntityAccessService(authz=authz_service)
     await access.sync_entity_created(entity)
 
     grants = AccessGrantService(
-        entity_repo=crm_container.entity_repository,
         authz=authz_service,
     )
     with pytest.raises(AuthzDenied):
@@ -125,7 +120,7 @@ async def test_share_requires_can_share(
 @pytest.mark.asyncio
 async def test_public_projection_via_fga_list_users(
     authz_service: AuthzService,
-    crm_container,
+    crm_di,
     unique_id: str,
 ) -> None:
     company_id = f"co-pub-{unique_id}"
@@ -135,7 +130,7 @@ async def test_public_projection_via_fga_list_users(
     entity_id = f"ent-{unique_id}"
 
     _ = await _seed_company_users(
-        crm_container,
+        crm_di,
         authz_service,
         company_id=company_id,
         owner_id=owner_id,
@@ -150,14 +145,13 @@ async def test_public_projection_via_fga_list_users(
         description="secret body",
         user_id=owner_id,
     )
-    _ = await crm_container.entity_repository.create(entity)
-    access = CrmEntityAccessService(
-        entity_type_repo=crm_container.entity_type_repository,
-        authz=authz_service,
+    entity = await CRMEntity.create(entity)
+    await index_crm_entity(
+        get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID), entity, replace=False,
     )
+    access = CrmEntityAccessService(authz=authz_service)
     await access.sync_entity_created(entity)
     grants = AccessGrantService(
-        entity_repo=crm_container.entity_repository,
         authz=authz_service,
     )
     _ = await grants.grant_entity_public(entity_id, created_by=owner_id)
@@ -173,7 +167,7 @@ async def test_public_projection_via_fga_list_users(
 @pytest.mark.asyncio
 async def test_namespace_recipients_via_list_users(
     authz_service: AuthzService,
-    crm_container,
+    crm_di,
     unique_id: str,
 ) -> None:
     company_id = f"co-rec-{unique_id}"
@@ -182,7 +176,7 @@ async def test_namespace_recipients_via_list_users(
     namespace = f"ns-{unique_id}"
 
     _ = await _seed_company_users(
-        crm_container,
+        crm_di,
         authz_service,
         company_id=company_id,
         owner_id=owner_id,

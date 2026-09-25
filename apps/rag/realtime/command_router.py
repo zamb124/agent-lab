@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.rag.container import RAGContainer, get_rag_container
+from apps.rag.di import RagDi
 from apps.rag.models import DocumentStatusesBatchRequest
 from apps.rag.realtime.operations import (
     RagDocumentRefPayload,
@@ -29,13 +29,10 @@ from apps.rag.realtime.operations import (
     op_search_global,
     op_search_namespace,
 )
-from core.logging import get_logger
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
-from core.websocket import EmptyPayload, Operation, RegisteredOperation, register_service_operations
+from core.websocket import EmptyPayload, Operation, RegisteredOperation
 
-logger = get_logger(__name__)
-
-RAG_OPERATIONS: dict[str, RegisteredOperation[RAGContainer]] = {
+RAG_OPERATIONS: dict[str, RegisteredOperation[RagDi]] = {
     "rag/namespaces/list_requested": Operation(
         payload_model=NamespacesListPayload, fn=op_namespaces_list
     ),
@@ -82,8 +79,3 @@ RAG_OPERATIONS: dict[str, RegisteredOperation[RAGContainer]] = {
         payload_model=EmptyPayload, fn=op_providers_list
     ),
 }
-
-
-def register_rag_ws_commands() -> None:
-    register_service_operations(RAG_OPERATIONS, get_rag_container)
-    logger.info("rag.ws.command.handlers", RAG_OPERATIONS_count=len(RAG_OPERATIONS))

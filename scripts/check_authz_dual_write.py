@@ -94,7 +94,7 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "op_channels_add_member",
         "apps/sync/realtime/operations.py",
-        ("set_member", "delete_member"),
+        ("set_member", "delete_channel_member"),
     ),
     (
         "sync_catalog_created",
@@ -223,42 +223,42 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "create_entity",
         "apps/crm/services/entity_service.py",
-        ("except Exception", "_entity_repo.delete"),
+        ("except Exception", "take_by_id"),
     ),
     (
         "get_or_create_person_entity_id",
         "apps/crm/services/user_person_service.py",
-        ("except Exception", "_entity_repo.delete"),
+        ("except Exception", "take_by_id"),
     ),
     (
         "upsert_canonical_by_external_ref",
         "apps/crm/integrations/entity_upsert.py",
-        ("except Exception", "entity_repo.delete"),
+        ("except Exception", "take_by_id"),
     ),
     (
         "_copy_shallow",
         "apps/crm/services/access_request_service.py",
-        ("except Exception", "_entity_repo.delete"),
+        ("except Exception", "take_by_id"),
     ),
     (
         "_ensure_company_entity",
         "apps/crm/services/company_init_service.py",
-        ("except Exception", "_entity_repo.delete"),
+        ("except Exception", "take_by_id"),
     ),
     (
         "persist_flow_with_authz",
         "apps/flows/realtime/operations.py",
-        ("except Exception", "flow_repository.delete"),
+        ("except Exception", "FlowConfig.delete_by_flow_id"),
     ),
     (
         "create_flow",
         "apps/flows/src/services/flow_factory.py",
-        ("except Exception", "flow_repository.delete"),
+        ("except Exception", "FlowConfig.delete_by_flow_id"),
     ),
     (
         "_load_flow_bundle",
         "apps/flows/src/services/flows_loader.py",
-        ("except Exception", "flow_repository.delete"),
+        ("except Exception", "FlowConfig.delete_by_flow_id"),
     ),
     (
         "register_device",
@@ -293,7 +293,7 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "op_channels_add_member",
         "apps/sync/realtime/operations.py",
-        ("except Exception", "delete_member"),
+        ("except Exception", "delete_channel_member"),
     ),
     (
         "create_queue",
@@ -303,12 +303,12 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "create_page",
         "apps/wiki/services/wiki_service.py",
-        ("except Exception", "hard_delete_page"),
+        ("except Exception", "delete_page_in_namespace"),
     ),
     (
         "create_connection",
         "core/datasources/service.py",
-        ("except Exception", "_connections.delete"),
+        ("except Exception", "delete_by_id"),
     ),
 )
 

@@ -4,7 +4,7 @@
 import { html } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
 import { marketingPublicContentPageStyles } from '@platform/lib/styles/shared/marketing-section.styles.js';
-import { applyPublicDocumentMeta } from '../utils/public-document-meta.js';
+import { applyPublicDocumentMeta } from '../_helpers/public-document-meta.js';
 import '../components/landing/landing-header.js';
 import '../components/landing/landing-footer.js';
 

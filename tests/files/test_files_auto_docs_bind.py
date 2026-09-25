@@ -16,7 +16,6 @@ from tests.fixtures.s3 import require_s3_configured
 async def test_create_durable_source_auto_binds(app, unique_id: str) -> None:
     _ = app
     require_s3_configured()
-    from apps.frontend.container import get_frontend_container
 
     binds: list[DocsPlacement] = []
 
@@ -29,9 +28,7 @@ async def test_create_durable_source_auto_binds(app, unique_id: str) -> None:
             catalog_path=["Sync", "ch-auto"],
         )
 
-    container = get_frontend_container()
     service = FilesService(
-        file_repository=container.file_repository,
         files_route_segment="frontend",
         docs_bind_hook=recording_bind,
     )
@@ -58,7 +55,6 @@ async def test_create_durable_source_fails_closed_when_office_bind_unavailable(
 ) -> None:
     _ = app
     require_s3_configured()
-    from apps.frontend.container import get_frontend_container
 
     bound_file_ids: list[str] = []
 
@@ -66,9 +62,7 @@ async def test_create_durable_source_fails_closed_when_office_bind_unavailable(
         bound_file_ids.append(placement.file_id)
         raise ServiceClientError("office unavailable")
 
-    container = get_frontend_container()
     service = FilesService(
-        file_repository=container.file_repository,
         files_route_segment="frontend",
         docs_bind_hook=failing_bind,
     )
@@ -97,7 +91,6 @@ async def test_create_durable_source_fails_closed_when_office_bind_unavailable(
 async def test_create_exempt_source_skips_bind(app, unique_id: str) -> None:
     _ = app
     require_s3_configured()
-    from apps.frontend.container import get_frontend_container
 
     binds: list[DocsPlacement] = []
 
@@ -110,9 +103,7 @@ async def test_create_exempt_source_skips_bind(app, unique_id: str) -> None:
             catalog_path=[],
         )
 
-    container = get_frontend_container()
     service = FilesService(
-        file_repository=container.file_repository,
         files_route_segment="frontend",
         docs_bind_hook=recording_bind,
     )

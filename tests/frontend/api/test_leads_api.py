@@ -61,7 +61,7 @@ async def test_create_lead_rejects_legacy_payload(frontend_client: AsyncClient) 
 @pytest.mark.asyncio
 async def test_create_lead_stores_canonical_record(
     frontend_client: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     response = await frontend_client.post(
@@ -84,14 +84,14 @@ async def test_create_lead_stores_canonical_record(
     lead_request_id = body["lead_request_id"]
     key = _storage_key(lead_request_id)
     try:
-        raw = await frontend_container.shared_storage.get(key, force_global=True)
+        raw = await frontend_di.shared_storage.get(key, force_global=True)
         assert raw is not None
         stored = LeadRequestRecord.model_validate_json(raw)
         assert stored.lead_request_id == lead_request_id
         assert stored.contact_name == f"Lead {unique_id}"
         assert stored.organization_name == f"Org {unique_id}"
     finally:
-        await frontend_container.shared_storage.delete(key, force_global=True)
+        await frontend_di.shared_storage.delete(key, force_global=True)
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_list_lead_requests_forbidden_for_non_system(frontend_client_with_
 @pytest.mark.asyncio
 async def test_list_lead_requests_system_cursor_page(
     frontend_client_system: AsyncClient,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     newer_id = f"lead_new_{unique_id}"
@@ -113,12 +113,12 @@ async def test_list_lead_requests_system_cursor_page(
     newer = _record(newer_id, base + timedelta(seconds=1))
     older = _record(older_id, base)
     try:
-        _ = await frontend_container.shared_storage.set(
+        _ = await frontend_di.shared_storage.set(
             _storage_key(newer_id),
             newer.model_dump_json(),
             force_global=True,
         )
-        _ = await frontend_container.shared_storage.set(
+        _ = await frontend_di.shared_storage.set(
             _storage_key(older_id),
             older.model_dump_json(),
             force_global=True,
@@ -142,5 +142,5 @@ async def test_list_lead_requests_system_cursor_page(
         second_body = second.json()
         assert second_body["items"][0]["lead_request_id"] == older_id
     finally:
-        await frontend_container.shared_storage.delete(_storage_key(newer_id), force_global=True)
-        await frontend_container.shared_storage.delete(_storage_key(older_id), force_global=True)
+        await frontend_di.shared_storage.delete(_storage_key(newer_id), force_global=True)
+        await frontend_di.shared_storage.delete(_storage_key(older_id), force_global=True)

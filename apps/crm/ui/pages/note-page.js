@@ -23,7 +23,7 @@
  */
 
 import { html, css, nothing } from 'lit';
-import { CRMNamespacePage } from '../base/crm-namespace-page.js';
+import { CRMNamespacePage } from './crm-namespace-page.js';
 import { CoreEvents } from '@platform/lib/events/index.js';
 import { CRM_NOTE_UPDATED, CRM_TASK_UPDATED } from '../events/types.js';
 import '@platform/lib/components/layout/page-header.js';

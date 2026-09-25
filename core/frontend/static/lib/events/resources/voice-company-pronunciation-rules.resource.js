@@ -21,14 +21,14 @@ function _normalizeRule(raw) {
     if (!raw || typeof raw !== 'object') {
         throw new Error('pronunciation_rules: rule object required');
     }
-    if (typeof raw.id !== 'string' || raw.id.length === 0) {
-        throw new Error('pronunciation_rules: id required');
+    if (typeof raw.pronunciation_rule_id !== 'string' || raw.pronunciation_rule_id.length === 0) {
+        throw new Error('pronunciation_rules: pronunciation_rule_id required');
     }
     if (!VALID_KINDS.includes(raw.kind)) {
         throw new Error(`pronunciation_rules: unknown kind ${raw.kind}`);
     }
     return {
-        id: raw.id,
+        pronunciation_rule_id: raw.pronunciation_rule_id,
         kind: raw.kind,
         pattern: typeof raw.pattern === 'string' ? raw.pattern : '',
         replacement: typeof raw.replacement === 'string' ? raw.replacement : '',

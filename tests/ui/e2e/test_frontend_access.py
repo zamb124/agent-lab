@@ -24,7 +24,7 @@ async def test_console_access_admin_sees_human_grant_and_why(
     frontend_ui: AppUI,
     ui_page_system: Page,
     ui_user_system: UiTestUser,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     user_id = ui_user_system.user_id
@@ -33,7 +33,7 @@ async def test_console_access_admin_sees_human_grant_and_why(
     company_id = ui_e2e_company_id()
     namespace = f"accessws_{unique_id}"
     obj = AuthzObject.platform_namespace(company_id, namespace)
-    await frontend_container.authz_service.write(
+    await frontend_di.authz_service.write(
         [
             AuthzTuple(
                 subject=AuthzSubject.user(user_id),

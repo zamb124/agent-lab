@@ -36,15 +36,15 @@ pytestmark = pytest.mark.timeout(60)
 
 @pytest.mark.asyncio
 async def test_handoff_wall_time_emitted_after_initiated(
-    container,
+    di,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     child_fid = f"handoff-child-{unique_id}"
     child_session_id = f"{child_fid}:ctx-{unique_id}"
-    await record_handoff_initiated(container.redis_client, child_session_id=child_session_id)
+    await record_handoff_initiated(di.redis_client, child_session_id=child_session_id)
     await maybe_record_handoff_wall_time(
-        container.redis_client,
+        di.redis_client,
         child_session_id=child_session_id,
         target_flow_id=child_fid,
         depth=1,
@@ -69,14 +69,14 @@ async def test_handoff_wall_time_emitted_after_initiated(
 @pytest.mark.asyncio
 async def test_hitl_operator_responded_emitted_on_resume(
     app,
-    container,
+    di,
     system_member_context,
     observability_caplog: pytest.LogCaptureFixture,
     unique_id: str,
 ) -> None:
     _ = app, system_member_context
     slug = f"hitl-metrics-{unique_id}"
-    await container.work_item_service.create_queue(
+    await di.work_item_service.create_queue(
         company_id="system",
         name="HITL metrics",
         slug=slug,
@@ -98,7 +98,7 @@ async def test_hitl_operator_responded_emitted_on_resume(
         node_id="h",
         tool_call_id=None,
     )
-    _cid, work_item_id = await container.hitl_work_item_service.register_handoff(
+    _cid, work_item_id = await di.node_constructor.hitl_work_item_service.register_handoff(
         state,
         question="Нужен оператор",
         task_title="Support",
@@ -108,7 +108,7 @@ async def test_hitl_operator_responded_emitted_on_resume(
     )
 
     await maybe_record_hitl_operator_response(
-        container.redis_client,
+        di.redis_client,
         work_item_id=work_item_id,
         queue_slug=slug,
         task_id=state.task_id,
@@ -135,10 +135,10 @@ async def test_hitl_operator_responded_emitted_on_resume(
 
 @pytest.mark.asyncio
 async def test_hitl_interrupt_timestamp_recorded_on_register(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     work_item_id = f"wi-{unique_id}"
-    await record_hitl_interrupt(container.redis_client, work_item_id=work_item_id)
-    raw = await container.redis_client.get(f"hitl_interrupt_ts:{work_item_id}")
+    await record_hitl_interrupt(di.redis_client, work_item_id=work_item_id)
+    raw = await di.redis_client.get(f"hitl_interrupt_ts:{work_item_id}")
     assert raw is not None

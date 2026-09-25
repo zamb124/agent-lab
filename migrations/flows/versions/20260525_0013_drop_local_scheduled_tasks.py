@@ -16,7 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Платформенный source of truth — core.db.models.platform.SchedulerTaskRecord
+    # Платформенный source of truth — core.scheduler.models.PlatformScheduledTask
     # (таблица scheduler_tasks в shared БД). Локальная проекция в flows БД больше
     # не нужна: ScheduleService и execute_scheduled_task работают напрямую через
     # core.scheduler.SchedulerTaskRepository.

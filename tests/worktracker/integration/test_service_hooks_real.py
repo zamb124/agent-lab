@@ -42,10 +42,12 @@ async def test_create_with_assignment_publishes_assigned_event(
     worktracker_service,
     platform_events_listener,
     unique_id: str,
+    di,
 ) -> None:
     _ = app, flows_service
     flow_id = f"flow_hook_{unique_id}"
     await provision_flow_employee_for_tests(
+        di=di,
         flow_id=flow_id,
         curator_user_id=f"cur_{unique_id}",
     )
@@ -66,7 +68,7 @@ async def test_create_with_assignment_publishes_assigned_event(
         # чисто доменное событие: без UI-доставки
         assert matched[0].get("delivery") is None
     finally:
-        await cleanup_flow_employee_for_tests(flow_id=flow_id)
+        await cleanup_flow_employee_for_tests(di=di,flow_id=flow_id)
 
 
 async def test_reassign_publishes_assigned_event(
@@ -75,10 +77,12 @@ async def test_reassign_publishes_assigned_event(
     worktracker_service,
     platform_events_listener,
     unique_id: str,
+    di,
 ) -> None:
     _ = app, flows_service
     flow_id = f"flow_re_{unique_id}"
     await provision_flow_employee_for_tests(
+        di=di,
         flow_id=flow_id,
         curator_user_id=f"cur_{unique_id}",
     )
@@ -99,4 +103,4 @@ async def test_reassign_publishes_assigned_event(
         matched = _assigned_events_for_item(events, item.work_item_id)
         assert matched, "ожидалось событие worktracker/work_item/assigned после reassign"
     finally:
-        await cleanup_flow_employee_for_tests(flow_id=flow_id)
+        await cleanup_flow_employee_for_tests(di=di,flow_id=flow_id)

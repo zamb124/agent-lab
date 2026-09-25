@@ -47,7 +47,7 @@ def test_build_raw_bytes() -> None:
 
 def test_unsupported_markdown_target() -> None:
     w = FileWriter()
-    with pytest.raises(FileWriteError, match="не поддерживается"):
+    with pytest.raises(FileWriteError, match="is not supported"):
         w.build_bytes("# x", "z.png", content_mode="markdown")
 
 

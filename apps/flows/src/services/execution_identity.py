@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.flow_config import FlowConfig
 from core.context.job_context import build_job_context
 from core.identity.flow_employee import flow_employee_user_id, is_flow_employee
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.flow_ui_share import FlowUIShareGrant
+from core.models.identity_models import User
 from core.types import JsonObject
 
 logger = get_logger(__name__)
@@ -42,7 +42,6 @@ def _employee_permission_groups(company_id: str, groups: list[str], roles: list[
 
 
 async def _share_owner_context(
-    container: FlowRuntimeContainer,
     *,
     share_grant: FlowUIShareGrant,
     visitor_context: Context,
@@ -55,7 +54,7 @@ async def _share_owner_context(
     company = visitor_context.active_company
     if company is None or company.company_id != share_grant.company_id:
         raise ValueError("share visitor context must carry the grant company")
-    owner = await container.user_repository.get(share_grant.created_by_user_id)
+    owner = await User.get(share_grant.created_by_user_id)
     if owner is None:
         raise ValueError(
             f"share grant {share_grant.grant_id} owner {share_grant.created_by_user_id} not found"
@@ -81,7 +80,6 @@ async def _share_owner_context(
 
 
 async def resolve_execution_context(
-    container: FlowRuntimeContainer,
     *,
     flow_config: FlowConfig,
     initiator_context: Context,
@@ -91,7 +89,7 @@ async def resolve_execution_context(
     actor_context = initiator_context
     if share_grant is not None:
         actor_context = await _share_owner_context(
-            container, share_grant=share_grant, visitor_context=initiator_context
+            share_grant=share_grant, visitor_context=initiator_context
         )
     initiator_user_id = actor_context.user.user_id
     if not flow_config.employee.enabled:
@@ -108,7 +106,7 @@ async def resolve_execution_context(
         )
 
     employee_user_id = flow_employee_user_id(flow_config.flow_id)
-    user = await container.user_repository.get(employee_user_id)
+    user = await User.get(employee_user_id)
     if user is None:
         raise ValueError(
             f"resolve_execution_context: flow employee user {employee_user_id} not provisioned"

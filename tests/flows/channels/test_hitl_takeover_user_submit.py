@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
-from core.worktracker.models import WorkItemState
+from core.worktracker.models import WorkItem, WorkItemState
 from tests.flows._a2a_v1 import A2A_HEADERS, SEND_MESSAGE, a2a_rpc, a2a_text_message
 from tests.flows._flow_ui_session import a2a_send, ui_action_message
 from tests.flows.a2a_conformance.helpers.flows import delete_flow
@@ -74,17 +74,17 @@ async def _create_hitl_flow(
 
 async def test_a2a_user_message_appends_during_hitl_takeover(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     flow_id = f"hitl_takeover_{unique_id}"
     parked = await park_hitl_session(
-        container,
+        di,
         unique_id,
         mode=HandoffMode.TAKEOVER,
         owner_user_id=system_user_id,
@@ -124,9 +124,9 @@ async def test_a2a_user_message_appends_during_hitl_takeover(
     user_turns = [t for t in snapshot.json()["turns"] if t["role"] == "user"]
     assert any(t["text"] == text for t in user_turns)
 
-    item = await container.work_item_service.get("system", parked.work_item_id)
+    item = await WorkItem.require_in_company("system", parked.work_item_id)
     assert item.state is WorkItemState.OPEN
-    state = await container.workflow_runtime.get_state(parked.session_id)
+    state = await di.workflow_runtime.get_state(parked.session_id)
     assert state is not None
     assert state.interrupt is not None
     assert isinstance(state.interrupt.body, OperatorTaskInterrupt)
@@ -135,17 +135,17 @@ async def test_a2a_user_message_appends_during_hitl_takeover(
 
 async def test_ui_action_appends_during_hitl_takeover(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     flow_id = f"hitl_ui_takeover_{unique_id}"
     parked = await park_hitl_session(
-        container,
+        di,
         unique_id,
         mode=HandoffMode.TAKEOVER,
         owner_user_id=system_user_id,
@@ -177,9 +177,9 @@ async def test_ui_action_appends_during_hitl_takeover(
         assert snapshot.status_code == 200, snapshot.text
         user_turns = [t for t in snapshot.json()["turns"] if t["role"] == "user"]
         assert any("send" in t["text"] for t in user_turns)
-        item = await container.work_item_service.get("system", parked.work_item_id)
+        item = await WorkItem.require_in_company("system", parked.work_item_id)
         assert item.state is WorkItemState.OPEN
-        state = await container.workflow_runtime.get_state(parked.session_id)
+        state = await di.workflow_runtime.get_state(parked.session_id)
         assert state is not None
         assert state.interrupt is not None
     finally:

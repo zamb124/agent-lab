@@ -7,8 +7,7 @@ import io
 import zipfile
 from datetime import UTC, datetime, timedelta
 
-from apps.search.db.crawl_repositories import CrawlDomainRepository
-from core.crawl.models import CrawlDomainSeed, SeedImportResult
+from core.crawl.models import CrawlDomain, CrawlDomainSeed, SeedImportResult
 from core.http import get_httpx_client
 from core.http.client import SmartProxyClient
 from core.types import JsonObject, parse_json_object
@@ -85,7 +84,6 @@ def _matches_ru_filter(domain: str, *, ru_tlds: tuple[str, ...], com_whitelist: 
 async def import_tranco_domains(
     crawl_profile_id: str,
     *,
-    crawl_domain_repository: CrawlDomainRepository,
     limit: int,
     ru_com_whitelist: tuple[str, ...],
     skip_categories: tuple[str, ...],
@@ -137,7 +135,7 @@ async def import_tranco_domains(
             break
 
     next_crawl = datetime.now(UTC) + timedelta(minutes=5)
-    imported = await crawl_domain_repository.upsert_seed_batch(
+    imported = await CrawlDomain.upsert_seed_batch(
         crawl_profile_id,
         seeds,
         next_crawl_after=next_crawl,

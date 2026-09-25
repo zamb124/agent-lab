@@ -1,6 +1,6 @@
-"""`register_sync_ws_commands` регистрирует все sync-операции в core registry.
+"""Каталог SYNC_OPERATIONS регистрирует все sync-команды в core registry.
 
-Тест уровня unit, без БД и WS-сокета: вызываем регистратор и проверяем,
+Тест уровня unit, без БД и WS-сокета: вызываем `register_operations` и проверяем,
 что для каждого канонического WS-имени из `SYNC_OPERATIONS` есть handler.
 """
 
@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from apps.sync.realtime.command_router import SYNC_OPERATIONS, register_sync_ws_commands
+from apps.sync.di import SyncDi
+from apps.sync.realtime.command_router import SYNC_OPERATIONS
 from core.websocket import has_ws_command_handler, list_ws_command_types
+from core.websocket.operation import register_operations
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +29,7 @@ def _ensure_sync_handlers_registered() -> None:
     registered = set(list_ws_command_types())
     if expected.issubset(registered):
         return
-    register_sync_ws_commands()
+    register_operations(SYNC_OPERATIONS, SyncDi)
 
 
 def test_register_sync_ws_commands_registers_all_canonical_names() -> None:

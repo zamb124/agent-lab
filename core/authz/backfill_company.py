@@ -10,9 +10,8 @@ from typing import cast
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.factory import build_authz_service
 from core.config import get_settings
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.storage import Storage
 from core.logging import get_logger
+from core.models.identity_models import Company
 
 logger = get_logger(__name__)
 
@@ -25,10 +24,8 @@ async def backfill_company_members(*, limit: int | None = None) -> int:
     authz = build_authz_service()
     if not authz.enabled:
         raise RuntimeError("openfga.enabled must be true for company backfill")
-    storage = Storage(db_url=str(settings.database.shared_url))
-    company_repository = CompanyRepository(storage=storage)
     written = 0
-    companies = await company_repository.list(limit=10_000)
+    companies = await Company.list(limit=10_000)
     try:
         for company in companies:
             if limit is not None and written >= limit:

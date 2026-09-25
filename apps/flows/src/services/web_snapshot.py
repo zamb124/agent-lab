@@ -10,7 +10,7 @@ from typing import override
 from urllib.parse import urlparse
 
 from apps.flows.src.clients.mcp_client import get_mcp_client
-from apps.flows.src.container_state import require_current_container
+from apps.flows.src.models.mcp import MCPServerConfig
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
 from core.state import ExecutionState
@@ -106,7 +106,7 @@ async def _mcp_json(
     cleaned_server_id = server_id.strip()
     if cleaned_server_id == "":
         raise ValueError("server_id is required")
-    config = await require_current_container().mcp_server_repository.get(cleaned_server_id)
+    config = await MCPServerConfig.get(MCPServerConfig.row_id(cleaned_server_id))
     if config is None:
         raise ValueError(f"MCP server not found: {cleaned_server_id}")
     client = await get_mcp_client(

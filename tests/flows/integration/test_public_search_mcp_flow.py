@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 
+from apps.flows.src.models import ToolReference
+from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.services.flows_loader import FlowsLoader
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.tools.builtin_specs import builtin_tool_ids
@@ -32,7 +34,7 @@ _FLOWS_REGISTRY_PATH = _FLOWS_BUNDLES_DIR.parent / "registry.yaml"
 
 
 @pytest.fixture(autouse=True)
-async def _reload_public_search_bundle(container, app) -> None:
+async def _reload_public_search_bundle(di, app) -> None:
     """Подтягивает актуальный public_search/flow.json в БД (research/tools contract)."""
     _ = app
     from core.context import get_context, set_context
@@ -53,11 +55,8 @@ async def _reload_public_search_bundle(container, app) -> None:
     try:
         loader = FlowsLoader(
             bundles_dir=_FLOWS_BUNDLES_DIR,
-            flow_repository=container.flow_repository,
-            node_repository=container.node_repository,
-            tool_repository=container.tool_repository,
             registry_path=_FLOWS_REGISTRY_PATH,
-            flow_access_service=container.flow_access_service,
+            flow_access_service=di.flow_access_service,
         )
         loaded = await loader.reload_flow_bundle("public_search")
         if loaded != "public_search":
@@ -281,7 +280,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     enable_serp_rerank,
     auth_headers_system,
     client,
-    container,
+    di,
     mock_llm_redis,
     mock_llm_capture,
     unique_id,
@@ -305,10 +304,10 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
             }
         ]
     )
-    search_mcp_server = await container.mcp_server_repository.get("search")
+    search_mcp_server = await MCPServerConfig.get(MCPServerConfig.row_id("search"))
     assert search_mcp_server is not None
     synced_tool_ids, _ = await sync_mcp_server_tools(
-        container=container,
+        di=di,
         server_config=search_mcp_server,
     )
     assert set(synced_tool_ids) >= {
@@ -351,7 +350,7 @@ async def test_public_search_flow_calls_search_mcp_without_monkeypatches(
     assert search_artifact["result_insights"]
 
     for tool_name in ["meta_web_search", "search_suggest", "search_result_insights"]:
-        tool_ref = await container.tool_repository.get(mcp_tool_reference_id("search", tool_name))
+        tool_ref = await ToolReference.get(mcp_tool_reference_id("search", tool_name))
         assert tool_ref is not None
         assert tool_ref.mcp_server_id == "search"
         assert tool_ref.mcp_tool_name == tool_name
@@ -596,12 +595,12 @@ async def test_public_search_with_file_reads_file_before_search(
 @pytest.mark.timeout(180, func_only=True)
 async def test_public_search_source_branch_calls_browser_tool_without_builtin_bypass(
     client,
-    container,
+    di,
     mock_llm_redis,
     mock_llm_capture,
     unique_id,
 ) -> None:
-    tool_ref = await container.tool_repository.get("browser_page_markdown")
+    tool_ref = await ToolReference.get("browser_page_markdown")
     assert tool_ref is not None
     assert "tools.call_builtin" not in (tool_ref.code or "")
 
@@ -737,7 +736,7 @@ async def test_public_search_research_branch_runs_agentic_loop(
     provider_litserve_service,
     auth_headers_system,
     client,
-    container,
+    di,
     mock_llm_redis,
     mock_llm_capture,
     unique_id,

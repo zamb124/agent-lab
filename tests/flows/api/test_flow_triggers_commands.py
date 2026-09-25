@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.operations import FlowsFlowIdPayload
 from apps.flows.realtime.trigger_operations import (
     op_flows_platform_events_catalog,
@@ -16,7 +17,6 @@ from apps.flows.realtime.trigger_operations import (
     op_flows_triggers_list,
     op_flows_triggers_remove,
 )
-from apps.flows.src.container import FlowContainer
 from apps.flows.src.models import TriggerType
 from apps.flows.src.models.trigger_config import (
     TriggerCreatePayload,
@@ -64,7 +64,7 @@ def _system_scope(system_user_id: str) -> Generator[User]:
 
 async def test_triggers_list_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -86,14 +86,14 @@ async def test_triggers_list_rest_and_op_share_payload(
         listed = await op_flows_triggers_list(
             FlowsFlowIdPayload(flow_id=flow_id),
             user=user,
-            container=container,
+            di=di,
         )
     assert listed.model_dump(mode="json") == http_resp.json()
 
 
 async def test_triggers_create_get_remove_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     unique_id: str,
     system_user_id: str,
     auth_headers_system: dict[str, str],
@@ -135,7 +135,7 @@ async def test_triggers_create_get_remove_rest_and_op_share_payload(
         op_item = await op_flows_triggers_item(
             TriggerFlowIdPayload(flow_id=flow_id, trigger_id="wh_cmd"),
             user=user,
-            container=container,
+            di=di,
         )
     assert op_item.model_dump(mode="json") == http_get.json()
 
@@ -155,12 +155,12 @@ async def test_triggers_create_get_remove_rest_and_op_share_payload(
     )
     with _system_scope(system_user_id) as user:
         created_op = await op_flows_triggers_create(
-            op_create_body, user=user, container=container
+            op_create_body, user=user, di=di
         )
         removed = await op_flows_triggers_remove(
             TriggerFlowIdPayload(flow_id=flow_id, trigger_id="wh_cmd_op"),
             user=user,
-            container=container,
+            di=di,
         )
     assert created_op.trigger_id == "wh_cmd_op"
     assert removed.model_dump(mode="json") == {"status": "deleted", "trigger_id": "wh_cmd_op"}
@@ -168,7 +168,7 @@ async def test_triggers_create_get_remove_rest_and_op_share_payload(
 
 async def test_platform_events_catalog_rest_and_op_share_payload(
     client: AsyncClient,
-    container: FlowContainer,
+    di: FlowsDi,
     system_user_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -182,6 +182,6 @@ async def test_platform_events_catalog_rest_and_op_share_payload(
         catalog = await op_flows_platform_events_catalog(
             EmptyPayload(),
             user=user,
-            container=container,
+            di=di,
         )
     assert catalog.model_dump(mode="json") == http_resp.json()

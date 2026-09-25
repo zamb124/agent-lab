@@ -4,7 +4,7 @@ Smoke тесты для быстрой проверки работоспособ
 Минимальный набор тестов для проверки что:
 - Сервисы поднимаются
 - Базовые endpoint работают
-- Контейнеры корректно настроены
+- DI процесса flows собран
 """
 
 import pytest
@@ -29,21 +29,16 @@ async def test_frontend_service_health(frontend_client):
 
 
 @pytest.mark.asyncio
-async def test_container_setup(container):
-    """Проверка что DI контейнер настроен корректно"""
-    assert container.flow_repository is not None
-    assert container.tool_repository is not None
-    assert container.node_repository is not None
-    assert container.company_repository is not None
-    assert container.user_repository is not None
-    assert container.subdomain_repository is not None
-    print("✅ Container: OK")
+async def test_flows_process_di(di):
+    """Процесс flows отдает собранный DI."""
+    assert di.redis_client is not None
+    assert di.authz_service is not None
 
 
 @pytest.mark.asyncio
-async def test_redis_connection(container):
+async def test_redis_connection(di):
     """Проверка подключения к Redis"""
-    redis = container.redis_client
+    redis = di.redis_client
 
     # Простой ping
     await redis.set("test_key", "test_value", ttl=60)
@@ -103,15 +98,15 @@ async def test_company_api_endpoint_exists(flows_client):
 
 
 @pytest.mark.asyncio
-async def test_service_client_available(container):
-    """Проверка что ServiceClient доступен через контейнер"""
+async def test_service_client_available(di):
+    """Проверка что ServiceClient доступен через DI"""
     from core.clients.service_client import ServiceClient
 
-    client = container.service_client
+    client = di.service_client
     assert isinstance(client, ServiceClient)
 
     # Проверяем что это один и тот же экземпляр (кэширование через @lazy)
-    client2 = container.service_client
+    client2 = di.service_client
     assert client is client2
 
     print("✅ ServiceClient: Available")

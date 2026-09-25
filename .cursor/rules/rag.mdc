@@ -1,168 +1,65 @@
 ---
-description: "RAG: провайдеры, namespaces, документы, pgvector, TTL, reembed"
-alwaysApply: false
+description: "RAG: pgvector/agentset, namespace = Namespace.name, index-file по file_id, гибридный поиск, RAGSearchOptions, реранк, TTL, reembed, RagClient. Читать при индексации и поиске"
 globs:
-  - "core/rag/**/*"
+  - "core/rag/**"
   - "core/clients/rag_client.py"
-  - "apps/rag/**/*"
-  - "tests/rag/**/*"
-  - "tests/core/rag/**/*"
+  - "apps/rag/**"
+  - "apps/rag_worker/**"
+  - "tests/rag/**"
+  - "tests/core/rag/**"
+alwaysApply: false
 ---
-# RAG (Retrieval-Augmented Generation)
 
-**Продуктовый статус:** отдельный Lara Tier-1 `rag-platform` и branch `rag` удалены; company knowledge в Lara идёт через `documents-platform` → `knowledge-rag`. Полный decommission сервиса `apps/rag` (API/UI/helm → Documents) — **отдельный эпик**; до него этот rule и `/rag/api/v1/` остаются каноном backend knowledge.
+# RAG
 
-Сервис документов и семантического поиска с провайдерами `pgvector` (PostgreSQL+pgvector) и `agentset` (внешний SaaS). Изоляция через namespaces, асинхронная индексация через TaskIQ, оригиналы файлов в S3/MinIO. Парсинг — канонический `FileReader.read(source, ReadFileArgs) → FileExtract` (hybrid PDF OCR / vision / STT); отдельного парсера в `core/rag` нет. Embeddings — OpenAI-compatible API; дефолт в Pydantic и продуктовом `conf.json` — **`provider_litserve`** с **Qwen3-Embedding-0.6B** и размерностью из `rag.embedding.api`; альтернатива — **`openrouter`** (`rag.embedding.base_url` или ключ из `llm`).
+Единственный семантический индекс платформы: чанки файлов и текста в pgvector (или внешний `agentset`), поиск по namespace. REST — `/rag/api/v1/`; парсинг — только `FileReader.read` (→ `files.mdc`); эмбеддинги и реранк — только `core.ai` (→ `ai_models.mdc`).
 
-Префикс REST: **`/rag/api/v1/`**. Структура: `apps/rag/{api,ui,realtime}` + `core/rag/{base_provider,factory,models,repository,providers,services,post_retrieval_rerank,rag_http_namespace_search,rag_resource_bind,constants}`.
+## Модель
 
-Команды с сессией — `RAG_OPERATIONS` / `op_*` (`apps/rag/realtime/`): REST и Centrifugo RPC `platform.event` зовут одну функцию. Загрузка байтов (`rag/document_upload`) остаётся HTTP: chunked Files API в WS RPC не укладывается. `namespace_id` в payload — `Namespace.name`; `PlatformEvent.meta.namespace` для RAG не задаёт каталог.
+- Таблицы `database.rag_url`: `VectorDocument` (чанк: `content`, `embedding vector(1024)`, `embedding_model`, `content_tsv`, `metadata`, `company_id`) и `DocumentProcessingStatus` (`document_id`, `status`, `ttl_seconds`, `error_message`) — `core/db/models/rag.py`; `RAGDocument`, `RAGSearchResult`, `RAGNamespace` собираются из чанков.
+- Каталог индекса — `namespace_id` = `Namespace.name` платформы (→ `namespace.mdc`); ключи `flow:{...}`, `{company_id}_{namespace}` запрещены.
+- Провайдер — `BaseRAGProvider` (`core/rag/base_provider.py`): namespaces, documents, `search`; реализации `core/rag/providers/{pgvector,agentset}_provider.py`; конструирование — только `get_rag_provider` (`rag.default_provider`); in-process id — `RAG_IN_PROCESS_PROVIDER_ID`.
+- `RAGSearchOptions` (`core/rag/models.py`: `channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `rerank_max_candidates`, `retrieval`, `freshness_weight`, `freshness_half_life_days`) — единый контракт опций поиска.
 
-## Authorization
+## Инварианты
 
-Namespace CRUD — `require_company_admin` / `require_can_view(company)`. Document/search paths — `require_can_view(AuthzObject.platform_namespace(...))`. Roster не PDP. Канон → **`authorization.mdc`**, **`namespace.mdc`**.
+1. Байты — только chunked Files API; индексация — `POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file` `{file_id, metadata?}` → 202 → `DocumentProcessingStatus` `pending` → TaskIQ по существующему объекту S3 → `completed`/`failed`; multipart в RAG запрещён.
+2. Мутации индекса — только воркер `rag_worker` (`apps/rag_worker/tasks/indexing_tasks.py`); синхронный парсинг в API запрещён; в индекс — только `RAG_INDEXABLE_FILE_CATEGORIES` (`core/rag/indexable.py`), остальное — skip, не `failed`.
+3. Доступ — `require_registered_rag_namespace` (`apps/rag/namespace_access.py`): Check `platform_namespace` (нет tuples — 403), затем существование (404); глобальный поиск — Check каждого `namespace_ids[i]`; CRUD namespace — `require_company_admin`/tenancy.
+4. Каждое поле `RAGSearchOptions` проходит все слои одним изменением: `rag_http_namespace_search.py`, `RAGNamespaceSearchRequest`/`RAGGlobalSearchRequest` + `op_search_*`, `RagClient.search`/`global_search`, provider, flows tool `rag_search`; дефолты — `resolve_platform_search_options` (`rag.document_indexing.search_defaults` + overrides вызова) во всех потребителях.
+5. Реранк после retrieve — только `apply_rerank_after_retrieve*` (`core/rag/post_retrieval_rerank.py`) с обязательным `RerankScoreCache` (Redis по `(model, query_hash, chunk_id)`); freshness переносится через `provenance.freshness_multiplier`.
+6. pgvector: чанкинг — `split_file_extract` по `IndexProfileConfig.split` (`auto`, `semantic` — Chonkie `RecursiveChunker`, `code` — tree-sitter); in-process `SemanticChunker`/`sentence_transformers`/torch в поде RAG запрещены. Поиск — semantic + FTS `content_tsv` через RRF, `SET hnsw.iterative_scan = relaxed_order`, freshness в обоих путях; векторы разных `embedding_model` не смешиваются; `query_instruction` — только для запроса.
+7. `agentset` не поддерживает freshness и lexical — явный `ValueError`.
+8. TTL: `metadata.ttl_seconds` (≥ 0, `0` — без очистки; по умолчанию `rag.ttl.default_ttl_seconds`, нормализация — `core/rag/ttl.py`); очистка — `rag_cleanup_expired_documents_tick`; CRM индексирует с `ttl_seconds: 0`.
+9. Reembed — единственная точка `execute_reembed_tick` (`core/rag/reembed_stale_documents.py`): stale-чанки по компаниям, проверка `company_may_incur_billable_operation_charge`, контекст владельца чанка (`build_job_context`), эмбеддинги через `core.ai.runtime`; TaskIQ-обёртки — один вызов; orphan-чанки без `company_id` удаляет `rag_cleanup_orphan_company_chunks_tick`.
+10. LLM context использует RAG адаптерами `RAGLLMContextSource` и `RAGLLMContextMemoryStore` (`core/rag/`), политика → опции — `rag_search_options_override_from_retrieval` (`core/llm_context/retrieval_rag_bridge.py`).
 
-## Контракт
+## Контракты
 
-- `core/rag/base_provider.py::BaseRAGProvider` — namespaces (`create/delete/list/get`), documents (`add/delete/list/get`), `search(query, namespace?, top_k, filters, **kwargs)`. Реализации: `core/rag/providers/{pgvector,agentset}_provider.py`.
-- **Пост-retrieval реранк (только pgvector):** `core/rag/post_retrieval_rerank.py` — `apply_rerank_after_retrieve`, `apply_rerank_after_retrieve_grouped`, `RerankerHTTPClient`. Вызывается после `search` в `op_search_namespace` / `op_search_global` и в CRM семантическом поиске сущностей. Дубли логики реранка в `apps/*` запрещены. CI: `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-rag-post-retrieval-rerank`, входит в `check-events-canon`).
-- **RerankScoreCache обязателен у каждого вызывающего реранк:** Redis-кэш скорингов по `(model, query_hash, chunk_id)` из `core/rag/post_retrieval_rerank.py::RerankScoreCache`. Контейнеры rag (`rerank_score_cache`) и crm передают его в `apply_rerank_after_retrieve*` через `score_cache=`. Новый вызывающий без кэша — нарушение единообразия. Freshness-сигнал переносится на rerank-скор через `provenance.freshness_multiplier`.
-- LLM context layer использует RAG через `core/rag/llm_context_source.py::RAGLLMContextSource` и память через `core/rag/llm_context_memory_store.py::RAGLLMContextMemoryStore`. Это адаптеры поверх существующего RAGRepository/search/rerank, не второй RAG-пайплайн.
-- **LLM context retrieval policy → RAGSearchOptions:** `core/llm_context/models.py::LLMContextRetrievalPolicy` хранит `mode`, `top_k`, `rerank`, `min_score`, `rrf_k`, `per_channel_top_k`, `rerank_max_candidates`, `freshness_weight`, `freshness_half_life_days`. Маппинг в RAG — единый bridge `core/llm_context/retrieval_rag_bridge.py::rag_search_options_override_from_retrieval`; используется в `core/rag/llm_context_source.py` и `core/llm_context/memory.py`. Итоговые опции — через `resolve_platform_search_options` с call-level overrides от bridge.
-- In-process идентификатор провайдера на контейнере (репозиторий, CRM rerank-guard): **`core/rag/constants.py::RAG_IN_PROCESS_PROVIDER_ID`** (должен совпадать с `BaseContainer.rag_repository` / pgvector).
-- **Единый контракт retrieval-опций:** источник — `core/rag/models.py::RAGSearchOptions` (`channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `rerank_max_candidates`, `retrieval`, `freshness_weight`, `freshness_half_life_days`). Каждое поле обязано проходить сквозь ВСЕ слои одинаково: `SEARCH_REQUEST_OPTION_KEYS`/body builder/merge (`rag_http_namespace_search.py`), `RAGNamespaceSearchRequest` / `RAGGlobalSearchRequest` + `op_search_*`, `RagClient.search`/`global_search`, `RAGRepository.search_namespace` (bind + call merge), flows tool `rag_search`. **Platform defaults** — `resolve_platform_search_options` (`core/rag/search_options_resolver.py`) из `rag.document_indexing.search_defaults` + call-level overrides; обязателен в RAG API, CRM in-process search, Office catalog search, LLM context/memory sources. Gate: `tests/core/rag/test_search_options_contract.py`, `tests/core/rag/test_search_options_resolver.py`. Добавил поле в `RAGSearchOptions` — обязан протянуть по всем слоям в том же изменении. Поле `retrieval` зарезервировано; реализация опций — только в `core/rag`.
-- **Freshness decay — в обоих путях pgvector:** `_freshness_score_and_provenance` применяется и в `_hybrid_search_rrf`, и в semantic-only `search()` (расширенный пул `limit*3` до среза). Возраст: `metadata.date_modified` → `date_published` → `created_at`; `freshness_relevance=evergreen` растягивает half-life в `FRESHNESS_EVERGREEN_HALF_LIFE_FACTOR` раз. Provenance: `freshness_multiplier`, `freshness_age_days`, `freshness_age_source`. `agentset` не поддерживает freshness/lexical и падает явным `ValueError` (без тихого игнорирования).
-- **Query instruction (asymmetric embeddings):** `rag.embedding.api.query_instruction` → `RagEmbeddingRuntime.query_instruction` → `PgVectorProvider._query_embedding_text` (`Instruct: …\nQuery: …`). Единственный путь конструирования провайдера — `get_rag_provider` (bundle cache учитывает `query_instruction`); документы индексируются без префикса.
-- Модели: `RAGDocument`, `RAGSearchResult`, `RAGNamespace` (Pydantic) + `VectorDocument`, `DocumentProcessingStatus` (SQLAlchemy в БД процесса RAG, `database.rag_url`).
+- Команды — `RAG_OPERATIONS` (`apps/rag/realtime/`); `rag/document_upload` — HTTP (chunked Files); `namespace_id` в payload — `Namespace.name`, `PlatformEvent.meta.namespace` каталог не задаёт.
+- Push `rag/document/status_updated` — статус индексации (UI `rag/document_status`, `rag/documents`, Office `office/documents`); снимок — `GET /rag/api/v1/documents/{document_id}/status`; HTTP poll запрещён.
+- Деиндексация без удаления файла — `DELETE .../documents/{document_id}/index` (`RagClient.delete_document_index`); полный `DELETE .../documents/{document_id}` удаляет `FileRecord` и S3.
+- `GET /rag/api/v1/search-defaults` — resolved platform defaults для UI.
 
-## Правила (обязательно)
+## Интеграции
 
-1. **Префикс** `/rag/api/v1/` — всегда. Без префикса — запрещено.
-2. **Загрузка байтов** — только Files chunked API (`/{svc}/api/v1/files/uploads*`); индексация — `POST .../documents/index-file` JSON `{ file_id, metadata? }`. Multipart FormData upload в RAG **запрещён**.
-3. **Каталог индекса = platform `Namespace.name`** (`namespace.mdc`): flows-ресурс `rag` биндится через `core/rag/rag_resource_bind.py::RagResourceBindParams.namespace`, peer-сервисы передают `namespace_id` явно. Составные ключи вида `f"flow:{...}"` / `{company_id}_{namespace}` запрещены.
-4. **Async-индексация** — mutating-операции в воркере через TaskIQ (`process_document_upload`, `index_rag_document_s3_task`, `delete_document_task` в `apps/rag_worker/tasks/indexing_tasks.py` и связанные задачи). Синхронный `parse_document` в API — запрещён. В индекс только категории из `core/rag/indexable.py::RAG_INDEXABLE_FILE_CATEGORIES`; `signature`/archive/unknown — skip (не `failed`).
-5. **Доступ к namespace** — `apps/rag/namespace_access.py::require_registered_rag_namespace`: сначала FGA `require_can_view(AuthzObject.platform_namespace(company_id, namespace_id))` (нет tuples → **403**, existence leak запрещён), затем `namespace_repository.get` (после успешного Check SQL missing → **404**). Для `POST /rag/api/v1/search` — тот же Check на каждый `namespace_ids[i]`.
-6. **Межсервисный клиент** — только `core/clients/rag_client.py::RagClient` (поверх `ServiceClient`): `create_namespace`, `ingest_text`, `index_file`, `delete_namespace_document`, `get_document_processing_status`, `get_documents_processing_statuses` (`POST /rag/api/v1/documents/statuses`), `search`, `global_search`. Не плодить `ServiceClient("rag", path=...)` в peer-сервисах в обход `RagClient`.
-7. **Flows resource `type: rag`** — bind к platform Namespace (`RagResourceBindParams`), не отдельный пайплайн; DX/runtime — `flows.mdc` § Resources.
-
-## TTL документов и retention
-
-- `metadata.ttl_seconds` (необяз.) при загрузке файла / `ingest-text`. Целое неотрицательное; `0` — индекс не удаляется фоновой очисткой.
-- Не передан — подставляется `rag.ttl.default_ttl_seconds` (шаблон 864000 = 10 суток).
-- Хранится в `document_processing_status.ttl_seconds` и дублируется в `vector_documents.metadata` каждого чанка.
-- Очистка — TaskIQ `rag_cleanup_expired_documents_tick` (очередь `rag`), планируется `scheduler` по `rag.ttl.cleanup_cron`; за тик не более `rag.ttl.cleanup_batch_size`. Отключение: `rag.ttl.cleanup_enabled: false`.
-- Контракт нормализации (валидация и дефолт) — `core/rag/ttl.py`.
-- **CRM при индексации в RAG всегда передаёт `ttl_seconds: 0`** (вложения и текст сущностей).
-
-## Перевекторизация (reembed)
-
-При смене модели эмбеддинга миграция обнуляет `embedding` (`ALTER COLUMN embedding TYPE vector(N) USING NULL`). Старые чанки временно недоступны (`embedding_model IS NULL`).
-
-- **Единственная точка входа** — `core/rag/reembed_stale_documents.py::execute_reembed_tick(*, container, channel, schedule_task_id)`. Берёт in-process pgvector через `get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID)`, `company_repository`/`user_repository` — из переданного контейнера (`BaseContainer`). Внутри: SELECT `fetch_stale_chunks_for_reembed(limit=rag.ttl.reembed_batch_size)` (фильтр `company_id IS NOT NULL AND != ''` — на стороне SQL), группировка по `company_id` (стабильный порядок), для каждой компании — тихая проверка баланса **`BillingService.company_may_incur_embedding_charge`** (без `notify_user`), `pick_company_billing_user` + `build_job_context` (`core/context/job_context.py`), один батч через `core.ai.runtime.embed_texts`/runtime embedding client + `write_reembed_chunk_embeddings`. Скип-группы (нет компании / низкий баланс / нет owner) остаются stale до следующего тика — без overscan и magic numbers.
-- **TaskIQ-обёртки** (`apps/crm_worker/tasks/reembed_tasks.py`, `apps/rag_worker/tasks/maintenance_tasks.py::rag_reembed_stale_documents_tick`) — тонкие, по 5 LOC: один вызов `execute_reembed_tick`. Глобальный системный `Context` вокруг тика не используется — биллинг и JWT соответствуют владельцу чанка.
-- **Orphan-чанки** (`company_id IS NULL`) reembed-тиком не обрабатываются (без owner биллинг и поиск по тенанту невозможны). Их удаляет отдельный TaskIQ `rag_cleanup_orphan_company_chunks_tick` пачками `rag.ttl.orphan_cleanup_batch_size` через `PgVectorProvider.delete_orphan_company_chunks`.
-- Конфиг `rag.ttl` (`RagTtlConfig`): `reembed_enabled` (default `true`), `reembed_cron` (default `"*/5 * * * *"`), `reembed_batch_size` (default 50, 1..2000), `orphan_cleanup_enabled` (default `true`), `orphan_cleanup_cron` (default `"*/15 * * * *"`), `orphan_cleanup_batch_size` (default 500, 1..5000). ENV: `RAG__TTL__REEMBED_*`, `RAG__TTL__ORPHAN_CLEANUP_*`.
-- Батчи не блокируют поиск.
-
-## Провайдеры
-
-**Два уровня:**
-- `rag.default_provider` — где хранится и ищется вектор: `pgvector` | `agentset`.
-- Embedding execution (только pgvector) — через `core.ai.runtime` / `AIEmbeddingClient` внутри `core.ai`. Модель, provider и размерность резолвятся как capability `AICapability.EMBEDDING`; pgvector не создаёт HTTP-клиент напрямую. Плейсхолдеры `YOUR_*_API_KEY` не используются. ENV остаётся для credentials/base URL: `RAG__EMBEDDING__BASE_URL`, `RAG__PROVIDERS__PGVECTOR__EMBEDDING_API_KEY`, `LLM__OPENROUTER__API_KEY`, `PROVIDER_LITSERVE__API__BASE_URL`.
-
-### `pgvector`
-
-- PostgreSQL + pgvector. Чанкинг — `split_file_extract` по `IndexProfileConfig.split` из канонического `FileExtract`. `auto`: CODE → structure если HEADING/FIGURE → TABLE → structure если NATIVE → recursive (docx с heading+table идёт в structure, xlsx без heading остаётся table). `split.strategy=semantic` — Chonkie `RecursiveChunker` (tiktoken `cl100k_base`) + `OverlapRefinery` при `chunk_overlap > 0`; in-process `chonkie.SemanticChunker` / `sentence_transformers` / torch в RAG-поде запрещены (эмбеддинги только `core.ai`). `split.strategy=code` — `core/rag/chunking/code_split.split_code_text` (`tree_sitter_language_pack.Parser.parse(str)`, packing по tiktoken `chunk_size`; язык — `chonkie_code_language` или суффикс файла при `auto`). Worker/API: `FileReader.configure_asset_persist(files_service)` + `ReadFileArgs(page_end=-1, persist_assets_namespace=namespace_id)`. `RAGSearchResult` — typed (`page_index`/`page_label`/`heading_trail`/`files`/`split`/`attributes`); поля `metadata` и `indexing_runtime` в результате поиска нет. Пустой page label в extract заполняется `page_{index+1}`.
-- Колонка `embedding_model` на чанке = активной модели; векторы разных моделей не смешиваются.
-- Колонка `embedding` — **`vector(1024)`** с индексом **`ix_vd_embedding_hnsw`** (cosine, `m = 16`, `ef_construction = 64`) при размерности, допустимой для HNSW в сборке pgvector. Перед запросом семантического поиска: **`SET hnsw.iterative_scan = relaxed_order`** (`PgVectorProvider`) для корректного объединения ANN с жёсткими фильтрами SQL.
-- **Гибридный поиск:** semantic + FTS по `content_tsv` (если в параметрах включены `semantic` и `lexical`) — два списка через RRF; полные строки — по id.
-- **`rag.embedding.api`**: полный выход модели (для Qwen3-Embedding-0.6B нативно 1024) и **`mrl_output_dimension`** (совпадает с **`dimension`** для хранения в колонке) — префикс нормализуется и сохраняется как плотный **1024**-мерный вектор; см. `core.ai.embedding_client`.
-- Ключи `conf.json`: `rag.enabled`, `rag.default_provider`, `rag.embedding.{model,dimension,base_url,mrl_output_dimension}`, `rag.providers.pgvector.{enabled,embedding_api_key,timeout}`. Нарезка — `rag.document_indexing.split`, не поля провайдера.
-
-### Операционные расширения (не в MVP код-пути)
-
-- **DiskANN** (Timescale pgvectorscale / Microsoft pg_diskann): при росте корпуса до десятков миллионов чанков и упора индекса HNSW в RAM Postgres — отдельная задача: образ Postgres с расширением, DDL индекса и возможная правка `PgVectorProvider`.
-- **Тип halfvec**: может уменьшить память строк и индекса после верификации связки образ Postgres / версия pgvector / тип SQLAlchemy.
-- **GraphRAG** (Apache AGE, Graphiti и др.): обход графа узлов и рёбер в Postgres не является текущим `apps/rag` пайплайном (чанки + pgvector + FTS); выносится в отдельный продуктовый эпик при появлении требований к топологии знаний.
-
-### `agentset`
-
-Внешний SaaS (`https://api.agentset.ai`), API-key. Конфиг: `rag.providers.agentset.{enabled,api_key,base_url}`.
-
-## Workflow загрузки
-
-1. Chunked Files upload → `FileRecord` (`/{svc}/api/v1/files/uploads*`).
-2. `POST /rag/api/v1/namespaces/{id}/documents/index-file` JSON `{ file_id, metadata? }` → **202**.
-3. `DocumentProcessingStatus.create(status="pending")`.
-4. TaskIQ `enqueue(RAG_INDEX_DOCUMENT_S3, …)` по уже существующему S3-объекту `FileRecord`.
-5. Worker: `FileReader.read` → чанкинг → embeddings → `vector_documents` → `status="completed"` (или `"failed"` с `error_message`).
-
-Статус индексации: push `rag/document/status_updated` → UI
-`rag/document_status` (`extraReducer`) и список `rag/documents`
-(`extraReducer` / `extraEffect`). Снимок — `GET /rag/api/v1/documents/{document_id}/status`.
-HTTP poll статуса удалён.
-
-## Inter-service
-
-`core/clients/rag_client.py::RagClient` — единственный канон обращения к RAG из других сервисов (`crm`/`flows`/`office`). Поверх `ServiceClient`. CRM `apps/crm/services/attachment_service.py` индексирует attachments через `FilesService.create` + `post_create.rag_index` или `RagClient.index_file`; ссылку (`document_id`) сохраняет в `entity.metadata.attachments[]`.
-
-### Index-file (внешний владелец байтов)
-
-Peer-сервис (Office и т.п.), у которого `FileRecord` уже в shared S3, индексирует через **`POST /rag/api/v1/namespaces/{namespace_id}/documents/index-file`** (`RagClient.index_file`). Worker — тот же `rag_index_document_s3`; новый S3-объект не создаётся. В metadata обязательны `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds` (Office — `0`).
-
-**Office catalog semantic search — слои overrides:** `office_document_catalogs.rag_index_search_options` (JSONB, partial `RAGSearchOptions`) задаёт per-catalog defaults в модалке RAG indexing; при `search_catalog` merge: **request > catalog > platform** (`merge_search_request_options` + `resolve_platform_search_options`). UI: `platform-rag-retrieval-panel` в `catalog-rag-modal`; explorer читает `rag_index_search_options` из list catalogs и передаёт в `office/catalog_rag_search`. **Platform defaults для UI placeholders:** `GET /rag/api/v1/search-defaults` (`resolve_platform_search_options`) и поле `platform_defaults` в `GET …/catalogs/{id}/rag-index/status`; панель показывает числа в `.placeholder` и resolved enum inherit labels (паттерн как `llm-context-editor`).
-
-Деиндексация без удаления файла — **`DELETE /rag/api/v1/namespaces/{namespace_id}/documents/{document_id}/index`** (`RagClient.delete_document_index`). Полный **`DELETE .../documents/{document_id}`** удаляет `FileRecord` + S3 — для Office **запрещён**; только index-only delete.
+- Peer-сервисы — только `RagClient` (`core/clients/rag_client.py`): `create_namespace`, `ingest_text`, `index_file`, `delete_document_index`, `get_documents_processing_statuses`, `search`, `global_search`; `ServiceClient("rag", ...)` в обход запрещён.
+- Index-file внешнего владельца байтов: metadata `document_id=file_id`, `company_id`, `uploaded_by_user_id`, `ttl_seconds`.
+- Flows-ресурс `rag` — bind к Namespace через `RagResourceBindParams` (`core/rag/rag_resource_bind.py`) → `flows.mdc` § Ресурсы; Office catalog index → `office.mdc`.
 
 ## UI
 
-Канон — `frontend.mdc` + `ui_factories.mdc` + `ui_components.mdc`. Сервис включён в `FACTORY_CANON_SERVICES`. Owner-фабрики — `@platform/lib/events/resources/rag-*.resource.js` (тот же объект регистрируют `RagApp` и flows editor). В pages/modals/components — только helpers (`useOp`/`useResource`/`useForm`/`openModal`/`navigate`/`toast`). Прямые импорты resource-объектов / `new XController` / `dispatch(CoreEvents.UI_*|ROUTER_*|AUTH_*|...)` — запрещены (CI).
+Фабрики — `@platform/lib/events/resources/rag-*.resource.js` (один объект у `RagApp` и редактора flows), `transport: 'ws'`, кроме `rag/document_upload`; маршруты `namespaces`, `namespace_detail`, `search`, `settings`; модалка `rag.namespace_create`; i18n-бандл `rag`.
 
-### Реестр фабрик (`RagApp.static factories`)
+## Запреты
 
-| Имя | Тип | Эндпоинт |
-|---|---|---|
-| `rag/providers` | `createAsyncOp` WS | `GET /rag/api/v1/providers` |
-| `rag/namespaces` | `createResourceCollection` WS (list/create/remove, idField=`name`) | `/rag/api/v1/namespaces` |
-| `rag/namespace_create_form` | `createForm` | submit → `rag/namespaces` CREATE_REQUESTED |
-| `rag/documents` | `createAsyncOp` WS | `GET /rag/api/v1/namespaces/:namespace_id/documents` |
-| `rag/document_upload` | `createAsyncOp` HTTP (chunked Files + index-file) | `uploadPlatformFile` → `POST /rag/api/v1/namespaces/:namespace_id/documents/index-file` |
-| `rag/document_remove` | `createAsyncOp` WS | `DELETE /rag/api/v1/namespaces/:namespace_id/documents/:document_id` |
-| `rag/document_status` | `createAsyncOp` WS + push `rag/document/status_updated` (`extraReducer`) | `GET /rag/api/v1/documents/:document_id/status` (снимок); poll удалён |
-| `rag/search` | `createAsyncOp` WS | `POST /rag/api/v1/namespaces/:namespace_id/search` |
-| `rag/search_defaults` | `createAsyncOp` WS | `GET /rag/api/v1/search-defaults` |
+1. Свой векторный пайплайн или парсер вне `core/rag` и `FileReader`.
+2. Дубли реранка в `apps/*`; вызов реранка без `RerankScoreCache`.
+3. Поле `RAGSearchOptions`, протянутое не во все слои.
+4. Полный delete документа для индекса каталога Office.
 
-`rag/documents/ingest_text_requested` остаётся в `RAG_OPERATIONS` и REST `POST .../ingest-text` для `RagClient`. UI-фабрики нет: страницы индексируют файлы через `rag/document_upload`.
+## Гейты
 
-`rag/document_upload.onSuccess` стартует `rag/document_status.REQUESTED` (снимок).
-Дальше статус приходит push'ем `rag/document/status_updated` в `extraReducer`.
-На `completed`/`failed` — `UI_TOAST_SHOW`. `namespace-page` через
-`useEvent('rag/document_status/succeeded')` перезагружает список документов.
-Office explorer слушает тот же push в `office/documents` (`rag_index_status`).
-
-### Маршруты (`createRouterEffect({ baseUrl: '/rag', routes })`)
-
-| `routeKey` | path |
-|---|---|
-| `namespaces` | `/rag` |
-| `namespace_detail` | `/rag/namespaces/:namespaceId` |
-| `search` | `/rag/search` |
-| `settings` | `/rag/settings` |
-
-Переход — `this.navigate(routeKey, params?)`. Хеш-роутинг (`#/...`) и `CustomEvent('navigate')` запрещены.
-
-### Модалки
-
-| `modalKind` | Файл | База |
-|---|---|---|
-| `rag.namespace_create` | `modals/namespace-create-modal.js` | `PlatformFormModal` |
-
-Открытие — `this.openModal('rag.namespace_create')`; закрытие — `closeAfterSave()` после `namespacesResource.events.CREATED`.
-
-### i18n
-
-Бандл — `core/i18n/translations/{ru,en}/rag.json`. Секции: `sidebar`, `namespace_list`, `namespace_detail`, `search_view`, `settings_view`, `namespace_create_modal`, `form`, `toast`. Toast-ключи фабрик (`toast.namespace_*`, `toast.document_*`, `toast.text_*`, `toast.search_failed`, `toast.provider_*`) парны: `make check-i18n` + `make check-i18n-keys --mode missing --strict --app rag`.
-
-## Тестирование
-
-`tests/rag/{test_documents_api,test_namespaces_api,test_providers_api,test_search_api}.py`. Live WS=REST identity — `tests/realtime/test_rag_commands.py` (Centrifugo `:19000` + Granian rag `:9002` + bus `:9025`). Реальная инфраструктура (PostgreSQL+pgvector, MinIO), `unique_id` для тестовых id. Фикстуры — `tests/conftest.py`. Подробности — `tests/rag/README.md`, `testing.mdc`.
+- `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-events-canon`) — одна реализация реранка.
+- `tests/core/rag/test_search_options_contract.py`, `tests/core/rag/test_search_options_resolver.py` — сквозной контракт опций.
+- `tests/realtime/test_rag_commands.py` — WS ≡ REST; `tests/rag/` — API на реальном pgvector и MinIO.

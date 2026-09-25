@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
+from apps.flows.di import Di
 from apps.flows.realtime.code_agent_operations import (
     op_flows_code_agent_copy_tree,
     op_flows_code_agent_delete,
@@ -14,7 +15,6 @@ from apps.flows.realtime.code_agent_operations import (
     op_flows_code_agent_rebuild,
     op_flows_code_agent_status,
 )
-from apps.flows.src.dependencies import ContainerDep
 from core.context import require_context
 from core.guest_runtime.models import (
     CodeAgentCopyTreeRequest,
@@ -40,13 +40,13 @@ router = APIRouter(tags=["code-agent"])
 async def ensure_code_agent_source(
     flow_id: str,
     node_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentEnsureSourceResponse:
     return await op_flows_code_agent_ensure_source(
         CodeAgentNodeRefPayload(flow_id=flow_id, node_id=node_id, branch_id=branch_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -58,13 +58,13 @@ async def import_code_agent_git(
     flow_id: str,
     node_id: str,
     body: CodeAgentImportGitRequest,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
     return await op_flows_code_agent_import_git(
         body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -76,13 +76,13 @@ async def import_code_agent_archive(
     flow_id: str,
     node_id: str,
     body: CodeAgentImportArchiveRequest,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
     return await op_flows_code_agent_import_archive(
         body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -94,13 +94,13 @@ async def copy_code_agent_tree(
     flow_id: str,
     node_id: str,
     body: CodeAgentCopyTreeRequest,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentEnsureSourceResponse:
     return await op_flows_code_agent_copy_tree(
         body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -112,13 +112,13 @@ async def rebuild_code_agent(
     flow_id: str,
     node_id: str,
     body: CodeAgentRebuildRequest,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> GuestRebuildResponse:
     return await op_flows_code_agent_rebuild(
         body.model_copy(update={"flow_id": flow_id, "node_id": node_id, "branch_id": branch_id}),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -129,13 +129,13 @@ async def rebuild_code_agent(
 async def code_agent_status(
     flow_id: str,
     node_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
 ) -> CodeAgentNodeStatusResponse:
     return await op_flows_code_agent_status(
         CodeAgentNodeRefPayload(flow_id=flow_id, node_id=node_id, branch_id=branch_id),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -146,7 +146,7 @@ async def code_agent_status(
 async def code_agent_logs(
     flow_id: str,
     node_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
     task_id: Annotated[str | None, Query()] = None,
     session_id: Annotated[str | None, Query()] = None,
@@ -162,7 +162,7 @@ async def code_agent_logs(
             context_id=context_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )
 
 
@@ -170,7 +170,7 @@ async def code_agent_logs(
 async def delete_code_agent_source(
     flow_id: str,
     node_id: str,
-    container: ContainerDep,
+    di: Di,
     branch_id: Annotated[str, Query()] = "default",
     catalog_id: Annotated[str | None, Query()] = None,
 ) -> None:
@@ -182,5 +182,5 @@ async def delete_code_agent_source(
             catalog_id=catalog_id,
         ),
         user=require_context().user,
-        container=container,
+        di=di,
     )

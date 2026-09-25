@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
-from apps.realtime.db.repository import PlatformEventLogRepository
+from oxyde.exceptions import IntegrityError
+
+from apps.realtime.db.models import PlatformEventLog
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
 from core.events.contract import (
@@ -23,6 +25,7 @@ from core.realtime.channels import centrifugo_channels_for_delivery, user_channe
 from core.realtime.command_owners import is_command_event_type, owner_service_for_event_type
 from core.realtime.models import BusProcessingState
 from core.types import JsonObject, require_json_object
+from core.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -30,12 +33,9 @@ _TERMINAL_FAILED_DETAIL = "deadline_exceeded"
 
 
 class RealtimeBusService:
-    def __init__(self, repository: PlatformEventLogRepository) -> None:
-        self._repository: PlatformEventLogRepository = repository
-
     async def ingest(self, event: PlatformEvent) -> PlatformEvent:
         _ = assert_platform_event_type(event.type)
-        existing = await self._repository.get(event.event_id)
+        existing = await self._event(event.event_id)
         if existing is not None:
             return existing
 
@@ -49,14 +49,14 @@ class RealtimeBusService:
                 seconds=get_settings().realtime.command_deadline_seconds
             )
 
-        inserted = await self._repository.insert_if_absent(
+        inserted = await self.insert_if_absent(
             event,
             processing_state=processing_state,
             owner_service=owner_service,
             deadline_at=deadline_at,
         )
         if not inserted:
-            stored = await self._repository.get(event.event_id)
+            stored = await self._event(event.event_id)
             if stored is None:
                 raise RuntimeError(f"platform_event_log race: missing {event.event_id}")
             return stored
@@ -70,38 +70,102 @@ class RealtimeBusService:
         return event
 
     async def get_event(self, event_id: str) -> PlatformEvent:
-        stored = await self._repository.get(event_id)
+        stored = await self._event(event_id)
         if stored is None:
             raise KeyError(event_id)
         return stored
 
     async def get_terminal_for_causation(self, causation_id: str) -> PlatformEvent:
-        stored = await self._repository.get_terminal_for_causation(causation_id)
+        stored = await self._terminal(causation_id)
         if stored is None:
             raise KeyError(causation_id)
         return stored
 
     async def sweep_expired_commands(self) -> int:
         now = datetime.now(timezone.utc)
-        expired = await self._repository.list_expired_commands(now=now, limit=100)
+        expired = await self._expired_commands(now=now, limit=100)
         swept = 0
         for command in expired:
-            if await self._repository.has_terminal_for_causation(command.event_id):
-                await self._repository.set_processing_state(
+            if await self._has_terminal(command.event_id):
+                await self._set_processing_state(
                     command.event_id, BusProcessingState.PUBLISHED
                 )
                 continue
             failed = _deadline_failed_event(command)
             _ = await self.ingest(failed)
-            await self._repository.set_processing_state(
+            await self._set_processing_state(
                 command.event_id, BusProcessingState.DEADLINE_EXCEEDED
             )
             swept += 1
         return swept
 
+    async def insert_if_absent(
+        self,
+        event: PlatformEvent,
+        *,
+        processing_state: BusProcessingState,
+        owner_service: str | None,
+        deadline_at: datetime | None,
+    ) -> bool:
+        delivery: JsonObject | None = None
+        if event.delivery is not None:
+            delivery = require_json_object(
+                event.delivery.model_dump(mode="json"),
+                "PlatformEvent.delivery",
+            )
+        now = utcnow()
+        row = PlatformEventLog(
+            event_id=event.event_id,
+            type=event.type,
+            company_id=event.company_id,
+            payload=event.payload,
+            meta=require_json_object(event.meta.model_dump(mode="json"), "PlatformEvent.meta"),
+            delivery=delivery,
+            processing_state=processing_state.value,
+            owner_service=owner_service,
+            causation_id=event.meta.causation_id,
+            deadline_at=deadline_at,
+            created_at=now,
+            updated_at=now,
+        )
+        try:
+            _ = await PlatformEventLog.create_platform_event_log(row)
+        except IntegrityError:
+            return False
+        return True
+
+    async def _event(self, event_id: str) -> PlatformEvent | None:
+        row = await PlatformEventLog.get(event_id)
+        if row is None:
+            return None
+        return row.platform_event()
+
+    async def _set_processing_state(self, event_id: str, processing_state: BusProcessingState) -> None:
+        row = await PlatformEventLog.get(event_id)
+        if row is None:
+            raise ValueError(f"platform_event_log row {event_id} not found")
+        row.processing_state = processing_state.value
+        row.updated_at = utcnow()
+        _ = await row.save()
+
+    async def _expired_commands(self, *, now: datetime, limit: int) -> list[PlatformEvent]:
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        rows = await PlatformEventLog.expired_command_logs(now=now, limit=limit)
+        return [row.platform_event() for row in rows]
+
+    async def _has_terminal(self, causation_id: str) -> bool:
+        return await PlatformEventLog.terminal_event_logs(causation_id).first() is not None
+
+    async def _terminal(self, causation_id: str) -> PlatformEvent | None:
+        row = await PlatformEventLog.terminal_event_logs(causation_id).order_by("-created_at").first()
+        if row is None:
+            return None
+        return row.platform_event()
+
     async def _dispatch_command(self, event: PlatformEvent) -> None:
         owner = owner_service_for_event_type(event.type)
-        await self._repository.set_processing_state(event.event_id, BusProcessingState.DISPATCHED)
+        await self._set_processing_state(event.event_id, BusProcessingState.DISPATCHED)
         client = ServiceClient()
         path = f"/{owner}/api/internal/realtime/command"
         try:
@@ -115,9 +179,7 @@ class RealtimeBusService:
             if exc.status_code is not None and 400 <= exc.status_code < 500:
                 failed = _owner_failed_event(event, exc)
                 _ = await self.ingest(failed)
-                await self._repository.set_processing_state(
-                    event.event_id, BusProcessingState.FAILED
-                )
+                await self._set_processing_state(event.event_id, BusProcessingState.FAILED)
                 return
             logger.error(
                 "realtime.command.dispatch_failed",

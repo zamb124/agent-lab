@@ -34,14 +34,14 @@ def _state_with(file_ref: FileRef) -> ExecutionState:
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_pdf_scanned_table_uses_hybrid_ocr(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "pdf/single_table.pdf")
     mock_llm_with_queue([_MOCK_VISION])
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
 
     payload = require_json_object(
@@ -62,13 +62,13 @@ async def test_read_file_pdf_scanned_table_uses_hybrid_ocr(
 @pytest.mark.timeout(300)
 @pytest.mark.usefixtures("file_reader_billing_service")
 async def test_read_file_pdf_text_only_stays_text_lane(
-    frontend_container,
+    frontend_di,
     unique_id: str,
     mock_llm_with_queue,
 ) -> None:
     require_s3_configured()
     entry = next(e for e in POSITIVE if e.relative_path == "pdf/DA-1p.pdf")
-    file_ref = await store_corpus_in_files_service(frontend_container, entry, unique_id=unique_id)
+    file_ref = await store_corpus_in_files_service(frontend_di, entry, unique_id=unique_id)
     state = _state_with(file_ref)
 
     payload = require_json_object(

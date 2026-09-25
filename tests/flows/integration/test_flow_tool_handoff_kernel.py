@@ -35,7 +35,7 @@ def _prepared_params(parent_flow_id: str, context_id: str) -> PreparedTaskParams
 
 @pytest.mark.asyncio
 async def test_flow_tool_wrapper_emits_typed_handoff_without_llm_or_test_double(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     child_flow_id = f"strict-child-{unique_id}"
@@ -46,7 +46,7 @@ async def test_flow_tool_wrapper_emits_typed_handoff_without_llm_or_test_double(
         call_type=NodeToolCallType.HANDOFF,
         name="Профильный консультант",
     )
-    tool = await container.tool_registry.materialize(ref)
+    tool = await di.tool_registry.materialize(ref)
     state = workflow_state(
         flow_id=f"strict-parent-{unique_id}",
         unique_id=unique_id,
@@ -67,12 +67,12 @@ async def test_flow_tool_wrapper_emits_typed_handoff_without_llm_or_test_double(
 
 @pytest.mark.asyncio
 async def test_handoff_kernel_creates_and_routes_real_child_state_without_test_doubles(
-    container,
+    di,
     unique_id: str,
 ) -> None:
     parent_flow_id = f"strict-parent-route-{unique_id}"
     child_flow_id = f"strict-child-route-{unique_id}"
-    await container.flow_repository.set(
+    await FlowConfig.create_version(
         FlowConfig(
             flow_id=child_flow_id,
             name="Профильный консультант",
@@ -102,7 +102,7 @@ async def test_handoff_kernel_creates_and_routes_real_child_state_without_test_d
     body = raised.value.body
     assert isinstance(body, HandoffInterrupt)
 
-    orchestrator = container.handoff_orchestrator_service
+    orchestrator = di.handoff_orchestrator_service
     validated = await orchestrator.validate_handoff_target(body)
     assert validated.target_name == "Профильный консультант"
     child_depth = orchestrator.assert_handoff_depth_allowed(parent_state)

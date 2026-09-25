@@ -7,7 +7,7 @@ import pytest
 from core.context import clear_context, get_context, set_context
 from core.models.context_models import Context
 from core.models.i18n_models import Language
-from core.models.identity_models import NamespaceKind
+from core.models.identity_models import Company, NamespaceKind, User
 from core.namespace import personal_namespace_name
 from tests.sync.api._helpers import seed_namespace_via_repo
 
@@ -19,19 +19,16 @@ async def test_sync_list_namespaces_excludes_personal_and_technical(
     sync_db_clean: None,
     company_id: str,
     unique_id: str,
+    sync_di,
 ) -> None:
-    from apps.frontend.container import get_frontend_container
-    from apps.sync.container import get_sync_container
-
-    frontend = get_frontend_container()
-    company = await frontend.company_repository.get(company_id)
+    company = await Company.get(company_id)
     assert company is not None
     owner_id = company.owner_user_id
-    owner = await frontend.user_repository.get(owner_id)
+    owner = await User.get(owner_id)
     assert owner is not None
 
     workspace = f"ws_sync_{unique_id}"
-    await seed_namespace_via_repo(company_id, workspace)
+    await seed_namespace_via_repo(sync_di, company_id, workspace)
 
     previous = get_context()
     set_context(
@@ -44,7 +41,7 @@ async def test_sync_list_namespaces_excludes_personal_and_technical(
         )
     )
     try:
-        sync_ns = get_sync_container().namespace_service
+        sync_ns = sync_di.namespace_service
         _ = await sync_ns.ensure_personal_namespace(
             owner_id, display_name=owner.name
         )

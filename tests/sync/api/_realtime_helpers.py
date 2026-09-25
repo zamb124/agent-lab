@@ -13,7 +13,6 @@ from typing import Any, AsyncIterator
 
 from httpx import AsyncClient
 
-from apps.sync.container import get_sync_container
 from core.authz.company_sync import sync_company_member_roles
 from core.models.identity_models import Company, User
 from core.realtime.presence import is_user_connected
@@ -159,8 +158,10 @@ async def add_third_user(
     """Создаёт третьего пользователя в shared, dual-write membership в OpenFGA,
     возвращает свежий JWT токен.
     """
-    container = get_sync_container()
-    company = await container.company_repository.get(company_id)
+    from tests.sync.conftest import require_sync_di
+
+    di = require_sync_di()
+    company = await Company.get(company_id)
     if company is None:
         raise AssertionError(
             f"add_third_user: company {company_id!r} ещё не создана; "
@@ -175,7 +176,7 @@ async def add_third_user(
         members=members,
         balance=company.balance,
     )
-    await container.company_repository.set(updated_company)
+    await Company.set(updated_company)
     user = User(
         user_id=user_id,
         name=name,
@@ -183,9 +184,9 @@ async def add_third_user(
         companies={company_id: ["member"]},
         active_company_id=company_id,
     )
-    await container.user_repository.set(user)
+    await User.set(user)
     await sync_company_member_roles(
-        container.authz_service,
+        di.authz_service,
         company_id=company_id,
         user_id=user_id,
         roles=["member"],

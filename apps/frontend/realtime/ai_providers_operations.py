@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import Field, ValidationError
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from apps.frontend.models import (
     AIProvidersCapabilityUpdate,
     CustomProviderCreate,
@@ -31,6 +31,7 @@ from core.ai.company_settings import (
     platform_default_provider_for_capability,
 )
 from core.ai.free_pool import read_humanitec_llms_model_options
+from core.ai.models import AIModelRecord
 from core.ai.providers import (
     HUMANITEC_LLM_PROVIDER,
     LLM_CAPABILITIES,
@@ -98,8 +99,8 @@ class CustomProviderCreated(AIProvidersMutationResult):
     id: str
 
 
-async def _require_admin_company(container: FrontendContainer) -> Company:
-    _ = await require_company_admin(container.authz_service)
+async def _require_admin_company(di: Di) -> Company:
+    _ = await require_company_admin(di.authz_service)
     return require_active_company()
 
 
@@ -112,7 +113,6 @@ def _load_aip(company: Company) -> CompanyAIProviders:
 
 async def _save_aip(
     company: Company,
-    container: FrontendContainer,
     aip: CompanyAIProviders,
 ) -> None:
     metadata = dict(company.metadata)
@@ -122,7 +122,7 @@ async def _save_aip(
     else:
         _ = metadata.pop(METADATA_KEY, None)
     company.metadata = metadata
-    _ = await container.company_repository.set(company)
+    _ = await Company.set(company)
 
 
 def _capability_from_payload(capability: str) -> AICapability:
@@ -375,14 +375,14 @@ def _provider_catalog(
     return catalog
 
 
-async def _provider_model_options(container: FrontendContainer) -> dict[str, dict[str, list[JsonObject]]]:
+async def _provider_model_options() -> dict[str, dict[str, list[JsonObject]]]:
     options: dict[str, dict[str, list[JsonObject]]] = {}
     for cap in (*_LLM_CAPABILITIES, AICapability.RERANK):
         capability_options: dict[str, list[JsonObject]] = {}
         for spec in platform_provider_specs_for_capability(cap):
             if spec.kind != "platform":
                 continue
-            rows = await container.ai_model_catalog_repository.list_by_provider_capability(
+            rows = await AIModelRecord.list_by_provider_capability(
                 spec.provider,
                 cap,
             )
@@ -401,13 +401,13 @@ async def _provider_model_options(container: FrontendContainer) -> dict[str, dic
     return options
 
 
-async def _embedding_model_options(container: FrontendContainer) -> dict[str, list[JsonObject]]:
+async def _embedding_model_options() -> dict[str, list[JsonObject]]:
     settings = get_settings()
     storage_dimension = settings.rag.embedding.api.dimension
     options: dict[str, list[JsonObject]] = {}
     for spec in platform_provider_specs_for_capability(AICapability.EMBEDDING):
         provider_options: list[JsonObject] = []
-        rows = await container.ai_model_catalog_repository.list_by_provider_capability(
+        rows = await AIModelRecord.list_by_provider_capability(
             spec.provider,
             AICapability.EMBEDDING,
         )
@@ -493,7 +493,6 @@ def _build_llm_override(capability: AICapability, payload: AIProvidersCapability
 
 async def _build_embedding_override(
     payload: AIProvidersCapabilityUpdate,
-    container: FrontendContainer,
 ) -> CompanyEmbeddingOverride:
     if payload.provider is None:
         raise_invalid(ValueError("capability embedding: provider is required"))
@@ -511,7 +510,7 @@ async def _build_embedding_override(
         dimension = payload.dimension
         mrl_output_dimension = payload.mrl_output_dimension
     else:
-        catalog_model = await container.ai_model_catalog_repository.get_provider_model(
+        catalog_model = await AIModelRecord.get_provider_model(
             provider,
             model,
         )
@@ -555,7 +554,6 @@ async def _build_embedding_override(
 
 async def _build_rerank_override(
     payload: AIProvidersCapabilityUpdate,
-    container: FrontendContainer,
 ) -> CompanyRerankOverride:
     if payload.enabled is False:
         return CompanyRerankOverride(enabled=False)
@@ -567,7 +565,7 @@ async def _build_rerank_override(
         _ = validate_platform_provider_for_capability(provider, AICapability.RERANK)
         if not model:
             raise_invalid(ValueError("capability rerank: model is required"))
-        catalog_model = await container.ai_model_catalog_repository.get_provider_model(
+        catalog_model = await AIModelRecord.get_provider_model(
             provider,
             model,
         )
@@ -676,14 +674,14 @@ def _validated_ai_providers(aip: CompanyAIProviders) -> CompanyAIProviders:
 
 
 async def op_ai_providers_snapshot(
-    payload: AIProvidersSnapshotPayload, *, user: User, container: FrontendContainer
+    payload: AIProvidersSnapshotPayload, *, user: User, di: Di
 ) -> JsonObject:
     """Снимок: capabilities + custom-провайдеры + каталог селектора + LLM-контекст."""
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     brand = _resolve_brand_for_ai_providers(payload.public_host)
-    humanitec_llms_models = await read_humanitec_llms_model_options(container.redis_client)
+    humanitec_llms_models = await read_humanitec_llms_model_options(di.redis_client)
     return {
         "capabilities": _public_capabilities(aip),
         "custom_providers": [_custom_provider_to_public(p) for p in aip.custom_providers],
@@ -691,8 +689,8 @@ async def op_ai_providers_snapshot(
             aip,
             brand=brand,
             humanitec_llms_models=humanitec_llms_models,
-            provider_models=await _provider_model_options(container),
-            embedding_models=await _embedding_model_options(container),
+            provider_models=await _provider_model_options(),
+            embedding_models=await _embedding_model_options(),
             voice_models=_voice_model_options(),
         ),
         "llm_context": _public_llm_context(aip),
@@ -700,10 +698,10 @@ async def op_ai_providers_snapshot(
 
 
 async def op_ai_providers_llm_context_update(
-    payload: LLMContextPatch, *, user: User, container: FrontendContainer
+    payload: LLMContextPatch, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     try:
         patch = LLMContextPatch.model_validate(
@@ -713,28 +711,28 @@ async def op_ai_providers_llm_context_update(
         updated_aip = _validated_ai_providers(aip.model_copy(update={"llm_context": patch}))
     except (ValueError, ValidationError) as exc:
         raise_invalid(exc)
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     logger.info("ai_providers.llm_context_updated", company_id=company.company_id)
     return AIProvidersMutationResult()
 
 
 async def op_ai_providers_llm_context_remove(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = payload, user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     updated_aip = _validated_ai_providers(aip.model_copy(update={"llm_context": None}))
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     logger.info("ai_providers.llm_context_removed", company_id=company.company_id)
     return AIProvidersMutationResult()
 
 
 async def op_ai_providers_capability_update(
-    payload: AIProvidersCapabilityPayload, *, user: User, container: FrontendContainer
+    payload: AIProvidersCapabilityPayload, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     cap = _capability_from_payload(payload.capability)
     aip = _load_aip(company)
     try:
@@ -743,9 +741,9 @@ async def op_ai_providers_capability_update(
                 CompanyLLMOverride | CompanyEmbeddingOverride | CompanyRerankOverride | CompanyVoiceOverride
             ) = _build_llm_override(cap, payload)
         elif cap == AICapability.EMBEDDING:
-            updated_override = await _build_embedding_override(payload, container)
+            updated_override = await _build_embedding_override(payload)
         elif cap == AICapability.RERANK:
-            updated_override = await _build_rerank_override(payload, container)
+            updated_override = await _build_rerank_override(payload)
         elif cap in _VOICE_CAPABILITIES:
             updated_override = _build_voice_override(cap, payload)
         else:
@@ -753,7 +751,7 @@ async def op_ai_providers_capability_update(
         updated_aip = _validated_ai_providers(aip.model_copy(update={cap.value: updated_override}))
     except (ValueError, ValidationError) as exc:
         raise_invalid(exc)
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     logger.info(
         "ai_providers.capability_updated",
         capability=payload.capability,
@@ -764,23 +762,23 @@ async def op_ai_providers_capability_update(
 
 
 async def op_ai_providers_capability_remove(
-    payload: AIProvidersCapabilityIdPayload, *, user: User, container: FrontendContainer
+    payload: AIProvidersCapabilityIdPayload, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     cap = _capability_from_payload(payload.capability)
     aip = _load_aip(company)
     updated_aip = _validated_ai_providers(aip.model_copy(update={cap.value: None}))
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     logger.info("ai_providers.capability_removed", capability=payload.capability, company_id=company.company_id)
     return AIProvidersMutationResult()
 
 
 async def op_ai_providers_custom_create(
-    payload: CustomProviderCreate, *, user: User, container: FrontendContainer
+    payload: CustomProviderCreate, *, user: User, di: Di
 ) -> CustomProviderCreated:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     if any(p.id == payload.id for p in aip.custom_providers):
         raise_invalid(ValueError(f"custom provider {payload.id!r} already exists"))
@@ -801,15 +799,15 @@ async def op_ai_providers_custom_create(
         )
     except (ValueError, ValidationError) as exc:
         raise_invalid(exc)
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     return CustomProviderCreated(id=built_provider.id)
 
 
 async def op_ai_providers_custom_update(
-    payload: CustomProviderUpdatePayload, *, user: User, container: FrontendContainer
+    payload: CustomProviderUpdatePayload, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     try:
         existing = aip.find_custom(payload.provider_id)
@@ -844,15 +842,15 @@ async def op_ai_providers_custom_update(
         updated_aip = _validated_ai_providers(aip.model_copy(update={"custom_providers": updated_providers}))
     except (ValueError, ValidationError) as exc:
         raise_invalid(exc)
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     return AIProvidersMutationResult()
 
 
 async def op_ai_providers_custom_remove(
-    payload: CustomProviderIdPayload, *, user: User, container: FrontendContainer
+    payload: CustomProviderIdPayload, *, user: User, di: Di
 ) -> AIProvidersMutationResult:
     _ = user
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     aip = _load_aip(company)
     if not any(p.id == payload.provider_id for p in aip.custom_providers):
         raise PlatformNotFoundError(f"custom provider {payload.provider_id!r} not found", error_code='not_found')
@@ -879,16 +877,16 @@ async def op_ai_providers_custom_remove(
         )
     updated_providers = [p for p in aip.custom_providers if p.id != payload.provider_id]
     updated_aip = _validated_ai_providers(aip.model_copy(update={"custom_providers": updated_providers}))
-    await _save_aip(company, container, updated_aip)
+    await _save_aip(company, updated_aip)
     return AIProvidersMutationResult()
 
 
 async def op_ai_providers_resolved(
-    payload: EmptyPayload, *, user: User, container: FrontendContainer
+    payload: EmptyPayload, *, user: User, di: Di
 ) -> JsonObject:
     """Диагностика: что резолвится для текущей компании по всем capabilities."""
     _ = payload
-    company = await _require_admin_company(container)
+    company = await _require_admin_company(di)
     context_token = set_context(Context(user=user, active_company=company, channel="settings_resolved"))
     try:
         items: list[JsonObject] = []

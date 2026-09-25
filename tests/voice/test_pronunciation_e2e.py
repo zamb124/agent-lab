@@ -32,7 +32,7 @@ def _compile_rules(rules: list[PronunciationRule]) -> CompiledPronunciation:
 
 def _rule(kind, pattern, replacement, **kwargs) -> PronunciationRule:
     return PronunciationRule(
-        id=str(uuid.uuid4()),
+        pronunciation_rule_id=str(uuid.uuid4()),
         kind=kind,
         pattern=pattern,
         replacement=replacement,

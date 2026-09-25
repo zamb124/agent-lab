@@ -9,7 +9,7 @@ from datetime import datetime
 
 from pydantic import Field
 
-from apps.frontend.container import FrontendContainer
+from apps.frontend.di import Di
 from apps.frontend.models import LeadRequestRecord
 from core.models import StrictBaseModel
 from core.models.identity_models import SYSTEM_COMPANY_ID, User
@@ -44,11 +44,11 @@ def _apply_cursor(records: list[LeadRequestRecord], cursor: str | None) -> list[
 
 
 async def op_lead_requests_list(
-    payload: LeadRequestsListPayload, *, user: User, container: FrontendContainer
+    payload: LeadRequestsListPayload, *, user: User, di: Di
 ) -> CursorPage[LeadRequestRecord]:
     _ = user
-    _ = await require_system_admin(container.authz_service)
-    raw_records = await container.shared_storage.get_all_by_prefix(
+    _ = await require_system_admin(di.authz_service)
+    raw_records = await di.shared_storage.get_all_by_prefix(
         REQUEST_STORAGE_PREFIX, limit=LEAD_REQUEST_SCAN_LIMIT, force_global=True
     )
     records = [LeadRequestRecord.model_validate_json(value) for value in raw_records.values()]

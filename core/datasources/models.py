@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
+from typing import ClassVar, Self, override
 
-from pydantic import Field, model_validator
+from oxyde import Field as DbField
+from oxyde import Index
+from pydantic import (
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from core.models.base import StrictBaseModel
-from core.types import JsonObject
+from core.models.platform_model import PlatformModel
+from core.types import JsonObject, require_serializer_json_object
 
 
 class DatasourceExecutorKind(StrEnum):
@@ -67,20 +77,57 @@ class DatasourceTestResult(StrictBaseModel):
     server_version: str | None = None
 
 
-class DatasourceConnectorSpec(StrictBaseModel):
-    connector_id: str = Field(min_length=1)
-    name: str = Field(min_length=1)
-    description: str
-    executor: DatasourceExecutorKind
-    icon: str = "database"
-    credential_schema: JsonObject
-    operations: list[DatasourceOperation] = Field(min_length=1)
-    mcp_server_id: str | None = None
-    mcp_introspect_tool: str | None = None
-    mcp_query_tool: str | None = None
-    mcp_execute_tool: str | None = None
-    flow_id: str | None = None
-    flow_branch_id: str = "default"
+
+def _datasource_required(value: str, field_name: str) -> str:
+    if value.strip() == "":
+        raise ValueError(f"{field_name} cannot be empty.")
+    return value
+
+class DatasourceConnectorSpec(PlatformModel):
+    """Коннектор компании. Таблица ``datasource_connectors``.
+
+    Каталог платформы — тот же класс без ``company_id`` и без сохранения.
+    ``__global_model__``: чтение идёт по явной компании.
+    """
+
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    datasource_connector_id: str = DbField(default="", db_pk=True)
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "datasource_connectors"
+        indexes: list[Index] = [Index(("company_id", "connector_id"), unique=True)]
+
+    connector_id: str = DbField(min_length=1, max_length=255)
+    name: str = DbField(min_length=1, max_length=255)
+    description: str = DbField(db_type="TEXT")
+    executor: DatasourceExecutorKind = DbField(max_length=32)
+    icon: str = DbField(default="database", max_length=64)
+    credential_schema: JsonObject = DbField(db_type="JSONB")
+    operations: list[DatasourceOperation] = DbField(min_length=1, db_type="JSONB")
+    mcp_server_id: str | None = DbField(default=None, max_length=255)
+    mcp_introspect_tool: str | None = DbField(default=None, max_length=255)
+    mcp_query_tool: str | None = DbField(default=None, max_length=255)
+    mcp_execute_tool: str | None = DbField(default=None, max_length=255)
+    flow_id: str | None = DbField(default=None, max_length=255)
+    flow_branch_id: str = DbField(default="default", max_length=255)
+    company_id: str | None = DbField(default=None, db_index=True, max_length=255)
+    owner_user_id: str | None = DbField(default=None, max_length=255)
+    created_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = is_create, update_fields
+        if self.company_id is None or self.company_id == "" or self.connector_id == "":
+            raise ValueError("company_id and connector_id are required")
+        if self.owner_user_id is None or self.owner_user_id == "":
+            raise ValueError("owner_user_id is required")
+        self.datasource_connector_id = f"{self.company_id}:{self.connector_id}"
+        self.updated_at = datetime.now(timezone.utc)
 
     @model_validator(mode="after")
     def validate_executor_binding(self) -> DatasourceConnectorSpec:
@@ -98,28 +145,159 @@ class DatasourceConnectorSpec(StrictBaseModel):
         return self
 
 
-class DatasourceConnection(StrictBaseModel):
-    datasource_id: str
-    company_id: str
-    connector_id: str
-    name: str
-    host: str | None = None
-    port: int | None = Field(default=None, ge=1, le=65535)
-    database_name: str | None = None
-    username: str | None = None
-    password_encrypted: str | None = Field(default=None, exclude=True)
-    ssl_mode: DatasourceSslMode = DatasourceSslMode.REQUIRE
-    allowed_operations: list[DatasourceSqlOperation] = Field(
-        default_factory=lambda: [DatasourceSqlOperation.SELECT]
+    @classmethod
+    async def by_connector_id(cls, company_id: str, connector_id: str) -> Self | None:
+        return await cls.objects.filter(
+            company_id=_datasource_required(company_id, "company_id"),
+            connector_id=_datasource_required(connector_id, "connector_id"),
+        ).get_or_none()
+
+    @classmethod
+    async def list_stamped_for_company(cls, company_id: str) -> list[Self]:
+        return await cls.objects.filter(
+            company_id=_datasource_required(company_id, "company_id"),
+        ).order_by("name", "connector_id").all()
+
+    @classmethod
+    async def upsert_by_connector_id(
+        cls,
+        company_id: str,
+        spec: Self,
+        *,
+        owner_user_id: str,
+    ) -> Self:
+        company_id = _datasource_required(company_id, "company_id")
+        owner_user_id = _datasource_required(owner_user_id, "owner_user_id")
+        existing = await cls.objects.filter(
+            company_id=company_id,
+            connector_id=spec.connector_id,
+        ).get_or_none()
+        now = datetime.now(timezone.utc)
+        if existing is None:
+            created = spec.model_copy(
+                update={
+                    "company_id": company_id,
+                    "owner_user_id": owner_user_id,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+            return await cls.objects.create(instance=created)
+        existing.name = spec.name
+        existing.description = spec.description
+        existing.executor = spec.executor
+        existing.icon = spec.icon
+        existing.credential_schema = spec.credential_schema
+        existing.operations = spec.operations
+        existing.mcp_server_id = spec.mcp_server_id
+        existing.mcp_introspect_tool = spec.mcp_introspect_tool
+        existing.mcp_query_tool = spec.mcp_query_tool
+        existing.mcp_execute_tool = spec.mcp_execute_tool
+        existing.flow_id = spec.flow_id
+        existing.flow_branch_id = spec.flow_branch_id
+        existing.updated_at = now
+        _ = await existing.save()
+        return existing
+
+
+
+class DatasourceConnection(PlatformModel):
+    """Подключение к внешней базе. Таблица ``datasource_connections``. ``password_encrypted`` в JSON не отдаётся."""
+
+    __database_alias__: ClassVar[str | None] = "shared"
+    __global_model__: ClassVar[bool] = True
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    datasource_id: str = DbField(db_pk=True, max_length=255)
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "datasource_connections"
+        indexes: list[Index] = [
+            Index(("company_id", "name"), unique=True),
+            Index(("company_id", "connector_id")),
+        ]
+
+    company_id: str = DbField(db_index=True, max_length=255)
+    connector_id: str = DbField(max_length=255)
+    name: str = DbField(max_length=255)
+    host: str | None = DbField(default=None, max_length=255)
+    port: int | None = DbField(default=None, ge=1, le=65535)
+    database_name: str | None = DbField(default=None, max_length=255)
+    username: str | None = DbField(default=None, max_length=255)
+    password_encrypted: str | None = DbField(default=None, db_type="TEXT")
+    ssl_mode: DatasourceSslMode = DbField(default=DatasourceSslMode.REQUIRE, max_length=32)
+    allowed_operations: list[DatasourceSqlOperation] = DbField(
+        default_factory=lambda: [DatasourceSqlOperation.SELECT],
+        db_type="JSONB",
     )
-    statement_timeout_ms: int = Field(default=15_000, ge=1, le=120_000)
-    max_rows: int = Field(default=1_000, ge=1, le=10_000)
-    mcp_server_id: str | None = None
-    flow_id: str | None = None
-    flow_branch_id: str = "default"
-    owner_user_id: str
-    created_at: datetime
-    updated_at: datetime
+    statement_timeout_ms: int = DbField(default=15_000, ge=1, le=120_000)
+    max_rows: int = DbField(default=1_000, ge=1, le=10_000)
+    mcp_server_id: str | None = DbField(default=None, max_length=255)
+    flow_id: str | None = DbField(default=None, max_length=255)
+    flow_branch_id: str = DbField(default="default", max_length=255)
+    owner_user_id: str = DbField(max_length=255)
+    created_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = DbField(default_factory=lambda: datetime.now(timezone.utc))
+
+    @model_serializer(mode="wrap", when_used="json")
+    def _json_without_password(self, handler: SerializerFunctionWrapHandler) -> JsonObject:
+        payload = require_serializer_json_object(handler, self, "DatasourceConnection")
+        if "password_encrypted" in payload:
+            del payload["password_encrypted"]
+        return payload
+
+    @override
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None) -> None:
+        _ = is_create, update_fields
+        if self.datasource_id == "" or self.company_id == "" or self.name == "" or self.owner_user_id == "":
+            raise ValueError("datasource_id, company_id, name and owner_user_id are required")
+        self.updated_at = datetime.now(timezone.utc)
+
+    @classmethod
+    async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
+        ordered = cls.objects.order_by("datasource_id")
+        if limit is None:
+            return await ordered.all()
+        return await ordered.limit(limit).all()
+
+
+    @classmethod
+    async def list_by_company(cls, company_id: str) -> list[Self]:
+        return await cls.objects.filter(
+            company_id=_datasource_required(company_id, "company_id"),
+        ).order_by("name", "datasource_id").all()
+
+    @classmethod
+    async def insert(cls, connection: Self) -> Self:
+        clash = await cls.objects.filter(
+            company_id=connection.company_id,
+            name=connection.name,
+        ).get_or_none()
+        if clash is not None:
+            raise ValueError(
+                f"datasource name {connection.name!r} already exists in company {connection.company_id}"
+            )
+        return await cls.objects.create(instance=connection)
+
+    @classmethod
+    async def update_connection(cls, connection: Self) -> Self:
+        existing = await cls.get(connection.datasource_id)
+        if existing is None:
+            raise ValueError(f"datasource not found: {connection.datasource_id}")
+        if existing.company_id != connection.company_id:
+            raise ValueError("datasource_id belongs to another company")
+        name_owner = await cls.objects.filter(
+            company_id=connection.company_id,
+            name=connection.name,
+        ).get_or_none()
+        if name_owner is not None and name_owner.datasource_id != connection.datasource_id:
+            raise ValueError(
+                f"datasource name {connection.name!r} already exists in company {connection.company_id}"
+            )
+        _ = await connection.save()
+        return connection
+
 
 
 class DatasourceConnectionCreate(StrictBaseModel):

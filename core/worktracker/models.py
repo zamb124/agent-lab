@@ -8,15 +8,21 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, Self
 
-from pydantic import ConfigDict, Field
+from oxyde import Field as DbField
+from oxyde import Index, execute_raw
+from pydantic import ConfigDict, Field, model_validator
 
+from core.files.file_attachments import minimal_file_refs_from_file_ids
 from core.files.file_ref import FileRef
+from core.identity.flow_employee import flow_employee_user_id
 from core.models import StrictBaseModel
-from core.types import JsonObject
+from core.models.platform_model import PlatformModel
+from core.types import JsonObject, parse_json_object, require_json_array, require_json_object
 from core.variables.models import VariableMap
 
 
@@ -132,6 +138,8 @@ class WorkItemLinkKind(StrEnum):
     RAG_DOCUMENT = "rag_document"
     FILE = "file"
     CALENDAR_EVENT = "calendar_event"
+    STOCK_TRANSFER = "stock_transfer"
+    STOCK_LOCATION = "stock_location"
     WORK_ITEM = "work_item"
 
 
@@ -176,6 +184,16 @@ class CalendarEventLink(WorktrackerModel):
     event_id: str = Field(..., min_length=1)
 
 
+class StockTransferLink(WorktrackerModel):
+    link_kind: Literal[WorkItemLinkKind.STOCK_TRANSFER] = WorkItemLinkKind.STOCK_TRANSFER
+    transfer_id: str = Field(..., min_length=1)
+
+
+class StockLocationLink(WorktrackerModel):
+    link_kind: Literal[WorkItemLinkKind.STOCK_LOCATION] = WorkItemLinkKind.STOCK_LOCATION
+    location_id: str = Field(..., min_length=1)
+
+
 class WorkItemToWorkItemLink(WorktrackerModel):
     link_kind: Literal[WorkItemLinkKind.WORK_ITEM] = WorkItemLinkKind.WORK_ITEM
     work_item_id: str = Field(..., min_length=1)
@@ -189,6 +207,8 @@ WorkItemLink = Annotated[
     | RagDocumentLink
     | FileLink
     | CalendarEventLink
+    | StockTransferLink
+    | StockLocationLink
     | WorkItemToWorkItemLink,
     Field(discriminator="link_kind"),
 ]
@@ -223,6 +243,31 @@ class WorkItemResolution(WorktrackerModel):
     text: str = ""
     files: list[FileRef] = Field(default_factory=list)
     resolved_by: WorkActor | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stored_file_ids(cls, value: object) -> object:
+        def has_legacy_file_ids(raw: object) -> bool:
+            if not isinstance(raw, dict):
+                return False
+            return "file_ids" in raw and "files" not in raw
+
+        if not has_legacy_file_ids(value):
+            return value
+        stored = require_json_object(value, "resolution")
+        file_ids = require_json_array(stored["file_ids"], "resolution.file_ids")
+        ids: list[str] = []
+        for item in file_ids:
+            if not isinstance(item, str):
+                raise ValueError("resolution.file_ids must be strings")
+            ids.append(item)
+        refs = minimal_file_refs_from_file_ids(ids)
+        del stored["file_ids"]
+        stored["files"] = [
+            require_json_object(ref.model_dump(mode="json"), "resolution.files")
+            for ref in refs
+        ]
+        return stored
 
 
 # === Интерактивный контракт задачи (operator_handoff) ===
@@ -276,15 +321,71 @@ class WorkQueueMember(WorktrackerModel):
     role: Literal["owner", "member"] = "member"
 
 
-class WorkQueue(WorktrackerModel):
-    work_queue_id: str = Field(..., min_length=1)
-    company_id: str = Field(..., min_length=1)
-    name: str = Field(..., min_length=1)
-    work_queue_slug: str = Field(..., min_length=1)
-    description: str | None = None
-    owner_user_id: str = Field(..., min_length=1)
-    created_at: datetime
-    updated_at: datetime
+class WorkQueue(PlatformModel):
+    """Очередь. Колонка slug в таблице называется ``slug``."""
+
+    __database_alias__: ClassVar[str | None] = "worktracker"
+    __global_model__: ClassVar[bool] = True
+
+    work_queue_id: str = DbField(db_pk=True, max_length=64, min_length=1)
+    company_id: str = DbField(max_length=100, min_length=1, db_index=True)
+    name: str = DbField(max_length=255, min_length=1)
+    work_queue_slug: str = DbField(max_length=120, min_length=1, db_column="slug")
+    owner_user_id: str = DbField(max_length=100, min_length=1)
+    created_at: datetime = DbField()
+    updated_at: datetime = DbField()
+    description: str | None = DbField(default=None, db_type="TEXT")
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "work_queues"
+        unique_together: list[tuple[str, str]] = [("company_id", "work_queue_slug")]
+
+    @classmethod
+    async def list_by_work_queue_id(cls, *, limit: int | None) -> list[Self]:
+        query = cls.objects.order_by("work_queue_id")
+        if limit is not None:
+            if limit < 1:
+                raise ValueError("limit must be >= 1")
+            query = query.limit(limit)
+        return await query.all()
+
+    @classmethod
+    async def list_for_company(cls, company_id: str) -> list[Self]:
+        return await cls.objects.filter(company_id=company_id).all()
+
+    @classmethod
+    async def list_queues(cls, company_id: str) -> list[Self]:
+        return await (
+            cls.objects.filter(company_id=company_id)
+            .order_by("created_at")
+            .all()
+        )
+
+    @classmethod
+    async def by_slug(cls, company_id: str, slug: str) -> Self | None:
+        return await cls.objects.filter(
+            company_id=company_id,
+            work_queue_slug=slug,
+        ).get_or_none()
+
+    @classmethod
+    async def by_id(cls, company_id: str, work_queue_id: str) -> Self | None:
+        return await cls.objects.filter(
+            company_id=company_id,
+            work_queue_id=work_queue_id,
+        ).get_or_none()
+
+    @classmethod
+    async def create(cls, queue: Self) -> Self:
+        return await cls.objects.create(instance=queue)
+
+    @classmethod
+    async def delete_for_company(cls, company_id: str, work_queue_id: str) -> int:
+        return await cls.objects.filter(
+            company_id=company_id,
+            work_queue_id=work_queue_id,
+        ).delete()
 
 
 class BoardColumn(WorktrackerModel):
@@ -317,18 +418,52 @@ def build_generic_board_columns() -> list[BoardColumn]:
     ]
 
 
-class Board(WorktrackerModel):
-    board_id: str = Field(..., min_length=1)
-    company_id: str = Field(..., min_length=1)
-    namespace: str | None = None
-    board_key: str = Field(
+class Board(PlatformModel):
+    """Доска. ``columns`` — JSON этой строки."""
+
+    __database_alias__: ClassVar[str | None] = "worktracker"
+    __global_model__: ClassVar[bool] = True
+
+    board_id: str = DbField(db_pk=True, max_length=64, min_length=1)
+    company_id: str = DbField(max_length=100, min_length=1, db_index=True)
+    name: str = DbField(max_length=255, min_length=1)
+    created_at: datetime = DbField()
+    updated_at: datetime = DbField()
+    namespace: str | None = DbField(default=None, max_length=100)
+    board_key: str = DbField(
         default="generic",
+        max_length=120,
         description="Логический ключ доски: generic | operator | task | task:<subtype>.",
     )
-    name: str = Field(..., min_length=1)
-    columns: list[BoardColumn] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
+    columns: list[BoardColumn] = DbField(default_factory=list, db_type="JSONB")
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "work_boards"
+        indexes: list[Index] = [
+            Index(["company_id", "namespace"]),
+        ]
+
+    @classmethod
+    async def get_board(cls, company_id: str, board_id: str) -> Self:
+        board = await cls.objects.filter(
+            company_id=company_id,
+            board_id=board_id,
+        ).get_or_none()
+        if board is None:
+            raise ValueError(f"Board {board_id!r} not found")
+        return board
+
+    @classmethod
+    async def company_boards(cls, company_id: str, *, namespace: str | None) -> list[Self]:
+        rows = cls.objects.filter(company_id=company_id)
+        if namespace is not None:
+            rows = rows.filter(namespace=namespace)
+        return await rows.order_by("created_at").all()
+
+    @classmethod
+    async def create(cls, board: Self) -> Self:
+        return await cls.objects.create(instance=board)
 
 
 class WorkItemCommentRole(StrEnum):
@@ -338,47 +473,94 @@ class WorkItemCommentRole(StrEnum):
     AGENT = "agent"
 
 
-class WorkItemComment(WorktrackerModel):
-    comment_id: str = Field(..., min_length=1)
-    work_item_id: str = Field(..., min_length=1)
-    company_id: str = Field(..., min_length=1)
-    author: WorkActor
-    role: WorkItemCommentRole = WorkItemCommentRole.SYSTEM
-    text: str = ""
-    files: list[FileRef] = Field(default_factory=list)
-    created_at: datetime
+class WorkItemComment(PlatformModel):
+    """Комментарий задачи. ``author`` и ``files`` — JSON этой строки."""
+
+    __database_alias__: ClassVar[str | None] = "worktracker"
+    __global_model__: ClassVar[bool] = True
+
+    comment_id: str = DbField(db_pk=True, max_length=64, min_length=1)
+    work_item_id: str = DbField(max_length=64, min_length=1, db_index=True)
+    company_id: str = DbField(max_length=100, min_length=1, db_index=True)
+    author: UserActor | SystemActor = DbField(db_type="JSONB", discriminator="actor_kind")
+    created_at: datetime = DbField()
+    role: WorkItemCommentRole = DbField(default=WorkItemCommentRole.SYSTEM, max_length=16, db_type="TEXT")
+    text: str = DbField(default="", db_type="TEXT")
+    files: list[FileRef] = DbField(default_factory=list, db_type="JSONB")
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "work_item_comments"
+
+    @classmethod
+    async def create(cls, comment: Self) -> Self:
+        return await cls.objects.create(instance=comment)
+
+    @classmethod
+    async def list_comments(cls, company_id: str, work_item_id: str) -> list[Self]:
+        return await (
+            cls.objects.filter(company_id=company_id, work_item_id=work_item_id)
+            .order_by("created_at")
+            .all()
+        )
 
 
 # === Корневая модель ===
 
 
-class WorkItem(WorktrackerModel):
-    """Каноническая единица работы платформы."""
+class WorkItem(PlatformModel):
+    """Каноническая единица работы. Таблица ``work_items``."""
 
-    work_item_id: str = Field(..., min_length=1)
-    company_id: str = Field(..., min_length=1)
-    namespace: str | None = None
-    title: str = Field(..., min_length=1)
-    description: str = ""
-    kind: WorkItemKind = WorkItemKind.GENERIC
-    state: WorkItemState = WorkItemState.OPEN
-    board_id: str | None = None
-    board_column_id: str | None = None
-    priority: WorkItemPriority = WorkItemPriority.NORMAL
-    due_date: datetime | None = None
-    labels: list[str] = Field(default_factory=list)
-    created_by: WorkActor
-    assignment: WorkItemAssignment = Field(default_factory=UnassignedAssignment)
-    blocking: bool = False
-    interaction: WorkItemInteractionSpec | None = None
+    __database_alias__: ClassVar[str | None] = "worktracker"
+    __global_model__: ClassVar[bool] = True
+
+    work_item_id: str = DbField(db_pk=True, max_length=64, min_length=1)
+    company_id: str = DbField(max_length=100, min_length=1, db_index=True)
+    title: str = DbField(min_length=1, db_type="TEXT")
+    created_by: UserActor | SystemActor = DbField(db_type="JSONB", discriminator="actor_kind")
+    created_at: datetime = DbField()
+    updated_at: datetime = DbField()
+    namespace: str | None = DbField(default=None, max_length=100)
+    description: str = DbField(default="", db_type="TEXT")
+    kind: WorkItemKind = DbField(default=WorkItemKind.GENERIC, max_length=32, db_type="TEXT")
+    state: WorkItemState = DbField(default=WorkItemState.OPEN, max_length=32, db_index=True, db_type="TEXT")
+    board_id: str | None = DbField(default=None, max_length=64)
+    board_column_id: str | None = DbField(default=None, max_length=64)
+    priority: WorkItemPriority = DbField(default=WorkItemPriority.NORMAL, max_length=16, db_type="TEXT")
+    due_date: datetime | None = DbField(default=None)
+    labels: list[str] = DbField(default_factory=list, db_type="JSONB")
+    assignment: UnassignedAssignment | UsersAssignment | QueueAssignment = DbField(
+        default_factory=UnassignedAssignment,
+        db_type="JSONB",
+        discriminator="assignee_kind",
+    )
+    blocking: bool = DbField(default=False)
+    interaction: WorkItemInteractionSpec | None = DbField(default=None, db_type="JSONB")
+    hooks: list[WorkItemHook] = DbField(default_factory=list, db_type="JSONB")
+    resolution: WorkItemResolution | None = DbField(default=None, db_type="JSONB")
+    links: list[
+        CrmEntityLink
+        | FlowSessionLink
+        | SyncMessageLink
+        | RagDocumentLink
+        | FileLink
+        | CalendarEventLink
+        | StockTransferLink
+        | StockLocationLink
+        | WorkItemToWorkItemLink
+    ] = DbField(default_factory=list, db_type="JSONB")
+    variables: VariableMap = DbField(default_factory=dict, db_type="JSONB")
+    attachments: list[FileRef] = DbField(default_factory=list, db_type="JSONB")
     interaction_policy: WorkItemInteractionPolicy | None = None
-    hooks: list[WorkItemHook] = Field(default_factory=list)
-    resolution: WorkItemResolution | None = None
-    links: list[WorkItemLink] = Field(default_factory=list)
-    variables: VariableMap = Field(default_factory=dict)
-    attachments: list[FileRef] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
+
+    class Meta:
+        is_table: bool = True
+        table_name: str = "work_items"
+        indexes: list[Index] = [
+            Index(["company_id", "state"]),
+            Index(["company_id", "board_id"]),
+            Index(["company_id", "namespace"]),
+        ]
 
     def hooks_for(self, event: WorkItemHookEvent) -> list[WorkItemHook]:
         return [hook for hook in self.hooks if hook.event == event]
@@ -388,6 +570,244 @@ class WorkItem(WorktrackerModel):
             if isinstance(link, FlowSessionLink):
                 return link
         return None
+
+    @classmethod
+    async def require_in_company(cls, company_id: str, work_item_id: str) -> Self:
+        item = await cls.objects.filter(
+            company_id=company_id,
+            work_item_id=work_item_id,
+        ).get_or_none()
+        if item is None:
+            raise ValueError(f"WorkItem {work_item_id!r} not found")
+        return item
+
+    @classmethod
+    async def delete_in_company(cls, company_id: str, work_item_id: str) -> bool:
+        if company_id == "":
+            raise ValueError("company_id cannot be empty.")
+        if work_item_id == "":
+            raise ValueError("work_item_id cannot be empty.")
+        deleted = await cls.objects.filter(
+            company_id=company_id,
+            work_item_id=work_item_id,
+        ).delete()
+        return deleted > 0
+
+    @classmethod
+    async def create(cls, item: Self) -> Self:
+        return await cls.objects.create(instance=item)
+
+    @classmethod
+    async def list_work_items(
+        cls,
+        company_id: str,
+        *,
+        board_id: str | None = None,
+        namespace: str | None = None,
+        kind: WorkItemKind | None = None,
+        state: WorkItemState | None = None,
+        work_queue_id: str | None = None,
+        assignee_user_id: str | None = None,
+        assignee_flow_id: str | None = None,
+        exclude_terminal: bool = False,
+        queue_unclaimed_only: bool = False,
+        work_queue_ids: list[str] | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[WorkItem]:
+        sql = work_item_sql(
+            company_id,
+            board_id=board_id,
+            namespace=namespace,
+            kind=kind,
+            state=state,
+            work_queue_id=work_queue_id,
+            assignee_user_id=assignee_user_id,
+            assignee_flow_id=assignee_flow_id,
+            exclude_terminal=exclude_terminal,
+            queue_unclaimed_only=queue_unclaimed_only,
+            work_queue_ids=work_queue_ids,
+        )
+        sql.params.append(limit)
+        limit_placeholder = f"${len(sql.params)}"
+        sql.params.append(offset)
+        offset_placeholder = f"${len(sql.params)}"
+        query = (
+            "SELECT row_to_json(work_items) AS item FROM work_items "
+            + f"WHERE {sql.where()} ORDER BY created_at DESC "
+            + f"LIMIT {limit_placeholder} OFFSET {offset_placeholder}"
+        )
+        rows = await execute_raw(query, sql.params, using="worktracker")
+        return [_work_item_from_row(row) for row in rows]
+
+    @classmethod
+    async def count_work_items(
+        cls,
+        company_id: str,
+        *,
+        board_id: str | None = None,
+        namespace: str | None = None,
+        kind: WorkItemKind | None = None,
+        state: WorkItemState | None = None,
+        work_queue_id: str | None = None,
+        assignee_user_id: str | None = None,
+        assignee_flow_id: str | None = None,
+        exclude_terminal: bool = False,
+        queue_unclaimed_only: bool = False,
+        work_queue_ids: list[str] | None = None,
+    ) -> int:
+        sql = work_item_sql(
+            company_id,
+            board_id=board_id,
+            namespace=namespace,
+            kind=kind,
+            state=state,
+            work_queue_id=work_queue_id,
+            assignee_user_id=assignee_user_id,
+            assignee_flow_id=assignee_flow_id,
+            exclude_terminal=exclude_terminal,
+            queue_unclaimed_only=queue_unclaimed_only,
+            work_queue_ids=work_queue_ids,
+        )
+        rows = await execute_raw(
+            f"SELECT count(*)::int AS total FROM work_items WHERE {sql.where()}",
+            sql.params,
+            using="worktracker",
+        )
+        total = require_json_object(rows[0], "work_item_count")["total"]
+        if isinstance(total, bool) or not isinstance(total, int):
+            raise TypeError("work_item count must be int")
+        return total
+
+    @classmethod
+    async def find_work_item_by_correlation(
+        cls, company_id: str, correlation_id: str
+    ) -> Self | None:
+        """Поиск WorkItem по correlation_id в hooks[].binding (идемпотентность HITL)."""
+        rows = await cls.objects.filter(company_id=company_id).all()
+        for row in rows:
+            for hook in row.hooks:
+                if hook.binding.get("correlation_id") == correlation_id:
+                    return row
+        return None
+
+    @classmethod
+    async def find_work_item_by_crm_entity(
+        cls, company_id: str, entity_id: str
+    ) -> Self | None:
+        """Поиск парного WorkItem по `CrmEntityLink.entity_id` (связь 1:1 с CRM-узлом)."""
+        rows = await cls.objects.filter(
+            company_id=company_id,
+            kind=WorkItemKind.CRM_ACTIVITY,
+        ).all()
+        for row in rows:
+            for link in row.links:
+                if isinstance(link, CrmEntityLink) and link.entity_id == entity_id:
+                    return row
+        return None
+
+    @classmethod
+    async def map_work_item_ids_by_crm_entities(
+        cls, company_id: str, entity_ids: list[str]
+    ) -> dict[str, str]:
+        if len(entity_ids) == 0:
+            return {}
+        wanted = set(entity_ids)
+        mapped: dict[str, str] = {}
+        rows = await cls.objects.filter(
+            company_id=company_id,
+            kind=WorkItemKind.CRM_ACTIVITY,
+        ).all()
+        for row in rows:
+            for link in row.links:
+                if isinstance(link, CrmEntityLink) and link.entity_id in wanted:
+                    mapped[link.entity_id] = row.work_item_id
+        return mapped
+
+
+class _WorkItemSql:
+    def __init__(self, company_id: str) -> None:
+        self.clauses: list[str] = ["company_id = $1"]
+        self.params: list[str | int] = [company_id]
+
+    def add(self, value: str) -> str:
+        self.params.append(value)
+        return f"${len(self.params)}"
+
+    def where(self) -> str:
+        return " AND ".join(self.clauses)
+
+
+def work_item_sql(
+    company_id: str,
+    *,
+    board_id: str | None,
+    namespace: str | None,
+    kind: WorkItemKind | None,
+    state: WorkItemState | None,
+    work_queue_id: str | None,
+    assignee_user_id: str | None,
+    assignee_flow_id: str | None,
+    exclude_terminal: bool,
+    queue_unclaimed_only: bool,
+    work_queue_ids: list[str] | None,
+) -> _WorkItemSql:
+    sql = _WorkItemSql(company_id)
+    if board_id is not None:
+        sql.clauses.append(f"board_id = {sql.add(board_id)}")
+    if namespace is not None:
+        sql.clauses.append(f"namespace = {sql.add(namespace)}")
+    if kind is not None:
+        sql.clauses.append(f"kind = {sql.add(kind.value)}")
+    if state is not None:
+        sql.clauses.append(f"state = {sql.add(state.value)}")
+    if exclude_terminal:
+        placeholders = [sql.add(item.value) for item in TERMINAL_WORK_ITEM_STATES]
+        sql.clauses.append(f"state NOT IN ({', '.join(placeholders)})")
+    if work_queue_id is not None:
+        sql.clauses.append(
+            f"assignment->>'assignee_kind' = {sql.add(AssigneeKind.QUEUE.value)}"
+        )
+        sql.clauses.append(f"assignment->>'work_queue_id' = {sql.add(work_queue_id)}")
+    if assignee_flow_id is not None:
+        sql.clauses.append(
+            f"assignment->>'assignee_kind' = {sql.add(AssigneeKind.USERS.value)}"
+        )
+        user_ids_json = sql.add(json.dumps([flow_employee_user_id(assignee_flow_id)]))
+        sql.clauses.append(f"assignment->'user_ids' @> {user_ids_json}::jsonb")
+    if assignee_user_id is not None:
+        sql.clauses.append(
+            f"assignment->>'assignee_kind' = {sql.add(AssigneeKind.USERS.value)}"
+        )
+        sql.clauses.append(
+            f"assignment->'user_ids' @> {sql.add(json.dumps([assignee_user_id]))}::jsonb"
+        )
+    if queue_unclaimed_only:
+        sql.clauses.append(
+            f"assignment->>'assignee_kind' = {sql.add(AssigneeKind.QUEUE.value)}"
+        )
+        sql.clauses.append("assignment->>'claimed_by_user_id' IS NULL")
+    if work_queue_ids is not None:
+        if len(work_queue_ids) == 0:
+            sql.clauses.append("FALSE")
+        else:
+            placeholders = ", ".join(sql.add(queue_id) for queue_id in work_queue_ids)
+            sql.clauses.append(
+                f"assignment->>'assignee_kind' = {sql.add(AssigneeKind.QUEUE.value)}"
+            )
+            sql.clauses.append(f"assignment->>'work_queue_id' IN ({placeholders})")
+            sql.clauses.append("assignment->>'claimed_by_user_id' IS NULL")
+    return sql
+
+
+def _work_item_from_row(row: object) -> WorkItem:
+    parsed = require_json_object(row, "work_item")
+    raw_item = parsed["item"]
+    if isinstance(raw_item, str):
+        payload = parse_json_object(raw_item, "work_item")
+    else:
+        payload = require_json_object(raw_item, "work_item")
+    return WorkItem.model_validate(payload)
 
 
 def build_conversation_ref(item: WorkItem) -> WorkItemConversationRef | None:

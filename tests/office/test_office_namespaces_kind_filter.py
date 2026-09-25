@@ -7,7 +7,7 @@ from httpx import AsyncClient
 
 from core.context import clear_context, set_context
 from core.models.context_models import Context
-from core.models.identity_models import NamespaceKind
+from core.models.identity_models import Company, NamespaceKind, User
 from core.namespace import personal_namespace_name
 from core.utils.tokens import get_token_service
 
@@ -17,13 +17,13 @@ async def test_office_list_namespaces_excludes_personal_and_technical(
     office_client: AsyncClient,
     auth_headers_system: dict[str, str],
     auth_token_system: str,
-    frontend_container,
+    frontend_di,
     unique_id: str,
 ) -> None:
     owner = get_token_service().validate_token(auth_token_system)
     assert owner is not None
-    company = await frontend_container.company_repository.get(owner.company_id)
-    user = await frontend_container.user_repository.get(owner.user_id)
+    company = await Company.get(owner.company_id)
+    user = await User.get(owner.user_id)
     assert company is not None and user is not None
 
     set_context(
@@ -35,17 +35,17 @@ async def test_office_list_namespaces_excludes_personal_and_technical(
         )
     )
     try:
-        _ = await frontend_container.namespace_service.ensure_personal_namespace(
+        _ = await frontend_di.namespace_service.ensure_personal_namespace(
             owner.user_id, display_name=user.name
         )
         tech = f"office-catalog-docs-{unique_id}"
-        _ = await frontend_container.namespace_service.get_or_create(
+        _ = await frontend_di.namespace_service.get_or_create(
             tech,
             description="tech",
             kind=NamespaceKind.TECHNICAL,
         )
         ws = f"docs_ws_{unique_id}"
-        _ = await frontend_container.namespace_service.create(
+        _ = await frontend_di.namespace_service.create(
             name=ws,
             description="docs workspace",
             kind=NamespaceKind.COMPANY_WORKSPACE,

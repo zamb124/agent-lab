@@ -156,14 +156,14 @@ describe('voice company pronunciation rules resource', () => {
 
     it('load нормализует правила; неизвестный kind — ошибка', async () => {
         fetchMock.respondJson('GET', RULES_URL, {
-            items: [{ id: 'r1', kind: 'alias', pattern: 'Humanitec', replacement: 'хуманитэк' }],
+            items: [{ pronunciation_rule_id: 'r1', kind: 'alias', pattern: 'Humanitec', replacement: 'хуманитэк' }],
         });
         const result = succeeded(
             companyPronunciationRulesLoadOp,
             await runOp(companyPronunciationRulesLoadOp, { company_id: COMPANY_ID }),
         );
         expect(result.items[0]).toMatchObject({
-            id: 'r1',
+            pronunciation_rule_id: 'r1',
             kind: 'alias',
             pattern: 'Humanitec',
             replacement: 'хуманитэк',
@@ -177,12 +177,12 @@ describe('voice company pronunciation rules resource', () => {
         );
         expect(state.items).toHaveLength(1);
 
-        fetchMock.respondJson('GET', RULES_URL, { items: [{ id: 'r2', kind: 'unknown' }] });
+        fetchMock.respondJson('GET', RULES_URL, { items: [{ pronunciation_rule_id: 'r2', kind: 'unknown' }] });
         await rejects(companyPronunciationRulesLoadOp, { company_id: COMPANY_ID }, 'unknown kind unknown');
     });
 
     it('create/update/delete/test используют пути владельца и нормализуют ответ', async () => {
-        fetchMock.respondJson('POST', RULES_URL, { id: 'r9', kind: 'regex', pattern: 'a', replacement: 'b' });
+        fetchMock.respondJson('POST', RULES_URL, { pronunciation_rule_id: 'r9', kind: 'regex', pattern: 'a', replacement: 'b' });
         const created = succeeded(
             companyPronunciationRuleCreateOp,
             await runOp(companyPronunciationRuleCreateOp, {
@@ -193,10 +193,10 @@ describe('voice company pronunciation rules resource', () => {
                 providers: [],
             }),
         );
-        expect(created).toMatchObject({ id: 'r9', kind: 'regex', providers: null });
+        expect(created).toMatchObject({ pronunciation_rule_id: 'r9', kind: 'regex', providers: null });
         expect(JSON.parse(fetchMock.calls[0].init.body)).toMatchObject({ kind: 'regex', providers: null, enabled: true });
 
-        fetchMock.respondJson('PUT', `${RULES_URL}/r9`, { id: 'r9', kind: 'regex', pattern: 'a', replacement: 'c' });
+        fetchMock.respondJson('PUT', `${RULES_URL}/r9`, { pronunciation_rule_id: 'r9', kind: 'regex', pattern: 'a', replacement: 'c' });
         const updated = succeeded(
             companyPronunciationRuleUpdateOp,
             await runOp(companyPronunciationRuleUpdateOp, {

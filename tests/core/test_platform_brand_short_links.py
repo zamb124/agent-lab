@@ -7,17 +7,13 @@ from uuid import uuid4
 
 import pytest
 
-from core.config import get_settings
-from core.short_links import ShortLinkRepository, ShortLinkService
+from core.short_links import ShortLinkService
+from core.short_links.models import PlatformShortLink
 
 
 @pytest.mark.asyncio
 async def test_mint_company_invite_respects_linnex_host(setup_database_before_tests) -> None:
-    shared_url = get_settings().database.shared_url
-    if not shared_url:
-        raise RuntimeError("DATABASE__SHARED_URL не задан")
-
-    svc = ShortLinkService(repository=ShortLinkRepository(db_url=shared_url))
+    svc = ShortLinkService()
     fake_jwt = f"header.{uuid4().hex}.sig"
     exp = datetime.now(UTC) + timedelta(hours=1)
 
@@ -29,16 +25,12 @@ async def test_mint_company_invite_respects_linnex_host(setup_database_before_te
     assert target is not None
     assert target.startswith("https://linnex.io/join?c=")
 
-    await svc.delete_by_code(code)
+    await PlatformShortLink.delete_by_id(code)
 
 
 @pytest.mark.asyncio
 async def test_mint_sync_call_join_respects_linnex_host(setup_database_before_tests) -> None:
-    shared_url = get_settings().database.shared_url
-    if not shared_url:
-        raise RuntimeError("DATABASE__SHARED_URL не задан")
-
-    svc = ShortLinkService(repository=ShortLinkRepository(db_url=shared_url))
+    svc = ShortLinkService()
     link_token = uuid4().hex
     company_id = f"test_company_{uuid4().hex[:8]}"
     expires_at = datetime.now(UTC) + timedelta(hours=2)
@@ -47,5 +39,5 @@ async def test_mint_sync_call_join_respects_linnex_host(setup_database_before_te
     assert url.startswith("https://linnex.io/l/")
 
     code = url.rstrip("/").split("/l/")[-1]
-    await svc.delete_sync_by_link_token(link_token)
+    await PlatformShortLink.delete_sync_by_link_token(link_token)
     assert await svc.resolve_absolute_redirect_url(code) is None

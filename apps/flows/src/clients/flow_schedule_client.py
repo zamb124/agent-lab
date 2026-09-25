@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 
-from apps.flows.src.container_state import require_current_container
 from apps.flows.src.services.schedule_service import ScheduleService
 from core.scheduler.models import ContentType, ScheduledTaskInfo, ScheduledTaskStatus
 from core.types import JsonObject
@@ -15,10 +14,8 @@ class FlowScheduleClient:
 
     _service: ScheduleService
 
-    def __init__(self, service: ScheduleService | None = None) -> None:
-        self._service = (
-            service if service is not None else require_current_container().schedule_service
-        )
+    def __init__(self, service: ScheduleService) -> None:
+        self._service = service
 
     async def schedule_cron_task(
         self,

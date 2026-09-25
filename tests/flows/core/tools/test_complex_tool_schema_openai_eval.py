@@ -237,8 +237,7 @@ async def test_code_tool_to_openai_schema_complex_parameters_schema(app) -> None
 
 
 @pytest.mark.asyncio
-async def test_registry_materialize_merges_full_parameters_schema(app) -> None:
-    from apps.flows.src.container import get_container
+async def test_registry_materialize_merges_full_parameters_schema(app, di) -> None:
 
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     ref = ToolReference(
@@ -248,14 +247,13 @@ async def test_registry_materialize_merges_full_parameters_schema(app) -> None:
         parameters_schema=schema,
     )
     dumped = ref.model_dump(exclude_none=True)
-    tool = await get_container().tool_registry.materialize(dumped)
+    tool = await di.tool_registry.materialize(dumped)
     assert isinstance(tool, CodeTool)
     assert_openai_tools_list_entry(tool.to_openai_schema())
 
 
 @pytest.mark.asyncio
-async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> None:
-    from apps.flows.src.container import get_container
+async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app, di) -> None:
 
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     complex_tool = CodeTool(
@@ -276,7 +274,7 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
         tools=[complex_tool],
         llm=None,
         prompt="p",
-        container=get_container(),
+        workflow_runtime=di.node_constructor.workflow_runtime, memory_store=di.node_constructor.llm_context_memory_store, text_transform_service=di.node_constructor.text_transform_service, emitter_factory=di.node_constructor.emitter_factory, redis_client=di.node_constructor.redis_client, tool_registry=di.tool_registry,
     )
     built = runner._build_tools_schema()
     assert len(built) == 1
@@ -289,8 +287,7 @@ async def test_llm_node_runner_build_tools_schema_matches_openai_canon(app) -> N
 
 
 @pytest.mark.asyncio
-async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
-    from apps.flows.src.container import get_container
+async def test_code_tool_run_applies_json_defaults_and_executes(app, di) -> None:
 
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     tool = CodeTool(
@@ -298,7 +295,6 @@ async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
         code=COMPLEX_TOOL_CODE.strip(),
         description="exec",
         parameters_schema=schema,
-        container=get_container(),
     )
     state = ExecutionState.create(task_id="t1", context_id="c1", user_id="u1", session_id="flow:c1")
     payload = {"title": "Заголовок", "tags": ["one", "two"], "coord": {"lat": 55.75, "lon": 37.62}}
@@ -313,8 +309,7 @@ async def test_code_tool_run_applies_json_defaults_and_executes(app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_code_tool_explicit_args_override_defaults(app) -> None:
-    from apps.flows.src.container import get_container
+async def test_code_tool_explicit_args_override_defaults(app, di) -> None:
 
     schema = sanitize_parameters_schema_for_llm(pydantic_model_to_parameters_schema(ComplexArgs))
     tool = CodeTool(
@@ -322,7 +317,6 @@ async def test_code_tool_explicit_args_override_defaults(app) -> None:
         code=COMPLEX_TOOL_CODE.strip(),
         description="exec2",
         parameters_schema=schema,
-        container=get_container(),
     )
     state = ExecutionState.create(task_id="t2", context_id="c2", user_id="u1", session_id="flow:c2")
     payload = {

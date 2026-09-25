@@ -7,12 +7,12 @@ TaskIQ задачи для выполнения tools.
 
 from __future__ import annotations
 
-from apps.flows.src.container import get_container
+from apps.flows.di import Di
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_TOOL
 from apps.flows.src.tools.base import ToolArguments
-from apps.flows.src.tools.registry import ToolMaterializeInput
+from apps.flows.src.tools.materialize import ToolMaterializeInput
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
@@ -30,6 +30,8 @@ async def execute_tool(
     args: ToolArguments,
     state_dict: JsonObject,
     context_data: JsonObject | None = None,
+    *,
+    di: Di,
 ) -> JsonObject:
     """
     Выполняет tool через TaskIQ.
@@ -48,8 +50,7 @@ async def execute_tool(
         previous_context = get_context()
         _ = set_context(Context.from_dict(context_data))
 
-    container = get_container()
-    tool = await container.tool_registry.create_tool(tool_config)
+    tool = await di.tool_registry.create_tool(tool_config)
     tool_id = tool.name
     logger.debug("flows.tool.execute", tool_id=tool_id)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.flows.src.models import Edge
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import DatasourceNode
 from core.flow_ui.templates import default_chat_document
@@ -16,7 +17,7 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.timeout(60)]
 
 
 async def test_datasource_standalone_flow_query_exact_rows(
-    container,
+    di,
     unique_id: str,
     customer_datasource: CustomerDatasource,
     auth_headers_system: dict[str, str],
@@ -32,7 +33,7 @@ async def test_datasource_standalone_flow_query_exact_rows(
             "sql": customer_datasource.query_by_id_sql,
             "input_mapping": {"id": "@state:item_id"},
         },
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client, datasource_service=di.node_constructor.datasource_service, datasource_executors=di.datasource_executors,
     )
     flow = Flow(
         flow_id=flow_id,
@@ -41,7 +42,7 @@ async def test_datasource_standalone_flow_query_exact_rows(
         nodes={"orders": node},
         edges=[Edge(from_node="orders", to_node=None)],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(
         flow_id=flow_id,
@@ -49,7 +50,7 @@ async def test_datasource_standalone_flow_query_exact_rows(
         item_id=customer_datasource.seed_id,
     )
     with service_client_asgi_auth_context(auth_headers_system):
-        finished = await run_flow(container=container, flow=flow, state=state)
+        finished = await run_flow(di=di, flow=flow, state=state)
     result = finished.datasource_result
     assert result["columns"] == ["id", "name"]
     assert result["rows"] == [

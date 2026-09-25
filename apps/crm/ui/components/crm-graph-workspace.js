@@ -37,17 +37,17 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
-import { selectCrmApiNamespace, crmNamespaceForOptionalQuery } from '../utils/crm-namespace-select.js';
-import { clampTimelinePercents } from '../utils/crm-timeline-range.js';
-import { buildRelationshipTypeLabelMapFromItems } from '../utils/crm-relationship-type-labels.js';
+import { selectCrmApiNamespace, crmNamespaceForOptionalQuery } from '../_helpers/crm-namespace-select.js';
+import { clampTimelinePercents } from '../_helpers/crm-timeline-range.js';
+import { buildRelationshipTypeLabelMapFromItems } from '../_helpers/crm-relationship-type-labels.js';
 import {
     buildGraphWorkspaceSearch,
     parseGraphWorkspaceQuery,
-} from '../utils/graph-view-mode.js';
+} from '../_helpers/graph-view-mode.js';
 import {
     buildEntityTypeColorMapFromItems,
     buildEntityTypeIconMapFromItems,
-} from '../utils/crm-entity-type-visuals.js';
+} from '../_helpers/crm-entity-type-visuals.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';

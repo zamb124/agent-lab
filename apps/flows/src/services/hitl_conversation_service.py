@@ -33,6 +33,7 @@ from core.state import ExecutionState
 from core.types import JsonObject, require_json_array, require_json_object
 from core.worktracker.models import (
     TERMINAL_WORK_ITEM_STATES,
+    WorkItem,
     WorkItemConversationRef,
     WorkItemInteractionMode,
     WorkItemInteractionPolicy,
@@ -189,7 +190,7 @@ class HitlConversationService:
         work_item_id: str,
         operator_user_id: str,
     ) -> ConversationSnapshot:
-        item = await self._work_items.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         authorized = await self._work_items.operator_authorized(item, operator_user_id)
         policy = build_interaction_policy(item, operator_authorized=authorized)
         if policy.conversation is not None:
@@ -226,7 +227,7 @@ class HitlConversationService:
         idempotency_key: str,
         file_ids: list[str] | None = None,
     ) -> ConversationTurn:
-        item = await self._work_items.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         if not await self._work_items.operator_authorized(item, operator_user_id):
             raise PermissionError("No access to this task conversation")
         if item.state in TERMINAL_WORK_ITEM_STATES:
@@ -358,7 +359,7 @@ class HitlConversationService:
         resolved_file_ids = [fid.strip() for fid in (file_ids or []) if fid.strip()]
         if clean == "" and len(resolved_file_ids) == 0:
             return None
-        item = await self._work_items.get(company_id, work_item_id)
+        item = await WorkItem.require_in_company(company_id, work_item_id)
         spec = item.interaction
         if spec is None:
             raise ValueError(f"WorkItem {work_item_id!r} without interaction spec")
@@ -462,7 +463,6 @@ class HitlConversationService:
         if state.task_id != parked_task_id:
             state = state.model_copy(update={"task_id": parked_task_id})
         await ensure_submitted_a2a_task(
-            repository=self._a2a_projection.task_repository,
             company_id=company_id,
             state=state,
             content=content,

@@ -177,9 +177,10 @@ async def flows_get_node(
     branch_id: str | None = None,
     *,
     state: ExecutionState,
+    flows_client: FlowsClient,
 ) -> str:
     _ = state
-    payload = await FlowsClient().get_node(flow_id, node_id, branch_id=branch_id)
+    payload = await flows_client.get_node(flow_id, node_id, branch_id=branch_id)
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -197,9 +198,10 @@ async def flows_list_nodes(
     branch_id: str | None = None,
     *,
     state: ExecutionState,
+    flows_client: FlowsClient,
 ) -> str:
     _ = state
-    payload = await FlowsClient().list_nodes(flow_id, branch_id=branch_id)
+    payload = await flows_client.list_nodes(flow_id, branch_id=branch_id)
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -219,9 +221,10 @@ async def flows_read_context(
     node_id: str | None = None,
     *,
     state: ExecutionState,
+    flows_client: FlowsClient,
 ) -> str:
     _ = state
-    payload = await FlowsClient().read_context(
+    payload = await flows_client.read_context(
         flow_id, branch_id=branch_id, node_id=node_id
     )
     return json.dumps(payload, ensure_ascii=False)
@@ -249,8 +252,9 @@ async def flows_patch_node(
     idempotency_key: str | None = None,
     *,
     state: ExecutionState,
+    flows_client: FlowsClient,
 ) -> str:
-    client = FlowsClient()
+    client = flows_client
     if mode == "propose":
         if flow_id is None or node_id is None or patch_json is None:
             raise ValueError("flow_id, node_id and patch_json are required for mode=propose")
@@ -293,8 +297,9 @@ async def flows_patch_flow(
     idempotency_key: str | None = None,
     *,
     state: ExecutionState,
+    flows_client: FlowsClient,
 ) -> str:
-    client = FlowsClient()
+    client = flows_client
     if mode == "propose":
         if flow_id is None or patch_json is None:
             raise ValueError("flow_id and patch_json are required for mode=propose")

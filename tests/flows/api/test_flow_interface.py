@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from apps.flows.src.models import FlowConfig
 from core.context import Context, clear_context, set_context
 from core.flow_ui.document import (
     FlowUIAgentIdentity,
@@ -72,9 +73,9 @@ def _embed_headers(token: str) -> dict[str, str]:
 
 
 async def _set_interface(
-    *, flow_id: str, company_id: str, user_id: str, document: FlowUIDocument
+    *, flow_id: str, company_id: str, user_id: str, document: FlowUIDocument,
+    di,
 ) -> None:
-    from apps.flows.src.container import get_container
 
     set_context(
         Context(
@@ -85,11 +86,10 @@ async def _set_interface(
         )
     )
     try:
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
         assert config is not None
         config.interface = document
-        await container.flow_repository.set(config)
+        await FlowConfig.create_version(config)
     finally:
         clear_context()
 
@@ -159,7 +159,7 @@ async def test_flow_interface_session_auth_defaults(flows_client: AsyncClient, e
 
 @pytest.mark.asyncio
 async def test_flow_interface_capabilities_follow_conversation_settings(
-    flows_client: AsyncClient, embed_test_auth
+    flows_client: AsyncClient, embed_test_auth, di
 ):
     auth_headers, flow_id, company_id, user_id = embed_test_auth
     await _set_interface(
@@ -167,7 +167,7 @@ async def test_flow_interface_capabilities_follow_conversation_settings(
         company_id=company_id,
         user_id=user_id,
         document=_chat_document(greeting="Привет", allow_cancel=False),
-    )
+    di=di)
     response = await flows_client.get(f"/flows/api/v1/{flow_id}/interface", headers=auth_headers)
     assert response.status_code == 200, response.text
     payload = response.json()
@@ -189,9 +189,9 @@ async def test_flow_interface_unknown_flow_403(
 
 @pytest.mark.asyncio
 async def test_flow_interface_branch_document_and_unknown_branch_404(
-    flows_client: AsyncClient, embed_test_auth, unique_id
+    flows_client: AsyncClient, embed_test_auth, unique_id,
+    di,
 ):
-    from apps.flows.src.container import get_container
     from apps.flows.src.models.flow_config import BranchConfig
 
     auth_headers, flow_id, company_id, user_id = embed_test_auth
@@ -204,14 +204,13 @@ async def test_flow_interface_branch_document_and_unknown_branch_404(
         )
     )
     try:
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
         assert config is not None
         config.branches = {
             "support": BranchConfig(name="Support", interface=_chat_document(greeting="Support")),
             "sales": BranchConfig(name="Sales"),
         }
-        await container.flow_repository.set(config)
+        await FlowConfig.create_version(config)
     finally:
         clear_context()
 
@@ -270,7 +269,7 @@ async def test_embed_interface_with_embed_session_token(
 
 @pytest.mark.asyncio
 async def test_embed_interface_applies_conversation_override(
-    flows_client: AsyncClient, frontend_client: AsyncClient, embed_test_auth
+    flows_client: AsyncClient, frontend_client: AsyncClient, embed_test_auth, di
 ):
     auth_headers, flow_id, company_id, user_id = embed_test_auth
     await _set_interface(
@@ -278,7 +277,7 @@ async def test_embed_interface_applies_conversation_override(
         company_id=company_id,
         user_id=user_id,
         document=_chat_document(greeting="Flow greeting", allow_cancel=True),
-    )
+    di=di)
     embed_id = await _create_embed(
         frontend_client,
         auth_headers,
@@ -418,9 +417,9 @@ def test_embed_config_has_no_interface_behavior_fields():
 
 @pytest.mark.asyncio
 async def test_flow_identity_image_url_comes_from_agent_identity_block(
-    flows_client: AsyncClient, frontend_client: AsyncClient, embed_test_auth
+    flows_client: AsyncClient, frontend_client: AsyncClient, embed_test_auth,
+    di,
 ):
-    from apps.flows.src.container import get_container
 
     auth_headers, flow_id, company_id, user_id = embed_test_auth
     set_context(
@@ -432,11 +431,10 @@ async def test_flow_identity_image_url_comes_from_agent_identity_block(
         )
     )
     try:
-        container = get_container()
-        config = await container.flow_repository.get(flow_id)
+        config = await FlowConfig.get_latest(flow_id)
         assert config is not None
         config.store_card_image_url = "https://cdn.example/store-card.png"
-        await container.flow_repository.set(config)
+        await FlowConfig.create_version(config)
     finally:
         clear_context()
     store_only = await flows_client.get(f"/flows/api/v1/{flow_id}/interface", headers=auth_headers)
@@ -449,7 +447,7 @@ async def test_flow_identity_image_url_comes_from_agent_identity_block(
         company_id=company_id,
         user_id=user_id,
         document=_chat_document(image_url=image_url),
-    )
+    di=di)
     session_interface = await flows_client.get(
         f"/flows/api/v1/{flow_id}/interface", headers=auth_headers
     )

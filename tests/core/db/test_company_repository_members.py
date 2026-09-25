@@ -8,12 +8,11 @@ from core.models.identity_models import Company
 
 
 @pytest.mark.asyncio
-async def test_put_member_roles_keeps_concurrent_members(container, unique_id: str) -> None:
+async def test_put_member_roles_keeps_concurrent_members(di, unique_id: str) -> None:
     company_id = f"co-members-{unique_id}"
     first_user_id = f"mem-a-{unique_id}"
     second_user_id = f"mem-b-{unique_id}"
-    repo = container.company_repository
-    _ = await repo.set(
+    _ = await Company.set(
         Company(
             company_id=company_id,
             name=f"Members {unique_id}",
@@ -23,14 +22,15 @@ async def test_put_member_roles_keeps_concurrent_members(container, unique_id: s
     )
     try:
         await asyncio.gather(
-            repo.put_member_roles(company_id, first_user_id, ["member"]),
-            repo.put_member_roles(company_id, second_user_id, ["admin"]),
+            Company.put_member_roles(company_id, first_user_id, ["member"]),
+            Company.put_member_roles(company_id, second_user_id, ["admin"]),
         )
-        stored = await repo.get(company_id)
+        stored = await Company.get(company_id)
         assert stored is not None
         assert stored.members[first_user_id] == ["member"]
         assert stored.members[second_user_id] == ["admin"]
     finally:
-        deleted = await repo.delete(company_id)
+        deleted = await Company.delete_by_id(company_id)
         if not deleted:
             raise RuntimeError(f"failed to delete company {company_id}")
+        assert await Company.delete_by_id(company_id) is False

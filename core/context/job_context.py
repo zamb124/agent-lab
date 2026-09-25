@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from core.utils.tokens import get_token_service
-
-if TYPE_CHECKING:
-    from core.db.repositories.user_repository import UserRepository
 
 
 def resolve_user_roles_in_company(user: User, company: Company) -> list[str]:
@@ -66,7 +61,6 @@ def build_job_context(
 async def pick_company_billing_user(
     *,
     company: Company,
-    user_repository: UserRepository,
 ) -> User:
     """
     Детерминированный платёжный субъект для фоновой задачи в контексте ``company``.
@@ -80,7 +74,7 @@ async def pick_company_billing_user(
     cid = company.company_id
     raw_owner = (company.owner_user_id or "").strip()
     if raw_owner:
-        loaded = await user_repository.get(raw_owner)
+        loaded = await User.get(raw_owner)
         if loaded is not None and cid in loaded.companies:
             return loaded
 
@@ -90,7 +84,7 @@ async def pick_company_billing_user(
         if "owner" in roles
     )
     for uid in candidates:
-        loaded = await user_repository.get(uid)
+        loaded = await User.get(uid)
         if loaded is not None and cid in loaded.companies:
             return loaded
 

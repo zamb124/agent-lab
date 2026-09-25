@@ -7,7 +7,7 @@ import json
 import pytest
 import pytest_asyncio
 
-from apps.flows.src.container import get_container
+from apps.flows.src.clients.lara_client import LaraClient
 from apps.flows.tools.crm.crm_tools import crm_create_note
 from core.state import ExecutionState
 from core.state.execution_state_records import ToolResult
@@ -55,9 +55,12 @@ async def test_apply_pending_http_creates_note(
     lara_crm_tool_context,
     unique_id: str,
     system_user_id: str,
+    di,
 ) -> None:
     state = _tool_state(unique_id=unique_id, system_user_id=system_user_id)
-    propose_raw = await crm_create_note._run_impl(
+    propose_raw = await crm_create_note.with_dependencies(
+        [LaraClient(di.lara_facade)]
+    )._run_impl(
         {"name": f"HTTP apply {unique_id}", "description": "body", "mode": "propose"},
         state,
     )
@@ -73,7 +76,7 @@ async def test_apply_pending_http_creates_note(
     else:
         raise AssertionError(f"crm_create_note propose: неожиданный тип {type(propose_raw).__name__}")
     pid = proposed["pending_action_id"]
-    facade = get_container().lara_facade
+    facade = di.lara_facade
     applied = await facade.apply_pending_action_from_http(
         pending_action_id=pid,
         context_id=state.context_id,

@@ -92,14 +92,14 @@ def _file_item_dict(item: object) -> dict[str, Any] | None:
 
 
 async def _wait_state_viz_file(
-    container,
+    di,
     *,
     flow_id: str,
     context_id: str,
 ) -> dict[str, Any]:
     session_id = f"{flow_id}:{context_id}"
     for _ in range(50):
-        state = await container.workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         if state:
             files_raw = (
                 state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
@@ -170,7 +170,7 @@ async def test_agent_create_viz_office_roundtrip_and_export(
     office_service,
     mock_llm_redis,
     auth_headers_system,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     _ = office_service
@@ -203,13 +203,13 @@ async def test_agent_create_viz_office_roundtrip_and_export(
             text="Create a funnel flowchart visualization.",
         )
         file_item = await _wait_state_viz_file(
-            container, flow_id=flow_id, context_id=context_id
+            di, flow_id=flow_id, context_id=context_id
         )
         file_id = file_item["file_id"]
         assert isinstance(file_id, str) and file_id
 
         session_id = f"{flow_id}:{context_id}"
-        state = await container.workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         assert state is not None
         create_result = None
         for value in _tool_results(state).values():
@@ -263,7 +263,7 @@ async def test_agent_create_viz_office_roundtrip_and_export(
         session_id = f"{flow_id}:{context_id}"
         svg_file_id: str | None = None
         for _ in range(50):
-            state = await container.workflow_runtime.get_state(session_id)
+            state = await di.workflow_runtime.get_state(session_id)
             assert state is not None
             files_raw = (
                 state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
@@ -295,7 +295,7 @@ async def test_agent_create_viz_rejects_invalid_args(
     flows_client_http,
     mock_llm_redis,
     auth_headers_system,
-    container,
+    di,
     unique_id: str,
 ) -> None:
     headers = _headers(auth_headers_system)
@@ -338,7 +338,7 @@ async def test_agent_create_viz_rejects_invalid_args(
         assert "source" in error_text or "mermaid" in error_text
 
         session_id = f"{flow_id}:{context_id}"
-        state = await container.workflow_runtime.get_state(session_id)
+        state = await di.workflow_runtime.get_state(session_id)
         assert state is not None
         files_raw = state.get("files") if isinstance(state, dict) else getattr(state, "files", [])
         files = files_raw if isinstance(files_raw, list) else []

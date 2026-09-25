@@ -2,14 +2,13 @@
 Emitter - публикация A2A событий в Redis Pub/Sub.
 """
 
-from typing import Protocol, Self, override
+from typing import Self, override
 
 from a2a.types import Message
 from google.protobuf.json_format import MessageToDict
 
 from apps.flows.src.a2a.ensure_submitted_task import ensure_submitted_a2a_task
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
-from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
 from apps.flows.src.observability.flow_timing import maybe_record_flow_first_content_chunk
 from core.a2a import struct_from_mapping
 from core.context import require_context
@@ -19,14 +18,6 @@ from core.state import ExecutionState
 from core.types import JsonObject, require_json_object
 
 from .base import BaseEmitter, StreamEvent
-
-
-class A2AEmitterContainer(Protocol):
-    @property
-    def a2a_task_projection_service(self) -> A2ATaskProjectionService: ...
-
-    @property
-    def a2a_task_repository(self) -> A2ATaskRepository: ...
 
 logger = get_logger(__name__)
 
@@ -42,10 +33,10 @@ class Emitter(BaseEmitter):
     - span_id (из OpenTelemetry контекста)
 
     Durable append требует Task projection: для новых путей используй
-    ``create_ensured``. ``from_container`` — только когда Task уже ensured.
+    ``create_ensured``. ``open`` — только когда Task уже ensured.
 
     Примеры:
-        >>> emitter = await Emitter.create_ensured(container, state)
+        >>> emitter = await Emitter.create_ensured(projection_service, state)
         >>> await emitter.emit_text("Привет")
         >>> await emitter.emit_complete("Готово")
     """
@@ -74,16 +65,16 @@ class Emitter(BaseEmitter):
         self._first_content_chunk_recorded = False
 
     @classmethod
-    def from_container(
+    def open(
         cls,
-        container: A2AEmitterContainer,
+        projection_service: A2ATaskProjectionService,
         state: ExecutionState,
     ) -> Self:
         context = require_context()
         if context.active_company is None:
             raise ValueError("Durable A2A emitter requires active_company")
         return cls(
-            container.a2a_task_projection_service,
+            projection_service,
             state,
             company_id=context.active_company.company_id,
         )
@@ -91,7 +82,7 @@ class Emitter(BaseEmitter):
     @classmethod
     async def create_ensured(
         cls,
-        container: A2AEmitterContainer,
+        projection_service: A2ATaskProjectionService,
         state: ExecutionState,
         *,
         input_message: Message | None = None,
@@ -102,13 +93,12 @@ class Emitter(BaseEmitter):
         if context.active_company is None:
             raise ValueError("Durable A2A emitter requires active_company")
         await ensure_submitted_a2a_task(
-            repository=container.a2a_task_repository,
             company_id=context.active_company.company_id,
             state=state,
             input_message=input_message,
             content=content,
         )
-        return cls.from_container(container, state)
+        return cls.open(projection_service, state)
 
     @override
     async def emit_text(
@@ -165,4 +155,31 @@ class Emitter(BaseEmitter):
             event=event,
         )
 
-__all__ = ["Emitter"]
+
+class EmitterFactory:
+    """Собирает durable Emitter для уже известного projection service."""
+
+    def __init__(self, projection_service: A2ATaskProjectionService) -> None:
+        self._projection_service: A2ATaskProjectionService = projection_service
+
+    async def create(
+        self,
+        state: ExecutionState,
+        *,
+        input_message: Message | None = None,
+        content: str | None = None,
+    ) -> Emitter:
+        context = require_context()
+        if context.active_company is None:
+            raise ValueError("Durable A2A emitter requires active_company")
+        company_id = context.active_company.company_id
+        await ensure_submitted_a2a_task(
+            company_id=company_id,
+            state=state,
+            input_message=input_message,
+            content=content,
+        )
+        return Emitter(self._projection_service, state, company_id=company_id)
+
+
+__all__ = ["Emitter", "EmitterFactory"]

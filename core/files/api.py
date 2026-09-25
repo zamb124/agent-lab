@@ -9,9 +9,8 @@ Mount на каждом сервисе с include_platform_routers:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, cast
+from typing import cast
 from urllib.parse import urlparse
 
 import httpx
@@ -24,22 +23,27 @@ from core.app_state import get_request_company_id
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.config import get_settings
-from core.context import require_active_company
+from core.context import get_context, require_active_company
+from core.di.platform import Di
 from core.documents.placement import DocsPlacement
+from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.files.chunked_upload import (
     ChunkedUploadInitResult,
     ChunkedUploadPartRecord,
-    ChunkedUploadService,
 )
 from core.files.create_spec import FileCreateSpec
 from core.files.file_ref import FileRef, stored_file_ref
 from core.files.http_range import RangeNotSatisfiableError
 from core.files.models import FileReadPreviewResponse, FileRecord
+from core.files.object_store.gate import FileGate
+from core.files.object_store.principals import (
+    AnonymousPrincipal,
+    FilePrincipal,
+    SessionPrincipal,
+)
 from core.files.read_preview import build_stored_file_text_preview
 from core.files.reader.exceptions import FileReadError
-from core.files.s3_client import S3ClientFactory
-from core.files.service import FilesService
-from core.files.streaming import stream_s3_file
+from core.files.streaming import stream_file_handle
 from core.files.urls import (
     files_api_prefix,
     normalize_files_route_segment,
@@ -52,49 +56,38 @@ from core.models import StrictBaseModel
 logger = get_logger(__name__)
 
 
-class _AuthzContainerView(Protocol):
-    @property
-    def authz_service(self) -> AuthzService: ...
-
-
-class _AppStateView(Protocol):
-    container: object
-
-
-class _AppView(Protocol):
-    state: _AppStateView
-
-
-def _authz_container(request: Request) -> _AuthzContainerView:
-    app = cast(_AppView, request.app)
-    return cast(_AuthzContainerView, app.state.container)
-
-
-async def _require_company_can_view(request: Request) -> str:
+async def _require_company_can_view(authz: AuthzService) -> str:
     company_id = require_active_company().company_id
-    await _authz_container(request).authz_service.require_can_view(AuthzObject.company(company_id))
+    await authz.require_can_view(AuthzObject.company(company_id))
     return company_id
 
 
-async def _ensure_file_record_access(request: Request, file_record: FileRecord) -> None:
-    if file_record.is_public:
-        return
-    active_company_id = get_request_company_id(request)
-    if active_company_id is None:
-        raise HTTPException(status_code=403, detail="File access denied.")
-    if file_record.company_id is None:
-        raise HTTPException(status_code=403, detail="File access denied.")
-    if active_company_id != file_record.company_id:
-        raise HTTPException(status_code=403, detail="File access denied.")
-    await _authz_container(request).authz_service.require_can_view(
-        AuthzObject.company(file_record.company_id)
-    )
+def _file_principal_for_request(request: Request) -> FilePrincipal:
+    company_id = get_request_company_id(request)
+    context = get_context()
+    if context is not None and company_id is not None:
+        return SessionPrincipal(user_id=context.user.user_id, company_id=company_id)
+    return AnonymousPrincipal()
+
+
+async def _open_file_for_request(
+    file_id: str,
+    request: Request,
+    authz: AuthzService,
+) -> FileRecord:
+    try:
+        handle = await FileGate(authz).open(file_id, _file_principal_for_request(request))
+    except PlatformNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlatformAccessDeniedError as exc:
+        raise HTTPException(status_code=403, detail="File access denied.") from exc
+    return handle.record
 
 
 class RegisterS3Request(StrictBaseModel):
     spec: FileCreateSpec
     s3_key: str
-    s3_bucket: str
+    storage_id: str
     original_name: str
     content_type: str
     file_size: int
@@ -144,23 +137,9 @@ def _is_http_url(url: str) -> bool:
     return parsed.scheme in ("http", "https")
 
 
-def build_files_router(
-    get_files_service: Callable[[], FilesService],
-    get_chunked_upload_service: Callable[[], ChunkedUploadService] | None = None,
-    *,
-    files_route_segment: str | None = None,
-) -> APIRouter:
+def build_files_router(*, files_route_segment: str) -> APIRouter:
     router = APIRouter(tags=["files"])
-    route_segment = (
-        normalize_files_route_segment(files_route_segment)
-        if files_route_segment is not None
-        else require_files_route_segment()
-    )
-
-    def _chunked() -> ChunkedUploadService:
-        if get_chunked_upload_service is None:
-            raise HTTPException(status_code=503, detail="Chunked upload is not configured.")
-        return get_chunked_upload_service()
+    route_segment = normalize_files_route_segment(files_route_segment)
 
     async def upload_config() -> FilesUploadConfigResponse:
         files_cfg = get_settings().files
@@ -170,14 +149,12 @@ def build_files_router(
             upload_session_ttl_seconds=files_cfg.upload_session_ttl_seconds,
         )
 
-    async def init_chunked_upload(
-        body: ChunkedUploadInitRequest, request: Request
-    ) -> ChunkedUploadInitResult:
-        _ = await _require_company_can_view(request)
+    async def init_chunked_upload(body: ChunkedUploadInitRequest, di: Di) -> ChunkedUploadInitResult:
+        _ = await _require_company_can_view(di.authz_service)
         upload_settings = get_settings()
-        if not upload_settings.s3.enabled or not upload_settings.s3.default_bucket:
+        if not upload_settings.s3.enabled or not upload_settings.s3.bucket_name:
             raise HTTPException(status_code=503, detail="S3 is not configured.")
-        service = _chunked()
+        service = di.chunked_upload_service
         try:
             return await service.init_upload(
                 spec=body.spec,
@@ -196,20 +173,21 @@ def build_files_router(
         upload_id: str,
         part_number: int,
         request: Request,
+        di: Di,
     ) -> ChunkedUploadPartRecord:
-        _ = await _require_company_can_view(request)
+        _ = await _require_company_can_view(di.authz_service)
         upload_settings = get_settings()
         max_part = upload_settings.files.chunk_size_bytes
         data = await _read_body_with_limit(request, max_part)
-        service = _chunked()
+        service = di.chunked_upload_service
         try:
             return await service.upload_part(upload_id, part_number, data)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    async def complete_chunked_upload(upload_id: str, request: Request) -> FileRef:
-        _ = await _require_company_can_view(request)
-        service = _chunked()
+    async def complete_chunked_upload(upload_id: str, di: Di) -> FileRef:
+        _ = await _require_company_can_view(di.authz_service)
+        service = di.chunked_upload_service
         try:
             file_record = await service.complete_upload(upload_id)
         except ValueError as exc:
@@ -218,26 +196,26 @@ def build_files_router(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return stored_file_ref(file_record, route_segment=route_segment)
 
-    async def abort_chunked_upload(upload_id: str, request: Request) -> Response:
-        _ = await _require_company_can_view(request)
-        service = _chunked()
+    async def abort_chunked_upload(upload_id: str, di: Di) -> Response:
+        _ = await _require_company_can_view(di.authz_service)
+        service = di.chunked_upload_service
         try:
             await service.abort_upload(upload_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return Response(status_code=204)
 
-    async def register_s3(body: RegisterS3Request, request: Request) -> FileRef:
-        _ = await _require_company_can_view(request)
+    async def register_s3(body: RegisterS3Request, di: Di) -> FileRef:
+        _ = await _require_company_can_view(di.authz_service)
         register_settings = get_settings()
         if not register_settings.s3.enabled:
             raise HTTPException(status_code=503, detail="S3 is not configured.")
-        service = get_files_service()
+        service = di.files_service
         try:
             file_record = await service.register_s3(
                 body.spec,
                 s3_key=body.s3_key,
-                s3_bucket=body.s3_bucket,
+                storage_id=body.storage_id,
                 original_name=body.original_name,
                 content_type=body.content_type,
                 file_size=body.file_size,
@@ -247,9 +225,9 @@ def build_files_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return stored_file_ref(file_record, route_segment=route_segment)
 
-    async def bind_file(file_id: str, placement: DocsPlacement, request: Request) -> dict[str, str]:
-        _ = await _require_company_can_view(request)
-        service = get_files_service()
+    async def bind_file(file_id: str, placement: DocsPlacement, di: Di) -> dict[str, str]:
+        _ = await _require_company_can_view(di.authz_service)
+        service = di.files_service
         try:
             result = await service.bind(file_id, placement)
         except ValueError as exc:
@@ -258,30 +236,29 @@ def build_files_router(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return result.model_dump(mode="json")
 
-    async def download_file(file_id: str, request: Request) -> StreamingResponse | Response:
-        service = get_files_service()
+    async def download_file(file_id: str, request: Request, di: Di) -> StreamingResponse | Response:
         try:
-            file_record = await service.get(file_id)
-        except ValueError as exc:
+            handle = await FileGate(di.authz_service).open(
+                file_id,
+                _file_principal_for_request(request),
+            )
+        except PlatformNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PlatformAccessDeniedError as exc:
+            raise HTTPException(status_code=403, detail="File access denied.") from exc
 
-        await _ensure_file_record_access(request, file_record)
-
-        s3_bucket = file_record.s3_bucket
+        file_record = handle.record
         s3_key = file_record.s3_key
         content_type = file_record.content_type
-        if s3_bucket != "" and s3_key != "":
+        if file_record.storage_id != "" and s3_key != "":
             if content_type == "":
                 raise HTTPException(status_code=500, detail="File content_type is missing.")
-            s3_client = S3ClientFactory.create_client_for_bucket(s3_bucket)
             range_raw = request.headers.get("range")
             range_header = range_raw.strip() if isinstance(range_raw, str) else None
             try:
-                return await stream_s3_file(
-                    s3_client=s3_client,
-                    s3_key=s3_key,
+                return await stream_file_handle(
+                    handle=handle,
                     content_type=content_type,
-                    bucket=None,
                     range_header=range_header,
                 )
             except RangeNotSatisfiableError as exc:
@@ -335,15 +312,14 @@ def build_files_router(
             media_type=media_type,
         )
 
-    async def get_file_text_preview(file_id: str, request: Request) -> FileReadPreviewResponse:
-        service = get_files_service()
+    async def get_file_text_preview(
+        file_id: str,
+        request: Request,
+        di: Di,
+    ) -> FileReadPreviewResponse:
+        _ = await _open_file_for_request(file_id, request, di.authz_service)
         try:
-            file_record = await service.get(file_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        await _ensure_file_record_access(request, file_record)
-        try:
+            file_record = await di.files_service.get(file_id)
             return await build_stored_file_text_preview(
                 file_id=file_id,
                 original_name=file_record.original_name,
@@ -351,14 +327,8 @@ def build_files_router(
         except FileReadError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    async def get_file_metadata(file_id: str, request: Request) -> FileRef:
-        service = get_files_service()
-        try:
-            file_record = await service.get(file_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-        await _ensure_file_record_access(request, file_record)
+    async def get_file_metadata(file_id: str, request: Request, di: Di) -> FileRef:
+        file_record = await _open_file_for_request(file_id, request, di.authz_service)
         return stored_file_ref(file_record)
 
     router.add_api_route(

@@ -252,11 +252,11 @@ class TestTempoClientGetTrace:
     @pytest.mark.asyncio
     async def test_get_trace_empty_id_raises(self):
         client = TempoClient(base_url="http://tempo:3200")
-        with pytest.raises(ValueError, match="trace_id обязателен"):
+        with pytest.raises(ValueError, match="trace_id is required"):
             await client.get_trace("")
 
     def test_constructor_empty_url_raises(self):
-        with pytest.raises(ValueError, match="base_url обязателен"):
+        with pytest.raises(ValueError, match="base_url is required"):
             TempoClient(base_url="")
 
 

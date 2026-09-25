@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from apps.idle_worker.container import get_container
+from apps.idle_worker.di import Di
 from apps.idle_worker.tasks.task_names import TASK_NAMESPACE_PERSONAL_BACKFILL
 from core.context import clear_context, get_context, set_context
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
+from core.models.identity_models import Company, User
 from core.namespace import ensure_personal_namespace_for_user
 from core.tasks import platform_task
 
@@ -15,26 +16,25 @@ logger = get_logger(__name__)
 
 
 @platform_task(TASK_NAMESPACE_PERSONAL_BACKFILL)
-async def namespace_personal_backfill(company_id: str | None = None) -> dict[str, int]:
+async def namespace_personal_backfill(company_id: str | None = None, *, di: Di) -> dict[str, int]:
     """Создаёт missing personal ns для members компании (все компании, если company_id нет)."""
-    container = get_container()
     if company_id is not None:
         cleaned_company_id = company_id.strip()
         if cleaned_company_id == "":
             raise ValueError("company_id is required when provided")
-        company = await container.company_repository.get(cleaned_company_id)
+        company = await Company.get(cleaned_company_id)
         if company is None:
             raise ValueError(f"Company not found: {cleaned_company_id}")
         companies = [company]
     else:
-        companies = await container.company_repository.list(limit=10000)
+        companies = await Company.list(limit=10000)
     ensured = 0
     skipped = 0
     previous = get_context()
     try:
         for company in companies:
             for user_id in company.members:
-                user = await container.user_repository.get(user_id)
+                user = await User.get(user_id)
                 if user is None:
                     skipped += 1
                     continue
@@ -53,7 +53,7 @@ async def namespace_personal_backfill(company_id: str | None = None) -> dict[str
                     )
                 )
                 await ensure_personal_namespace_for_user(
-                    container.namespace_service,
+                    di.namespace_service,
                     user,
                     company=company,
                 )

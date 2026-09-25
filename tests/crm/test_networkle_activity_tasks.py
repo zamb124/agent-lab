@@ -6,7 +6,7 @@ CRM-узел entity_type=task — граф/AI. Создание пары — POS
 Мутации work — /worktracker/api/v1/work-items (как worktracker/work_item_* в UI).
 
 Без моков и monkeypatch: реальный Postgres (CRM + worktracker), Redis, ASGI crm_client
-и worktracker_client, реальный DI-контейнер.
+и worktracker_client, реальный Service Kit.
 """
 
 from __future__ import annotations
@@ -18,8 +18,10 @@ import pytest
 from httpx import AsyncClient, Response
 
 from core.worktracker.models import (
+    Board,
     CrmEntityLink,
     UsersAssignment,
+    WorkItem,
     WorkItemKind,
     WorkItemPriority,
     WorkItemState,
@@ -89,7 +91,7 @@ async def _create_activity_task(
 
 async def test_activity_task_create_returns_entity_and_work_item_pair(
     crm_client: AsyncClient,
-    crm_container,
+    crm_di,
     unique_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -131,7 +133,7 @@ async def test_activity_task_create_returns_entity_and_work_item_pair(
     assert assignment.get("user_ids") == ["assignee_a", "assignee_b"]
 
     entity_id = _require_str(entity, "entity_id")
-    persisted = await crm_container.crm_work_item_service.get_for_task(
+    persisted = await crm_di.crm_work_item_service.get_for_task(
         company_id="system",
         entity_id=entity_id,
     )
@@ -163,7 +165,7 @@ async def test_activity_task_create_rejects_empty_title(
 
 async def test_activity_task_create_places_on_task_board(
     crm_client: AsyncClient,
-    crm_container,
+    crm_di,
     unique_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
@@ -178,7 +180,7 @@ async def test_activity_task_create_places_on_task_board(
     board_id = work_item.get("board_id")
     assert isinstance(board_id, str) and board_id
 
-    board = await crm_container.work_item_service.get_board(
+    board = await Board.get_board(
         company_id="system",
         board_id=board_id,
     )
@@ -353,7 +355,7 @@ async def test_worktracker_list_sees_crm_activity_from_activity_tasks(
 async def test_worktracker_patch_move_assign_crm_activity(
     crm_client: AsyncClient,
     worktracker_client: AsyncClient,
-    crm_container,
+    crm_di,
     unique_id: str,
     auth_headers_system: dict[str, str],
     system_user_id: str,
@@ -409,7 +411,7 @@ async def test_worktracker_patch_move_assign_crm_activity(
     assert entity_body.get("work_item_id") == work_item_id
     assert "priority" not in entity_body
 
-    persisted = await crm_container.work_item_service.get("system", work_item_id)
+    persisted = await WorkItem.require_in_company("system", work_item_id)
     assert persisted.title == f"Patched {unique_id}"
     assert persisted.priority is WorkItemPriority.HIGH
     assert persisted.state is WorkItemState.IN_PROGRESS
@@ -420,7 +422,7 @@ async def test_worktracker_patch_move_assign_crm_activity(
 async def test_entity_rename_does_not_reset_work_fields(
     crm_client: AsyncClient,
     worktracker_client: AsyncClient,
-    crm_container,
+    crm_di,
     unique_id: str,
     auth_headers_system: dict[str, str],
     system_user_id: str,
@@ -451,7 +453,7 @@ async def test_entity_rename_does_not_reset_work_fields(
     assert renamed.status_code == 200
     assert _json_object(renamed).get("name") == f"After rename {unique_id}"
 
-    item = await crm_container.work_item_service.get("system", work_item_id)
+    item = await WorkItem.require_in_company("system", work_item_id)
     assert item.title == f"After rename {unique_id}"
     assert item.priority is WorkItemPriority.HIGH
     assert item.state is WorkItemState.BLOCKED
@@ -466,13 +468,13 @@ async def test_entity_rename_does_not_reset_work_fields(
 
 async def test_entities_create_task_still_pairs_and_enriches_work_item_id(
     crm_client: AsyncClient,
-    crm_container,
+    crm_di,
     unique_id: str,
     auth_headers_system: dict[str, str],
 ) -> None:
     namespace = _ns(unique_id)
     create = await crm_client.post(
-        "/crm/api/v1/entities/",
+        "/crm/api/v1/entities",
         json={
             "entity_type": "task",
             "name": f"Graph path {unique_id}",
@@ -485,12 +487,12 @@ async def test_entities_create_task_still_pairs_and_enriches_work_item_id(
     entity_id = _require_str(body, "entity_id")
     work_item_id = _require_str(body, "work_item_id")
 
-    item = await crm_container.work_item_service.find_by_crm_entity("system", entity_id)
+    item = await WorkItem.find_work_item_by_crm_entity("system", entity_id)
     assert item is not None
     assert item.work_item_id == work_item_id
     assert item.kind is WorkItemKind.CRM_ACTIVITY
     assert item.board_id is not None
-    board = await crm_container.work_item_service.get_board(
+    board = await Board.get_board(
         company_id="system",
         board_id=item.board_id,
     )

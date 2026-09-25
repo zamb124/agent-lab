@@ -34,7 +34,7 @@ def test_is_rag_indexable_file_category_whitelist() -> None:
 
 
 def test_is_rag_indexable_file_category_rejects_empty() -> None:
-    with pytest.raises(ValueError, match="file_category обязателен"):
+    with pytest.raises(ValueError, match="file_category is required"):
         _ = is_rag_indexable_file_category("  ")
 
 

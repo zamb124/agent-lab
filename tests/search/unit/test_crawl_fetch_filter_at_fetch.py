@@ -9,8 +9,8 @@ import pytest
 
 from apps.search.config import get_search_settings
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
-from core.crawl.models import CrawlDomain, CrawlProfile, CrawlProfileWithIndex, CrawlUrl
-from core.search.index_models import SearchIndexDefinition, SearchIndexRetrievalConfig
+from core.crawl.models import CrawlDomain, CrawlJob, CrawlProfile, CrawlProfileWithIndex, CrawlUrl
+from core.search.index_models import SearchIndexDefinition
 
 pytestmark = pytest.mark.unit
 
@@ -40,7 +40,6 @@ def _profile_bundle() -> CrawlProfileWithIndex:
         rag_collection_id="runet",
         enabled=True,
         search_enabled=True,
-        retrieval=SearchIndexRetrievalConfig(),
         created_at=now,
         updated_at=now,
     )
@@ -49,7 +48,9 @@ def _profile_bundle() -> CrawlProfileWithIndex:
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="URL filter check removed from fetch_one_url — filtering moved to sitemap parsing")
-async def test_fetch_one_url_skips_filter_rejected_without_fetch() -> None:
+async def test_fetch_one_url_skips_filter_rejected_without_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = datetime.now(UTC)
     profile_bundle = _profile_bundle()
     domain = CrawlDomain(
@@ -79,35 +80,18 @@ async def test_fetch_one_url_skips_filter_rejected_without_fetch() -> None:
     increment_mock = AsyncMock()
     log_outcome = MagicMock()
 
-    class _ProfileRepo:
-        async def get_with_index(self, crawl_profile_id: str) -> CrawlProfileWithIndex:
-            return profile_bundle
-
-    class _DomainRepo:
-        async def get(self, crawl_domain_id: str) -> CrawlDomain:
-            return domain
-
-        mark_crawled = AsyncMock()
-
-    class _UrlRepo:
-        async def claim_pending_batch(self, crawl_domain_id: str, limit: int) -> list[CrawlUrl]:
-            return [crawl_url]
-
-        mark_skipped = mark_skipped_mock
-        mark_failed = AsyncMock()
-        get = AsyncMock(return_value=crawl_url)
-
-        async def count_pending(self, crawl_domain_id: str) -> int:
-            return 0
-
-        async def count_pending_for_profile(self, crawl_profile_id: str) -> int:
-            return 0
+    monkeypatch.setattr(CrawlProfile, "get_with_index", AsyncMock(return_value=profile_bundle))
+    monkeypatch.setattr(CrawlDomain, "get", AsyncMock(return_value=domain))
+    monkeypatch.setattr(CrawlDomain, "mark_crawled", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "claim_pending_batch", AsyncMock(return_value=[crawl_url]))
+    monkeypatch.setattr(CrawlUrl, "mark_skipped", mark_skipped_mock)
+    monkeypatch.setattr(CrawlUrl, "mark_failed", AsyncMock())
+    monkeypatch.setattr(CrawlUrl, "get", AsyncMock(return_value=crawl_url))
+    monkeypatch.setattr(CrawlUrl, "count_pending", AsyncMock(return_value=0))
+    monkeypatch.setattr(CrawlUrl, "count_pending_for_profile", AsyncMock(return_value=0))
+    monkeypatch.setattr(CrawlJob, "increment", increment_mock)
 
     orchestrator = CrawlOrchestratorService(
-        crawl_profile_repository=_ProfileRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_domain_repository=_DomainRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_url_repository=_UrlRepo(),  # pyright: ignore[reportArgumentType]
-        crawl_job_repository=AsyncMock(increment=increment_mock),
         fetch_service=fetch_service,
         page_enrichment_service=AsyncMock(),
         politeness_service=AsyncMock(

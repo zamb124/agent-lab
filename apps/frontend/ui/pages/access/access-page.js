@@ -12,7 +12,7 @@ import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
-import '../../sheets/access-why-sheet.js';
+import '../../components/sheets/access-why-sheet.js';
 
 const OBJECT_TYPES = Object.freeze([
     'wiki_page',

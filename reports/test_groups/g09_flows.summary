@@ -1,0 +1,5 @@
+GROUP g09_flows rc=1
+FAILED tests/flows/core/services/test_services.py::TestFlowsLoader::test_load_tools_to_db
+=========================== short test summary info ============================
+FAILED tests/flows/core/services/test_services.py::TestFlowsLoader::test_load_tools_to_db
+====== 1 failed, 1983 passed, 1 skipped, 6 warnings in 358.14s (0:05:58) =======

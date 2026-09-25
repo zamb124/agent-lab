@@ -19,9 +19,11 @@ import pytest
 from httpx import AsyncClient, Response
 
 from apps.wiki.realtime.command_router import WIKI_OPERATIONS
+from core.di.platform import PlatformDi
 from core.types import JsonObject, JsonValue, require_json_object
 from core.utils.tokens import get_token_service
 from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
+from tests.sync.api._helpers import seed_namespace_via_repo
 
 _API = "/wiki/api/v1"
 _NAMESPACE = "default"
@@ -49,7 +51,7 @@ _VOLATILE_KEYS = frozenset(
     }
 )
 
-CompareMode = Literal["exact", "normalized", "named_title"]
+CompareMode = Literal["exact", "normalized", "named_title", "named_name"]
 PayloadStrategy = Literal["body_minus_path", "query", "none"]
 SetupFn = Callable[["LiveCtx"], Awaitable[JsonObject]]
 
@@ -78,6 +80,7 @@ class LiveCtx:
     unique_id: str
     suffix: str
     system_user2_id: str
+    di: PlatformDi
     marker: str | None = None
 
 
@@ -147,7 +150,8 @@ async def _setup_deleted_tree(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_namespaces(ctx: LiveCtx) -> JsonObject:
-    _ = ctx
+    name = f"0wiki-ns-{ctx.unique_id}-{ctx.suffix}"
+    ctx.marker = await seed_namespace_via_repo(ctx.di, "system", name)
     return {"limit": 200, "offset": 0}
 
 
@@ -579,7 +583,7 @@ _CASES: dict[str, OpCase] = {
         RestMirror("GET", f"{_API}/namespaces", "query"),
         _setup_namespaces,
         True,
-        "normalized",
+        "named_name",
     ),
 }
 
@@ -680,6 +684,21 @@ async def _rest_command(
     )
 
 
+def _row_by_name(payload: JsonObject, name: str) -> JsonObject:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise AssertionError("list payload must have items[]")
+    matched: list[JsonObject] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("name") == name:
+            matched.append(require_json_object(item, "namespace.row"))
+    if len(matched) != 1:
+        raise AssertionError(f"expected one namespace name={name!r}, got {len(matched)}")
+    return matched[0]
+
+
 def _row_by_title(payload: JsonObject, title: str) -> JsonObject:
     items = payload.get("items")
     if not isinstance(items, list):
@@ -716,6 +735,7 @@ async def test_wiki_op_ws_rest_identical(
     auth_token_system: str,
     system_user2_id: str,
     unique_id: str,
+    frontend_di,
 ) -> None:
     _ = wiki_service_http, realtime_service, frontend_service
     headers = {**auth_headers_system, "X-Platform-Namespace": _NAMESPACE}
@@ -726,6 +746,7 @@ async def test_wiki_op_ws_rest_identical(
         unique_id=unique_id,
         suffix="ws",
         system_user2_id=system_user2_id,
+        di=frontend_di,
     )
     ws_payload = await case.setup(ws_ctx)
     ws_event = await _ws_command(
@@ -748,6 +769,7 @@ async def test_wiki_op_ws_rest_identical(
             unique_id=unique_id,
             suffix="rest",
             system_user2_id=system_user2_id,
+        di=frontend_di,
         )
         rest_payload = await case.setup(rest_ctx)
         rest_marker = rest_ctx.marker
@@ -763,6 +785,13 @@ async def test_wiki_op_ws_rest_identical(
         assert _row_by_title(ws_result, rest_marker) == _row_by_title(rest_result, rest_marker), (
             f"WS != REST row для {canonical_type}"
         )
+        return
+    if case.compare == "named_name":
+        if rest_marker is None:
+            raise AssertionError("named_name compare requires marker")
+        assert _normalize(_row_by_name(ws_result, rest_marker)) == _normalize(
+            _row_by_name(rest_result, rest_marker)
+        ), f"WS != REST row для {canonical_type}"
         return
     assert _normalize(ws_result) == _normalize(rest_result), (
         f"WS != REST для {canonical_type}\nWS: {ws_result}\nREST: {rest_result}"

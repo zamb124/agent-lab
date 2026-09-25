@@ -73,7 +73,7 @@ COMMON_TEST_ENV: dict[str, str] = {
     TEST_SCOPE_DEFAULT_ENV: TEST_SCOPE_STATIC_E2E,
     "DATABASE__REDIS_URL": "redis://localhost:63792/0",
     "TASKS__BROKER_URL": "redis://localhost:63792/1",
-    # DevInterServiceProxy: браузер на :9021 с путём /flows/... → flows_service_url (см. dev_inter_service_proxy.mdc).
+    # DevInterServiceProxy: браузер на :9021 с путём /flows/... → flows_service_url (см. integrations.mdc).
     "SERVER__ENV": "test",
     "SERVER__DEFAULT_TENANT_ID": "test_tenant",
     "SERVER__FLOWS_SERVICE_URL": "http://localhost:9001",
@@ -104,17 +104,13 @@ COMMON_TEST_ENV: dict[str, str] = {
     "CALLS__LIVEKIT_API_KEY": "devkey",
     "CALLS__LIVEKIT_API_SECRET": TEST_LIVEKIT_API_SECRET,
     "S3__ENABLED": "true",
-    "S3__DEFAULT_BUCKET": "test-bucket",
-    "S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL": "http://localhost:19002",
-    "S3__BUCKETS__TEST-BUCKET__ACCESS_KEY_ID": "minioadmin",
-    "S3__BUCKETS__TEST-BUCKET__SECRET_ACCESS_KEY": "minioadmin",
-    "S3__BUCKETS__TEST-BUCKET__REGION_NAME": "us-east-1",
-    "S3__BUCKETS__TEST-BUCKET__PROVIDER": "minio",
-    "S3__BUCKETS__TEST_BUCKET__ENDPOINT_URL": "http://localhost:19002",
-    "S3__BUCKETS__TEST_BUCKET__ACCESS_KEY_ID": "minioadmin",
-    "S3__BUCKETS__TEST_BUCKET__SECRET_ACCESS_KEY": "minioadmin",
-    "S3__BUCKETS__TEST_BUCKET__REGION_NAME": "us-east-1",
-    "S3__BUCKETS__TEST_BUCKET__PROVIDER": "minio",
+    "S3__ENDPOINT_URL": "http://localhost:19002",
+    "S3__BUCKET_NAME": "test-bucket",
+    "S3__ACCESS_KEY_ID": "minioadmin",
+    "S3__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__REGION_NAME": "us-east-1",
+    "S3__PROVIDER": "minio",
+    "S3__PATH_STYLE": "true",
     "PUSH__ENABLED": "true",
     "PUSH__VAPID_PUBLIC_KEY": "BP1OB4uP0WSgQqumAOefg1PdsN9S7qA1-UK26qjSPa11ylB1HgbcrVi6peEUkhkdfrADeTa_dwypXYiucfbu3JQ",
     "PUSH__VAPID_PRIVATE_KEY": "lwzkecdrLZYcyUVhYUQuAnXYk92xup132qCCk5BtUEs",
@@ -364,6 +360,12 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         port=9025,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
+    GranianService(
+        name="stock",
+        app_path="apps.stock.main:app",
+        port=9026,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
 )
 
 
@@ -425,6 +427,13 @@ def build_taskiq_worker_services(pytest_workers: int | None = None) -> tuple[Tas
         name="idle_worker",
         worker_module="apps.idle_worker.worker:worker_app",
         stream_name="idle",
+        workers=2,
+        readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
+    ),
+    TaskiqWorkerService(
+        name="a2a_push_worker",
+        worker_module="apps.idle_worker.a2a_push_worker:worker_app",
+        stream_name="a2a_push",
         workers=1,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
     ),
@@ -856,7 +865,31 @@ def _port_listening(port: int) -> bool:
         sock.close()
 
 
+MIN_LISTEN_BACKLOG = 1024
+
+
+def _require_listen_backlog() -> None:
+    """macOS режет listen-очередь до kern.ipc.somaxconn: granian (--backlog 1024) и проброс портов Docker
+    теряют SYN под параллельным pytest, и тесты падают на connect к 127.0.0.1."""
+    if sys.platform != "darwin":
+        return
+    raw = subprocess.run(
+        ["sysctl", "-n", "kern.ipc.somaxconn"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    somaxconn = int(raw)
+    if somaxconn < MIN_LISTEN_BACKLOG:
+        raise SystemExit(
+            f"test_stack: kern.ipc.somaxconn={somaxconn} < {MIN_LISTEN_BACKLOG}. "
+            + "Выполните `sudo sysctl -w kern.ipc.somaxconn=4096` и перезапустите Docker Desktop "
+            + "(его проброс портов читает лимит при старте), затем `make test-up`."
+        )
+
+
 def cmd_up() -> int:
+    _require_listen_backlog()
     _bootstrap_parent_test_env()
     cmd_down(quiet=True)
 

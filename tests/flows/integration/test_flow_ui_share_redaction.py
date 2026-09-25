@@ -93,13 +93,13 @@ def _share_headers(token: str) -> dict[str, str]:
 async def test_share_viewer_reads_task_without_redacted_state_paths(
     client: AsyncClient,
     app: object,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     _ = app
     flow_id = f"a2a_share_redact_{unique_id}"
     context_id = f"ctx-redact-{unique_id}"
     secret = f"TOP-SECRET-{unique_id}"
-    _ = await ensure_flow(flow_id=flow_id, interface=_secret_interface())
+    _ = await ensure_flow(flow_id=flow_id, interface=_secret_interface(), di=di)
 
     owner_task = await a2a_send(
         client,
@@ -144,12 +144,12 @@ async def test_share_viewer_reads_task_without_redacted_state_paths(
 async def test_share_editor_cannot_write_redacted_paths(
     client: AsyncClient,
     app: object,
-    unique_id: str,
+    unique_id: str, di,
 ) -> None:
     _ = app
     flow_id = f"a2a_share_write_{unique_id}"
     context_id = f"ctx-write-{unique_id}"
-    _ = await ensure_flow(flow_id=flow_id, interface=_secret_interface())
+    _ = await ensure_flow(flow_id=flow_id, interface=_secret_interface(), di=di)
 
     owner_task = await a2a_send(
         client,

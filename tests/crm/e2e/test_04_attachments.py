@@ -60,7 +60,7 @@ class TestAttachments:
     ) -> None:
         """Загрузка текстового файла"""
         note_name = f"Note с txt файлом {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -94,7 +94,7 @@ class TestAttachments:
     ) -> None:
         """Загрузка файлов разных форматов (PDF, DOCX, изображения)"""
         note_name = f"Note с разными файлами {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -146,7 +146,7 @@ class TestAttachments:
     ) -> None:
         """Получение списка вложений entity"""
         task_name = f"Task с вложениями {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": task_name,
         }, headers=auth_headers_system)
@@ -186,7 +186,7 @@ class TestAttachments:
     ) -> None:
         """Удаление вложения"""
         note_name = f"Note для удаления вложения {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -223,7 +223,7 @@ class TestAttachments:
     ) -> None:
         """Вложения сохраняются при обновлении entity"""
         note_name = f"Note {unique_id}"
-        entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
@@ -260,14 +260,14 @@ class TestAttachments:
     ) -> None:
         """Разные entities могут иметь вложения"""
         note_name = f"Note {unique_id}"
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": note_name,
         }, headers=auth_headers_system)
         note_id = _entity_id(note_resp)
 
         task_name = f"Task {unique_id}"
-        task_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        task_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": task_name,
         }, headers=auth_headers_system)

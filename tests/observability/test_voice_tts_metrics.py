@@ -15,8 +15,9 @@ from apps.voice.services.speak_worker import (
 )
 from apps.voice.services.voice_session import VoiceSession
 from core.clients.tts_streaming import BaseTTSStreamer
-from core.context import Context, reset_context, set_context
+from core.context import reset_context, set_context
 from core.logging.attributes import LOG_TTS_PROVIDER, LOG_TTS_TTFA_MS
+from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
 from tests.fixtures.observability_log_capture import (

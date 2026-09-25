@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Mapping
 from dataclasses import dataclass
 from typing import Generic, Never, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from core.di.kit import ServiceDi
 from core.errors.boundary import PlatformBoundaryError
 from core.models.base import StrictBaseModel
 from core.models.identity_models import User
@@ -20,24 +21,24 @@ from core.websocket.command_router import (
     validate_ws_payload,
 )
 
-ContainerT = TypeVar("ContainerT")
+DiT = TypeVar("DiT", bound=ServiceDi)
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
 OperationPayloadT = TypeVar("OperationPayloadT", bound=BaseModel, contravariant=True)
-OperationContainerT = TypeVar("OperationContainerT", contravariant=True)
+OperationDiT = TypeVar("OperationDiT", bound=ServiceDi, contravariant=True)
 
 
-class OperationFn(Protocol[OperationPayloadT, OperationContainerT]):
+class OperationFn(Protocol[OperationPayloadT, OperationDiT]):
     def __call__(
         self,
         payload: OperationPayloadT,
         /,
         *,
         user: User,
-        container: OperationContainerT,
+        di: OperationDiT,
     ) -> Awaitable[BaseModel | JsonValue | None]: ...
 
 
-class RegisteredOperation(Protocol[OperationContainerT]):
+class RegisteredOperation(Protocol[OperationDiT]):
     @property
     def payload_model(self) -> type[BaseModel]: ...
 
@@ -46,7 +47,7 @@ class RegisteredOperation(Protocol[OperationContainerT]):
         payload: JsonObject,
         *,
         user: User,
-        container: OperationContainerT,
+        di: OperationDiT,
     ) -> JsonObject | None: ...
 
 
@@ -169,9 +170,9 @@ class EmptyPayload(StrictBaseModel):
 
 
 @dataclass(frozen=True)
-class Operation(Generic[PayloadT, ContainerT]):
+class Operation(Generic[PayloadT, DiT]):
     payload_model: type[PayloadT]
-    fn: OperationFn[PayloadT, ContainerT]
+    fn: OperationFn[PayloadT, DiT]
 
     def parse_payload(self, payload: JsonObject) -> PayloadT:
         return validate_ws_payload(self.payload_model, payload)
@@ -181,10 +182,10 @@ class Operation(Generic[PayloadT, ContainerT]):
         payload: JsonObject,
         *,
         user: User,
-        container: ContainerT,
+        di: DiT,
     ) -> JsonObject | None:
         parsed = self.parse_payload(payload)
-        result = await self.fn(parsed, user=user, container=container)
+        result = await self.fn(parsed, user=user, di=di)
         return dump_ws_result(result)
 
 
@@ -192,28 +193,34 @@ class Operation(Generic[PayloadT, ContainerT]):
 _registered_operation_ids: dict[str, int] = {}
 
 
-def register_service_operations(
-    catalog: Mapping[str, RegisteredOperation[ContainerT]],
-    get_container: Callable[[], ContainerT],
+def register_operations(
+    catalog: Mapping[str, RegisteredOperation[DiT]],
+    di_class: type[DiT],
 ) -> None:
-    """Зарегистрировать каталог владельца.
+    """Зарегистрировать каталог владельца; DI команда получает из ASGI-приложения владельца.
 
-    Повторный вызов с тем же объектом `Operation` — no-op (lifespan сервиса может
-    подниматься несколько раз в одном процессе, например ASGI-клиенты в тестах);
+    Повторный вызов с тем же объектом `Operation` — no-op (в одном процессе тестов
+    приложение создаётся один раз, а lifespan поднимается многократно);
     другой handler на уже занятый `command_type` — ошибка.
     """
     for command_type, operation in catalog.items():
         if _registered_operation_ids.get(command_type) == id(operation):
             continue
-        register_ws_command_handler(command_type, _make_ws_handler(operation, get_container))
+        register_ws_command_handler(command_type, _make_ws_handler(operation, di_class))
         _registered_operation_ids[command_type] = id(operation)
 
 
 def _make_ws_handler(
-    operation: RegisteredOperation[ContainerT],
-    get_container: Callable[[], ContainerT],
+    operation: RegisteredOperation[DiT],
+    di_class: type[DiT],
 ) -> CommandHandler:
-    async def handler(payload: JsonObject, user: User) -> JsonObject | None:
-        return await operation.run(payload, user=user, container=get_container())
+    async def handler(payload: JsonObject, user: User, di: ServiceDi) -> JsonObject | None:
+        if not isinstance(di, di_class):
+            raise WsCommandError(
+                "internal",
+                f"command expects {di_class.__qualname__}, the owner app DI is {type(di).__qualname__}",
+                error_code="internal",
+            )
+        return await operation.run(payload, user=user, di=di)
 
     return handler

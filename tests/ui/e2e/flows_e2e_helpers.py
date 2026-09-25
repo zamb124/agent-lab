@@ -1044,22 +1044,19 @@ async def flows_seed_mcp_store_catalog_entry(
     upstream_url: str,
 ) -> str:
     """Глобальная catalog entry для UI/E2E MCP Store."""
-    from apps.flows.src.container import get_container
-    from apps.flows.src.container_contracts import as_flow_runtime_container
     from tests.flows.integration.mcp_catalog_helpers import (
         build_verified_catalog_entry,
         persist_catalog_entry,
     )
 
     catalog_id = f"ui_doc_{unique_id}"
-    container = as_flow_runtime_container(get_container())
     entry = build_verified_catalog_entry(
         catalog_id=catalog_id,
         upstream_url=upstream_url,
         platform_approved=False,
         title=f"Doc MCP {unique_id}",
     )
-    _ = await persist_catalog_entry(container=container, entry=entry)
+    _ = await persist_catalog_entry(entry=entry)
     return catalog_id
 
 
@@ -1944,16 +1941,20 @@ async def flows_open_problems(page: Page) -> Locator:
 
 async def flows_seed_mock_llm(responses: list[Any]) -> None:
     """Предзасев MockLLM под worker E2E-scope (см. tests/ui/e2e_worker.py)."""
-    from apps.flows.src.container import get_container
     from core.clients.llm.mock import setup_mock_responses_redis
+    from core.clients.redis_client import RedisClient
+    from core.config import get_settings
     from tests.ui.e2e_worker import ui_e2e_test_scope
 
-    container = get_container()
-    await setup_mock_responses_redis(
-        container.redis_client,
-        responses,
-        test_scope=ui_e2e_test_scope(),
-    )
+    redis_client = RedisClient(get_settings().database.redis_url)
+    try:
+        await setup_mock_responses_redis(
+            redis_client,
+            responses,
+            test_scope=ui_e2e_test_scope(),
+        )
+    finally:
+        await redis_client.close()
 
 
 # --------------------------------------------------------------------------------------
@@ -3513,7 +3514,7 @@ async def flows_trigger_editor_apply_email_filter_preset(
 
 
 async def flows_seed_ui_mail_mailbox(
-    frontend_container: Any,
+    frontend_di: Any,
     *,
     unique_id: str,
     local_part: str | None = None,
@@ -3535,8 +3536,8 @@ async def flows_seed_ui_mail_mailbox(
 
     company_id = ui_e2e_company_id()
     user_id = f"ui_owner_{ui_e2e_worker_id()}"
-    company = await frontend_container.company_repository.get(company_id)
-    user = await frontend_container.user_repository.get(user_id)
+    company = await Company.get(company_id)
+    user = await User.get(user_id)
     if company is None or user is None:
         raise RuntimeError(
             f"UI E2E company/user missing for mail seed: {company_id!r} / {user_id!r}"
@@ -3545,19 +3546,16 @@ async def flows_seed_ui_mail_mailbox(
         raise TypeError("flows_seed_ui_mail_mailbox: unexpected company/user types")
 
     port = RecordingMailServerPort(supports_provision=False)
-    base_mail = frontend_container.mail_service
+    base_mail = frontend_di.mail_service
     mail_service = MailService(
-        connection_repository=base_mail._connection_repository,
-        binding_repository=base_mail._binding_repository,
-        sync_cursor_repository=base_mail._sync_cursor_repository,
-        folder_repository=base_mail._folder_repository,
-        message_repository=base_mail._message_repository,
         authz=base_mail._authz,
         namespace_service=base_mail._namespace_service,
-        company_repository=base_mail._company_repository,
-        user_repository=base_mail._user_repository,
+        rag_client=base_mail._rag_client,
         mail_config=base_mail._mail_config,
         port_override=port,
+        files_service=base_mail._files_service,
+        attachment_file_index=base_mail._attachment_file_index,
+        calendar_bridge=base_mail._calendar_bridge,
     )
     set_context(
         Context(

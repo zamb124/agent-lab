@@ -22,16 +22,12 @@ from core.calendar.caldav_discovery import (
     resolve_caldav_target,
 )
 from core.calendar.events import CALENDAR_EVENT_CREATED
-from core.calendar.repositories import CalendarEventSqlRepository
 from core.clients.service_client import ServiceClient, ServiceClientError
 from core.config import get_settings
-from core.db.repositories.company_repository import CompanyRepository
-from core.db.repositories.user_repository import UserRepository
 from core.events import publish_event_to_users
 from core.http import get_httpx_client
 from core.integrations.models import IntegrationCredential, IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
-from core.integrations.repository import IntegrationCredentialRepository
 from core.logging import get_logger
 from core.models import (
     CalendarAttendee,
@@ -50,6 +46,7 @@ from core.models import (
     CalendarProvider,
 )
 from core.models.base import FlexibleBaseModel, StrictBaseModel
+from core.models.identity_models import Company, User
 from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -579,18 +576,10 @@ def _calendar_integration_to_credential(integration: CalendarIntegration) -> Int
 class CalendarService:
     def __init__(
         self,
-        event_repository: CalendarEventSqlRepository,
         oauth_service: OAuthService,
-        credential_repository: IntegrationCredentialRepository,
-        user_repository: UserRepository,
-        company_repository: CompanyRepository,
         service_client: ServiceClient,
     ) -> None:
-        self._event_repository: CalendarEventSqlRepository = event_repository
         self._oauth_service: OAuthService = oauth_service
-        self._credential_repository: IntegrationCredentialRepository = credential_repository
-        self._user_repository: UserRepository = user_repository
-        self._company_repository: CompanyRepository = company_repository
         self._service_client: ServiceClient = service_client
         self._google_client: GoogleCalendarClient = GoogleCalendarClient()
 
@@ -655,7 +644,7 @@ class CalendarService:
                 "metadata": require_json_object(metadata.model_dump(mode="json"), "calendar.integration.metadata"),
             }
         )
-        await self._credential_repository.upsert(updated)
+        await IntegrationCredential.upsert_by_credential_id(updated)
 
         now = datetime.now(timezone.utc)
         _ = await self.run_sync(
@@ -678,7 +667,7 @@ class CalendarService:
     ) -> list[CalendarEvent]:
         if _ensure_utc(start_at) >= _ensure_utc(end_at):
             raise ValueError("Calendar list range start_at must be before end_at")
-        local_events = await self._event_repository.list_in_range(
+        local_events = await CalendarEvent.list_in_range(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -738,7 +727,7 @@ class CalendarService:
         organizer_user_id: str,
         attendees: list[CalendarAttendee],
     ) -> list[str]:
-        company = await self._company_repository.get(company_id)
+        company = await Company.get(company_id)
         if company is None:
             raise ValueError(f"Company {company_id} not found")
         company_member_ids = set(company.members.keys())
@@ -754,12 +743,12 @@ class CalendarService:
             if attendee.attendee_id in company_member_ids:
                 invited_ids.add(attendee.attendee_id)
                 continue
-            attendee_user = await self._user_repository.get(attendee.attendee_id)
+            attendee_user = await User.get(attendee.attendee_id)
             if attendee_user is not None and company_id in attendee_user.companies:
                 invited_ids.add(attendee.attendee_id)
         if invited_emails:
             for email in invited_emails:
-                for member_user in await self._user_repository.find_all_by_email_ci(email):
+                for member_user in await User.find_all_by_email_ci(email):
                     if member_user.user_id in company_member_ids or company_id in member_user.companies:
                         invited_ids.add(member_user.user_id)
         invited_ids.discard(organizer_user_id)
@@ -930,7 +919,7 @@ class CalendarService:
             created_at = now
             created_by = user_id
         else:
-            current = await self._event_repository.get(event_id=event_id, company_id=company_id)
+            current = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
             if current is None:
                 raise ValueError(f"Calendar event {event_id} not found")
             final_event_id = current.event_id
@@ -1014,7 +1003,7 @@ class CalendarService:
             created_at=created_at,
             updated_at=now,
         )
-        await self._event_repository.upsert(event)
+        await CalendarEvent.upsert_by_event_id(event)
         if event_id is None and event.source == CalendarEventSource.PLATFORM:
             await self._notify_attendees_about_event_invite(
                 event=event,
@@ -1023,7 +1012,7 @@ class CalendarService:
         return event
 
     async def delete_event(self, event_id: str, company_id: str) -> None:
-        event = await self._event_repository.get(event_id=event_id, company_id=company_id)
+        event = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
         if event is None:
             raise ValueError(f"Calendar event {event_id} not found")
         token = event.metadata.get(SYNC_LINK_TOKEN_META)
@@ -1033,7 +1022,7 @@ class CalendarService:
                 f"/sync/api/v1/calls/links/{token}",
             )
         await self._delete_external_links(event)
-        deleted = await self._event_repository.delete(event_id=event_id, company_id=company_id)
+        deleted = await CalendarEvent.delete_in_company(company_id=company_id, event_id=event_id)
         if not deleted:
             raise RuntimeError(f"Failed to delete calendar event {event_id}")
 
@@ -1051,7 +1040,7 @@ class CalendarService:
         return sorted(recipients)
 
     async def mark_sync_meeting_reminder_sent(self, event_id: str, company_id: str) -> None:
-        event = await self._event_repository.get(event_id=event_id, company_id=company_id)
+        event = await CalendarEvent.find_in_company(event_id=event_id, company_id=company_id)
         if event is None:
             return
         md = dict(event.metadata)
@@ -1059,10 +1048,10 @@ class CalendarService:
         updated = event.model_copy(
             update={"metadata": md, "updated_at": datetime.now(timezone.utc)}
         )
-        await self._event_repository.upsert(updated)
+        await CalendarEvent.upsert_by_event_id(updated)
 
     async def list_integrations(self, user_id: str, company_id: str) -> list[CalendarIntegration]:
-        credentials = await self._credential_repository.list_by_user(
+        credentials = await IntegrationCredential.list_by_user(
             company_id=company_id,
             user_id=user_id,
         )
@@ -1082,7 +1071,7 @@ class CalendarService:
         provider = payload.provider
         if provider != CalendarProvider.GOOGLE and provider not in CALDAV_PROVIDERS:
             raise ValueError(f"Unsupported calendar provider for integration: {provider}")
-        existing = await self._credential_repository.get_by_user_provider_service_mailbox(
+        existing = await IntegrationCredential.by_natural_key(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider(provider),
@@ -1137,7 +1126,7 @@ class CalendarService:
             updated_at=now,
         )
         credential = _calendar_integration_to_credential(integration)
-        await self._credential_repository.upsert(credential)
+        await IntegrationCredential.upsert_by_credential_id(credential)
         return integration
 
     async def ensure_caldav_integration_from_mailbox(
@@ -1211,7 +1200,7 @@ class CalendarService:
         mailbox_binding_id: str,
     ) -> int:
         """Снять календарные интеграции ящика при его отвязке."""
-        return await self._credential_repository.delete_by_mailbox_binding(
+        return await IntegrationCredential.delete_by_mailbox_binding(
             company_id=company_id,
             mailbox_binding_id=mailbox_binding_id,
             service="calendar",
@@ -1230,7 +1219,7 @@ class CalendarService:
         """
         if not payload.source_id or not payload.source_id.strip():
             raise ValueError("iMIP calendar payload requires source_id")
-        existing = await self._event_repository.get_by_source(
+        existing = await CalendarEvent.by_source(
             company_id=company_id,
             source=payload.source,
             source_id=payload.source_id,
@@ -1243,7 +1232,7 @@ class CalendarService:
         )
 
     async def disconnect_integration(self, user_id: str, company_id: str, integration_id: str) -> None:
-        deleted = await self._credential_repository.delete(
+        deleted = await IntegrationCredential.delete_by_credential_id(
             credential_id=integration_id,
             company_id=company_id,
             user_id=user_id,
@@ -1261,10 +1250,10 @@ class CalendarService:
     ) -> dict[str, int]:
         if _ensure_utc(start_at) >= _ensure_utc(end_at):
             raise ValueError("Calendar sync range start_at must be before end_at")
-        credential = await self._credential_repository.get_by_credential_id(
-            credential_id=integration_id,
+        credential = await IntegrationCredential.find_for_user(
             company_id=company_id,
             user_id=user_id,
+            credential_id=integration_id,
         )
         if credential is None or credential.service != "calendar":
             raise ValueError(f"Calendar integration {integration_id} not found")
@@ -1359,7 +1348,7 @@ class CalendarService:
             start_at=start_at,
             end_at=end_at,
         )
-        existing = await self._event_repository.list_in_range(
+        existing = await CalendarEvent.list_in_range(
             company_id=company_id,
             start_at=start_at - timedelta(days=3650),
             end_at=end_at + timedelta(days=3650),
@@ -1426,7 +1415,7 @@ class CalendarService:
                 created_at=matched.created_at if matched else now,
                 updated_at=now,
             )
-            await self._event_repository.upsert(event)
+            await CalendarEvent.upsert_by_event_id(event)
             imported += 1
         return imported
 
@@ -1452,7 +1441,7 @@ class CalendarService:
             start_at=start_at,
             end_at=end_at,
         )
-        existing = await self._event_repository.list_in_range(
+        existing = await CalendarEvent.list_in_range(
             company_id=company_id,
             start_at=start_at - timedelta(days=3650),
             end_at=end_at + timedelta(days=3650),
@@ -1519,7 +1508,7 @@ class CalendarService:
                 created_at=matched.created_at if matched else now,
                 updated_at=now,
             )
-            await self._event_repository.upsert(event)
+            await CalendarEvent.upsert_by_event_id(event)
             imported += 1
         return imported
 
@@ -1532,7 +1521,7 @@ class CalendarService:
         start_at: datetime,
         end_at: datetime,
     ) -> int:
-        events = await self._event_repository.list_in_range(
+        events = await CalendarEvent.list_in_range(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -1589,7 +1578,7 @@ class CalendarService:
             event.external_refs = refs
             event.updated_by_user_id = user_id
             event.updated_at = datetime.now(timezone.utc)
-            await self._event_repository.upsert(event)
+            await CalendarEvent.upsert_by_event_id(event)
             exported += 1
         return exported
 
@@ -1606,7 +1595,7 @@ class CalendarService:
     ) -> int:
         if not credentials.username:
             raise ValueError(f"{provider} integration username is required")
-        events = await self._event_repository.list_in_range(
+        events = await CalendarEvent.list_in_range(
             company_id=company_id,
             start_at=start_at,
             end_at=end_at,
@@ -1646,7 +1635,7 @@ class CalendarService:
             event.external_refs = refs
             event.updated_by_user_id = user_id
             event.updated_at = datetime.now(timezone.utc)
-            await self._event_repository.upsert(event)
+            await CalendarEvent.upsert_by_event_id(event)
             exported += 1
         return exported
 
@@ -1662,7 +1651,7 @@ class CalendarService:
         провайдера может быть несколько интеграций (по одной на ящик), поэтому
         различаем их по calendar_id из ref.
         """
-        credentials = await self._credential_repository.list_by_user_provider_service(
+        credentials = await IntegrationCredential.list_by_user_provider_service(
             company_id=company_id,
             user_id=user_id,
             provider=IntegrationProvider(ref.provider),

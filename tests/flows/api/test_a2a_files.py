@@ -12,7 +12,6 @@ from typing import Any, Dict
 
 import pytest
 
-from apps.flows.src.container import get_container
 from core.context import Context, clear_context, set_context
 from core.files.file_ref import FileRef
 from core.models.identity_models import Company, User
@@ -85,7 +84,7 @@ class TestA2AFilesHandling:
         return "example_react"
 
     @pytest.mark.asyncio
-    async def test_file_saved_and_in_state(self, client, flow_id, mock_llm_with_queue, sync_tools):
+    async def test_file_saved_and_in_state(self, client, flow_id, mock_llm_with_queue, sync_tools, di):
         """
         Проверяет что файл из Part.raw/url:
         1. Персистится (S3 + FileRecord), в state — file_id и url
@@ -119,7 +118,7 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data, f"Expected result, got: {data}"
 
-        workflow_runtime = get_container().workflow_runtime
+        workflow_runtime = di.workflow_runtime
         session_id = f"{flow_id}:{context_id}"
         state = await workflow_runtime.get_state(session_id)
 
@@ -135,7 +134,7 @@ class TestA2AFilesHandling:
         assert file_info.url is not None
         assert "/api/v1/files/download/" in file_info.url
         assert file_info.url.startswith("/")
-        stored = await get_container().files_service.get(file_info.file_id)
+        stored = await di.files_service.get(file_info.file_id)
         assert stored is not None
         assert stored.file_size == len(test_content)
 
@@ -148,7 +147,7 @@ class TestA2AFilesHandling:
         mock_llm_with_queue,
         sync_tools,
         auth_headers_system,
-    ):
+    di):
         """Part.url из chat upload остаётся тем же FileRecord, без повторной записи bytes."""
         mock_llm_with_queue([{"type": "text", "content": "I received your linked file"}])
 
@@ -201,7 +200,7 @@ class TestA2AFilesHandling:
             )
         )
         try:
-            state = await get_container().workflow_runtime.get_state(f"{flow_id}:{context_id}")
+            state = await di.workflow_runtime.get_state(f"{flow_id}:{context_id}")
         finally:
             clear_context()
         assert state is not None
@@ -215,7 +214,7 @@ class TestA2AFilesHandling:
         assert file_info.file_size == len(b"a,b\n1,2\n")
 
     @pytest.mark.asyncio
-    async def test_file_info_in_content(self, client, flow_id, mock_llm_with_queue, sync_tools):
+    async def test_file_info_in_content(self, client, flow_id, mock_llm_with_queue, sync_tools, di):
         """
         Проверяет что информация о файле добавляется в content сообщения.
         Агент должен видеть [FILE]...[/FILE] теги.
@@ -247,7 +246,7 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data, f"Expected result, got: {data}"
 
-        workflow_runtime = get_container().workflow_runtime
+        workflow_runtime = di.workflow_runtime
         session_id = f"{flow_id}:{context_id}"
         state = await workflow_runtime.get_state(session_id)
 
@@ -261,7 +260,7 @@ class TestA2AFilesHandling:
         assert "/api/v1/files/download/" in content
 
     @pytest.mark.asyncio
-    async def test_multiple_files(self, client, flow_id, mock_llm_with_queue, sync_tools):
+    async def test_multiple_files(self, client, flow_id, mock_llm_with_queue, sync_tools, di):
         """Проверяет обработку нескольких файлов в одном сообщении."""
         mock_llm_with_queue([{"type": "text", "content": "Multiple files received"}])
 
@@ -303,7 +302,7 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data
 
-        workflow_runtime = get_container().workflow_runtime
+        workflow_runtime = di.workflow_runtime
         session_id = f"{flow_id}:{context_id}"
         state = await workflow_runtime.get_state(session_id)
 
@@ -321,7 +320,7 @@ class TestA2AFilesHandling:
         assert content.count("[FILE]") == 2, "Content should have 2 [FILE] tags"
 
     @pytest.mark.asyncio
-    async def test_message_without_files(self, client, flow_id, mock_llm_with_queue, sync_tools):
+    async def test_message_without_files(self, client, flow_id, mock_llm_with_queue, sync_tools, di):
         """Проверяет что сообщение без файлов работает как раньше."""
         mock_llm_with_queue([{"type": "text", "content": "Simple response"}])
 
@@ -349,7 +348,7 @@ class TestA2AFilesHandling:
         data = resp.json()
         assert "result" in data
 
-        workflow_runtime = get_container().workflow_runtime
+        workflow_runtime = di.workflow_runtime
         session_id = f"{flow_id}:{context_id}"
         state = await workflow_runtime.get_state(session_id)
 

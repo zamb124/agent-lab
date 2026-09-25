@@ -59,6 +59,7 @@ CREATE_BROKER_ALLOWLIST: frozenset[str] = frozenset(
         "core/tasks/broker.py",
         "apps/flows_worker/broker.py",
         "apps/idle_worker/broker.py",
+        "apps/idle_worker/a2a_push_broker.py",
         "apps/rag_worker/broker.py",
         "apps/crm_worker/broker.py",
         "apps/crm_worker/summary_broker.py",
@@ -215,7 +216,7 @@ def _scan_taskspec_as_str(spec_symbols: set[str]) -> list[str]:
 
 def _check_runtime_registry() -> list[str]:
     errors: list[str] = []
-    from apps.platform_tasks.wiring import all_queues, wire_all
+    from apps.worker_manifest import all_queues, wire_all
     from core.tasks import all_task_specs, registered_queue_brokers
 
     wire_all()

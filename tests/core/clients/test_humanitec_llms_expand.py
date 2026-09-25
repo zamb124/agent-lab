@@ -387,7 +387,7 @@ def test_constructor_without_pool_and_without_fallbacks_raises() -> None:
     try:
         set_settings(settings)
         with _production_llm_env():
-            with pytest.raises(ValueError, match="humanitec_llm недоступен"):
+            with pytest.raises(ValueError, match="humanitec_llm is unavailable"):
                 create_llm_transport_client(
                     provider=HUMANITEC_LLM_PROVIDER,
                     model_name=HUMANITEC_LLM_AUTO_MODEL,

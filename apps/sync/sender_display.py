@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from apps.sync.models.common import UserBrief
-
-if TYPE_CHECKING:
-    from core.db.repositories.user_repository import UserRepository
+from core.models.identity_models import User
 
 
 def guest_display_name_from_sender_id(sender_user_id: str) -> str | None:
@@ -23,16 +19,17 @@ UNKNOWN_SPEAKER_DISPLAY_NAME = "guest"
 
 
 async def sender_brief_for_message(
-    user_repository: UserRepository | None,
     sender_user_id: str,
+    *,
+    resolve_user: bool,
 ) -> UserBrief:
     guest_name = guest_display_name_from_sender_id(sender_user_id)
     if guest_name is not None:
         return UserBrief(user_id=sender_user_id, display_name=guest_name, avatar_url=None)
     if sender_user_id.strip() == "":
         raise ValueError("sender_user_id is empty.")
-    if user_repository is not None:
-        u = await user_repository.get(sender_user_id)
+    if resolve_user:
+        u = await User.get(sender_user_id)
         if u is not None:
             return UserBrief(user_id=sender_user_id, display_name=u.name, avatar_url=u.avatar_url)
     return UserBrief(

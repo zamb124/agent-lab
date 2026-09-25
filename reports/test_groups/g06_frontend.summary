@@ -1,0 +1,4 @@
+GROUP g06_frontend rc=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 359 passed, 4 skipped, 4 warnings in 40.56s ==================

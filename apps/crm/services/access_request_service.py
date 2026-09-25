@@ -5,16 +5,16 @@
 import uuid
 from datetime import UTC, datetime
 
-from apps.crm.db.models import AccessRequest, CRMEntity, Relationship
-from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
-from apps.crm.db.repositories.entity_repository import EntityRepository
-from apps.crm.db.repositories.relationship_repository import RelationshipRepository
+from apps.crm.models.access_request import AccessRequest
+from apps.crm.models.crm_entity import CRMEntity, entity_namespace, index_crm_entity
+from apps.crm.models.relationship import Relationship
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
 from core.logging import get_logger
+from core.rag import BaseRAGProvider
 from core.types import JsonObject
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
@@ -26,15 +26,11 @@ class AccessRequestService:
 
     def __init__(
         self,
-        access_request_repo: AccessRequestRepository,
-        entity_repo: EntityRepository,
-        relationship_repo: RelationshipRepository,
+        rag: BaseRAGProvider,
         authz: AuthzService,
         entity_access: CrmEntityAccessService,
     ) -> None:
-        self._access_request_repo: AccessRequestRepository = access_request_repo
-        self._entity_repo: EntityRepository = entity_repo
-        self._relationship_repo: RelationshipRepository = relationship_repo
+        self._rag: BaseRAGProvider = rag
         self._authz: AuthzService = authz
         self._entity_access: CrmEntityAccessService = entity_access
 
@@ -98,7 +94,7 @@ class AccessRequestService:
         """Запрос доступа к entity (внутри компании или cross-company)"""
 
         # Получаем entity
-        entity = await self._entity_repo.get(entity_id)
+        entity = await CRMEntity.get(entity_id)
         if not entity:
             raise PlatformNotFoundError("Entity not found", error_code='not_found')
 
@@ -119,7 +115,7 @@ class AccessRequestService:
             updated_at=datetime.now(UTC),
         )
 
-        access_request = await self._access_request_repo.create(access_request)
+        access_request = await AccessRequest.create(access_request)
         logger.info(
             "crm.access_request.created",
             access_request_id=access_request.access_request_id,
@@ -142,8 +138,8 @@ class AccessRequestService:
     ) -> AccessRequest:
         """Одобрить = скопировать entity в компанию запросившего"""
 
-        access_request = await self._access_request_repo.get(access_request_id)
-        if not access_request:
+        access_request = await AccessRequest.get(access_request_id)
+        if access_request is None:
             raise PlatformNotFoundError("Request not found", error_code='not_found')
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
@@ -151,7 +147,7 @@ class AccessRequestService:
         if access_request.status != "pending":
             raise PlatformConflictError(f"Request already {access_request.status}", error_code='conflict')
 
-        original = await self._entity_repo.get(access_request.resource_id)
+        original = await CRMEntity.get(access_request.resource_id)
         if not original:
             raise PlatformNotFoundError("Original entity not found", error_code='not_found')
 
@@ -176,7 +172,7 @@ class AccessRequestService:
         access_request.status = "approved"
         access_request.created_entity_id = copy.entity_id
         access_request.updated_at = datetime.now(UTC)
-        access_request = await self._access_request_repo.update(access_request)
+        access_request = await access_request.save(using="crm")
 
         logger.info(
             "crm.access_request.approved",
@@ -214,12 +210,15 @@ class AccessRequestService:
         """Поверхностное копирование — entity и metadata relationships"""
 
         # Получаем relationships оригинала
-        relationships = await self._relationship_repo.get_by_entity(original.entity_id)
+        relationships = await Relationship.touching_in_company(
+            original.entity_id,
+            original.company_id,
+        ).all()
 
         # Преобразуем в metadata (без ID, только имена)
         external_rels: list[JsonObject] = []
         for rel in relationships:
-            target_entity = await self._entity_repo.get(rel.target_entity_id)
+            target_entity = await CRMEntity.get(rel.target_entity_id)
             if target_entity:
                 external_rels.append(
                     {
@@ -254,11 +253,14 @@ class AccessRequestService:
             relevance=original.relevance,
         )
 
-        copy = await self._entity_repo.create(copy)
+        copy = await CRMEntity.create(copy)
+        await index_crm_entity(self._rag, copy, replace=False)
         try:
             await self._entity_access.sync_entity_created(copy)
         except Exception:
-            _ = await self._entity_repo.delete(copy.entity_id)
+            removed = await CRMEntity.take_by_id(copy.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
         logger.info("crm.access.copy_created", entity_id=copy.entity_id, source_entity_id=original.entity_id)
 
@@ -301,20 +303,26 @@ class AccessRequestService:
             relevance=original.relevance,
         )
 
-        copy = await self._entity_repo.create(copy)
+        copy = await CRMEntity.create(copy)
+        await index_crm_entity(self._rag, copy, replace=False)
         try:
             await self._entity_access.sync_entity_created(copy)
         except Exception:
-            _ = await self._entity_repo.delete(copy.entity_id)
+            removed = await CRMEntity.take_by_id(copy.entity_id)
+            if removed is not None:
+                _ = await self._rag.delete_document(entity_namespace(removed), removed.entity_id)
             raise
         _copied_map[original.entity_id] = copy.entity_id
 
         # Получаем relationships
-        relationships = await self._relationship_repo.get_by_entity(original.entity_id)
+        relationships = await Relationship.touching_in_company(
+            original.entity_id,
+            original.company_id,
+        ).all()
 
         # Рекурсивно копируем связанные entities
         for rel in relationships:
-            target_entity = await self._entity_repo.get(rel.target_entity_id)
+            target_entity = await CRMEntity.get(rel.target_entity_id)
             if not target_entity:
                 continue
 
@@ -346,7 +354,7 @@ class AccessRequestService:
                 confidence=rel.confidence,
                 attributes=rel.attributes,
             )
-            new_rel = await self._relationship_repo.create(new_rel)
+            _ = await Relationship.create(new_rel)
 
         logger.info(
             "crm.entity.deep_copy_created",
@@ -365,20 +373,20 @@ class AccessRequestService:
     ) -> AccessRequest:
         """Отклонить запрос"""
 
-        access_request = await self._access_request_repo.get(access_request_id)
-        if not access_request:
+        access_request = await AccessRequest.get(access_request_id)
+        if access_request is None:
             raise PlatformNotFoundError("Request not found", error_code='not_found')
 
         await self._require_can_share_entity(access_request.resource_id, owner_user_id)
 
         access_request.status = "rejected"
         access_request.updated_at = datetime.now(UTC)
-        access_request = await self._access_request_repo.update(access_request)
+        access_request = await access_request.save(using="crm")
 
         logger.info("crm.access.rejected", access_request_id=access_request_id, owner_user_id=owner_user_id)
 
         # Уведомление запросившему об отклонении
-        entity = await self._entity_repo.get(access_request.resource_id)
+        entity = await CRMEntity.get(access_request.resource_id)
         if entity is None:
             raise PlatformNotFoundError("Original entity not found", error_code='not_found')
         entity_name = entity.name
@@ -402,10 +410,6 @@ class AccessRequestService:
 
         return access_request
 
-    async def get_access_request(self, access_request_id: str) -> AccessRequest | None:
-        """Получить запрос по ID"""
-        return await self._access_request_repo.get(access_request_id)
-
     async def list_access_requests(
         self,
         company_id: str,
@@ -413,12 +417,12 @@ class AccessRequestService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[AccessRequest]:
-        if status:
-            return await self._access_request_repo.list_by_company_and_status(
-                company_id, status, limit=limit, offset=offset
-            )
-        return await self._access_request_repo.list_by_company(
-            company_id, limit=limit, offset=offset
+        return await (
+            AccessRequest.in_company(company_id, status)
+            .order_by("-created_at")
+            .limit(limit)
+            .offset(offset)
+            .all()
         )
 
     async def count_access_requests(
@@ -426,4 +430,4 @@ class AccessRequestService:
         company_id: str,
         status: str | None = None,
     ) -> int:
-        return await self._access_request_repo.count_by_company(company_id, status=status)
+        return await AccessRequest.in_company(company_id, status).count()

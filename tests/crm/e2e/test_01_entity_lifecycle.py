@@ -46,7 +46,7 @@ class TestEntityLifecycle:
     ) -> None:
         """Создание note entity"""
         response = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Встреча {unique_id}",
@@ -71,7 +71,7 @@ class TestEntityLifecycle:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание и получение entity по ID"""
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Звонок {unique_id}",
             "description": "Обсудили условия контракта",
@@ -97,7 +97,7 @@ class TestEntityLifecycle:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Обновление полей entity"""
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Задача {unique_id}",
         }, headers=auth_headers_system)
@@ -121,7 +121,7 @@ class TestEntityLifecycle:
         unique_id: str,
         auth_headers_system: dict[str, str],
     ) -> None:
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Контакт {unique_id}",
             "attributes": {"email": f"keep-{unique_id}@example.com", "stale": "drop-me"},
@@ -148,7 +148,7 @@ class TestEntityLifecycle:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление entity"""
-        create_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Удаляемая заметка {unique_id}",
         }, headers=auth_headers_system)
@@ -171,7 +171,7 @@ class TestEntityLifecycle:
         test_user_id = f"test_user_{unique_id}"
 
         for i in range(3):
-            _ = await crm_client.post("/crm/api/v1/entities/", json={
+            _ = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": "note",
                 "name": f"Note {i} {unique_id}",
                 "user_id": test_user_id,
@@ -203,17 +203,17 @@ class TestEntityLifecycle:
         """Список с фильтрацией по типу"""
         test_user_id = f"test_user_{unique_id}"
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Meeting {unique_id}",
             "user_id": test_user_id,
         }, headers=auth_headers_system)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Task {unique_id}",
             "user_id": test_user_id,
         }, headers=auth_headers_system)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Call {unique_id}",
             "user_id": test_user_id,
@@ -247,7 +247,7 @@ class TestEntityLifecycle:
         test_user_id = f"test_user_{unique_id}"
         meeting_subtype = f"meeting_{unique_id}"
 
-        create_subtype_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+        create_subtype_resp = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": meeting_subtype,
             "parent_type_id": "note",
             "name": "Meeting",
@@ -255,13 +255,13 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
         assert create_subtype_resp.status_code == 200
 
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": meeting_subtype,
             "name": f"Meeting 1 {unique_id}",
             "user_id": test_user_id,
         }, headers=auth_headers_system)
-        _ = await crm_client.post("/crm/api/v1/entities/", json={
+        _ = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "entity_subtype": meeting_subtype,
             "name": f"Meeting 2 {unique_id}",
@@ -325,7 +325,7 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
         assert create_namespace_resp.status_code == 201
 
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": candidate_type_id,
             "name": f"Иван Иванов {unique_id}",
             "namespace": namespace_name,
@@ -351,7 +351,7 @@ class TestEntityLifecycle:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание entity со всеми опциональными полями графового узла"""
-        response = await crm_client.post("/crm/api/v1/entities/", json={
+        response = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "task",
             "name": f"Полная задача {unique_id}",
             "description": "Детальное описание задачи",
@@ -377,7 +377,7 @@ class TestEntityLifecycle:
         candidate_type_id = f"candidate_{unique_id}"
         namespace_name = f"hr_{unique_id}"
 
-        create_type_resp = await crm_client.post("/crm/api/v1/entity-types/", json={
+        create_type_resp = await crm_client.post("/crm/api/v1/entity-types", json={
             "type_id": candidate_type_id,
             "name": "Кандидат",
             "description": "HR сущность",
@@ -392,7 +392,7 @@ class TestEntityLifecycle:
         }, headers=auth_headers_system)
         assert create_namespace_resp.status_code == 201
 
-        create_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        create_entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": candidate_type_id,
             "name": "Иван Кандидат",
             "namespace": namespace_name,

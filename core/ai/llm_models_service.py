@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 from core.ai.adapters import AIProviderAdapter, create_model_catalog_adapter_registry
 from core.ai.free_pool import read_humanitec_llms_model_options
-from core.ai.model_catalog_repository import AIModelCatalogRepository
 from core.ai.models import AIModelRecord
 from core.ai.providers import (
     HUMANITEC_LLM_PROVIDER,
@@ -43,11 +42,9 @@ class LLMModelsService:
 
     def __init__(
         self,
-        repository: AIModelCatalogRepository,
         scheduler_client: SchedulerClient,
         redis_client: RedisClient,
     ):
-        self._repository: AIModelCatalogRepository = repository
         self._scheduler_client: SchedulerClient = scheduler_client
         self._redis_client: RedisClient = redis_client
         self._sync_schedule_task_id: str | None = None
@@ -111,7 +108,7 @@ class LLMModelsService:
             raise RuntimeError(f"provider {provider} did not return models")
 
         for model in records:
-            existing = await self._repository.get_provider_model(model.provider, model.model_id)
+            existing = await AIModelRecord.get_provider_model(model.provider, model.model_id)
             if (
                 existing is not None
                 and existing.artificial_analysis is not None
@@ -120,7 +117,7 @@ class LLMModelsService:
                 model = model.model_copy(
                     update={"artificial_analysis": existing.artificial_analysis}
                 )
-            _ = await self._repository.set(model)
+            _ = await AIModelRecord.set(model)
 
         logger.info("ai.event", records_count=len(records), provider=provider)
         return len(records)
@@ -173,7 +170,7 @@ class LLMModelsService:
             humanitec_models: list[str | JsonObject] = []
             humanitec_models.extend(options)
             return humanitec_models
-        models = await self._repository.list_by_provider_capability(provider, capability)
+        models = await AIModelRecord.list_by_provider_capability(provider, capability)
         provider_models: list[str | JsonObject] = []
         provider_models.extend(m.model_id for m in models)
         return provider_models

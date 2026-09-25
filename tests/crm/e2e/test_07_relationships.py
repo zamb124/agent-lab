@@ -46,19 +46,19 @@ class TestRelationships:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Создание связи вручную"""
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note",
             "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
         note_id = _entity_id(note_resp)
 
-        contact_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        contact_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Contact {unique_id}",
         }, headers=auth_headers_system)
         contact_id = _entity_id(contact_resp)
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": note_id,
             "target_entity_id": contact_id,
             "relationship_type": "mentions",
@@ -79,27 +79,27 @@ class TestRelationships:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Получение всех связей entity"""
-        note_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        note_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "note", "name": f"Note {unique_id}",
         }, headers=auth_headers_system)
         note_id = _entity_id(note_resp)
 
-        contact1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        contact1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"C1 {unique_id}",
         }, headers=auth_headers_system)
         contact1_id = _entity_id(contact1_resp)
 
-        contact2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        contact2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"C2 {unique_id}",
         }, headers=auth_headers_system)
         contact2_id = _entity_id(contact2_resp)
 
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": note_id,
             "target_entity_id": contact1_id,
             "relationship_type": "mentions",
         }, headers=auth_headers_system)
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": note_id,
             "target_entity_id": contact2_id,
             "relationship_type": "mentions",
@@ -121,24 +121,24 @@ class TestRelationships:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Двунаправленные связи (manages ↔ reports_to)"""
-        manager_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        manager_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"Manager {unique_id}",
         }, headers=auth_headers_system)
         manager_id = _entity_id(manager_resp)
 
-        employee_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        employee_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"Employee {unique_id}",
         }, headers=auth_headers_system)
         employee_id = _entity_id(employee_resp)
 
-        rel1_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel1_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": manager_id,
             "target_entity_id": employee_id,
             "relationship_type": "parent_of",
         }, headers=auth_headers_system)
         assert rel1_resp.status_code == 200
 
-        rel2_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel2_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": employee_id,
             "target_entity_id": manager_id,
             "relationship_type": "child_of",
@@ -161,17 +161,17 @@ class TestRelationships:
         }, headers=auth_headers_system)
         assert type_resp.status_code == 200
 
-        person_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        person_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"Person {unique_id}",
         }, headers=auth_headers_system)
         person_id = _entity_id(person_resp)
 
-        company_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        company_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "organization", "name": f"Company {unique_id}",
         }, headers=auth_headers_system)
         company_id = _entity_id(company_resp)
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": person_id,
             "target_entity_id": company_id,
             "relationship_type": f"works_for_{unique_id}",
@@ -186,17 +186,17 @@ class TestRelationships:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Связь с дополнительными атрибутами"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"E1 {unique_id}",
         }, headers=auth_headers_system)
         entity1_id = _entity_id(entity1_resp)
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project", "name": f"Project {unique_id}",
         }, headers=auth_headers_system)
         entity2_id = _entity_id(entity2_resp)
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": "assigned_to",
@@ -220,17 +220,17 @@ class TestRelationships:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Удаление связи"""
-        entity1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"E1 {unique_id}",
         }, headers=auth_headers_system)
         entity1_id = _entity_id(entity1_resp)
 
-        entity2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        entity2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact", "name": f"E2 {unique_id}",
         }, headers=auth_headers_system)
         entity2_id = _entity_id(entity2_resp)
 
-        rel_resp = await crm_client.post("/crm/api/v1/relationships/", json={
+        rel_resp = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": entity1_id,
             "target_entity_id": entity2_id,
             "relationship_type": "mentions",

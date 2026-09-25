@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus
 
-from apps.flows.src.db.a2a_task_repository import A2ATaskRepository
+from apps.flows.src.models.a2a_projection import A2ATaskProjection
 from core.a2a import set_task_status_state
 from core.state import ExecutionState
 
 
 async def ensure_submitted_a2a_task(
     *,
-    repository: A2ATaskRepository,
     company_id: str,
     state: ExecutionState,
     input_message: Message | None = None,
@@ -24,7 +23,7 @@ async def ensure_submitted_a2a_task(
     ``Emitter.create_ensured`` so ensure and emitter construction stay one contract.
     """
     owner_user_id = state.initiator_user_id or state.user_id
-    if await repository.task_exists_in_scope(
+    if await A2ATaskProjection.task_exists_in_scope(
         company_id=company_id,
         task_id=state.task_id,
         session_id=state.session_id,
@@ -73,7 +72,7 @@ async def ensure_submitted_a2a_task(
         status=submitted_status,
         history=history,
     )
-    _ = await repository.ensure_task(
+    _ = await A2ATaskProjection.ensure_task(
         company_id=company_id,
         session_id=state.session_id,
         flow_id=state.session_flow_id,

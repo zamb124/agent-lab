@@ -334,10 +334,10 @@ class TestGate:
         with pytest.raises(ValueError) as exc:
             assert_flow_ui_publishable(document, LIMITS)
         assert str(exc.value).startswith("Flow UI: Путь 'task_id' указывает на системное поле state (main, i)")
-        assert str(exc.value).endswith("всего проблем: 4")
+        assert str(exc.value).endswith("total problems: 4")
 
     def test_document_level_problem_has_document_location(self) -> None:
-        with pytest.raises(ValueError, match=r"\(document\); всего проблем: 1"):
+        with pytest.raises(ValueError, match=r"\(document\); total problems: 1"):
             assert_flow_ui_publishable(
                 _document([], {"page_id": "second"}), FlowUILimits(max_pages=1)
             )

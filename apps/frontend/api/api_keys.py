@@ -4,8 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from apps.frontend.dependencies import ContainerDep
-from apps.frontend.models import ApiKey, ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
+from apps.frontend.di import Di
+from apps.frontend.models import ApiKeyCreate, ApiKeyCreated, ApiKeyUpdate
 from apps.frontend.realtime.company_operations import (
     ApiKeyIdPayload,
     ApiKeyRenamed,
@@ -18,36 +18,37 @@ from apps.frontend.realtime.company_operations import (
     op_api_keys_revoke,
 )
 from core.context import require_context
+from core.models.api_key import ApiKeyRecord
 from core.pagination import OffsetPage
 
 router = APIRouter(prefix="/api/api-keys", tags=["api-keys"])
 
 
-@router.get("", response_model=OffsetPage[ApiKey])
+@router.get("", response_model=OffsetPage[ApiKeyRecord])
 async def list_api_keys(
-    container: ContainerDep,
+    di: Di,
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> OffsetPage[ApiKey]:
+) -> OffsetPage[ApiKeyRecord]:
     return await op_api_keys_list(
-        OffsetPayload(limit=limit, offset=offset), user=require_context().user, container=container
+        OffsetPayload(limit=limit, offset=offset), user=require_context().user, di=di
     )
 
 
 @router.post("", response_model=ApiKeyCreated)
-async def create_api_key(key_data: ApiKeyCreate, container: ContainerDep) -> ApiKeyCreated:
-    return await op_api_keys_create(key_data, user=require_context().user, container=container)
+async def create_api_key(key_data: ApiKeyCreate, di: Di) -> ApiKeyCreated:
+    return await op_api_keys_create(key_data, user=require_context().user, di=di)
 
 
 @router.patch("/{key_id}", response_model=ApiKeyRenamed)
-async def update_api_key(key_id: str, body: ApiKeyUpdate, container: ContainerDep) -> ApiKeyRenamed:
+async def update_api_key(key_id: str, body: ApiKeyUpdate, di: Di) -> ApiKeyRenamed:
     return await op_api_keys_rename(
-        ApiKeyRenamePayload(key_id=key_id, name=body.name), user=require_context().user, container=container
+        ApiKeyRenamePayload(key_id=key_id, name=body.name), user=require_context().user, di=di
     )
 
 
 @router.delete("/{key_id}", response_model=ApiKeyRevoked)
-async def revoke_api_key(key_id: str, container: ContainerDep) -> ApiKeyRevoked:
+async def revoke_api_key(key_id: str, di: Di) -> ApiKeyRevoked:
     return await op_api_keys_revoke(
-        ApiKeyIdPayload(key_id=key_id), user=require_context().user, container=container
+        ApiKeyIdPayload(key_id=key_id), user=require_context().user, di=di
     )

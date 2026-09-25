@@ -1,8 +1,7 @@
 """
 Alembic env для crm БД.
 
-Управляет таблицами: crm_entities, crm_tasks, entity_types, entity_type_catalog_revision,
-relationship_types, relationships, company_mapping, access_requests.
+Каталог пуст: crm_entities и остальные таблицы CRM — Oxyde, autogenerate их не трогает.
 """
 
 import asyncio
@@ -17,18 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from apps.crm.db.models import (  # noqa: F401
-    AccessRequest,
-    Base,
-    CompanyMapping,
-    CRMEntity,
-    CRMSuggest,
-    CRMTask,
-    EntityType,
-    EntityTypeCatalogRevision,
-    Relationship,
-    RelationshipType,
-)
+from core.db.models.base import Base  # noqa: F401
 
 config = context.config
 logger = logging.getLogger("alembic.env")
@@ -38,17 +26,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-MANAGED_TABLES = {
-    "crm_entities",
-    "crm_tasks",
-    "entity_types",
-    "entity_type_catalog_revision",
-    "relationship_types",
-    "relationships",
-    "company_mapping",
-    "access_requests",
-    "crm_suggests",
-}
+MANAGED_TABLES: set[str] = set()
 
 
 def include_object(obj, name, type_, reflected, compare_to):

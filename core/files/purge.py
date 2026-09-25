@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from core.config import get_settings
-from core.files.file_repository import FileRepository
+from core.files.models import FileRecord
 from core.files.storage import FileStorage
 from core.logging import get_logger
 
@@ -20,9 +20,8 @@ class PurgeBatchResult:
 
 
 class FilePurgeService:
-    def __init__(self, file_repository: FileRepository) -> None:
-        self._repository: FileRepository = file_repository
-        self._storage: FileStorage = FileStorage(file_repository=file_repository)
+    def __init__(self) -> None:
+        self._storage: FileStorage = FileStorage()
 
     async def purge_expired_batch(self) -> PurgeBatchResult:
         settings = get_settings()
@@ -31,7 +30,7 @@ class FilePurgeService:
 
         batch_limit = settings.files.retention.purge_batch_size
         now = datetime.now(UTC)
-        expired = await self._repository.list_expired(before=now, limit=batch_limit)
+        expired = await FileRecord.list_expired(before=now, limit=batch_limit)
         failed: list[str] = []
         purged = 0
         for record in expired:

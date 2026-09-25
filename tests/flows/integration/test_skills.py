@@ -89,7 +89,7 @@ class TestFlowConfigWithSkills:
 class TestApplySkill:
     """Тесты применения skill к конфигу."""
 
-    def test_apply_skill_entry(self, container):
+    def test_apply_skill_entry(self, di):
         """Применение entry из skill."""
         config = FlowConfig(
             flow_id="test",
@@ -108,10 +108,10 @@ class TestApplySkill:
             ],
             branches={"custom": BranchConfig(name="Custom", entry="skill_entry")},
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert effective["entry"] == "skill_entry"
 
-    def test_apply_skill_variables_merge(self, container):
+    def test_apply_skill_variables_merge(self, di):
         """Мерж variables (по умолчанию)."""
         config = FlowConfig(
             flow_id="test",
@@ -126,12 +126,12 @@ class TestApplySkill:
                 )
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert effective["variables"]["base_var"] == "base_value"
         assert effective["variables"]["skill_var"] == "skill_value"
         assert effective["variables"]["shared"] == "from_skill"
 
-    def test_apply_skill_variables_replace(self, container):
+    def test_apply_skill_variables_replace(self, di):
         """Замена variables."""
         config = FlowConfig(
             flow_id="test",
@@ -148,11 +148,11 @@ class TestApplySkill:
                 )
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert "base_var" not in effective["variables"]
         assert effective["variables"]["skill_var"] == "skill_value"
 
-    def test_apply_skill_nodes_replace(self, container):
+    def test_apply_skill_nodes_replace(self, di):
         """Замена nodes (по умолчанию)."""
         config = FlowConfig(
             flow_id="test",
@@ -171,12 +171,12 @@ class TestApplySkill:
                 )
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert "main" not in effective["nodes"]
         assert "helper" not in effective["nodes"]
         assert "custom_main" in effective["nodes"]
 
-    def test_apply_skill_nodes_merge(self, container):
+    def test_apply_skill_nodes_merge(self, di):
         """Мерж nodes."""
         config = FlowConfig(
             flow_id="test",
@@ -195,13 +195,13 @@ class TestApplySkill:
                 )
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert effective["nodes"]["main"]["prompt"] == "Custom prompt"
         assert effective["nodes"]["main"]["tools"] == ["tool1"]
         assert effective["nodes"]["main"]["llm"]["temperature"] == 0.1
         assert "new_node" in effective["nodes"]
 
-    def test_apply_skill_edges_replace(self, container):
+    def test_apply_skill_edges_replace(self, di):
         """Замена edges (по умолчанию)."""
         config = FlowConfig(
             flow_id="test",
@@ -213,12 +213,12 @@ class TestApplySkill:
                 "custom": BranchConfig(name="Custom", edges=[Edge(from_node="main", to_node=None)])
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert len(effective["edges"]) == 1
         assert effective["edges"][0].from_node == "main"
         assert effective["edges"][0].to_node is None
 
-    def test_apply_skill_edges_merge(self, container):
+    def test_apply_skill_edges_merge(self, di):
         """Мерж edges по паре (from_node, to_node)."""
         config = FlowConfig(
             flow_id="test",
@@ -234,7 +234,7 @@ class TestApplySkill:
                 )
             },
         )
-        effective = container.flow_factory.apply_branch(config, "custom")
+        effective = di.flow_factory.apply_branch(config, "custom")
         assert len(effective["edges"]) == 3
         from_nodes = [e.from_node for e in effective["edges"]]
         assert from_nodes.count("main") == 2
@@ -244,7 +244,7 @@ class TestApplySkill:
         main_to_nodes = {e.to_node for e in main_edges}
         assert main_to_nodes == {"step2", "step3"}
 
-    def test_apply_skill_unknown_skill(self, container):
+    def test_apply_skill_unknown_skill(self, di):
         """Неизвестный skill возвращает базовый конфиг."""
         config = FlowConfig(
             flow_id="test",
@@ -254,10 +254,10 @@ class TestApplySkill:
             edges=[Edge(from_node="main", to_node=None)],
             branches={"known": BranchConfig(name="Known", entry="other")},
         )
-        effective = container.flow_factory.apply_branch(config, "unknown")
+        effective = di.flow_factory.apply_branch(config, "unknown")
         assert effective["entry"] == "main"
 
-    def test_apply_skill_default_without_skills(self, container):
+    def test_apply_skill_default_without_skills(self, di):
         """default skill при пустых skills."""
         config = FlowConfig(
             flow_id="test",
@@ -266,7 +266,7 @@ class TestApplySkill:
             nodes={"main": {"type": "code", "code": "async def run(args, state): return state"}},
             edges=[Edge(from_node="main", to_node=None)],
         )
-        effective = container.flow_factory.apply_branch(config, "default")
+        effective = di.flow_factory.apply_branch(config, "default")
         assert effective["entry"] == "main"
 
 
@@ -274,7 +274,7 @@ class TestFlowWithSkills:
     """Интеграционные тесты Agent со skills."""
 
     @pytest.mark.asyncio
-    async def test_flow_execution_with_skill_entry(self, container, unique_id):
+    async def test_flow_execution_with_skill_entry(self, di, unique_id):
         """Выполнение flow с skill entry."""
         config = FlowConfig(
             flow_id="skill_flow",
@@ -309,13 +309,13 @@ class TestFlowWithSkills:
                 ],
             },
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
         state = workflow_state(
             flow_id=flow_default.flow_id,
             unique_id=f"{unique_id}-default",
         )
-        result = await run_flow(container=container, flow=flow_default, state=state)
+        result = await run_flow(di=di, flow=flow_default, state=state)
         assert result["path"] == "default"
         flow_skill = await Flow.from_config(
             config={
@@ -330,17 +330,17 @@ class TestFlowWithSkills:
                 ],
             },
             variables={},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
         state = workflow_state(
             flow_id=flow_skill.flow_id,
             unique_id=f"{unique_id}-skill",
         )
-        result = await run_flow(container=container, flow=flow_skill, state=state)
+        result = await run_flow(di=di, flow=flow_skill, state=state)
         assert result["path"] == "skill"
 
     @pytest.mark.asyncio
-    async def test_flow_execution_with_skill_variables(self, container, unique_id):
+    async def test_flow_execution_with_skill_variables(self, di, unique_id):
         """Выполнение flow с skill variables."""
         flow = await Flow.from_config(
             config={
@@ -357,9 +357,9 @@ class TestFlowWithSkills:
                 "edges": [{"from_node": "main", "to_node": None}],
             },
             variables={"mode": "refund", "extra": "skill_var"},
-            container=container,
+            node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
         )
         state = workflow_state(flow_id=flow.flow_id, unique_id=unique_id)
-        result = await run_flow(container=container, flow=flow, state=state)
+        result = await run_flow(di=di, flow=flow, state=state)
         assert result["mode"] == "refund"
         assert result.variables["extra"] == "skill_var"

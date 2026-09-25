@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 
-from core.db.storage import Storage
+from core.db.storage import SharedStorage
 
 
 class MailAttachmentFileIndex:
-    def __init__(self, storage: Storage) -> None:
-        self._storage: Storage = storage
+    def __init__(self, storage: SharedStorage) -> None:
+        self._storage: SharedStorage = storage
 
     def _key(self, mailbox_binding_id: str, mail_uid: str, attachment_index: int) -> str:
         return f"mail_attachment:{mailbox_binding_id}:{mail_uid}:{attachment_index}"

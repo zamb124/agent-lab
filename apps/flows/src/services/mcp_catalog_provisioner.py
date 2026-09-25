@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from apps.flows.config import get_settings
-from apps.flows.src.container_contracts import FlowRuntimeContainer
 from apps.flows.src.models.mcp import MCPServerConfig, MCPServerSource, MCPTransportType
 from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
+from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.mcp_catalog_ids import server_id_from_catalog_id
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.logging import get_logger
+from core.variables.service import VariablesService
 
 logger = get_logger(__name__)
 
@@ -84,7 +85,8 @@ def apply_catalog_entry_to_server(
 
 async def provision_mcp_catalog_for_company(
     *,
-    container: FlowRuntimeContainer,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
 ) -> MCPCatalogProvisionStats:
     settings = get_settings()
     auto_provision = settings.mcp_catalog.auto_provision
@@ -98,8 +100,8 @@ async def provision_mcp_catalog_for_company(
             sync_failed=0,
         )
 
-    entries = await container.mcp_catalog_repository.list_provision_candidates(limit=20_000)
-    existing_servers = await container.mcp_server_repository.list(limit=5000)
+    entries = await MCPCatalogEntry.list(limit=20_000)
+    existing_servers = await MCPServerConfig.list(limit=5000)
     existing_by_catalog_id: dict[str, MCPServerConfig] = {}
     for server in existing_servers:
         if server.catalog_id is not None:
@@ -120,11 +122,12 @@ async def provision_mcp_catalog_for_company(
         desired = catalog_entry_to_server_config(entry, catalog_auto_provisioned=True)
         existing = existing_by_catalog_id.get(entry.catalog_id)
         if existing is None:
-            _ = await container.mcp_server_repository.set(desired)
+            _ = await MCPServerConfig.set(desired)
             added += 1
             try:
                 _ = await sync_mcp_server_tools(
-                    container=container,
+                    variables_service=variables_service,
+                    flow_access_service=flow_access_service,
                     server_config=desired,
                 )
                 sync_ok += 1
@@ -166,11 +169,12 @@ async def provision_mcp_catalog_for_company(
         )
         if not changed:
             continue
-        _ = await container.mcp_server_repository.set(merged)
+        _ = await MCPServerConfig.set(merged)
         updated += 1
         try:
             _ = await sync_mcp_server_tools(
-                container=container,
+                variables_service=variables_service,
+                flow_access_service=flow_access_service,
                 server_config=merged,
             )
             sync_ok += 1
@@ -198,7 +202,7 @@ async def provision_mcp_catalog_for_company(
         if not server.is_active:
             continue
         inactive = server.model_copy(update={"is_active": False})
-        _ = await container.mcp_server_repository.set(inactive)
+        _ = await MCPServerConfig.set(inactive)
         deprecated += 1
 
     return MCPCatalogProvisionStats(
@@ -213,9 +217,10 @@ async def provision_mcp_catalog_for_company(
 
 async def resync_catalog_tools_for_company(
     *,
-    container: FlowRuntimeContainer,
+    variables_service: VariablesService,
+    flow_access_service: FlowAccessService,
 ) -> tuple[int, int]:
-    servers = await container.mcp_server_repository.list(limit=5000)
+    servers = await MCPServerConfig.list(limit=5000)
     sync_ok = 0
     sync_failed = 0
     for server in servers:
@@ -227,7 +232,8 @@ async def resync_catalog_tools_for_company(
             continue
         try:
             _ = await sync_mcp_server_tools(
-                container=container,
+                variables_service=variables_service,
+                flow_access_service=flow_access_service,
                 server_config=server,
             )
             sync_ok += 1

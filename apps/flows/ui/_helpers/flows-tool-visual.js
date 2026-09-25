@@ -2,7 +2,7 @@
  * Визуальная мета для ToolReference на канвасе и в списках (иконка + category как у типов нод).
  */
 
-import { getNodeTypeMeta } from '../constants/node-icons.js';
+import { getNodeTypeMeta } from './node-icons.js';
 import { isPlainObject } from './flows-resolvers.js';
 import { isFlowCodeLanguage, normalizeFlowCodeLanguage } from './flows-code-languages.js';
 

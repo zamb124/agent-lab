@@ -7,7 +7,8 @@ from typing import Any
 
 import pytest
 
-from apps.flows.src.container_contracts import FlowRuntimeContainer
+from apps.flows.di import FlowsDi
+from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.runtime.nodes import BaseNode, ReflectionNode, create_node
 from core.clients.llm.mock import MockLLM
@@ -41,11 +42,11 @@ class _HitSinkNode(BaseNode):
         return None
 
 
-def _hit_sink(node_id: str, *, container: FlowRuntimeContainer) -> _HitSinkNode:
+def _hit_sink(node_id: str, *, di: FlowsDi) -> _HitSinkNode:
     return _HitSinkNode(
         node_id=node_id,
         config={"type": "code", "name": node_id},
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), redis_client=di.node_constructor.redis_client,
     )
 
 
@@ -72,16 +73,16 @@ def _blocked_edge(from_node: str, to_node: str) -> JsonObject:
 
 
 async def _build_dual_exit_flow(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     *,
     flow_id: str,
 ) -> Flow:
-    critic = await create_node("critic", reflection_node_config(), container=container)
+    critic = await create_node("critic", reflection_node_config(), node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
     assert isinstance(critic, ReflectionNode)
     nodes: dict[str, BaseNode] = {
         "critic": critic,
-        "approved_sink": _hit_sink("approved_sink", container=container),
-        "blocked_sink": _hit_sink("blocked_sink", container=container),
+        "approved_sink": _hit_sink("approved_sink", di=di),
+        "blocked_sink": _hit_sink("blocked_sink", di=di),
     }
     return Flow(
         flow_id=flow_id,
@@ -95,19 +96,19 @@ async def _build_dual_exit_flow(
             {"from_node": "blocked_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
 
 
 @pytest.mark.asyncio
 async def test_reflection_flow_takes_approved_exit(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
     flow_id = f"refl-flow-ok-{unique_id}"
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    flow = await _build_dual_exit_flow(container, flow_id=flow_id)
+    flow = await _build_dual_exit_flow(di, flow_id=flow_id)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
@@ -115,7 +116,7 @@ async def test_reflection_flow_takes_approved_exit(
         variables={"hits": {}},
     )
 
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
 
     assert out.validation is not None
     assert out.validation["approved"] is True
@@ -128,7 +129,7 @@ async def test_reflection_flow_takes_approved_exit(
 
 @pytest.mark.asyncio
 async def test_reflection_flow_takes_blocked_exit(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
@@ -140,7 +141,7 @@ async def test_reflection_flow_takes_blocked_exit(
         issues=[critique_issue()],
     )
     mock_llm_with_queue([mock_critique_queue_item(critique)])
-    flow = await _build_dual_exit_flow(container, flow_id=flow_id)
+    flow = await _build_dual_exit_flow(di, flow_id=flow_id)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
@@ -148,7 +149,7 @@ async def test_reflection_flow_takes_blocked_exit(
         variables={"hits": {}},
     )
 
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
 
     assert out.validation is not None
     assert out.validation["approved"] is False
@@ -161,7 +162,7 @@ async def test_reflection_flow_takes_blocked_exit(
 
 @pytest.mark.asyncio
 async def test_reflection_flow_incomplete_exits_raises_no_conditional_match(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
@@ -179,21 +180,21 @@ async def test_reflection_flow_incomplete_exits_raises_no_conditional_match(
             )
         ]
     )
-    critic = await create_node("critic", reflection_node_config(), container=container)
+    critic = await create_node("critic", reflection_node_config(), node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory)
     flow = Flow(
         flow_id=flow_id,
         name="reflection incomplete exits",
         entry="critic",
         nodes={
             "critic": critic,
-            "approved_sink": _hit_sink("approved_sink", container=container),
+            "approved_sink": _hit_sink("approved_sink", di=di),
         },
         edges=[
             _approved_edge("critic", "approved_sink"),
             {"from_node": "approved_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
     state = workflow_state(
         flow_id=flow_id,
@@ -203,27 +204,27 @@ async def test_reflection_flow_incomplete_exits_raises_no_conditional_match(
     )
 
     with pytest.raises(FlowPrematureCompletionError) as exc_info:
-        await run_flow(container=container, flow=flow, state=state)
+        await run_flow(di=di, flow=flow, state=state)
     assert exc_info.value.payload.get("reason") == "no_conditional_match"
 
 
 @pytest.mark.asyncio
 async def test_reflection_flow_replay_same_session_does_not_recall_llm(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
     mock_llm_capture: MockLLMCapture,
 ) -> None:
     flow_id = f"refl-flow-replay-{unique_id}"
     mock_llm_with_queue([mock_critique_queue_item(reflection_critique())])
-    flow = await _build_dual_exit_flow(container, flow_id=flow_id)
+    flow = await _build_dual_exit_flow(di, flow_id=flow_id)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
         response="Safe answer",
         variables={"hits": {}},
     )
-    first = await run_flow(container=container, flow=flow, state=state)
+    first = await run_flow(di=di, flow=flow, state=state)
     assert first.validation is not None
     assert first.validation["approved"] is True
 
@@ -237,7 +238,7 @@ async def test_reflection_flow_replay_same_session_does_not_recall_llm(
 
 
 async def _build_three_exit_flow(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     *,
     flow_id: str,
 ) -> Flow:
@@ -265,13 +266,13 @@ async def _build_three_exit_flow(
     critic = await create_node(
         "critic",
         reflection_node_config(policy=policy),
-        container=container,
+        node_constructor=di.node_constructor, tool_registry=di.tool_registry, flow_factory=di.flow_factory,
     )
     nodes: dict[str, BaseNode] = {
         "critic": critic,
-        "pass_sink": _hit_sink("pass_sink", container=container),
-        "revise_sink": _hit_sink("revise_sink", container=container),
-        "reject_sink": _hit_sink("reject_sink", container=container),
+        "pass_sink": _hit_sink("pass_sink", di=di),
+        "revise_sink": _hit_sink("revise_sink", di=di),
+        "reject_sink": _hit_sink("reject_sink", di=di),
     }
     return Flow(
         flow_id=flow_id,
@@ -287,13 +288,13 @@ async def _build_three_exit_flow(
             {"from_node": "reject_sink", "to_node": None},
         ],
         interface=default_chat_document(),
-        container=container,
+        execution=execution_context_for(di.node_constructor.workflow_runtime), emitter_factory=di.node_constructor.emitter_factory,
     )
 
 
 @pytest.mark.asyncio
 async def test_reflection_flow_three_exits_revise(
-    container: FlowRuntimeContainer,
+    di: FlowsDi,
     unique_id: str,
     mock_llm_with_queue: MockLLMQueue,
 ) -> None:
@@ -309,14 +310,14 @@ async def test_reflection_flow_three_exits_revise(
             )
         ]
     )
-    flow = await _build_three_exit_flow(container, flow_id=flow_id)
+    flow = await _build_three_exit_flow(di, flow_id=flow_id)
     state = workflow_state(
         flow_id=flow_id,
         unique_id=unique_id,
         response="Incomplete answer",
         variables={"hits": {}},
     )
-    out = await run_flow(container=container, flow=flow, state=state)
+    out = await run_flow(di=di, flow=flow, state=state)
     assert out.validation is not None
     assert out.validation["exit_id"] == "revise"
     hits = out.variables.get("hits")

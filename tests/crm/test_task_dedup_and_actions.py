@@ -2,7 +2,7 @@
 Тесты дедупликации задач, retry и новых эндпоинтов.
 
 Без моков и манкипатчей. Для симуляции running-задач используем прямые
-вставки в TaskRepository через crm_container — единственный способ
+вставки в TaskRepository через crm_di — единственный способ
 воспроизвести состояние pending/running без реального воркера.
 """
 
@@ -14,10 +14,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from httpx import AsyncClient
 
-from apps.crm.db.models import CRMTask
+from apps.crm.models.crm_entity import CRMEntity, index_crm_entity
+from apps.crm.models.task import CRMTask
 from core.context import clear_context, set_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
+from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
+from core.rag.factory import get_rag_provider
 
 pytestmark = pytest.mark.timeout(30, func_only=True)
 
@@ -53,7 +56,7 @@ def _make_task(
     )
 
 
-async def _insert_task(crm_container, task: CRMTask, company_id: str, namespace: str, user_id: str) -> None:
+async def _insert_task(task: CRMTask, company_id: str, namespace: str, user_id: str) -> None:
     ctx = Context(
         user=User(user_id=user_id, name="Test"),
         active_company=Company(company_id=company_id, name="System"),
@@ -62,13 +65,13 @@ async def _insert_task(crm_container, task: CRMTask, company_id: str, namespace:
     )
     set_context(ctx)
     try:
-        await crm_container.task_repository.create(task)
+        _ = await CRMTask.create(task)
     finally:
         clear_context()
 
 
 async def _set_note_attachment_ids(
-    crm_container,
+    crm_di,
     *,
     note_id: str,
     attachment_ids: list[str],
@@ -84,10 +87,15 @@ async def _set_note_attachment_ids(
     )
     set_context(ctx)
     try:
-        note = await crm_container.entity_repository.get(note_id)
+        note = await CRMEntity.get(note_id)
         assert note is not None
         note.attachment_ids = attachment_ids
-        await crm_container.entity_repository.update(note)
+        note = await CRMEntity.save_loaded(note)
+        await index_crm_entity(
+            get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID),
+            note,
+            replace=True,
+        )
     finally:
         clear_context()
 
@@ -99,7 +107,7 @@ class TestNoteAnalyzeDedup:
     async def test_analyze_rejects_note_with_missing_file_metadata(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -107,7 +115,7 @@ class TestNoteAnalyzeDedup:
         """Старт анализа блокируется pre-flight проверкой, если attachment_id не найден в shared storage."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Orphan attachment {unique_id}", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -115,7 +123,7 @@ class TestNoteAnalyzeDedup:
         note_id = note_resp.json()["entity_id"]
         missing_file_id = f"file_missing_{unique_id[:8]}"
         await _set_note_attachment_ids(
-            crm_container,
+            crm_di,
             note_id=note_id,
             attachment_ids=[missing_file_id],
             company_id="system",
@@ -135,7 +143,7 @@ class TestNoteAnalyzeDedup:
     async def test_running_task_blocks_new_analyze(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -143,7 +151,7 @@ class TestNoteAnalyzeDedup:
         """Running note_analyze задача блокирует запуск новой для той же заметки."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Dedup note {unique_id}", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -159,7 +167,7 @@ class TestNoteAnalyzeDedup:
             user_id=system_user_id,
             data={"note_id": note_id, "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, running_task, "system", ns, system_user_id)
+        await _insert_task(running_task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -175,7 +183,7 @@ class TestNoteAnalyzeDedup:
     async def test_pending_task_blocks_new_analyze(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -183,7 +191,7 @@ class TestNoteAnalyzeDedup:
         """Pending note_analyze задача также блокирует запуск новой."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Dedup pending {unique_id}", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -200,7 +208,7 @@ class TestNoteAnalyzeDedup:
             user_id=system_user_id,
             data={"note_id": note_id, "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, pending_task, "system", ns, system_user_id)
+        await _insert_task(pending_task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -216,7 +224,7 @@ class TestNoteAnalyzeDedup:
     async def test_completed_task_allows_new_analyze(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -224,7 +232,7 @@ class TestNoteAnalyzeDedup:
         """Completed задача НЕ блокирует запуск новой анализа той же заметки."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Dedup completed {unique_id}", "description": "x", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -241,7 +249,7 @@ class TestNoteAnalyzeDedup:
             user_id=system_user_id,
             data={"note_id": note_id, "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, completed_task, "system", ns, system_user_id)
+        await _insert_task(completed_task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -254,7 +262,7 @@ class TestNoteAnalyzeDedup:
     async def test_running_task_for_other_note_does_not_block(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -262,7 +270,7 @@ class TestNoteAnalyzeDedup:
         """Running задача для ДРУГОЙ заметки не блокирует запуск новой."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Target note {unique_id}", "description": "y", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -279,7 +287,7 @@ class TestNoteAnalyzeDedup:
             user_id=system_user_id,
             data={"note_id": other_note_id, "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, running_task, "system", ns, system_user_id)
+        await _insert_task(running_task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/note-analyze",
@@ -296,7 +304,7 @@ class TestKnowledgeImportDedup:
     async def test_running_import_blocks_new_in_same_namespace(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -312,7 +320,7 @@ class TestKnowledgeImportDedup:
             user_id=system_user_id,
             data={"mode": "notes_only", "notes_created_count": 0},
         )
-        await _insert_task(crm_container, running_task, "system", ns, system_user_id)
+        await _insert_task(running_task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/knowledge-import",
@@ -330,7 +338,7 @@ class TestEntityCardAttachments:
     async def test_card_returns_missing_attachment_instead_of_500(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -338,7 +346,7 @@ class TestEntityCardAttachments:
         """Карточка note не падает, если attachment_id отсутствует и в shared storage, и в RAG."""
         ns = f"g_{unique_id}"
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={"entity_type": "note", "name": f"Card orphan {unique_id}", "namespace": ns},
             headers=auth_headers_system,
         )
@@ -346,7 +354,7 @@ class TestEntityCardAttachments:
         note_id = note_resp.json()["entity_id"]
         missing_file_id = f"file_missing_card_{unique_id[:8]}"
         await _set_note_attachment_ids(
-            crm_container,
+            crm_di,
             note_id=note_id,
             attachment_ids=[missing_file_id],
             company_id="system",
@@ -368,7 +376,7 @@ class TestEntityCardAttachments:
     async def test_completed_import_allows_new(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -385,7 +393,7 @@ class TestEntityCardAttachments:
             user_id=system_user_id,
             data={"mode": "notes_only"},
         )
-        await _insert_task(crm_container, completed, "system", ns, system_user_id)
+        await _insert_task(completed, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/knowledge-import",
@@ -402,7 +410,7 @@ class TestDailySummaryDedup:
     async def test_running_daily_summary_blocks_same_date(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -420,7 +428,7 @@ class TestDailySummaryDedup:
             user_id=system_user_id,
             data={"date_str": date_str},
         )
-        await _insert_task(crm_container, running, "system", ns, system_user_id)
+        await _insert_task(running, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/daily-summary",
@@ -436,7 +444,7 @@ class TestDailySummaryDedup:
     async def test_running_daily_summary_different_date_does_not_block(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -453,7 +461,7 @@ class TestDailySummaryDedup:
             user_id=system_user_id,
             data={"date_str": "2024-01-10"},
         )
-        await _insert_task(crm_container, running, "system", ns, system_user_id)
+        await _insert_task(running, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             "/crm/api/v1/tasks/daily-summary",
@@ -485,7 +493,7 @@ class TestTaskRetry:
     async def test_retry_completed_task_returns_400(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -503,7 +511,7 @@ class TestTaskRetry:
             user_id=system_user_id,
             data={"note_id": "some-note", "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, completed, "system", ns, system_user_id)
+        await _insert_task(completed, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             f"/crm/api/v1/tasks/{task_id}/retry",
@@ -517,7 +525,7 @@ class TestTaskRetry:
     async def test_retry_running_task_returns_400(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -534,7 +542,7 @@ class TestTaskRetry:
             user_id=system_user_id,
             data={"note_id": "some-note", "mode": "analyze", "config_payload": {}},
         )
-        await _insert_task(crm_container, running, "system", ns, system_user_id)
+        await _insert_task(running, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             f"/crm/api/v1/tasks/{task_id}/retry",
@@ -547,7 +555,7 @@ class TestTaskRetry:
     async def test_retry_failed_knowledge_import_file_based(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -576,7 +584,7 @@ class TestTaskRetry:
                 "chunk_errors": [],
             },
         )
-        await _insert_task(crm_container, failed, "system", ns, system_user_id)
+        await _insert_task(failed, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             f"/crm/api/v1/tasks/{task_id}/retry",
@@ -664,7 +672,7 @@ class TestNamespaceIntegrationCancelFinalize:
     async def test_second_cancel_finalizes_when_cancel_already_requested(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -688,7 +696,7 @@ class TestNamespaceIntegrationCancelFinalize:
             created_at=now,
             updated_at=now,
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await _insert_task(task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             f"/crm/api/v1/tasks/{tid}/cancel",
@@ -706,7 +714,7 @@ class TestStaleTasksAndWorkerGuards:
     @pytest.mark.asyncio
     async def test_worker_terminal_patch_does_not_overwrite_cancelled(
         self,
-        crm_container,
+        crm_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
@@ -722,8 +730,8 @@ class TestStaleTasksAndWorkerGuards:
             system_user_id,
             data={"note_id": "note-x"},
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
-        await crm_container.task_repository.patch_progress(
+        await _insert_task(task, "system", ns, system_user_id)
+        await CRMTask.patch_progress(
             tid,
             "system",
             status="cancelled",
@@ -732,7 +740,7 @@ class TestStaleTasksAndWorkerGuards:
             completed_at=_NOW(),
             cancel_requested=False,
         )
-        await crm_container.task_repository.patch_progress(
+        await CRMTask.patch_progress(
             tid,
             "system",
             status="completed",
@@ -740,7 +748,7 @@ class TestStaleTasksAndWorkerGuards:
             progress_pct=100,
             completed_at=_NOW(),
         )
-        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        row = await CRMTask.by_company_and_task_id("system", tid)
         assert row is not None
         assert row.status == "cancelled"
 
@@ -748,7 +756,7 @@ class TestStaleTasksAndWorkerGuards:
     async def test_second_cancel_finalizes_note_analyze_when_cancel_requested(
         self,
         crm_client: AsyncClient,
-        crm_container,
+        crm_di,
         auth_headers_system: dict,
         unique_id: str,
         system_user_id: str,
@@ -772,7 +780,7 @@ class TestStaleTasksAndWorkerGuards:
             created_at=now,
             updated_at=now,
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await _insert_task(task, "system", ns, system_user_id)
 
         resp = await crm_client.post(
             f"/crm/api/v1/tasks/{tid}/cancel",
@@ -787,7 +795,7 @@ class TestStaleTasksAndWorkerGuards:
     @pytest.mark.asyncio
     async def test_reconcile_stale_worker_marks_running_as_failed(
         self,
-        crm_container,
+        crm_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
@@ -810,13 +818,13 @@ class TestStaleTasksAndWorkerGuards:
             created_at=old,
             updated_at=old,
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await _insert_task(task, "system", ns, system_user_id)
 
-        first = await crm_container.task_service.reconcile_stale_worker_tasks()
-        second = await crm_container.task_service.reconcile_stale_worker_tasks()
+        first = await crm_di.task_service.reconcile_stale_worker_tasks()
+        second = await crm_di.task_service.reconcile_stale_worker_tasks()
         assert first >= 1
         assert second == 0
-        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        row = await CRMTask.by_company_and_task_id("system", tid)
         assert row is not None
         assert row.status == "failed"
         assert row.error_message is not None
@@ -825,7 +833,7 @@ class TestStaleTasksAndWorkerGuards:
     @pytest.mark.asyncio
     async def test_reconcile_cancel_requested_closes_even_when_recently_updated(
         self,
-        crm_container,
+        crm_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
@@ -847,10 +855,10 @@ class TestStaleTasksAndWorkerGuards:
             created_at=fresh,
             updated_at=fresh,
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await _insert_task(task, "system", ns, system_user_id)
 
-        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
-        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        _ = await crm_di.task_service.reconcile_stale_worker_tasks()
+        row = await CRMTask.by_company_and_task_id("system", tid)
         assert row is not None
         assert row.status == "cancelled"
         assert row.cancel_requested is False
@@ -858,7 +866,7 @@ class TestStaleTasksAndWorkerGuards:
     @pytest.mark.asyncio
     async def test_reconcile_stale_cancel_requested_becomes_cancelled(
         self,
-        crm_container,
+        crm_di,
         unique_id: str,
         system_user_id: str,
     ) -> None:
@@ -880,10 +888,10 @@ class TestStaleTasksAndWorkerGuards:
             created_at=old,
             updated_at=old,
         )
-        await _insert_task(crm_container, task, "system", ns, system_user_id)
+        await _insert_task(task, "system", ns, system_user_id)
 
-        _ = await crm_container.task_service.reconcile_stale_worker_tasks()
-        row = await crm_container.task_repository.get_for_worker(tid, "system")
+        _ = await crm_di.task_service.reconcile_stale_worker_tasks()
+        row = await CRMTask.by_company_and_task_id("system", tid)
         assert row is not None
         assert row.status == "cancelled"
         assert row.cancel_requested is False

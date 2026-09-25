@@ -72,7 +72,7 @@ def test_default_tts_entry_has_silero_bundle_voice_sample_rate(unique_id):
 
 
 def test_tts_entry_unknown_input_step_raises(unique_id):
-    with pytest.raises(ValidationError, match="неизвестные шаги"):
+    with pytest.raises(ValidationError, match="unknown steps"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
             hf_model_id="snakers4/silero-models",
@@ -160,7 +160,7 @@ def test_tts_sample_rate_not_v5_ru_choice_raises_validation_error(unique_id):
 
 
 def test_silero_tts_unknown_bundle_raises_validation_error(unique_id):
-    with pytest.raises(ValidationError, match="не из поддерживаемых"):
+    with pytest.raises(ValidationError, match="not a supported Russian v5 bundle"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
             hf_model_id="snakers4/silero-models",
@@ -182,7 +182,7 @@ def test_silero_tts_bundle_whitespace_normalized(unique_id):
 
 
 def test_silero_tts_voice_eugene_invalid_for_v5_4_ru(unique_id):
-    with pytest.raises(ValidationError, match="недопустим"):
+    with pytest.raises(ValidationError, match="is invalid for silero_bundle"):
         ProviderLitserveTTSModelEntry(
             api_model_id=f"t-{unique_id}",
             hf_model_id="snakers4/silero-models",

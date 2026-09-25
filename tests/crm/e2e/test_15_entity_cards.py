@@ -43,32 +43,32 @@ class TestEntityCards:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Карточка entity со всеми связями и связанными entities"""
-        main_entity_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        main_entity_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Main Contact {unique_id}",
             "attributes": {"role": "менеджер"},
         }, headers=auth_headers_system)
         main_entity_id = _entity_id(main_entity_resp)
 
-        related1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        related1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project",
             "name": f"Project A {unique_id}",
         }, headers=auth_headers_system)
         related1_id = _entity_id(related1_resp)
 
-        related2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        related2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "organization",
             "name": f"Company X {unique_id}",
         }, headers=auth_headers_system)
         related2_id = _entity_id(related2_resp)
 
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": main_entity_id,
             "target_entity_id": related1_id,
             "relationship_type": "assigned_to",
         }, headers=auth_headers_system)
 
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": main_entity_id,
             "target_entity_id": related2_id,
             "relationship_type": "belongs_to",
@@ -96,38 +96,38 @@ class TestEntityCards:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Карточка компании с людьми и проектами"""
-        company_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        company_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "organization",
             "name": f"Company {unique_id}",
         }, headers=auth_headers_system)
         company_id = _entity_id(company_resp)
 
-        person1_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        person1_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Employee 1 {unique_id}",
         }, headers=auth_headers_system)
         person1_id = _entity_id(person1_resp)
 
-        person2_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        person2_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "contact",
             "name": f"Employee 2 {unique_id}",
         }, headers=auth_headers_system)
         person2_id = _entity_id(person2_resp)
 
-        project_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        project_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project",
             "name": f"Company Project {unique_id}",
         }, headers=auth_headers_system)
         project_id = _entity_id(project_resp)
 
         for person_id in (person1_id, person2_id):
-            _ = await crm_client.post("/crm/api/v1/relationships/", json={
+            _ = await crm_client.post("/crm/api/v1/relationships", json={
                 "source_entity_id": person_id,
                 "target_entity_id": company_id,
                 "relationship_type": "belongs_to",
             }, headers=auth_headers_system)
 
-        _ = await crm_client.post("/crm/api/v1/relationships/", json={
+        _ = await crm_client.post("/crm/api/v1/relationships", json={
             "source_entity_id": company_id,
             "target_entity_id": project_id,
             "relationship_type": "parent_of",
@@ -151,7 +151,7 @@ class TestEntityCards:
         auth_headers_system: dict[str, str],
     ) -> None:
         """Карточка проекта с командой"""
-        project_resp = await crm_client.post("/crm/api/v1/entities/", json={
+        project_resp = await crm_client.post("/crm/api/v1/entities", json={
             "entity_type": "project",
             "name": f"Project {unique_id}",
             "attributes": {"status": "active"},
@@ -160,7 +160,7 @@ class TestEntityCards:
 
         team_member_ids: list[str] = []
         for i in range(3):
-            resp = await crm_client.post("/crm/api/v1/entities/", json={
+            resp = await crm_client.post("/crm/api/v1/entities", json={
                 "entity_type": "contact",
                 "name": f"Team Member {i} {unique_id}",
                 "attributes": {"role": f"role_{i}"},
@@ -168,7 +168,7 @@ class TestEntityCards:
             team_member_ids.append(_entity_id(resp))
 
         for member_id in team_member_ids:
-            _ = await crm_client.post("/crm/api/v1/relationships/", json={
+            _ = await crm_client.post("/crm/api/v1/relationships", json={
                 "source_entity_id": member_id,
                 "target_entity_id": project_id,
                 "relationship_type": "assigned_to",

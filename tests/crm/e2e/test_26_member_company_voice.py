@@ -45,7 +45,7 @@ async def _list_all_entity_types(
     by_id: dict[str, dict[str, object]] = {}
     while True:
         resp = await crm_client.get(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             headers=headers,
             params={"limit": page_limit, "offset": offset, "namespace": "default"},
         )
@@ -107,7 +107,7 @@ class TestVoiceTargetAPI:
     ) -> None:
         type_id = f"vt_create_{unique_id}"
         resp = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Тип-голос",
@@ -134,7 +134,7 @@ class TestVoiceTargetAPI:
     ) -> None:
         type_id = f"vt_upd_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Тип без голоса",
@@ -167,7 +167,7 @@ class TestVoiceTargetAPI:
         """Тип без is_voice_target=True не может быть голосом заметки."""
         type_id = f"novt_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Не голос",
@@ -178,7 +178,7 @@ class TestVoiceTargetAPI:
         )
 
         ent_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Сущность {unique_id}",
@@ -190,7 +190,7 @@ class TestVoiceTargetAPI:
         ent_id = object_str(_http_json(ent_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка {unique_id}",
@@ -208,7 +208,7 @@ class TestVoiceTargetAPI:
         """Кастомный тип с is_voice_target=True допустим как голос заметки."""
         type_id = f"custom_vt_{unique_id}"
         _ = await crm_client.post(
-            "/crm/api/v1/entity-types/",
+            "/crm/api/v1/entity-types",
             json={
                 "type_id": type_id,
                 "name": "Кастомный голос",
@@ -219,7 +219,7 @@ class TestVoiceTargetAPI:
         )
 
         voice_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": type_id,
                 "name": f"Голос {unique_id}",
@@ -231,7 +231,7 @@ class TestVoiceTargetAPI:
         voice_id = object_str(_http_json(voice_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка {unique_id}",
@@ -301,7 +301,7 @@ class TestPersonEntityMember:
         member_id = object_str(_http_json(person_resp).get("entity_id"), field="entity_id")
 
         note_resp = await crm_client.post(
-            "/crm/api/v1/entities/",
+            "/crm/api/v1/entities",
             json={
                 "entity_type": "note",
                 "name": f"Заметка от member {unique_id}",

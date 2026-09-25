@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 
 from core.state.interrupt import HandoffMode
-from core.worktracker.models import WorkItemState
+from core.worktracker.models import WorkItem, WorkItemState
 from tests.flows.hitl_test_harness import park_hitl_session
 from tests.sync.api._helpers import upload_platform_file
 
@@ -18,16 +18,16 @@ WORK_ITEMS = "/worktracker/api/v1/work-items"
 
 async def test_takeover_operator_message_http_appends_without_resume(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     text = f"оператор {unique_id}"
     send = await client.post(
@@ -46,25 +46,25 @@ async def test_takeover_operator_message_http_appends_without_resume(
     assert len(operator_turns) == 1
     assert operator_turns[0]["text"] == text
 
-    item = await container.work_item_service.get("system", parked.work_item_id)
+    item = await WorkItem.require_in_company("system", parked.work_item_id)
     assert item.state is WorkItemState.OPEN
-    state = await container.workflow_runtime.get_state(parked.session_id)
+    state = await di.workflow_runtime.get_state(parked.session_id)
     assert state is not None
     assert state.interrupt is not None
 
 
 async def test_single_reply_operator_ask_http_rejected(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.SINGLE_REPLY, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.SINGLE_REPLY, owner_user_id=system_user_id
     )
     send = await client.post(
         f"{HITL_API}/{parked.work_item_id}/conversation/messages",
@@ -76,17 +76,17 @@ async def test_single_reply_operator_ask_http_rejected(
 
 async def test_operator_message_http_forbidden_for_queue_outsider(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
     auth_headers_system_user2: dict[str, str],
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     send = await client.post(
         f"{HITL_API}/{parked.work_item_id}/conversation/messages",
@@ -99,8 +99,8 @@ async def test_operator_message_http_forbidden_for_queue_outsider(
 
 async def test_takeover_operator_message_http_with_file_ids(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     frontend_client,
     auth_headers_system: dict[str, str],
@@ -108,9 +108,9 @@ async def test_takeover_operator_message_http_with_file_ids(
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     upload = await upload_platform_file(
         frontend_client,
@@ -138,16 +138,16 @@ async def test_takeover_operator_message_http_with_file_ids(
 
 async def test_single_reply_complete_http_requires_resolution(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     worktracker_client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.SINGLE_REPLY, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.SINGLE_REPLY, owner_user_id=system_user_id
     )
     empty = await worktracker_client.post(
         f"{WORK_ITEMS}/{parked.work_item_id}/complete",
@@ -156,7 +156,7 @@ async def test_single_reply_complete_http_requires_resolution(
     assert empty.status_code == 400
     detail = empty.json()["detail"]
     assert "single_reply" in str(detail)
-    open_item = await container.work_item_service.get("system", parked.work_item_id)
+    open_item = await WorkItem.require_in_company("system", parked.work_item_id)
     assert open_item.state is WorkItemState.OPEN
 
     done = await worktracker_client.post(
@@ -169,16 +169,16 @@ async def test_single_reply_complete_http_requires_resolution(
 
 async def test_takeover_complete_http_allows_empty_resolution(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     worktracker_client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     done = await worktracker_client.post(
         f"{WORK_ITEMS}/{parked.work_item_id}/complete",
@@ -190,16 +190,16 @@ async def test_takeover_complete_http_allows_empty_resolution(
 
 async def test_operator_message_http_idempotent(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     payload = {"text": f"idem {unique_id}", "idempotency_key": f"same-{unique_id}"}
     first = await client.post(
@@ -220,17 +220,17 @@ async def test_operator_message_http_idempotent(
 
 async def test_terminal_hitl_rejects_send_and_second_complete(
     app,
-    container,
-    worktracker_container,
+    di,
+    worktracker_di,
     client: AsyncClient,
     worktracker_client: AsyncClient,
     unique_id: str,
     system_user_id: str,
 ) -> None:
     _ = app
-    _ = worktracker_container
+    _ = worktracker_di
     parked = await park_hitl_session(
-        container, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
+        di, unique_id, mode=HandoffMode.TAKEOVER, owner_user_id=system_user_id
     )
     done = await worktracker_client.post(
         f"{WORK_ITEMS}/{parked.work_item_id}/complete",

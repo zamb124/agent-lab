@@ -25,6 +25,10 @@ from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event
 _API = "/search/api/v1"
 _PATH_PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 _TRANSPORT_MARKER = re.compile(r"[-_ ](?:ws|rest)(?=$|[^a-z0-9])")
+_REQUEST_SCOPE_IN_ERROR = re.compile(
+    r',?\s*"(?:request_id|trace_id|service)":\s*"(?:[^"\\]|\\.)*"'
+    r'|,\s*"observability":\s*\{[^{}]*\}'
+)
 # Оркестратор crawl подхватывает домены/URL фоном между WS- и REST-вызовом: статусы и метки времени волатильны.
 _VOLATILE_KEYS = frozenset(
     {
@@ -110,7 +114,15 @@ def _str_field(payload: JsonObject, key: str) -> str:
 
 def _normalize(value: JsonValue | None) -> JsonValue | None:
     if isinstance(value, dict):
-        return {k: _normalize(v) for k, v in value.items() if k not in _VOLATILE_KEYS}
+        normalized: dict[str, JsonValue | None] = {}
+        for key, item in value.items():
+            if key in _VOLATILE_KEYS:
+                continue
+            normalized_item = _normalize(item)
+            if key == "error" and isinstance(normalized_item, str):
+                normalized_item = _REQUEST_SCOPE_IN_ERROR.sub("", normalized_item)
+            normalized[key] = normalized_item
+        return normalized
     if isinstance(value, list):
         return [_normalize(item) for item in value]
     if isinstance(value, str):
@@ -651,8 +663,9 @@ async def test_search_op_ws_rest_identical(
     auth_headers_system: dict[str, str],
     auth_token_system: str,
     unique_id: str,
+    search_worker_prerequisites: None,
 ) -> None:
-    _ = search_service, rag_service, realtime_service
+    _ = search_service, rag_service, realtime_service, search_worker_prerequisites
     case = _CASES[canonical_type]
     ws_ctx = LiveCtx(
         client=search_client_http,

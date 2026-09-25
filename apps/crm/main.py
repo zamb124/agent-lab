@@ -12,12 +12,16 @@ from fastapi import FastAPI
 
 from apps.crm.api.router import router as api_router
 from apps.crm.config import CRMSettings
-from apps.crm.container import CRMContainer, get_crm_container
-from apps.crm.realtime.command_router import register_crm_ws_commands
+from apps.crm.di import CrmDi
+from apps.crm.integrations.registry import IntegrationRegistry
+from apps.crm.realtime.command_router import CRM_OPERATIONS
+from apps.crm.services.company_init_service import CompanyInitService
+from apps.crm.services.task_service import TaskService
 from core.app import create_service_app
 from core.app.spa import mount_service_spa
 from core.config import get_settings
-from core.context import clear_context, get_context, set_context
+from core.context import reset_context, set_context
+from core.di import recipe
 from core.integrations.models import IntegrationCredential
 from core.integrations.oauth_service import set_oauth_credential_saved_hook
 from core.logging import get_logger
@@ -30,10 +34,12 @@ _ = importlib.import_module("apps.crm.events")
 logger = get_logger(__name__)
 
 
-async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSettings) -> None:
-    """Кастомная логика при старте"""
-    register_crm_ws_commands()
-    _ = set_context(
+async def crm_http_startup(
+    company_init_service: CompanyInitService,
+    integration_registry: IntegrationRegistry,
+    task_service: TaskService,
+) -> None:
+    startup_context = set_context(
         Context(
             user=User(user_id="system", name="System"),
             active_company=Company(company_id="system", name="System"),
@@ -41,17 +47,16 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
         )
     )
     try:
-        init_result = await container.company_init_service.initialize_company(
+        init_result = await company_init_service.initialize_company(
             "system",
             reseed=True,
         )
         logger.info("crm.entities.system", result=init_result)
     finally:
-        clear_context()
+        reset_context(startup_context)
 
     async def _on_oauth_credential_saved(credential: IntegrationCredential) -> None:
-        prev = get_context()
-        _ = set_context(
+        oauth_context = set_context(
             Context(
                 user=User(user_id=credential.user_id, name="OAuth"),
                 active_company=Company(
@@ -62,16 +67,13 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
             )
         )
         try:
-            await container.integration_registry.dispatch_credential_saved(credential)
+            await integration_registry.dispatch_credential_saved(credential)
         finally:
-            if prev is not None:
-                _ = set_context(prev)
-            else:
-                clear_context()
+            reset_context(oauth_context)
 
     set_oauth_credential_saved_hook(_on_oauth_credential_saved)
 
-    reconciled = await container.task_service.reconcile_stale_worker_tasks()
+    reconciled = await task_service.reconcile_stale_worker_tasks()
     if reconciled:
         logger.warning(
             "crm.reconcile_stale_crm_tasks_on_api_startup",
@@ -81,17 +83,17 @@ async def on_startup(_app: FastAPI, container: CRMContainer, _settings: CRMSetti
 
 
 def create_app() -> FastAPI:
-    """Создает FastAPI приложение"""
     return create_service_app(
-        service_name="crm",
-        settings_class=CRMSettings,
-        get_container=get_crm_container,
+        "crm",
+        CRMSettings,
+        CrmDi,
+        database="crm_url",
+        operations=CRM_OPERATIONS,
+        lifecycle=(recipe(crm_http_startup),),
         routers=[api_router],
-        on_startup=on_startup,
         services_spa_index=Path(__file__).parent / "ui" / "index.html",
         title="NetWorkle Service",
         description="API для управления NetWorkle: сущности, заметки, задачи, связи",
-        include_crud_routers=False,
     )
 
 

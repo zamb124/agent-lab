@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from apps.realtime.container import get_realtime_container
-from apps.realtime.db.repository import PlatformEventLogRepository
+from apps.realtime.services.bus_service import RealtimeBusService
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -22,6 +21,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 @pytest.fixture
-def realtime_event_log(realtime_service: None) -> PlatformEventLogRepository:
+def realtime_event_log(realtime_service: None) -> RealtimeBusService:
+    """Строки лога пишет pytest в ту же БД, которую читает sweeper процесса granian."""
     _ = realtime_service
-    return get_realtime_container().event_log_repository
+    return RealtimeBusService()
