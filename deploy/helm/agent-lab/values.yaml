@@ -44,7 +44,7 @@ postgres:
     limits:
       cpu: "2"
       memory: 8Gi
-  maxConnections: 300
+  maxConnections: 1000
   sharedBuffers: 2GB
 
 openfga:
