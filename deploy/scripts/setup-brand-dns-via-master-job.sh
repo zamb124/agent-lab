@@ -205,6 +205,13 @@ EOF
 }
 
 EXEC_POD="$(find_running_pod_on_master "$EXEC_DEPLOYMENT")"
+# phase=Running ≠ контейнер готов: CrashLoopBackOff под держит phase=Running,
+# но exec падает с "container not found" между рестартами. Проверяю exec-пробой.
+if [ -n "$EXEC_POD" ] && ! $K exec -n "$PLATFORM_NS" "$EXEC_POD" -- \
+    /bin/sh -c 'command -v bash >/dev/null' >/dev/null 2>&1; then
+  log_warn "${EXEC_POD}: phase=Running, но контейнер недоступен для exec — generic выбор"
+  EXEC_POD=""
+fi
 if [ -z "$EXEC_POD" ]; then
   # Любой Running app-pod на master с curl/python3.
   EXEC_POD="$($K get pods -n "$PLATFORM_NS" \
@@ -225,8 +232,12 @@ if [ -z "$EXEC_POD" ]; then
 fi
 
 if [ -n "$EXEC_POD" ]; then
-  run_dns_via_exec "$EXEC_POD"
-else
+  if ! run_dns_via_exec "$EXEC_POD"; then
+    log_warn "exec-путь упал на ${EXEC_POD} — fallback на Job"
+    EXEC_POD=""
+  fi
+fi
+if [ -z "$EXEC_POD" ]; then
   run_dns_via_job
 fi
 
