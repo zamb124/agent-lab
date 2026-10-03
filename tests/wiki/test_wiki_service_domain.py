@@ -10,7 +10,10 @@ from __future__ import annotations
 import pytest
 
 from apps.wiki.content.markdown_parser import markdown_to_document
-from apps.wiki.models.domain import WikiLinkTargetKind, WikiPage, WikiPageLink, WikiRevision
+from apps.wiki.models.domain import WikiLinkTargetKind
+from apps.wiki.models.page import WikiPage
+from apps.wiki.models.page_link import WikiPageLink
+from apps.wiki.models.revision import WikiRevision
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 
 pytestmark = pytest.mark.no_test_doubles

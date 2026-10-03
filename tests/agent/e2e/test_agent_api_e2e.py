@@ -299,7 +299,8 @@ async def test_e2e_register_incomplete_pairing_data(
         },
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Неполные данные pairing code"
+    assert response.json()["detail"] == "pairing code payload is incomplete"
+    assert response.json()["error_code"] == "pairing_code_incomplete"
     await frontend_di.shared_storage.delete(key, force_global=True)
 
 
@@ -341,7 +342,8 @@ async def test_e2e_register_expired_pairing_code(
         },
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Недействительный или истёкший pairing code"
+    assert response.json()["detail"] == "pairing code is invalid or expired"
+    assert response.json()["error_code"] == "pairing_code_invalid"
 
 
 @pytest.mark.asyncio
@@ -375,7 +377,8 @@ async def test_e2e_register_rate_limit_429(
         json=register_payload,
     )
     assert response.status_code == 429
-    assert response.json()["detail"] == "Превышен лимит регистрации устройств. Попробуйте позже."
+    assert response.json()["detail"] == "register rate limit exceeded"
+    assert response.json()["error_code"] == "register_rate_limit_exceeded"
 
 
 @pytest.mark.asyncio
@@ -415,7 +418,8 @@ async def test_e2e_revoke_device_wrong_company(
     )
     response = await agent_frontend_http_company2.delete(f"{AGENT_API_PREFIX}/devices/{device_id}")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Устройство не найдено"
+    assert response.json()["detail"] == "device not found"
+    assert response.json()["error_code"] == "device_not_found"
 
 
 @pytest.mark.asyncio
@@ -476,7 +480,8 @@ async def test_e2e_update_device_policy_not_found(
         },
     )
     assert response.status_code == 404
-    assert response.json()["detail"] == "Устройство не найдено"
+    assert response.json()["detail"] == "device not found"
+    assert response.json()["error_code"] == "device_not_found"
 
 
 @pytest.mark.asyncio

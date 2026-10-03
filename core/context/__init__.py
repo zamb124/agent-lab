@@ -2,6 +2,15 @@
 Context - глобальный асинхронный контекст для запросов.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from core.context.command import (
+    current_command_event_id,
+    reset_command_event_id,
+    set_command_event_id,
+)
 from core.context.context import (
     clear_context,
     get_context,
@@ -24,10 +33,18 @@ __all__ = [
     "reset_context",
     "set_current_channel",
     "get_current_channel",
+    "current_command_event_id",
+    "set_command_event_id",
+    "reset_command_event_id",
 ]
 
 
-def __getattr__(name: str) -> object:
+if TYPE_CHECKING:
+    from core.models.context_models import Context
+    from core.models.identity_models import Company, User
+
+
+def __getattr__(name: str) -> type[Context] | type[User] | type[Company]:
     """Ленивый re-export моделей: eager-импорт даёт цикл через platform_model."""
     if name == "Context":
         from core.models.context_models import Context

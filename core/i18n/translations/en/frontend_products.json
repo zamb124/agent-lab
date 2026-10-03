@@ -204,7 +204,7 @@
     "f3_title": "Namespaces",
     "f3_desc": "Same isolation model as other products: X-Platform-Namespace scopes the document list.",
     "f4_title": "Secure BFF",
-    "f4_desc": "Download for the editor and callbacks use server-issued JWT; the client never sees MinIO or DS admin secrets.",
+    "f4_desc": "Download for the editor and callbacks use server-issued JWT; the client never sees S3 storage or DS admin secrets.",
     "how_title": "How it works",
     "s1_h": "Sign in",
     "s1_p": "Use your {platformName} session; the Documents app uses the same auth and company context — teammates open the same files for collaborative editing.",

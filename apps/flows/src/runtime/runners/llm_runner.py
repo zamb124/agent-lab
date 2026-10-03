@@ -13,7 +13,7 @@ import json
 import time
 from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timezone
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.types import (
@@ -143,7 +143,12 @@ from core.tracing.attributes import (
 )
 from core.tracing.context import get_current_trace_context
 from core.tracing.operation_span import traced_operation
-from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_value,
+    require_json_object,
+)
 from core.variables import VariableResolver
 
 from .base_runner import BaseLlmNodeRunner, LlmNodeRunnerHost
@@ -244,7 +249,7 @@ def _copy_state_projection(target: ExecutionState, source: ExecutionState) -> No
             target[key] = value
 
 
-def _format_tool_result_content(result: object) -> str:
+def _format_tool_result_content(result: JsonValue) -> str:
     """Строка tool_result для LLM history и SSE: JSON для объектов, не Python repr."""
     if isinstance(result, str):
         return result
@@ -1135,10 +1140,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                             # Структурированный вывод — всегда завершаем после первого ответа
                             if structured_output and output_schema:
                                 try:
-                                    parsed_output = require_json_value(
-                                        cast(JsonValue, json.loads(content)),
-                                        "llm.structured_output",
-                                    )
+                                    parsed_output = parse_json_value(content, "llm.structured_output")
                                     state.set_structured_output_result(parsed_output)
                                     final_response = content
                                     parsed_output_keys: list[str] = (
@@ -1151,7 +1153,7 @@ class LlmNodeRunner(BaseLlmNodeRunner):
                                         llm_node=llm_node_label,
                                         output_keys=parsed_output_keys or type(parsed_output).__name__,
                                     )
-                                except json.JSONDecodeError as e:
+                                except ValueError as e:
                                     logger.error("flows.llm.structured_output_parse_failed", llm_node=llm_node_label, error=str(e))
                                     final_response = content
 

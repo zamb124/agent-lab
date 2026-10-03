@@ -1,6 +1,6 @@
 """Auto-generated migration.
 
-Created: 2026-09-25 11:59:24
+Created: 2026-09-25 16:17:20
 """
 
 depends_on = None
@@ -4958,7 +4958,86 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
+                'name': 'source_kind',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': "''",
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'catalog_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'name_key',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 255
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 255,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
                 'name': 'deleted_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'deleted_by_user_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 100
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 100,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'authz_synced_at',
                 'column_type': {
                     'kind': 'date_time'
                 },
@@ -5147,6 +5226,16 @@ def upgrade(ctx):
         ],
         indexes=[
             {
+                'name': 'files_catalog_id_name_key_idx',
+                'fields': [
+                    'catalog_id',
+                    'name_key'
+                ],
+                'unique': True,
+                'method': None,
+                'where': 'deleted_at IS NULL AND catalog_id IS NOT NULL'
+            },
+            {
                 'name': 'files_storage_id_idx',
                 'fields': [
                     'storage_id'
@@ -5174,6 +5263,22 @@ def upgrade(ctx):
                 'name': 'files_updated_at_idx',
                 'fields': [
                     'updated_at'
+                ],
+                'unique': False,
+                'method': None
+            },
+            {
+                'name': 'files_source_kind_idx',
+                'fields': [
+                    'source_kind'
+                ],
+                'unique': False,
+                'method': None
+            },
+            {
+                'name': 'files_catalog_id_idx',
+                'fields': [
+                    'catalog_id'
                 ],
                 'unique': False,
                 'method': None
@@ -5678,6 +5783,334 @@ def upgrade(ctx):
                 'name': 'embed_configs_flow_id_idx',
                 'fields': [
                     'flow_id'
+                ],
+                'unique': False,
+                'method': None
+            }
+        ],
+    )
+    ctx.create_table(
+        "document_catalogs",
+        fields=[
+            {
+                'name': 'catalog_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': True,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'company_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 100
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 100,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'namespace',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'parent_catalog_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 64
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 64,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'title',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 255
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 255,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'title_key',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 255
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 255,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'managed',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'source_object',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 255
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 255,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'company_visible',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'owner_user_id',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 100
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 100,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'authz_synced_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'rag_index_enabled',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'rag_index_include_subcatalogs',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'rag_index_search_options',
+                'column_type': {
+                    'kind': 'json_binary'
+                },
+                'db_type': 'JSONB',
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'rag_index_updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'created_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'updated_at',
+                'column_type': {
+                    'kind': 'date_time'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            }
+        ],
+        indexes=[
+            {
+                'name': 'document_catalogs_company_id_namespace_parent_catalog_id_idx',
+                'fields': [
+                    'company_id',
+                    'namespace',
+                    'parent_catalog_id'
+                ],
+                'unique': False,
+                'method': None
+            },
+            {
+                'name': 'document_catalogs_parent_catalog_id_title_key_idx',
+                'fields': [
+                    'parent_catalog_id',
+                    'title_key'
+                ],
+                'unique': True,
+                'method': None,
+                'where': 'parent_catalog_id IS NOT NULL'
+            },
+            {
+                'name': 'document_catalogs_company_id_namespace_title_key_idx',
+                'fields': [
+                    'company_id',
+                    'namespace',
+                    'title_key'
+                ],
+                'unique': True,
+                'method': None,
+                'where': 'parent_catalog_id IS NULL'
+            },
+            {
+                'name': 'document_catalogs_company_id_namespace_source_object_idx',
+                'fields': [
+                    'company_id',
+                    'namespace',
+                    'source_object'
+                ],
+                'unique': True,
+                'method': None,
+                'where': 'source_object IS NOT NULL'
+            },
+            {
+                'name': 'document_catalogs_company_id_idx',
+                'fields': [
+                    'company_id'
+                ],
+                'unique': False,
+                'method': None
+            },
+            {
+                'name': 'document_catalogs_parent_catalog_id_idx',
+                'fields': [
+                    'parent_catalog_id'
                 ],
                 'unique': False,
                 'method': None
@@ -8548,6 +8981,19 @@ def upgrade(ctx):
             }
         ],
     )
+    ctx.execute(
+        "ALTER TABLE files ADD CONSTRAINT files_catalog_id_fkey "
+        "FOREIGN KEY (catalog_id) REFERENCES document_catalogs (catalog_id) ON DELETE RESTRICT"
+    )
+    ctx.execute(
+        "ALTER TABLE document_catalogs ADD CONSTRAINT document_catalogs_parent_fkey "
+        "FOREIGN KEY (parent_catalog_id) REFERENCES document_catalogs (catalog_id) ON DELETE RESTRICT"
+    )
+    ctx.execute(
+        "ALTER TABLE files ADD CONSTRAINT files_catalog_required_chk CHECK ("
+        "(catalog_id IS NULL) = (source_kind IN ('', 'generated_ephemeral', 'platform_auxiliary'))"
+        ")"
+    )
 
 
 def downgrade(ctx):
@@ -8562,6 +9008,7 @@ def downgrade(ctx):
     ctx.drop_table("cookie_consents")
     ctx.drop_table("datasource_connections")
     ctx.drop_table("datasource_connectors")
+    ctx.drop_table("document_catalogs")
     ctx.drop_table("embed_configs")
     ctx.drop_table("files")
     ctx.drop_table("guest_runtimes")

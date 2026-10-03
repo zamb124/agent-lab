@@ -261,7 +261,7 @@ async def op_platform_billing_facet_companies(
 
 
 async def _storage_price_override(di: Di, key: str) -> PriceCatalog | None:
-    raw = await di.shared_storage.get(key, force_global=True)
+    raw = await di.shared_storage.get(key)
     if not raw:
         return None
     return validate_price_catalog(parse_json_object(raw, key))
@@ -285,7 +285,7 @@ async def op_platform_billing_prices_update(
     _ = user
     _ = await require_system_admin(di.authz_service)
     catalog = validate_price_catalog(payload.catalog)
-    _ = await di.shared_storage.set(STORAGE_PRICES_KEY, json.dumps(catalog), force_global=True)
+    _ = await di.shared_storage.set(STORAGE_PRICES_KEY, json.dumps(catalog))
     return StatusOk()
 
 
@@ -364,8 +364,7 @@ async def op_platform_billing_company_prices_update(
         raise_invalid(ValueError("company_id must not be empty"))
     catalog = validate_price_catalog(payload.catalog)
     _ = await di.shared_storage.set(
-        company_resource_prices_storage_key(cid), json.dumps(catalog), force_global=True
-    )
+        company_resource_prices_storage_key(cid), json.dumps(catalog)    )
     return StatusOk()
 
 

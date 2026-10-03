@@ -11,7 +11,7 @@ from oxyde import Field as DbField
 from oxyde import Index, Query, execute_raw
 
 from core.models.platform_model import PlatformModel
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 CRM_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rolled_back"})
 _RUNNING_GUARD = "status NOT IN ('completed', 'failed', 'cancelled', 'rolled_back')"
@@ -320,7 +320,7 @@ def _note_filter(
     return " AND ".join(clauses), params
 
 
-def _count_cell(rows: Sequence[object]) -> int:
+def _count_cell(rows: Sequence[JsonValue]) -> int:
     if len(rows) != 1:
         raise ValueError("crm task count returned empty value")
     total = require_json_object(rows[0], "crm_task_count")["total"]
@@ -329,7 +329,7 @@ def _count_cell(rows: Sequence[object]) -> int:
     return total
 
 
-def _task_from_row(row: object) -> CRMTask:
+def _task_from_row(row: JsonValue) -> CRMTask:
     parsed = require_json_object(row, "crm_task")
     raw_item = parsed["item"]
     if isinstance(raw_item, str):

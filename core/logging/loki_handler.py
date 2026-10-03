@@ -11,8 +11,9 @@
   через http.client (без внешних зависимостей).
 - Batch ограничен по количеству записей и размеру; тело сжимается gzip.
 - При shutdown ждёт завершения потока через join(timeout).
-- Если Loki недоступен — тихо логирует ошибку в stderr и дропает batch
-  (dev-only, потеря логов приемлема).
+- Если Loki недоступен или flush падает — строка в stderr, batch дропается,
+  фоновый поток продолжает цикл. Ошибка close одного handler на выходе
+  процесса не останавливает flush остальных (dev-only, потеря логов приемлема).
 """
 
 from __future__ import annotations
@@ -38,12 +39,20 @@ _MAX_BATCH_BYTES = 4 * 1024 * 1024
 _LOKI_HANDLERS: list[LokiHandler] = []
 
 
+def _report_loki_failure(reason: str) -> None:
+    _ = sys.stderr.write("[LokiHandler] " + reason + "\n")
+
+
+def _forget_handler(handler: LokiHandler) -> None:
+    _LOKI_HANDLERS[:] = [item for item in _LOKI_HANDLERS if item is not handler]
+
+
 def _flush_all_on_exit() -> None:
     for handler in list(_LOKI_HANDLERS):
         try:
             handler.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            _report_loki_failure("exit flush failed: " + type(exc).__name__ + ": " + str(exc))
 
 
 _ = atexit.register(_flush_all_on_exit)
@@ -107,8 +116,8 @@ class LokiHandler(logging.Handler):
             _ = self._shutdown.wait(self._flush_interval)
             try:
                 self._do_flush()
-            except Exception:
-                pass
+            except Exception as exc:
+                _report_loki_failure("flush failed: " + type(exc).__name__ + ": " + str(exc))
 
     def _do_flush(self) -> None:
         raw: list[tuple[str, str, str]] = []
@@ -187,16 +196,13 @@ class LokiHandler(logging.Handler):
             _ = resp.read()
             conn.close()
         except (OSError, http.client.HTTPException) as exc:
-            _ = sys.stderr.write(
-                f"[LokiHandler] push failed ({len(body)} bytes): {exc}\n"
+            _report_loki_failure(
+                "push failed (" + str(len(body)) + " bytes): " + type(exc).__name__ + ": " + str(exc)
             )
 
     @override
     def close(self) -> None:
         self._shutdown.set()
         self._thread.join(timeout=5.0)
-        try:
-            _LOKI_HANDLERS.remove(self)
-        except ValueError:
-            pass
+        _forget_handler(self)
         super().close()

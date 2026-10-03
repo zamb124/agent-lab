@@ -39,11 +39,11 @@ def _exit_zero_after_k8s_init_migrate() -> None:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="db-migrate",
-        description="Миграции Oxyde по сервисным БД (migrations/<service>/0001_initial.py).",
+        description="Миграции Oxyde по сервисным БД (migrations/<service>/NNNN_<name>.py).",
     )
     sub = p.add_subparsers(dest="command", required=True)
 
-    u = sub.add_parser("upgrade", help="применить 0001_initial (все БД или одна)")
+    u = sub.add_parser("upgrade", help="применить неприменённые файлы (все БД или одна)")
     u.add_argument(
         "--service",
         choices=_SERVICE_CHOICES,

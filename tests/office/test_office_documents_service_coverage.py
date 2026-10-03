@@ -1,6 +1,6 @@
 """
 Полное интеграционное покрытие BFF documents (office): PostgreSQL platform_office, shared (company/user),
-S3/MinIO, Redis (callback dedupe), без моков внутренних компонентов платформы.
+S3/SeaweedFS, Redis (callback dedupe), без моков внутренних компонентов платформы.
 """
 
 from __future__ import annotations

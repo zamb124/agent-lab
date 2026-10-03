@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from typing import ClassVar, Literal, Protocol, TypeAlias
 
 import torch
-from fastapi import HTTPException, Request
+from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 from silero import silero_tts
 
@@ -36,6 +36,7 @@ from core.logging import get_logger
 from core.types import JsonValue
 from core.utils.text_sanitize import sanitize_text_for_speech_backend
 from core.utils.tts_input_steps import apply_tts_input_steps
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -87,20 +88,21 @@ def parse_tts_body(
     модели), ``response_format`` (``pcm``|``wav``).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="TTS: LitServe must pass a prepared request body")
+        raise WsCommandError("unprocessable", "TTS: LitServe must pass a prepared request body", error_code="ws_invalid_payload")
 
     input_raw = raw.get("input")
     if not isinstance(input_raw, str):
-        raise HTTPException(status_code=422, detail="TTS: input must be a string")
+        raise WsCommandError("unprocessable", "TTS: input must be a string", error_code="ws_invalid_payload")
     raw_input = input_raw.strip()
     text = sanitize_text_for_speech_backend(raw_input).strip()
     if not text:
         if raw_input:
-            raise HTTPException(
-                status_code=422,
-                detail="TTS: input field has no valid Unicode characters after normalization",
+            raise WsCommandError(
+                "unprocessable",
+                "TTS: input field has no valid Unicode characters after normalization",
+                error_code="ws_invalid_payload",
             )
-        raise HTTPException(status_code=422, detail="TTS: input field is required and must not be empty")
+        raise WsCommandError("unprocessable", "TTS: input field is required and must not be empty", error_code="ws_invalid_payload")
 
     model_raw = raw.get("model")
     if model_raw is None:
@@ -108,13 +110,14 @@ def parse_tts_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="TTS: model must be a string")
+        raise WsCommandError("unprocessable", "TTS: model must be a string", error_code="ws_invalid_payload")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
-        raise HTTPException(
-            status_code=422,
-            detail="TTS: model is required (explicitly in payload or tts_default_api_model_id in config)",
+        raise WsCommandError(
+            "unprocessable",
+            "TTS: model is required (explicitly in payload or tts_default_api_model_id in config)",
+            error_code="ws_invalid_payload",
         )
 
     voice_raw = raw.get("voice")
@@ -125,7 +128,7 @@ def parse_tts_body(
         v = sanitize_text_for_speech_backend(voice_raw.strip()).strip()
         voice_override = _normalize_silero_speaker(v) if v else None
     else:
-        raise HTTPException(status_code=422, detail="TTS: voice must be a string")
+        raise WsCommandError("unprocessable", "TTS: voice must be a string", error_code="ws_invalid_payload")
 
     response_format_raw = raw.get("response_format")
     if response_format_raw is None:
@@ -133,9 +136,9 @@ def parse_tts_body(
     elif isinstance(response_format_raw, str):
         response_format = response_format_raw.strip().lower()
     else:
-        raise HTTPException(status_code=422, detail="TTS: response_format must be a string")
+        raise WsCommandError("unprocessable", "TTS: response_format must be a string", error_code="ws_invalid_payload")
     if response_format not in ("pcm", "wav"):
-        raise HTTPException(status_code=422, detail="TTS: response_format supports only pcm or wav")
+        raise WsCommandError("unprocessable", "TTS: response_format supports only pcm or wav", error_code="ws_invalid_payload")
 
     sample_rate_raw = raw.get("sample_rate")
     if sample_rate_raw is None:
@@ -143,7 +146,7 @@ def parse_tts_body(
     elif isinstance(sample_rate_raw, int) and not isinstance(sample_rate_raw, bool):
         sample_rate_override = sample_rate_raw
     else:
-        raise HTTPException(status_code=422, detail="TTS: sample_rate must be an integer")
+        raise WsCommandError("unprocessable", "TTS: sample_rate must be an integer", error_code="ws_invalid_payload")
 
     return TTSSynthesisInput(
         text=text,

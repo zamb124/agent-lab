@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.models.mcp_catalog import MCPCatalogEntry, MCPCatalogVerifyStatus
 from apps.flows.src.services.mcp_catalog_crawler import crawl_mcp_registry
@@ -24,6 +23,7 @@ from apps.flows.src.services.mcp_catalog_ids import (
     server_id_from_catalog_id,
 )
 from apps.flows.src.services.mcp_catalog_provisioner import provision_mcp_catalog_for_company
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 from tests.fixtures.mcp_modes_stub import (

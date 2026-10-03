@@ -24,7 +24,7 @@ from core.files.types import FileCategory
 def _sample_file_record(**overrides: object) -> FileRecord:
     base = {
         "file_id": "f-json",
-        "provider": "minio",
+        "provider": "seaweedfs",
         "original_name": "package-lock.json",
         "content_type": "application/json",
         "file_size": 1200,

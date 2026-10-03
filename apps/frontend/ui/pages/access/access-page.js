@@ -16,8 +16,8 @@ import '../../components/sheets/access-why-sheet.js';
 
 const OBJECT_TYPES = Object.freeze([
     'wiki_page',
-    'office_document',
-    'office_catalog',
+    'document_file',
+    'document_catalog',
     'crm_entity',
     'crm_namespace',
     'flow',
@@ -31,8 +31,8 @@ const OBJECT_TYPES = Object.freeze([
 
 const TYPE_ICONS = Object.freeze({
     wiki_page: 'book-open',
-    office_document: 'file',
-    office_catalog: 'folder',
+    document_file: 'file',
+    document_catalog: 'folder',
     crm_entity: 'users',
     crm_namespace: 'folder',
     flow: 'workflow',

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 
 from core.config import get_settings
 from core.context import get_context
+from core.context.command import reset_command_event_id, set_command_event_id
 from core.di.state import app_di
 from core.events import publish_event_to_user
 from core.events.contract import PlatformEvent
@@ -59,12 +60,16 @@ async def execute_realtime_command(
         raise RuntimeError("execute_realtime_command requires request context")
     command_start = time.perf_counter()
     logger.info(EVENT_WS_COMMAND, **{LOG_WS_COMMAND: event.type})
-    reply_type, reply_payload = await dispatch_ws_command(
-        event.type,
-        event.payload,
-        context.user,
-        di,
-    )
+    command_token = set_command_event_id(event.event_id)
+    try:
+        reply_type, reply_payload = await dispatch_ws_command(
+            event.type,
+            event.payload,
+            context.user,
+            di,
+        )
+    finally:
+        reset_command_event_id(command_token)
     command_status = "error" if reply_type.endswith("_failed") else "ok"
     command_duration_ms = round((time.perf_counter() - command_start) * 1000.0, 3)
     logger.info(

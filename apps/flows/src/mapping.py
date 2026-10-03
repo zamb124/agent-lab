@@ -29,18 +29,22 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import ClassVar, cast
 
 from pydantic import BaseModel
 
 from core.guest_runtime.env import validate_guest_env
-from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+from core.state.execution_state import ExecutionState, ExecutionStateValue
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_value,
+    require_json_object,
+    require_json_value,
+)
 from core.variables import VarResolver
 
 PLATFORM_ENV_PREFIX = "@platform:"
-
-if TYPE_CHECKING:
-    from core.state import ExecutionState
 
 _VAR_FULL_VAR = VarResolver.VAR_REF_PATTERN
 type MappingState = ExecutionState | JsonObject
@@ -63,18 +67,20 @@ class MappingResolver:
     )
 
     @staticmethod
-    def _as_mapping(value: object) -> Mapping[str, object] | None:
+    def _as_mapping(
+        value: MappingState | ExecutionStateValue,
+    ) -> Mapping[str, ExecutionStateValue] | None:
         if isinstance(value, Mapping):
-            return cast(Mapping[str, object], value)
+            return cast(Mapping[str, ExecutionStateValue], value)
         if isinstance(value, BaseModel):
             return cast(
-                Mapping[str, object],
+                Mapping[str, ExecutionStateValue],
                 value.model_dump(mode="python", exclude_none=False),
             )
         return None
 
     @staticmethod
-    def resolve_value(source: object, state: MappingState) -> object:
+    def resolve_value(source: JsonValue, state: MappingState) -> ExecutionStateValue:
         """
         Резолвит значение из маппинга.
 
@@ -109,7 +115,7 @@ class MappingResolver:
         return require_json_object(dict(state), "mapping.state")
 
     @staticmethod
-    def get_nested_value(data: MappingState, path: str) -> object | None:
+    def get_nested_value(data: MappingState, path: str) -> ExecutionStateValue | None:
         """
         Получает значение по вложенному пути из любого объекта.
 
@@ -126,7 +132,7 @@ class MappingResolver:
             return None
 
         keys = path.split(".")
-        value: object = data
+        value: MappingState | ExecutionStateValue = data
 
         for key in keys:
             mapping = MappingResolver._as_mapping(value)
@@ -134,6 +140,8 @@ class MappingResolver:
                 return None
             value = mapping[key]
 
+        if isinstance(value, ExecutionState):
+            return MappingResolver.dump_state(value)
         return value
 
     @staticmethod
@@ -217,9 +225,9 @@ class MappingResolver:
 
     @staticmethod
     def build_mapped_state(
-        mapping: Mapping[str, object],
+        mapping: Mapping[str, JsonValue],
         state: MappingState,
-    ) -> dict[str, object]:
+    ) -> dict[str, ExecutionStateValue]:
         """
         Строит новый Dict на основе маппинга.
 
@@ -230,7 +238,7 @@ class MappingResolver:
         Возвращает:
             Новый Dict с замапленными полями
         """
-        result: dict[str, object] = {}
+        result: dict[str, ExecutionStateValue] = {}
 
         for target_field, source in mapping.items():
             result[target_field] = MappingResolver.resolve_value(source, state)
@@ -305,11 +313,11 @@ class MappingResolver:
         raw = body_template.strip()
         if not raw:
             return {}
-        parsed = require_json_value(cast(object, json.loads(raw)), "body_template")
+        parsed = parse_json_value(raw, "body_template")
         return MappingResolver.resolve_json_template_tree(parsed, state, variables)
 
     @staticmethod
-    def stringify_mapping_value(value: object) -> str:
+    def stringify_mapping_value(value: ExecutionStateValue) -> str:
         """Скаляр или JSON в одну строку для HTTP-заголовка / interpolated string."""
         if value is None:
             raise ValueError("template resolved to None")

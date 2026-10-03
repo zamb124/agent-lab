@@ -7,7 +7,8 @@ import sys
 
 from apps.sync.authz.tuples import sync_channel_company_link, sync_channel_member_tuple
 from apps.sync.di import SyncDi
-from apps.sync.models.channel import SyncChannel, SyncChannelMember
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.channel_member import SyncChannelMember
 from core.authz.models import AuthzObject
 from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.config import get_settings

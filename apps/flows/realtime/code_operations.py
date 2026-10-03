@@ -12,7 +12,7 @@ import time
 import uuid
 from pathlib import Path
 from types import FrameType, FunctionType, MethodType, ModuleType, TracebackType
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from apps.flows.di import Di
 from apps.flows.realtime.operations import (
@@ -58,10 +58,10 @@ from apps.flows.src.runtime.state_diff import compute_state_diff
 from apps.flows.src.state import collect_flow_node_files
 from apps.flows.src.tools.decorator import FunctionTool
 from core.capabilities import (
-    CAPABILITY_LANGUAGE_SET,
     CapabilityDocumentation,
     CapabilityLanguage,
     CodeExecutionKind,
+    match_capability_language,
 )
 from core.clients.capability_gateway_client import CapabilityGatewayClient
 from core.context import get_context
@@ -71,6 +71,7 @@ from core.errors.boundary import PlatformNotFoundError
 from core.files.file_ref import FileRef
 from core.flow_ui.document import FlowUIDocument
 from core.flow_ui.templates import default_chat_document
+from core.imports import imported_attr
 from core.logging import get_logger
 from core.models.identity_models import User
 from core.state import ExecutionState
@@ -88,7 +89,7 @@ from core.websocket import (
 
 logger = get_logger(__name__)
 type SourceObject = (
-    ModuleType | type[object] | MethodType | FunctionType | TracebackType | FrameType
+    ModuleType | type | MethodType | FunctionType | TracebackType | FrameType
 )
 
 CODE_RUNNER_SERVICE_BY_LANGUAGE = {
@@ -116,9 +117,10 @@ class ParsedFunctionSignature(TypedDict):
 
 
 def _require_capability_language(language: str) -> CapabilityLanguage:
-    if language not in CAPABILITY_LANGUAGE_SET:
+    known = match_capability_language(language)
+    if known is None:
         raise_invalid(ValueError(f"Unsupported language: {language}"))
-    return cast(CapabilityLanguage, language)
+    return known
 
 
 async def _capability_documentation(language: CapabilityLanguage) -> CapabilityDocumentation:
@@ -617,8 +619,7 @@ def _get_source_by_path(path: str) -> SourceResponse:
 
 
 def _source_object_child(obj: SourceObject, attr_name: str) -> SourceObject | None:
-    namespace = cast(dict[str, object], vars(obj))
-    raw_attr = namespace.get(attr_name)
+    raw_attr = imported_attr(obj, attr_name, object)
     if isinstance(raw_attr, (ModuleType, FunctionType, MethodType, TracebackType, FrameType)):
         return raw_attr
     if isinstance(raw_attr, type):

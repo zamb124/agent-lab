@@ -11,6 +11,7 @@ import uuid
 from core.config import get_settings
 from core.logging import get_log_context
 from core.logging.attributes import LOG_TEST_SCOPE
+from core.types import JsonValue
 
 LABEL_REQUEST_ID = "request_id"
 LABEL_TRACE_ID = "trace_id"
@@ -88,7 +89,7 @@ def merge_extra_labels(labels: dict[str, str], extra_labels: dict[str, str] | No
 
 def _resolve_id(
     override: str | None,
-    from_ctx: object,
+    from_ctx: JsonValue,
     *,
     background_kind: str | None,
 ) -> str:

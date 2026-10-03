@@ -38,31 +38,13 @@ def _log_python_runtime(service_name: str) -> None:
     )
 
 
-def _resolve_int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    value = int(raw)
-    if value < 1:
-        raise ValueError(f"{name}={value!r} must be >= 1")
-    return value
-
-
-def _resolve_workers() -> int:
+def serve(service_name: str, target: str, settings: PlatformBaseSettings) -> None:
+    _log_python_runtime(service_name)
     # workers=1 для ASGI: каждый worker — отдельный event loop с отдельным ASGI
     # lifespan; пулы asyncpg/sqlalchemy/httpx/redis локальны к loop и не шарятся
     # между workers. Масштабирование — replicas в k8s.
-    return _resolve_int_env("GRANIAN_WORKERS", 1)
-
-
-def _resolve_runtime_threads() -> int:
-    return _resolve_int_env("GRANIAN_RUNTIME_THREADS", 2)
-
-
-def serve(service_name: str, target: str, settings: PlatformBaseSettings) -> None:
-    _log_python_runtime(service_name)
-    workers = _resolve_workers()
-    runtime_threads = _resolve_runtime_threads()
+    workers = settings.server.granian_workers
+    runtime_threads = settings.server.granian_runtime_threads
     logger.info(
         "service.granian_topology",
         service=service_name,

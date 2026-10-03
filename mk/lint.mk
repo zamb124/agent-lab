@@ -88,6 +88,66 @@ _lint-py:
 	uv run python scripts/check_agent_test_no_monkeypatch.py
 	@echo "=== lint: variables legacy grep ==="
 	@bash scripts/check_variables_legacy.sh
+	@echo "=== lint: sync file upload op ==="
+	uv run python scripts/check_sync_file_upload_op.py
+	@echo "=== lint: sync company directory ops ==="
+	uv run python scripts/check_sync_company_directory_ops.py
+	@echo "=== lint: sync call link ops ==="
+	uv run python scripts/check_sync_call_link_ops.py
+	@echo "=== lint: sync call session ops ==="
+	uv run python scripts/check_sync_call_session_ops.py
+	@echo "=== lint: sync call lifecycle ops ==="
+	uv run python scripts/check_sync_call_lifecycle_ops.py
+	@echo "=== lint: sync call recording ops ==="
+	uv run python scripts/check_sync_call_recording_ops.py
+	@echo "=== lint: sync thread and git ops ==="
+	uv run python scripts/check_sync_thread_git_ops.py
+	@echo "=== lint: sync message send ==="
+	uv run python scripts/check_sync_message_send.py
+	@echo "=== lint: sync message ops ==="
+	uv run python scripts/check_sync_message_ops.py
+	@echo "=== lint: no service components.py ==="
+	uv run python scripts/check_no_service_components.py
+	@echo "=== lint: crm entity type model files ==="
+	uv run python scripts/check_crm_entity_type_model_files.py
+	@echo "=== lint: ai model files ==="
+	uv run python scripts/check_ai_model_files.py
+	@echo "=== lint: datasource model files ==="
+	uv run python scripts/check_datasource_model_files.py
+	@echo "=== lint: evaluation lab model files ==="
+	uv run python scripts/check_evaluation_lab_model_files.py
+	@echo "=== lint: crm namespace template model files ==="
+	uv run python scripts/check_crm_namespace_template_model_files.py
+	@echo "=== lint: rag model files ==="
+	uv run python scripts/check_rag_model_files.py
+	@echo "=== lint: secrets model files ==="
+	uv run python scripts/check_secrets_model_files.py
+	@echo "=== lint: sync message model files ==="
+	uv run python scripts/check_sync_message_model_files.py
+	@echo "=== lint: a2a projection model files ==="
+	uv run python scripts/check_a2a_projection_model_files.py
+	@echo "=== lint: durable model files ==="
+	uv run python scripts/check_durable_model_files.py
+	@echo "=== lint: identity model files ==="
+	uv run python scripts/check_identity_model_files.py
+	@echo "=== lint: crawl model files ==="
+	uv run python scripts/check_crawl_model_files.py
+	@echo "=== lint: mail model files ==="
+	uv run python scripts/check_mail_model_files.py
+	@echo "=== lint: worktracker model files ==="
+	uv run python scripts/check_worktracker_model_files.py
+	@echo "=== lint: office model files ==="
+	uv run python scripts/check_office_model_files.py
+	@echo "=== lint: wiki model files ==="
+	uv run python scripts/check_wiki_model_files.py
+	@echo "=== lint: sync channel ops ==="
+	uv run python scripts/check_sync_channel_ops.py
+	@echo "=== lint: flows src clients ==="
+	uv run python scripts/check_flows_src_clients.py
+	@echo "=== lint: stock service queries ==="
+	uv run python scripts/check_stock_service_queries.py
+	@echo "=== lint: migration files canon ==="
+	uv run python scripts/check_migration_files_canon.py
 	@echo "=== lint: redis ttl canon ==="
 	uv run python scripts/check_redis_ttl_canon.py
 	@echo "=== lint: taskiq canon ==="

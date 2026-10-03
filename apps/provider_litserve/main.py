@@ -9,7 +9,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 import litserve as ls
 import torch
@@ -52,6 +52,8 @@ from core.app.health_payload import build_health_payload
 from core.app.server import serve
 from core.config.models import ProviderLitserveInfraConfig
 from core.di import recipe
+from core.imports import module_sdk
+from core.utils.background import finish_background_task
 
 UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -96,12 +98,8 @@ def _cuda_required_for_inference() -> bool:
     return False
 
 
-def _as_object(value: object) -> object:
-    return value
-
-
 def _cuda_runtime() -> _CudaRuntime:
-    return cast(_CudaRuntime, _as_object(torch.cuda))
+    return module_sdk(torch.cuda, _CudaRuntime)
 
 
 def _inference_health_handler(di: Di) -> JSONResponse:
@@ -310,11 +308,7 @@ async def _stop_litserver_runtime(runtime: ProviderLitserveRuntime) -> None:
     if manager is None:
         raise RuntimeError("provider_litserve manager is not started")
 
-    _ = task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    await finish_background_task(task)
     lit_server._perform_graceful_shutdown(manager, {}, "normal")
     runtime.manager = None
     runtime.response_task = None

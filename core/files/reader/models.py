@@ -8,7 +8,7 @@ from typing import ClassVar, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.files.file_ref import FileRef, file_id_from_download_url
-from core.types import JsonArray, parse_json_value, require_json_array
+from core.types import JsonArray, JsonValue, parse_json_value, require_json_array
 
 # ---------------------------------------------------------------------------
 # Константы
@@ -160,16 +160,40 @@ class ReadFileArgs(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    page_start: int = Field(default=0, ge=0)
+    page_start: int = Field(default=0, ge=0, description="Индекс первой страницы (0-based).")
     page_end: int = Field(default=-1, description="-1 = до конца.")
-    page_summarizations: bool = False
-    summarization_prompt: str = ""
-    summarization_model: str = ""
-    vision_prompt: str = ""
-    vision_model: str | None = None
-    compression: CompressionMode = CompressionMode.NEVER
-    transcription_company_id: str | None = None
-    forced_lane: ReadLane | None = None
+    page_summarizations: bool = Field(
+        default=False,
+        description="True — вместо текста страницы отдавать её LLM-суммаризацию.",
+    )
+    summarization_prompt: str = Field(
+        default="",
+        description="Свой промпт суммаризации страниц; пустое — дефолтный.",
+    )
+    summarization_model: str = Field(
+        default="",
+        description="Модель LLM для суммаризации; пустое — дефолт платформы.",
+    )
+    vision_prompt: str = Field(
+        default="",
+        description="Промпт vision-линии (OCR/описание страницы); пустое — дефолтный.",
+    )
+    vision_model: str | None = Field(
+        default=None,
+        description="Модель для vision-линии; None — дефолт платформы.",
+    )
+    compression: CompressionMode = Field(
+        default=CompressionMode.NEVER,
+        description="Режим сжатия текста перед отдачей: never | before_llm | on_error.",
+    )
+    transcription_company_id: str | None = Field(
+        default=None,
+        description="company_id для транскрипции audio/video; None — компания из контекста.",
+    )
+    forced_lane: ReadLane | None = Field(
+        default=None,
+        description="Принудительная линия чтения text | vision | stt | hybrid; None — авто.",
+    )
     persist_assets_namespace: str | None = Field(
         default=None,
         min_length=1,
@@ -185,11 +209,15 @@ class ReadFileArgs(BaseModel):
             "Передавай JSON-массив строк, например [\"report.pdf\"], не строку с JSON внутри."
         ),
     )
-    budget: int = Field(default=MAX_READ_BUDGET, ge=0)
+    budget: int = Field(
+        default=MAX_READ_BUDGET,
+        ge=0,
+        description="Общий бюджет символов на чтение всех файлов вызова.",
+    )
 
     @field_validator("names", mode="before")
     @classmethod
-    def coerce_names_from_llm_wire(cls, value: object) -> list[str]:
+    def coerce_names_from_llm_wire(cls, value: JsonValue) -> list[str]:
         """LLM tool wire: names иногда приходит строкой '["a.jpg"]' вместо массива."""
         if value is None:
             return []

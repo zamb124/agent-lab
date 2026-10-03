@@ -34,7 +34,7 @@ OBSERVABILITY_LOGGERS: tuple[str, ...] = (
     "apps.idle_worker.tasks.span_billing_settlement_tasks",
     "apps.rag.api.search",
     "core.rag.post_retrieval_rerank",
-    "apps.flows.src.clients.mcp_client",
+    "apps.flows.src.services.mcp_client",
 )
 
 

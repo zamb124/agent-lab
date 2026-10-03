@@ -12,14 +12,11 @@ from apps.flows.src.models.registry_contracts import (
 )
 from core.ai.company_settings import CUSTOM_PROVIDER_REF_PREFIX, CompanyAIProviders
 from core.ai.providers import HUMANITEC_LLM_PROVIDER, AICapability
-from core.config import get_settings
-from core.config.models import PlatformBrandConfig
 from core.context import require_active_company
 from core.models.identity_models import User
 from core.pagination import ListResponse
 from core.platform_brand.resolver import (
-    UnknownPlatformDomainError,
-    resolve_brand,
+    resolve_brand_or_primary,
     resolve_context_host,
 )
 from core.types import JsonObject
@@ -76,16 +73,6 @@ def _custom_provider_options(
     return items
 
 
-def _resolve_brand_for_registry(host: str | None) -> PlatformBrandConfig:
-    if host is not None and str(host).strip():
-        try:
-            return resolve_brand(str(host).strip())
-        except UnknownPlatformDomainError:
-            pass
-    settings = get_settings()
-    return settings.platform_brands[settings.primary_platform_domain]
-
-
 def _platform_provider_options(
     providers: list[str],
     *,
@@ -131,7 +118,7 @@ async def op_flows_registry_providers_list(
     _ = user
     _ = await require_company_member(di)
     capability = _capability_from_query(payload.capability)
-    brand = _resolve_brand_for_registry(resolve_context_host())
+    brand = resolve_brand_or_primary(resolve_context_host())
     platform_items = _platform_provider_options(
         di.llm_models_service.get_configured_providers_by_capability(capability),
         llms_display_label=brand.llms_display_label,

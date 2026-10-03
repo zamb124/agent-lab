@@ -14,9 +14,9 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-RUNTIME_ROOT = Path(
-    os.environ.get("PLATFORM_RUNTIME_DIR", "~/.cache/agent-lab/runtimes")
-).expanduser()
+from core.capabilities.runtime_executables import platform_runtime_dir
+
+RUNTIME_ROOT = platform_runtime_dir()
 BIN_DIR = RUNTIME_ROOT / "bin"
 DOTNET_CHANNEL = os.environ.get("DOTNET_CHANNEL", "10.0")
 GO_VERSION = os.environ.get("GO_VERSION", "1.26.1")

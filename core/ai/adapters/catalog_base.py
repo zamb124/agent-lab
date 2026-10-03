@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from abc import ABC
-from typing import cast, override
+from typing import override
 from urllib.parse import quote
 
 import httpx
@@ -46,12 +46,19 @@ from core.config.models import (
     ZAIProviderConfig,
 )
 from core.http import ProxyStrategy
-from core.http.client import request_with_strategy
+from core.http.client import http_header_text, request_with_strategy
 from core.logging import get_logger
 from core.rag.openai_http_contracts import PROVIDER_LITSERVE_PLACEHOLDER_BEARER
 from core.types import JsonArray, JsonObject, JsonValue, parse_json_value, require_json_object
 
 logger = get_logger(__name__)
+
+
+def string_headers_json(headers: dict[str, str]) -> JsonObject:
+    payload: JsonObject = {}
+    for key, value in headers.items():
+        payload[key] = value
+    return payload
 
 _ConfiguredLLMProvider = (
     OpenAIProviderConfig
@@ -115,7 +122,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             capability=capability,
             base_url=base_url,
             endpoint_url=endpoint_url,
-            headers=cast(JsonObject, self.provider_model_list_headers()),
+            headers=string_headers_json(self.provider_model_list_headers()),
         )
 
     @staticmethod
@@ -517,7 +524,7 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             )
             if response.status_code != 429 or attempt_index == 2:
                 break
-            retry_after = cast(str | None, response.headers.get("retry-after"))
+            retry_after = http_header_text(response.headers, "retry-after")
             try:
                 retry_delay = float(retry_after) if retry_after is not None else 0.0
             except ValueError:
@@ -541,9 +548,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         configured_models_url = cfg.models_url
         if isinstance(configured_models_url, str) and configured_models_url.strip():
             return configured_models_url.strip()
-        if self.provider == "yandex":
-            yandex_config = cast(YandexLLMProviderConfig, cfg)
-            return f"{yandex_llm_openai_root_from_provider_cfg(yandex_config).rstrip('/')}/models"
+        if isinstance(cfg, YandexLLMProviderConfig):
+            return f"{yandex_llm_openai_root_from_provider_cfg(cfg).rstrip('/')}/models"
         configured_base_url = cfg.base_url
         if isinstance(configured_base_url, str) and configured_base_url.strip():
             return f"{configured_base_url.strip().rstrip('/')}/models"
@@ -558,24 +564,21 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
             raise ValueError(f"{self.provider} provider config is not configured")
         api_key = first_provider_api_key(cfg)
         headers = {"Content-Type": "application/json"}
-        if self.provider == "yandex":
-            yandex_config = cast(YandexLLMProviderConfig, cfg)
+        if isinstance(cfg, YandexLLMProviderConfig):
             return {
-                **yandex_provider_http_headers(yandex_config),
+                **yandex_provider_http_headers(cfg),
                 "Content-Type": "application/json",
             }
         headers["Authorization"] = f"Bearer {api_key}"
-        if self.provider == "openrouter":
-            openrouter_config = cast(OpenRouterProviderConfig, cfg)
-            site_url = openrouter_config.site_url
-            site_name = openrouter_config.site_name
+        if isinstance(cfg, OpenRouterProviderConfig):
+            site_url = cfg.site_url
+            site_name = cfg.site_name
             if site_url.strip():
                 headers["HTTP-Referer"] = site_url.strip()
             if site_name.strip():
                 headers["X-Title"] = site_name.strip()
-        if self.provider == "github":
-            github_config = cast(GitHubModelsProviderConfig, cfg)
-            api_version = github_config.api_version
+        if isinstance(cfg, GitHubModelsProviderConfig):
+            api_version = cfg.api_version
             headers["Accept"] = "application/vnd.github+json"
             headers["X-GitHub-Api-Version"] = (
                 api_version.strip()
@@ -597,9 +600,8 @@ class BaseModelCatalogAdapter(AIProviderAdapter, ABC):
         cfg = self._configured_llm_provider()
         if cfg is None or not collect_provider_api_keys(cfg):
             return False
-        if self.provider == "yandex":
-            yandex_config = cast(YandexLLMProviderConfig, cfg)
-            folder_id = yandex_config.folder_id
+        if isinstance(cfg, YandexLLMProviderConfig):
+            folder_id = cfg.folder_id
             return isinstance(folder_id, str) and bool(folder_id.strip())
         return True
 

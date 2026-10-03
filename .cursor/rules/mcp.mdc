@@ -4,7 +4,6 @@ globs:
   - "apps/flows/src/models/mcp*.py"
   - "apps/flows/src/services/mcp_*.py"
   - "apps/flows/src/tasks/mcp_catalog_tasks.py"
-  - "apps/flows/src/clients/mcp_client.py"
   - "apps/flows/mcp_catalog_allowlist.yaml"
   - "apps/flows/mcp_branding/**"
   - "apps/flows/ui/modals/flows-mcp-servers-modal.js"

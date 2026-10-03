@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
 from apps.voice.di import Di
@@ -26,6 +26,7 @@ from core.clients.tts_pronunciation.models import (
 from core.context import require_context
 from core.logging import get_logger
 from core.models.identity_models import User
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -50,8 +51,10 @@ async def _require_superadmin(di: Di) -> User:
     user = context.user
     company = context.active_company
     if company is None or company.company_id != "system":
-        raise HTTPException(
-            status_code=403, detail="Platform rules can be managed only by system administrators"
+        raise WsCommandError(
+            "forbidden",
+            "Platform rules can be managed only by system administrators",
+            error_code="forbidden",
         )
     await di.authz_service.require_company_admin(
         company_id="system",
@@ -106,7 +109,7 @@ async def update_platform_pronunciation_rule(
         patch=payload,
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise WsCommandError("not_found", "Rule not found", error_code="not_found")
     invalidate_voice_platform_pronunciation_cache()
     logger.info(
         "frontend.platform_pronunciation_rule_updated",

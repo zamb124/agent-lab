@@ -7,8 +7,9 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-PLATFORM_RUNTIME_DIR_ENV = "PLATFORM_RUNTIME_DIR"
-DEFAULT_PLATFORM_RUNTIME_DIR = "~/.cache/agent-lab/runtimes"
+from core.config import get_settings
+
+_DEFAULT_RUNTIME_DIR = "~/.cache/agent-lab/runtimes"
 
 
 @dataclass(frozen=True)
@@ -18,41 +19,32 @@ class RuntimeExecutableResolution:
 
 
 def platform_runtime_dir() -> Path:
-    return Path(
-        os.environ.get(PLATFORM_RUNTIME_DIR_ENV, DEFAULT_PLATFORM_RUNTIME_DIR)
-    ).expanduser()
+    configured = get_settings().code_runner.runtime_dir.strip()
+    if configured == "":
+        return Path(_DEFAULT_RUNTIME_DIR).expanduser()
+    return Path(configured).expanduser()
 
 
 def platform_runtime_bin_dir() -> Path:
     return platform_runtime_dir() / "bin"
 
 
-def resolve_runtime_executable(
-    executable_name: str,
-    *,
-    override_env: str,
-) -> str | None:
-    return resolve_runtime_executable_with_details(
-        executable_name,
-        override_env=override_env,
-    ).executable
+def resolve_runtime_executable(executable_name: str) -> str | None:
+    return resolve_runtime_executable_with_details(executable_name).executable
 
 
 def resolve_runtime_executable_with_details(
     executable_name: str,
-    *,
-    override_env: str,
 ) -> RuntimeExecutableResolution:
     checked: list[str] = []
-
-    override = os.environ.get(override_env)
-    if override:
-        checked.append(f"${override_env}={override}")
+    field_name, override = _bin_override(executable_name)
+    if override != "":
+        checked.append(f"code_runner.{field_name}={override}")
         resolved = _resolve_candidate(override)
         return RuntimeExecutableResolution(executable=resolved, checked=tuple(checked))
 
     managed_path = platform_runtime_bin_dir() / executable_name
-    checked.append(f"${PLATFORM_RUNTIME_DIR_ENV}/bin/{executable_name}={managed_path}")
+    checked.append(f"code_runner.runtime_dir/bin/{executable_name}={managed_path}")
     if _is_executable(managed_path):
         return RuntimeExecutableResolution(
             executable=str(managed_path),
@@ -66,20 +58,34 @@ def resolve_runtime_executable_with_details(
     )
 
 
-def runtime_executable_required_message(
-    executable_name: str,
-    *,
-    override_env: str,
-) -> str:
-    resolution = resolve_runtime_executable_with_details(
-        executable_name,
-        override_env=override_env,
-    )
+def runtime_executable_required_message(executable_name: str) -> str:
+    resolution = resolve_runtime_executable_with_details(executable_name)
+    field_name, _override = _bin_override(executable_name)
     checked = "; ".join(resolution.checked)
     return (
         f"{executable_name} executable is required; checked {checked}. "
-        f"Run `make bootstrap-runtimes` or set ${override_env}."
+        f"Run `make bootstrap-runtimes` or set code_runner.{field_name}."
     )
+
+
+def _bin_override(executable_name: str) -> tuple[str, str]:
+    settings = get_settings().code_runner
+    match executable_name:
+        case "go":
+            field_name = "go_bin"
+            raw = settings.go_bin
+        case "node":
+            field_name = "node_bin"
+            raw = settings.node_bin
+        case "npm":
+            field_name = "npm_bin"
+            raw = settings.npm_bin
+        case "dotnet":
+            field_name = "dotnet_bin"
+            raw = settings.dotnet_bin
+        case _:
+            raise ValueError(f"unknown runtime executable {executable_name}")
+    return field_name, raw.strip()
 
 
 def _resolve_candidate(candidate: str) -> str | None:

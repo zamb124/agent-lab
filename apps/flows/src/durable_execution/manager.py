@@ -184,7 +184,7 @@ class DurableWorkflowRuntime:
         )
 
     @staticmethod
-    def _require_side_effect_policy(value: object) -> SideEffectPolicy:
+    def _require_side_effect_policy(value: SideEffectPolicy) -> SideEffectPolicy:
         if type(value) is not SideEffectPolicy:
             raise TypeError("side_effect_policy must be SideEffectPolicy")
         return value

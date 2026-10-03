@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.voice.api.voice_providers_catalog_helpers import (
@@ -35,7 +35,6 @@ from core.clients.speech_provider_catalog import (
     cloud_ru_tts_model_ids,
 )
 from core.config import get_settings
-from core.config.models import PlatformBrandConfig
 from core.context import require_context
 from core.logging import get_logger
 from core.models.company_voice_provider_secrets import (
@@ -44,7 +43,8 @@ from core.models.company_voice_provider_secrets import (
     unset_secrets_sentinel,
 )
 from core.models.voice_models import CompanyVoiceProvider, VoiceKind
-from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
+from core.platform_brand.resolver import resolve_brand_or_primary
+from core.websocket import WsCommandError, raise_invalid
 
 if TYPE_CHECKING:
     from core.models.identity_models import User
@@ -131,20 +131,11 @@ async def _ensure_user_can_manage_company(
 
 def _reject_vad_path_kind(kind: str) -> None:
     if kind == "vad":
-        raise HTTPException(
-            status_code=410,
-            detail="VAD is configured at deployment level; per-company override was removed.",
+        raise WsCommandError(
+            "gone",
+            "VAD is configured at deployment level; per-company override was removed.",
+            error_code="gone",
         )
-
-
-def _resolve_brand_for_voice_providers(host: str | None) -> PlatformBrandConfig:
-    if host is not None and str(host).strip():
-        try:
-            return resolve_brand(str(host).strip())
-        except UnknownPlatformDomainError:
-            pass
-    settings = get_settings()
-    return settings.platform_brands[settings.primary_platform_domain]
 
 
 def _validate_kind(kind: str) -> VoiceKind:
@@ -152,20 +143,20 @@ def _validate_kind(kind: str) -> VoiceKind:
         return "stt"
     if kind == "tts":
         return "tts"
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unknown kind: {kind!r}. Allowed: {', '.join(_VOICE_KINDS)}",
+    raise WsCommandError(
+        "ws_invalid_payload",
+        f"Unknown kind: {kind!r}. Allowed: {', '.join(_VOICE_KINDS)}",
+        error_code="ws_invalid_payload",
     )
 
 
 def _validate_provider(kind: VoiceKind, provider: str) -> None:
     allowed = STT_TTS_PROVIDER_IDS
     if provider not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Unknown provider {provider!r} for kind={kind!r}; allowed: {', '.join(sorted(allowed))}"
-            ),
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"Unknown provider {provider!r} for kind={kind!r}; allowed: {', '.join(sorted(allowed))}",
+            error_code="ws_invalid_payload",
         )
 
 
@@ -184,27 +175,30 @@ def _validate_model_for_voice(
                 return
             allowed = cloud_ru_stt_model_ids() if kind == "stt" else cloud_ru_tts_model_ids()
             if model_value not in allowed:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"model must be one of: {', '.join(allowed)}",
+                raise WsCommandError(
+                    "ws_invalid_payload",
+                    f"model must be one of: {', '.join(allowed)}",
+                    error_code="ws_invalid_payload",
                 )
             return
         if provider == "yandex":
             if model_value is None or model_value == "":
                 return
             if model_value not in _YANDEX_SPEECH_MODELS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Yandex model must be one of: {', '.join(_YANDEX_SPEECH_MODELS)}",
+                raise WsCommandError(
+                    "ws_invalid_payload",
+                    f"Yandex model must be one of: {', '.join(_YANDEX_SPEECH_MODELS)}",
+                    error_code="ws_invalid_payload",
                 )
             return
         if provider == "sber":
             if model_value is None or model_value == "":
                 return
             if model_value not in _SBER_SPEECH_MODELS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Sber model must be one of: {', '.join(_SBER_SPEECH_MODELS)}",
+                raise WsCommandError(
+                    "ws_invalid_payload",
+                    f"Sber model must be one of: {', '.join(_SBER_SPEECH_MODELS)}",
+                    error_code="ws_invalid_payload",
                 )
             return
         return
@@ -219,9 +213,10 @@ def _validate_model_for_voice(
         allowed = frozenset(m.api_model_id for m in infra.tts_models)
 
     if model_value not in allowed:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown model {voice_product_name}: {model_value!r}",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"Unknown model {voice_product_name}: {model_value!r}",
+            error_code="ws_invalid_payload",
         )
 
 
@@ -230,7 +225,7 @@ def _item_kind(value: str) -> Literal["stt", "tts"]:
         return "stt"
     if value == "tts":
         return "tts"
-    raise HTTPException(status_code=500, detail=f"Invalid kind in DB: {value!r}")
+    raise WsCommandError("internal", f"Invalid kind in DB: {value!r}", error_code="internal")
 
 
 def _response_format(
@@ -248,9 +243,10 @@ def _response_format(
         return "pcm"
     if value == "lpcm":
         return "lpcm"
-    raise HTTPException(
-        status_code=500,
-        detail=f"Invalid response_format in DB: {value!r}",
+    raise WsCommandError(
+        "internal",
+        f"Invalid response_format in DB: {value!r}",
+        error_code="internal",
     )
 
 
@@ -311,7 +307,7 @@ async def upsert_company_voice_provider(
     _reject_vad_path_kind(kind)
     voice_kind = _validate_kind(kind)
     _validate_provider(voice_kind, payload.provider)
-    brand = _resolve_brand_for_voice_providers(request.headers.get("host"))
+    brand = resolve_brand_or_primary(request.headers.get("host"))
     voice_product_name = brand.voice_product_name
 
     effective_model = payload.model
@@ -365,7 +361,7 @@ async def upsert_company_voice_provider(
                 allowed_keys=allowed,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_invalid(exc)
         secrets_arg = merged if merged else None
 
     row = await CompanyVoiceProvider.upsert_by_kind(

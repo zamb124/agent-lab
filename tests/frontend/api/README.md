@@ -49,7 +49,7 @@
 # Поднять тестовые зависимости
 docker-compose -f docker-compose-test.yaml up -d
 
-# Убедиться что Redis, PostgreSQL и MinIO запущены
+# Убедиться что Redis, PostgreSQL и SeaweedFS запущены
 docker ps | grep platform
 ```
 

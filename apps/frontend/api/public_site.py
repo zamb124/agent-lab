@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from apps.frontend.cookie_consent import COOKIE_CONSENT_TEXT_VERSION
 from apps.frontend.di import Di
@@ -20,6 +20,7 @@ from apps.frontend.models import (
 )
 from apps.frontend.services.cookie_consent_service import analytics_configured
 from core.platform_brand.resolver import resolve_brand, resolve_public_base_url
+from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/api/public", tags=["public-site"])
 
@@ -79,7 +80,7 @@ async def get_site_bundle(request: Request, di: Di) -> PublicSiteBundle:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     return PublicSiteBundle(
         legal=brand.legal,
@@ -97,7 +98,7 @@ async def record_cookie_consent(
 ) -> CookieConsentRecord:
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     return await di.cookie_consent_service.record(body, request=request, brand=brand)
 
@@ -107,7 +108,7 @@ async def list_public_blog_posts(request: Request, di: Di) -> PublicBlogListResp
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     items = tuple(_apply_platform_name_to_post(post, brand.platform_name) for post in _BLOG_POSTS)
     return PublicBlogListResponse(items=items)
@@ -122,12 +123,12 @@ async def get_public_blog_post(
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     for post in _BLOG_POSTS:
         if post.slug == slug:
             return _apply_platform_name_to_post(post, brand.platform_name)
-    raise HTTPException(status_code=404, detail="Post not found")
+    raise WsCommandError("not_found", "Post not found", error_code="not_found")
 
 
 @router.get("/startup-card", response_model=PublicStartupCard)
@@ -136,7 +137,7 @@ async def get_startup_card(request: Request, di: Di) -> PublicStartupCard:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     base_url = resolve_public_base_url(str(host).strip())
     return PublicStartupCard(

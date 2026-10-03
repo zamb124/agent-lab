@@ -4,8 +4,8 @@ MCP Tool Wrapper - обёртка для вызова MCP tools через MCPCl
 
 from typing import TYPE_CHECKING, override
 
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.tools.base import (
     BaseTool,
     ToolArguments,

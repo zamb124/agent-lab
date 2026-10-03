@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import re
 import tempfile
 import textwrap
@@ -21,6 +20,7 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
+from core.capabilities.runner_pool import code_runner_pool_size
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
@@ -32,8 +32,6 @@ from core.tracing.operation_span import traced_operation
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_go"
-GO_BIN_ENV = "CODE_RUNNER_GO_BIN"
-WORKER_POOL_ENV = "CODE_RUNNER_GO_WORKERS"
 FORBIDDEN_GO_IMPORTS: frozenset[str] = GO_FORBIDDEN_IMPORTS
 
 
@@ -75,12 +73,12 @@ class GoSandboxExecutor:
                 exception_type="InvalidEntrypointError",
             )
 
-        go_bin = resolve_runtime_executable("go", override_env=GO_BIN_ENV)
+        go_bin = resolve_runtime_executable("go")
         if go_bin is None:
             return self._failed_response(
                 request=request,
                 stage="runtime",
-                message=runtime_executable_required_message("go", override_env=GO_BIN_ENV),
+                message=runtime_executable_required_message("go"),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -160,12 +158,12 @@ class GoSandboxExecutor:
                 exception_type="InvalidEntrypointError",
             )
 
-        go_bin = resolve_runtime_executable("go", override_env=GO_BIN_ENV)
+        go_bin = resolve_runtime_executable("go")
         if go_bin is None:
             return self._failed_validation_response(
                 request=request,
                 stage="runtime",
-                message=runtime_executable_required_message("go", override_env=GO_BIN_ENV),
+                message=runtime_executable_required_message("go"),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -272,10 +270,7 @@ class GoSandboxExecutor:
             return self._compile_slots
 
     def _compile_slot_count(self) -> int:
-        raw = os.environ.get(WORKER_POOL_ENV)
-        if raw is None:
-            return max(2, min(8, (os.cpu_count() or 2)))
-        return max(2, int(raw))
+        return code_runner_pool_size("go")
 
     async def _build_lock(self, artifact_key: str) -> asyncio.Lock:
         async with self._build_locks_guard:

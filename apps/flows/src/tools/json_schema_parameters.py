@@ -10,7 +10,14 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as JsValidationError
 from pydantic import BaseModel
 
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
+
+
+def validate_json_schema_instance(schema: JsonObject, instance: JsonValue) -> None:
+    """Проверить instance по Draft 2020-12. Ошибка схемы — jsonschema.ValidationError."""
+    validator = Draft202012Validator(schema)
+    validate = cast(Callable[[JsonValue], None], validator.validate)
+    validate(instance)
 
 
 def validate_tool_args_against_parameters_schema(
@@ -24,9 +31,7 @@ def validate_tool_args_against_parameters_schema(
     """
 
     try:
-        validator = Draft202012Validator(schema)
-        validate = cast(Callable[[JsonObject], None], validator.validate)
-        validate(arguments)
+        validate_json_schema_instance(schema, arguments)
     except JsValidationError as exc:
         path = ".".join(str(p) for p in exc.path) if exc.path else ""
         msg = f"{exc.message}"

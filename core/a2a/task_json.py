@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import cast
 
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 _ROLE_AGENT = "ROLE_AGENT"
 
@@ -17,18 +16,17 @@ def _part_text(part: JsonObject) -> str | None:
     return None
 
 
-def iter_json_parts(parts_value: object) -> Iterator[JsonObject]:
+def iter_json_parts(parts_value: JsonValue) -> Iterator[JsonObject]:
     """Итерирует Part dict из ProtoJSON (presence text|raw|url|data)."""
     if not isinstance(parts_value, list):
         return
-    for part_value in cast(list[object], parts_value):
+    for part_value in parts_value:
         if not isinstance(part_value, dict):
             continue
-        # isinstance(dict) сужает до dict[Unknown, Unknown] — снова object для boundary.
-        yield require_json_object(cast(object, part_value), "a2a.part")
+        yield part_value
 
 
-def _parts_text_chunks(parts_value: object) -> list[str]:
+def _parts_text_chunks(parts_value: JsonValue) -> list[str]:
     chunks: list[str] = []
     for part in iter_json_parts(parts_value):
         text = _part_text(part)
@@ -52,7 +50,7 @@ def part_json_has_data(part: JsonObject) -> bool:
     return "data" in part and part.get("data") is not None
 
 
-def extract_text_from_parts_json(parts_value: object) -> str | None:
+def extract_text_from_parts_json(parts_value: JsonValue) -> str | None:
     chunks = _parts_text_chunks(parts_value)
     if not chunks:
         return None

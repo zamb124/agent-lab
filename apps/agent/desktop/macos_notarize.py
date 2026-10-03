@@ -28,6 +28,7 @@ from apps.agent.desktop.build_contract import (
     macos_notarize_fragment_filename,
     macos_notarize_manifest_filename,
 )
+from core.types import parse_json_object, parse_json_value
 
 NOTARY_FOLLOWUP_MAX_AGE_SECONDS_DEFAULT = 172_800
 MANIFEST_ASSET_NAME_PREFIX = "linnex-agent-macos-notarize-"
@@ -160,7 +161,7 @@ def normalize_submission_id(raw: str) -> str:
 
 
 def load_fragment(path: Path) -> MacosNotarizeFragment:
-    payload: dict[str, object] = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    payload = parse_json_object(path.read_text(encoding="utf-8"), "notarize fragment")
     fragment = MacosNotarizeFragment.model_validate(payload)
     normalized_submission_id = normalize_submission_id(fragment.submission_id)
     if normalized_submission_id == fragment.submission_id:
@@ -169,7 +170,7 @@ def load_fragment(path: Path) -> MacosNotarizeFragment:
 
 
 def load_manifest(path: Path) -> MacosNotarizeManifest:
-    payload: dict[str, object] = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    payload = parse_json_object(path.read_text(encoding="utf-8"), "notarize manifest")
     manifest = MacosNotarizeManifest.model_validate(payload)
     updated_platforms: dict[str, MacosNotarizePlatformRecord] = {}
     changed = False
@@ -286,8 +287,8 @@ def poll_submission_once(submission_id: str) -> NotaryPollResult:
                 f"notarytool info failed for {normalized_submission_id}: {stderr_text}"
             )
         _ = info_json_path.write_text(completed.stdout, encoding="utf-8")
-        payload: dict[str, object] = cast(dict[str, object], json.loads(info_json_path.read_text(encoding="utf-8")))
-        status_raw: object = payload.get("status")
+        payload = parse_json_object(info_json_path.read_text(encoding="utf-8"), "notarytool info")
+        status_raw = payload.get("status")
         if not isinstance(status_raw, str) or not status_raw:
             raise ValueError(
                 f"notarytool info missing status for {normalized_submission_id}"
@@ -460,16 +461,15 @@ def list_release_asset_names(*, repo: str, release_tag: str) -> list[str]:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
-    assets_raw: object = payload.get("assets")
+    payload = parse_json_object(completed.stdout, "gh release view")
+    assets_raw = payload.get("assets")
     if not isinstance(assets_raw, list):
         raise ValueError(f"release {release_tag} assets payload invalid")
-    asset_list: list[object] = cast(list[object], assets_raw)
     asset_names: list[str] = []
-    for asset_item in asset_list:
+    for asset_item in assets_raw:
         if not isinstance(asset_item, dict):
             continue
-        asset_name: object = asset_item.get("name")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        asset_name = asset_item.get("name")
         if isinstance(asset_name, str) and asset_name:
             asset_names.append(asset_name)
     return asset_names
@@ -523,8 +523,8 @@ def resolve_release_version_sha(*, repo: str, release_tag: str) -> str:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
-    target_commitish: object = payload.get("targetCommitish")
+    payload = parse_json_object(completed.stdout, "gh release view")
+    target_commitish = payload.get("targetCommitish")
     if not isinstance(target_commitish, str) or not target_commitish:
         raise ValueError(f"release {release_tag} missing targetCommitish")
     return target_commitish
@@ -607,17 +607,16 @@ def delete_release_assets(
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
-    assets_raw: object = payload.get("assets")
+    payload = parse_json_object(completed.stdout, "gh release view")
+    assets_raw = payload.get("assets")
     if not isinstance(assets_raw, list):
         raise ValueError(f"release {release_tag} assets payload invalid")
-    asset_list: list[object] = cast(list[object], assets_raw)
     asset_ids_by_name: dict[str, int] = {}
-    for asset_item in asset_list:
+    for asset_item in assets_raw:
         if not isinstance(asset_item, dict):
             continue
-        asset_name: object = asset_item.get("name")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        asset_id: object = asset_item.get("id")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        asset_name = asset_item.get("name")
+        asset_id = asset_item.get("id")
         if isinstance(asset_name, str) and isinstance(asset_id, int):
             asset_ids_by_name[asset_name] = asset_id
     for asset_name in asset_names:
@@ -877,16 +876,15 @@ def discover_pending_release_tags(*, repo: str) -> list[str]:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release list failed: {stderr_text}")
-    releases_raw: object = cast(object, json.loads(completed.stdout))
+    releases_raw = parse_json_value(completed.stdout, "gh release list")
     if not isinstance(releases_raw, list):
         raise ValueError("gh release list returned unexpected payload")
-    release_list: list[object] = cast(list[object], releases_raw)
     pending_tags: list[str] = []
-    for release_item in release_list:
+    for release_item in releases_raw:
         if not isinstance(release_item, dict):
             continue
-        tag_name: object = release_item.get("tagName")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        is_draft: object = release_item.get("isDraft")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        tag_name = release_item.get("tagName")
+        is_draft = release_item.get("isDraft")
         if not isinstance(tag_name, str) or not tag_name:
             continue
         if is_draft is True:
@@ -914,7 +912,7 @@ def fetch_release_body_note(*, repo: str, release_tag: str) -> str:
     if completed.returncode != 0:
         stderr_text = completed.stderr.strip()
         raise RuntimeError(f"gh release view failed for {release_tag}: {stderr_text}")
-    payload: dict[str, object] = cast(dict[str, object], json.loads(completed.stdout))
+    payload = parse_json_object(completed.stdout, "gh release view")
     body = payload.get("body")
     if isinstance(body, str):
         return body

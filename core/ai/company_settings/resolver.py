@@ -71,7 +71,7 @@ class CompanyResolvedLLM(_FrozenModel):
     cost_origin: CostOrigin = COST_ORIGIN_PLATFORM
     custom_provider_id: str | None = None
 
-    @computed_field  # type: ignore[misc]
+    @computed_field
     @property
     def billing_resource_name(self) -> str:
         if self.cost_origin == COST_ORIGIN_COMPANY:
@@ -92,7 +92,7 @@ class CompanyResolvedEmbedding(_FrozenModel):
     dimension: int | None = None
     mrl_output_dimension: int | None = None
 
-    @computed_field  # type: ignore[misc]
+    @computed_field
     @property
     def billing_resource_name(self) -> str:
         if self.cost_origin == COST_ORIGIN_COMPANY:
@@ -113,7 +113,7 @@ class CompanyResolvedRerank(_FrozenModel):
     billing_resource_id: str = "rerank"
     custom_provider_id: str | None = None
 
-    @computed_field  # type: ignore[misc]
+    @computed_field
     @property
     def billing_resource_name(self) -> str:
         if self.cost_origin == COST_ORIGIN_COMPANY:

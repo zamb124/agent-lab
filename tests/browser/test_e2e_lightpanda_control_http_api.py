@@ -136,7 +136,7 @@ async def test_control_http_api_full_flow() -> None:
                 json={"code": "print(page.url)", "timeout_ms": 30_000},
             )
             assert ra.status_code == 501, ra.text
-            detail = ra.json()["detail"]
+            detail = ra.json()["error_params"]
             assert detail["code"] == "browser_action_disabled"
 
             # удаляем session

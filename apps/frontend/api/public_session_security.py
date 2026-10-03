@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import uuid
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from core.clients.redis_client import RedisClient
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -97,13 +98,13 @@ async def enforce_public_session_issue_rate_limit(
         )
     except Exception:
         logger.exception("public_session_rate_limit_unavailable", scope=scope)
-        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
+        raise WsCommandError("unavailable", "Public sessions are temporarily unavailable", error_code="unavailable")
 
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         logger.error("public_session_rate_limit_bad_reply", scope=scope, raw=raw)
-        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
+        raise WsCommandError("unavailable", "Public sessions are temporarily unavailable", error_code="unavailable")
     if int(raw) < 0:
-        raise HTTPException(status_code=429, detail="Too many public sessions. Try again later")
+        raise WsCommandError("rate_limited", "Too many public sessions. Try again later", error_code="rate_limited")
 
 
 async def enforce_public_search_run_quota(
@@ -128,10 +129,10 @@ async def enforce_public_search_run_quota(
         )
     except Exception:
         logger.exception("public_search_run_quota_unavailable")
-        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
+        raise WsCommandError("unavailable", "Public sessions are temporarily unavailable", error_code="unavailable")
 
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         logger.error("public_search_run_quota_bad_reply", raw=raw)
-        raise HTTPException(status_code=503, detail="Public sessions are temporarily unavailable")
+        raise WsCommandError("unavailable", "Public sessions are temporarily unavailable", error_code="unavailable")
     if int(raw) == 0:
-        raise HTTPException(status_code=429, detail=PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL)
+        raise WsCommandError("rate_limited", PUBLIC_SEARCH_QUOTA_EXHAUSTED_DETAIL, error_code="rate_limited")

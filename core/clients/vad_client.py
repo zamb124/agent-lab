@@ -66,11 +66,11 @@ class _SileroSpeechTimestampFn(Protocol):
 class _TorchModule(Protocol):
     def Tensor(self, data: Sequence[float]) -> Tensor: ...
 
-    def no_grad(self) -> AbstractContextManager[object]: ...
+    def no_grad(self) -> AbstractContextManager[None]: ...
 
 
 class _SileroVadModule(Protocol):
-    def load_silero_vad(self) -> object: ...
+    def load_silero_vad(self) -> _SileroModel: ...
 
     def get_speech_timestamps(
         self,
@@ -82,14 +82,18 @@ class _SileroVadModule(Protocol):
     ) -> Sequence[_SileroSpeechTimestamp]: ...
 
 
+def _imported_sdk[T](module_type: type[T], module_name: str) -> T:
+    _ = module_type
+    module = cast(object, import_module(module_name))
+    return cast(T, module)
+
+
 def _load_torch_module() -> _TorchModule:
-    module = cast(object, import_module("torch"))
-    return cast(_TorchModule, module)
+    return _imported_sdk(_TorchModule, "torch")
 
 
 def _load_silero_vad_module() -> _SileroVadModule:
-    module = cast(object, import_module("silero_vad"))
-    return cast(_SileroVadModule, module)
+    return _imported_sdk(_SileroVadModule, "silero_vad")
 
 
 def _pcm16le_to_unit_floats(audio_bytes: bytes) -> list[float]:
@@ -237,11 +241,8 @@ class LocalSileroVADClient(BaseVADClient):
     def _ensure_loaded(self) -> tuple[_SileroModel, _SileroSpeechTimestampFn]:
         if self._model is None:
             silero_vad = _load_silero_vad_module()
-            self._model = cast(_SileroModel, silero_vad.load_silero_vad())
-            self._get_speech_ts = cast(
-                _SileroSpeechTimestampFn,
-                silero_vad.get_speech_timestamps,
-            )
+            self._model = silero_vad.load_silero_vad()
+            self._get_speech_ts = silero_vad.get_speech_timestamps
         if self._get_speech_ts is None:
             raise RuntimeError("VAD silero_local: get_speech_timestamps is not initialized.")
         return self._model, self._get_speech_ts

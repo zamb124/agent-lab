@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from copy import deepcopy
-from typing import cast, override
+from typing import override
 
 from apps.flows.config import get_settings as get_flows_settings
 from apps.flows.src.models.execution_limits import get_remote_code_runner_http_timeout_seconds
@@ -24,6 +24,7 @@ from core.capabilities import (
     CodeValidationRequest,
     CodeValidationResponse,
     locked_down_code_sandbox_policy,
+    match_capability_language,
 )
 from core.capabilities.source_sanitize import reject_forbidden_platform_imports
 from core.capabilities.tokens import (
@@ -37,11 +38,15 @@ from core.context import get_context
 from core.errors import CodeExecutionRuntimeError, FrozenStateFieldError
 from core.flow_ui.effects import apply_capability_platform_effects
 from core.logging import get_log_context, get_logger
-from core.state import ExecutionState, parse_interrupt_body_from_external_dict
+from core.state import (
+    ExecutionState,
+    parse_interrupt_body_from_external_dict,
+    snapshot_frozen_fields,
+)
+from core.state.execution_state import ExecutionStateValue
 from core.state.mutation_policy import (
     USER_RETURN_FORBIDDEN_FROZEN_FIELDS,
     should_skip_field_on_user_returned_state_copy,
-    snapshot_frozen_fields,
 )
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue
@@ -73,7 +78,7 @@ logger = get_logger(__name__)
 
 def _frozen_fields_differ(
     returned_state: ExecutionState,
-    frozen_snapshot: dict[str, object],
+    frozen_snapshot: dict[str, ExecutionStateValue],
     *,
     returned_keys: frozenset[str],
 ) -> list[str]:
@@ -90,7 +95,7 @@ def _frozen_fields_differ(
 
 def _restore_frozen_fields_from_snapshot(
     returned_state: ExecutionState,
-    frozen_snapshot: dict[str, object],
+    frozen_snapshot: dict[str, ExecutionStateValue],
 ) -> None:
     for field_name, snapshot_value in frozen_snapshot.items():
         returned_state[field_name] = deepcopy(snapshot_value)
@@ -121,9 +126,10 @@ class RemoteCodeRunner(BaseCodeRunner):
     language: str = "remote"
 
     def __init__(self, language: str):
-        if language not in RUNNER_EXECUTE_PATHS:
+        known = match_capability_language(language)
+        if known is None or known not in RUNNER_EXECUTE_PATHS:
             raise ValueError(f"Unsupported code runner language: {language}")
-        self._language: CapabilityLanguage = cast(CapabilityLanguage, language)
+        self._language: CapabilityLanguage = known
         self._client: ServiceClient = ServiceClient()
 
     @override
@@ -463,7 +469,7 @@ class RemoteCodeRunner(BaseCodeRunner):
         self,
         state: ExecutionState,
         response: CodeExecutionResponse,
-        frozen_snapshot: dict[str, object],
+        frozen_snapshot: dict[str, ExecutionStateValue],
     ) -> None:
         returned_keys = frozenset(response.state.keys())
         returned_state = ExecutionState.model_validate(response.state)

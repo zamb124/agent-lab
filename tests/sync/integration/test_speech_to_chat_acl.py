@@ -10,8 +10,8 @@ from apps.sync.models.messages import (
     MessageContentType,
     MessageCreate,
 )
-from apps.sync.realtime.handlers import _ensure_actor_may_send_to_channel
 from apps.sync.realtime.operations import op_calls_invite
+from apps.sync.services.message_service import ensure_actor_may_send_to_channel
 from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
 from core.models.identity_models import User
 from tests.sync.integration._helpers import create_test_topic_channel
@@ -63,7 +63,7 @@ async def test_speech_to_chat_guest_without_joined_allowed(
     company_id = op_user.active_company_id
     if company_id is None or company_id == "":
         raise AssertionError("op_user.active_company_id обязателен")
-    await _ensure_actor_may_send_to_channel(
+    await ensure_actor_may_send_to_channel(
         channel_id=channel_id,
         company_id=company_id,
         actor_user_id="guest:deadbeef:Гость",
@@ -87,7 +87,7 @@ async def test_speech_to_chat_without_call_id_raises(
     if company_id is None or company_id == "":
         raise AssertionError("op_user.active_company_id обязателен")
     with pytest.raises(PermissionError, match="call_id"):
-        await _ensure_actor_may_send_to_channel(
+        await ensure_actor_may_send_to_channel(
             channel_id=channel_id,
             company_id=company_id,
             actor_user_id="guest:deadbeef:Гость",

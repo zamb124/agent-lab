@@ -11,7 +11,6 @@ import email.policy
 from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime
-from typing import cast
 
 from core.logging import get_logger
 from core.mail.models import InboundMailMessage, MailAttachment
@@ -20,7 +19,7 @@ logger = get_logger(__name__)
 
 
 def _header_str(parsed: Message, name: str) -> str | None:
-    value = cast(object | None, parsed.get(name))
+    value = parsed.get(name)
     if value is None:
         return None
     text = str(value).strip()

@@ -24,11 +24,11 @@ from apps.flows.src.agent.llm_proxy import (
     _agent_llm_option_value,
     _build_usage_payload,
     _is_rate_limit_error,
-    read_agent_llm_model_ids,
     _resolve_agent_llm_auto_mock_bridge,
     _resolve_agent_llm_model,
     _stream_agent_llm_sse,
     _validate_requested_agent_model,
+    read_agent_llm_model_ids,
 )
 from core.a2a import struct_from_mapping
 from core.ai.models import AIModelRecord, ResolvedAIModel
@@ -37,6 +37,7 @@ from core.ai.providers import (
     HUMANITEC_LLM_PROVIDER,
     AICapability,
 )
+from core.config import get_settings
 from core.websocket import WsCommandError
 
 
@@ -180,12 +181,17 @@ def test_resolve_agent_llm_auto_mock_bridge_uses_mock_when_env_set(
         assert getattr(selection, "model") == "mock-gpt-4"
         return expected
 
-    monkeypatch.setenv("AGENT_LLM_PROXY_USE_MOCK_AUTO", "1")
     monkeypatch.setattr("apps.flows.src.agent.llm_proxy.resolve_ai_model", fake_resolve_ai_model)
-    bridged = _resolve_agent_llm_auto_mock_bridge(HUMANITEC_LLM_AUTO_MODEL)
-    assert bridged == expected
-    resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
-    assert resolved == expected
+    agent_settings = get_settings().agent
+    previous = agent_settings.llm_proxy_use_mock_auto
+    agent_settings.llm_proxy_use_mock_auto = True
+    try:
+        bridged = _resolve_agent_llm_auto_mock_bridge(HUMANITEC_LLM_AUTO_MODEL)
+        assert bridged == expected
+        resolved = _resolve_agent_llm_model(HUMANITEC_LLM_AUTO_MODEL)
+        assert resolved == expected
+    finally:
+        agent_settings.llm_proxy_use_mock_auto = previous
 
 
 def test_resolve_agent_llm_model_provider_prefixed_uses_direct_provider(

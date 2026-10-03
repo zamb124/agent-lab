@@ -46,8 +46,14 @@ class StockProductCreateArgs(BaseModel):
     )
     standard_price: str = Field(default="0")
     tracking: str = Field(default="none", description="none | lot | serial")
+    is_storable: bool = True
     category: str = Field(default="", max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    weight: str | None = None
+    volume: str | None = None
+    removal_strategy: str | None = Field(
+        default=None, description="fifo | lifo | fefo — переопределение для товара"
+    )
 
 
 class StockLocationsListArgs(BaseModel):

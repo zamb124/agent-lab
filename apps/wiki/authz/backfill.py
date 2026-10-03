@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
 from apps.wiki.authz.tuples import (
     wiki_page_company_link,
@@ -14,7 +12,8 @@ from apps.wiki.authz.tuples import (
     wiki_page_parent_tuple,
 )
 from apps.wiki.di import WikiDi
-from apps.wiki.models.domain import WikiPage
+from apps.wiki.models.page import WikiPage
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.service import AuthzService
 from core.config import get_settings
 from core.di import ProcessIdentity, open_di
@@ -63,10 +62,7 @@ async def _write_page_tuples(authz: AuthzService, *, limit: int | None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill Wiki pages into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit: int | None = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill Wiki pages into OpenFGA", argv)
     pages = asyncio.run(backfill_wiki_authz(limit=limit))
     _ = sys.stdout.write(f"pages={pages}\n")
     return 0

@@ -12,7 +12,6 @@ from uuid import uuid4
 import aiohttp
 from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 
-from apps.sync.di import Di
 from apps.sync.events import (
     event_call_accepted,
     event_call_declined,
@@ -38,6 +37,7 @@ from apps.sync.models.calls import (
 from apps.sync.models.channel import SyncChannel
 from apps.sync.models.channels import ChannelType
 from apps.sync.realtime.speech_to_chat_workflow import stop_speech_egresses_for_call_room
+from apps.sync.services.message_service import SyncMessageService
 from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
@@ -45,6 +45,7 @@ from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_room_session_usage
 from core.config import get_settings
 from core.events.contract import PlatformEvent
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -315,7 +316,8 @@ async def handle_call_hangup(
     actor_user_id: str,
     company_id: str,
     channel_access: SyncChannelAccessService,
-    di: Di,
+    files_service: FilesService,
+    message_service: SyncMessageService,
 ) -> tuple[CallRead, list[PlatformEvent], bool]:
     """Третий элемент: звонок полностью завершён (последний участник вышел)."""
     call = await SyncCall.require_company_call(payload.call_id, company_id)
@@ -355,7 +357,8 @@ async def handle_call_hangup(
                 company_id=company_id,
                 room_name=call.livekit_room_name,
                 actor_user_id=actor_user_id,
-                di=di,
+                files_service=files_service,
+                message_service=message_service,
             )
             settings = get_settings()
             lk = LiveKitClient(

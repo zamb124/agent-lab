@@ -5,8 +5,10 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from apps.office.config import get_office_settings
-from apps.office.db.models import OfficeDocumentBinding
+from apps.office.models.link import DocumentLink
+from apps.office.services.document_lifecycle import document_title
 from apps.office.services.document_type import supports_onlyoffice_viewer
+from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from apps.office.services.office_access_service import PublicLinkTarget
 from apps.office.services.viewer_context import OfficeViewerLinkPermission, ViewerOpenContext
 from apps.office.services.viewer_handlers.binary_handler import BinaryViewerHandler
@@ -16,6 +18,7 @@ from apps.office.services.viewer_handlers.media_handler import MediaViewerHandle
 from apps.office.services.viewer_handlers.onlyoffice_handler import OnlyOfficeViewerHandler
 from apps.office.services.viewer_handlers.text_handler import TextViewerHandler
 from apps.office.services.viewer_handlers.viz_handler import VizViewerHandler
+from core.documents.catalog import DocumentCatalog
 from core.documents.viewer.models import (
     DocumentOpenCapabilities,
     DocumentOpenConfigResponse,
@@ -158,14 +161,19 @@ class DocumentViewerService:
         self,
         *,
         public_origin: str,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
         file_record: FileRecord,
         user_id: str,
         user_name: str,
         editor_lang: str,
     ) -> DocumentOpenConfigResponse:
         integration_ok, detail = integration_configured()
-        file_category = binding.file_category
+        file_category, onlyoffice_document_type = resolve_binding_metadata(
+            binding.original_name,
+            binding.content_type.split(";", 1)[0].strip(),
+        )
+        catalog = await DocumentCatalog.get(binding.catalog_id or "")
+        namespace = catalog.namespace if catalog is not None else ""
         handler_id = self.resolve_handler_id(
             file_category=file_category,
             original_name=file_record.original_name,
@@ -179,11 +187,11 @@ class DocumentViewerService:
             handler_id=handler_id,
             viewer_scope="catalog",
             file_record=file_record,
-            title=binding.title,
+            title=document_title(binding),
             file_category=file_category,
-            onlyoffice_document_type=binding.onlyoffice_document_type,
-            namespace=binding.namespace,
-            company_id=binding.company_id,
+            onlyoffice_document_type=onlyoffice_document_type,
+            namespace=namespace,
+            company_id=binding.company_id or "",
             user_id=user_id,
             user_name=user_name,
             editor_lang=editor_lang,
@@ -201,7 +209,14 @@ class DocumentViewerService:
             raise ValueError("Open the file via a direct link")
         binding = target.binding
         integration_ok, detail = integration_configured()
-        file_category = binding.file_category
+        file_category, onlyoffice_document_type = resolve_binding_metadata(
+            binding.original_name,
+            binding.content_type.split(";", 1)[0].strip(),
+        )
+        catalog = await DocumentCatalog.get(binding.catalog_id or "")
+        namespace = catalog.namespace if catalog is not None else ""
+        link = await DocumentLink.for_target("file", binding.file_id)
+        link_permission = link.permission if link is not None else "viewer"
         handler_id = self.resolve_handler_id(
             file_category=file_category,
             original_name=file_record.original_name,
@@ -210,19 +225,19 @@ class DocumentViewerService:
         )
         if handler_id == "onlyoffice" and not integration_ok:
             raise PlatformUnavailableError(detail)
-        if binding.link_permission not in ("viewer", "editor"):
-            raise ValueError(f"Invalid link_permission: {binding.link_permission}")
-        resolved_link_permission: OfficeViewerLinkPermission = binding.link_permission
+        if link_permission not in ("viewer", "editor"):
+            raise ValueError(f"Invalid link_permission: {link_permission}")
+        resolved_link_permission: OfficeViewerLinkPermission = link_permission
         ctx = self.build_context(
             public_origin=public_origin,
             handler_id=handler_id,
             viewer_scope="catalog",
             file_record=file_record,
-            title=binding.title,
+            title=document_title(binding),
             file_category=file_category,
-            onlyoffice_document_type=binding.onlyoffice_document_type,
-            namespace=binding.namespace,
-            company_id=binding.company_id,
+            onlyoffice_document_type=onlyoffice_document_type,
+            namespace=namespace,
+            company_id=binding.company_id or "",
             user_id="public",
             user_name="Guest",
             editor_lang=Language.EN.value,
@@ -290,12 +305,16 @@ class DocumentViewerService:
     async def preview_for_binding(
         self,
         *,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
         file_record: FileRecord,
     ) -> str | None:
         integration_ok, _ = integration_configured()
+        file_category, _office_type = resolve_binding_metadata(
+            binding.original_name,
+            binding.content_type.split(";", 1)[0].strip(),
+        )
         handler_id = self.resolve_handler_id(
-            file_category=binding.file_category,
+            file_category=file_category,
             original_name=file_record.original_name,
             content_type=file_record.content_type,
             integration_ok=integration_ok,

@@ -15,13 +15,13 @@ alwaysApply: false
 
 ## Канон
 
-1. **Реальная инфраструктура.** Тест работает на PostgreSQL, Redis, MinIO, TaskIQ, OpenFGA, Centrifugo и HTTP-сервисах стека. Внутренние компоненты (runtime flows, фабрики, реестры, каналы, S3-клиент, модели Oxyde, сервисы, `op_*`) — реальные экземпляры из DI процесса. Гейт: ratchet `tests_monkeypatch_internal`.
+1. **Реальная инфраструктура.** Тест работает на PostgreSQL, Redis, SeaweedFS, TaskIQ, OpenFGA, Centrifugo и HTTP-сервисах стека. Внутренние компоненты (runtime flows, фабрики, реестры, каналы, S3-клиент, модели Oxyde, сервисы, `op_*`) — реальные экземпляры из DI процесса. Гейт: ratchet `tests_monkeypatch_internal`.
 2. **Единственный мок — `MockLLM`** (`core/clients/llm/mock.py`) → § MockLLM и задачи. Гейты: ratchet `tests_asyncmock`, `scripts/check_agent_test_no_monkeypatch.py`.
 3. **Внешний API — эмулятор.** Внешний сервис заменяет локальный сервер того же протокола, адрес которого задают settings: Google Workspace — `tests/fixtures/google_api_emulator/` через `google_workspace.api_bases`; OpenAI-compatible провайдер — локальный HTTP-сервер теста; MCP — `tests/fixtures/mcp_modes_stub.py`; A2A — контейнер `test-a2a-agent`; речь — провайдер `mock` (`VOICE__STT__PROVIDER`). Патч клиента, тула или резолвера запрещён. `[без гейта]`
 4. **`unique_id` в каждом идентификаторе.** Фикстура `unique_id` (`tests/conftest.py`) входит в каждый id, ключ Redis, namespace, канал, flow, файл и порт теста; `session_id = {flow_id}:{context_id}`. Литералы вида `"test-1"` в идентификаторах запрещены. `[без гейта]`
 5. **Свои границы данных.** У теста свои `company_id` и `auth_headers_*`, RAG `namespace_id`, CRM-сущности; общие «дефолтные» записи не используются, одиночный и параллельный прогон дают одинаковый результат. `[без гейта]`
 6. **Процессы — только стек.** Granian-сервисы и TaskIQ-воркеры поднимает только `make test-up` (`scripts/test_stack.py up`); pytest процессы не стартует и не убивает. Фикстуры `<svc>_service` и `<svc>_worker` проверяют readiness (`require_http_service` в `tests/fixtures/services.py`, `require_taskiq_worker` в `tests/fixtures/workers.py`) и падают `pytest.fail` с подсказкой `make test-up`. `[без гейта]`
-7. **Миграции — только стек.** Схему и сид компании `system` накатывает `make test-up` (`scripts/test_migrate.py`); `setup_database_before_tests` (`tests/conftest.py`) только сверяет `0001_initial` в `oxyde_migrations` каждой базы → `database.mdc`. `[без гейта]`
+7. **Миграции — только стек.** Схему и сид компании `system` накатывает `make test-up` (`scripts/test_migrate.py`); `setup_database_before_tests` (`tests/conftest.py`) только сверяет, что каждый `NNNN_*.py` каталога есть в `oxyde_migrations` базы → `database.mdc`. `[без гейта]`
 8. **DI как в production.** Фикстура `<svc>_di` (flows — `di`) отдаёт `require_di(app, <Svc>Di)` приложения с запущенным lifespan: `ServiceProcesses.app` (`tests/fixtures/service_processes.py`) держит lifespan до конца сессии, фикстура пакета входит в `app.router.lifespan_context(app)` сама; CLI-сборка — `open_di` → `architecture.mdc` § Service Kit DI. Settings задаются до входа в lifespan; компонент подменяет только recipe подкласса `<Svc>Di` в `tests/`. `[без гейта]`
 9. **Тест — инвариант.** Тест закрепляет свойство, которое переживает рефакторинг (поля API ↔ источники данных, изоляция, коды ошибок), и поведение, видимое потребителю; приватные имена и порядок внутренних вызовов не проверяются. Смена формы ответа без правки теста падает; при смене контракта фикстуры и ассерты переписываются под новый контракт, glue и alias ради зелёных тестов запрещены → `main.mdc` § Запреты. `[без гейта]`
 10. **Уровень — от потребителя.** Сила сигнала: HTTP/ASGI-клиент (маршрут, JSON, статус, ошибка) → компонент `<svc>_di` → чистая функция с переиспользуемым контрактом. Изменение домена покрывают сценарии «запрос → ответ» и «задача воркера → эффект в БД или очереди»; команда — тождество WS ≡ REST → `architecture.mdc` § Новая команда. `[без гейта]`
@@ -58,14 +58,14 @@ alwaysApply: false
 
 - `mock_llm_with_queue([...])` — очередь ответов в процессе теста (текст или `{"type": "tool_call", ...}`); `mock_llm_redis([...])` — очередь `mock_llm:responses:<test_scope>` для granian и воркеров; `mock_llm_capture` — журнал вызовов `mock_llm:capture:<test_scope>`. `MockLLM` любого процесса снимает ответы только из очереди своего scope (`resolve_test_scope`, `core/test_scope.py`). `[без гейта]`
 - Фоновая side-effect задача (CRM daily/period summary, note markdown format) получает scope `{parent}:{kind}` (`side_effect_test_scope`, `core/test_scope.py`) и не снимает FIFO породившего теста. `[без гейта]`
-- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`, desktop и agent) — статический `test_e2e_static` через `TEST_SCOPE_DEFAULT`. `[без гейта]`
+- UI E2E под xdist — scope `test_e2e_gwN` (`tests/ui/e2e_worker.py`); E2E без заголовка `X-Test-Scope` (`-n0`, desktop и agent) — статический `test_e2e_static` через `test_scope_default` (ENV `TEST_SCOPE_DEFAULT`). `[без гейта]`
 - `sync_tools` исполняет `enqueue` in-process: задача получает DI своего процесса по аннотации `di` (`ServiceProcesses.di`, `tests/fixtures/service_processes.py`), как `task_di` воркера; Redis Pub/Sub реальный. `@pytest.mark.real_taskiq` отключает `sync_tools`: задача идёт через воркер стека, ответы — только `mock_llm_redis`. `[без гейта]`
 - Исполняемый `llm_node` задаёт `llm.provider="mock"` и `llm.model="mock-gpt-4"` явно: скрытый fallback на модель по умолчанию runtime отвергает (`_validate_explicit_primary`, `apps/flows/src/runtime/effective_llm_config.py`). `[без гейта]`
 - `MockLLM` повторяет контракт `LLMClient.stream` (`core/clients/llm/client.py`): чанки, `tool_calls`, `usage`; расхождение с провайдером чинится в `MockLLM`, а не в тесте. `[без гейта]`
 
 ### Параллельный прогон
 
-Прогон идёт под xdist (`_PYTEST_XDIST` в `mk/test.mk`): каждый gw — отдельный процесс, БД, Redis, MinIO и стек общие. `xdist_group`, `FileLock`, локи и любая сериализация тестов запрещены; shared state чинится архитектурно. `[без гейта]`
+Прогон идёт под xdist (`_PYTEST_XDIST` в `mk/test.mk`): каждый gw — отдельный процесс, БД, Redis, SeaweedFS и стек общие. `xdist_group`, `FileLock`, локи и любая сериализация тестов запрещены; shared state чинится архитектурно. `[без гейта]`
 
 - Глобальный storage-ключ платформы пишет ровно один тест (`billing:resource_base_prices_json` — `test_platform_billing_put_prices_roundtrip`, `tests/frontend/api/test_platform_billing_api.py`); остальные сценарии — чистые функции или изолированный экземпляр сервиса. `[без гейта]`
 - Глобальную batch-операцию (reembed, orphan-cleanup, backfill, purge) тест проверяет на своих строках и через сходимость за ограниченное число вызовов; ассерт глобальных счётчиков и глобальная чистка таблиц из фикстур запрещены. `[без гейта]`
@@ -114,6 +114,6 @@ alwaysApply: false
 - `make test-static` (`mk/test.mk`) — первый шаг `make test`: `_lint-py`, `scripts/pin_a2a_official_fixtures.py --check`, agent-гейты, `tests/core/ai/test_platform_model_scoring_fixtures.py`; warning basedpyright — fail.
 - `scripts/check_scenario_docs_quality.py` (`make doc`) — шаги и PNG инструкции, `tag` из taxonomy, `README.en.md`, `title_en`, `description_en`, `label_en` на маркерах.
 - `enforce_no_test_doubles` (`tests/conftest.py`) — тест `no_test_doubles` падает при запросе фикстур-двойников.
-- `setup_database_before_tests` (`tests/conftest.py`) — `pytest.fail` с подсказкой `make test-up`, если `0001_initial` не применена.
+- `setup_database_before_tests` (`tests/conftest.py`) — `pytest.fail` с подсказкой `make test-up`, если файл цепочки миграций не применён.
 - `tests/core/di/test_service_kit.py`, `tests/core/di/test_service_kit_boundary.py` — DI процесса, override recipe подкласса, boundary FastAPI/TaskIQ/WS.
 - `tests/test_hang_guard.py`, `tests/test_pytest_with_timeout.py` — hang-guard не трогает `idle`-воркер, wall-clock обёртка убивает process group.

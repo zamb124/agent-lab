@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Literal, cast
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -80,10 +79,14 @@ class LLMCallConfig(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _split_provider_prefixed_model(cls, raw_config: object) -> object:
-        if not isinstance(raw_config, Mapping):
+    def _split_provider_prefixed_model(
+        cls, raw_config: JsonValue | LLMCallConfig
+    ) -> JsonValue | LLMCallConfig:
+        if isinstance(raw_config, LLMCallConfig):
             return raw_config
-        config: dict[str, object] = dict(cast(Mapping[str, object], raw_config))
+        if not isinstance(raw_config, dict):
+            return raw_config
+        config = dict(raw_config)
         raw_provider = config.get("provider")
         provider_is_set = (
             raw_provider is not None

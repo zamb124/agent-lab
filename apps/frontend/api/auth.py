@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse
 
 from apps.frontend.di import Di
@@ -12,6 +12,7 @@ from core.logging import get_logger
 from core.models.identity_models import AuthProvider, AuthRequest, Company
 from core.utils.domain import build_url, get_cookie_domain, is_local
 from core.utils.tokens import TokenService
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -31,7 +32,7 @@ async def auth_callback(
 
     auth_state = await auth_service.get_auth_state(state)
     if not auth_state:
-        raise HTTPException(status_code=400, detail="Invalid state")
+        raise WsCommandError("ws_invalid_payload", "Invalid state", error_code="ws_invalid_payload")
 
     if provider is None:
         provider_enum = auth_state.provider
@@ -39,7 +40,11 @@ async def auth_callback(
         try:
             provider_enum = AuthProvider(provider.lower())
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+            raise WsCommandError(
+                "ws_invalid_payload",
+                f"Unknown provider: {provider}",
+                error_code="ws_invalid_payload",
+            )
 
     original_host = auth_state.original_host
     return_path = auth_state.return_path
@@ -58,7 +63,11 @@ async def auth_callback(
     if not result.success:
         return RedirectResponse(url=f"/?error={result.error_message}")
     if result.user is None or result.token is None:
-        raise HTTPException(status_code=500, detail="OAuth result is missing user or token")
+        raise WsCommandError(
+            "internal",
+            "OAuth result is missing user or token",
+            error_code="internal",
+        )
 
     settings = get_settings()
     is_production = settings.server.env == "production"

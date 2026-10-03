@@ -15,7 +15,6 @@ async def list_active_device_ids_for_company(
     records = await storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=1000,
-        force_global=True,
     )
     device_ids: list[str] = []
     for storage_key, raw_value in records.items():

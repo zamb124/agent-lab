@@ -122,7 +122,7 @@ class RagSearchArgs(RagRetrievalOptions):
         min_length=1,
         description="Запрос естественным языком по смыслу фрагментов в этом namespace.",
     )
-    limit: int = Field(5, ge=1, le=100)
+    limit: int = Field(5, ge=1, le=100, description="Максимум фрагментов в ответе (разумно 3–20).")
     filters: RAGMetadataFilter | None = Field(None, description="Фильтры по metadata; опционально.")
     provider: str | None = Field(None, description="RAG provider override; опционально.")
 

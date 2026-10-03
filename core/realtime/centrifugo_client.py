@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import httpx
 
 from core.config import get_settings
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.realtime.models import UserPresenceSnapshot
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
@@ -62,10 +60,7 @@ async def centrifugo_publish(channel: str, data: JsonObject) -> None:
             _ = response.raise_for_status()
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Centrifugo publish failed for {channel}") from exc
-    payload = require_json_object(
-        cast(object, response.json()),
-        "centrifugo.publish.response",
-    )
+    payload = parse_json_object(response.text, "centrifugo.publish.response")
     _ = _raise_for_centrifugo_payload(payload, path=path)
     logger.debug("centrifugo.published", channel=channel)
 
@@ -87,10 +82,7 @@ async def centrifugo_presence_stats(channel: str) -> UserPresenceSnapshot:
             _ = response.raise_for_status()
         except httpx.HTTPError as exc:
             raise RuntimeError(f"Centrifugo presence_stats failed for {channel}") from exc
-    payload = require_json_object(
-        cast(object, response.json()),
-        "centrifugo.presence_stats.response",
-    )
+    payload = parse_json_object(response.text, "centrifugo.presence_stats.response")
     result = _raise_for_centrifugo_payload(payload, path=path)
     num_clients_value: JsonValue = result.get("num_clients")
     if not isinstance(num_clients_value, int):

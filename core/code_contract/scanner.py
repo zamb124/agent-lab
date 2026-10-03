@@ -14,7 +14,6 @@ import ast
 import hashlib
 import re
 from collections.abc import Iterable
-from typing import cast
 
 from core.code_contract.models import CodeContract
 
@@ -177,7 +176,7 @@ def _python_literal_string(node: ast.AST | None) -> str | None:
 
 
 def _regex_capture_groups(pattern: re.Pattern[str], code: str) -> list[str]:
-    return cast(list[str], pattern.findall(code))
+    return [match.group(1) for match in pattern.finditer(code)]
 
 
 def _scan_c_like(code: str) -> CodeContract:

@@ -29,8 +29,6 @@ from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
 
 from apps.flows.config import get_settings as get_flows_settings
-from apps.flows.src.clients.external_api_client import ExternalAPIClient
-from apps.flows.src.clients.mcp_client import MCPClient
 from apps.flows.src.contracts import (
     ChannelRegistryProtocol,
     FlowFactoryProtocol,
@@ -86,6 +84,7 @@ from apps.flows.src.runtime.llm_resource_config import (
 from apps.flows.src.runtime.runners import LlmNodeRunner
 from apps.flows.src.services.code_agent_source_service import CodeAgentSourceService
 from apps.flows.src.services.datasources.executors import build_datasource_executors
+from apps.flows.src.services.external_api_client import ExternalAPIClient
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flow_ui_cards import card_block_id, show_reflection
 from apps.flows.src.services.handoff_orchestrator_service import HandoffOrchestratorService
@@ -94,6 +93,7 @@ from apps.flows.src.services.hitl_work_item_service import (
     HANDOFF_PREVIEW_MAX_LEN,
     HitlWorkItemService,
 )
+from apps.flows.src.services.mcp_client import MCPClient
 from apps.flows.src.services.mcp_sync import sync_mcp_server_tools
 from apps.flows.src.state.interrupt_manager import InterruptManager
 from apps.flows.src.streaming.emitter import EmitterFactory
@@ -160,6 +160,7 @@ from core.state import (
     InterruptPathItem,
     parse_interrupt_body_from_external_dict,
 )
+from core.state.execution_state import ExecutionStateValue
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt
 from core.state.mutation_policy import (
     forbid_frozen_update_key,
@@ -3469,7 +3470,7 @@ class ReflectionNode(BaseNode):
     def _resolve_target_snapshot(self, state: ExecutionState) -> ReflectionTargetSnapshot:
         target = self.critic_policy.target
         if target.kind == "response":
-            value: object = state.response
+            value: ExecutionStateValue | None = state.response
         elif target.kind == "result":
             value = state.result
         elif target.kind == "validation":

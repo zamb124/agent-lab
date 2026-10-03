@@ -111,7 +111,7 @@ def _ssl_arg(ssl_mode: DatasourceSslMode) -> str:
             return "verify-full"
 
 
-def _asyncpg_args(values: list[JsonValue]) -> list[object]:
+def _asyncpg_args(values: list[JsonValue]) -> list[JsonValue]:
     return [value for value in values]
 
 

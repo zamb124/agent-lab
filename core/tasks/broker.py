@@ -11,21 +11,21 @@
 """
 
 from collections.abc import Awaitable, Callable
-from typing import Protocol, TypeAlias, TypedDict, cast
+from typing import Protocol, TypeAlias, TypedDict
 
-import redis.asyncio as redis
 from redis.exceptions import ResponseError as RedisResponseError
 from taskiq import TaskiqState
 from taskiq.events import TaskiqEvents
 from taskiq.middlewares.simple_retry_middleware import SimpleRetryMiddleware
 from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
 
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.logging import get_logger
 from core.logging.setup import setup_logging
 from core.tasks.logging_middleware import build_logging_middleware
 from core.tasks.registry import TaskSpec, get_task_spec, queue_broker, register_queue_broker
-from core.tasks.session_lock import session_lock_middleware
+from core.tasks.session_lock import SessionLockMiddleware
 from core.types import JsonValue
 
 logger = get_logger(__name__)
@@ -60,18 +60,8 @@ class _TaskRecoveryRedisClient(Protocol):
     def aclose(self) -> Awaitable[None]: ...
 
 
-class _TaskRecoveryRedisFromUrl(Protocol):
-    def __call__(
-        self,
-        url: str,
-        *,
-        decode_responses: bool,
-    ) -> _TaskRecoveryRedisClient: ...
-
-
 def _task_recovery_redis_client(broker_url: str) -> _TaskRecoveryRedisClient:
-    redis_from_url = cast(_TaskRecoveryRedisFromUrl, redis.from_url)
-    return redis_from_url(broker_url, decode_responses=True)
+    return redis_client_from_url(_TaskRecoveryRedisClient, broker_url, decode_responses=True)
 
 
 def stream_maxlen_for_queue(queue_name: str) -> int | None:
@@ -146,13 +136,11 @@ def create_broker(
             queue_name=effective_queue,
         )
 
-    session_lock_middleware.set_queue_name(effective_queue)
-
     broker = (
         stream_broker
         .with_result_backend(result_backend)
         .with_middlewares(
-            session_lock_middleware,
+            SessionLockMiddleware(queue_name=effective_queue),
             build_logging_middleware(
                 queue_name=effective_queue,
                 service_name=effective_service,

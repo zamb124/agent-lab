@@ -10,8 +10,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 from collections.abc import Iterable
-from typing import Protocol, cast
+from typing import Protocol
 
+from core.imports import module_sdk
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,7 +34,7 @@ def import_task_modules(module_names: Iterable[str]) -> tuple[str, ...]:
         imported.add(root_name)
         if not hasattr(root, "__path__"):
             continue
-        package = cast(_PackageModule, cast(object, root))
+        package = module_sdk(root, _PackageModule)
         for info in pkgutil.walk_packages(package.__path__, prefix=f"{package.__name__}."):
             _ = importlib.import_module(info.name)
             imported.add(info.name)

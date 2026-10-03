@@ -6,12 +6,13 @@ import hashlib
 import json
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal, Self, cast
+from typing import ClassVar, Literal, Self
 
 from oxyde import Field as DbField
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.models.platform_model import PlatformModel
+from core.types import JsonValue
 
 __all__ = [
     "MCPAuthPolicy",
@@ -168,7 +169,7 @@ class MCPCatalogAllowlistItemPayload(BaseModel):
 
     @field_validator("catalog_id", "registry_name", "title", mode="before")
     @classmethod
-    def _strip_optional_strings(cls, value: object) -> object:
+    def _strip_optional_strings(cls, value: JsonValue) -> str | None:
         if value is None:
             return None
         if not isinstance(value, str):
@@ -180,13 +181,13 @@ class MCPCatalogAllowlistItemPayload(BaseModel):
 
     @field_validator("required_variables", mode="before")
     @classmethod
-    def _normalize_required_variables(cls, value: object) -> list[str]:
+    def _normalize_required_variables(cls, value: JsonValue) -> list[str]:
         if value is None:
             return []
         if not isinstance(value, list):
             raise ValueError("required_variables must be a list")
         normalized: list[str] = []
-        for variable_name in cast(list[object], value):
+        for variable_name in value:
             if not isinstance(variable_name, str) or not variable_name.strip():
                 raise ValueError("required_variables entries must be non-empty strings")
             normalized.append(variable_name.strip())
@@ -194,7 +195,7 @@ class MCPCatalogAllowlistItemPayload(BaseModel):
 
     @field_validator("transport_type", mode="before")
     @classmethod
-    def _normalize_transport_type(cls, value: object) -> object:
+    def _normalize_transport_type(cls, value: JsonValue) -> Literal["http", "sse"]:
         if value is None:
             return "http"
         if not isinstance(value, str) or not value.strip():
@@ -206,7 +207,7 @@ class MCPCatalogAllowlistItemPayload(BaseModel):
 
     @field_validator("upstream_url", mode="before")
     @classmethod
-    def _normalize_upstream_url(cls, value: object) -> object:
+    def _normalize_upstream_url(cls, value: JsonValue) -> str | None:
         if value is None:
             return None
         if not isinstance(value, str) or not value.strip():

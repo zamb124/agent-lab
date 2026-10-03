@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.context import resolve_namespace_or_raise
-from core.documents.placement import DocsPlacement, DocsPlacementAnchor, DocsPlacementSourceKind
-from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
+from core.documents.placement import DocumentPlacement
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.retention import FileRetentionKind, FileRetentionSpec
+from core.types import JsonObject
 
 DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS: frozenset[FileSourceKind] = frozenset(
     {
@@ -77,82 +77,9 @@ def is_docs_placement_exempt(source_kind: FileSourceKind) -> bool:
     return source_kind in DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS
 
 
-SOURCE_KIND_TO_DOCS_PLACEMENT: dict[FileSourceKind, DocsPlacementSourceKind] = {
-    FileSourceKind.CRM_ENTITY: "crm_entity",
-    FileSourceKind.FLOW_SESSION: "flow_session",
-    FileSourceKind.FLOW_ASSET: "flow_asset",
-    FileSourceKind.WORK_ITEM: "work_item",
-    FileSourceKind.SYNC_MESSAGE: "sync_message",
-    FileSourceKind.SYNC_CALL_RECORDING: "sync_call_recording",
-    FileSourceKind.SYNC_SPEECH_SEGMENT: "sync_speech_segment",
-    FileSourceKind.SYNC_CHANNEL_ASSET: "sync_channel_asset",
-    FileSourceKind.BROWSER_ARTIFACT: "browser_artifact",
-    FileSourceKind.RAG_DOCUMENT: "rag_document",
-    FileSourceKind.CALENDAR_EVENT: "calendar_event",
-    FileSourceKind.MAIL_MESSAGE: "mail_message",
-    FileSourceKind.WIKI_PAGE: "wiki_page",
-    FileSourceKind.CODE_AGENT_SOURCE: "code_agent_source",
-}
-
-
-def _placement_source_kind(source_kind: FileSourceKind) -> DocsPlacementSourceKind:
-    mapped = SOURCE_KIND_TO_DOCS_PLACEMENT.get(source_kind)
-    if mapped is None:
-        raise ValueError(f"no DocsPlacement mapping for FileSourceKind: {source_kind}")
-    return mapped
-
-
-def source_ref_to_placement_anchor(
-    source_kind: FileSourceKind,
-    source_ref: FileSourceRef,
-) -> DocsPlacementAnchor:
-    return DocsPlacementAnchor(
-        source_kind=_placement_source_kind(source_kind),
-        entity_id=source_ref.entity_id,
-        entity_type=source_ref.entity_type,
-        entity_title=source_ref.entity_title,
-        import_id=source_ref.import_id,
-        flow_id=source_ref.flow_id,
-        flow_slug=source_ref.flow_slug,
-        session_id=source_ref.session_id,
-        work_item_id=source_ref.work_item_id,
-        work_queue_id=source_ref.work_queue_id,
-        board_id=source_ref.board_id,
-        channel_id=source_ref.channel_id,
-        message_id=source_ref.message_id,
-        call_id=source_ref.call_id,
-        recording_id=source_ref.recording_id,
-        event_id=source_ref.event_id,
-        browser_session_id=source_ref.browser_session_id,
-        namespace_id=source_ref.namespace_id,
-        mailbox_binding_id=source_ref.mailbox_binding_id,
-        mail_uid=source_ref.mail_uid,
-        mailbox_email=source_ref.mailbox_email,
-        mail_subject=source_ref.mail_subject,
-        wiki_page_id=source_ref.wiki_page_id,
-        node_id=source_ref.node_id,
-        relative_dir=source_ref.relative_dir,
-    )
-
-
-def default_docs_placement(
-    source_kind: FileSourceKind,
-    source_ref: FileSourceRef,
-    *,
-    title: str | None = None,
-    namespace: str | None = None,
-) -> DocsPlacement | None:
-    """Build auto DocsPlacement for durable sources. Exempt kinds → None."""
-    if is_docs_placement_exempt(source_kind):
-        return None
-    resolved_namespace = resolve_namespace_or_raise(namespace)
-    anchor = source_ref_to_placement_anchor(source_kind, source_ref)
-    return DocsPlacement(
-        namespace=resolved_namespace,
-        file_id="",
-        title=title,
-        anchor=anchor,
-    )
+PLACED_SOURCE_KINDS: frozenset[FileSourceKind] = frozenset(
+    kind for kind in FileSourceKind if kind not in DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS
+)
 
 
 def build_file_create_spec(
@@ -160,13 +87,20 @@ def build_file_create_spec(
     source_kind: FileSourceKind,
     source_ref: FileSourceRef,
     retention: FileRetentionSpec | None = None,
-    **kwargs: object,
+    placement: DocumentPlacement | None = None,
+    post_create: FilePostCreate | None = None,
+    metadata: JsonObject | None = None,
+    tags: list[str] | None = None,
 ) -> FileCreateSpec:
-    effective_retention = retention if retention is not None else default_retention_for_source(source_kind)
-    fields = {
-        "source_kind": source_kind,
-        "source_ref": source_ref,
-        "retention": effective_retention,
-        **kwargs,
-    }
-    return FileCreateSpec.model_validate(fields)
+    effective_retention = (
+        retention if retention is not None else default_retention_for_source(source_kind)
+    )
+    return FileCreateSpec(
+        source_kind=source_kind,
+        source_ref=source_ref,
+        retention=effective_retention,
+        placement=placement,
+        post_create=post_create,
+        metadata=metadata,
+        tags=tags,
+    )

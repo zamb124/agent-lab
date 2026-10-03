@@ -16,11 +16,13 @@ from core.config.models import (
     BillingConfig,
     CalendarSyncConfig,
     CallsConfig,
+    CodeRunnerSettings,
     DatabaseConfig,
     EventsConfig,
     FilesConfig,
     GoogleWorkspaceConfig,
     GuestRuntimeFarmConfig,
+    LanesConfig,
     LegalConfig,
     LLMConfig,
     LoggingConfig,
@@ -129,6 +131,7 @@ class BaseSettings(PydanticBaseSettings):
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     realtime: RealtimeConfig = Field(default_factory=RealtimeConfig)
+    lanes: LanesConfig = Field(default_factory=LanesConfig)
     openfga: OpenFGAConfig = Field(default_factory=OpenFGAConfig)
     calendar_sync: CalendarSyncConfig = Field(default_factory=CalendarSyncConfig)
     mail_sync: MailSyncConfig = Field(default_factory=MailSyncConfig)
@@ -146,6 +149,14 @@ class BaseSettings(PydanticBaseSettings):
         description="TTL Redis SET NX для ключа sync:transcribe_audio:{company_id}:{message_id}.",
     )
     agent: AgentSettings = Field(default_factory=AgentSettings)
+    code_runner: CodeRunnerSettings = Field(default_factory=CodeRunnerSettings)
+    test_scope_default: str = Field(
+        default="",
+        description=(
+            "Scope MockLLM для запросов без X-Test-Scope в тестовом контуре. "
+            "Пусто — scope только из лог-контекста."
+        ),
+    )
 
     # extra="forbid": ключ conf.json без поля в Settings — ошибка старта, а не тихо
     # проигнорированная настройка (гейт scripts/check_conf_keys_declared.py ловит это статически).
@@ -304,6 +315,10 @@ class _SettingsProxy:
     @property
     def realtime(self) -> RealtimeConfig:
         return get_settings().realtime
+
+    @property
+    def lanes(self) -> LanesConfig:
+        return get_settings().lanes
 
     @property
     def openfga(self) -> OpenFGAConfig:

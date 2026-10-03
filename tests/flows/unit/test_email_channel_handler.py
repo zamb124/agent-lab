@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiosmtplib
 import pytest
 
 from apps.flows.src.channels.email import EmailChannelHandler, send_smtp_message
@@ -163,6 +164,44 @@ async def test_send_smtp_message_uses_aiosmtplib() -> None:
     assert "accepted" in result
     assert result["accepted"] == ["a@example.com"]
     assert isinstance(result["message_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_send_smtp_message_returns_accepted_when_quit_fails() -> None:
+    class _QuitFails:
+        def __init__(self, **_kwargs: object) -> None:
+            return None
+
+        async def connect(self) -> str:
+            return "220"
+
+        async def login(self, user: str, password: str) -> str:
+            _ = user, password
+            return "235"
+
+        async def send_message(self, message: object) -> tuple[dict[str, str], str]:
+            _ = message
+            return {}, "250"
+
+        async def quit(self) -> str:
+            raise aiosmtplib.SMTPException("421 closing")
+
+    with patch("apps.flows.src.channels.email.aiosmtplib.SMTP", _QuitFails):
+        result = await send_smtp_message(
+            smtp_host="smtp.example.com",
+            smtp_port=587,
+            smtp_user="me@example.com",
+            password="secret",
+            from_email="me@example.com",
+            to_addresses=["a@example.com"],
+            subject="Hi",
+            body_text="Hello",
+            body_html=None,
+            in_reply_to=None,
+            references=None,
+            use_tls=True,
+        )
+    assert result["accepted"] == ["a@example.com"]
 
 
 @pytest.mark.asyncio

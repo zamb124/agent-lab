@@ -159,7 +159,6 @@ async def is_device_token_denied_shared(
 ) -> bool:
     deny_raw = await shared_storage.get(
         _token_deny_key(device_id),
-        force_global=True,
     )
     if deny_raw is not None:
         return True
@@ -167,7 +166,6 @@ async def is_device_token_denied_shared(
         return False
     jti_deny_raw = await shared_storage.get(
         _jti_deny_key(device_jti),
-        force_global=True,
     )
     return jti_deny_raw is not None
 
@@ -676,7 +674,6 @@ async def create_pairing_code(
         storage_key,
         payload,
         ttl=settings.pairing_ttl_seconds,
-        force_global=True,
     )
     await record_agent_audit_event(
         control_plane,
@@ -709,7 +706,7 @@ async def register_device(
 ) -> DeviceRegisterResponse:
     await _enforce_register_rate_limit(control_plane, client_key)
     redis_key = _pairing_storage_key(request.pairing_code)
-    pairing_data_raw = await control_plane.shared_storage.get(redis_key, force_global=True)
+    pairing_data_raw = await control_plane.shared_storage.get(redis_key)
     if pairing_data_raw is None:
         raise WsCommandError(
             "ws_invalid_payload",
@@ -741,7 +738,7 @@ async def register_device(
             error_code="pairing_code_incomplete",
         )
 
-    _ = await control_plane.shared_storage.delete(redis_key, force_global=True)
+    _ = await control_plane.shared_storage.delete(redis_key)
 
     device_record = AgentDeviceRecord(
         device_id=request.device_id,
@@ -758,7 +755,6 @@ async def register_device(
     _ = await control_plane.shared_storage.set(
         device_key,
         device_record.model_dump_json(),
-        force_global=True,
     )
     try:
         await control_plane.authz_service.write(
@@ -768,7 +764,7 @@ async def register_device(
             ]
         )
     except Exception:
-        _ = await control_plane.shared_storage.delete(device_key, force_global=True)
+        _ = await control_plane.shared_storage.delete(device_key)
         raise
 
     token_service = TokenService()
@@ -788,7 +784,6 @@ async def register_device(
     _ = await control_plane.shared_storage.set(
         device_key,
         device_record.model_dump_json(),
-        force_global=True,
     )
 
     await record_agent_audit_event(
@@ -842,7 +837,7 @@ async def register_device_with_auth(
     url_scheme: str | None = None,
 ) -> DeviceRegisterResponse:
     device_key = _device_storage_key(request.device_id)
-    existing_raw = await control_plane.shared_storage.get(device_key, force_global=True)
+    existing_raw = await control_plane.shared_storage.get(device_key)
     if existing_raw is not None:
         existing = AgentDeviceRecord.model_validate_json(existing_raw)
         if existing.company_id != company_id:
@@ -875,7 +870,6 @@ async def register_device_with_auth(
     _ = await control_plane.shared_storage.set(
         device_key,
         device_record.model_dump_json(),
-        force_global=True,
     )
     try:
         await control_plane.authz_service.write(
@@ -885,7 +879,7 @@ async def register_device_with_auth(
             ]
         )
     except Exception:
-        _ = await control_plane.shared_storage.delete(device_key, force_global=True)
+        _ = await control_plane.shared_storage.delete(device_key)
         raise
 
     token_service = TokenService()
@@ -905,7 +899,6 @@ async def register_device_with_auth(
     _ = await control_plane.shared_storage.set(
         device_key,
         device_record.model_dump_json(),
-        force_global=True,
     )
 
     await record_agent_audit_event(
@@ -965,7 +958,6 @@ async def list_company_devices(
     records = await control_plane.shared_storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=1000,
-        force_global=True,
     )
     items: list[AgentDeviceListItem] = []
     for storage_key, raw_value in records.items():
@@ -1004,7 +996,6 @@ async def get_device_record(
 ) -> AgentDeviceRecord:
     raw_value = await control_plane.shared_storage.get(
         _device_storage_key(device_id),
-        force_global=True,
     )
     if raw_value is None:
         raise PlatformNotFoundError("device not found", error_code="device_not_found")
@@ -1028,13 +1019,11 @@ async def mark_device_tunnel_online(
     _ = await control_plane.shared_storage.set(
         _device_storage_key(device_id),
         device.model_dump_json(),
-        force_global=True,
     )
     _ = await control_plane.shared_storage.set(
         _tunnel_online_key(device_id),
         json.dumps({"device_id": device_id, "online_at": device.last_seen_at.isoformat()}),
         ttl=settings.tunnel_online_ttl_seconds,
-        force_global=True,
     )
 
 
@@ -1043,13 +1032,12 @@ async def mark_device_tunnel_offline(
     *,
     device_id: str,
 ) -> None:
-    _ = await control_plane.shared_storage.delete(_tunnel_online_key(device_id), force_global=True)
+    _ = await control_plane.shared_storage.delete(_tunnel_online_key(device_id))
 
 
 async def device_tunnel_is_online(storage: Storage, device_id: str) -> bool:
     online_raw = await storage.get(
         _tunnel_online_key(device_id),
-        force_global=True,
     )
     return online_raw is not None
 
@@ -1075,7 +1063,6 @@ async def update_device_policy(
     _ = await control_plane.shared_storage.set(
         _device_storage_key(device_id),
         device.model_dump_json(),
-        force_global=True,
     )
     await record_agent_audit_event(
         control_plane,
@@ -1113,22 +1100,19 @@ async def revoke_device(
     _ = await control_plane.shared_storage.set(
         _device_storage_key(device_id),
         device.model_dump_json(),
-        force_global=True,
     )
     _ = await control_plane.shared_storage.set(
         _token_deny_key(device_id),
         json.dumps({"revoked_at": datetime.now(timezone.utc).isoformat()}),
         ttl=DEVICE_TOKEN_EXPIRES,
-        force_global=True,
     )
     if device.active_device_jti is not None:
         _ = await control_plane.shared_storage.set(
             _jti_deny_key(device.active_device_jti),
             json.dumps({"revoked_at": datetime.now(timezone.utc).isoformat()}),
             ttl=DEVICE_TOKEN_EXPIRES,
-            force_global=True,
         )
-    _ = await control_plane.shared_storage.delete(_tunnel_online_key(device_id), force_global=True)
+    _ = await control_plane.shared_storage.delete(_tunnel_online_key(device_id))
     await publish_tunnel_disconnect(control_plane.redis_client, device_id)
     await record_agent_audit_event(
         control_plane,

@@ -28,7 +28,6 @@ async def resolve_user_online_device(
     records = await storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=1000,
-        force_global=True,
     )
     best: AgentDeviceListItem | None = None
     best_seen: datetime | None = None
@@ -79,7 +78,6 @@ async def _load_owned_active_device(
 ) -> AgentDeviceRecord | None:
     raw_value = await storage.get(
         f"{DEVICE_KEY_PREFIX}{device_id}",
-        force_global=True,
     )
     if raw_value is None:
         return None

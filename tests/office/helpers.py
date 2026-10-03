@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from core.documents.placement import DocumentPlacement
 from core.files.create_spec import (
     FileCreateSpec,
     FilePostCreate,
@@ -21,6 +22,7 @@ def office_document_upload_spec_json(*, namespace: str = "default") -> str:
         source_kind=FileSourceKind.OFFICE_DOCUMENT,
         source_ref=FileSourceRef(entity_id=namespace),
         retention=default_retention_for_source(FileSourceKind.OFFICE_DOCUMENT),
+        placement=DocumentPlacement(catalog_path=["Documents"]),
         post_create=FilePostCreate(is_public=False),
     )
     return spec.model_dump_json()

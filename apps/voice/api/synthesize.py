@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,7 @@ from core.clients.tts_streaming import BaseTTSStreamer
 from core.context import get_context, require_context
 from core.files.media.wav_merge import merge_wav_s16le_mono_files
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -58,10 +59,25 @@ async def _require_company_view_when_user_context(
     await di.authz_service.require_can_view(AuthzObject.company(company_id))
 
 
-def _http_status_for_litserve_tts_error(exc: TTSLitserveHttpError) -> int:
+_LITSERVE_CLIENT_TRANSPORT_CODE: dict[int, str] = {
+    400: "ws_invalid_payload",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    410: "gone",
+    422: "unprocessable",
+    429: "rate_limited",
+}
+
+
+def _litserve_tts_error_transport(exc: TTSLitserveHttpError) -> tuple[str, str]:
     if 400 <= exc.status_code < 500:
-        return exc.status_code
-    return status.HTTP_502_BAD_GATEWAY
+        transport = _LITSERVE_CLIENT_TRANSPORT_CODE.get(exc.status_code, "ws_invalid_payload")
+    else:
+        transport = "upstream"
+    error_code = "ws_invalid_payload" if transport == "unprocessable" else transport
+    return transport, error_code
 
 
 class SynthesizeRequest(BaseModel):
@@ -101,9 +117,10 @@ async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
     ctx = require_context()
     company = ctx.active_company
     if company is None or company.company_id == "":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Active company is not set in the request context.",
+        raise WsCommandError(
+            "unauthorized",
+            "Active company is not set in the request context.",
+            error_code="unauthorized",
         )
     company_id = company.company_id
 
@@ -144,15 +161,18 @@ async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
     try:
         first_chunk = await body_iter.__anext__()
     except TTSLitserveHttpError as exc:
-        code = _http_status_for_litserve_tts_error(exc)
+        transport, error_code = _litserve_tts_error_transport(exc)
         logger.warning(
             "voice.synthesize.litserve_http_error",
             company_id=company_id,
             provider=tts_streamer.provider,
             upstream_status=exc.status_code,
-            response_status=code,
+            response_status=transport,
         )
-        raise HTTPException(status_code=code, detail=exc.detail) from exc
+        detail = exc.detail
+        if detail == "":
+            detail = f"TTS provider returned HTTP {exc.status_code}"
+        raise WsCommandError(transport, detail, error_code=error_code) from exc
     except httpx.RequestError as exc:
         logger.warning(
             "voice.synthesize.tts_upstream_unreachable",
@@ -161,11 +181,10 @@ async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
             error_type=type(exc).__name__,
             message=str(exc),
         )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "TTS provider is unavailable: no connection to the synthesis service. Check that the provider is running and voice.tts (for example litserve base_url) has the correct address."
-            ),
+        raise WsCommandError(
+            "unavailable",
+            "TTS provider is unavailable: no connection to the synthesis service. Check that the provider is running and voice.tts (for example litserve base_url) has the correct address.",
+            error_code="unavailable",
         ) from exc
     except StopAsyncIteration:
         logger.warning(
@@ -176,11 +195,10 @@ async def synthesize(body: SynthesizeRequest, di: Di) -> StreamingResponse:
             total_audio_bytes=0,
             response_format=body.response_format,
         )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "TTS returned 0 audio bytes; see X-Voice-Provider header and voice.synthesize.empty_audio_body log by request_id."
-            ),
+        raise WsCommandError(
+            "upstream",
+            "TTS returned 0 audio bytes; see X-Voice-Provider header and voice.synthesize.empty_audio_body log by request_id.",
+            error_code="upstream",
         )
 
     async def stream_from_first_chunk() -> AsyncIterator[bytes]:

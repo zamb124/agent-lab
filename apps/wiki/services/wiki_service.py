@@ -47,21 +47,21 @@ from apps.wiki.events import (
     publish_wiki_page_moved,
 )
 from apps.wiki.models.api import WikiPageResponse
+from apps.wiki.models.comment import WikiComment
 from apps.wiki.models.domain import (
     WikiAccessMemberRelation,
     WikiBacklink,
-    WikiComment,
     WikiLinkPermission,
     WikiLinkTargetKind,
-    WikiPage,
     WikiPageAccess,
-    WikiPageLink,
     WikiPageMember,
     WikiPageSummary,
-    WikiRevision,
     WikiRevisionSummary,
     WikiSearchHit,
 )
+from apps.wiki.models.page import WikiPage
+from apps.wiki.models.page_link import WikiPageLink
+from apps.wiki.models.revision import WikiRevision
 from apps.wiki.services.links import ExtractedMention, extract_links, extract_user_mentions
 from apps.wiki.services.rag_index import WikiRagIndexService
 from apps.wiki.services.rag_metadata import (

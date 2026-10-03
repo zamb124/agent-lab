@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -13,12 +14,15 @@ import pytest
 
 from apps.stock.di import StockDi
 from apps.stock.models import (
+    StockLayoutPreset,
     StockLocationUsage,
     StockMoveState,
     StockOperationCode,
     StockOperationType,
+    StockPartnerRole,
     StockProduct,
     StockQuant,
+    StockRemovalStrategy,
     StockTracking,
     StockTransferState,
     StockValueLayer,
@@ -56,12 +60,16 @@ async def _make_env(
         code=f"WH{unique[:8]}",
         name=f"Warehouse {unique}",
         owner_user_id="test_user",
+
+        layout_preset=StockLayoutPreset.SIMPLE,
+
+        removal_strategy=StockRemovalStrategy.FIFO,
     )
     uom = await UnitOfMeasure.objects.filter(
         company_id=company_id, name="Units"
     ).first()
     assert uom is not None
-    product = await di.warehouse_service.create_product(
+    product = await di.catalog_service.create_product(
         company_id=company_id,
         name=f"Widget {unique}",
         sku=f"SKU-{unique}",
@@ -165,7 +173,6 @@ async def _stock_quant(env: StockEnv) -> StockQuant | None:
         product_id=env.product.product_id,
         location_id=env.warehouse.stock_location_id,
         lot_id=None,
-        package_id=None,
         owner_entity_id=None,
     )
 
@@ -185,9 +192,12 @@ class TestCompanyInit:
             company_id=company
         )
         usages = {loc.usage for loc in created}
-        assert StockLocationUsage.SUPPLIER in usages
-        assert StockLocationUsage.CUSTOMER in usages
-        assert StockLocationUsage.INVENTORY in usages
+        assert StockLocationUsage.PARTNER in usages
+        assert StockLocationUsage.ADJUSTMENT in usages
+        assert StockLocationUsage.TRANSIT in usages
+        roles = {loc.partner_role for loc in created}
+        assert StockPartnerRole.VENDOR in roles
+        assert StockPartnerRole.CUSTOMER in roles
         uoms = await UnitOfMeasure.objects.filter(company_id=company).all()
         assert {u.name for u in uoms} >= {"Units", "kg", "g", "m", "l"}
 
@@ -219,7 +229,7 @@ class TestWarehouseBootstrap:
         }
         incoming = env.op_types[StockOperationCode.INCOMING]
         assert incoming.default_source_location_id == virtual_location_id(
-            env.company_id, StockLocationUsage.SUPPLIER
+            env.company_id, StockLocationUsage.PARTNER, StockPartnerRole.VENDOR
         )
         assert incoming.default_dest_location_id == env.warehouse.stock_location_id
 
@@ -235,6 +245,10 @@ class TestWarehouseBootstrap:
                 code=f"WH{unique_id[:8]}",
                 name="Dup",
                 owner_user_id="test_user",
+
+                layout_preset=StockLayoutPreset.SIMPLE,
+
+                removal_strategy=StockRemovalStrategy.FIFO,
             )
 
 
@@ -270,6 +284,24 @@ class TestIncomingCycle:
         _ = await _delivery(env, Decimal("1"))
         nos = [layer.entry_no for layer in await _layers(env)]
         assert nos == list(range(1, len(nos) + 1))
+
+    async def test_ledger_concurrent_receipts_no_gaps(
+        self, stock_di, unique_id: str
+    ) -> None:
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.STANDARD
+        )
+        await asyncio.gather(
+            *[_receipt(env, Decimal("1"), Decimal("5")) for _ in range(6)]
+        )
+        nos = [layer.entry_no for layer in await _layers(env)]
+        assert nos == list(range(1, len(nos) + 1))
+        last = await StockValueLayer.last_for_product(
+            env.company_id, env.product.product_id
+        )
+        assert last is not None
+        assert last.qty_after == Decimal("6")
+        assert last.value_after == Decimal("30")
 
 
 class TestFifoValuation:
@@ -358,7 +390,7 @@ class TestPartialBackorder:
             company_id=env.company_id, transfer_id=transfer.transfer_id
         )
         assert len(lines) == 1
-        _ = await env.di.warehouse_service.update_move_line(
+        _ = await env.di.task_service.update_move_line(
             company_id=env.company_id,
             move_line_id=lines[0].move_line_id,
             done_quantity=Decimal("4"),
@@ -496,6 +528,42 @@ class TestBarcode:
             entity_type=StockBarcodeEntityType.PRODUCT,
             entity_id="prod-1",
         )
+
+    async def test_transfer_barcode_resolves_via_index(
+        self, stock_di, unique_id: str
+    ) -> None:
+        """Штрихкод накладной пишется в индекс атомарно с документом —
+        скан на гейте резолвит его без отдельной колонки у transfer."""
+        from apps.stock.models import StockBarcodeEntityType
+
+        env = await _make_env(
+            stock_di, f"co-{unique_id}", unique_id, ValuationMethod.STANDARD
+        )
+        op = env.op_types[StockOperationCode.INCOMING]
+        code = f"TRF-{unique_id}"
+        transfer = await env.di.move_engine.create_transfer(
+            company_id=env.company_id,
+            warehouse_id=env.warehouse.warehouse_id,
+            operation_type_id=op.operation_type_id,
+            partner_entity_id=None,
+            owner_entity_id=None,
+            scheduled_at=None,
+            origin_document_type=None,
+            origin_document_id=None,
+            barcode=code,
+            moves=[
+                StockMoveSpec(
+                    product_id=env.product.product_id,
+                    product_qty=Decimal(1),
+                    uom_id=env.uom_id,
+                )
+            ],
+        )
+        resolved = await stock_di.barcode_service.resolve(
+            company_id=env.company_id, barcode=code
+        )
+        assert resolved.entity_type == StockBarcodeEntityType.TRANSFER
+        assert resolved.entity_id == transfer.transfer_id
 
 
 class TestIsolation:

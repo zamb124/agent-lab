@@ -10,6 +10,7 @@ from core.crawl.models import (
     CrawlUrlEnrichmentSnapshot,
 )
 from core.rag.models import RAGMetadata
+from core.types import JsonValue
 
 
 def enrichment_snapshot_from_enriched_page(enriched_page: CrawlEnrichedPage) -> CrawlUrlEnrichmentSnapshot:
@@ -21,7 +22,7 @@ def enrichment_snapshot_from_enriched_page(enriched_page: CrawlEnrichedPage) -> 
     )
 
 
-def _parse_iso_date_field(value: object) -> date | None:
+def _parse_iso_date_field(value: JsonValue) -> date | None:
     if not isinstance(value, str):
         return None
     token = value.strip()

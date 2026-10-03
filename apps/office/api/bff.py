@@ -5,19 +5,17 @@ callback) и REST-зеркала `op_*` редактора.
 
 from __future__ import annotations
 
-import hashlib
 from typing import Annotated
 from urllib.parse import quote
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
 from apps.office.api.commands import router as office_commands_router
 from apps.office.api.data_tables import router as office_data_tables_router
 from apps.office.api.viewer_routes import router as office_viewer_router
 from apps.office.config import get_office_settings
-from apps.office.db.models import OfficeDocumentBinding
 from apps.office.di import Di
 from apps.office.events import OFFICE_DOCUMENT_SAVED
 from apps.office.models.api import (
@@ -30,6 +28,7 @@ from apps.office.models.api import (
     OfficePublicResolveResponse,
     OnlyOfficeCallbackResponse,
 )
+from apps.office.models.link import DocumentLink
 from apps.office.realtime.editor_operations import (
     OfficeDocumentShareResolvePayload,
     OfficeEditorConfigPayload,
@@ -57,12 +56,14 @@ from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import require_context
 from core.events import publish_event_to_user
+from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SignedFileGrant
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.types import JsonObject, parse_json_object, require_json_object
+from core.websocket import WsCommandError, raise_invalid, raise_not_found
 from core.websocket.publisher import Notification, NotificationType, notify_user
 
 logger = get_logger(__name__)
@@ -181,7 +182,7 @@ async def public_resolve(token: str, di: Di) -> OfficePublicResolveResponse:
     try:
         target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     return await di.office_access_service.build_public_resolve(target)
 
 
@@ -194,14 +195,14 @@ async def public_open(
     try:
         target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     if target.kind != "binding" or target.binding is None:
-        raise HTTPException(status_code=400, detail="Open the file via a direct link")
+        raise WsCommandError("ws_invalid_payload", "Open the file via a direct link", error_code="ws_invalid_payload")
     meta = await di.files_service.get_optional(target.binding.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     if meta.company_id != target.binding.company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     try:
         return await di.viewer_service.open_config_for_public_link(
             public_origin=build_service_base_url(request),
@@ -209,7 +210,7 @@ async def public_open(
             file_record=meta,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_invalid(exc)
 
 
 @router.get("/public/catalog/{token}/items", response_model=OfficePublicCatalogItemsResponse)
@@ -219,11 +220,11 @@ async def public_catalog_items(
     try:
         target = await di.office_access_service.resolve_public_token(token)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     try:
         return await di.office_access_service.list_public_catalog_items(target)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_invalid(exc)
 
 
 @router.get(
@@ -243,18 +244,19 @@ async def public_catalog_binding_open(
             file_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
+    file_link = await DocumentLink.for_target("file", binding.file_id)
+    if file_link is None or not file_link.enabled or file_link.token_hash is None:
+        raise WsCommandError("forbidden", "File public link is not configured", error_code="forbidden")
     binding_target = PublicLinkTarget(
         kind="binding",
         catalog=None,
         binding=binding,
-        token_hash=binding.link_token_hash or "",
+        token_hash=file_link.token_hash,
     )
-    if binding.link_token_hash is None:
-        raise HTTPException(status_code=403, detail="File public link is not configured")
     meta = await di.files_service.get_optional(binding.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     try:
         return await di.viewer_service.open_config_for_public_link(
             public_origin=build_service_base_url(request),
@@ -262,7 +264,7 @@ async def public_catalog_binding_open(
             file_record=meta,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_invalid(exc)
 
 
 @router.get("/office-download")
@@ -272,28 +274,28 @@ async def office_download(
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office is not configured")
+        raise WsCommandError("unavailable", "office is not configured", error_code="unavailable")
     try:
         claims = decode_download_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as e:
-        raise HTTPException(status_code=401, detail="Invalid download token") from e
+        raise WsCommandError("unauthorized", "Invalid download token", error_code="unauthorized") from e
     file_id = claims.file_id
     company_id = claims.company_id
     viewer_scope = claims.viewer_scope
     if viewer_scope == "catalog":
-        binding_row = await OfficeDocumentBinding.binding_for_company(
+        binding_row = await FileRecord.for_company(
             file_id,
             company_id,
         )
         if binding_row is None:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     elif viewer_scope != "file":
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     meta = await di.files_service.get_optional(file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     if meta.company_id != company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     try:
         handle = await FileGate().open_record(
             meta,
@@ -309,9 +311,10 @@ async def office_download(
             key=meta.s3_key,
             code=code,
         )
-        raise HTTPException(
-            status_code=502,
-            detail=f"S3 did not return the object: {code}",
+        raise WsCommandError(
+            "upstream",
+            f"S3 did not return the object: {code}",
+            error_code="upstream",
         ) from e
     ct = meta.content_type or "application/octet-stream"
     return Response(
@@ -332,11 +335,11 @@ async def onlyoffice_callback(
 ) -> OnlyOfficeCallbackResponse:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office is not configured")
+        raise WsCommandError("unavailable", "office is not configured", error_code="unavailable")
     try:
         ctx_cb = decode_callback_context_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as e:
-        raise HTTPException(status_code=401, detail="Invalid callback token") from e
+        raise WsCommandError("unauthorized", "Invalid callback token", error_code="unauthorized") from e
     file_id = ctx_cb.file_id
     company_id = ctx_cb.company_id
     viewer_scope = ctx_cb.viewer_scope
@@ -345,7 +348,7 @@ async def onlyoffice_callback(
         raw_body = await request.body()
         body = parse_json_object(raw_body, "OnlyOffice callback body") if raw_body else {}
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Callback body must be a JSON object") from exc
+        raise WsCommandError("ws_invalid_payload", "Callback body must be a JSON object", error_code="ws_invalid_payload") from exc
 
     auth = request.headers.get("Authorization")
     bearer = ""
@@ -356,26 +359,27 @@ async def onlyoffice_callback(
         if isinstance(body_token, str) and body_token.strip() != "":
             bearer = body_token.strip()
     if not bearer:
-        raise HTTPException(
-            status_code=401,
-            detail="OnlyOffice JWT is required in Authorization: Bearer or body.token",
+        raise WsCommandError(
+            "unauthorized",
+            "OnlyOffice JWT is required in Authorization: Bearer or body.token",
+            error_code="unauthorized",
         )
     try:
         token_payload = decode_callback_authorization(bearer, integ.jwt_secret)
     except OnlyOfficeJwtError as e:
-        raise HTTPException(status_code=401, detail="Invalid callback JWT") from e
+        raise WsCommandError("unauthorized", "Invalid callback JWT", error_code="unauthorized") from e
     payload = _onlyoffice_request_payload(token_payload, body)
 
     namespace = ctx_cb.namespace or ""
     status_raw = payload.get("status")
     if status_raw is None:
-        raise HTTPException(status_code=400, detail="Callback status is required")
+        raise WsCommandError("ws_invalid_payload", "Callback status is required", error_code="ws_invalid_payload")
     if not isinstance(status_raw, str | int):
-        raise HTTPException(status_code=400, detail="Callback status must be an integer")
+        raise WsCommandError("ws_invalid_payload", "Callback status must be an integer", error_code="ws_invalid_payload")
     try:
         status_int = int(status_raw)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Callback status must be an integer") from None
+        raise WsCommandError("ws_invalid_payload", "Callback status must be an integer", error_code="ws_invalid_payload") from None
     logger.info(
         "office.onlyoffice.callback.received.file_id.company_id",
         file_id=file_id,
@@ -388,7 +392,7 @@ async def onlyoffice_callback(
     if status_int in (2, 6):
         url = payload.get("url")
         if not url or not isinstance(url, str):
-            raise HTTPException(status_code=400, detail="Callback has no url for save")
+            raise WsCommandError("ws_invalid_payload", "Callback has no url for save", error_code="ws_invalid_payload")
         redis_url = get_settings().database.redis_url
         claimed = await try_claim_onlyoffice_callback(
             redis_url,
@@ -405,28 +409,28 @@ async def onlyoffice_callback(
         notification_message = ""
         notification_action_url: str | None = None
         notification_data: JsonObject = {}
-        document_binding: OfficeDocumentBinding | None = None
+        document_binding: FileRecord | None = None
 
         if viewer_scope == "catalog":
-            document_binding = await OfficeDocumentBinding.binding_for_company(
+            document_binding = await FileRecord.for_company(
                 file_id,
                 company_id,
             )
             if document_binding is None:
                 logger.error("office.onlyoffice.callback.company", file_id=file_id, company=company_id)
-                raise HTTPException(status_code=404, detail="Binding not found")
-            notification_user_id = document_binding.created_by_user_id
-            notification_message = document_binding.title
+                raise WsCommandError("not_found", "Binding not found", error_code="not_found")
+            notification_user_id = document_binding.uploaded_by
+            notification_message = document_binding.original_name
             notification_action_url = f"/documents/edit/{file_id}"
             notification_data = {"file_id": file_id, "company_id": company_id}
         elif viewer_scope != "file":
-            raise HTTPException(status_code=400, detail="Invalid OnlyOffice viewer_scope")
+            raise WsCommandError("ws_invalid_payload", "Invalid OnlyOffice viewer_scope", error_code="ws_invalid_payload")
 
         meta = await di.files_service.get_optional(file_id)
         if meta is None:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise WsCommandError("not_found", "File not found", error_code="not_found")
         if meta.company_id != company_id:
-            raise HTTPException(status_code=403, detail="File does not belong to the company")
+            raise WsCommandError("forbidden", "File does not belong to the company", error_code="forbidden")
 
         async with get_httpx_client(timeout=120.0) as client:
             r = await client.get(url)
@@ -434,19 +438,13 @@ async def onlyoffice_callback(
             new_bytes = r.content
         previous_size = meta.file_size
         previous_checksum = meta.checksum
-        s3 = await FileGate().client_for_storage_id(meta.storage_id, record=meta)
-        _ = await s3.upload_bytes(
-            data=new_bytes,
-            key=meta.s3_key,
-            content_type=meta.content_type or "application/octet-stream",
-            public=meta.is_public,
-        )
-        digest = hashlib.sha256(new_bytes).hexdigest()
-        _ = await di.files_service.save_file_size_checksum(
+        updated = await di.files_service.replace_content(
             meta,
-            file_size=len(new_bytes),
-            checksum=digest,
+            new_bytes,
+            content_type=meta.content_type or "application/octet-stream",
+            expected_checksum=meta.checksum,
         )
+        digest = updated.checksum or ""
         if document_binding is not None:
             try:
                 await index_binding_if_catalog_enabled_with_job_context(
@@ -454,7 +452,7 @@ async def onlyoffice_callback(
                     document_binding,
                     company_id=company_id,
                     workspace_namespace=namespace,
-                    user_id=document_binding.created_by_user_id,
+                    user_id=document_binding.uploaded_by or "",
                 )
             except ServiceClientError as exc:
                 raise_from_service_client("rag", exc)

@@ -522,7 +522,7 @@ class TranslationManager:
 
         logger.debug("i18n.js_modules_generated", language_count=len(Language))
 
-    def t(self, key: str, language: Language | None = None, **kwargs: object) -> str:
+    def t(self, key: str, language: Language | None = None, **kwargs: JsonValue) -> str:
         """
         Основная функция перевода
 
@@ -603,7 +603,7 @@ def get_translation_manager() -> TranslationManager:
     return _translation_manager
 
 
-def t(key: str, language: Language | None = None, **kwargs: object) -> str:
+def t(key: str, language: Language | None = None, **kwargs: JsonValue) -> str:
     """Глобальная функция перевода"""
     manager = get_translation_manager()
     return manager.t(key, language, **kwargs)

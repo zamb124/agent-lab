@@ -15,7 +15,7 @@ import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
-from typing import ClassVar, Literal, NotRequired, TypedDict, cast
+from typing import ClassVar, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -112,7 +112,8 @@ from core.tracing.operation_span import traced_operation
 from core.types import (
     JsonObject,
     JsonValue,
-    require_json_array,
+    model_json_object,
+    parse_json_value,
     require_json_object,
     require_json_value,
 )
@@ -138,13 +139,21 @@ class EntityTypePromptField(TypedDict):
     required: bool
     description: NotRequired[str]
     type: NotRequired[str]
-    values: NotRequired[list[object]]
+    values: NotRequired[list[JsonValue]]
 
 
-def _as_json_object(value: object) -> JsonObject | None:
+def _as_json_object(value: JsonValue) -> JsonObject | None:
     if isinstance(value, dict):
-        return cast(JsonObject, value)
+        return value
     return None
+
+
+def _json_object_from_fragment(fragment: str) -> JsonObject | None:
+    try:
+        parsed = parse_json_value(fragment, "json")
+    except ValueError:
+        return None
+    return _as_json_object(parsed)
 
 
 _ANALYZE_ENTITY_DESCRIPTION_MIN_LEN = 12
@@ -252,11 +261,13 @@ def _clamp_period_dates_for_summary(
     return tail[0], tail[-1], True
 
 
-def _canonical_json(obj: object) -> str:
+def _canonical_json(obj: JsonValue | date) -> str:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
 
 
 ANALYSIS_DRAFT_APPLY_MAX_ROUNDS = 3
+
+EntityMergeScalar = str | date | None
 
 _MERGE_SCALAR_KEYS: tuple[str, ...] = (
     "name",
@@ -322,7 +333,7 @@ def _extract_entity_type_fields(entity_type: EntityType) -> list[EntityTypePromp
                 field["type"] = json_type.strip()
             values = defn.get("values")
             if json_type == "enum" and isinstance(values, list):
-                field["values"] = cast(list[object], values)
+                field["values"] = values
             result.append(field)
     return result
 
@@ -592,19 +603,9 @@ class EntityService:
         return value
 
     @staticmethod
-    def _check_field_type(value: object, expected_type: str) -> bool:
-        type_map: dict[str, type[object] | tuple[type[object], ...]] = {
-            "string": str,
-            "integer": int,
-            "number": (int, float),
-            "boolean": bool,
-            "array": list,
-            "object": dict,
-            "external_refs": dict,
-        }
-        python_type = type_map.get(expected_type)
-        if python_type is None:
-            return True
+    def _check_field_type(value: JsonValue, expected_type: str) -> bool:
+        if expected_type == "string":
+            return isinstance(value, str)
         if expected_type == "integer":
             if isinstance(value, bool):
                 return False
@@ -613,7 +614,13 @@ class EntityService:
             if isinstance(value, bool):
                 return False
             return isinstance(value, (int, float))
-        return isinstance(value, python_type)
+        if expected_type == "boolean":
+            return isinstance(value, bool)
+        if expected_type == "array":
+            return isinstance(value, list)
+        if expected_type in {"object", "external_refs"}:
+            return isinstance(value, dict)
+        return True
 
     @staticmethod
     def _draft_repair_field_type_rules_doc() -> str:
@@ -670,8 +677,8 @@ class EntityService:
         return field_specs
 
     @staticmethod
-    def _validate_filter_value_type(field_type: str, operator: str, value: object) -> None:
-        def _validate_scalar(candidate: object) -> None:
+    def _validate_filter_value_type(field_type: str, operator: str, value: JsonValue) -> None:
+        def _validate_scalar(candidate: JsonValue) -> None:
             if field_type in {"string", "text", "enum"}:
                 if not isinstance(candidate, str):
                     raise ValueError(f"Filter value must be string for field type {field_type}")
@@ -714,7 +721,7 @@ class EntityService:
         if operator in {"$in", "$nin"}:
             if not isinstance(value, list):
                 raise ValueError(f"{operator} requires non-empty array value")
-            values = cast(list[object], value)
+            values = value
             if len(values) == 0:
                 raise ValueError(f"{operator} requires non-empty array value")
             for item in values:
@@ -777,7 +784,7 @@ class EntityService:
             if and_children is not None:
                 if not isinstance(and_children, list):
                     raise ValueError("$and must be an array")
-                for raw_child in cast(list[object], and_children):
+                for raw_child in and_children:
                     child = _as_json_object(raw_child)
                     if child is None:
                         raise ValueError("$and children must be objects")
@@ -787,7 +794,7 @@ class EntityService:
             if or_children is not None:
                 if not isinstance(or_children, list):
                     raise ValueError("$or must be an array")
-                for raw_child in cast(list[object], or_children):
+                for raw_child in or_children:
                     child = _as_json_object(raw_child)
                     if child is None:
                         raise ValueError("$or children must be objects")
@@ -1132,25 +1139,27 @@ class EntityService:
         context_entity_id: str | None = None,
         voice_entity_in_payload: bool = False,
         context_entity_in_payload: bool = False,
-        **kwargs: object,
+        user_id: str | None = None,
+        namespace: str | None = None,
+        priority: str | None = None,
+        due_date: date | None = None,
+        assignees: list[str] | None = None,
+        note_date: date | None = None,
+        attachment_ids: list[str] | None = None,
+        source_entity_id: str | None = None,
+        source_company_id: str | None = None,
+        status: str | None = None,
+        relevance: float | None = None,
     ) -> CRMEntity:
         """Создает новую entity"""
 
-        # user_id ОБЯЗАТЕЛЕН - берем из kwargs или из контекста
-        user_id_raw = kwargs.pop("user_id", None)
-        if isinstance(user_id_raw, str) and user_id_raw.strip():
-            user_id = user_id_raw
-        else:
+        if user_id is None or user_id.strip() == "":
             context = get_context()
             if not context or not context.user:
                 raise ValueError("user_id is required (no user in context)")
             user_id = context.user.user_id
 
-        namespace_raw = kwargs.get("namespace")
-        if namespace_raw is not None and not isinstance(namespace_raw, str):
-            raise ValueError("namespace must be a string or null")
-        namespace = self._resolve_namespace_for_write(namespace_raw)
-        kwargs["namespace"] = namespace
+        namespace = self._resolve_namespace_for_write(namespace)
         await self._ensure_namespace_exists(namespace)
 
         storage_type, storage_subtype = await self._resolve_storage_type_for_note_family(
@@ -1167,9 +1176,6 @@ class EntityService:
             entity_subtype=entity_subtype,
         )
         # Work-семантика задачи живёт в парном WorkItem; на CRM-узле её нет.
-        work_priority = kwargs.pop("priority", None)
-        work_due_date = kwargs.pop("due_date", None)
-        work_assignees = kwargs.pop("assignees", None)
         work_board_status: str | None = None
         if entity_type == "task":
             base_attrs: JsonObject = dict(attributes or {})
@@ -1184,57 +1190,18 @@ class EntityService:
             entity_subtype=entity_subtype,
         )
 
-        raw_note_date = kwargs.pop("note_date", None)
-        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and raw_note_date is None:
-            raw_note_date = datetime.now(UTC).date()
-        note_date: date | None
-        if raw_note_date is None:
-            note_date = None
-        elif isinstance(raw_note_date, datetime):
-            note_date = raw_note_date.date()
-        elif isinstance(raw_note_date, date):
-            note_date = raw_note_date
-        else:
-            raise ValueError("note_date must be a date")
+        if entity_type == NOTE_ROOT_ENTITY_TYPE_ID and note_date is None:
+            note_date = datetime.now(UTC).date()
+        elif isinstance(note_date, datetime):
+            note_date = note_date.date()
 
-        raw_attachment_ids = kwargs.pop("attachment_ids", None)
-        attachment_ids: list[str] = []
-        if raw_attachment_ids is not None:
-            for attachment_id in require_json_array(raw_attachment_ids, "attachment_ids"):
-                if not isinstance(attachment_id, str):
-                    raise ValueError("attachment_ids must be a list of strings")
-                attachment_ids.append(attachment_id)
-
-        raw_source_entity_id = kwargs.pop("source_entity_id", None)
-        if raw_source_entity_id is not None and not isinstance(raw_source_entity_id, str):
-            raise ValueError("source_entity_id must be a string")
-        source_entity_id = raw_source_entity_id
-
-        raw_source_company_id = kwargs.pop("source_company_id", None)
-        if raw_source_company_id is not None and not isinstance(raw_source_company_id, str):
-            raise ValueError("source_company_id must be a string")
-        source_company_id = raw_source_company_id
-
-        raw_status = kwargs.pop("status", None)
-        if raw_status is None:
+        if status is None:
             status = "active"
-        elif isinstance(raw_status, str) and raw_status != "":
-            status = raw_status
-        else:
+        elif status == "":
             raise ValueError("status must be a string")
 
-        raw_relevance = kwargs.pop("relevance", None)
-        if raw_relevance is None:
+        if relevance is None:
             relevance = 1.0
-        elif isinstance(raw_relevance, bool) or not isinstance(raw_relevance, (int, float)):
-            raise ValueError("relevance must be a number")
-        else:
-            relevance = float(raw_relevance)
-
-        if "namespace" in kwargs:
-            _ = kwargs.pop("namespace")
-        if len(kwargs) > 0:
-            raise ValueError("Unsupported entity fields: " + ", ".join(sorted(kwargs)))
 
         entity = CRMEntity(
             user_id=user_id,
@@ -1245,10 +1212,10 @@ class EntityService:
             description=description,
             attributes=attributes or {},
             tags=tags or [],
+            attachment_ids=attachment_ids or [],
             company_id=self._get_company_id(),
             namespace=namespace,
             note_date=note_date,
-            attachment_ids=attachment_ids,
             source_entity_id=source_entity_id,
             source_company_id=source_company_id,
             status=status,
@@ -1291,14 +1258,12 @@ class EntityService:
 
         if entity.entity_type == "task":
             create_seed_fields: dict[str, object] = {}
-            if isinstance(work_priority, str):
-                create_seed_fields["priority"] = work_priority
-            if isinstance(work_due_date, date):
-                create_seed_fields["due_date"] = work_due_date
-            if isinstance(work_assignees, list):
-                create_seed_fields["assignees"] = [
-                    str(a) for a in cast(list[object], work_assignees)
-                ]
+            if priority is not None:
+                create_seed_fields["priority"] = priority
+            if due_date is not None:
+                create_seed_fields["due_date"] = due_date
+            if assignees is not None:
+                create_seed_fields["assignees"] = assignees
             if work_board_status is not None:
                 create_seed_fields["board_status"] = work_board_status
             await self.sync_task_work_item(
@@ -1370,7 +1335,7 @@ class EntityService:
         return await CRMEntity.get(entity_id)
 
     @staticmethod
-    def _entity_merge_scalar_value(entity: CRMEntity, key: str) -> object:
+    def _entity_merge_scalar_value(entity: CRMEntity, key: str) -> EntityMergeScalar:
         match key:
             case "name":
                 return entity.name
@@ -1386,7 +1351,9 @@ class EntityService:
                 raise ValueError(f"Unsupported merge scalar key: {key}")
 
     @staticmethod
-    def _set_entity_merge_scalar_value(entity: CRMEntity, key: str, value: object) -> None:
+    def _set_entity_merge_scalar_value(
+        entity: CRMEntity, key: str, value: EntityMergeScalar
+    ) -> None:
         match key:
             case "name":
                 if not isinstance(value, str):
@@ -1455,7 +1422,7 @@ class EntityService:
         attr_choices = dict(body.attribute_choices)
 
         conflict_scalar_keys: set[str] = set()
-        merged_scalars: dict[str, object] = {}
+        merged_scalars: dict[str, EntityMergeScalar] = {}
         for key in _MERGE_SCALAR_KEYS:
             av = self._entity_merge_scalar_value(survivor, key)
             bv = self._entity_merge_scalar_value(source, key)
@@ -1508,19 +1475,19 @@ class EntityService:
                 "Extra keys in attribute_choices (no conflict): " + ", ".join(sorted(extra_attr))
             )
 
-        def _coerce_str_list(value: object | None) -> list[str]:
+        def _coerce_str_list(value: JsonValue | None) -> list[str]:
             if value is None:
                 return []
             if not isinstance(value, list):
                 raise ValueError("Expected a list of strings")
             merged: list[str] = []
-            for item in cast(list[object], value):
+            for item in value:
                 if not isinstance(item, str):
                     raise ValueError("Expected a list of strings")
                 merged.append(item)
             return merged
 
-        def _union_str_lists(a: object | None, b: object | None) -> list[str]:
+        def _union_str_lists(a: JsonValue | None, b: JsonValue | None) -> list[str]:
             merged: list[str] = []
             merged.extend(_coerce_str_list(a))
             merged.extend(_coerce_str_list(b))
@@ -1644,10 +1611,9 @@ class EntityService:
         if update_attributes_raw is None:
             update_attributes: JsonObject = {}
         else:
-            parsed_update_attributes = _as_json_object(update_attributes_raw)
-            if parsed_update_attributes is None:
+            if not isinstance(update_attributes_raw, dict):
                 raise ValueError("attributes must be an object or null")
-            update_attributes = parsed_update_attributes
+            update_attributes = update_attributes_raw
         if "attributes" in updates:
             attributes_for_validation = update_attributes
         else:
@@ -1733,7 +1699,7 @@ class EntityService:
             if "assignees" in updates:
                 update_assignees = updates.get("assignees")
                 update_seed_fields["assignees"] = (
-                    [str(a) for a in cast(list[object], update_assignees)]
+                    [str(a) for a in update_assignees]
                     if isinstance(update_assignees, list)
                     else []
                 )
@@ -2773,7 +2739,7 @@ class EntityService:
         summary_raw = attrs.get("ai_analysis_last_error")
         summary = summary_raw.strip() if isinstance(summary_raw, str) else ""
         failures_raw = attrs.get("ai_analysis_apply_failures")
-        failures_list = cast(list[object], failures_raw) if isinstance(failures_raw, list) else []
+        failures_list = failures_raw if isinstance(failures_raw, list) else []
         has_failures_list = len(failures_list) > 0
         if not summary and not has_failures_list:
             raise ValueError(
@@ -2793,7 +2759,7 @@ class EntityService:
 
         cleaned_failures: list[dict[str, str]] = []
         if isinstance(failures_raw, list):
-            for raw_row in cast(list[object], failures_raw):
+            for raw_row in failures_raw:
                 row = _as_json_object(raw_row)
                 if row is None:
                     continue
@@ -3556,8 +3522,8 @@ class EntityService:
             tags=raw.get("tags") or [],
             note_date=note_date,
             due_date=self._parse_optional_date_iso(raw.get("due_date")),
-            priority=raw.get("priority"),
-            assignees=raw.get("assignees") or [],
+            priority=ent.priority,
+            assignees=ent.assignees if ent.assignees is not None else [],
             source_entity_id=source_entity_id,
         )
 
@@ -4127,7 +4093,7 @@ class EntityService:
             entity_types=entity_types,
         )
         note_family_lc = {str(t).lower() for t in note_family_type_ids}
-        for i, raw_ent in enumerate(cast(list[object], entities_data)):
+        for i, raw_ent in enumerate(entities_data):
             ent_payload = _as_json_object(raw_ent)
             if ent_payload is None:
                 raise ValueError(f"entities[{i}] must be an object")
@@ -4145,7 +4111,7 @@ class EntityService:
         if not isinstance(rels_data, list):
             rels_data = []
         rel_extracted: list[AIAnalyzeRelationshipExtracted] = []
-        for i, raw_rel in enumerate(cast(list[object], rels_data)):
+        for i, raw_rel in enumerate(rels_data):
             rel_payload = _as_json_object(raw_rel)
             if rel_payload is None:
                 raise ValueError(f"relationships[{i}] must be an object")
@@ -4154,7 +4120,7 @@ class EntityService:
         attachment_summaries: list[JsonObject] = []
         summaries_data = normalized_result.get("attachment_summaries")
         if isinstance(summaries_data, list):
-            for raw_item in cast(list[object], summaries_data):
+            for raw_item in summaries_data:
                 item = _as_json_object(raw_item)
                 if item is None:
                     continue
@@ -4207,7 +4173,7 @@ class EntityService:
         entities_data = normalized.get("entities")
         if isinstance(entities_data, list):
             normalized_entities: list[JsonValue] = []
-            for entity in cast(list[object], entities_data):
+            for entity in entities_data:
                 entity_obj = _as_json_object(entity)
                 normalized_entities.append(
                     self._normalize_entity_payload(entity_obj)
@@ -4232,7 +4198,7 @@ class EntityService:
         entities_data = normalized.get("entities")
         if not isinstance(entities_data, list):
             return
-        for i, raw_ent in enumerate(cast(list[object], entities_data)):
+        for i, raw_ent in enumerate(entities_data):
             ent = _as_json_object(raw_ent)
             if ent is None:
                 raise ValueError(f"entities[{i}] must be an object")
@@ -4285,7 +4251,7 @@ class EntityService:
             return []
         found: list[JsonObject] = []
 
-        def add_from_parts(parts_raw: object) -> None:
+        def add_from_parts(parts_raw: JsonValue | None) -> None:
             for part in iter_json_parts(parts_raw):
                 if part_json_has_data(part):
                     data = _as_json_object(part.get("data"))
@@ -4302,7 +4268,7 @@ class EntityService:
 
         raw_artifacts = task_result.get("artifacts")
         if isinstance(raw_artifacts, list):
-            for raw_artifact in cast(list[object], raw_artifacts):
+            for raw_artifact in raw_artifacts:
                 artifact = _as_json_object(raw_artifact)
                 if artifact is None:
                     continue
@@ -4310,7 +4276,7 @@ class EntityService:
 
         history = task_result.get("history")
         if isinstance(history, list):
-            for raw_message in reversed(cast(list[object], history)):
+            for raw_message in reversed(history):
                 message = _as_json_object(raw_message)
                 if message is None:
                     continue
@@ -4337,42 +4303,30 @@ class EntityService:
         return {}
 
     def _extract_json_from_text(self, text: str) -> JsonObject:
-        """Извлекает JSON из текста (включая markdown code blocks)."""
+        """Извлекает JSON-объект из текста: markdown-блок, весь текст, срез между скобками."""
         json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
         if json_match:
-            try:
-                parsed_block = cast(object, json.loads(json_match.group(1).strip()))
-                parsed_obj = _as_json_object(parsed_block)
-                if parsed_obj is not None:
-                    return parsed_obj
-            except (json.JSONDecodeError, TypeError):
-                pass
+            parsed_block = _json_object_from_fragment(json_match.group(1).strip())
+            if parsed_block is not None:
+                return parsed_block
 
         stripped = text.strip()
         if stripped.startswith("{") or stripped.startswith("["):
-            try:
-                parsed_full = cast(object, json.loads(stripped))
-                parsed_obj = _as_json_object(parsed_full)
-                if parsed_obj is not None:
-                    return parsed_obj
-            except (json.JSONDecodeError, TypeError):
-                pass
+            parsed_full = _json_object_from_fragment(stripped)
+            if parsed_full is not None:
+                return parsed_full
 
         if "{" in stripped:
             start = stripped.find("{")
             end = stripped.rfind("}")
             if start != -1 and end > start:
-                try:
-                    parsed_slice = cast(object, json.loads(stripped[start : end + 1]))
-                    parsed_obj = _as_json_object(parsed_slice)
-                    if parsed_obj is not None:
-                        return parsed_obj
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                parsed_slice = _json_object_from_fragment(stripped[start : end + 1])
+                if parsed_slice is not None:
+                    return parsed_slice
 
         return {}
 
-    def _extract_summary_from_payload(self, payload: object) -> str | None:
+    def _extract_summary_from_payload(self, payload: JsonValue) -> str | None:
         """Извлекает summary из вложенного payload A2A ответа."""
         payload_obj = _as_json_object(payload)
         if payload_obj is not None:
@@ -4394,7 +4348,7 @@ class EntityService:
             return None
 
         if isinstance(payload, list):
-            for item in cast(list[object], payload):
+            for item in payload:
                 nested_summary = self._extract_summary_from_payload(item)
                 if nested_summary is not None:
                     return nested_summary
@@ -4402,14 +4356,14 @@ class EntityService:
 
         return None
 
-    def _extract_string_list_from_payload(self, payload: object, key: str) -> list[str]:
+    def _extract_string_list_from_payload(self, payload: JsonValue, key: str) -> list[str]:
         """Извлекает список строк по ключу из вложенного payload."""
         payload_obj = _as_json_object(payload)
         if payload_obj is not None:
             raw_value = payload_obj.get(key)
             if isinstance(raw_value, list):
                 collected: list[str] = []
-                for item in cast(list[object], raw_value):
+                for item in raw_value:
                     if isinstance(item, str):
                         normalized = item.strip()
                         if normalized:
@@ -4429,7 +4383,7 @@ class EntityService:
             return []
 
         if isinstance(payload, list):
-            for item in cast(list[object], payload):
+            for item in payload:
                 nested = self._extract_string_list_from_payload(item, key)
                 if nested:
                     return nested
@@ -4498,7 +4452,7 @@ class EntityService:
         aliases: list[str] = []
         raw_aliases = attrs.get("aliases")
         if isinstance(raw_aliases, list):
-            for alias in cast(list[object], raw_aliases):
+            for alias in raw_aliases:
                 if isinstance(alias, str) and alias.strip() and alias.strip() != name:
                     aliases.append(alias.strip())
         if entity_type == "member":
@@ -4539,11 +4493,11 @@ class EntityService:
         return out
 
     @staticmethod
-    def _normalize_summary_entity_links(raw_links: object) -> list[JsonObject]:
+    def _normalize_summary_entity_links(raw_links: JsonValue) -> list[JsonObject]:
         if not isinstance(raw_links, list):
             return []
         normalized: list[JsonObject] = []
-        for raw_item in cast(list[object], raw_links):
+        for raw_item in raw_links:
             item = _as_json_object(raw_item)
             if item is None:
                 continue
@@ -4572,9 +4526,7 @@ class EntityService:
         entity_ids: list[str] = []
         seen_ids: set[str] = set()
 
-        def append_entity_id(raw_id: object) -> None:
-            if not isinstance(raw_id, str):
-                return
+        def append_entity_id(raw_id: str) -> None:
             entity_id = raw_id.strip()
             if not entity_id or entity_id in seen_ids or entity_id in note_ids:
                 return
@@ -4633,7 +4585,7 @@ class EntityService:
             if any(ch in canonical for ch in "[]()"):
                 continue
             raw_aliases = entry.get("aliases")
-            aliases = cast(list[object], raw_aliases) if isinstance(raw_aliases, list) else []
+            aliases: list[JsonValue] = raw_aliases if isinstance(raw_aliases, list) else []
             names = [canonical, *aliases]
             for raw_name in names:
                 if not isinstance(raw_name, str) or not raw_name.strip():
@@ -4679,14 +4631,15 @@ class EntityService:
             return []
         seen: set[str] = set()
         result: list[str] = []
-        for entity_id in cast(list[str], self._MENTION_TOKEN_RE.findall(text)):
+        for match in self._MENTION_TOKEN_RE.finditer(text):
+            entity_id = match.group(1)
             if entity_id not in seen:
                 seen.add(entity_id)
                 result.append(entity_id)
         return result
 
     def _enrich_description_with_entity_mentions(
-        self, description: str, entities: list[dict[str, object]]
+        self, description: str, entities: list[JsonObject]
     ) -> str:
         """
         Вставляет [@Name](entity:id) токены в plain-текст description.
@@ -4711,7 +4664,7 @@ class EntityService:
                 continue
             entries.append((name_stripped, name_stripped, entity_id))
             raw_aliases = entity.get("aliases")
-            aliases = cast(list[object], raw_aliases) if isinstance(raw_aliases, list) else []
+            aliases: list[JsonValue] = raw_aliases if isinstance(raw_aliases, list) else []
             for alias in aliases:
                 alias_stripped = alias.strip() if isinstance(alias, str) else ""
                 if alias_stripped:
@@ -4814,19 +4767,19 @@ class EntityService:
         ]
         if not linked_target_ids:
             return
-        entities: list[dict[str, object]] = []
+        entities: list[JsonObject] = []
         for entity_id in linked_target_ids:
             entity = await CRMEntity.get(entity_id)
             if not entity or not entity.name:
                 continue
-            entry: dict[str, object] = {"entity_id": entity_id, "name": entity.name}
+            entry: JsonObject = {"entity_id": entity_id, "name": entity.name}
             attrs = entity.attributes or {}
             aliases: list[str] = []
 
             # Псевдонимы, вручную заданные пользователем в атрибуте aliases
             raw_aliases = attrs.get("aliases")
             if isinstance(raw_aliases, list):
-                for a in cast(list[object], raw_aliases):
+                for a in raw_aliases:
                     a_str = (a or "").strip() if isinstance(a, str) else ""
                     if a_str and a_str != entity.name:
                         aliases.append(a_str)
@@ -4879,7 +4832,7 @@ class EntityService:
 
             mentioned_entities = (note.attributes or {}).get("mentioned_entities")
             if isinstance(mentioned_entities, list):
-                for entity_name in cast(list[object], mentioned_entities):
+                for entity_name in mentioned_entities:
                     if isinstance(entity_name, str):
                         append_entity(entity_name)
 
@@ -5355,10 +5308,10 @@ class EntityService:
         return True
 
     @staticmethod
-    def _normalize_summary_entity_list(cached_entities: object) -> list[str]:
+    def _normalize_summary_entity_list(cached_entities: JsonValue) -> list[str]:
         normalized_entities: list[str] = []
         if isinstance(cached_entities, list):
-            for entity_name in cast(list[object], cached_entities):
+            for entity_name in cached_entities:
                 if isinstance(entity_name, str):
                     normalized = entity_name.strip()
                     if normalized:
@@ -5598,7 +5551,7 @@ class EntityService:
                 raw_entities = p.get("entities")
                 if not isinstance(raw_entities, list):
                     continue
-                for name in cast(list[object], raw_entities):
+                for name in raw_entities:
                     if isinstance(name, str) and name.strip() and name.strip() not in merged:
                         merged.append(name.strip())
             summary_entities = merged[:12]
@@ -6031,9 +5984,7 @@ class EntityService:
                 crm_work_item_service=self._crm_work_item_service,
             )
             for resp in enriched_centers:
-                center_payload_by_id[resp.entity_id] = cast(
-                    JsonObject, resp.model_dump(mode="json")
-                )
+                center_payload_by_id[resp.entity_id] = model_json_object(resp)
 
         result: dict[str, JsonObject] = {}
         for eid in entity_ids:
@@ -6082,7 +6033,7 @@ class EntityService:
         )
         if len(enriched) != 1:
             raise ValueError("_entity_as_api_dict: expected a single enriched entity")
-        return cast(JsonObject, enriched[0].model_dump(mode="json"))
+        return model_json_object(enriched[0])
 
     async def _related_entities_as_api_dicts(self, entities: list[CRMEntity]) -> list[JsonObject]:
         if not entities:
@@ -6092,7 +6043,7 @@ class EntityService:
             entities,
             crm_work_item_service=self._crm_work_item_service,
         )
-        return [cast(JsonObject, resp.model_dump(mode="json")) for resp in enriched]
+        return [model_json_object(resp) for resp in enriched]
 
     @staticmethod
     def _entity_to_dict(entity: CRMEntity) -> JsonObject:
@@ -6354,8 +6305,8 @@ class EntityService:
         decisions = cur["decisions"]
         if isinstance(decisions, str) and decisions.strip():
             try:
-                parsed_decisions = cast(object, json.loads(decisions))
-            except (json.JSONDecodeError, TypeError) as e:
+                parsed_decisions = parse_json_value(decisions, "decisions")
+            except ValueError as e:
                 raise ValueError(
                     "deduplicate_batch: decisions is an invalid JSON string"
                 ) from e
@@ -6426,7 +6377,7 @@ class EntityService:
         decisions_raw = result_data["decisions"]
         if not isinstance(decisions_raw, list):
             raise ValueError("deduplicate_batch: decisions must be an array")
-        decisions = cast(list[object], decisions_raw)
+        decisions = decisions_raw
         if len(decisions) != len(chunk):
             raise ValueError(
                 f"deduplicate_batch: expected {len(chunk)} decisions items, got {len(decisions)}"

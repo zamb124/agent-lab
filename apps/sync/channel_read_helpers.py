@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from apps.sync.models.channel import SyncChannel, SyncChannelMember
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.channel_member import SyncChannelMember
 from apps.sync.models.channels import ChannelRead, ChannelType
 from apps.sync.models.common import UserBrief
 from apps.sync.models.lane_preview import ChannelLaneSummary

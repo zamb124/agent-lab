@@ -30,7 +30,7 @@ Flows (`apps/flows`, порт 8001, база `platform_agents`) — владел
 
 ### Layout
 
-Исключение из `main.mdc` § Стандарт сервиса: код сервиса — в `apps/flows/src/**`, DI — `FlowsDi` в `apps/flows/di.py`, воркер — `apps/flows_worker/` с `di_class=FlowsDi`, builtin tools — `apps/flows/tools/<tag>/`, bundles — `apps/flows/bundles/`. В `apps/flows/src/` существуют только пакеты: `a2a`, `agent` (LinnexAgent: device auth, LLM proxy), `api`, `channels`, `durable_execution`, `evaluation`, `files`, `models` (все таблицы flows), `observability`, `registry`, `resources`, `runners`, `runtime`, `services`, `state`, `streaming`, `tasks`, `tools` (базовые классы tools), `triggers` и модуль `events.py`. Клиенты — `core/clients/`, DB-примитивы — `core/db/`, middleware — `core/middleware/`. `[без гейта]`
+Исключение из `main.mdc` § Стандарт сервиса: код сервиса — в `apps/flows/src/**`, DI — `FlowsDi` в `apps/flows/di.py`, воркер — `apps/flows_worker/` с `di_class=FlowsDi`, builtin tools — `apps/flows/tools/<tag>/`, bundles — `apps/flows/bundles/`. В `apps/flows/src/` существуют только пакеты: `a2a`, `agent` (LinnexAgent: device auth, LLM proxy), `api`, `channels`, `durable_execution`, `evaluation`, `files`, `models` (все таблицы flows), `observability`, `registry`, `resources`, `runners`, `runtime`, `services`, `state`, `streaming`, `tasks`, `tools` (базовые классы tools), `triggers` и модуль `events.py`. HTTP-клиент peer-сервиса — `core/clients/` (`TeamClient` в `core/clients/team_client.py`, `WorktrackerClient` в `core/clients/worktracker_client.py`). Фасад, который зовёт сервис flows, — модуль `apps/flows/src/services/`. Каталога clients в `apps/flows/src/` нет. DB-примитивы — `core/db/`, middleware — `core/middleware/`. Остальной состав `apps/flows/src/` сверх перечисленных пакетов `[без гейта]`.
 
 ### Ноды
 
@@ -107,6 +107,8 @@ Flows (`apps/flows`, порт 8001, база `platform_agents`) — владел
 
 ## Гейты
 
+- `scripts/check_evaluation_lab_model_files.py` (`make lint`) — одна таблица evaluation lab на файл `apps/flows/src/models/evaluation_lab/`.
+- `scripts/check_flows_src_clients.py` (`make lint`) — в `apps/flows/src/` нет каталога clients.
 - `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые символы flows и контракты reflection, code_agent, observability.
 - `scripts/check_tool_contracts.py`, `scripts/check_tool_tags.py` (`make lint`) — `parameters_schema`, tag builtin tools.
 - `scripts/check_ui_canon.sh` п.23–32 (`make check-ui-canon`) — стили UI flows.

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from apps.wiki.content.prosemirror import empty_document
-from apps.wiki.models.domain import WikiPage
+from apps.wiki.models.page import WikiPage
 from apps.wiki.services.rag_metadata import (
     MAX_PAGE_ID_FILTER_SIZE,
     WIKI_SOURCE_KIND,

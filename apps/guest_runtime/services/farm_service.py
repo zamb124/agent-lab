@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +23,7 @@ from apps.guest_runtime.services.slots import (
     restore_docker_slot,
     restore_inprocess_slot,
     rewrite_loopback_url,
+    signal_process,
     start_docker_slot,
     start_inprocess_slot,
     stop_slot,
@@ -40,7 +40,12 @@ from core.guest_runtime.billing import (
     trace_guest_session_usage,
     trace_guest_start,
 )
-from core.guest_runtime.env import resolve_idle_ttl_seconds, validate_guest_env
+from core.guest_runtime.env import (
+    apply_inprocess_host_env,
+    guest_host_path,
+    resolve_idle_ttl_seconds,
+    validate_guest_env,
+)
 from core.guest_runtime.models import (
     CodeAgentSourceFile,
     GuestBuildBusyError,
@@ -74,12 +79,14 @@ from core.logging.attributes import (
 from core.test_scope import resolve_test_scope
 from core.types import (
     JsonObject,
+    JsonValue,
     parse_json_object,
     parse_json_value,
     require_json_object,
     require_json_value,
 )
 from core.utils.background import run_with_log_context
+from core.utils.process_env import child_process_env
 
 logger = get_logger(__name__)
 
@@ -536,11 +543,12 @@ class GuestFarmService:
             if restored_inprocess is not None:
                 self._start_log_drain(restored_inprocess, body.flow_id, body.node_id)
                 return restored_inprocess
-            if lease.process_id is not None:
-                try:
-                    os.kill(lease.process_id, 15)
-                except ProcessLookupError:
-                    pass
+            if lease.process_id is not None and not signal_process(lease.process_id, 15):
+                logger.info(
+                    "guest_runtime_stale_process_absent",
+                    guest_lease_id=lease.guest_lease_id,
+                    process_id=lease.process_id,
+                )
         if lease.executor == GuestExecutorKind.DOCKER and lease.container_id is not None:
             restored = await restore_docker_slot(lease.container_id)
             if restored is not None:
@@ -600,9 +608,8 @@ class GuestFarmService:
             raise ValueError("llm_proxy_base_url is required")
         if not body.capability_gateway_base_url.strip():
             raise ValueError("capability_gateway_base_url is required")
-        path = os.environ.get("PATH")
-        if path is None or path.strip() == "":
-            raise RuntimeError("PATH is required for guest env")
+        parent = child_process_env()
+        _ = guest_host_path(parent)
         llm_url = body.llm_proxy_base_url
         gateway_url = body.capability_gateway_base_url
         env: dict[str, str] = {
@@ -656,13 +663,7 @@ class GuestFarmService:
             env["HOME"] = "/tmp"
             env["XDG_CACHE_HOME"] = "/tmp"
             return env
-        env["PATH"] = path
-        home = os.environ.get("HOME")
-        if home is not None and home.strip() != "":
-            env["HOME"] = home
-        lang = os.environ.get("LANG")
-        if lang is not None and lang.strip() != "":
-            env["LANG"] = lang
+        apply_inprocess_host_env(env, parent)
         return env
 
     def _start_log_drain(self, slot: GuestSlot, flow_id: str, node_id: str) -> None:
@@ -995,7 +996,7 @@ def _extract_message_identity(params: JsonObject) -> tuple[str | None, str | Non
     return task_id, context_id
 
 
-def _optional_log_str(value: object) -> str | None:
+def _optional_log_str(value: JsonValue) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None

@@ -25,6 +25,7 @@ alwaysApply: false
 6. Каталог: каждый процесс на старте пишет регистрации в Redis HASH `platform:event_catalog` (`store_registered_platform_events`); полный каталог — `load_platform_event_catalog` (`GET /flows/api/v1/platform-events/catalog`). `filter_fields` записи выводит `derive_filter_fields` из JSON Schema payload; UI schema не парсит.
 7. Redis-клиент шины — `events_redis_client()` (`core/events/redis_client.py`), один на running event loop; при смене loop пересоздаётся.
 8. WS-фрейм push — сериализованный `PlatformEvent` без `delivery`.
+9. События леджерных команды строятся в транзакции полосы и сохраняются в `LaneCommit.events`; публикация — `publish_lane_run` после commit, потерянные догоняет `relay_lane_commits` → `database.mdc` § Полосы. Ответ команды публикацию не ждёт; доставка at-least-once с дедупликацией в bus по `event_id`.
 
 ### Потребители
 

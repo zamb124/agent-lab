@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from core.authz.service import AuthzService
 from core.config import get_settings
-from core.context import require_active_company, require_context
+from core.context import require_active_company, require_context, resolve_namespace_or_raise
 from core.data_tables.models import DATA_TABLE_CONTENT_TYPE, normalize_data_table_filename
-from core.documents.placement import DocsBindResult, DocsPlacement
-from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind
+from core.documents.placement import DocumentPlacement
+from core.documents.tree_service import DocumentTreeService, PlaceResult
+from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.file_ref import FileRef, stored_file_ref
 from core.files.models import FileRecord
+from core.files.object_key import object_key
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import FilePrincipal
-from core.files.registry import default_docs_placement
 from core.files.retention import FileRetentionKind
 from core.files.retention_promote import promote_file_retention_record
 from core.files.storage import FileStorage, retention_fields_from_spec
@@ -23,7 +27,6 @@ from core.files.urls import normalize_files_route_segment
 from core.types import JsonObject
 
 RagIndexHook = Callable[[str, str, JsonObject | None], Awaitable[None]]
-DocsBindHook = Callable[[DocsPlacement], Awaitable[DocsBindResult]]
 
 
 def _source_kind_metadata_value(source_kind: FileSourceKind | str) -> str:
@@ -36,13 +39,13 @@ class FilesService:
         self,
         *,
         files_route_segment: str,
+        tree: DocumentTreeService,
         rag_index_hook: RagIndexHook | None = None,
-        docs_bind_hook: DocsBindHook | None = None,
     ) -> None:
         self._storage: FileStorage = FileStorage()
         self._files_route_segment: str = normalize_files_route_segment(files_route_segment)
+        self._tree: DocumentTreeService = tree
         self._rag_index_hook: RagIndexHook | None = rag_index_hook
-        self._docs_bind_hook: DocsBindHook | None = docs_bind_hook
 
     def _resolve_route_segment(self, route_segment: str | None) -> str:
         if route_segment is not None:
@@ -101,8 +104,7 @@ class FilesService:
         )
 
         await self._run_post_create(file_record, spec, post_create)
-        await self._bind_after_create(file_record, spec, title=effective_name)
-        return file_record
+        return await self._bind_after_create(file_record, spec, title=effective_name)
 
     async def register_s3(
         self,
@@ -151,8 +153,7 @@ class FilesService:
             route_segment=self._resolve_route_segment(route_segment),
         )
         await self._run_post_create(file_record, spec, post_create)
-        await self._bind_after_create(file_record, spec, title=original_name)
-        return file_record
+        return await self._bind_after_create(file_record, spec, title=original_name)
 
     async def get(self, file_id: str) -> FileRecord:
         record = await self._storage.get(file_id)
@@ -163,13 +164,23 @@ class FilesService:
     async def get_optional(self, file_id: str) -> FileRecord | None:
         return await self._storage.get(file_id)
 
-    async def bind(self, file_id: str, placement: DocsPlacement) -> DocsBindResult:
-        if self._docs_bind_hook is None:
-            raise RuntimeError("docs bind is not configured for this FilesService")
-        if placement.file_id != file_id:
-            raise ValueError("placement.file_id must match file_id argument")
-        _ = await self.get(file_id)
-        return await self._docs_bind_hook(placement)
+    async def require_stored_file_ref(self, file_id: str) -> FileRef:
+        record = await self.get_optional(file_id)
+        if record is None:
+            raise PlatformNotFoundError(f"File {file_id!r} not found.")
+        return stored_file_ref(record)
+
+    async def place(self, file_id: str, placement: DocumentPlacement) -> PlaceResult:
+        record = await self.get(file_id)
+        kind = FileSourceKind(record.source_kind) if record.source_kind else FileSourceKind.OFFICE_DOCUMENT
+        return await self._tree.place(
+            record,
+            source_kind=kind,
+            source_ref=FileSourceRef(),
+            placement=placement,
+            namespace=resolve_namespace_or_raise(),
+            user_id=record.uploaded_by or "",
+        )
 
     async def read_bytes(
         self,
@@ -199,6 +210,41 @@ class FilesService:
         )
         return await self.save(updated)
 
+    async def replace_content(
+        self,
+        record: FileRecord,
+        data: bytes,
+        *,
+        content_type: str,
+        expected_checksum: str | None,
+    ) -> FileRecord:
+        if expected_checksum is not None and record.checksum != expected_checksum:
+            raise PlatformConflictError("file checksum mismatch")
+        if record.company_id is None or record.company_id == "":
+            raise ValueError("file has no company")
+        digest = hashlib.sha256(data).hexdigest()
+        new_key = object_key(record.company_id, record.file_id, digest[:16], record.original_name)
+        s3 = await FileGate().client_for_storage_id(record.storage_id, record=record)
+        _ = await s3.upload_bytes(
+            data=data,
+            key=new_key,
+            content_type=content_type,
+            public=record.is_public,
+        )
+        claimed = await FileRecord.claim_content_replace(
+            record.file_id,
+            expected_checksum=record.checksum,
+            s3_key=new_key,
+            file_size=len(data),
+            checksum=digest,
+        )
+        if not claimed:
+            _ = await s3.delete_file(new_key)
+            raise PlatformConflictError("file checksum mismatch")
+        if new_key != record.s3_key:
+            _ = await s3.delete_file(record.s3_key)
+        return await self.get(record.file_id)
+
     async def promote_retention(
         self,
         file_id: str,
@@ -222,22 +268,23 @@ class FilesService:
         spec: FileCreateSpec,
         *,
         title: str,
-    ) -> None:
-        placement = spec.placement
-        if placement is None:
-            placement = default_docs_placement(
-                spec.source_kind,
-                spec.source_ref,
-                title=title,
-            )
-        if placement is None:
-            return
-        bound = placement.model_copy(update={"file_id": file_record.file_id})
+    ) -> FileRecord:
+        _ = title
         try:
-            _ = await self.bind(file_record.file_id, bound)
+            placed = await self._tree.place(
+                file_record,
+                source_kind=FileSourceKind(spec.source_kind),
+                source_ref=spec.source_ref,
+                placement=spec.placement,
+                namespace=resolve_namespace_or_raise(),
+                user_id=file_record.uploaded_by or "",
+            )
         except Exception as bind_error:
             _ = await self.delete(file_record.file_id)
             raise bind_error
+        if placed.record.file_id != file_record.file_id:
+            _ = await self.delete(file_record.file_id)
+        return placed.record
 
     async def _run_post_create(
         self,

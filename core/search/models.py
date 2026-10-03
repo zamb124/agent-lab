@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from core.types import JsonValue
 
 _SEARCH_INDEX_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 
@@ -94,13 +96,13 @@ class MetaSearchRequest(BaseModel):
 
     @field_validator("index_ids", mode="before")
     @classmethod
-    def _normalize_index_ids(cls, value: object) -> list[str]:
+    def _normalize_index_ids(cls, value: JsonValue) -> list[str]:
         if value is None:
             return []
         if isinstance(value, str):
-            raw: list[object] = [value]
+            raw: list[JsonValue] = [value]
         elif isinstance(value, list):
-            raw = cast(list[object], value)
+            raw = value
         else:
             raise ValueError("index_ids must be a string or an array")
         out: list[str] = []
@@ -118,13 +120,13 @@ class MetaSearchRequest(BaseModel):
 
     @field_validator("providers", mode="before")
     @classmethod
-    def _normalize_providers(cls, value: object) -> list[str]:
+    def _normalize_providers(cls, value: JsonValue) -> list[str]:
         if value is None:
             return ["auto"]
         if isinstance(value, str):
-            raw: list[object] = [value]
+            raw: list[JsonValue] = [value]
         elif isinstance(value, list):
-            raw = cast(list[object], value)
+            raw = value
         else:
             raise ValueError("providers must be a string or an array")
         out: list[str] = []

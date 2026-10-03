@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 import pytest
 
-import core.files.object_store.pool as pool_module
+import core.files.storage as storage_module
 from core.files.create_spec import FileSourceKind
 from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.object_store.resolved import ResolvedStorage
@@ -43,7 +43,7 @@ async def test_process_file_from_bytes_encodes_unicode_metadata_for_s3(monkeypat
     async def _client_for(_resolved: ResolvedStorage) -> _FakeS3Client:
         return s3
 
-    monkeypatch.setattr(pool_module, "client_for", _client_for)
+    monkeypatch.setattr(storage_module, "client_for", _client_for)
 
     storage = FileStorage()
     retention = default_retention_for_source(FileSourceKind.GENERATED_EPHEMERAL)

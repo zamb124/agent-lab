@@ -6,13 +6,14 @@ import time
 from urllib.parse import urlsplit
 
 from core.search import MetaSearchProviderStatus
+from core.types import JsonValue
 
 
-def string_field(value: object) -> str:
+def string_field(value: JsonValue) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def int_rank(value: object, *, default: int) -> int:
+def int_rank(value: JsonValue, *, default: int) -> int:
     return value if isinstance(value, int) and value >= 1 else default
 
 

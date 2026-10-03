@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import platform
 import subprocess
 from pathlib import Path
@@ -41,10 +40,11 @@ def detect_host_platform() -> str:
 
 
 def release_source() -> str:
-    configured = os.environ.get("AGENT__RELEASES__SOURCE")
-    if configured is not None and configured.strip():
-        return configured.strip()
-    if os.environ.get("TESTING") == "true":
+    settings = get_settings()
+    source = settings.agent.releases.source.strip()
+    if source != "":
+        return source
+    if settings.testing:
         return "local"
     return "github"
 

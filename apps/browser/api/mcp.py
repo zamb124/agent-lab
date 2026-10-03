@@ -283,7 +283,7 @@ def _mcp_tool_trace_attributes(*, tool_name: str, arguments: JsonObject) -> dict
     return out
 
 
-def _parse_interaction_profile(value: object) -> InteractionProfileName:
+def _parse_interaction_profile(value: JsonValue) -> InteractionProfileName:
     if value == "off":
         return "off"
     if value == "fast":
@@ -293,7 +293,7 @@ def _parse_interaction_profile(value: object) -> InteractionProfileName:
     raise ValueError("interaction_profile must be one of: off, fast, human")
 
 
-def _parse_anti_bot_tier(value: object) -> AntiBotTier:
+def _parse_anti_bot_tier(value: JsonValue) -> AntiBotTier:
     if value == "white":
         return "white"
     if value == "gray":
@@ -303,7 +303,7 @@ def _parse_anti_bot_tier(value: object) -> AntiBotTier:
     raise ValueError("anti_bot_tier must be one of: white, gray, black")
 
 
-def _optional_str(value: object, *, field: str) -> str | None:
+def _optional_str(value: JsonValue, *, field: str) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):

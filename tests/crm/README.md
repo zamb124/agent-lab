@@ -206,7 +206,7 @@ async def test_example(crm_client, unique_id):
 
 - Python 3.12+
 - uv (package manager)
-- Docker (для тестовых сервисов: PostgreSQL, Redis, MinIO)
+- Docker (для тестовых сервисов: PostgreSQL, Redis, SeaweedFS)
 
 ## Тестовое окружение
 

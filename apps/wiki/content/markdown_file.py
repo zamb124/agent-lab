@@ -13,13 +13,14 @@
 from __future__ import annotations
 
 import re
-from typing import Final, cast
+from typing import Final
 
 import yaml
 from pydantic import Field
 
 from apps.wiki.base_model import WikiBaseModel
 from apps.wiki.content.markdown_notices import WikiMarkdownNotice, WikiMarkdownNoticeKind
+from core.types import parse_yaml_value
 
 _FRONT_MATTER_RE: Final[re.Pattern[str]] = re.compile(
     r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL
@@ -64,10 +65,9 @@ def split_markdown_file(text: str) -> WikiMarkdownFileParts:
 
     body = text[match.end() :]
     notices: list[WikiMarkdownNotice] = []
-    loaded: object
     try:
-        loaded = cast("object", yaml.safe_load(match.group(1)))
-    except yaml.YAMLError as exc:
+        loaded = parse_yaml_value(match.group(1), "wiki frontmatter")
+    except (yaml.YAMLError, ValueError) as exc:
         return WikiMarkdownFileParts(
             body=body,
             notices=[
@@ -91,10 +91,8 @@ def split_markdown_file(text: str) -> WikiMarkdownFileParts:
             ],
         )
 
-    # YAML отдаёт нетипизированное дерево; дальше по коду идут только строки.
-    header = cast("dict[object, object]", loaded)
     values: dict[str, str] = {}
-    for key, value in header.items():
+    for key, value in loaded.items():
         name = str(key)
         if name not in KNOWN_KEYS:
             notices.append(

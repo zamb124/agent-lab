@@ -222,8 +222,8 @@ async def test_post_v1_embeddings_unknown_model_422(
             json={"model": "unknown/model-id", "input": "x"},
         )
     assert r.status_code == 422
-    detail = r.json().get("detail")
-    assert isinstance(detail, dict) and detail.get("reason") == "unknown_embedding_model"
+    params = r.json().get("error_params")
+    assert isinstance(params, dict) and params.get("reason") == "unknown_embedding_model"
 
 
 @pytest.mark.asyncio
@@ -277,7 +277,7 @@ async def test_post_v1_rerank_too_many_passages_422(
             json={"query": "q", "passages": ["a", "b", "c"]},
         )
     assert r.status_code == 422
-    assert r.json()["detail"]["reason"] == "too_many_passages"
+    assert r.json()["error_params"]["reason"] == "too_many_passages"
 
 
 @pytest.mark.asyncio

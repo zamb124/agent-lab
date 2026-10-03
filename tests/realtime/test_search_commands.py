@@ -211,8 +211,8 @@ async def _add_url(ctx: LiveCtx, crawl_profile_id: str, crawl_domain_id: str, ki
     return _str_field(first, "crawl_url_id")
 
 
-async def _indexed_search_pool(ctx: LiveCtx, kind: str) -> tuple[str, str]:
-    """Индекс + документ в RAG, затем поиск до появления результатов: (query, serp_cache_key)."""
+async def _indexed_search_pool(ctx: LiveCtx, kind: str) -> tuple[str, str, str]:
+    """Индекс + документ в RAG, затем поиск до появления результатов: (query, serp_cache_key, search_index_id)."""
     search_index_id = await _create_index(ctx, kind)
     marker = f"live_search_marker_{ctx.unique_id}_{ctx.suffix}"
     text = f"Документ платформенного индекса содержит уникальный маркер {marker} и длинный текст для chunking."
@@ -236,7 +236,7 @@ async def _indexed_search_pool(ctx: LiveCtx, kind: str) -> tuple[str, str]:
         body = await _expect_json(response, ok=(200,), label="index_search")
         cache_key = body.get("serp_cache_key")
         if body.get("results") and isinstance(cache_key, str) and cache_key:
-            return text, cache_key
+            return text, cache_key, search_index_id
         await asyncio.sleep(1.0)
     raise AssertionError(f"index search returned no results for {search_index_id}")
 
@@ -380,17 +380,17 @@ async def _setup_indexes_batch_get(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_query_search(ctx: LiveCtx) -> JsonObject:
-    query, _ = await _indexed_search_pool(ctx, "qsearch")
-    return {"query": query, "limit": 5, "providers": ["index"]}
+    query, _, search_index_id = await _indexed_search_pool(ctx, "qsearch")
+    return {"query": query, "limit": 5, "providers": ["index"], "index_ids": [search_index_id]}
 
 
 async def _setup_query_serp_more(ctx: LiveCtx) -> JsonObject:
-    _, cache_key = await _indexed_search_pool(ctx, "qmore")
+    _, cache_key, _ = await _indexed_search_pool(ctx, "qmore")
     return {"serp_cache_key": cache_key, "offset": 0, "limit": 5}
 
 
 async def _setup_query_serp_refine(ctx: LiveCtx) -> JsonObject:
-    query, cache_key = await _indexed_search_pool(ctx, "qrefine")
+    query, cache_key, _ = await _indexed_search_pool(ctx, "qrefine")
     return {"serp_cache_key": cache_key, "query": query, "limit": 5, "offset": 0, "mode": "quick"}
 
 

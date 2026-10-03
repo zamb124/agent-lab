@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.models.api import (
     OfficeCatalogRagIndexEnableResponse,
     OfficeCatalogRagIndexRebuildResponse,
@@ -17,10 +16,12 @@ from apps.office.models.api import (
     OfficeCatalogSemanticSearchRequest,
     OfficeCatalogSemanticSearchResponse,
 )
+from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError
 from core.config import get_settings
 from core.context import get_context
+from core.documents.catalog import DocumentCatalog
 from core.files.models import FileRecord
 from core.logging import get_logger
 from core.rag.indexable import effective_rag_file_category, is_rag_indexable_file_category
@@ -69,8 +70,8 @@ class OfficeCatalogRagIndexService:
         *,
         company_id: str,
         workspace_namespace: str,
-    ) -> OfficeDocumentCatalog:
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(
+    ) -> DocumentCatalog:
+        catalog = await DocumentCatalog.catalog_in_namespace(
             catalog_id,
             company_id,
             workspace_namespace,
@@ -82,8 +83,8 @@ class OfficeCatalogRagIndexService:
     @staticmethod
     def _binding_metadata(
         *,
-        binding: OfficeDocumentBinding,
-        catalog: OfficeDocumentCatalog,
+        binding: FileRecord,
+        catalog: DocumentCatalog,
         company_id: str,
         workspace_namespace: str,
         user_id: str,
@@ -94,8 +95,11 @@ class OfficeCatalogRagIndexService:
             "office_namespace": workspace_namespace,
             "catalog_id": catalog.catalog_id,
             "file_id": binding.file_id,
-            "document_title": binding.title,
-            "file_category": binding.file_category,
+            "document_title": binding.original_name,
+            "file_category": resolve_binding_metadata(
+                binding.original_name,
+                binding.content_type.split(";", 1)[0].strip(),
+            )[0],
             "uploaded_by_user_id": user_id,
             "ttl_seconds": 0,
             "external_file_owner": "peer",
@@ -147,7 +151,7 @@ class OfficeCatalogRagIndexService:
 
     async def index_binding(
         self,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
         *,
         scope_company_id: str | None = None,
         scope_workspace_namespace: str | None = None,
@@ -169,8 +173,11 @@ class OfficeCatalogRagIndexService:
                 raise ValueError("scope_user_id is required")
         else:
             company_id, workspace_namespace, user_id = self._require_context()
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(
-            binding.catalog_id,
+        catalog_id = binding.catalog_id
+        if catalog_id is None:
+            raise ValueError("file has no catalog")
+        catalog = await DocumentCatalog.catalog_in_namespace(
+            catalog_id,
             company_id,
             workspace_namespace,
         )
@@ -184,7 +191,10 @@ class OfficeCatalogRagIndexService:
             raise ValueError(f"FileRecord not found: {binding.file_id}")
 
         resolved_category = effective_rag_file_category(
-            file_category=binding.file_category,
+            file_category=resolve_binding_metadata(
+                binding.original_name,
+                binding.content_type.split(";", 1)[0].strip(),
+            )[0],
             document_name=file_record.original_name,
         )
         if not is_rag_indexable_file_category(resolved_category):
@@ -231,7 +241,7 @@ class OfficeCatalogRagIndexService:
 
     async def _searchable_catalog_ids_in_scope(
         self,
-        catalog: OfficeDocumentCatalog,
+        catalog: DocumentCatalog,
         *,
         company_id: str,
         workspace_namespace: str,
@@ -246,10 +256,10 @@ class OfficeCatalogRagIndexService:
         queue = [catalog.catalog_id]
         while queue:
             current_id = queue.pop(0)
-            children = await OfficeDocumentCatalog.child_catalogs(
-                company_id,
-                workspace_namespace,
-                current_id,
+            children = await DocumentCatalog.children_page(
+                company_id=company_id,
+                namespace=workspace_namespace,
+                parent_catalog_id=current_id,
             )
             for child in children:
                 if child.catalog_id in seen:
@@ -262,7 +272,7 @@ class OfficeCatalogRagIndexService:
 
     async def _reindex_catalog_bindings(
         self,
-        catalog: OfficeDocumentCatalog,
+        catalog: DocumentCatalog,
         *,
         company_id: str,
         workspace_namespace: str,
@@ -272,9 +282,8 @@ class OfficeCatalogRagIndexService:
 
         Возвращает task_id последнего поставленного документа и число поставленных.
         """
-        bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+        bindings = await FileRecord.alive_in_catalog(
             company_id=company_id,
-            namespace=workspace_namespace,
             catalog_id=catalog.catalog_id,
         )
         last_task_id: str | None = None
@@ -338,7 +347,7 @@ class OfficeCatalogRagIndexService:
 
     @staticmethod
     def catalog_search_options_model(
-        catalog: OfficeDocumentCatalog,
+        catalog: DocumentCatalog,
     ) -> RAGSearchOptions | None:
         raw = catalog.rag_index_search_options
         if raw is None:
@@ -406,19 +415,19 @@ class OfficeCatalogRagIndexService:
         indexable_file_ids: list[str] = []
         non_indexable_count = 0
         for searchable_catalog_id in searchable_catalog_ids:
-            bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+            bindings = await FileRecord.alive_in_catalog(
                 company_id=company_id,
-                namespace=workspace_namespace,
                 catalog_id=searchable_catalog_id,
             )
             for binding in bindings:
-                file_record = await FileRecord.get(binding.file_id)
-                document_name = (
-                    file_record.original_name if file_record is not None else binding.title
-                )
+                document_name = binding.original_name
+                file_category = resolve_binding_metadata(
+                    binding.original_name,
+                    binding.content_type.split(";", 1)[0].strip(),
+                )[0]
                 if not is_rag_indexable_file_category(
                     effective_rag_file_category(
-                        file_category=binding.file_category,
+                        file_category=file_category,
                         document_name=document_name,
                     )
                 ):
@@ -602,17 +611,20 @@ class OfficeCatalogRagIndexService:
 
         deduped_hits = self._dedupe_search_hits(hits)[:limit]
 
-        if len(searchable_catalog_ids) == 0:
-            bindings = []
-        else:
-            bindings = await OfficeDocumentBinding.active_bindings_in_catalogs(
-                company_id=company_id,
-                namespace=workspace_namespace,
-                catalog_ids=searchable_catalog_ids,
+        bindings: list[FileRecord] = []
+        for searchable_catalog_id in searchable_catalog_ids:
+            bindings.extend(
+                await FileRecord.alive_in_catalog(
+                    company_id=company_id,
+                    catalog_id=searchable_catalog_id,
+                )
             )
-        binding_by_file_and_catalog: dict[tuple[str, str], OfficeDocumentBinding] = {}
+        binding_by_file_and_catalog: dict[tuple[str, str], FileRecord] = {}
         for binding in bindings:
-            binding_by_file_and_catalog[(binding.file_id, binding.catalog_id)] = binding
+            placed_catalog_id = binding.catalog_id
+            if placed_catalog_id is None:
+                continue
+            binding_by_file_and_catalog[(binding.file_id, placed_catalog_id)] = binding
 
         catalog_titles: dict[str, str] = {}
         for searchable_id in searchable_catalog_ids:
@@ -639,7 +651,7 @@ class OfficeCatalogRagIndexService:
                     file_id=hit.document_id,
                     catalog_id=hit_catalog_id,
                     catalog_title=catalog_title,
-                    title=binding.title,
+                    title=binding.original_name,
                     snippet=hit.content,
                     score=hit.score,
                 )

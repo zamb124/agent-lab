@@ -8,7 +8,7 @@ from typing import ClassVar, Self
 from oxyde import Field as DbField
 from oxyde import Index
 
-from apps.sync.models.channel import SyncChannelMember
+from apps.sync.models.channel_member import SyncChannelMember
 from core.models.platform_model import PlatformModel
 
 

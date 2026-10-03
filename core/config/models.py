@@ -295,6 +295,19 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
+    granian_workers: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Число процессов Granian для python -m apps.<svc>.main. "
+            "Больше одного — отдельные event loop. CLI в k8s задаёт GRANIAN_WORKERS сам."
+        ),
+    )
+    granian_runtime_threads: int = Field(
+        default=2,
+        ge=1,
+        description="Потоки runtime Granian для python -m. CLI в k8s задаёт GRANIAN_RUNTIME_THREADS сам.",
+    )
     deployment_version: str | None = Field(
         default=None,
         description="Уникальная метка релиза для /health и сброса PWA-кэша в браузере; в проде задавать на каждый выкат (ENV SERVER__DEPLOYMENT_VERSION или server.deployment_version в JSON).",
@@ -954,6 +967,10 @@ class EmbeddingConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     provider: str = "provider_litserve"
+    mock: bool = Field(
+        default=False,
+        description="Детерминированный embedding-клиент без внешнего API. В тестовом контуре включён и без этого флага.",
+    )
     api: EmbeddingApiConfig = Field(default_factory=EmbeddingApiConfig)
 
     @field_validator("provider")
@@ -1545,6 +1562,13 @@ class TracingConfig(BaseModel):
     postgres_enabled: bool = True
     tempo_enabled: bool = False
     tempo_endpoint: str = "http://localhost:4317"
+    otlp_endpoint: str = Field(
+        default="",
+        description=(
+            "OTLP gRPC endpoint (Alloy). Непустое значение включает экспорт spans. "
+            "Пусто — tempo_endpoint, если tempo_enabled."
+        ),
+    )
     tempo_http_url: str = Field(
         default="http://localhost:3200",
         description=(
@@ -1645,6 +1669,27 @@ class EventsConfig(BaseModel):
         default=120_000,
         ge=1_000,
         description="Порог idle для XAUTOCLAIM pending-записей мёртвых consumers.",
+    )
+
+
+class LanesConfig(BaseModel):
+    """Строгие полосы исполнения команд (`core/lanes`)."""
+
+    lock_timeout_ms: int = Field(
+        default=3_000,
+        ge=100,
+        le=30_000,
+        description="lock_timeout транзакции полосы; превышение — ошибка lane_busy, повтор с тем же idempotency_key безопасен.",
+    )
+    commit_retention_days: int = Field(
+        default=14,
+        ge=1,
+        description="Сколько дней хранится опубликованный LaneCommit — окно идемпотентного повтора команды.",
+    )
+    relay_after_seconds: int = Field(
+        default=10,
+        ge=1,
+        description="Возраст неопубликованного LaneCommit, после которого его события публикует relay.",
     )
 
 
@@ -2102,7 +2147,7 @@ class LLMConfig(BaseModel):
 
 
 class S3Config(BaseModel):
-    """Платформенное объектное хранилище (MinIO кластера). Хранилища компаний — таблица object_storages."""
+    """Платформенное объектное хранилище (SeaweedFS кластера). Хранилища компаний — таблица object_storages."""
 
     enabled: bool = Field(default=False)
     endpoint_url: str | None = Field(default=None)
@@ -2110,7 +2155,7 @@ class S3Config(BaseModel):
     bucket_name: str = Field(default="files")
     access_key_id: str | None = Field(default=None)
     secret_access_key: str | None = Field(default=None)
-    provider: str = Field(default="minio")
+    provider: str = Field(default="seaweedfs")
     path_style: bool = Field(default=True)
 
 
@@ -2190,8 +2235,8 @@ class AgentReleaseSettings(BaseModel):
         description="PAT для GitHub Releases API; обязателен для private repo",
     )
     source: str = Field(
-        default="github",
-        description="github — GitHub Releases API; local — dist/ артефакт",
+        default="",
+        description="github — GitHub Releases API; local — dist/ артефакт; пусто — local при testing, иначе github",
     )
 
 
@@ -2210,6 +2255,60 @@ class AgentSettings(BaseModel):
         ge=300,
         le=2592000,
         description="TTL sticky A2A context_id Platform MCP сессии (MCP-сессия + flow), сек",
+    )
+    llm_proxy_use_mock_auto: bool = Field(
+        default=False,
+        description="E2E: модель auto в LLM proxy резолвится в mock, а не в humanitec",
+    )
+
+
+class CodeRunnerSettings(BaseModel):
+    """Пул и каталоги кэша code runner. Пустые пути — `<repo>/.cache`."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    python_workers: int | None = Field(
+        default=None,
+        ge=1,
+        description="Пул Python worker. Пусто — от 2 до 8 по CPU.",
+    )
+    node_workers: int | None = Field(
+        default=None,
+        ge=1,
+        description="Пул Node worker. Пусто — от 2 до 8 по CPU.",
+    )
+    go_workers: int | None = Field(
+        default=None,
+        ge=1,
+        description="Параллельные сборки Go. Пусто — от 2 до 8 по CPU; заданное значение не ниже 2.",
+    )
+    csharp_workers: int | None = Field(
+        default=None,
+        ge=1,
+        description="Параллельные сборки C#. Пусто — от 2 до 8 по CPU; заданное значение не ниже 2.",
+    )
+    lsp_cache: str = Field(
+        default="",
+        description="Корень кэша language server. Пусто — <repo>/.cache.",
+    )
+    python_sandbox_site: str = Field(
+        default="",
+        description="Target site-packages Python sandbox. Пусто — <repo>/.cache/code-runner-python-sandbox-site.",
+    )
+    node_sandbox_modules: str = Field(
+        default="",
+        description="Prefix npm-пакетов Node sandbox. Пусто — <repo>/.cache/code-runner-node-sandbox-modules.",
+    )
+    runtime_dir: str = Field(
+        default="",
+        description="Каталог managed runtime. Пусто — ~/.cache/agent-lab/runtimes.",
+    )
+    go_bin: str = Field(default="", description="Явный путь go. Пусто — runtime_dir/bin, затем PATH.")
+    node_bin: str = Field(default="", description="Явный путь node. Пусто — runtime_dir/bin, затем PATH.")
+    npm_bin: str = Field(default="", description="Явный путь npm. Пусто — runtime_dir/bin, затем PATH.")
+    dotnet_bin: str = Field(
+        default="",
+        description="Явный путь dotnet. Пусто — runtime_dir/bin, затем PATH.",
     )
 
 

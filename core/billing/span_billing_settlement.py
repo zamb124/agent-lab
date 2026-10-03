@@ -44,7 +44,7 @@ class SpanBillingSettlement:
         return f"{_SETTLED_PREFIX}{span_id}:{rule_id}"
 
     async def get_usage_id(self, span_id: str, rule_id: str) -> str | None:
-        raw = await self._storage.get(self._composite_key(span_id, rule_id), force_global=True)
+        raw = await self._storage.get(self._composite_key(span_id, rule_id))
         if raw:
             return _usage_id_from_storage_raw(raw, span_id=span_id, rule_id=rule_id)
         return None
@@ -53,5 +53,4 @@ class SpanBillingSettlement:
         _ = await self._storage.set(
             self._composite_key(span_id, rule_id),
             json.dumps(usage_id),
-            force_global=True,
         )

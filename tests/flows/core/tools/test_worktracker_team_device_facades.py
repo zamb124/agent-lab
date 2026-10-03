@@ -6,9 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from apps.flows.src.clients.device_client import DeviceClient
-from apps.flows.src.clients.team_client import TeamClient
-from apps.flows.src.clients.worktracker_client import WorktrackerClient
+from apps.flows.src.services.device_client import DeviceClient
 from apps.flows.tools.scheduling.scheduling import list_scheduled_tasks, schedule_cron_task
 from apps.flows.tools.wiki.wiki_tools import (
     wiki_create_page,
@@ -16,6 +14,8 @@ from apps.flows.tools.wiki.wiki_tools import (
     wiki_list_tree,
     wiki_update_markdown,
 )
+from core.clients.team_client import TeamClient
+from core.clients.worktracker_client import WorktrackerClient
 from core.worktracker.models import UserActor, WorkItem, WorkItemPriority, WorkItemState
 
 
@@ -83,7 +83,7 @@ async def test_device_client_tools_list_delegates() -> None:
     client = DeviceClient(redis_client)
     send = AsyncMock(return_value={"tools": []})
     with patch(
-        "apps.flows.src.clients.device_client.send_mcp_request_to_device",
+        "apps.flows.src.services.device_client.send_mcp_request_to_device",
         send,
     ):
         result = await client.tools_list("dev_1", timeout_seconds=10.0)

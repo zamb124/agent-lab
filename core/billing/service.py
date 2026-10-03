@@ -287,7 +287,7 @@ class BillingService:
         merged = copy.deepcopy(self._resource_base_prices_static)
         if self._shared_storage is None:
             return merged
-        raw = await self._shared_storage.get("billing:resource_base_prices_json", force_global=True)
+        raw = await self._shared_storage.get("billing:resource_base_prices_json")
         if not raw:
             return merged
         _merge_resource_base_price_override(merged, raw, "billing:resource_base_prices_json")
@@ -329,7 +329,7 @@ class BillingService:
         merged = await self.get_effective_resource_base_prices()
         if self._shared_storage is None:
             return merged
-        raw = await self._shared_storage.get(company_resource_prices_storage_key(company_id), force_global=True)
+        raw = await self._shared_storage.get(company_resource_prices_storage_key(company_id))
         if not raw:
             return merged
         _merge_resource_base_price_override(merged, raw, company_resource_prices_storage_key(company_id))
@@ -340,7 +340,7 @@ class BillingService:
         """Устаревший глобальный каталог (только чтение для миграции). Джоба и API используют per-company."""
         if self._shared_storage is None:
             return SettlementRulesDocument()
-        raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON, force_global=True)
+        raw = await self._shared_storage.get(STORAGE_SETTLEMENT_RULES_JSON)
         if not raw:
             return SettlementRulesDocument()
         return parse_settlement_rules_json(raw)
@@ -359,7 +359,7 @@ class BillingService:
             return default_settlement_rules_document()
 
         key = company_settlement_rules_storage_key(company_id)
-        raw = await self._shared_storage.get(key, force_global=True)
+        raw = await self._shared_storage.get(key)
         if raw:
             existing = parse_settlement_rules_json(raw)
             if existing.rules:
@@ -369,7 +369,6 @@ class BillingService:
         _ = await self._shared_storage.set(
             key,
             _settlement_rules_document_to_storage_json(fresh),
-            force_global=True,
         )
         return fresh
 
@@ -398,7 +397,6 @@ class BillingService:
         _ = await self._shared_storage.set(
             key,
             _settlement_rules_document_to_storage_json(document),
-            force_global=True,
         )
 
     async def record_usage(

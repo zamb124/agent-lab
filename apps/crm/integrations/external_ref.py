@@ -12,10 +12,10 @@ from typing import cast as type_cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 
-def _as_json_object(value: object, context: str) -> JsonObject:
+def _as_json_object(value: JsonValue, context: str) -> JsonObject:
     return require_json_object(value, context)
 
 
@@ -31,7 +31,7 @@ class ExternalRef(BaseModel):
 
     def to_json_dict(self) -> JsonObject:
         return _as_json_object(
-            type_cast(object, self.model_dump(mode="json", exclude_none=True)),
+            type_cast(JsonValue, self.model_dump(mode="json", exclude_none=True)),
             "ExternalRef JSON",
         )
 
@@ -53,7 +53,7 @@ def merge_external_refs(
     elif not isinstance(raw_refs, dict):
         raise ValueError("attributes.external_refs must be an object")
     else:
-        refs = _as_json_object(type_cast(object, raw_refs), "attributes.external_refs")
+        refs = raw_refs
     refs[source_id] = ref.to_json_dict()
     out = dict(attributes)
     out["external_refs"] = refs

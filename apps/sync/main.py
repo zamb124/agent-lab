@@ -8,7 +8,6 @@ Sync Service - FastAPI приложение для инженерного чат
 import importlib
 from pathlib import Path
 
-from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from apps.sync.api import get_api_router
@@ -20,6 +19,7 @@ from core.app.spa import mount_service_spa
 from core.config import get_settings
 from core.di import recipe
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 # side-effect: register platform event catalog types
 _ = importlib.import_module("apps.sync.events")
@@ -52,7 +52,7 @@ async def serve_call_join(token: str) -> FileResponse:
     _ = token
     ui_index = Path(__file__).parent / "ui" / "index.html"
     if not ui_index.exists():
-        raise HTTPException(status_code=404, detail="Sync UI not found")
+        raise WsCommandError("not_found", "Sync UI not found", error_code="not_found")
     return FileResponse(ui_index)
 
 

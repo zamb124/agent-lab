@@ -39,7 +39,7 @@ def disable_testing_mode():
             os.environ["_PYTEST_RAISE"] = old_pytest_raise
 
 
-from apps.flows.src.runtime.execution_context import execution_context_for
+from apps.flows.src.runtime.execution_context import execution_context_for  # noqa: E402
 from core.clients.llm.client import LLMClient  # noqa: E402
 from core.clients.llm.provider_resolution import (  # noqa: E402
     _detect_provider,
@@ -49,6 +49,7 @@ from core.clients.llm.provider_resolution import (  # noqa: E402
 from core.clients.llm.runtime import (  # noqa: E402
     create_llm_transport_client as create_transport_llm_client,
 )
+from core.config.models import YandexLLMProviderConfig  # noqa: E402
 from core.context import clear_context  # noqa: E402
 from core.pagination import OffsetPage  # noqa: E402
 from core.scheduler.models import PlatformScheduledTask  # noqa: E402
@@ -454,7 +455,6 @@ class TestLLMModelsServiceSchedulerIdempotency:
     async def test_start_background_sync_reuses_existing_pending_schedule(self):
         from core.ai.llm_models_service import LLMModelsService
 
-        repository = MagicMock()
         scheduler_client = AsyncMock()
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
@@ -492,7 +492,6 @@ class TestLLMModelsServiceSchedulerIdempotency:
     async def test_start_background_sync_resumes_paused_schedule(self):
         from core.ai.llm_models_service import LLMModelsService
 
-        repository = MagicMock()
         scheduler_client = AsyncMock()
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
@@ -553,7 +552,6 @@ class TestLLMModelsServiceSchedulerIdempotency:
     async def test_start_background_sync_raises_on_duplicates(self):
         from core.ai.llm_models_service import LLMModelsService
 
-        repository = MagicMock()
         scheduler_client = AsyncMock()
         scheduler_client.list_schedules.return_value = self._schedule_page(
             self._schedule_model(
@@ -612,7 +610,6 @@ class TestLLMModelsServiceSchedulerIdempotency:
     async def test_stop_background_sync_cancels_cached_schedule_id(self):
         from core.ai.llm_models_service import LLMModelsService
 
-        repository = MagicMock()
         scheduler_client = AsyncMock()
         scheduler_client.cancel_schedule.return_value = self._schedule_model(
             {
@@ -659,8 +656,6 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к BotHub API для получения списка моделей.
         Использует endpoint: https://bothub.chat/api/v2/model/list?children=1
         """
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
 
@@ -669,8 +664,7 @@ class TestLLMModelsServiceRealAPI:
             "BotHub API key не настроен в конфиге"
         )
 
-        mock_repo = MagicMock(spec=AIModelCatalogRepository)
-        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
 
         try:
             models = await service.fetch_models_by_provider("bothub")
@@ -699,8 +693,6 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к OpenRouter API для получения списка моделей.
         Использует endpoint: {base_url}/models
         """
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
 
@@ -709,8 +701,7 @@ class TestLLMModelsServiceRealAPI:
             "OpenRouter API key не настроен в конфиге"
         )
 
-        mock_repo = MagicMock(spec=AIModelCatalogRepository)
-        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
 
         try:
             models = await service.fetch_models_by_provider("openrouter")
@@ -746,8 +737,6 @@ class TestLLMModelsServiceRealAPI:
         Реальный запрос к OpenAI API для получения списка моделей.
         Использует endpoint: {base_url}/models
         """
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
 
@@ -755,8 +744,7 @@ class TestLLMModelsServiceRealAPI:
         if not (settings.llm.openai and settings.llm.openai.api_key):
             pytest.skip("OpenAI не настроен: в LLMConfig нет openai или api_key")
 
-        mock_repo = MagicMock(spec=AIModelCatalogRepository)
-        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
 
         models = await service.fetch_models_by_provider("openai")
 
@@ -788,11 +776,9 @@ class TestLLMModelsServiceRealAPI:
         """
         Полный цикл синхронизации: fetch от реального API и сохранение в БД.
         """
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.db import Storage
+        from core.ai.models import AIModelRecord
 
         settings = get_settings()
         provider = settings.llm.provider
@@ -804,11 +790,7 @@ class TestLLMModelsServiceRealAPI:
             if not (settings.llm.openrouter and settings.llm.openrouter.api_key):
                 pytest.skip("OpenRouter API key не настроен")
             try:
-                probe_service = LLMModelsService(
-                    MagicMock(spec=AIModelCatalogRepository),
-                    AsyncMock(),
-                    AsyncMock(),
-                )
+                probe_service = LLMModelsService(AsyncMock(), AsyncMock())
                 await probe_service.fetch_models_by_provider("openrouter")
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code in (401, 403):
@@ -817,10 +799,7 @@ class TestLLMModelsServiceRealAPI:
                     )
                 raise
 
-        # Storage использует PostgreSQL напрямую из settings
-        storage = Storage()
-        repo = AIModelCatalogRepository(storage)
-        service = LLMModelsService(repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
 
         # Синхронизируем
         count = await service.sync_models()
@@ -828,7 +807,7 @@ class TestLLMModelsServiceRealAPI:
         assert count > 0, f"Должны синхронизироваться модели от {provider}"
 
         # Проверяем что модели сохранились в БД
-        saved_models = await repo.list_by_provider(provider)
+        saved_models = await AIModelRecord.list_by_provider(provider)
 
         assert len(saved_models) > 0
         for model in saved_models:
@@ -844,11 +823,9 @@ class TestLLMModelsServiceRealAPI:
         """
         Синхронизация моделей от ВСЕХ настроенных провайдеров.
         """
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from apps.flows.config import get_settings
         from core.ai.llm_models_service import LLMModelsService
-        from core.db import Storage
+        from core.ai.models import AIModelRecord
 
         settings = get_settings()
 
@@ -861,9 +838,7 @@ class TestLLMModelsServiceRealAPI:
             "Нет настроенных провайдеров (bothub/openrouter/openai)"
         )
 
-        storage = Storage()
-        repo = AIModelCatalogRepository(storage)
-        service = LLMModelsService(repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
 
         # Синхронизируем ВСЕ провайдеры
         results = await service.sync_all_providers()
@@ -878,7 +853,7 @@ class TestLLMModelsServiceRealAPI:
         # Репозиторий только upsert; записи снятые с API не удаляются — в БД может быть больше строк.
         for provider, count in results.items():
             if count > 0:
-                models = await repo.list_by_provider(provider)
+                models = await AIModelRecord.list_by_provider(provider)
                 assert len(models) >= count, (
                     f"В БД должно быть не меньше моделей {provider}, чем синхронизировано"
                 )
@@ -900,12 +875,9 @@ class TestLLMModelsServiceRealAPI:
             "BotHub API key не настроен в конфиге"
         )
 
-        from core.ai.model_catalog_repository import AIModelCatalogRepository
-
         from core.ai.llm_models_service import LLMModelsService
 
-        mock_repo = MagicMock(spec=AIModelCatalogRepository)
-        service = LLMModelsService(mock_repo, AsyncMock(), AsyncMock())
+        service = LLMModelsService(AsyncMock(), AsyncMock())
         records = await service.discover_model_records_by_provider("bothub")
 
         assert records, "Должны извлечь хотя бы одну модель"
@@ -924,7 +896,7 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.max_tokens = None
                 mock_settings.return_value.llm.timeout = 120.0
                 mock_settings.return_value.llm.provider = "yandex"
-                mock_settings.return_value.llm.yandex = MagicMock(
+                mock_settings.return_value.llm.yandex = YandexLLMProviderConfig(
                     api_key="AQVN-key",
                     folder_id="folder-1",
                     base_url="https://llm.api.cloud.yandex.net/v1",
@@ -948,7 +920,7 @@ class TestLLMTransportYandex:
                 mock_settings.return_value.llm.max_tokens = None
                 mock_settings.return_value.llm.timeout = 120.0
                 mock_settings.return_value.llm.provider = "yandex"
-                mock_settings.return_value.llm.yandex = MagicMock(
+                mock_settings.return_value.llm.yandex = YandexLLMProviderConfig(
                     api_key="AQVN-key",
                     folder_id="",
                     base_url="https://llm.api.cloud.yandex.net/v1",

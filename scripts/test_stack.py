@@ -51,8 +51,14 @@ from tests.fixtures.test_database_env import (
     TEST_DATABASE_ENV,
     TEST_LIVEKIT_API_SECRET,
     TEST_OFFICE_JWT_SECRET,
+    ensure_local_no_proxy,
     load_openfga_test_env_overlay,
 )
+
+# Пробы readiness этого процесса (urlopen к 127.0.0.1) не должны идти через
+# внешний HTTP(S)_PROXY шелла — иначе прокси отвечает ошибкой и живой сервис
+# считается неготовым. Дочерние процессы получают NO_PROXY из TEST_DATABASE_ENV.
+ensure_local_no_proxy()
 
 STACK_MANIFEST_PATH = Path("/tmp/platform_test_stack.json")
 STACK_LOG_DIR = Path("/tmp/platform_test_stack")
@@ -106,10 +112,10 @@ COMMON_TEST_ENV: dict[str, str] = {
     "S3__ENABLED": "true",
     "S3__ENDPOINT_URL": "http://localhost:19002",
     "S3__BUCKET_NAME": "test-bucket",
-    "S3__ACCESS_KEY_ID": "minioadmin",
-    "S3__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__ACCESS_KEY_ID": "s3admin",
+    "S3__SECRET_ACCESS_KEY": "s3admin",
     "S3__REGION_NAME": "us-east-1",
-    "S3__PROVIDER": "minio",
+    "S3__PROVIDER": "seaweedfs",
     "S3__PATH_STYLE": "true",
     "PUSH__ENABLED": "true",
     "PUSH__VAPID_PUBLIC_KEY": "BP1OB4uP0WSgQqumAOefg1PdsN9S7qA1-UK26qjSPa11ylB1HgbcrVi6peEUkhkdfrADeTa_dwypXYiucfbu3JQ",
@@ -224,6 +230,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         port=9001,
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=scale_stack_workers(14, pytest_workers),
+        env={"AGENT__LLM_PROXY_USE_MOCK_AUTO": "1"},
     ),
     GranianService(name="rag", app_path="apps.rag.main:app", port=9002, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
     GranianService(
@@ -240,7 +247,6 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         env={
             "HOSTNAME": "frontend-e2e-pod",
-            "AGENT_LLM_PROXY_USE_MOCK_AUTO": "1",
         },
     ),
     GranianService(name="sync", app_path="apps.sync.main:app", port=9005, readiness_timeout=STACK_READINESS_TIMEOUT_SEC),
@@ -292,7 +298,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
-            "CODE_RUNNER_PYTHON_WORKERS": str(code_runner_workers),
+            "CODE_RUNNER__PYTHON_WORKERS": str(code_runner_workers),
         },
     ),
     GranianService(
@@ -302,7 +308,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
-            "CODE_RUNNER_NODE_WORKERS": str(code_runner_workers),
+            "CODE_RUNNER__NODE_WORKERS": str(code_runner_workers),
         },
     ),
     GranianService(
@@ -312,7 +318,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
-            "CODE_RUNNER_GO_WORKERS": str(code_runner_workers),
+            "CODE_RUNNER__GO_WORKERS": str(code_runner_workers),
         },
     ),
     GranianService(
@@ -322,7 +328,7 @@ def build_granian_services(pytest_workers: int | None = None) -> tuple[GranianSe
         readiness_timeout=STACK_READINESS_TIMEOUT_SEC,
         workers=code_runner_workers,
         env={
-            "CODE_RUNNER_CSHARP_WORKERS": str(code_runner_workers),
+            "CODE_RUNNER__CSHARP_WORKERS": str(code_runner_workers),
         },
     ),
     GranianService(

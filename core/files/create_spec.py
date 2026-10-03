@@ -6,8 +6,8 @@ from enum import StrEnum
 
 from pydantic import model_validator
 
-from core.documents.placement import DocsPlacement
-from core.documents.placement_paths import validate_relative_dir
+from core.documents.names import validate_relative_dir
+from core.documents.placement import DocumentPlacement
 from core.files.retention import FileRetentionSpec
 from core.models.base import StrictBaseModel
 from core.types import JsonObject
@@ -31,6 +31,11 @@ class FileSourceKind(StrEnum):
     CODE_AGENT_SOURCE = "code_agent_source"
     PLATFORM_AUXILIARY = "platform_auxiliary"
     GENERATED_EPHEMERAL = "generated_ephemeral"
+
+
+# Sentinel flow_id для файлов, которые пишет сам runtime-процесс
+# (FileWriter process defaults), а не конкретный flow.
+RUNTIME_FLOW_ID = "runtime"
 
 
 class FileSourceRef(StrictBaseModel):
@@ -70,7 +75,7 @@ class FileCreateSpec(StrictBaseModel):
     source_kind: FileSourceKind
     source_ref: FileSourceRef
     retention: FileRetentionSpec
-    placement: DocsPlacement | None = None
+    placement: DocumentPlacement | None = None
     post_create: FilePostCreate | None = None
     metadata: JsonObject | None = None
     tags: list[str] | None = None
@@ -79,9 +84,11 @@ class FileCreateSpec(StrictBaseModel):
     def _validate_source_ref(self) -> FileCreateSpec:
         ref = self.source_ref
         kind = self.source_kind
-        if kind in {FileSourceKind.CRM_ENTITY, FileSourceKind.OFFICE_DOCUMENT}:
+        if kind is FileSourceKind.CRM_ENTITY:
             if not ref.entity_id:
                 raise ValueError(f"source_ref.entity_id required for {kind}")
+        if kind is FileSourceKind.OFFICE_DOCUMENT and self.placement is None:
+            raise ValueError("placement is required for office_document")
         if kind == FileSourceKind.RAG_DOCUMENT:
             if not ref.namespace_id:
                 raise ValueError("source_ref.namespace_id required for rag_document")

@@ -12,11 +12,11 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models import Edge, FlowConfig
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.execution_context import execution_context_for
 from apps.flows.src.runtime.nodes import ExternalAPINode, create_node
+from apps.flows.src.services.external_api_client import ExternalAPIClient
 from apps.flows.src.tools.base import ExternalAPITool
 from core.state import ExecutionState
 from tests.flows.durable_runtime_harness import run_flow, run_node
@@ -379,7 +379,7 @@ class TestFlowWithExternalAPI:
     @pytest.mark.asyncio
     async def test_flow_with_external_api_node(self, app, monkeypatch, unique_id, di):
         """Agent с ExternalAPINode."""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
+        from apps.flows.src.services.external_api_client import ExternalAPIClient
 
         async def mock_request(self, method, url, **kwargs):
             import httpx

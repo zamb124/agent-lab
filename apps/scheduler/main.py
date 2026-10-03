@@ -31,6 +31,14 @@ from apps.scheduler.config import SchedulerSettings, get_scheduler_settings
 from apps.scheduler.crawl_schedule_bootstrap import ensure_search_crawl_schedules
 from apps.scheduler.di import SchedulerDi
 from apps.scheduler.realtime.command_router import SCHEDULER_OPERATIONS
+from apps.stock_worker.tasks.task_names import (
+    STOCK_CLAIMS_GC_TICK,
+    STOCK_CYCLE_COUNT_TICK,
+    STOCK_LANE_GC_TICK,
+    STOCK_LANE_RELAY_TICK,
+    STOCK_RECONCILE_TICK,
+    STOCK_REORDER_TICK,
+)
 from core.ai.task_names import TASK_REFRESH_PLATFORM_FREE_MODELS, TASK_SYNC_LLM_MODELS
 from core.app import create_service_app
 from core.config.testing import is_testing
@@ -356,6 +364,77 @@ async def _ensure_idle_interval_schedule(
         logger.info("scheduler.interval.schedule.kicked.immediately.schedule_task_id", log_label=log_label, schedule_task_id=task.schedule_task_id)
 
 
+async def _ensure_stock_interval_schedule(
+    *,
+    scheduler_service: SchedulerService,
+    config_enabled: bool,
+    task_name: str,
+    interval_seconds: int,
+    log_label: str,
+) -> None:
+    """Интервальный тик stock-очереди — как idle-вариант, но в свою очередь."""
+    if not config_enabled:
+        logger.info("scheduler.disabled.config", log_label=log_label)
+        return
+    tasks = await scheduler_service.list(
+        company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+        filters=PlatformScheduleFilter(
+            task_name=task_name,
+            limit=200,
+            offset=0,
+        ),
+    )
+    compatible_tasks = [
+        task
+        for task in tasks
+        if task.schedule_type == PlatformScheduleType.INTERVAL
+        and task.interval_seconds == interval_seconds
+    ]
+    payload: JsonObject = {}
+    pending_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PENDING]
+    task: PlatformScheduledTask
+    if pending_tasks:
+        task = pending_tasks[0]
+        logger.info("scheduler.stock.schedule.exists.count", log_label=log_label, count=len(pending_tasks))
+    else:
+        paused_tasks = [task for task in compatible_tasks if task.status == ScheduledTaskStatus.PAUSED]
+        if paused_tasks:
+            task = await scheduler_service.resume(
+                company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+                schedule_task_id=paused_tasks[0].schedule_task_id,
+            )
+        else:
+            request = PlatformScheduleCreateRequest(
+                target_service="stock",
+                task_name=task_name,
+                queue_name=get_task_spec(task_name).queue,
+                schedule_type=PlatformScheduleType.INTERVAL,
+                interval_seconds=interval_seconds,
+                timezone="UTC",
+                payload={},
+                run_at=datetime.now(timezone.utc),
+            )
+            task = await scheduler_service.create(
+                company_id=SYSTEM_SCHEDULER_COMPANY_ID,
+                user_id=None,
+                request=request,
+            )
+            logger.info(
+                "scheduler.stock.schedule.created.schedule_task_id.schedule_id",
+                log_label=log_label,
+                schedule_task_id=task.schedule_task_id,
+                schedule_id=task.schedule_id,
+            )
+    _ = await _reconcile_idle_interval_payload(
+        scheduler_service=scheduler_service,
+        task=task,
+        task_name=task_name,
+        interval_seconds=interval_seconds,
+        payload=payload,
+        log_label=log_label,
+    )
+
+
 async def _ensure_rag_ttl_cleanup_schedule(
     *,
     scheduler_service: SchedulerService,
@@ -564,6 +643,49 @@ async def ensure_platform_schedules(
         task_name=TASK_PLATFORM_SCHEDULES_GC_TICK.name,
         cron="0 4 * * *",
         log_label="Platform schedules Redis GC",
+    )
+    # Тики склада: сверка леджера, GC захватов, min/max, плановый пересчёт.
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_RECONCILE_TICK.name,
+        interval_seconds=3600,
+        log_label="Stock reconcile",
+    )
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_CLAIMS_GC_TICK.name,
+        interval_seconds=900,
+        log_label="Stock claims GC",
+    )
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_REORDER_TICK.name,
+        interval_seconds=3600,
+        log_label="Stock reorder",
+    )
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_CYCLE_COUNT_TICK.name,
+        interval_seconds=21600,
+        log_label="Stock cycle count",
+    )
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_LANE_RELAY_TICK.name,
+        interval_seconds=60,
+        log_label="Stock lane relay",
+    )
+    await _ensure_stock_interval_schedule(
+        scheduler_service=scheduler_service,
+        config_enabled=not is_testing(),
+        task_name=STOCK_LANE_GC_TICK.name,
+        interval_seconds=86400,
+        log_label="Stock lane commit GC",
     )
     if not is_testing():
         await _ensure_idle_interval_schedule(

@@ -11,6 +11,10 @@ from core.clients.redis_client import RedisClient
 
 _LOCK_TTL_SECONDS = 120
 _LOCK_FALLBACK_POLL_SECONDS = 2.0
+_RELEASE_IF_OWNER = (
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+    "return redis.call('DEL', KEYS[1]) else return 0 end"
+)
 
 
 class DataTableLockedError(ValueError):
@@ -59,5 +63,7 @@ async def data_table_mutation_lock(
     try:
         yield
     finally:
-        _ = await redis_client.delete(lock_key)
+        # Снимаем только свой lock: если TTL истёк и ключ занят другим
+        # процессом, чужую строку не удаляем.
+        _ = await redis_client.eval(_RELEASE_IF_OWNER, 1, lock_key, token)
         _ = await redis_client.publish(release_channel, "released")

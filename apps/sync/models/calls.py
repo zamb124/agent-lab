@@ -178,6 +178,32 @@ class GuestJoinRequest(BaseModel):
     guest_name: str = Field(min_length=1, max_length=64)
 
 
+class CallsLinksListPayload(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    channel_id: str | None = Field(default=None)
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+
+class CallsLinksUpdatePayload(BaseModel):
+    link_token: str = Field(min_length=1)
+    body: CallLinkPatch
+
+
+class CallsLinksRemovePayload(BaseModel):
+    link_token: str = Field(min_length=1)
+
+
+class CallsJoinInfoPayload(BaseModel):
+    link_token: str = Field(min_length=1)
+
+
+class CallsJoinAcceptPayload(BaseModel):
+    link_token: str = Field(min_length=1)
+    body: GuestJoinRequest | None = Field(default=None)
+
+
 class JoinResponse(BaseModel):
     """Ответ при входе в звонок (зарегистрированный пользователь или гость)."""
     call_id: str

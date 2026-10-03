@@ -1,6 +1,6 @@
 """Enum'ы домена склада — leaf-модуль без зависимостей.
 
-Импортируется и `domain.py` (поля моделей), и `valuation.py` (чистая
+Импортируется модулями таблиц и `valuation.py` (чистая
 математика) — потому не должен тянуть модели, иначе цикл импорта.
 """
 
@@ -10,22 +10,59 @@ from enum import StrEnum
 
 
 class StockLocationUsage(StrEnum):
+    """Таксономия локаций целевой топологии.
+
+    `view` — склад/зона/ряд/стеллаж (остаток не хранит); `bin` — ячейка;
+    `container` — паллета/короб/пакет/тоут/тележка (хранит и перемещается);
+    `partner` — поставщик/клиент (`partner_role` уточняет); `transit` —
+    собственный товар в пути (оценивается); `adjustment` —
+    инвентаризация и списание.
+    """
+
     VIEW = "view"
-    INTERNAL = "internal"
-    SUPPLIER = "supplier"
-    CUSTOMER = "customer"
-    INVENTORY = "inventory"
-    PRODUCTION = "production"
+    BIN = "bin"
+    CONTAINER = "container"
+    PARTNER = "partner"
     TRANSIT = "transit"
+    ADJUSTMENT = "adjustment"
 
 
-STOCK_VIRTUAL_LOCATION_KINDS: tuple[StockLocationUsage, ...] = (
-    StockLocationUsage.SUPPLIER,
-    StockLocationUsage.CUSTOMER,
-    StockLocationUsage.INVENTORY,
-    StockLocationUsage.PRODUCTION,
-    StockLocationUsage.TRANSIT,
+class StockPartnerRole(StrEnum):
+    """Роль partner-локации: поставщик или клиент."""
+
+    VENDOR = "vendor"
+    CUSTOMER = "customer"
+
+
+STOCK_VIRTUAL_LOCATION_KINDS: tuple[
+    tuple[StockLocationUsage, StockPartnerRole | None], ...
+] = (
+    (StockLocationUsage.PARTNER, StockPartnerRole.VENDOR),
+    (StockLocationUsage.PARTNER, StockPartnerRole.CUSTOMER),
+    (StockLocationUsage.ADJUSTMENT, None),
+    (StockLocationUsage.TRANSIT, None),
 )
+
+STOCK_QUANT_USAGES: frozenset[StockLocationUsage] = frozenset(
+    {
+        StockLocationUsage.BIN,
+        StockLocationUsage.CONTAINER,
+        StockLocationUsage.TRANSIT,
+    }
+)
+"""Usage, на которых живёт `StockQuant` (оцениваемые при `owner IS NULL`)."""
+
+STOCK_EXTERNAL_USAGES: frozenset[StockLocationUsage] = frozenset(
+    {
+        StockLocationUsage.PARTNER,
+        StockLocationUsage.ADJUSTMENT,
+    }
+)
+"""Внешние концы движения: товар появляется/исчезает без quant-проводки.
+
+`partner` — поставщик/клиент, `adjustment` — инвентаризационный сурплюс.
+`view` сюда не входит: зона — это корень поддерева ячеек, движение
+из/в view резолвится в конкретные quant-локации поддерева."""
 
 
 class StockMoveState(StrEnum):
@@ -47,6 +84,29 @@ class StockTransferState(StrEnum):
     CANCEL = "cancel"
 
 
+class StockMoveLineKind(StrEnum):
+    """Вид складского задания (WT): количество, контейнер целиком, пересчёт."""
+
+    QUANTITY = "quantity"
+    CONTAINER = "container"
+    COUNT = "count"
+
+
+class StockMoveLineState(StrEnum):
+    OPEN = "open"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
+class StockWaveState(StrEnum):
+    """Жизненный цикл волны сборки — сменного задания бригады."""
+
+    DRAFT = "draft"
+    RELEASED = "released"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
 class StockTracking(StrEnum):
     NONE = "none"
     LOT = "lot"
@@ -62,12 +122,66 @@ class StockOperationCode(StrEnum):
 class ReservationPolicy(StrEnum):
     AT_CONFIRM = "at_confirm"
     MANUAL = "manual"
-    BY_DATE = "by_date"
 
 
 class BackorderPolicy(StrEnum):
     ALWAYS = "always"
     NEVER = "never"
+    ASK = "ask"
+
+
+class StockContainerKind(StrEnum):
+    PALLET = "pallet"
+    BOX = "box"
+    BAG = "bag"
+    TOTE = "tote"
+    CART = "cart"
+    OTHER = "other"
+
+
+class StockContainerPolicy(StrEnum):
+    """Политика типа хранения по упаковке содержимого."""
+
+    LOOSE_ONLY = "loose_only"
+    ANY = "any"
+    CONTAINER_ONLY = "container_only"
+
+
+class StockProductMixing(StrEnum):
+    """Смешивание содержимого в ячейке типа хранения."""
+
+    MIXED = "mixed"
+    SAME_PRODUCT = "same_product"
+    EMPTY_ONLY = "empty_only"
+
+
+class StockRemovalStrategy(StrEnum):
+    FIFO = "fifo"
+    FEFO = "fefo"
+    LIFO = "lifo"
+    LEAST_CONTAINERS = "least_containers"
+    CLOSEST = "closest"
+
+
+class StockPutawayStrategy(StrEnum):
+    """Шаг цепочки стратегий размещения типа хранения (SAP-стиль).
+
+    ``manual`` — «оператор выбирает сам»: подсказки нет, но цепочка
+    явно объявлена (тип хранения всегда знает свою стратегию).
+    """
+
+    EXISTING_STOCK = "existing_stock"
+    EMPTY_BIN = "empty_bin"
+    NEAREST = "nearest"
+    MANUAL = "manual"
+
+
+class StockLayoutPreset(StrEnum):
+    """Пресет топологии склада: даркстор → стандартный → РЦ."""
+
+    SIMPLE = "simple"
+    STANDARD = "standard"
+    DISTRIBUTION_CENTER = "distribution_center"
 
 
 class ReflexMode(StrEnum):
@@ -77,10 +191,13 @@ class ReflexMode(StrEnum):
 
 
 class ReflexPoint(StrEnum):
+    """Точка, где движок спрашивает внешнее решение (reflex).
+
+    Пока одна — ``putaway``: «куда положить принятое». Новые точки
+    добавляются только вместе с исполнителем, который их вызывает.
+    """
+
     PUTAWAY = "putaway"
-    REMOVAL = "removal"
-    QC_ROUTE = "qc_route"
-    RECEIPT_LINES = "receipt_lines"
 
 
 class StockDecisionStatus(StrEnum):
@@ -117,7 +234,9 @@ class ValueEntryKind(StrEnum):
 
 class StockBarcodeEntityType(StrEnum):
     PRODUCT = "product"
+    PACKAGING = "packaging"
     LOCATION = "location"
-    PACKAGE = "package"
+    CONTAINER = "container"
     LOT = "lot"
     TRANSFER = "transfer"
+    RESOURCE = "resource"

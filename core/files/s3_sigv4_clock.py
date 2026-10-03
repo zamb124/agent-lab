@@ -2,7 +2,7 @@
 Подстройка времени для SigV4 под HTTP Date ответа S3-совместимого сервера.
 
 Устраняет RequestTimeTooSkewed, когда часы ОС клиента расходятся с временем
-на стороне MinIO (Docker VM / удалённый хост), без ручного NTP на каждой машине.
+на стороне S3-хранилища (Docker VM / удалённый хост), без ручного NTP на каждой машине.
 
 Один глобальный сдвиг на процесс. В botocore get_current_datetime импортируется
 в auth/signers/endpoint и др. как локальное имя; патчить нужно каждый такой модуль,
@@ -19,6 +19,7 @@ import ssl
 from collections.abc import Callable
 from email.utils import parsedate_to_datetime
 from http.client import HTTPConnection, HTTPSConnection
+from types import ModuleType
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -67,6 +68,7 @@ def _read_date_header(url: str, method: Literal["GET", "HEAD"]) -> str | None:
 def _http_date_for_endpoint(base_url: str) -> str | None:
     b = base_url.strip().rstrip("/")
     attempts: list[tuple[str, Literal["GET", "HEAD"]]] = [
+        (f"{b}/healthz", "GET"),
         (f"{b}/minio/health/live", "GET"),
         (f"{b}/", "HEAD"),
     ]
@@ -75,6 +77,18 @@ def _http_date_for_endpoint(base_url: str) -> str | None:
         if date_hdr:
             return date_hdr
     return None
+
+
+def _import_optional_module(name: str) -> ModuleType | None:
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        logger.info(
+            "files_sigv4_clock_module_absent",
+            module=name,
+            error=str(exc),
+        )
+        return None
 
 
 def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
@@ -102,13 +116,9 @@ def _apply_process_wide_offset(offset: datetime.timedelta) -> None:
         if hasattr(module, "get_current_datetime"):
             setattr(module, "get_current_datetime", _patched_get_current_datetime)
 
-    try:
-        crt_auth = importlib.import_module("botocore.crt.auth")
-    except ImportError:
-        pass
-    else:
-        if hasattr(crt_auth, "get_current_datetime"):
-            setattr(crt_auth, "get_current_datetime", _patched_get_current_datetime)
+    crt_auth = _import_optional_module("botocore.crt.auth")
+    if crt_auth is not None and hasattr(crt_auth, "get_current_datetime"):
+        setattr(crt_auth, "get_current_datetime", _patched_get_current_datetime)
 
     _clock_patch_applied = True
     logger.info("files.sigv4.http.date.s3.endpoint", offset=offset)
@@ -118,7 +128,7 @@ def ensure_sigv4_clock_aligned_with_endpoint(endpoint_url: str | None) -> None:
     """
     Синхронизирует время подписи SigV4 с сервером по заголовку Date (без AWS-подписи).
 
-    Вызывать при создании S3-клиента, если задан custom endpoint_url (MinIO, VK, Yandex).
+    Вызывать при создании S3-клиента, если задан custom endpoint_url (SeaweedFS, VK, Yandex).
     """
     global _clock_patch_applied
     if _clock_patch_applied:

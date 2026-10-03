@@ -3,7 +3,7 @@
 import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -55,7 +55,7 @@ from core.models.identity_models import Company, User
 from core.pagination import ListResponse
 from core.types import JsonObject
 from core.variables.resolver import VariableResolutionError
-from core.websocket import WsCommandError
+from core.websocket import WsCommandError, raise_internal
 
 logger = get_logger(__name__)
 
@@ -242,16 +242,16 @@ async def telegram_webhook(
 
     if not flow_config:
         logger.warning("flows.telegram.webhook_flow_missing", flow_id=flow_id)
-        raise HTTPException(status_code=404, detail="Flow not found")
+        raise WsCommandError("not_found", "Flow not found", error_code="not_found")
 
     trigger = flow_config.triggers.get(trigger_id)
 
     if not trigger:
         logger.warning("flows.telegram.webhook_trigger_missing", trigger_id=trigger_id)
-        raise HTTPException(status_code=404, detail="Trigger not found")
+        raise WsCommandError("not_found", "Trigger not found", error_code="not_found")
 
     if trigger.type != TriggerType.TELEGRAM:
-        raise HTTPException(status_code=400, detail="Not a Telegram trigger")
+        raise WsCommandError("ws_invalid_payload", "Not a Telegram trigger", error_code="ws_invalid_payload")
 
     runtime = di
     telegram_handler = TelegramTriggerHandler(
@@ -261,27 +261,26 @@ async def telegram_webhook(
 
     if not trigger.config.get("_secret_token"):
         logger.warning("flows.telegram.webhook.trigger.secret_token.register", trigger_id=trigger_id)
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Telegram webhook secret is not configured for this trigger; "
-                "save the flow or POST .../reregister."
-            ),
+        raise WsCommandError(
+            "forbidden",
+            "Telegram webhook secret is not configured for this trigger; save the flow or POST .../reregister.",
+            error_code="forbidden",
         )
     if not x_telegram_bot_api_secret_token:
-        raise HTTPException(
-            status_code=403,
-            detail="Missing X-Telegram-Bot-Api-Secret-Token",
+        raise WsCommandError(
+            "forbidden",
+            "Missing X-Telegram-Bot-Api-Secret-Token",
+            error_code="forbidden",
         )
     if not telegram_handler.verify_secret_token(trigger, x_telegram_bot_api_secret_token):
         logger.warning("flows.telegram.webhook.invalid.secret.token", trigger_id=trigger_id)
-        raise HTTPException(status_code=403, detail="Invalid secret token")
+        raise WsCommandError("forbidden", "Invalid secret token", error_code="forbidden")
 
     try:
         update = TelegramUpdate.model_validate_json(await request.body())
     except ValidationError as e:
         logger.error("flows.telegram.webhook_json_failed", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid JSON") from e
+        raise WsCommandError("ws_invalid_payload", "Invalid JSON", error_code="ws_invalid_payload") from e
     payload = update.to_payload()
 
     logger.info(
@@ -303,7 +302,7 @@ async def telegram_webhook(
         return {"status": "skipped", "reason": str(e)}
     except Exception as e:
         logger.error("flows.telegram.webhook_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise_internal(e)
 
 
 @router.post("/triggers/webhook/{flow_id}/{trigger_id}")
@@ -350,25 +349,25 @@ async def generic_webhook(
             )
 
     if not flow_config:
-        raise HTTPException(status_code=404, detail="Flow not found")
+        raise WsCommandError("not_found", "Flow not found", error_code="not_found")
 
     trigger = flow_config.triggers.get(trigger_id)
 
     if not trigger:
-        raise HTTPException(status_code=404, detail="Trigger not found")
+        raise WsCommandError("not_found", "Trigger not found", error_code="not_found")
 
     if trigger.type != TriggerType.WEBHOOK:
-        raise HTTPException(status_code=400, detail="Not a webhook trigger")
+        raise WsCommandError("ws_invalid_payload", "Not a webhook trigger", error_code="ws_invalid_payload")
 
     if not trigger.enabled:
-        raise HTTPException(status_code=400, detail="Trigger is disabled")
+        raise WsCommandError("ws_invalid_payload", "Trigger is disabled", error_code="ws_invalid_payload")
 
     client = request.client
     client_host = client.host if client else "unknown"
     if not check_webhook_rate_limit(flow_id, trigger_id, client_host):
-        raise HTTPException(status_code=429, detail="Too many requests")
+        raise WsCommandError("rate_limited", "Too many requests", error_code="rate_limited")
     if not client_ip_allowed(client_host, trigger.config.get("allowed_ips")):
-        raise HTTPException(status_code=403, detail="Client IP not allowed")
+        raise WsCommandError("forbidden", "Client IP not allowed", error_code="forbidden")
 
     secret_header = _webhook_secret_header_from_config(trigger.config)
     raw_secret = trigger.config.get("secret_token")
@@ -381,17 +380,17 @@ async def generic_webhook(
                 branch_id=trigger.branch_id,
             )
         except VariableResolutionError as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise_internal(e)
         received = webhook_secret_from_request(request, secret_header)
         if not received:
-            raise HTTPException(status_code=403, detail="Secret required")
+            raise WsCommandError("forbidden", "Secret required", error_code="forbidden")
         if not secrets.compare_digest(expected, received):
-            raise HTTPException(status_code=403, detail="Invalid secret")
+            raise WsCommandError("forbidden", "Invalid secret", error_code="forbidden")
 
     try:
         body = await parse_webhook_json_body(request)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON body: {e}") from e
+        raise WsCommandError("ws_invalid_payload", f"Invalid JSON body: {e}", error_code="ws_invalid_payload") from e
 
     payload = build_webhook_trigger_payload(request, body)
     body_obj = payload.get("body")
@@ -413,17 +412,17 @@ async def generic_webhook(
         result = await webhook_handler.handle(flow_id, trigger_id, payload)
     except Exception as e:
         logger.error("flows.trigger.webhook_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise_internal(e)
 
     task_id = result.get("task_id")
     if not isinstance(task_id, str) or not task_id.strip():
-        raise HTTPException(status_code=500, detail="Webhook trigger did not return task_id")
+        raise WsCommandError("internal", "Webhook trigger did not return task_id", error_code="internal")
     context_id = result.get("context_id")
     if not isinstance(context_id, str) or not context_id.strip():
-        raise HTTPException(status_code=500, detail="Webhook trigger did not return context_id")
+        raise WsCommandError("internal", "Webhook trigger did not return context_id", error_code="internal")
     session_id = result.get("session_id")
     if not isinstance(session_id, str) or not session_id.strip():
-        raise HTTPException(status_code=500, detail="Webhook trigger did not return session_id")
+        raise WsCommandError("internal", "Webhook trigger did not return session_id", error_code="internal")
 
     return JSONResponse(
         status_code=202,

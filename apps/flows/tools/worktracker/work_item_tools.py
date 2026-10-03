@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field
 
-from apps.flows.src.clients.worktracker_client import WorktrackerClient
 from apps.flows.src.tools.decorator import tool
+from core.clients.worktracker_client import WorktrackerClient
 from core.context import require_active_company, require_context
 from core.files.file_ref import FileRef
 from core.identity.flow_employee import flow_employee_user_id

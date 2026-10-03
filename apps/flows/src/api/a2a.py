@@ -25,7 +25,7 @@ from a2a.types import (
     TaskPushNotificationConfig,
     TaskStatusUpdateEvent,
 )
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import DecodeError
@@ -75,6 +75,7 @@ from core.models.context_models import Context
 from core.models.identity_models import User
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 from core.utils.tokens import TokenData, TokenType
+from core.websocket import WsCommandError, raise_forbidden, raise_not_found
 
 logger = get_logger(__name__)
 JsonRpcId = str | int
@@ -614,7 +615,7 @@ async def get_agent_card_well_known(
     await _require_view_flow(di, flow_id)
     config = await _get_flow_config(flow_id, version=v)
     if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+        raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
 
     context = get_context()
     channel = _a2a_channel(di, flow_id, context=context, flow_config=config)
@@ -622,7 +623,7 @@ async def get_agent_card_well_known(
     try:
         return await channel.get_agent_card(base_url)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise_not_found(e)
 
 
 @router.get("/{flow_id}")
@@ -641,7 +642,7 @@ async def get_agent_card(
     await _require_view_flow(di, flow_id)
     config = await _get_flow_config(flow_id, version=v)
     if not config:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+        raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
 
     context = get_context()
     channel = _a2a_channel(di, flow_id, context=context, flow_config=config)
@@ -649,7 +650,7 @@ async def get_agent_card(
     try:
         return await channel.get_agent_card(base_url)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise_not_found(e)
 
 
 async def _handle_streaming(
@@ -1098,10 +1099,10 @@ async def _flow_interface_internal(
         await _require_view_flow(di, flow_id)
     config = await _get_flow_config(flow_id)
     if config is None:
-        raise HTTPException(status_code=404, detail=f"Flow '{flow_id}' not found")
+        raise WsCommandError("not_found", f"Flow '{flow_id}' not found", error_code="not_found")
     if embed_target is None and config.branches and branch_id != "default":
         if branch_id not in config.branches:
-            raise HTTPException(status_code=404, detail=f"Branch '{branch_id}' not found")
+            raise WsCommandError("not_found", f"Branch '{branch_id}' not found", error_code="not_found")
     if is_embed_session and isinstance(token_data, TokenData):
         claims_error = _validate_embed_session_claims(
             request=request,
@@ -1112,7 +1113,7 @@ async def _flow_interface_internal(
             expected_company_id=embed_target.company_id if embed_target is not None else None,
         )
         if claims_error is not None:
-            raise HTTPException(status_code=403, detail=claims_error)
+            raise WsCommandError("forbidden", claims_error, error_code="forbidden")
 
     share_permission: str | None = None
     if is_share_session and isinstance(token_data, TokenData):
@@ -1123,7 +1124,7 @@ async def _flow_interface_internal(
             branch_id=branch_id,
         )
         if claims_error is not None:
-            raise HTTPException(status_code=403, detail=claims_error)
+            raise WsCommandError("forbidden", claims_error, error_code="forbidden")
         try:
             grant = await di.flow_ui_share_service.authorize(
                 grant_id=str(token_data.metadata["flow_ui_share_grant_id"]),
@@ -1133,7 +1134,7 @@ async def _flow_interface_internal(
                 require_editor=False,
             )
         except PermissionError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+            raise_forbidden(exc)
         share_permission = grant.permission
 
     document = config.interface_for_branch(branch_id)
@@ -1208,9 +1209,9 @@ async def get_embed_interface(
     """Документ интерфейса embed-поверхности с настройками EmbedConfig."""
     embed_target = await resolve_embed_target(embed_id)
     if embed_target is None:
-        raise HTTPException(status_code=404, detail=f"Embed not found: {embed_id}")
+        raise WsCommandError("not_found", f"Embed not found: {embed_id}", error_code="not_found")
     if not embed_target.active:
-        raise HTTPException(status_code=403, detail=f"Embed disabled: {embed_id}")
+        raise WsCommandError("forbidden", f"Embed disabled: {embed_id}", error_code="forbidden")
     return await _flow_interface_internal(
         flow_id=embed_target.flow_id,
         branch_id=embed_target.branch_id,

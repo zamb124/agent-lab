@@ -142,10 +142,22 @@ def run_with_log_context(
     return task
 
 
+async def finish_background_task[ResultT](task: asyncio.Task[ResultT]) -> None:
+    """Дождаться фоновой задачи. Отмена — штатная остановка; другая ошибка всплывает."""
+    if not task.done():
+        _ = task.cancel()
+        _ = await asyncio.wait({task})
+    if task.cancelled():
+        return
+    failure = task.exception()
+    if failure is not None:
+        raise failure
+
+
 def _str_or_none(value: JsonValue | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
 
 
-__all__ = ["LogContextScope", "run_with_log_context"]
+__all__ = ["LogContextScope", "finish_background_task", "run_with_log_context"]

@@ -642,8 +642,8 @@ class TestExternalAPIClientHeaders:
             == "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
         )
         """ExternalAPIClient._build_headers с вложенными @var:"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
         from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
+        from apps.flows.src.services.external_api_client import ExternalAPIClient
 
         client = ExternalAPIClient()
         config = ExternalAPIConfig(
@@ -671,7 +671,7 @@ class TestExternalAPIClientHeaders:
 
     def test_resolve_url_with_nested_vars(self):
         """ExternalAPIClient._resolve_url с вложенными @var:"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
+        from apps.flows.src.services.external_api_client import ExternalAPIClient
 
         client = ExternalAPIClient()
         variables = {
@@ -694,7 +694,7 @@ class TestExternalAPIClientHeaders:
 
     def test_resolve_url_with_nested_vars_and_path_params(self):
         """URL с вложенными @var: и path параметрами"""
-        from apps.flows.src.clients.external_api_client import ExternalAPIClient
+        from apps.flows.src.services.external_api_client import ExternalAPIClient
 
         client = ExternalAPIClient()
         variables = {

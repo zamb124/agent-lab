@@ -6,15 +6,15 @@ Builtin tools use XxxClient — not this module.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
-from apps.flows.src.clients.mcp_client import get_mcp_client as build_mcp_client
 from apps.flows.src.models.mcp import MCPServerConfig
 from apps.flows.src.services.flow_speech_resolve import (
     load_flow_speech_layers_from_context_metadata,
     merge_explicit_over_flow_speech_layer,
 )
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.mcp_client import get_mcp_client as build_mcp_client
 from core.ai.runtime import synthesize_speech_audio, transcribe_audio_bytes
 from core.billing.service import COST_ORIGIN_PLATFORM
 from core.billing.speech_usage import record_stt_usage_span, record_tts_usage_span
@@ -35,8 +35,8 @@ from core.types import JsonObject
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
-    from apps.flows.src.clients.mcp_client import MCPClient
     from apps.flows.src.models.mcp import MCPCallResult
+    from apps.flows.src.services.mcp_client import MCPClient
     from core.state import ExecutionState
 
 _SPEECH_PROVIDERS = STT_TTS_PROVIDER_IDS
@@ -46,17 +46,19 @@ _SPEECH_RESPONSE_FORMATS = VOICE_RESPONSE_FORMAT_IDS
 def _speech_provider(value: str | None) -> SpeechProviderName | None:
     if value is None:
         return None
-    if value not in _SPEECH_PROVIDERS:
-        raise ValueError(f"Unknown speech provider: {value}")
-    return cast(SpeechProviderName, value)
+    for provider in _SPEECH_PROVIDERS:
+        if provider == value:
+            return provider
+    raise ValueError(f"Unknown speech provider: {value}")
 
 
 def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
     if value is None:
         return None
-    if value not in _SPEECH_RESPONSE_FORMATS:
-        raise ValueError(f"Unknown speech response format: {value}")
-    return cast(SpeechResponseFormat, value)
+    for response_format in _SPEECH_RESPONSE_FORMATS:
+        if response_format == value:
+            return response_format
+    raise ValueError(f"Unknown speech response format: {value}")
 
 
 async def get_mcp_client(

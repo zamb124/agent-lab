@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from apps.crm.components import CRM_RECIPES
+from apps.crm.di import CRM_RECIPES
 from apps.crm.integrations.registry import IntegrationRegistry
 from apps.crm.services.entity_service import EntityService
 from apps.crm.services.note_processing_service import NoteProcessingService

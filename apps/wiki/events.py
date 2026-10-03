@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from apps.wiki.models.domain import WikiComment, WikiPageSummary, WikiVisibility
+from apps.wiki.models.comment import WikiComment
+from apps.wiki.models.domain import (
+    WikiPageSummary,
+    WikiVisibility,
+)
 from core.events import publish_event_to_company, register_platform_event
 
 WIKI_PAGE_CREATED = "wiki/page/created"

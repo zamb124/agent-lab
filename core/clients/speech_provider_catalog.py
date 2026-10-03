@@ -13,12 +13,16 @@ Allowlist идентификаторов моделей для UI (`VoiceProvide
 
 from __future__ import annotations
 
-STT_TTS_PROVIDER_IDS: frozenset[str] = frozenset(
-    {"litserve", "cloud_ru", "yandex", "sber", "mock"}
+from core.clients.speech_override import SpeechProviderName, SpeechResponseFormat, VADProviderName
+
+STT_TTS_PROVIDER_IDS: frozenset[SpeechProviderName] = frozenset(
+    ("litserve", "cloud_ru", "yandex", "sber", "mock")
 )
-VAD_PROVIDER_IDS: frozenset[str] = frozenset({"litserve", "silero_local", "mock"})
-VOICE_RESPONSE_FORMAT_IDS: frozenset[str] = frozenset(
-    {"wav", "mp3", "ogg", "pcm", "lpcm"}
+VAD_PROVIDER_IDS: frozenset[VADProviderName] = frozenset(
+    ("litserve", "silero_local", "mock")
+)
+VOICE_RESPONSE_FORMAT_IDS: frozenset[SpeechResponseFormat] = frozenset(
+    ("wav", "mp3", "ogg", "pcm", "lpcm")
 )
 
 # Языки для полей STT/TTS `language` в UI каталога (ISO 639-1): базовый набор +

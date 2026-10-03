@@ -75,14 +75,19 @@ async def test_init_company_resources_for_system(di, unique_id: str):
 
     assert result["status"] == "completed"
     assert result["company_id"] == "system"
+    assert isinstance(result["flows"], int)
     assert result["flows"] >= 0
+    assert isinstance(result["nodes"], int)
     assert result["nodes"] >= 0
 
     print(f"✅ System загружено: flows={result['flows']}, nodes={result['nodes']}")
 
     # Контекст должен быть очищен после выполнения
     context = get_context()
-    assert context is None or context.active_company.company_id == "system"
+    assert context is None or (
+        context.active_company is not None
+        and context.active_company.company_id == "system"
+    )
 
     clear_context()
 
@@ -193,6 +198,7 @@ async def test_flows_loader_filter_public(di, unique_id: str):
             bundles_dir=bundles_dir,
             registry_path=registry_path,
             flow_access_service=di.flow_access_service,
+            files_service=di.files_service,
         )
 
         # Тест 1: Загрузка с фильтром (только public)
@@ -258,6 +264,7 @@ async def test_system_vs_company_loading(di, unique_id: str):
     )
 
     system_agents_count = system_result["flows"]
+    assert isinstance(system_agents_count, int)
 
     print(f"📊 System: {system_agents_count} агентов")
 
@@ -271,6 +278,7 @@ async def test_system_vs_company_loading(di, unique_id: str):
     )
 
     company_agents_count = company_result["flows"]
+    assert isinstance(company_agents_count, int)
 
     print(f"📊 Company: {company_agents_count} агентов")
 

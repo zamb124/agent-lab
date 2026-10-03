@@ -40,7 +40,7 @@ from typing import (
 
 import soundfile as sf
 import torch
-from fastapi import HTTPException, Request
+from fastapi import Request
 from pydantic import BaseModel, ConfigDict
 from transformers import (
     AutoModel,
@@ -61,6 +61,7 @@ from core.config.models import (
 )
 from core.logging import get_logger
 from core.types import JsonValue
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -168,8 +169,13 @@ class GigaAMModelLoader(Protocol):
     ) -> GigaAMModel: ...
 
 
-class CTCProcessorLoader(Protocol):
-    def __call__(self, hf_model_id: str, *, revision: str | None, token: str | None) -> CTCProcessor: ...
+class _ProcessorLoader[T](Protocol):
+    def __call__(self, hf_model_id: str, *, revision: str | None, token: str | None) -> T: ...
+
+
+def _auto_processor[T](result_type: type[T]) -> _ProcessorLoader[T]:
+    _ = result_type
+    return cast(_ProcessorLoader[T], AutoProcessor.from_pretrained)
 
 
 class CTCModelLoader(Protocol):
@@ -181,10 +187,6 @@ class CTCModelLoader(Protocol):
         token: str | None,
         dtype: STTModelDTypeName,
     ) -> CTCModel: ...
-
-
-class WhisperProcessorLoader(Protocol):
-    def __call__(self, hf_model_id: str, *, revision: str | None, token: str | None) -> WhisperProcessor: ...
 
 
 class WhisperModelLoader(Protocol):
@@ -238,7 +240,7 @@ def _stt_model_dtype_name(device: str) -> STTModelDTypeName:
 
 def _coerce_audio_bytes(raw: STTRawValue | None) -> bytes:
     if raw is None:
-        raise HTTPException(status_code=422, detail="STT: file field is required")
+        raise WsCommandError("unprocessable", "STT: file field is required", error_code="ws_invalid_payload")
     if isinstance(raw, bytes):
         audio_bytes = raw
     elif isinstance(raw, bytearray | memoryview):
@@ -247,16 +249,16 @@ def _coerce_audio_bytes(raw: STTRawValue | None) -> bytes:
         byte_values: list[int] = []
         for item in raw:
             if not isinstance(item, int) or isinstance(item, bool):
-                raise HTTPException(status_code=422, detail="STT: file must be bytes or list[int]")
+                raise WsCommandError("unprocessable", "STT: file must be bytes or list[int]", error_code="ws_invalid_payload")
             byte_values.append(item)
         try:
             audio_bytes = bytes(byte_values)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="STT: file contains a byte outside 0..255") from exc
+            raise WsCommandError("unprocessable", "STT: file contains a byte outside 0..255", error_code="ws_invalid_payload") from exc
     else:
-        raise HTTPException(status_code=422, detail="STT: file must be bytes or list[int]")
+        raise WsCommandError("unprocessable", "STT: file must be bytes or list[int]", error_code="ws_invalid_payload")
     if len(audio_bytes) == 0:
-        raise HTTPException(status_code=422, detail="STT: file field is required")
+        raise WsCommandError("unprocessable", "STT: file field is required", error_code="ws_invalid_payload")
     return audio_bytes
 
 
@@ -271,7 +273,7 @@ def parse_stt_body(
     api id из ``cfg.stt_models``, ``language`` (опционально, для Whisper).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="STT: LitServe must pass a prepared request body")
+        raise WsCommandError("unprocessable", "STT: LitServe must pass a prepared request body", error_code="ws_invalid_payload")
     audio_raw = raw.get("file")
     if audio_raw is None:
         audio_raw = raw.get("audio")
@@ -283,13 +285,14 @@ def parse_stt_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="STT: model must be a string")
+        raise WsCommandError("unprocessable", "STT: model must be a string", error_code="ws_invalid_payload")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
-        raise HTTPException(
-            status_code=422,
-            detail="STT: model is required (explicitly in payload or stt_default_api_model_id in config)",
+        raise WsCommandError(
+            "unprocessable",
+            "STT: model is required (explicitly in payload or stt_default_api_model_id in config)",
+            error_code="ws_invalid_payload",
         )
 
     language_raw = raw.get("language")
@@ -298,7 +301,7 @@ def parse_stt_body(
     elif isinstance(language_raw, str):
         language = language_raw.strip() or None
     else:
-        raise HTTPException(status_code=422, detail="STT: language must be a string")
+        raise WsCommandError("unprocessable", "STT: language must be a string", error_code="ws_invalid_payload")
     return STTTranscriptionInput(audio_bytes=audio_bytes, model=requested_model, language=language)
 
 
@@ -364,15 +367,23 @@ def _gigaam_wav_sample_rate(sample_rate: int) -> int:
     return 16000
 
 
+def _unlink_temp_wav(wav_path: str) -> None:
+    try:
+        os.unlink(wav_path)
+    except OSError as exc:
+        logger.info(
+            "provider_litserve_stt_temp_wav_unlink_failed",
+            path=wav_path,
+            error=str(exc),
+        )
+
+
 def _transcribe_gigaam_wav(model_obj: GigaAMModel, floats: list[float], sample_rate: int) -> str:
     wav_path = _write_temp_wav(floats, sample_rate)
     try:
         text = model_obj.transcribe(wav_path)
     finally:
-        try:
-            os.unlink(wav_path)
-        except OSError:
-            pass
+        _unlink_temp_wav(wav_path)
     return str(text).strip()
 
 
@@ -442,7 +453,7 @@ class _HuggingfaceCTCAdapter(_BaseSTTAdapter[CTCBundle]):
             device=self._device,
         )
         started = time.monotonic()
-        load_processor = cast(CTCProcessorLoader, AutoProcessor.from_pretrained)
+        load_processor = _auto_processor(CTCProcessor)
         load_model = cast(CTCModelLoader, AutoModelForCTC.from_pretrained)
         processor = load_processor(hf_model_id, revision=revision, token=self._cfg.hf_token)
         model = load_model(
@@ -489,7 +500,7 @@ class _WhisperAdapter(_BaseSTTAdapter[WhisperASRPipeline]):
             device=self._device,
         )
         started = time.monotonic()
-        load_processor = cast(WhisperProcessorLoader, AutoProcessor.from_pretrained)
+        load_processor = _auto_processor(WhisperProcessor)
         load_model = cast(WhisperModelLoader, AutoModelForSpeechSeq2Seq.from_pretrained)
         pipeline_factory = cast(ASRPipelineFactory, pipeline)
         processor = load_processor(hf_model_id, revision=revision, token=self._cfg.hf_token)
@@ -538,9 +549,11 @@ class LocalSTTEngine:
         allowed = allowed_api_model_ids("stt", self._cfg)
         hf = resolve_hf_model_id("stt", requested_api_model_id, self._cfg)
         if hf is None:
-            raise HTTPException(
-                status_code=422,
-                detail={
+            raise WsCommandError(
+                "unprocessable",
+                f"STT: unknown model {requested_api_model_id!r}",
+                error_code="ws_invalid_payload",
+                error_params={
                     "reason": "unknown_stt_model",
                     "model": requested_api_model_id,
                     "allowed": sorted(allowed),
@@ -548,9 +561,10 @@ class LocalSTTEngine:
             )
         entry = find_stt_entry(self._cfg, requested_api_model_id)
         if entry is None:
-            raise HTTPException(
-                status_code=422,
-                detail=f"STT: for api_model_id={requested_api_model_id!r} has no entry in cfg.stt_models",
+            raise WsCommandError(
+                "unprocessable",
+                f"STT: for api_model_id={requested_api_model_id!r} has no entry in cfg.stt_models",
+                error_code="ws_invalid_payload",
             )
         return entry
 

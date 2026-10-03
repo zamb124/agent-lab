@@ -69,7 +69,7 @@ class CodeTool(BaseTool):
 
         schema_obj = require_json_object(parameters_schema, f"CodeTool.{tool_id}.parameters_schema")
         if schema_obj.get("type") != "object":
-            raise ValueError(f"CodeTool '{tool_id}': parameters_schema must have type: object")
+            raise ValueError(f"CodeTool '{tool_id}': parameters_schema must have type object")
         raw_properties = schema_obj.get("properties")
         if not isinstance(raw_properties, dict):
             raise ValueError(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 import sys
@@ -10,7 +9,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from core.capabilities.runner_cache import code_runner_lsp_cache_root
 
 
 def run_exclusive_lsp_install(
@@ -112,9 +111,4 @@ def python_lsp_command() -> list[str]:
 
 
 def _cache_dir(name: str) -> Path:
-    root = (
-        Path(os.environ["CODE_RUNNER_LSP_CACHE"])
-        if "CODE_RUNNER_LSP_CACHE" in os.environ
-        else _REPO_ROOT / ".cache"
-    )
-    return root / name
+    return code_runner_lsp_cache_root() / name

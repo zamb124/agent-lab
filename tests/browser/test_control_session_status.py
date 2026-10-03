@@ -5,11 +5,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from apps.browser.api import control
 from core.authz.models import AuthzObject
 from core.clients.browser.control_types import ControlSessionStatusResponse
+from core.websocket import WsCommandError
 
 
 class _StubAuthz:
@@ -58,6 +58,6 @@ async def test_control_session_status_unknown_session_returns_404() -> None:
             lease_manager=_UnknownSessionLeaseManager(),
         ),
     )
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(WsCommandError) as exc_info:
         _ = await control.control_session_status("sess-unknown", di)  # pyright: ignore[reportArgumentType]
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.code == "not_found"

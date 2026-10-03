@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import Response, StreamingResponse
 
 from apps.wiki.content.public_media import rewrite_cover_for_public, rewrite_media_for_public
@@ -24,12 +24,13 @@ from apps.wiki.models.api import (
     WikiPublicPageSummary,
     WikiPublicTreeResponse,
 )
-from apps.wiki.models.domain import WikiPage
+from apps.wiki.models.page import WikiPage
 from core.files.http_range import RangeNotSatisfiableError
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SystemPrincipal
 from core.files.streaming import stream_file_handle
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -54,7 +55,7 @@ async def get_public_page(di: Di, link_token: str) -> WikiPublicPageResponse:
     _ = di
     page = await WikiPage.get_public_page(link_token)
     if page is None:
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return _public_page_response(page, link_token)
 
 
@@ -65,7 +66,7 @@ async def get_public_page_markdown(
     _ = di
     page = await WikiPage.get_public_page(link_token)
     if page is None:
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return WikiMarkdownResponse(
         wiki_page_id=page.wiki_page_id,
         title=page.title,
@@ -77,7 +78,7 @@ async def get_public_page_markdown(
 async def get_public_site_tree(di: Di, link_token: str) -> WikiPublicTreeResponse:
     items = await di.wiki_service.get_public_site_tree(link_token)
     if not items:
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return WikiPublicTreeResponse(
         root_page_id=items[0].wiki_page_id,
         items=[
@@ -99,7 +100,7 @@ async def get_public_site_page(
 ) -> WikiPublicPageResponse:
     page = await di.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return _public_page_response(page, link_token)
 
 
@@ -111,7 +112,7 @@ async def get_public_site_page_markdown(
 ) -> WikiMarkdownResponse:
     page = await di.wiki_service.get_public_site_page(link_token, wiki_page_id)
     if page is None:
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise WsCommandError("not_found", "Page not found", error_code="not_found")
     return WikiMarkdownResponse(
         wiki_page_id=page.wiki_page_id,
         title=page.title,
@@ -130,19 +131,19 @@ async def get_public_site_file(
     внешние хранилища через публичную ссылку не проксируем.
     """
     if not await di.wiki_service.public_site_has_file(link_token, file_id):
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
 
     try:
         file_record = await di.files_service.get(file_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="File not found") from exc
+        raise WsCommandError("not_found", "File not found", error_code="not_found") from exc
 
     if file_record.storage_id == "" or file_record.s3_key == "":
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     if file_record.content_type == "":
-        raise HTTPException(status_code=500, detail="File has no content_type")
+        raise WsCommandError("internal", "File has no content_type", error_code="internal")
     if file_record.company_id is None or file_record.company_id == "":
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
 
     handle = await FileGate().open_record(
         file_record,
@@ -161,6 +162,6 @@ async def get_public_site_file(
         code = exc.response["Error"]["Code"]
         status = exc.response["ResponseMetadata"]["HTTPStatusCode"]
         if code in ("404", "NoSuchKey", "NotFound") or status == 404:
-            raise HTTPException(status_code=404, detail="File not found") from exc
+            raise WsCommandError("not_found", "File not found", error_code="not_found") from exc
         logger.exception("wiki.public_file_download_failed", file_id=file_id)
-        raise HTTPException(status_code=502, detail="Failed to read file") from exc
+        raise WsCommandError("upstream", "Failed to read file", error_code="upstream") from exc

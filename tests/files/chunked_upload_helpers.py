@@ -1,4 +1,4 @@
-"""Единый HTTP-хелпер chunked upload для тестов (реальный MinIO + Files API)."""
+"""Единый HTTP-хелпер chunked upload для тестов (реальный S3 + Files API)."""
 
 from __future__ import annotations
 

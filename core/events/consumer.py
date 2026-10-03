@@ -22,12 +22,12 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Protocol, TypeAlias, cast
+from typing import Protocol, TypeAlias
 
 from pydantic import ValidationError
-from redis.asyncio.client import Redis
 from redis.exceptions import ResponseError as RedisResponseError
 
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.events.contract import PLATFORM_EVENTS_STREAM, PlatformEvent
 from core.logging import get_logger
@@ -41,21 +41,15 @@ _StreamReadResult: TypeAlias = list[tuple[str, list[_StreamEntry]]]
 _AutoClaimResult: TypeAlias = tuple[str, list[_StreamEntry], list[str]]
 
 
-class _RedisFromUrl(Protocol):
-    def __call__(self, url: str, *, decode_responses: bool) -> Redis: ...
-
-
-class _RedisXReadCommand(Protocol):
-    def __call__(
+class _EventsRedis(Protocol):
+    def xread(
         self,
         streams: dict[str, str],
         count: int,
         block: int,
     ) -> Awaitable[_StreamReadResult]: ...
 
-
-class _RedisXReadGroupCommand(Protocol):
-    def __call__(
+    def xreadgroup(
         self,
         groupname: str,
         consumername: str,
@@ -64,9 +58,7 @@ class _RedisXReadGroupCommand(Protocol):
         block: int,
     ) -> Awaitable[_StreamReadResult]: ...
 
-
-class _RedisXGroupCreateCommand(Protocol):
-    def __call__(
+    def xgroup_create(
         self,
         name: str,
         groupname: str,
@@ -74,13 +66,9 @@ class _RedisXGroupCreateCommand(Protocol):
         mkstream: bool,
     ) -> Awaitable[bool]: ...
 
+    def xack(self, name: str, groupname: str, *ids: str) -> Awaitable[int]: ...
 
-class _RedisXAckCommand(Protocol):
-    def __call__(self, name: str, groupname: str, *ids: str) -> Awaitable[int]: ...
-
-
-class _RedisXAutoClaimCommand(Protocol):
-    def __call__(
+    def xautoclaim(
         self,
         name: str,
         groupname: str,
@@ -90,14 +78,11 @@ class _RedisXAutoClaimCommand(Protocol):
         count: int,
     ) -> Awaitable[_AutoClaimResult]: ...
 
-
-class _RedisACloseCommand(Protocol):
-    def __call__(self) -> Awaitable[None]: ...
+    def aclose(self) -> Awaitable[None]: ...
 
 
-def _events_redis_client(redis_url: str) -> Redis:
-    from_url = cast(_RedisFromUrl, Redis.from_url)
-    return from_url(redis_url, decode_responses=True)
+def _events_redis_client(redis_url: str) -> _EventsRedis:
+    return redis_client_from_url(_EventsRedis, redis_url, decode_responses=True)
 
 
 def _events_redis_url() -> str:
@@ -151,19 +136,17 @@ class PlatformEventTailReader:
                 )
                 await asyncio.sleep(1.0)
             finally:
-                aclose = cast(_RedisACloseCommand, client.aclose)
                 try:
-                    await aclose()
+                    await client.aclose()
                 except Exception as close_exc:
                     logger.warning(
                         "platform_event.tail_reader_close_failed",
                         error=str(close_exc),
                     )
 
-    async def _read_loop(self, client: Redis, block_ms: int) -> None:
-        xread = cast(_RedisXReadCommand, client.xread)
+    async def _read_loop(self, client: _EventsRedis, block_ms: int) -> None:
         while True:
-            read_result = await xread(
+            read_result = await client.xread(
                 {PLATFORM_EVENTS_STREAM: self._last_id},
                 count=100,
                 block=block_ms,
@@ -231,9 +214,8 @@ class PlatformEventGroupConsumer:
                 )
                 await asyncio.sleep(1.0)
             finally:
-                aclose = cast(_RedisACloseCommand, client.aclose)
                 try:
-                    await aclose()
+                    await client.aclose()
                 except Exception as close_exc:
                     logger.warning(
                         "platform_event.group_consumer_close_failed",
@@ -241,10 +223,9 @@ class PlatformEventGroupConsumer:
                         error=str(close_exc),
                     )
 
-    async def _ensure_group(self, client: Redis) -> None:
-        xgroup_create = cast(_RedisXGroupCreateCommand, client.xgroup_create)
+    async def _ensure_group(self, client: _EventsRedis) -> None:
         try:
-            _ = await xgroup_create(
+            _ = await client.xgroup_create(
                 PLATFORM_EVENTS_STREAM,
                 self._group,
                 id="$",
@@ -257,11 +238,10 @@ class PlatformEventGroupConsumer:
 
     async def _consume_loop(
         self,
-        client: Redis,
+        client: _EventsRedis,
         block_ms: int,
         autoclaim_idle_ms: int,
     ) -> None:
-        xreadgroup = cast(_RedisXReadGroupCommand, client.xreadgroup)
         last_autoclaim_at = 0.0
         while True:
             now = time.monotonic()
@@ -269,7 +249,7 @@ class PlatformEventGroupConsumer:
                 last_autoclaim_at = now
                 await self._autoclaim_stale(client, autoclaim_idle_ms)
 
-            read_result = await xreadgroup(
+            read_result = await client.xreadgroup(
                 self._group,
                 self._consumer_name,
                 {PLATFORM_EVENTS_STREAM: ">"},
@@ -281,11 +261,10 @@ class PlatformEventGroupConsumer:
             for _stream_name, entries in read_result:
                 await self._handle_entries(client, entries)
 
-    async def _autoclaim_stale(self, client: Redis, autoclaim_idle_ms: int) -> None:
+    async def _autoclaim_stale(self, client: _EventsRedis, autoclaim_idle_ms: int) -> None:
         """Забрать pending-записи мёртвых consumers этой группы."""
-        xautoclaim = cast(_RedisXAutoClaimCommand, client.xautoclaim)
         try:
-            claim_result = await xautoclaim(
+            claim_result = await client.xautoclaim(
                 PLATFORM_EVENTS_STREAM,
                 self._group,
                 self._consumer_name,
@@ -306,12 +285,11 @@ class PlatformEventGroupConsumer:
             )
             await self._handle_entries(client, claimed_entries)
 
-    async def _handle_entries(self, client: Redis, entries: list[_StreamEntry]) -> None:
-        xack = cast(_RedisXAckCommand, client.xack)
+    async def _handle_entries(self, client: _EventsRedis, entries: list[_StreamEntry]) -> None:
         for entry_id, fields in entries:
             event = _parse_entry(entry_id, fields)
             if event is None:
-                _ = await xack(PLATFORM_EVENTS_STREAM, self._group, entry_id)
+                _ = await client.xack(PLATFORM_EVENTS_STREAM, self._group, entry_id)
                 continue
             try:
                 await self._on_event(event)
@@ -327,4 +305,4 @@ class PlatformEventGroupConsumer:
                     exc_info=True,
                 )
                 continue
-            _ = await xack(PLATFORM_EVENTS_STREAM, self._group, entry_id)
+            _ = await client.xack(PLATFORM_EVENTS_STREAM, self._group, entry_id)

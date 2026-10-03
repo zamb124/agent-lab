@@ -1,5 +1,5 @@
 """
-E2E импорта базы знаний: реальный TaskIQ worker, S3/MinIO, парсинг файлов, откат.
+E2E импорта базы знаний: реальный TaskIQ worker, S3/SeaweedFS, парсинг файлов, откат.
 
 LLM мокируется только в сценарии mode=graph (mock_llm_redis), как в test_05_ai_analysis.
 """

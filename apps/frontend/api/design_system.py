@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from apps.frontend.di import Di
@@ -15,6 +15,7 @@ from apps.frontend.services.design_system_catalog import (
     resolve_variant,
 )
 from apps.frontend.services.design_system_preview_html import build_design_system_preview_html
+from core.websocket import WsCommandError, raise_not_found
 
 router = APIRouter(tags=["design-system"])
 
@@ -49,12 +50,12 @@ async def design_system_preview(
     trimmed = component.strip()
     variant_id = variant.strip()
     if not catalog_allows_component(trimmed):
-        raise HTTPException(status_code=404, detail="Component not in UI Kit catalog")
+        raise WsCommandError("not_found", "Component not in UI Kit catalog", error_code="not_found")
     manifest = load_manifest(trimmed)
     try:
         resolved = resolve_variant(trimmed, variant_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     html_out = build_design_system_preview_html(
         component=trimmed,
         variant_id=resolved.id,

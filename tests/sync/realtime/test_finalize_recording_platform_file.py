@@ -11,6 +11,7 @@ from apps.sync.realtime.tasks import (
     _call_recording_s3_object_key,
     _register_platform_file_record_for_call_recording,
 )
+from apps.sync.services.sync_channel_access_service import SyncChannelAccessService
 from core.config import get_settings
 from core.files.object_storage import PLATFORM_STORAGE_ID
 from tests.fixtures.s3 import require_s3_configured
@@ -41,15 +42,22 @@ async def test_call_recording_register_platform_file_then_download_ok(
     assert uploaded, "S3 upload_bytes вернул False"
     await s3_client.close()
 
+    channel_id = f"ch-{unique_id}"
+    access = SyncChannelAccessService(frontend_app.state.di.authz_service)
+    await access.set_member(channel_id, user_id=sync_user_id, relation="member")
+
     try:
         file_size = await _register_platform_file_record_for_call_recording(
+            files_service=frontend_app.state.di.files_service,
             raw_file_id=recording_id,
             company_id=company_id,
+            channel_id=channel_id,
             call_id=call_id,
             recording_id=recording_id,
             started_by_user_id=sync_user_id,
             raw_original_name=f"{recording_id}.mp4",
             raw_storage_url="https://example.invalid/egress-location",
+            storage_id=PLATFORM_STORAGE_ID,
         )
         assert file_size == len(payload)
 
@@ -62,7 +70,7 @@ async def test_call_recording_register_platform_file_then_download_ok(
         assert dl.status_code == 200, dl.text
         assert dl.content == payload
     finally:
-        cleanup = s3_client_for_bucket(bucket)
+        cleanup = s3_client_for_bucket(PLATFORM_STORAGE_ID)
         await cleanup.delete_file(s3_key)
         await cleanup.close()
         from core.files.models import FileRecord

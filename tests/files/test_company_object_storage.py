@@ -1,4 +1,4 @@
-"""Компания пишет в платформенный MinIO, в своё хранилище и в разные бакеты по роду файла."""
+"""Компания пишет в платформенное S3-хранилище, в своё хранилище и в разные бакеты по роду файла."""
 
 from __future__ import annotations
 
@@ -22,7 +22,13 @@ def _spec(kind: str) -> FileCreateSpec:
     return FileCreateSpec.model_validate(
         {
             "source_kind": kind,
-            "source_ref": {},
+            "source_ref": {
+                "mailbox_binding_id": "mb",
+                "mail_uid": "1",
+                "mailbox_email": "a@b.test",
+            }
+            if kind == "mail_message"
+            else {},
             "retention": {"kind": "generated_ephemeral" if kind == "generated_ephemeral" else "mail_attachment"},
         }
     )
@@ -56,7 +62,7 @@ def _bind_company(company_id: str):
 
 
 @pytest.mark.asyncio
-async def test_company_without_route_writes_platform_minio(frontend_di):
+async def test_company_without_route_writes_platform_s3(frontend_di):
     company_id = f"co_{uuid.uuid4().hex[:10]}"
     token = _bind_company(company_id)
     try:
@@ -74,7 +80,7 @@ async def test_company_without_route_writes_platform_minio(frontend_di):
 
 
 @pytest.mark.asyncio
-async def test_company_route_writes_external_minio_and_kind_split(frontend_di):
+async def test_company_route_writes_external_s3_and_kind_split(frontend_di):
     endpoint = "http://127.0.0.1:19003"
     access_key = "extadmin"
     secret = "extadminsecret"
@@ -87,7 +93,7 @@ async def test_company_route_writes_external_minio_and_kind_split(frontend_di):
         default_storage = await service.create(
             company_id,
             name="ext-a",
-            provider="minio",
+            provider="seaweedfs",
             endpoint_url=endpoint,
             region_name="us-east-1",
             bucket_name="ext-a",
@@ -98,7 +104,7 @@ async def test_company_route_writes_external_minio_and_kind_split(frontend_di):
         mail_storage = await service.create(
             company_id,
             name="ext-b",
-            provider="minio",
+            provider="seaweedfs",
             endpoint_url=endpoint,
             region_name="us-east-1",
             bucket_name="ext-b",
@@ -141,7 +147,7 @@ def test_private_storage_endpoint_is_rejected():
     with pytest.raises(ValueError):
         assert_company_endpoint("http://10.1.1.1")
     with pytest.raises(ValueError):
-        assert_company_endpoint("https://minio.platform.svc.cluster.local")
+        assert_company_endpoint("https://seaweedfs.platform.svc.cluster.local")
 
 
 @pytest.mark.asyncio
@@ -156,7 +162,7 @@ async def test_delete_storage_with_files_conflicts(frontend_di):
         storage = await service.create(
             company_id,
             name="held",
-            provider="minio",
+            provider="seaweedfs",
             endpoint_url=endpoint,
             region_name="us-east-1",
             bucket_name="ext-a",

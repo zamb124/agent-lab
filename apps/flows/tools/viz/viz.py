@@ -143,7 +143,12 @@ class CreateVizArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     kind: VizKind = Field(..., description="chart|flowchart|gantt|sequence|timeline")
-    title: str = Field(..., min_length=1, max_length=500)
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Заголовок визуализации; показывается в viewer и используется для имени файла.",
+    )
     engine: VizEngine | None = Field(
         None,
         description="echarts|mermaid; если не задан — выбирается по kind",
@@ -175,11 +180,19 @@ class CreateVizArgs(BaseModel):
 class UpdateVizArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    file_id: str = Field(..., min_length=1)
-    title: str | None = Field(None, min_length=1, max_length=500)
-    source: str | None = None
-    option: JsonObject | None = None
-    spec: JsonObject | None = None
+    file_id: str = Field(..., min_length=1, description="file_id существующего .viz файла из state.files")
+    title: str | None = Field(
+        None,
+        min_length=1,
+        max_length=500,
+        description="Новый заголовок; если не задан — сохраняется текущий",
+    )
+    source: str | None = Field(None, description="Новый Mermaid DSL; перезаписывает spec.source")
+    option: JsonObject | None = Field(None, description="Новый ECharts option object; перезаписывает spec.option")
+    spec: JsonObject | None = Field(
+        None,
+        description="Полная замена spec документа; приоритет над source/option",
+    )
 
     @model_validator(mode="after")
     def _require_patch(self) -> "UpdateVizArgs":
@@ -191,7 +204,7 @@ class UpdateVizArgs(BaseModel):
 class ExportVizArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    file_id: str = Field(..., min_length=1)
+    file_id: str = Field(..., min_length=1, description="file_id .viz файла для экспорта")
     format: Literal["svg", "json"] = Field(
         "svg",
         description="svg — экспорт с заголовком/содержимым; json — копия .viz JSON",
@@ -201,8 +214,14 @@ class ExportVizArgs(BaseModel):
 class VizOpenFileArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    file_id: str | None = None
-    file_name: str | None = None
+    file_id: str | None = Field(
+        None,
+        description="file_id .viz файла из state.files; приоритет над file_name",
+    )
+    file_name: str | None = Field(
+        None,
+        description="original_name .viz файла; используется, если file_id неизвестен",
+    )
 
     @model_validator(mode="after")
     def _require_ref(self) -> "VizOpenFileArgs":

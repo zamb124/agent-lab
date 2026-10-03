@@ -18,9 +18,9 @@ from apps.wiki.content.prosemirror import ProseMirrorNode
 from apps.wiki.models.domain import (
     WikiAccessMemberRelation,
     WikiLinkPermission,
-    WikiPage,
     WikiPageSummary,
 )
+from apps.wiki.models.page import WikiPage
 
 
 class WikiPageCreateRequest(WikiBaseModel):

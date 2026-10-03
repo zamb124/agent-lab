@@ -10,7 +10,6 @@ Mount на каждом сервисе с include_platform_routers:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 from urllib.parse import urlparse
 
 import httpx
@@ -25,7 +24,6 @@ from core.authz.service import AuthzService
 from core.config import get_settings
 from core.context import get_context, require_active_company
 from core.di.platform import Di
-from core.documents.placement import DocsPlacement
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError
 from core.files.chunked_upload import (
     ChunkedUploadInitResult,
@@ -49,7 +47,7 @@ from core.files.urls import (
     normalize_files_route_segment,
     require_files_route_segment,
 )
-from core.http import get_httpx_client
+from core.http import get_httpx_client, http_header_text
 from core.logging import get_logger
 from core.models import StrictBaseModel
 
@@ -225,17 +223,6 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return stored_file_ref(file_record, route_segment=route_segment)
 
-    async def bind_file(file_id: str, placement: DocsPlacement, di: Di) -> dict[str, str]:
-        _ = await _require_company_can_view(di.authz_service)
-        service = di.files_service
-        try:
-            result = await service.bind(file_id, placement)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        return result.model_dump(mode="json")
-
     async def download_file(file_id: str, request: Request, di: Di) -> StreamingResponse | Response:
         try:
             handle = await FileGate(di.authz_service).open(
@@ -297,9 +284,9 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="Upstream download failed.") from exc
 
-        response_content_type_raw = cast(
-            str | None,
-            upstream_response.headers.get("content-type"),
+        response_content_type_raw = http_header_text(
+            upstream_response.headers,
+            "content-type",
         )
         if (
             not isinstance(response_content_type_raw, str)
@@ -367,11 +354,6 @@ def build_files_router(*, files_route_segment: str) -> APIRouter:
         register_s3,
         methods=["POST"],
         response_model=FileRef,
-    )
-    router.add_api_route(
-        "/{file_id}/bind",
-        bind_file,
-        methods=["POST"],
     )
     router.add_api_route(
         "/download/{file_id}",

@@ -9,7 +9,7 @@ from apps.wiki.models.api import (
     WikiCommentCreateRequest,
     WikiCommentResolveRequest,
 )
-from apps.wiki.models.domain import WikiComment
+from apps.wiki.models.comment import WikiComment
 from apps.wiki.realtime.operations import (
     WikiCommentCreatePayload,
     WikiCommentIdPayload,

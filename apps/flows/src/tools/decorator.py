@@ -156,7 +156,7 @@ class FunctionTool(BaseTool):
         """Возвращает копию tool с клиентами, сопоставленными по типу параметра."""
         if self.parameters_model is None:
             raise RuntimeError(f"Tool '{self.name}' requires parameters_model")
-        by_type: dict[type[object], BuiltinToolClient] = {
+        by_type: dict[type[BuiltinToolClient], BuiltinToolClient] = {
             type(client): client for client in self._clients
         }
         for client in clients:
@@ -189,7 +189,7 @@ class FunctionTool(BaseTool):
         return self._func
 
 
-def _declared_parameter_type(func: FunctionType, parameter_name: str) -> type[object] | None:
+def _declared_parameter_type(func: FunctionType, parameter_name: str) -> type[BuiltinToolClient] | None:
     namespace = dict(func.__globals__)
     namespace.setdefault("ExecutionState", ExecutionState)
     hints: Mapping[str, object] = get_type_hints(func, globalns=namespace)
@@ -201,7 +201,7 @@ def _declared_parameter_type(func: FunctionType, parameter_name: str) -> type[ob
 
 def _client_of_type(
     clients: Sequence[BuiltinToolClient],
-    annotation: type[object] | None,
+    annotation: type[BuiltinToolClient] | None,
 ) -> BuiltinToolClient | None:
     if annotation is None:
         return None

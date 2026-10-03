@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from apps.flows.src.models import FlowConfig
@@ -26,6 +26,7 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import SYSTEM_COMPANY_ID
 from core.utils.tokens import get_token_service
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -73,7 +74,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin must be an HTTP(S) origin")
+        raise WsCommandError("ws_invalid_payload", "origin must be an HTTP(S) origin", error_code="ws_invalid_payload")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -177,24 +178,24 @@ async def issue_public_landing_session(
     embed_id = body.embed_id.strip()
     config = await EmbedConfig.get(embed_id)
     if config is None or config.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise WsCommandError("not_found", "Configuration not found", error_code="not_found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Widget is disabled")
+        raise WsCommandError("forbidden", "Widget is disabled", error_code="forbidden")
     if not config.landing_visible:
-        raise HTTPException(status_code=403, detail="Widget is not available for public chat")
+        raise WsCommandError("forbidden", "Widget is not available for public chat", error_code="forbidden")
     session_flow_cfg = await _landing_flow_config(config.company_id, config.flow_id)
     img = _effective_landing_card_image_url(config, session_flow_cfg)
     if not img:
-        raise HTTPException(status_code=403, detail="Widget is not published in the catalog")
+        raise WsCommandError("forbidden", "Widget is not published in the catalog", error_code="forbidden")
 
     origin = _normalize_origin(request.headers.get("origin", ""))
     referer_origin = _origin_from_referer(request.headers.get("referer", ""))
     if not origin and referer_origin:
         origin = referer_origin
     if origin and referer_origin and origin != referer_origin:
-        raise HTTPException(status_code=403, detail="origin does not match the catalog page")
+        raise WsCommandError("forbidden", "origin does not match the catalog page", error_code="forbidden")
     if not origin:
-        raise HTTPException(status_code=403, detail="origin is required for a public session")
+        raise WsCommandError("forbidden", "origin is required for a public session", error_code="forbidden")
 
     await enforce_public_session_issue_rate_limit(
         redis_client=di.redis_client,

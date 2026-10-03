@@ -35,7 +35,7 @@ def get_token_info(
 ) -> JsonObject | None:
     """Валидирует access token и возвращает хранящуюся в нем информацию"""
     try:
-        decoded_payload: object = jwt.decode(
+        decoded_payload = jwt.decode(
             token,
             jwt_secret,
             algorithms=[jwt_algorithm],

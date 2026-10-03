@@ -41,6 +41,7 @@ from core.capabilities.models import (
     PlatformEffectEnvelope,
     PlatformEffectOrigin,
     locked_down_code_sandbox_policy,
+    match_capability_language,
 )
 from core.capabilities.sandbox_libraries import (
     CSHARP_ALLOWED_USINGS,
@@ -78,6 +79,7 @@ __all__ = [
     "CapabilityLanguage",
     "CAPABILITY_LANGUAGES",
     "CAPABILITY_LANGUAGE_SET",
+    "match_capability_language",
     "CapabilityManifest",
     "CapabilityNamespaceDocumentation",
     "CapabilitySchemaFieldDocumentation",

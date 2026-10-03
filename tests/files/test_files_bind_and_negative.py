@@ -36,7 +36,7 @@ async def test_bind_rejects_mismatched_file_id(frontend_client, auth_headers_sys
         headers=auth_headers_system,
         json=placement,
     )
-    assert response.status_code == 400
+    assert response.status_code == 405
 
 
 @pytest.mark.asyncio
@@ -72,19 +72,15 @@ async def test_upload_missing_spec_422(frontend_client, auth_headers_system):
 
 
 @pytest.mark.asyncio
-async def test_files_service_bind_file_id_mismatch_raises(app, frontend_di):
+async def test_files_service_place_missing_file_raises(app, frontend_di):
     _ = app
-    from core.documents.placement import DocsPlacement
+    from core.documents.placement import DocumentPlacement
 
-    placement = DocsPlacement.model_validate(
-        {
-            "namespace": "default",
-            "file_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "title": "x",
-        }
-    )
-    with pytest.raises(ValueError, match="file_id"):
-        await frontend_di.files_service.bind("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", placement)
+    with pytest.raises(ValueError, match="file not found"):
+        await frontend_di.files_service.place(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            DocumentPlacement(catalog_path=["Missing"]),
+        )
 
 
 def test_platform_auxiliary_spec_json_valid():

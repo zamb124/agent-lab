@@ -6,7 +6,6 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request, Response
 
-from apps.office.db.models import OfficeDocumentEvent, OfficeDocumentRevision
 from apps.office.di import Di
 from apps.office.models.api import (
     OfficeCatalogCreateRequest,
@@ -53,6 +52,8 @@ from apps.office.models.api import (
     OfficeResourceAccessRotateLinkResponse,
     OfficeSpreadsheetUpdateCellsRequest,
 )
+from apps.office.models.event import OfficeDocumentEvent
+from apps.office.models.revision import OfficeDocumentRevision
 from apps.office.realtime.operations import (
     OfficeCatalogAccessRotatePayload,
     OfficeCatalogAccessUpdatePayload,
@@ -98,7 +99,6 @@ from apps.office.realtime.operations import (
     op_documents_access_update,
     op_documents_ai_summary,
     op_documents_append_text,
-    op_documents_bind,
     op_documents_copy,
     op_documents_create_from_file,
     op_documents_deleted_list,
@@ -127,12 +127,7 @@ from apps.office.realtime.operations import (
 )
 from core.context import require_context
 from core.di.platform import Di as PlatformDiDep
-from core.documents.placement import (
-    DocsBindResult,
-    DocsEnsurePathRequest,
-    DocsEnsurePathResult,
-    DocsPlacement,
-)
+from core.documents.placement import DocumentEnsureRequest, DocumentEnsureResult
 from core.identity.team_operations import TeamMemberResponse, op_team_members_list
 from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.identity_models import Namespace
@@ -200,10 +195,10 @@ async def list_catalogs(di: Di) -> OfficeCatalogListResponse:
     )
 
 
-@router.post("/catalogs/ensure-path", response_model=DocsEnsurePathResult)
+@router.post("/catalogs/ensure-path", response_model=DocumentEnsureResult)
 async def ensure_catalog_path(
-    di: Di, body: DocsEnsurePathRequest
-) -> DocsEnsurePathResult:
+    di: Di, body: DocumentEnsureRequest
+) -> DocumentEnsureResult:
     return await op_catalogs_ensure_path(
         body, user=require_context().user, di=di
     )
@@ -493,13 +488,6 @@ async def create_document_from_uploaded_file(
     return await op_documents_create_from_file(
         body, user=require_context().user, di=di
     )
-
-
-@router.post("/documents/bind", response_model=DocsBindResult)
-async def bind_file_to_catalog(
-    di: Di, body: DocsPlacement
-) -> DocsBindResult:
-    return await op_documents_bind(body, user=require_context().user, di=di)
 
 
 @router.post(

@@ -2,26 +2,27 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Annotated
 
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, Response
 
 from apps.office.config import get_office_settings
-from apps.office.db.models import OfficeDocumentBinding
 from apps.office.di import Di
+from apps.office.models.link import DocumentLink
 from apps.office.services.viewer_frame import render_viewer_frame_html
 from apps.office.services.viewer_handlers._urls import viewer_save_url, viewer_stream_url
 from apps.office.services.viewer_handlers.text_handler import TEXT_MAX_EDIT_BYTES
 from core.clients.onlyoffice import OnlyOfficeJwtError
 from core.documents.viewer.jwt import decode_viewer_save_token, decode_viewer_stream_token
 from core.documents.viewer.models import OfficeViewerSaveTokenClaims, OfficeViewerStreamTokenClaims
+from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
 from core.files.object_store.principals import SignedFileGrant
 from core.logging import get_logger
 from core.middleware.auth.company_resolver import build_service_base_url
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["office-viewer"])
@@ -34,17 +35,17 @@ async def viewer_stream(
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office is not configured")
+        raise WsCommandError("unavailable", "office is not configured", error_code="unavailable")
     try:
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
+        raise WsCommandError("unauthorized", "Invalid viewer token", error_code="unauthorized") from exc
     await _authorize_viewer_claims(claims)
     meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     if meta.company_id != claims.company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     handle = await FileGate().open_record(
         meta,
         SignedFileGrant(file_id=claims.file_id, company_id=claims.company_id),
@@ -60,7 +61,7 @@ async def viewer_stream(
             key=meta.s3_key,
             code=code,
         )
-        raise HTTPException(status_code=502, detail=f"S3 did not return the object: {code}") from exc
+        raise WsCommandError("upstream", f"S3 did not return the object: {code}", error_code="upstream") from exc
     content_type = claims.content_type or meta.content_type or "application/octet-stream"
     disposition = "inline"
     if claims.handler == "binary":
@@ -80,15 +81,15 @@ async def viewer_frame(
 ) -> HTMLResponse:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office is not configured")
+        raise WsCommandError("unavailable", "office is not configured", error_code="unavailable")
     try:
         claims = decode_viewer_stream_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Invalid viewer token") from exc
+        raise WsCommandError("unauthorized", "Invalid viewer token", error_code="unauthorized") from exc
     await _authorize_viewer_claims(claims)
     meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     base = build_service_base_url(request)
     stream_url = viewer_stream_url(
         base_url=base,
@@ -130,39 +131,33 @@ async def viewer_save(
 ) -> Response:
     integ = get_office_settings().office
     if not integ.jwt_secret.strip():
-        raise HTTPException(status_code=503, detail="office is not configured")
+        raise WsCommandError("unavailable", "office is not configured", error_code="unavailable")
     try:
         claims = decode_viewer_save_token(token, integ.jwt_secret)
     except OnlyOfficeJwtError as exc:
-        raise HTTPException(status_code=401, detail="Invalid viewer save token") from exc
+        raise WsCommandError("unauthorized", "Invalid viewer save token", error_code="unauthorized") from exc
     await _authorize_viewer_claims(claims)
     body = await request.body()
     if len(body) == 0:
-        raise HTTPException(status_code=400, detail="Empty save body")
+        raise WsCommandError("ws_invalid_payload", "Empty save body", error_code="ws_invalid_payload")
     if len(body) > TEXT_MAX_EDIT_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Text size exceeds the limit {TEXT_MAX_EDIT_BYTES} bytes",
+        raise WsCommandError(
+            "payload_too_large",
+            f"Text size exceeds the limit {TEXT_MAX_EDIT_BYTES} bytes",
+            error_code="ws_invalid_payload",
         )
     meta = await di.files_service.get_optional(claims.file_id)
     if meta is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise WsCommandError("not_found", "File not found", error_code="not_found")
     if meta.company_id != claims.company_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
     content_type = meta.content_type or "text/plain"
     normalized_content_type = content_type.split(";", 1)[0].strip()
-    digest = hashlib.sha256(body).hexdigest()
-    s3 = await FileGate().client_for_storage_id(meta.storage_id, record=meta)
-    _ = await s3.upload_bytes(
-        data=body,
-        key=meta.s3_key,
-        content_type=normalized_content_type,
-        public=meta.is_public,
-    )
-    _ = await di.files_service.save_file_size_checksum(
+    _ = await di.files_service.replace_content(
         meta,
-        file_size=len(body),
-        checksum=digest,
+        body,
+        content_type=normalized_content_type,
+        expected_checksum=meta.checksum,
     )
     return Response(status_code=204)
 
@@ -171,27 +166,20 @@ async def _authorize_viewer_claims(
     claims: OfficeViewerStreamTokenClaims | OfficeViewerSaveTokenClaims,
 ) -> None:
     if claims.public_link_token_hash is not None:
-        binding_row = await OfficeDocumentBinding.binding_by_enabled_link_token(
-            claims.public_link_token_hash,
-        )
-        if binding_row is None:
-            raise HTTPException(status_code=403, detail="Access denied")
-        if binding_row.file_id != claims.file_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        if binding_row.company_id != claims.company_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        if binding_row.link_permission == "viewer" and isinstance(claims, OfficeViewerSaveTokenClaims):
-            raise HTTPException(status_code=403, detail="Save is forbidden")
+        link = await DocumentLink.by_enabled_token(claims.public_link_token_hash)
+        if link is None or link.target_kind != "file" or link.target_id != claims.file_id:
+            raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
+        if link.company_id != claims.company_id:
+            raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
+        if link.permission == "viewer" and isinstance(claims, OfficeViewerSaveTokenClaims):
+            raise WsCommandError("forbidden", "Save is forbidden", error_code="forbidden")
         return
 
     if claims.viewer_scope == "catalog":
-        binding_row = await OfficeDocumentBinding.binding_for_company(
-            claims.file_id,
-            claims.company_id,
-        )
-        if binding_row is None:
-            raise HTTPException(status_code=403, detail="Access denied")
+        binding_row = await FileRecord.for_company(claims.file_id, claims.company_id)
+        if binding_row is None or binding_row.catalog_id is None:
+            raise WsCommandError("forbidden", "Access denied", error_code="forbidden")
         return
     if claims.viewer_scope == "file":
         return
-    raise HTTPException(status_code=403, detail="Access denied")
+    raise WsCommandError("forbidden", "Access denied", error_code="forbidden")

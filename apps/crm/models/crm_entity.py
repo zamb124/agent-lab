@@ -43,7 +43,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _note_date_value(value: object) -> date:
+def _note_date_value(value: JsonValue | date | datetime) -> date:
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -723,7 +723,7 @@ async def index_crm_entity(rag: BaseRAGProvider, entity: CRMEntity, *, replace: 
     )
 
 
-def crm_entity_from_row(row: object) -> CRMEntity:
+def crm_entity_from_row(row: JsonValue) -> CRMEntity:
     parsed = require_json_object(row, "crm entity")
     raw_item = parsed["item"] if "item" in parsed else parsed
     if isinstance(raw_item, str):
@@ -929,7 +929,7 @@ def _required_string(node: JsonObject, key: str) -> str:
     return raw_value
 
 
-def _coerce_scalar(field_type: str, value: object) -> _FilterScalar:
+def _coerce_scalar(field_type: str, value: JsonValue | date | datetime) -> _FilterScalar:
     if field_type == "integer":
         if isinstance(value, bool) or not isinstance(value, int):
             if isinstance(value, str) and value.strip() != "":
@@ -971,7 +971,7 @@ def _coerce_scalar(field_type: str, value: object) -> _FilterScalar:
     raise ValueError("Scalar filter value must be string, number, boolean, or null")
 
 
-def _int_cell(rows: Sequence[object], key: str, message: str) -> int:
+def _int_cell(rows: Sequence[JsonValue], key: str, message: str) -> int:
     if len(rows) != 1:
         raise ValueError(message)
     parsed = require_json_object(rows[0], key)
@@ -981,7 +981,7 @@ def _int_cell(rows: Sequence[object], key: str, message: str) -> int:
     return value
 
 
-def _optional_datetime(value: object, label: str) -> datetime | None:
+def _optional_datetime(value: JsonValue | datetime, label: str) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -995,7 +995,7 @@ def _optional_datetime(value: object, label: str) -> datetime | None:
 
 
 
-def _rank_to_float(value: object) -> float:
+def _rank_to_float(value: JsonValue) -> float:
     if isinstance(value, bool):
         raise ValueError("FTS rank returned invalid value")
     if isinstance(value, int | float):
@@ -1008,7 +1008,7 @@ def _rank_to_float(value: object) -> float:
     raise ValueError("FTS rank returned invalid value")
 
 
-def _facet_map(rows: Sequence[object], key: str) -> dict[str, int]:
+def _facet_map(rows: Sequence[JsonValue], key: str) -> dict[str, int]:
     result: dict[str, int] = {}
     for row in rows:
         parsed = require_json_object(row, key)

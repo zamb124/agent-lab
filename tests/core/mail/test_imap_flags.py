@@ -26,9 +26,9 @@ def test_parse_message_flags_blob_unseen() -> None:
 
 
 def test_extract_message_flags_from_fetch_lines() -> None:
-    seen_lines: list[object] = [b"* 1 FETCH (UID 42 FLAGS (\\Seen) BODY[] {0})"]
+    seen_lines = [b"* 1 FETCH (UID 42 FLAGS (\\Seen) BODY[] {0})"]
     assert _extract_message_flags_from_fetch(seen_lines).unread is False
-    unseen_lines: list[object] = [b"* 2 FETCH (UID 43 FLAGS (\\Recent) RFC822 {10})"]
+    unseen_lines = [b"* 2 FETCH (UID 43 FLAGS (\\Recent) RFC822 {10})"]
     assert _extract_message_flags_from_fetch(unseen_lines).unread is True
-    missing_flags: list[object] = [b"* 3 FETCH (UID 44 RFC822 {10})"]
+    missing_flags = [b"* 3 FETCH (UID 44 RFC822 {10})"]
     assert _extract_message_flags_from_fetch(missing_flags).unread is True

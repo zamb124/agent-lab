@@ -13,7 +13,8 @@ from apps.crm.constants_graph import (
 from apps.crm.models.api import NamespaceEditabilityResponse
 from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.models.entity_type import EntityType
-from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.namespace_template import NamespaceTemplate
+from apps.crm.models.namespace_template_type import NamespaceTemplateType
 from apps.crm.services.company_init_service import CompanyInitService
 from apps.crm.system_templates import (
     NAMESPACE_TEMPLATE_CORE_NOTE_TASK,

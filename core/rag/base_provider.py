@@ -7,10 +7,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from types import TracebackType
 
+from core.authz.factory import build_authz_service
+from core.config import get_settings
 from core.config.models import RAGProviderConfig
 from core.context import get_context, require_active_company, reset_context, set_context
+from core.documents.tree_service import DocumentTreeService
 from core.files.create_spec import FileCreateSpec, FileSourceKind
-from core.files.hooks import bind_document_placement
 from core.files.models import FileRecord
 from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.object_store.gate import FileGate
@@ -158,7 +160,7 @@ class BaseRAGProvider(ABC):
     def _rag_files(self) -> FilesService:
         return FilesService(
             files_route_segment="rag",
-            docs_bind_hook=bind_document_placement,
+            tree=DocumentTreeService(build_authz_service(get_settings().openfga)),
         )
 
     async def _store_rag_bytes(

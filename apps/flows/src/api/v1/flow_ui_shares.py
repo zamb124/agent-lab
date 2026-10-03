@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from apps.flows.di import Di
 from apps.flows.realtime.flow_ui_share_operations import (
@@ -26,6 +26,7 @@ from core.models.flow_ui_share import (
     FlowUIShareListPayload,
 )
 from core.pagination import ListResponse
+from core.websocket import WsCommandError, raise_not_found
 
 router = APIRouter(prefix="/flow-ui/shares", tags=["flow-ui-shares"])
 
@@ -33,12 +34,12 @@ router = APIRouter(prefix="/flow-ui/shares", tags=["flow-ui-shares"])
 def _exchange_origin(request: Request) -> str:
     raw = (request.headers.get("origin") or "").strip().rstrip("/")
     if not raw:
-        raise HTTPException(status_code=400, detail="Origin header is required")
+        raise WsCommandError("ws_invalid_payload", "Origin header is required", error_code="ws_invalid_payload")
     parsed = urlsplit(raw)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path:
-        raise HTTPException(status_code=400, detail="Origin header is invalid")
+        raise WsCommandError("ws_invalid_payload", "Origin header is invalid", error_code="ws_invalid_payload")
     if raw != build_service_base_url(request).rstrip("/"):
-        raise HTTPException(status_code=403, detail="Share token exchange origin mismatch")
+        raise WsCommandError("forbidden", "Share token exchange origin mismatch", error_code="forbidden")
     return raw
 
 
@@ -95,7 +96,7 @@ async def exchange_flow_ui_share(
             origin=_exchange_origin(request),
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
 
 
 __all__ = ["router"]

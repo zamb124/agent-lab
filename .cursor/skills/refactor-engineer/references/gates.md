@@ -40,6 +40,36 @@
 | `analyze_imports.py` | локальные импорты: цель `Total local imports: 0` | — |
 | `scripts/check_agent_e2e_coverage.py`, `scripts/check_agent_goose_tool_contract.py`, `scripts/check_agent_test_no_monkeypatch.py` | E2E LinnexAgent, контракт goose-тулов, без моков в agent e2e | — |
 | `scripts/check_variables_legacy.sh` | нет старого API переменных | — |
+| `scripts/check_migration_files_canon.py` | цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` без разрывов | — |
+| `scripts/check_stock_service_queries.py` | сервисы склада без SQL; один `PlatformModel` на файл моделей | — |
+| `scripts/check_wiki_model_files.py` | одна таблица wiki на файл `apps/wiki/models/` | — |
+| `scripts/check_office_model_files.py` | таблицы Documents в `apps/office/models/`, без каталога db | — |
+| `scripts/check_worktracker_model_files.py` | одна таблица worktracker на файл пакета models | — |
+| `scripts/check_mail_model_files.py` | одна таблица почты на файл `core/mail/models/` | — |
+| `scripts/check_crawl_model_files.py` | одна таблица краула на файл `core/crawl/models/` | — |
+| `scripts/check_identity_model_files.py` | одна таблица идентичности на файл пакета identity_models | — |
+| `scripts/check_durable_model_files.py` | одна таблица durable execution на файл пакета models | — |
+| `scripts/check_a2a_projection_model_files.py` | одна таблица проекции A2A на файл пакета a2a_projection | — |
+| `scripts/check_sync_message_model_files.py` | сообщение, блок и файл Sync в разных модулях | — |
+| `scripts/check_evaluation_lab_model_files.py` | одна таблица evaluation lab на файл пакета | — |
+| `scripts/check_datasource_model_files.py` | коннектор и подключение datasource в разных модулях | — |
+| `scripts/check_ai_model_files.py` | каталог моделей и overlay оценок в разных модулях | — |
+| `scripts/check_crm_entity_type_model_files.py` | тип сущности и ревизия каталога CRM в разных модулях | — |
+| `scripts/check_no_service_components.py` | в корне процесса нет components.py | — |
+| `scripts/check_sync_message_ops.py` | op_messages_* зовёт SyncMessageService | — |
+| `scripts/check_sync_message_send.py` | отправка сообщения Sync в message_service, не в handlers | — |
+| `scripts/check_sync_thread_git_ops.py` | треды и Git-ссылки Sync зовут сервис | — |
+| `scripts/check_sync_call_recording_ops.py` | запись звонка Sync в SyncCallRecordingService | — |
+| `scripts/check_sync_call_lifecycle_ops.py` | жизненный цикл звонка Sync в SyncCallService | — |
+| `scripts/check_sync_call_session_ops.py` | чтение, токен, сигнал и админ звонка в SyncCallService | — |
+| `scripts/check_sync_call_link_ops.py` | ссылки на звонок и вход гостя в SyncCallLinkService | — |
+| `scripts/check_sync_company_directory_ops.py` | участники компании и общие каналы в SyncChannelService | — |
+| `scripts/check_sync_file_upload_op.py` | подтверждение upload Sync через FilesService | — |
+| `scripts/check_secrets_model_files.py` | актуальная переменная и версия в разных модулях | — |
+| `scripts/check_rag_model_files.py` | статус индексации и чанк RAG в разных модулях | — |
+| `scripts/check_crm_namespace_template_model_files.py` | шаблон пространства CRM и тип в разных модулях | — |
+| `scripts/check_flows_src_clients.py` | в src flows нет каталога clients | — |
+| `scripts/check_sync_channel_ops.py` | `op_channels_*` зовёт `SyncChannelService` | — |
 | `scripts/check_redis_ttl_canon.py` | TTL у каждого ключа Redis, `from_url` только в разрешённых точках | `REDIS_FROM_URL_*` |
 | `scripts/check_taskiq_canon.py` | только `declare_task` + `@platform_task` + `enqueue` | `KIQ_*`, `CREATE_BROKER_*` (инфраструктурные точки) |
 

@@ -150,7 +150,7 @@ def _runtime_dir_from_command(command: str) -> Path | None:
     return None
 
 
-# Порт-форварды docker compose (Centrifugo :19000, Postgres, Redis, MinIO) держит Docker Desktop:
+# Порт-форварды docker compose (Centrifugo :19000, Postgres, Redis, SeaweedFS) держит Docker Desktop:
 # его процессы — не stale-тест, их убийство валит весь compose-стек.
 _DOCKER_COMMAND_MARKERS: tuple[str, ...] = ("Docker.app", "com.docker.", "docker-proxy")
 

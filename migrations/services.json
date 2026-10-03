@@ -27,7 +27,7 @@
     },
     {
       "name": "office",
-      "models_module": "apps.office.db.models",
+      "models_module": "apps.office.models",
       "database_url_key": "office_url"
     },
     {
@@ -66,7 +66,7 @@
       "database_url_key": "stock_url"
     }
   ],
-    "postgres": {
+  "postgres": {
     "databases": [
       "platform_shared",
       "platform_agents",
@@ -83,6 +83,10 @@
       "platform_stock",
       "openfga"
     ],
-    "vector_extensions": ["platform_shared", "platform_crm", "platform_rag"]
+    "vector_extensions": [
+      "platform_shared",
+      "platform_crm",
+      "platform_rag"
+    ]
   }
 }

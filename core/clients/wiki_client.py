@@ -45,7 +45,7 @@ class WikiClient:
         return {NAMESPACE_HEADER: resolve_namespace_or_raise()}
 
     @staticmethod
-    def _as_objects(value: object, label: str) -> list[JsonObject]:
+    def _as_objects(value: JsonValue, label: str) -> list[JsonObject]:
         items = require_json_array(value, label)
         return [require_json_object(item, f"{label}[{index}]") for index, item in enumerate(items)]
 
@@ -85,7 +85,7 @@ class WikiClient:
         }
 
     @staticmethod
-    def _unwrap_page_response(raw: object) -> tuple[JsonObject, bool, bool]:
+    def _unwrap_page_response(raw: JsonValue) -> tuple[JsonObject, bool, bool]:
         body = require_json_object(raw, "wiki.page_response")
         page = require_json_object(body.get("page"), "wiki.page_response.page")
         return page, body.get("can_edit") is True, body.get("can_admin") is True

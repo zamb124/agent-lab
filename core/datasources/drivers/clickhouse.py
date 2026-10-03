@@ -25,7 +25,7 @@ from core.datasources.models import (
     DatasourceTestResult,
 )
 from core.datasources.sql_policy import bind_named_params, rewrite_placeholders_pyformat
-from core.types import JsonObject, JsonValue
+from core.types import JsonObject, JsonValue, require_json_value
 
 
 class ClickHouseDatasourceDriver:
@@ -36,7 +36,13 @@ class ClickHouseDatasourceDriver:
             result = await client.query("SELECT version()")
         finally:
             await client.close()
-        version = _first_cell_text(result.result_rows, "clickhouse version()")
+        version = _first_cell_text(
+            [
+                [require_json_value(cell, "clickhouse version()") for cell in row]
+                for row in result.result_rows
+            ],
+            "clickhouse version()",
+        )
         latency_ms = int((perf_counter() - started) * 1000)
         return DatasourceTestResult(ok=True, latency_ms=latency_ms, server_version=version)
 
@@ -55,7 +61,12 @@ class ClickHouseDatasourceDriver:
             )
         finally:
             await client.close()
-        return _schema_from_rows(result.result_rows)
+        return _schema_from_rows(
+            [
+                [require_json_value(cell, "clickhouse system.columns") for cell in row]
+                for row in result.result_rows
+            ]
+        )
 
     async def query(
         self,
@@ -131,7 +142,7 @@ def _clickhouse_params(params: JsonObject) -> dict[str, JsonValue]:
     return dict(params)
 
 
-def _first_cell_text(rows: Sequence[Sequence[object]], label: str) -> str:
+def _first_cell_text(rows: Sequence[Sequence[JsonValue]], label: str) -> str:
     if not rows or not rows[0]:
         raise ValueError(f"{label}: empty result")
     value = rows[0][0]
@@ -162,7 +173,7 @@ def _command_rowcount(result: str | int | Sequence[str] | QuerySummary) -> int:
     raise ValueError(f"clickhouse command unexpected result type: {type(result).__name__}")
 
 
-def _schema_from_rows(rows: Sequence[Sequence[object]]) -> DatasourceSchemaSnapshot:
+def _schema_from_rows(rows: Sequence[Sequence[JsonValue]]) -> DatasourceSchemaSnapshot:
     tables: dict[str, DatasourceTable] = {}
     order: list[str] = []
     for row in rows:

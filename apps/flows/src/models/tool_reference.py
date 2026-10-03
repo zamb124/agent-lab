@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Collection
 from enum import Enum
-from typing import ClassVar, Literal, Self, cast, override
+from typing import ClassVar, Literal, Self, override
 
 from oxyde import Field as DbField
 from oxyde import Q
@@ -60,7 +60,7 @@ class ToolReference(CompanyScopedModel):
         default=None,
         description=(
             "Полная JSON Schema объекта параметров для LLM "
-            "(type: object, properties, required, minLength, default, items и т.д.)."
+            "(type object, properties, required, minLength, default, items и т.д.)."
         ),
     )
     params: JsonObject = DbField(default_factory=dict, db_type="JSONB", description="Параметры инструмента")
@@ -108,15 +108,14 @@ class ToolReference(CompanyScopedModel):
 
     @model_validator(mode="before")
     @classmethod
-    def strip_graph_node_type(cls, data: object) -> object:
+    def strip_graph_node_type(cls, data: JsonValue) -> JsonValue:
         """UI editor пишет type=code|mcp в tool ref; у ToolReference поля type нет."""
         if not isinstance(data, dict):
             return data
-        payload = cast(JsonObject, data)
-        raw_type = payload.get("type")
+        raw_type = data.get("type")
         if raw_type not in {"code", "mcp"}:
-            return payload
-        return {key: value for key, value in payload.items() if key != "type"}
+            return data
+        return {key: value for key, value in data.items() if key != "type"}
 
     @model_validator(mode="after")
     def default_display_name(self) -> Self:
@@ -373,14 +372,14 @@ class ToolListIndexItem(StrictBaseModel):
 
     @field_validator("tags", mode="before")
     @classmethod
-    def tags_none_to_list(cls, value: object) -> object:
+    def tags_none_to_list(cls, value: JsonValue) -> JsonValue:
         if value is None:
             return []
         return value
 
     @field_validator("code_mode", mode="before")
     @classmethod
-    def code_mode_none_to_inline(cls, value: object) -> object:
+    def code_mode_none_to_inline(cls, value: JsonValue) -> JsonValue | CodeMode:
         if value is None or value == "":
             return CodeMode.INLINE_CODE
         return value

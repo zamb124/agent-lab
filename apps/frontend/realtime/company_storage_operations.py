@@ -7,6 +7,7 @@ from pydantic import Field
 from apps.frontend.di import Di
 from apps.idle_worker.tasks.task_names import TASK_STORAGE_MIGRATION_TICK
 from core.context import require_active_company
+from core.errors.boundary import PlatformNotFoundError
 from core.files.company_storage_service import CompanyStorageService
 from core.files.create_spec import FileSourceKind
 from core.files.events import STORAGE_MIGRATION_PROGRESSED
@@ -207,7 +208,5 @@ async def op_company_storage_migrations_get(
     company_id = require_active_company().company_id
     row = await StorageMigration.get(payload.storage_migration_id)
     if row is None or row.company_id != company_id:
-        from core.errors.boundary import PlatformNotFoundError
-
         raise PlatformNotFoundError("storage migration not found")
     return row

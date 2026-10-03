@@ -349,7 +349,8 @@ async def test_platform_tracing_facet_companies_by_subdomain(
     frontend_di,
     unique_id: str,
 ) -> None:
-    from core.models.identity_models import Company, TariffPlan
+    from core.models.billing_models import TariffPlan
+    from core.models.identity_models import Company
 
     cid = f"co_subfacet_{unique_id}"
     sub = f"subfacet-{unique_id}"
@@ -389,7 +390,8 @@ async def test_platform_tracing_spans_resolve_company_id_query_subdomain(
     frontend_di,
     unique_id: str,
 ) -> None:
-    from core.models.identity_models import Company, TariffPlan
+    from core.models.billing_models import TariffPlan
+    from core.models.identity_models import Company
 
     cid = f"co_sresolve_{unique_id}"
     sub = f"sres-{unique_id}"

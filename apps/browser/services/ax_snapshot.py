@@ -6,9 +6,8 @@ Fallback-режимы запрещены: при недоступности ис
 
 from __future__ import annotations
 
-from typing import cast
-
 from apps.browser.models.types import BrowserPage
+from apps.browser.services.page_evaluate import evaluate_json_value
 from core.clients.browser.control_types import BrowserCapabilityError
 from core.types import JsonObject, require_json_object
 
@@ -24,10 +23,9 @@ async def dom_accessibility_tree_dict_from_page(
     - children: только интерактивные элементы (link/button/input/...).
     """
     try:
-        data = cast(
-            object,
-            await page.evaluate(
-                """() => {
+        data = await evaluate_json_value(
+            page,
+            """() => {
   const normalize = (s) => String(s).trim().replace(/\\s+/g, ' ').slice(0, 300);
 
   const roleOf = (el) => {
@@ -113,8 +111,14 @@ async def dom_accessibility_tree_dict_from_page(
     children,
   };
 }""",
-            ),
+            "DOM snapshot",
         )
+    except ValueError as exc:
+        raise BrowserCapabilityError(
+            "ax_snapshot_invalid",
+            "DOM snapshot did not return a JSON object",
+            details={"error": str(exc)},
+        ) from exc
     except Exception as exc:
         raise BrowserCapabilityError(
             "dom_accessibility_unavailable",

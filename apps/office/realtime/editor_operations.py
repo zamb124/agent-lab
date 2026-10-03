@@ -12,7 +12,6 @@ import asyncio
 
 from pydantic import Field
 
-from apps.office.db.models import OfficeDocumentBinding
 from apps.office.di import Di
 from apps.office.models.api import (
     OfficeDocumentEditorSessionResponse,
@@ -21,6 +20,7 @@ from apps.office.models.api import (
     OfficeEditorConfigResponse,
     OfficeFileEditorSyncResponse,
 )
+from apps.office.models.link import DocumentLink
 from apps.office.realtime.operations import (
     ONLYOFFICE_COMMAND_ERROR_DETAILS,
     OfficeFileIdPayload,
@@ -37,6 +37,7 @@ from apps.office.realtime.operations import (
 from apps.office.services.document_type import supports_onlyoffice_viewer
 from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from core.context import require_context
+from core.documents.catalog import DocumentCatalog
 from core.files.models import FileRecord
 from core.logging import get_logger
 from core.models import StrictBaseModel
@@ -138,14 +139,16 @@ async def op_editor_file_config(
     file_category, onlyoffice_document_type = resolve_binding_metadata(
         meta.original_name, _content_type_base(meta)
     )
-    binding = await OfficeDocumentBinding.binding_for_company(
+    binding = await FileRecord.for_company(
         payload.file_id,
         scope.company_id,
     )
     namespace: str | None = None
-    if binding is not None and binding.namespace.strip():
-        namespace = binding.namespace
-    elif context.active_namespace.strip():
+    if binding is not None and binding.catalog_id is not None:
+        catalog = await DocumentCatalog.get(binding.catalog_id)
+        if catalog is not None and catalog.namespace.strip():
+            namespace = catalog.namespace
+    if namespace is None and context.active_namespace.strip():
         namespace = context.active_namespace.strip()
     try:
         return await di.viewer_service.open_config_for_file(
@@ -231,12 +234,19 @@ async def op_editor_document_sync(
                 file_size=meta.file_size,
                 sync_options=payload,
             )
+    catalog_id = row.catalog_id
+    if catalog_id is None:
+        raise WsCommandError("not_found", "Binding not found", error_code="not_found")
+    file_category, onlyoffice_document_type = resolve_binding_metadata(
+        row.original_name,
+        row.content_type.split(";", 1)[0].strip(),
+    )
     return OfficeDocumentEditorSessionResponse(
         file_id=row.file_id,
-        catalog_id=row.catalog_id,
-        title=row.title,
-        file_category=row.file_category,
-        onlyoffice_document_type=row.onlyoffice_document_type,
+        catalog_id=catalog_id,
+        title=row.original_name,
+        file_category=file_category,
+        onlyoffice_document_type=onlyoffice_document_type,
         namespace=scope.namespace,
         editor_url=editor_embed_url(row.file_id, scope.namespace),
     )
@@ -259,15 +269,22 @@ async def op_document_share_resolve(
     row = target.binding
     if row.deleted_at is not None:
         raise WsCommandError("not_found", "Document not found", error_code='not_found')
-    if row.link_permission not in ("viewer", "editor"):
+    link = await DocumentLink.for_target("file", row.file_id)
+    if link is None or not link.enabled:
+        raise WsCommandError("not_found", "Link not found", error_code="not_found")
+    if link.permission not in ("viewer", "editor"):
         raise WsCommandError(
-            "ws_invalid_payload", f"Invalid link_permission: {row.link_permission}",
+            "ws_invalid_payload", f"Invalid link_permission: {link.permission}",
                   error_code='ws_invalid_payload',
               )
+    file_category, onlyoffice_document_type = resolve_binding_metadata(
+        row.original_name,
+        row.content_type.split(";", 1)[0].strip(),
+    )
     return OfficeDocumentShareResolveResponse(
         file_id=row.file_id,
-        title=row.title,
-        permission=row.link_permission,
-        file_category=row.file_category,
-        onlyoffice_document_type=row.onlyoffice_document_type,
+        title=row.original_name,
+        permission=link.permission,
+        file_category=file_category,
+        onlyoffice_document_type=onlyoffice_document_type,
     )

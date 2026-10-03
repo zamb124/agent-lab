@@ -69,7 +69,7 @@ class PravoDocumentRagSearchArgs(BaseModel):
         description="URL legislation/document с hash или отдельно 64-символьный hash.",
     )
     query: str = Field(..., min_length=1, description="Семантический запрос по тексту акта.")
-    limit: int = Field(5, ge=1, le=100)
+    limit: int = Field(5, ge=1, le=100, description="Максимум фрагментов в ответе (как у rag_search).")
     force_refresh: bool = Field(
         False,
         description="Перезагрузить текст с IPS и переиндексировать даже если в RAG уже есть чанки.",

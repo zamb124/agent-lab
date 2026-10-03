@@ -9,6 +9,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+type CapabilityValue = (
+    str | int | float | bool | None | list[CapabilityValue] | dict[str, CapabilityValue]
+)
+
 
 def _require_env(name: str) -> str:
     value = os.environ.get(name)
@@ -62,7 +66,7 @@ def _llm_chat(prompt: str) -> str:
     return content
 
 
-def _call_capability(name: str, **kwargs: object) -> object:
+def _call_capability(name: str, **kwargs: CapabilityValue) -> CapabilityValue:
     gateway = _require_env("CAPABILITY_GATEWAY_URL")
     context_raw = _require_env("PLATFORM_CAPABILITY_CONTEXT")
     context = json.loads(context_raw)

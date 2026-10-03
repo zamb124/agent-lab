@@ -12,9 +12,16 @@ from websockets.protocol import State
 
 from core.config import get_settings
 from core.logging import get_logger
-from core.utils.background import run_with_log_context
+from core.utils.background import finish_background_task, run_with_log_context
 
 logger = get_logger(__name__)
+
+
+async def _stop_pending_websocket_tasks(pending: set[asyncio.Task[None]]) -> None:
+    for task in pending:
+        _ = task.cancel()
+    for task in pending:
+        await finish_background_task(task)
 
 
 def _websocket_close_code(exc: ConnectionClosed) -> int:
@@ -116,13 +123,7 @@ async def proxy_service_websocket(client_ws: WebSocket, service: str, path: str)
             },
             return_when=asyncio.FIRST_COMPLETED,
         )
-        for task in pending:
-            _ = task.cancel()
-        for task in pending:
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        await _stop_pending_websocket_tasks(pending)
         for task in done:
             exc = task.exception()
             if exc is not None:

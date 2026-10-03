@@ -41,22 +41,21 @@ services:
     networks:
       - dev-net
 
-  # MinIO в Docker VM; uvicorn с хоста подписывает SigV4 по часам macOS — при дрейфе VM см. make dev-minio-restart
-  minio:
+  # SeaweedFS в Docker VM; uvicorn с хоста подписывает SigV4 по часам macOS — при дрейфе VM см. make dev-seaweedfs-restart
+  # -volume.max=0: лимит вольюмов авто = свободное место / размер вольюма — иначе фиксированный лимит исчерпывается, т.к. каждый бакет (collection) резервирует свои вольюмы
+  seaweedfs:
     platform: "linux/amd64"
-    image: pgsty/silo:RELEASE.2026-09-03T13-18-01Z
-    container_name: agentlab_minio_dev
+    image: chrislusf/seaweedfs:4.45
+    container_name: agentlab_seaweedfs_dev
     ports:
-      - "19001:9000"
-      - "19011:9001"
+      - "19001:8333"
+      - "19011:8888"
     volumes:
-      - minio_dev_data:/data
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    command: server /data --console-address ":9001"
+      - seaweedfs_dev_data:/data
+      - ./deploy/seaweedfs/s3-dev.json:/etc/seaweedfs/s3.json:ro
+    command: server -dir=/data -ip.bind=0.0.0.0 -filer -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -volume.max=0 -master.volumeSizeLimitMB=2048
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8333/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -443,7 +442,7 @@ volumes:
     driver: local
   redis_dev_data:
     driver: local
-  minio_dev_data:
+  seaweedfs_dev_data:
     driver: local
   loki_dev_data:
     driver: local

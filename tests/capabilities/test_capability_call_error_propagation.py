@@ -3,11 +3,11 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from apps.capability_gateway.api.v1.capabilities import call_capability
 from core.capabilities import CapabilityCallRequest, CapabilityExecutionContext
 from core.clients.service_client import ServiceClientError
+from core.websocket import WsCommandError
 
 
 def _call_request() -> CapabilityCallRequest:
@@ -39,12 +39,11 @@ async def test_call_capability_propagates_peer_422_detail() -> None:
         )
     )
 
-    with pytest.raises(HTTPException) as raised:
+    with pytest.raises(WsCommandError) as raised:
         await call_capability(di, _call_request())
 
-    assert raised.value.status_code == 422
-    detail = raised.value.detail
-    assert isinstance(detail, dict)
+    assert raised.value.code == "unprocessable"
+    detail = raised.value.error_params
     assert detail["tool_id"] == "ask_user"
     assert detail["message"] == "Tool arguments failed validation"
 

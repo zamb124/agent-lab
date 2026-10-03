@@ -12,21 +12,31 @@ from typing import Generic, TypeVar
 
 from pydantic import Field
 
-from apps.stock.models.domain import (
+from apps.stock.models.common import StockMoveSpec
+from apps.stock.models.enums import (
     BackorderPolicy,
     ReflexMode,
     ReservationPolicy,
     StockBarcodeEntityType,
+    StockContainerKind,
+    StockContainerPolicy,
+    StockLayoutPreset,
     StockLocationUsage,
-    StockMove,
-    StockMoveLine,
-    StockProduct,
-    StockProductTemplate,
+    StockProductMixing,
+    StockPutawayStrategy,
+    StockRemovalStrategy,
     StockTracking,
-    StockTransfer,
     StockTransferState,
+    StockWaveState,
     ValuationMethod,
 )
+from apps.stock.models.location import StockLocation
+from apps.stock.models.move import StockMove
+from apps.stock.models.move_line import StockMoveLine
+from apps.stock.models.quant import StockQuant
+from apps.stock.models.route import StockRouteStepSpec
+from apps.stock.models.scan import ScanContext, ScanResolution
+from apps.stock.models.transfer import StockTransfer
 from core.models import StrictBaseModel
 
 ItemT = TypeVar("ItemT")
@@ -56,6 +66,14 @@ class StockProductCreatePayload(StrictBaseModel):
     is_storable: bool = True
     category: str = Field(default="", max_length=128)
     barcode: str | None = Field(default=None, max_length=128)
+    weight: Decimal | None = Field(default=None, ge=0)
+    volume: Decimal | None = Field(default=None, ge=0)
+    use_expiration: bool = False
+    expiration_days: int | None = Field(default=None, ge=1)
+    best_before_days: int | None = Field(default=None, ge=1)
+    removal_days: int | None = Field(default=None, ge=1)
+    alert_days: int | None = Field(default=None, ge=1)
+    removal_strategy: StockRemovalStrategy | None = None
 
 
 class StockProductUpdatePayload(StrictBaseModel):
@@ -67,15 +85,19 @@ class StockProductUpdatePayload(StrictBaseModel):
     valuation_method: ValuationMethod | None = None
     standard_price: Decimal | None = Field(default=None, ge=0)
     tracking: StockTracking | None = None
+    category: str | None = Field(default=None, max_length=128)
+    weight: Decimal | None = Field(default=None, ge=0)
+    volume: Decimal | None = Field(default=None, ge=0)
+    use_expiration: bool | None = None
+    expiration_days: int | None = Field(default=None, ge=1)
+    best_before_days: int | None = Field(default=None, ge=1)
+    removal_days: int | None = Field(default=None, ge=1)
+    alert_days: int | None = Field(default=None, ge=1)
+    removal_strategy: StockRemovalStrategy | None = None
 
 
 class StockProductIdPayload(StrictBaseModel):
     product_id: str
-
-
-class StockProductDetail(StrictBaseModel):
-    product: StockProduct
-    template: StockProductTemplate
 
 
 # --- Локации ---
@@ -85,17 +107,25 @@ class StockLocationCreatePayload(StrictBaseModel):
     warehouse_id: str
     parent_id: str | None = None
     name: str = Field(min_length=1, max_length=255)
-    usage: StockLocationUsage = StockLocationUsage.INTERNAL
-    removal_method: str | None = Field(default=None, max_length=32)
+    usage: StockLocationUsage = StockLocationUsage.BIN
     barcode: str | None = Field(default=None, max_length=128)
+    allow_negative: bool = False
+    storage_type_id: str | None = None
+    container_type_id: str | None = None
+    pick_sequence: int = 0
+    level: int = Field(default=1, ge=1)
 
 
 class StockLocationUpdatePayload(StrictBaseModel):
     location_id: str
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    removal_method: str | None = Field(default=None, max_length=32)
     barcode: str | None = Field(default=None, max_length=128)
     is_active: bool | None = None
+    allow_negative: bool | None = None
+    storage_type_id: str | None = None
+    pick_sequence: int | None = None
+    putaway_blocked: bool | None = None
+    removal_blocked: bool | None = None
 
 
 class StockLocationIdPayload(StrictBaseModel):
@@ -112,6 +142,12 @@ class StockLocationsListPayload(StrictBaseModel):
 class StockWarehouseCreatePayload(StrictBaseModel):
     code: str = Field(min_length=1, max_length=32)
     name: str = Field(min_length=1, max_length=255)
+    layout_preset: StockLayoutPreset = StockLayoutPreset.SIMPLE
+    """Каркас топологии: simple (микросклад), standard (даркстор),
+    distribution_center (РЦ с QC/bulk/forward/staging/карантином)."""
+    removal_strategy: StockRemovalStrategy = StockRemovalStrategy.FIFO
+    """Стратегия отбора склада — обязательная настройка (цепочка
+    «товар → тип хранения → склад» всегда заканчивается здесь)."""
 
 
 class StockWarehouseUpdatePayload(StrictBaseModel):
@@ -144,17 +180,6 @@ class StockOperationTypeUpdatePayload(StrictBaseModel):
 # --- Transfers / moves ---
 
 
-class StockMoveSpec(StrictBaseModel):
-    """Строка движения в create-transfer."""
-
-    product_id: str
-    product_qty: Decimal = Field(gt=0)
-    uom_id: str
-    unit_price: Decimal | None = Field(default=None, ge=0)
-    location_id: str | None = None
-    location_dest_id: str | None = None
-
-
 class StockTransferCreatePayload(StrictBaseModel):
     warehouse_id: str
     operation_type_id: str
@@ -164,11 +189,21 @@ class StockTransferCreatePayload(StrictBaseModel):
     origin_document_type: str | None = Field(default=None, max_length=64)
     origin_document_id: str | None = Field(default=None, max_length=64)
     barcode: str | None = Field(default=None, max_length=128)
+    priority: int = 0
+    date_deadline: datetime | None = None
     moves: list[StockMoveSpec] = Field(min_length=1)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockTransferIdPayload(StrictBaseModel):
     transfer_id: str
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
+class StockTransferValidatePayload(StrictBaseModel):
+    transfer_id: str
+    create_backorder: bool = True
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockTransfersListPayload(StockPagePayload):
@@ -179,6 +214,7 @@ class StockTransfersListPayload(StockPagePayload):
 class StockTransferReturnPayload(StrictBaseModel):
     transfer_id: str
     move_quantities: dict[str, Decimal] | None = None
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockTransferDetail(StrictBaseModel):
@@ -196,11 +232,13 @@ class StockMoveLineUpdatePayload(StrictBaseModel):
     picked: bool | None = None
     lot_id: str | None = None
     location_dest_id: str | None = None
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockMoveApplyDecisionPayload(StrictBaseModel):
     move_id: str
     location_id: str
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 # --- Остатки / инвентаризация ---
@@ -209,15 +247,18 @@ class StockMoveApplyDecisionPayload(StrictBaseModel):
 class StockQuantsListPayload(StockPagePayload):
     location_id: str | None = None
     product_id: str | None = None
+    owner_entity_id: str | None = None
 
 
 class StockQuantInventorySetPayload(StrictBaseModel):
     quant_id: str
     inventory_quantity: Decimal = Field(ge=0)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockQuantInventoryApplyPayload(StrictBaseModel):
     quant_id: str
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 # --- Оценка ---
@@ -246,6 +287,7 @@ class StockValuationRevaluePayload(StrictBaseModel):
     value_delta: Decimal | None = None
     new_price: Decimal | None = Field(default=None, ge=0)
     description: str = Field(default="", max_length=512)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 class StockValuationCorrectionPayload(StrictBaseModel):
@@ -253,9 +295,10 @@ class StockValuationCorrectionPayload(StrictBaseModel):
     quantity_delta: Decimal = Decimal("0")
     value_delta: Decimal
     description: str = Field(default="", max_length=512)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
-# --- Lots / packages ---
+# --- Lots ---
 
 
 class StockLotCreatePayload(StrictBaseModel):
@@ -269,11 +312,148 @@ class StockLotsListPayload(StrictBaseModel):
     product_id: str | None = None
 
 
-class StockPackageCreatePayload(StrictBaseModel):
-    package_type_id: str | None = None
-    parent_package_id: str | None = None
-    location_id: str | None = None
+# --- Топология: типы, контейнеры, ресурсы, упаковки ---
+
+
+class StockStorageTypesListPayload(StrictBaseModel):
+    warehouse_id: str
+
+
+class StockStorageTypeCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    name: str = Field(min_length=1, max_length=128)
+    container_policy: StockContainerPolicy = StockContainerPolicy.ANY
+    allowed_container_type_ids: list[str] = Field(default_factory=list)
+    max_containers: int | None = Field(default=None, ge=1)
+    product_mixing: StockProductMixing = StockProductMixing.MIXED
+    allow_mixed_lots: bool = True
+    max_weight: Decimal | None = Field(default=None, ge=0)
+    max_volume: Decimal | None = Field(default=None, ge=0)
+    putaway_strategies: list[StockPutawayStrategy] = Field(
+        default_factory=lambda: [StockPutawayStrategy.EMPTY_BIN]
+    )
+    removal_strategy: StockRemovalStrategy | None = None
+    """Переопределение стратегии склада; None — берётся политика склада."""
+
+
+class StockContainerTypesListPayload(StrictBaseModel):
+    warehouse_id: str
+
+
+class StockContainerTypeCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    name: str = Field(min_length=1, max_length=128)
+    kind: StockContainerKind = StockContainerKind.OTHER
+    max_weight: Decimal | None = Field(default=None, ge=0)
+    tare_weight: Decimal | None = Field(default=None, ge=0)
+    max_volume: Decimal | None = Field(default=None, ge=0)
+    length: Decimal | None = Field(default=None, ge=0)
+    width: Decimal | None = Field(default=None, ge=0)
+    height: Decimal | None = Field(default=None, ge=0)
+    is_reusable: bool = False
+    allowed_parent_type_ids: list[str] = Field(default_factory=list)
+
+
+class StockResourceTypesListPayload(StrictBaseModel):
+    warehouse_id: str
+
+
+class StockResourceTypeCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    name: str = Field(min_length=1, max_length=128)
+    allowed_container_type_ids: list[str] = Field(default_factory=list)
+    handles_loose: bool = True
+    max_level: int | None = Field(default=None, ge=1)
+    max_load_weight: Decimal | None = Field(default=None, ge=0)
+    storage_type_ids: list[str] = Field(default_factory=list)
+
+
+class StockResourcesListPayload(StrictBaseModel):
+    warehouse_id: str
+
+
+class StockResourceCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    resource_type_id: str
+    code: str = Field(min_length=1, max_length=64)
     barcode: str | None = Field(default=None, max_length=128)
+
+
+class StockResourceLoginPayload(StrictBaseModel):
+    warehouse_id: str
+    resource_id: str | None = None
+    barcode: str | None = Field(default=None, max_length=128)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
+class StockResourceLogoutPayload(StrictBaseModel):
+    warehouse_id: str
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
+class StockContainersListPayload(StrictBaseModel):
+    warehouse_id: str | None = None
+    parent_location_id: str | None = None
+
+
+class StockContainerCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    parent_location_id: str
+    container_type_id: str
+    name: str = Field(min_length=1, max_length=255)
+    barcode: str | None = Field(default=None, max_length=128)
+
+
+class StockContainerIdPayload(StrictBaseModel):
+    container_id: str
+
+
+class StockContainerMovePayload(StrictBaseModel):
+    container_id: str
+    dest_location_id: str
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+
+class StockContainerContentsResponse(StrictBaseModel):
+    container: StockLocation
+    quants: list[StockQuant]
+    children: list[StockLocation]
+
+
+class StockPackagingsListPayload(StrictBaseModel):
+    product_id: str | None = None
+
+
+class StockPackagingCreatePayload(StrictBaseModel):
+    product_id: str
+    name: str = Field(min_length=1, max_length=128)
+    quantity: Decimal = Field(gt=0)
+    barcode: str | None = Field(default=None, max_length=128)
+    container_type_id: str | None = None
+    weight: Decimal | None = Field(default=None, ge=0)
+    volume: Decimal | None = Field(default=None, ge=0)
+
+
+class StockPackagingIdPayload(StrictBaseModel):
+    packaging_id: str
+
+
+class StockPackagingView(StrictBaseModel):
+    """Проекция упаковки товара на API.
+
+    Физически упаковка — строка ``stock_uom`` с ``product_id`` (AUoM):
+    ``packaging_id`` — это ``uom_id`` строки, а ``quantity`` — «сколько
+    базовых единиц товара в одной упаковке», вычисленное как
+    ``factor / factor(базовой ЕИ товара)``.
+    """
+
+    packaging_id: str
+    product_id: str
+    name: str
+    quantity: Decimal
+    container_type_id: str | None = None
+    weight: Decimal | None = None
+    volume: Decimal | None = None
 
 
 # --- Пульс / barcode / init ---
@@ -316,8 +496,236 @@ class StockBarcodeResolvePayload(StrictBaseModel):
 class StockBarcodeResolveResponse(StrictBaseModel):
     entity_type: StockBarcodeEntityType
     entity_id: str
+    is_gs1: bool = False
+    gtin: str | None = None
+    sscc: str | None = None
+    lot_name: str | None = None
+    serial: str | None = None
+    quantity: Decimal | None = None
+    weight_kg: Decimal | None = None
+    expiration_date: str | None = None
 
 
 class StockCompanyInitResponse(StrictBaseModel):
     company_id: str
     location_ids: list[str]
+
+
+# --- Скан-сессии ТСД ---
+
+
+class StockScanStepPayload(StrictBaseModel):
+    """Один скан в потоке: приехал контекст + штрихкод, уехал новый контекст."""
+
+    warehouse_id: str
+    context: ScanContext
+    barcode: str = Field(min_length=1, max_length=128)
+    move_id: str | None = None
+    """Сессия идёт по документу — ответ принесёт `expected` подсказку."""
+
+
+class StockScanQuantityPayload(StrictBaseModel):
+    warehouse_id: str
+    context: ScanContext
+    quantity: Decimal = Field(gt=Decimal("0"))
+    move_id: str | None = None
+
+
+class StockScanExpected(StrictBaseModel):
+    """Что экран должен подсветить оператору на текущем шаге.
+
+    Берётся из первой открытой строки документа: «отсканируй ячейку
+    A-01, возьми SKU-77, осталось 3 шт, положи в DOCK-2». Без привязки
+    к документу (``move_id`` не задан) — ``None``, экран строится
+    только по ``context.step``.
+    """
+
+    location_id: str | None = None
+    product_id: str | None = None
+    quantity: Decimal | None = None
+    location_dest_id: str | None = None
+
+
+class StockScanStepResponse(StrictBaseModel):
+    context: ScanContext
+    resolution: ScanResolution | None = None
+    error: str | None = None
+    hint: str = ""
+    expected: StockScanExpected | None = None
+
+
+class StockScanCommitPayload(StrictBaseModel):
+    """Коммит набранного: строки контекста → проводка move одной транзакцией."""
+
+    move_id: str
+    context: ScanContext
+    idempotency_key: str | None = None
+
+
+class StockScanCountCommitPayload(StrictBaseModel):
+    warehouse_id: str
+    context: ScanContext
+    idempotency_key: str | None = None
+
+
+class StockScanCountCommitResponse(StrictBaseModel):
+    quant_ids: list[str]
+
+
+# --- Очередь заданий (ТСД) ---
+
+
+class StockMoveLinesQueuePayload(StrictBaseModel):
+    warehouse_id: str
+    assigned_user_id: str | None = None
+    zone_location_id: str | None = None
+    """Зона склада — очередь только её поддерева ячеек-источников."""
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class StockMoveLineNextPayload(StrictBaseModel):
+    warehouse_id: str
+    resource_id: str | None = None
+    zone_location_id: str | None = None
+    claim: bool = True
+
+
+class StockMoveLineNextResponse(StrictBaseModel):
+    line: StockMoveLine | None = None
+
+
+class StockMoveLinesClaimPayload(StrictBaseModel):
+    warehouse_id: str
+    move_line_ids: list[str] = Field(min_length=1, max_length=200)
+    resource_id: str | None = None
+    idempotency_key: str | None = None
+
+
+class StockMoveLinesAssignPayload(StockMoveLinesClaimPayload):
+    assignee_user_id: str
+
+
+class StockMoveLinesReleasePayload(StrictBaseModel):
+    warehouse_id: str
+    move_line_ids: list[str] = Field(min_length=1, max_length=200)
+    idempotency_key: str | None = None
+
+
+class StockMoveLineExceptionPayload(StrictBaseModel):
+    """«Пришёл — а товара нет»: недостача/бой по строке задания."""
+
+    warehouse_id: str
+    move_line_id: str
+    shortage: Decimal = Field(gt=Decimal("0"))
+    reason: str = Field(default="", max_length=512)
+    idempotency_key: str | None = None
+
+
+# --- Волны сборки ---
+
+
+class StockWavesListPayload(StrictBaseModel):
+    warehouse_id: str
+    state: StockWaveState | None = None
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class StockWaveCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    name: str | None = Field(default=None, max_length=128)
+    move_line_ids: list[str] = Field(default_factory=list, max_length=2000)
+    move_ids: list[str] = Field(default_factory=list, max_length=500)
+    priority: int = 0
+    user_id: str | None = None
+    stop_transfer_ids: list[str] = Field(default_factory=list, max_length=500)
+    idempotency_key: str | None = None
+
+
+class StockWaveIdPayload(StrictBaseModel):
+    wave_id: str
+    idempotency_key: str | None = None
+
+
+# --- Маршруты цепочек движений ---
+
+
+class StockRouteCreatePayload(StrictBaseModel):
+    warehouse_id: str | None = None
+    name: str = Field(max_length=255)
+    code: str = Field(default="", max_length=64)
+    steps: list[StockRouteStepSpec] = Field(default_factory=list, max_length=20)
+    idempotency_key: str | None = None
+
+
+class StockRoutesListPayload(StrictBaseModel):
+    warehouse_id: str | None = None
+    limit: int = Field(default=100, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class StockRouteIdPayload(StrictBaseModel):
+    route_id: str
+
+
+# --- Правила пополнения (min/max) ---
+
+
+class StockReorderRulesListPayload(StrictBaseModel):
+    warehouse_id: str | None = None
+
+
+class StockReorderRuleCreatePayload(StrictBaseModel):
+    warehouse_id: str
+    product_id: str
+    location_id: str
+    min_qty: Decimal = Field(ge=0)
+    max_qty: Decimal = Field(gt=0)
+    operation_type_id: str
+    route_id: str | None = None
+    idempotency_key: str | None = None
+
+
+class StockReorderRuleUpdatePayload(StrictBaseModel):
+    rule_id: str
+    is_active: bool
+    idempotency_key: str | None = None
+
+
+class StockPutawayRulesListPayload(StrictBaseModel):
+    warehouse_id: str
+
+
+class StockPutawayRuleCreatePayload(StrictBaseModel):
+    """Правило «из зоны приёмки location_in товар X кладём в location_out».
+
+    Фильтры: product/category/owner — чем конкретнее, тем выше приоритет
+    при равном sequence. destination не может быть партнёрской/
+    корректировочной локацией.
+    """
+
+    warehouse_id: str
+    location_in_id: str
+    location_out_id: str
+    product_id: str | None = None
+    category: str | None = None
+    owner_entity_id: str | None = None
+    sequence: int = 0
+    idempotency_key: str | None = None
+
+
+class StockPutawayRuleUpdatePayload(StrictBaseModel):
+    rule_id: str
+    location_in_id: str | None = None
+    location_out_id: str | None = None
+    product_id: str | None = None
+    category: str | None = None
+    owner_entity_id: str | None = None
+    sequence: int | None = None
+    is_active: bool | None = None
+    idempotency_key: str | None = None
+
+
+class StockPutawayRuleDeletePayload(StrictBaseModel):
+    rule_id: str
+    idempotency_key: str | None = None

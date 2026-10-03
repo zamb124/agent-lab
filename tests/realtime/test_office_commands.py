@@ -244,7 +244,7 @@ async def _setup_catalogs_list(ctx: LiveCtx) -> JsonObject:
 
 
 async def _setup_ensure_path(ctx: LiveCtx) -> JsonObject:
-    return {"path_segments": [f"LivePath{_token(ctx)}"]}
+    return {"catalog_path": [f"LivePath{_token(ctx)}"]}
 
 
 async def _setup_catalog_create(ctx: LiveCtx) -> JsonObject:
@@ -374,7 +374,7 @@ async def _setup_bind(ctx: LiveCtx) -> JsonObject:
         "namespace": _NAMESPACE,
         "file_id": file_id,
         "title": title,
-        "path_segments": [f"Bind{_token(ctx)}"],
+        "catalog_path": [f"Bind{_token(ctx)}"],
     }
 
 
@@ -842,9 +842,6 @@ _CASES: dict[str, OpCase] = {
     ),
     "office/documents/create_from_file_requested": _op(
         "POST", f"{_API}/documents", "body", _setup_create_from_file, same=False,
-    ),
-    "office/documents/bind_requested": _op(
-        "POST", f"{_API}/documents/bind", "body", _setup_bind, same=False,
     ),
     "office/documents/rag_statuses_requested": _op(
         "POST", f"{_API}/documents/rag-index-statuses", "body", _setup_rag_statuses, same=True,

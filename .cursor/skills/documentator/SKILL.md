@@ -215,7 +215,7 @@ Fallback из `label_en`/`label` существует только для сов
 
 | Команда | Назначение |
 |---|---|
-| `make test-up` | Поднять PostgreSQL, Redis, MinIO и HTTP-сервисы |
+| `make test-up` | Поднять PostgreSQL, Redis, SeaweedFS и HTTP-сервисы |
 | `make test-ui` | Полный E2E UI; всегда с `UI_E2E_USE_LVH_ME=1` через `mk/test.mk` |
 | `make test-ui-doc` | E2E, генерация README/скриншотов, quality gate и сборка docs |
 | `uv run pytest tests/ui/e2e/test_*.py -k ... -v --tb=short` | Точечно проверить изменённый сценарий |

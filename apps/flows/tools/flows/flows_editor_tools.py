@@ -12,7 +12,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from apps.flows.src.clients.flows_client import FlowsClient
+from apps.flows.src.services.flows_client import FlowsClient
 from apps.flows.src.tools.decorator import tool
 from core.state import ExecutionState
 from core.types import JsonValue

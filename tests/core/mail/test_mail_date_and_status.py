@@ -48,7 +48,7 @@ def test_parse_inbound_rfc822_sets_date() -> None:
 
 
 def test_parse_status_counts() -> None:
-    lines: list[object] = [b'* STATUS "INBOX" (MESSAGES 2564 UNSEEN 818)']
+    lines = [b'* STATUS "INBOX" (MESSAGES 2564 UNSEEN 818)']
     assert _parse_status_counts(lines) == (2564, 818)
 
 

@@ -19,6 +19,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = REPO_ROOT / "scripts" / "ratchet_baseline.json"
 SKIP_PARTS: frozenset[str] = frozenset({"vendor", "__pycache__", "desktop", "node_modules"})
+# configuration.mdc § Исключения: эти пути читают окружение процесса, не конфиг Settings.
+OS_ENVIRON_FILES: frozenset[str] = frozenset(
+    {
+        "core/config/loader.py",
+        "core/config/testing.py",
+        "core/utils/process_env.py",
+        "apps/guest_runtime/shim/pid1.py",
+    }
+)
+OS_ENVIRON_PREFIXES: tuple[str, ...] = (
+    "apps/guest_runtime/examples/",
+    "apps/test_a2a_sample/",
+)
 
 
 @dataclass(frozen=True)
@@ -32,7 +45,12 @@ class RatchetMetric:
 METRICS: tuple[RatchetMetric, ...] = (
     RatchetMetric("cast_calls", ("apps", "core"), r"\bcast\(", "main.mdc: Any/cast запрещены — лечить источник потери типа"),
     RatchetMetric("type_ignore", ("apps", "core"), r"#\s*type:\s*ignore", "main.mdc: type: ignore не лечит потерю типа"),
-    RatchetMetric("object_annotations", ("apps", "core"), r":\s*object\b|\[object\]|-> object\b", "main.mdc: голый object как тип запрещён"),
+    RatchetMetric(
+        "object_annotations",
+        ("apps", "core"),
+        r":[^\S\n]*object\b|\[object\]|->[^\S\n]*object\b",
+        "main.mdc: голый object как тип запрещён",
+    ),
     RatchetMetric("os_environ", ("apps", "core"), r"\bos\.(environ|getenv)\b", "configuration.mdc: только Pydantic Settings"),
     RatchetMetric("except_pass", ("apps", "core"), r"except[^\n]*:\n\s+pass\b", "main.mdc: проглоченное исключение"),
     RatchetMetric("force_global", ("apps", "core"), r"force_global\s*=\s*True", "database.mdc: модель берёт company_id из контекста"),
@@ -45,6 +63,12 @@ METRICS: tuple[RatchetMetric, ...] = (
     RatchetMetric("tests_asyncmock", ("tests",), r"\bAsyncMock\(", "testing.mdc: единственный мок — MockLLM"),
     RatchetMetric("tests_skip_markers", ("tests",), r"pytest\.mark\.skip\(|pytest\.skip\(", "testing.mdc: skip — только fail-loud с причиной инфраструктуры"),
 )
+
+
+def os_environ_path_allowed(relative_posix: str) -> bool:
+    if relative_posix in OS_ENVIRON_FILES:
+        return True
+    return any(relative_posix.startswith(prefix) for prefix in OS_ENVIRON_PREFIXES)
 
 
 def _files(roots: tuple[str, ...]) -> list[Path]:
@@ -63,6 +87,9 @@ def collect_counts() -> dict[str, int]:
         regex = re.compile(metric.pattern, re.MULTILINE)
         total = 0
         for path in _files(metric.roots):
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            if metric.name == "os_environ" and os_environ_path_allowed(relative):
+                continue
             total += len(regex.findall(path.read_text(encoding="utf-8")))
         counts[metric.name] = total
     return counts

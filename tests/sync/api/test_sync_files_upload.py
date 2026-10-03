@@ -1,4 +1,4 @@
-"""Chunked upload /frontend/api/v1/files/uploads — реальный S3 (MinIO)."""
+"""Chunked upload /frontend/api/v1/files/uploads — реальный S3 (SeaweedFS)."""
 
 from __future__ import annotations
 

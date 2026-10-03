@@ -1,17 +1,21 @@
-from core.files.object_storage import PLATFORM_STORAGE_ID
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from typing import AsyncIterator
+from typing import cast
 
 import pytest
 
-from apps.browser.api.mcp import _tool_call
+from apps.browser.api.mcp import _tool_call  # pyright: ignore[reportPrivateUsage]
+from core.files.object_storage import PLATFORM_STORAGE_ID
 
 
 class _FakePage:
+    url: str
+    _html: str
+
     def __init__(self, url: str, html: str) -> None:
         self.url = url
         self._html = html
@@ -21,6 +25,8 @@ class _FakePage:
 
 
 class _FakeLeaseManager:
+    _page: _FakePage
+
     def __init__(self, page: _FakePage) -> None:
         self._page = page
 
@@ -29,7 +35,7 @@ class _FakeLeaseManager:
         return None
 
     @asynccontextmanager
-    async def session_navigate_exclusive(self, session_id: str) -> AsyncIterator[None]:
+    async def session_navigate_exclusive(self, session_id: str) -> AsyncGenerator[None]:
         _ = session_id
         yield
 
@@ -40,7 +46,7 @@ class _FakeLeaseManager:
 
 
 class _FakeFilesService:
-    async def create(self, **kwargs):
+    async def create(self, **kwargs: object) -> SimpleNamespace:
         data = kwargs["data"]
         if not isinstance(data, bytes) or len(data) == 0:
             raise ValueError("expected non-empty bytes")
@@ -76,9 +82,9 @@ async def test_tool_call_save_html_to_s3_returns_s3_path_and_links() -> None:
     assert result.is_error is False
     text_raw = result.content[0].get("text")
     assert isinstance(text_raw, str)
-    payload = json.loads(text_raw)
+    payload = cast("dict[str, object]", json.loads(text_raw))
     assert payload["file_id"] == "file_test_1"
-    assert payload["s3_path"] == "s3://files/files/file_test_1.html"
+    assert payload["s3_path"] == "s3://platform/files/file_test_1.html"
     assert payload["links"] == [
         "https://example.com/first",
         "https://example.org/second",

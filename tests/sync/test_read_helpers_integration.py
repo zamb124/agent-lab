@@ -6,11 +6,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.models.lane_preview import ChannelLaneSummary
 from apps.sync.channel_read_helpers import channel_read_from_entity
 from apps.sync.message_read_helpers import message_read_from_entity
-from apps.sync.models.channel import SyncChannel, SyncChannelMember
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.channel_member import SyncChannelMember
 from apps.sync.models.common import UserBrief
+from apps.sync.models.lane_preview import ChannelLaneSummary
 from apps.sync.models.messages import (
     MessageContentModel,
     MessageContentType,

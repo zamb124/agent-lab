@@ -28,6 +28,7 @@ async def test_landing_demo_bundles_store_card_image_in_storage(app, di) -> None
         bundles_dir=bundles_dir,
         registry_path=registry_path,
         flow_access_service=di.flow_access_service,
+        files_service=di.files_service,
     )
     loader._target_company_id = "system"
 

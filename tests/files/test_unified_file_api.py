@@ -4,7 +4,7 @@
 Single-shot POST /files/ снят; upload — только chunked /{svc}/api/v1/files/uploads*.
 Peer-сервисы монтируют тот же chunked router на своём prefix.
 
-Требует: MinIO (S3), shared DB.
+Требует: S3 (SeaweedFS), shared DB.
 """
 
 from __future__ import annotations

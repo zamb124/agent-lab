@@ -33,8 +33,8 @@ from core.websocket import WsCommandError
 
 EXPLORER_OBJECT_TYPES: tuple[AuthzObjectType, ...] = (
     AuthzObjectType.WIKI_PAGE,
-    AuthzObjectType.OFFICE_CATALOG,
-    AuthzObjectType.OFFICE_DOCUMENT,
+    AuthzObjectType.DOCUMENT_CATALOG,
+    AuthzObjectType.DOCUMENT_FILE,
     AuthzObjectType.CRM_ENTITY,
     AuthzObjectType.CRM_NAMESPACE,
     AuthzObjectType.FLOW,
@@ -405,7 +405,7 @@ class AuthzExplorerService:
             return True
         if hydrated.company_id is not None:
             return False
-        if obj.object_type is AuthzObjectType.OFFICE_DOCUMENT:
+        if obj.object_type is AuthzObjectType.DOCUMENT_FILE:
             return False
         company_tuples = await self._authz.list_tuples(
             obj,

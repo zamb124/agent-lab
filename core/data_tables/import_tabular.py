@@ -5,12 +5,15 @@ from __future__ import annotations
 import csv
 import io
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Literal
 
 from openpyxl import load_workbook
+from openpyxl.cell.rich_text import CellRichText
+from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
-from core.data_tables.identifiers import validate_ident
+from core.data_tables.identifiers import is_valid_ident, validate_ident
 from core.data_tables.models import DataTableColumnSpec
 from core.data_tables.sqlite_format import create_user_table, insert_rows
 from core.types import JsonObject, JsonValue
@@ -21,15 +24,30 @@ _HEADER_RE_FALLBACK = "col"
 def _header_to_ident(header: str, index: int) -> str:
     raw = header.strip().lower().replace(" ", "_").replace("-", "_")
     cleaned = "".join(ch for ch in raw if ch.isalnum() or ch == "_")
-    if cleaned and cleaned[0].isalpha():
-        try:
-            return validate_ident(cleaned[:63], kind="column")
-        except ValueError:
-            pass
+    candidate = cleaned[:63]
+    if is_valid_ident(candidate):
+        return candidate
     return validate_ident(f"{_HEADER_RE_FALLBACK}_{index + 1}", kind="column")
 
 
-def _cell_to_json(value: object) -> JsonValue:
+type TabularCell = (
+    bool
+    | int
+    | float
+    | Decimal
+    | str
+    | CellRichText
+    | datetime
+    | date
+    | time
+    | timedelta
+    | DataTableFormula
+    | ArrayFormula
+    | None
+)
+
+
+def _cell_to_json(value: TabularCell) -> JsonValue:
     if value is None:
         return None
     if isinstance(value, bool):

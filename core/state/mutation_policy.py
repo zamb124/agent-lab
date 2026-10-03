@@ -9,7 +9,6 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from copy import deepcopy
 
 from core.errors import FrozenStateFieldError
 
@@ -149,25 +148,6 @@ def forbid_frozen_update_key(key: str, *, reason: str = "update") -> None:
         raise FrozenStateFieldError(field=key, reason=reason)
 
 
-def snapshot_frozen_fields(state: object) -> dict[str, object]:
-    out: dict[str, object] = {}
-    state_fields: dict[str, object] = dict(vars(state))
-    for k in FROZEN_STATE_SNAPSHOT_FIELDS:
-        out[k] = deepcopy(state_fields.get(k))
-    return out
-
-
-def assert_frozen_fields_unchanged(state: object, snapshot: dict[str, object]) -> None:
-    state_fields: dict[str, object] = dict(vars(state))
-    for k, old_val in snapshot.items():
-        new_val = state_fields.get(k)
-        if old_val != new_val:
-            raise FrozenStateFieldError(
-                field=k,
-                reason="in_place_mutation",
-            )
-
-
 def should_skip_field_on_user_returned_state_copy(field_name: str) -> bool:
     if field_name not in FROZEN_STATE_FIELDS:
         return False
@@ -187,12 +167,10 @@ __all__ = [
     "USER_CODE_OVERRIDABLE_FROZEN_FIELDS",
     "USER_RETURN_FORBIDDEN_FROZEN_FIELDS",
     "USER_TOOL_PARALLEL_STATE_MERGE_FIELDS",
-    "assert_frozen_fields_unchanged",
     "forbid_frozen_update_key",
     "guard_setattr_if_user_code",
     "is_runtime_state_mutation_allowed",
     "should_skip_field_on_runtime_node_state_merge",
     "should_skip_field_on_user_returned_state_copy",
-    "snapshot_frozen_fields",
     "user_code_state_mutation_guard",
 ]

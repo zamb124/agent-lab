@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
+
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.context import get_context, resolve_namespace_or_raise
+from core.context.command import current_command_event_id
 from core.models.base import StrictBaseModel
 from core.models.identity_models import ANONYMOUS_USER_ID, SYSTEM_COMPANY_ID
 from core.namespace.service import NamespaceService
@@ -39,6 +42,21 @@ def require_company() -> CompanyScope:
         company_id=context.active_company.company_id,
         user_id=context.user.user_id,
     )
+
+
+def command_idempotency_key(explicit: str | None = None) -> str:
+    """Ключ идемпотентности мутации леджера.
+
+    Приоритет: явный ключ payload → ``event_id`` исполняемой WS-команды
+    (повтор кадра тем же ``event_id`` — безопасный replay) → новый uuid7
+    (REST/внутренний вызов без ключа, каждая попытка уникальна).
+    """
+    if explicit:
+        return explicit
+    event_id = current_command_event_id()
+    if event_id:
+        return event_id
+    return uuid.uuid7().hex
 
 
 async def require_company_viewer(authz_service: AuthzService) -> CompanyScope:

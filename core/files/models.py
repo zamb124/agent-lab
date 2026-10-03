@@ -9,6 +9,7 @@ from enum import Enum
 from typing import ClassVar, Self, override
 
 from oxyde import Field as DbField
+from oxyde import Index as OxydeIndex
 from oxyde import Q
 from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
@@ -55,6 +56,13 @@ class FileRecord(PlatformModel):
     class Meta:
         is_table: bool = True
         table_name: str = "files"
+        indexes: list[OxydeIndex] = [
+            OxydeIndex(
+                ["catalog_id", "name_key"],
+                unique=True,
+                where="deleted_at IS NULL AND catalog_id IS NOT NULL",
+            ),
+        ]
 
     original_name: str = DbField(db_type="TEXT", description="Оригинальное имя файла")
     s3_key: str = DbField(db_type="TEXT", description="Ключ файла в S3")
@@ -96,7 +104,21 @@ class FileRecord(PlatformModel):
         db_index=True,
         description="Время обновления файла",
     )
-    deleted_at: datetime | None = DbField(default=None, description="Время удаления файла")
+    source_kind: str = DbField(default="", max_length=64, db_index=True, description="FileSourceKind записи")
+    catalog_id: str | None = DbField(
+        default=None,
+        max_length=64,
+        db_index=True,
+        description="Каталог Документов; NULL только у exempt-источников",
+    )
+    name_key: str | None = DbField(
+        default=None,
+        max_length=255,
+        description="NFC casefold original_name для уникальности в каталоге",
+    )
+    deleted_at: datetime | None = DbField(default=None, description="Корзина Документов")
+    deleted_by_user_id: str | None = DbField(default=None, max_length=100)
+    authz_synced_at: datetime | None = DbField(default=None)
     retention_kind: str | None = DbField(
         default=None,
         description="Канонический FileRetentionKind для audit и purge",
@@ -190,6 +212,111 @@ class FileRecord(PlatformModel):
             storage_id=source_storage_id,
         ).update(storage_id=target_storage_id, s3_key=s3_key)
         return affected == 1
+
+    @classmethod
+    async def claim_content_replace(
+        cls,
+        file_id: str,
+        *,
+        expected_checksum: str | None,
+        s3_key: str,
+        file_size: int,
+        checksum: str,
+    ) -> bool:
+        query = cls.objects.filter(file_id=file_id, checksum=expected_checksum)
+        affected = await query.update(s3_key=s3_key, file_size=file_size, checksum=checksum)
+        return affected == 1
+
+    @classmethod
+    async def list_pending_authz(cls, *, limit: int) -> list[Self]:
+        return await (
+            cls.objects.filter(authz_synced_at__isnull=True, catalog_id__isnull=False)
+            .order_by("created_at")
+            .limit(limit)
+            .all()
+        )
+
+    @classmethod
+    async def alive_in_catalog(cls, *, company_id: str, catalog_id: str) -> list[Self]:
+        return await (
+            cls.objects.filter(company_id=company_id, catalog_id=catalog_id, deleted_at__isnull=True)
+            .order_by("-updated_at")
+            .all()
+        )
+
+    @classmethod
+    async def count_in_catalog(cls, catalog_id: str) -> int:
+        return await cls.objects.filter(catalog_id=catalog_id, deleted_at__isnull=True).count()
+
+    @classmethod
+    async def count_held_in_catalog(cls, catalog_id: str) -> int:
+        return await cls.objects.filter(catalog_id=catalog_id).count()
+
+    @classmethod
+    async def for_company(cls, file_id: str, company_id: str) -> Self | None:
+        return await cls.objects.filter(file_id=file_id, company_id=company_id).get_or_none()
+
+    @classmethod
+    async def count_alive(cls, company_id: str) -> int:
+        return await cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False).count()
+
+    @classmethod
+    async def search_alive(cls, company_id: str, catalog_ids: list[str], title_query: str, limit: int) -> list[Self]:
+        if not catalog_ids:
+            return []
+        return await (
+            cls.objects.filter(
+                company_id=company_id,
+                catalog_id__in=catalog_ids,
+                deleted_at__isnull=True,
+                original_name__icontains=title_query,
+            )
+            .order_by("-updated_at")
+            .limit(limit)
+            .all()
+        )
+
+    @classmethod
+    async def search_by_name(cls, company_id: str, query: str, limit: int) -> list[Self]:
+        rows = cls.objects.filter(company_id=company_id, deleted_at__isnull=True, catalog_id__isnull=False)
+        if query != "":
+            rows = rows.filter(original_name__icontains=query)
+        return await rows.order_by("original_name").limit(limit).all()
+
+    @classmethod
+    async def mark_trashed(cls, record: Self, *, user_id: str, deleted_at: datetime) -> Self:
+        record.deleted_at = deleted_at
+        record.deleted_by_user_id = user_id
+        _ = await record.save()
+        return record
+
+    @classmethod
+    async def clear_trash(cls, record: Self) -> Self:
+        record.deleted_at = None
+        record.deleted_by_user_id = None
+        _ = await record.save()
+        return record
+
+    @classmethod
+    async def trashed_in_catalog(cls, catalog_id: str) -> list[Self]:
+        return await cls.objects.filter(
+            catalog_id=catalog_id,
+            deleted_at__isnull=False,
+        ).all()
+
+    @classmethod
+    async def trashed_in_namespace(cls, company_id: str, namespace_catalog_ids: list[str]) -> list[Self]:
+        if not namespace_catalog_ids:
+            return []
+        return await (
+            cls.objects.filter(
+                company_id=company_id,
+                catalog_id__in=namespace_catalog_ids,
+                deleted_at__isnull=False,
+            )
+            .order_by("-deleted_at")
+            .all()
+        )
 
     @model_serializer(mode="wrap", when_used="json")
     def _json_without_storage_location(self, handler: SerializerFunctionWrapHandler) -> JsonObject:

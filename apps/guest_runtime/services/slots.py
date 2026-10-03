@@ -456,12 +456,19 @@ async def restore_docker_slot(container_id: str) -> GuestSlot | None:
     )
 
 
+def signal_process(process_id: int, sig: int) -> bool:
+    """Доставить сигнал процессу. False — pid уже не существует."""
+    try:
+        os.kill(process_id, sig)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 async def restore_inprocess_slot(lease: GuestLease) -> GuestSlot | None:
     if lease.process_id is None:
         return None
-    try:
-        os.kill(lease.process_id, 0)
-    except ProcessLookupError:
+    if not signal_process(lease.process_id, 0):
         return None
     try:
         await _wait_health(lease.shim_url, attempts=5)
@@ -494,10 +501,7 @@ async def stop_slot(slot: GuestSlot) -> None:
             return
         if slot.process_id is None:
             raise RuntimeError("inprocess slot missing process_id")
-        try:
-            os.kill(slot.process_id, 15)
-        except ProcessLookupError:
-            return
+        _ = signal_process(slot.process_id, 15)
         return
     if slot.executor == GuestExecutorKind.DOCKER:
         if slot.container_id is None:

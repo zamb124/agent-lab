@@ -10,7 +10,7 @@ import struct
 import wave
 
 import pytest
-from fastapi import HTTPException
+from core.websocket import WsCommandError
 
 from apps.provider_litserve.stt.engines import (
     _decode_audio_to_floats,
@@ -47,18 +47,18 @@ def test_parse_stt_body_accepts_explicit_model_and_language(unique_id):
     assert parsed.language == "en"
 
 
-def test_parse_stt_body_missing_file_raises_422(unique_id):
-    with pytest.raises(HTTPException) as exc_info:
+def test_parse_stt_body_missing_file_raises_unprocessable(unique_id):
+    with pytest.raises(WsCommandError) as exc_info:
         parse_stt_body({}, default_api_model_id=f"gigaam-{unique_id}")
-    assert exc_info.value.status_code == 422
-    assert "file" in str(exc_info.value.detail)
+    assert exc_info.value.code == "unprocessable"
+    assert "file" in exc_info.value.detail
 
 
-def test_parse_stt_body_no_default_and_no_model_raises_422():
+def test_parse_stt_body_no_default_and_no_model_raises_unprocessable():
     pcm = _generate_pcm16_silence(sample_rate=16000, duration_s=0.05)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(WsCommandError) as exc_info:
         parse_stt_body({"file": pcm}, default_api_model_id="")
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "unprocessable"
 
 
 def test_parse_tts_body_uses_default_and_accepts_wav_response_format(unique_id):
@@ -72,13 +72,13 @@ def test_parse_tts_body_uses_default_and_accepts_wav_response_format(unique_id):
     assert parsed.response_format == "wav"
 
 
-def test_parse_tts_body_unknown_response_format_raises_422(unique_id):
-    with pytest.raises(HTTPException) as exc_info:
+def test_parse_tts_body_unknown_response_format_raises_unprocessable(unique_id):
+    with pytest.raises(WsCommandError) as exc_info:
         parse_tts_body(
             {"input": "Привет, мир", "response_format": "FLAC"},
             default_api_model_id=f"silero-tts-{unique_id}",
         )
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "unprocessable"
 
 
 def test_parse_tts_body_normalizes_voice_to_lowercase(unique_id):
@@ -109,12 +109,12 @@ def test_parse_tts_body_accepts_voice_and_known_formats(unique_id):
     assert parsed.response_format == "pcm"
 
 
-def test_parse_tts_body_empty_input_raises_value_error(unique_id):
-    with pytest.raises(HTTPException) as exc_info:
+def test_parse_tts_body_empty_input_raises_unprocessable(unique_id):
+    with pytest.raises(WsCommandError) as exc_info:
         parse_tts_body(
             {"input": "   "}, default_api_model_id=f"silero-tts-{unique_id}"
         )
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "unprocessable"
 
 
 def test_parse_tts_body_replaces_lone_surrogate_so_unicode_is_safe_for_tts():
@@ -166,10 +166,10 @@ def test_parse_vad_body_default_and_explicit_sample_rate(unique_id):
     assert parsed_explicit.sample_rate_override == 8000
 
 
-def test_parse_vad_body_missing_audio_raises_value_error(unique_id):
-    with pytest.raises(HTTPException) as exc_info:
+def test_parse_vad_body_missing_audio_raises_unprocessable(unique_id):
+    with pytest.raises(WsCommandError) as exc_info:
         parse_vad_body({}, default_api_model_id=f"silero-{unique_id}")
-    assert exc_info.value.status_code == 422
+    assert exc_info.value.code == "unprocessable"
 
 
 def test_decode_audio_to_floats_rejects_raw_pcm16():

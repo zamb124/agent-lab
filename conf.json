@@ -539,12 +539,12 @@
   },
   "s3": {
     "enabled": true,
-    "provider": "minio",
-    "endpoint_url": "http://minio.platform.svc.cluster.local:9000",
+    "provider": "seaweedfs",
+    "endpoint_url": "http://seaweedfs.platform.svc.cluster.local:8333",
     "region_name": "us-east-1",
     "bucket_name": "platform",
-    "access_key_id": "YOUR_MINIO_ACCESS_KEY",
-    "secret_access_key": "YOUR_MINIO_SECRET_KEY",
+    "access_key_id": "YOUR_S3_ACCESS_KEY",
+    "secret_access_key": "YOUR_S3_SECRET_KEY",
     "path_style": true
   },
   "proxy": {

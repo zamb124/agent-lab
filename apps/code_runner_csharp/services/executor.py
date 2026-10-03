@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import re
 import tempfile
 import textwrap
@@ -21,6 +20,7 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
+from core.capabilities.runner_pool import code_runner_pool_size
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
@@ -28,12 +28,11 @@ from core.capabilities.runtime_executables import (
 from core.capabilities.sandbox_libraries import CSHARP_ALLOWED_USINGS
 from core.config import get_settings
 from core.tracing.operation_span import traced_operation
+from core.utils.process_env import child_process_env
 
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 RESPONSE_PREFIX = "__CODE_RUNNER_RESPONSE__"
 SERVICE_NAME = "code_runner_csharp"
-DOTNET_BIN_ENV = "CODE_RUNNER_DOTNET_BIN"
-WORKER_POOL_ENV = "CODE_RUNNER_CSHARP_WORKERS"
 CSHARP_METHOD_RE = re.compile(
     r"(?m)^\s*"
     + r"(?:(?:public|private|protected|internal|static|async|virtual|override|sealed|new|partial)\s+)*"
@@ -91,12 +90,12 @@ class CsharpSandboxExecutor:
                 traceback_text="".join(traceback.format_exception(exc)),
             )
 
-        dotnet_bin = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
+        dotnet_bin = resolve_runtime_executable("dotnet")
         if dotnet_bin is None:
             return self._failed_response(
                 request=request,
                 stage="runtime",
-                message=runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV),
+                message=runtime_executable_required_message("dotnet"),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -207,12 +206,12 @@ class CsharpSandboxExecutor:
                 exception_type="EntrypointNotFoundError",
             )
 
-        dotnet_bin = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
+        dotnet_bin = resolve_runtime_executable("dotnet")
         if dotnet_bin is None:
             return self._failed_validation_response(
                 request=request,
                 stage="runtime",
-                message=runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV),
+                message=runtime_executable_required_message("dotnet"),
                 exception_type="MissingRuntimeExecutableError",
             )
 
@@ -277,10 +276,7 @@ class CsharpSandboxExecutor:
             return self._compile_slots
 
     def _compile_slot_count(self) -> int:
-        raw = os.environ.get(WORKER_POOL_ENV)
-        if raw is None:
-            return max(2, min(8, (os.cpu_count() or 2)))
-        return max(2, int(raw))
+        return code_runner_pool_size("csharp")
 
     async def _build_lock(self, artifact_key: str) -> asyncio.Lock:
         async with self._build_locks_guard:
@@ -415,12 +411,13 @@ class CsharpSandboxExecutor:
         return response
 
     def _dotnet_env(self) -> dict[str, str]:
-        return {
-            **os.environ,
-            "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-            "DOTNET_NOLOGO": "1",
-            "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
-        }
+        return child_process_env(
+            {
+                "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+                "DOTNET_NOLOGO": "1",
+                "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+            }
+        )
 
     def _extract_response_line(self, stdout_text: str) -> str:
         for line in reversed(stdout_text.splitlines()):

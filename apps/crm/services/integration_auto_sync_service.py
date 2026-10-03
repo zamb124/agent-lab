@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import CroniterBadCronError, croniter
@@ -18,6 +17,19 @@ from core.integrations.oauth_service import OAuthService
 from core.models.identity_models import Namespace, NamespaceCRMSettings
 from core.namespace import NamespaceService
 from core.scheduler.models import PlatformScheduleCreateRequest, PlatformScheduleType
+from core.types import JsonObject
+
+
+def _copied_integrations(crm: NamespaceCRMSettings) -> dict[str, JsonObject]:
+    return {provider_id: dict(block) for provider_id, block in crm.integrations.items()}
+
+
+def _integration_block(blocks: dict[str, JsonObject], provider_id: str) -> JsonObject:
+    current = blocks.get(provider_id)
+    if current is None:
+        empty: JsonObject = {}
+        return empty
+    return dict(current)
 
 
 def validate_cron_for_timezone(cron: str, timezone_name: str) -> None:
@@ -104,9 +116,8 @@ class IntegrationAutoSyncService:
         crm = existing.crm_settings
         if crm is None:
             crm = NamespaceCRMSettings()
-        integ = cast(dict[str, dict[str, object]], crm.integrations.copy())
-        raw_block = integ.get(pid)
-        block: dict[str, object] = dict(raw_block) if raw_block is not None else {}
+        integ = _copied_integrations(crm)
+        block = _integration_block(integ, pid)
 
         if not auto_sync_enabled:
             current_schedule_task_id = block.get("auto_sync_schedule_task_id")
@@ -220,9 +231,8 @@ class IntegrationAutoSyncService:
         crm = existing.crm_settings
         if crm is None:
             crm = NamespaceCRMSettings()
-        integ = cast(dict[str, dict[str, object]], crm.integrations.copy())
-        raw_block = integ.get(pid)
-        block: dict[str, object] = dict(raw_block) if raw_block is not None else {}
+        integ = _copied_integrations(crm)
+        block = _integration_block(integ, pid)
         block["auto_note_ai_analyze"] = bool(auto_note_ai_analyze)
         integ[pid] = block
         existing.crm_settings = crm.model_copy(update={"integrations": integ})

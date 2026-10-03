@@ -1,9 +1,13 @@
-"""CRUD сущностей склада + создание склада (дерево локаций + 3 типа операций)."""
+"""Агрегат «склад»: карточки площадок, типы операций, накладные.
+
+Сервис отвечает за склад как объект учёта: создание площадки вместе
+со стартовым деревом локаций и типами операций (пресеты топологии),
+настройка политик вида накладной и чтение документов-накладных.
+Справочники товара — ``CatalogService``, дерево локаций и тара —
+``TopologyService``, правила поведения — ``RuleService``.
+"""
 
 from __future__ import annotations
-
-from datetime import datetime
-from decimal import Decimal
 
 from oxyde.exceptions import UniqueViolationError
 
@@ -11,27 +15,19 @@ from apps.stock.models import (
     BackorderPolicy,
     ReflexMode,
     ReservationPolicy,
-    StockBarcodeEntityType,
+    StockLayoutPreset,
     StockLocation,
     StockLocationUsage,
-    StockLot,
     StockMove,
     StockMoveLine,
     StockOperationCode,
     StockOperationType,
-    StockPackage,
-    StockPackageType,
-    StockProduct,
-    StockProductTemplate,
-    StockQuant,
-    StockTracking,
+    StockPartnerRole,
+    StockRemovalStrategy,
     StockTransfer,
     StockTransferState,
     StockWarehouse,
-    UnitOfMeasure,
-    ValuationMethod,
 )
-from apps.stock.services.barcode_service import BarcodeService
 from apps.stock.services.ids import new_id
 from apps.stock.services.stock_access_service import StockAccessService
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
@@ -43,249 +39,81 @@ def _conflict(message: str, error_code: str) -> PlatformConflictError:
     return PlatformConflictError(message, error_code=error_code)
 
 
+# Топология пресетов склада: (имя зоны, usage, дети) — чистое описание
+# каркаса бизнес-зон, разворачиваемое `create_warehouse` за один вызов.
+_TopologySpec = tuple[str, StockLocationUsage, tuple["_TopologySpec", ...]]
+
+_PRESET_TOPOLOGY: dict[StockLayoutPreset, tuple[_TopologySpec, ...]] = {
+    # Микросклад/минимум: одна общая ячейка запаса.
+    StockLayoutPreset.SIMPLE: (
+        ("Stock", StockLocationUsage.BIN, ()),
+    ),
+    # Даркстор/стандартный: приёмка → запас отбора → упаковка → отгрузка.
+    StockLayoutPreset.STANDARD: (
+        ("Receiving", StockLocationUsage.BIN, ()),
+        (
+            "Stock",
+            StockLocationUsage.VIEW,
+            (("Pick", StockLocationUsage.BIN, ()),),
+        ),
+        ("Packing", StockLocationUsage.BIN, ()),
+        ("Shipping", StockLocationUsage.BIN, ()),
+    ),
+    # РЦ: полный цикл с QC, bulk-хранением, forward-отбором,
+    # стейджингом («чистый пол») и карантином.
+    StockLayoutPreset.DISTRIBUTION_CENTER: (
+        ("Receiving Dock", StockLocationUsage.BIN, ()),
+        ("Quality Control", StockLocationUsage.BIN, ()),
+        (
+            "Storage",
+            StockLocationUsage.VIEW,
+            (
+                ("Bulk", StockLocationUsage.BIN, ()),
+                ("Forward Pick", StockLocationUsage.BIN, ()),
+            ),
+        ),
+        ("Clean Floor", StockLocationUsage.BIN, ()),
+        ("Packing", StockLocationUsage.BIN, ()),
+        ("Shipping Dock", StockLocationUsage.BIN, ()),
+        ("Quarantine", StockLocationUsage.BIN, ()),
+    ),
+}
+
+# Какая ячейка пресета — «основной запас» склада (дефолт источника/
+# приёмника типовых операций и точка отсчёта остатка).
+_PRESET_STOCK_ZONE: dict[StockLayoutPreset, str] = {
+    StockLayoutPreset.SIMPLE: "Stock",
+    StockLayoutPreset.STANDARD: "Pick",
+    StockLayoutPreset.DISTRIBUTION_CENTER: "Forward Pick",
+}
+
+
+def _flatten_topology(
+    spec: _TopologySpec, parent_name: str | None = None
+) -> list[tuple[str, StockLocationUsage, str | None]]:
+    """Развернуть дерево пресета в плоский список (имя, usage, родитель)."""
+    name, usage, children = spec
+    rows = [(name, usage, parent_name)]
+    for child in children:
+        rows.extend(_flatten_topology(child, name))
+    return rows
+
+
 def _not_found(message: str, error_code: str) -> PlatformNotFoundError:
     return PlatformNotFoundError(message, error_code=error_code)
 
 
 class WarehouseService:
-    """Сценарии управления справочниками склада."""
+    """Сценарии агрегата «склад»: площадки, типы операций, накладные.
 
-    def __init__(
-        self,
-        barcode: BarcodeService,
-        access: StockAccessService,
-    ) -> None:
-        self._barcode: BarcodeService = barcode
+    ``create_warehouse`` разворачивает готовую к работе площадку —
+    дерево локаций по пресету и три типа операций; остальные методы —
+    правка карточки склада, настройка политик вида накладной и чтение
+    документов (накладная + её движения и строки исполнения).
+    """
+
+    def __init__(self, access: StockAccessService) -> None:
         self._access: StockAccessService = access
-
-    # --- UoM ---
-
-    async def list_uoms(self, *, company_id: str) -> list[UnitOfMeasure]:
-        return await UnitOfMeasure.objects.filter(company_id=company_id).order_by(
-            "category", "name"
-        ).all()
-
-    # --- Products ---
-
-    async def create_product(
-        self,
-        *,
-        company_id: str,
-        name: str,
-        sku: str,
-        uom_id: str,
-        valuation_method: ValuationMethod,
-        standard_price: Decimal,
-        tracking: StockTracking,
-        is_storable: bool,
-        category: str,
-        barcode: str | None,
-    ) -> StockProduct:
-        """Шаблон + вариант + barcode-индекс одним сценарием."""
-        if await UnitOfMeasure.by_id(company_id, uom_id) is None:
-            raise _not_found("Unit of measure not found", "uom_not_found")
-        now = utcnow()
-        template = await StockProductTemplate.objects.create(
-            instance=StockProductTemplate(
-                product_template_id=new_id("spt"),
-                company_id=company_id,
-                name=name,
-                tracking=tracking,
-                is_storable=is_storable,
-                category=category,
-                valuation_method=valuation_method,
-                standard_price=standard_price,
-                uom_id=uom_id,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        try:
-            product = await StockProduct.objects.create(
-                instance=StockProduct(
-                    product_id=new_id("spr"),
-                    company_id=company_id,
-                    template_id=template.product_template_id,
-                    sku=sku,
-                    barcode=barcode,
-                    uom_id=uom_id,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-        except UniqueViolationError as exc:
-            raise _conflict("SKU already exists", "sku_conflict") from exc
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.PRODUCT,
-                entity_id=product.product_id,
-            )
-        return product
-
-    async def update_product(
-        self,
-        *,
-        company_id: str,
-        product_id: str,
-        name: str | None,
-        sku: str | None,
-        barcode: str | None,
-        is_active: bool | None,
-        valuation_method: ValuationMethod | None,
-        standard_price: Decimal | None,
-        tracking: StockTracking | None,
-    ) -> StockProduct:
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
-            raise _not_found("Product not found", "product_not_found")
-        template = await StockProductTemplate.by_id(company_id, product.template_id)
-        if template is None:
-            raise _not_found("Product template not found", "product_not_found")
-        if valuation_method is not None or standard_price is not None:
-            _ = await StockProductTemplate.update_valuation_method(
-                company_id=company_id,
-                product_template_id=template.product_template_id,
-                valuation_method=valuation_method or template.valuation_method,
-                standard_price=standard_price,
-            )
-        if name is not None or tracking is not None:
-            template.name = name if name is not None else template.name
-            template.tracking = tracking if tracking is not None else template.tracking
-            template.updated_at = utcnow()
-            _ = await template.save()
-        if sku is not None or barcode is not None or is_active is not None:
-            product.sku = sku if sku is not None else product.sku
-            product.is_active = (
-                is_active if is_active is not None else product.is_active
-            )
-            if barcode is not None and barcode != product.barcode:
-                _ = await self._barcode.replace(
-                    company_id=company_id,
-                    barcode=barcode,
-                    entity_type=StockBarcodeEntityType.PRODUCT,
-                    entity_id=product.product_id,
-                )
-                product.barcode = barcode
-            product.updated_at = utcnow()
-            try:
-                _ = await product.save()
-            except UniqueViolationError as exc:
-                raise _conflict("SKU already exists", "sku_conflict") from exc
-        return product
-
-    async def get_product(
-        self, *, company_id: str, product_id: str
-    ) -> tuple[StockProduct, StockProductTemplate]:
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
-            raise _not_found("Product not found", "product_not_found")
-        template = await StockProductTemplate.by_id(company_id, product.template_id)
-        if template is None:
-            raise _not_found("Product template not found", "product_not_found")
-        return product, template
-
-    async def list_products(
-        self, *, company_id: str, limit: int, offset: int
-    ) -> OffsetPage[StockProduct]:
-        rows = await StockProduct.list_for_company(
-            company_id, limit=limit, offset=offset
-        )
-        total = await StockProduct.count_for_company(company_id)
-        return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
-
-    # --- Locations ---
-
-    async def create_location(
-        self,
-        *,
-        company_id: str,
-        warehouse_id: str,
-        parent_id: str | None,
-        name: str,
-        usage: StockLocationUsage,
-        removal_method: str | None,
-        barcode: str | None,
-    ) -> StockLocation:
-        warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
-        if warehouse is None:
-            raise _not_found("Warehouse not found", "warehouse_not_found")
-        if usage not in {StockLocationUsage.VIEW, StockLocationUsage.INTERNAL}:
-            raise _conflict(
-                "Warehouse locations must be view|internal",
-                "location_usage_invalid",
-            )
-        if parent_id is not None:
-            parent = await StockLocation.by_id(company_id, parent_id)
-            if parent is None or parent.warehouse_id != warehouse_id:
-                raise _not_found("Parent location not found", "location_not_found")
-        location = await StockLocation.objects.create(
-            instance=StockLocation(
-                location_id=new_id("loc"),
-                company_id=company_id,
-                warehouse_id=warehouse_id,
-                parent_id=parent_id or warehouse.view_location_id,
-                name=name,
-                usage=usage,
-                removal_method=removal_method or "fifo",
-                barcode=barcode,
-                created_at=utcnow(),
-            )
-        )
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.LOCATION,
-                entity_id=location.location_id,
-            )
-        return location
-
-    async def update_location(
-        self,
-        *,
-        company_id: str,
-        location_id: str,
-        name: str | None,
-        removal_method: str | None,
-        barcode: str | None,
-        is_active: bool | None,
-    ) -> StockLocation:
-        location = await StockLocation.by_id(company_id, location_id)
-        if location is None:
-            raise _not_found("Location not found", "location_not_found")
-        location.name = name if name is not None else location.name
-        location.removal_method = (
-            removal_method if removal_method is not None else location.removal_method
-        )
-        location.is_active = is_active if is_active is not None else location.is_active
-        if barcode is not None and barcode != location.barcode:
-            _ = await self._barcode.replace(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.LOCATION,
-                entity_id=location.location_id,
-            )
-            location.barcode = barcode
-        _ = await location.save()
-        return location
-
-    async def list_locations(
-        self, *, company_id: str, warehouse_id: str | None
-    ) -> list[StockLocation]:
-        rows = await StockLocation.list_for_company(company_id)
-        if warehouse_id is not None:
-            rows = [r for r in rows if r.warehouse_id == warehouse_id]
-        return rows
-
-    async def get_location(
-        self, *, company_id: str, location_id: str
-    ) -> StockLocation:
-        location = await StockLocation.by_id(company_id, location_id)
-        if location is None:
-            raise _not_found("Location not found", "location_not_found")
-        return location
 
     # --- Warehouses ---
 
@@ -296,64 +124,101 @@ class WarehouseService:
         code: str,
         name: str,
         owner_user_id: str,
+        layout_preset: StockLayoutPreset,
+        removal_strategy: StockRemovalStrategy,
     ) -> StockWarehouse:
-        """Склад = view + stock локация + 3 типа операций + authz-дефолты."""
+        """Открыть новый склад — одна команда разворачивает топологию.
+
+        Создаются (созданный склад сразу готов принимать и отгружать):
+
+        * ``stock_warehouses`` — карточка склада;
+        * дерево локаций по ``layout_preset``: ``simple`` — корень
+          ``view`` + ячейка «Stock» (микросклад/даркстор: один общий
+          запас); ``standard`` — + дебаркадер приёмки, зона упаковки и
+          отгрузки; ``distribution_center`` — РЦ: дебаркадер, QC,
+          bulk-хранение, forward-отбор, «чистый пол» (staging), упаковка,
+          отгрузочные ворота, карантин. Точную вилку рядов/ярусов
+          администратор достраивает под конкретное здание — пресет даёт
+          рабочий каркас бизнес-зон;
+        * три типа операций по умолчанию: ``Receipts``
+          (partner:vendor → основной запас), ``Delivery Orders``
+          (запас → partner:customer), ``Internal Transfers``
+          (запас → запас) — именно они определяют границу оценки:
+          приход и отгрузка создают записи в журнале стоимости,
+          внутренние перемещения — нет;
+        * authz-дефолты склада для ``owner_user_id``.
+
+        ``code`` уникален на компанию → ``warehouse_code_conflict``.
+        Требует инициализированной компании (виртуальные локации
+        partner vendor/customer уже существуют) — иначе
+        ``company_not_initialized``.
+
+        ``removal_strategy`` — обязательная бизнес-политика склада:
+        цепочка «товар → тип хранения → склад» всегда кончается здесь;
+        незаданная стратегия — ошибка конфигурации, а не дефолт.
+        """
+        preset = layout_preset
         now = utcnow()
         warehouse_id = new_id("whs")
-        view = await StockLocation.objects.create(
-            instance=StockLocation(
-                location_id=new_id("loc"),
-                company_id=company_id,
-                warehouse_id=warehouse_id,
-                parent_id=None,
-                name=f"{name} (view)",
-                usage=StockLocationUsage.VIEW,
-                created_at=now,
-            )
+        view = await StockLocation.create_child(
+            company_id=company_id,
+            warehouse_id=warehouse_id,
+            parent=None,
+            name=f"{name} (view)",
+            usage=StockLocationUsage.VIEW,
         )
-        stock = await StockLocation.objects.create(
-            instance=StockLocation(
-                location_id=new_id("loc"),
-                company_id=company_id,
-                warehouse_id=warehouse_id,
-                parent_id=view.location_id,
-                name="Stock",
-                usage=StockLocationUsage.INTERNAL,
-                created_at=now,
-            )
-        )
+        created: dict[str, StockLocation] = {}
+        for spec in _PRESET_TOPOLOGY[preset]:
+            for path_name, usage, parent_name in _flatten_topology(spec):
+                parent = view if parent_name is None else created[parent_name]
+                loc = await StockLocation.create_child(
+                    company_id=company_id,
+                    warehouse_id=warehouse_id,
+                    parent=parent,
+                    name=path_name,
+                    usage=usage,
+                )
+                created[path_name] = loc
+        stock = created[_PRESET_STOCK_ZONE[preset]]
         try:
-            warehouse = await StockWarehouse.objects.create(
-                instance=StockWarehouse(
+            warehouse = await StockWarehouse.create(StockWarehouse(
                     warehouse_id=warehouse_id,
                     company_id=company_id,
                     code=code,
                     name=name,
                     view_location_id=view.location_id,
                     stock_location_id=stock.location_id,
+                    removal_strategy=removal_strategy,
                     created_at=now,
                 )
             )
         except UniqueViolationError as exc:
             raise _conflict("Warehouse code already exists", "warehouse_code_conflict") from exc
         supplier = await StockLocation.virtual_by_usage(
-            company_id, StockLocationUsage.SUPPLIER
+            company_id, StockLocationUsage.PARTNER, StockPartnerRole.VENDOR
         )
         customer = await StockLocation.virtual_by_usage(
-            company_id, StockLocationUsage.CUSTOMER
+            company_id, StockLocationUsage.PARTNER, StockPartnerRole.CUSTOMER
         )
         if supplier is None or customer is None:
             raise _conflict(
                 "Virtual locations missing; run stock/company/init first",
                 "company_not_initialized",
             )
+        # Приёмка ставит товар на входную зону пресета (дебаркадер),
+        # отгрузка отбирает из основного запаса; межзональную логистику
+        # дают маршруты (StockRoute) — см. раздел сценариев в stock.mdc.
+        receipt_zone = (
+            created["Receiving"]
+            if preset == StockLayoutPreset.STANDARD
+            else created.get("Receiving Dock", stock)
+        )
         for op_code, op_name, src, dst in (
-            (StockOperationCode.INCOMING, "Receipts", supplier.location_id, stock.location_id),
+            (StockOperationCode.INCOMING, "Receipts", supplier.location_id, receipt_zone.location_id),
             (StockOperationCode.OUTGOING, "Delivery Orders", stock.location_id, customer.location_id),
             (StockOperationCode.INTERNAL, "Internal Transfers", stock.location_id, stock.location_id),
         ):
-            _ = await StockOperationType.objects.create(
-                instance=StockOperationType(
+            _ = await StockOperationType.create(StockOperationType(
                     operation_type_id=new_id("opt"),
                     company_id=company_id,
                     warehouse_id=warehouse_id,
@@ -430,6 +295,21 @@ class WarehouseService:
         putaway_flow_id: str | None,
         auto_validate: bool | None,
     ) -> StockOperationType:
+        """Настроить политику вида накладной.
+
+        * ``reservation_policy`` — когда резервировать: ``manual``
+          (явной командой) или ``at_confirm`` (при подтверждении
+          накладной);
+        * ``backorder_policy`` — при нехватке: ``always`` (отгрузить
+          сколько есть, остаток — доказкой), ``never`` (ошибка,
+          накладная целиком или никак), ``ask`` (спросить у оператора);
+        * ``putaway_mode`` — как выбирать ячейку приёмки: ``rule``
+          (по правилам размещения) или ``inline`` (flow платформы
+          решает — тогда обязателен ``putaway_flow_id``, иначе
+          ``putaway_flow_missing``);
+        * ``auto_validate`` — проводить накладную автоматически после
+          резервирования (быстрый режим даркстора).
+        """
         op = await StockOperationType.by_id(company_id, operation_type_id)
         if op is None:
             raise _not_found("Operation type not found", "operation_type_not_found")
@@ -452,7 +332,7 @@ class WarehouseService:
         _ = await op.save()
         return op
 
-    # --- Transfers / move lines / quants (чтение) ---
+    # --- Transfers (чтение) ---
 
     async def list_transfers(
         self,
@@ -482,125 +362,3 @@ class WarehouseService:
             company_id, [m.move_id for m in moves]
         )
         return transfer, moves, lines
-
-    async def update_move_line(
-        self,
-        *,
-        company_id: str,
-        move_line_id: str,
-        done_quantity: Decimal | None,
-        picked: bool | None,
-        lot_id: str | None,
-        location_dest_id: str | None,
-    ) -> StockMoveLine:
-        return await StockMoveLine.update_execution(
-            company_id=company_id,
-            move_line_id=move_line_id,
-            done_quantity=done_quantity,
-            picked=picked,
-            lot_id=lot_id,
-            location_dest_id=location_dest_id,
-        )
-
-    async def list_quants(
-        self,
-        *,
-        company_id: str,
-        location_id: str | None,
-        product_id: str | None,
-        limit: int,
-        offset: int,
-    ) -> OffsetPage[StockQuant]:
-        rows = await StockQuant.list_for_company(
-            company_id, location_id=location_id, product_id=product_id,
-            limit=limit, offset=offset,
-        )
-        total = await StockQuant.count_for_company(
-            company_id, location_id=location_id, product_id=product_id
-        )
-        return OffsetPage(items=rows, total=total, limit=limit, offset=offset)
-
-    # --- Lots / packages ---
-
-    async def create_lot(
-        self,
-        *,
-        company_id: str,
-        product_id: str,
-        name: str,
-        barcode: str | None,
-        expiration_at: datetime | None,
-    ) -> StockLot:
-        product = await StockProduct.by_id(company_id, product_id)
-        if product is None:
-            raise _not_found("Product not found", "product_not_found")
-        try:
-            lot = await StockLot.objects.create(
-                instance=StockLot(
-                    lot_id=new_id("lot"),
-                    company_id=company_id,
-                    product_id=product_id,
-                    name=name,
-                    barcode=barcode,
-                    expiration_at=expiration_at,
-                    created_at=utcnow(),
-                )
-            )
-        except UniqueViolationError as exc:
-            raise _conflict("Lot name already exists", "lot_conflict") from exc
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.LOT,
-                entity_id=lot.lot_id,
-            )
-        return lot
-
-    async def list_lots(
-        self, *, company_id: str, product_id: str | None
-    ) -> list[StockLot]:
-        query = StockLot.objects.filter(company_id=company_id)
-        if product_id is not None:
-            query = query.filter(product_id=product_id)
-        return await query.order_by("name").all()
-
-    async def create_package(
-        self,
-        *,
-        company_id: str,
-        package_type_id: str | None,
-        parent_package_id: str | None,
-        location_id: str | None,
-        barcode: str | None,
-    ) -> StockPackage:
-        if package_type_id is not None:
-            exists = await StockPackageType.objects.filter(
-                company_id=company_id, package_type_id=package_type_id
-            ).exists()
-            if not exists:
-                raise _not_found("Package type not found", "package_type_not_found")
-        package = await StockPackage.objects.create(
-            instance=StockPackage(
-                package_id=new_id("pkg"),
-                company_id=company_id,
-                package_type_id=package_type_id,
-                parent_package_id=parent_package_id,
-                location_id=location_id,
-                barcode=barcode,
-                created_at=utcnow(),
-            )
-        )
-        if barcode is not None:
-            _ = await self._barcode.register(
-                company_id=company_id,
-                barcode=barcode,
-                entity_type=StockBarcodeEntityType.PACKAGE,
-                entity_id=package.package_id,
-            )
-        return package
-
-    async def list_packages(self, *, company_id: str) -> list[StockPackage]:
-        return await StockPackage.objects.filter(company_id=company_id).order_by(
-            "created_at"
-        ).all()

@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import cast
 
 import httpx
 
@@ -20,6 +19,7 @@ from core.ai.provider_error import (
 from core.clients.llm.candidates import candidate_key
 from core.clients.redis_client import RedisClient, RedisOperationError
 from core.config import get_settings
+from core.http.client import http_header_text
 
 _COOLDOWN_KEY_PREFIX = "llm:candidate_cooldown:"
 
@@ -44,7 +44,7 @@ def _redis() -> RedisClient:
 
 
 def retry_after_ttl_seconds(response: httpx.Response) -> int | None:
-    raw = cast(str | None, response.headers.get("retry-after"))
+    raw = http_header_text(response.headers, "retry-after")
     if raw is None:
         return None
     stripped = raw.strip()

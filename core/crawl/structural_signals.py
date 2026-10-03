@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -12,7 +11,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup, Tag
 
 from core.crawl.models import CrawlContentType, CrawlStructuralSignals
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_value, require_json_object
 
 _ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 _SCHEMA_ORG_TYPES: dict[str, CrawlContentType] = {
@@ -141,14 +140,22 @@ def _meta_content(soup: BeautifulSoup, *, prop: str | None = None, name: str | N
     return None
 
 
+def _json_ld_object(value: JsonValue) -> JsonObject | None:
+    if not isinstance(value, dict):
+        return None
+    return require_json_object(cast(object, value), "json-ld")
+
+
 def _append_json_ld_object(objects: list[JsonObject], value: JsonValue) -> None:
-    if isinstance(value, dict):
-        objects.append(require_json_object(cast(object, value), "json-ld"))
+    found = _json_ld_object(value)
+    if found is not None:
+        objects.append(found)
         return
     if isinstance(value, list):
         for item in value:
-            if isinstance(item, dict):
-                objects.append(require_json_object(cast(object, item), "json-ld"))
+            nested = _json_ld_object(item)
+            if nested is not None:
+                objects.append(nested)
 
 
 def _first_json_ld_objects(soup: BeautifulSoup) -> list[JsonObject]:
@@ -160,8 +167,8 @@ def _first_json_ld_objects(soup: BeautifulSoup) -> list[JsonObject]:
         if raw is None or not raw.strip():
             continue
         try:
-            payload = cast(JsonValue, json.loads(raw))
-        except json.JSONDecodeError:
+            payload = parse_json_value(raw, "json-ld")
+        except ValueError:
             continue
         _append_json_ld_object(objects, payload)
     return objects

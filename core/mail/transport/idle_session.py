@@ -3,22 +3,40 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Final, Protocol, cast, final
+from collections.abc import Awaitable
+from typing import Final, Protocol, final
 
 import aioimaplib
 
+from core.imports import typed_view
+from core.logging import get_logger
 from core.mail.exceptions import MailTransportError
 from core.mail.models import MailIdleWake, MailIdleWakeKind
 
+logger = get_logger(__name__)
+
+ImapIdlePush = list[bytes] | bytes | bytearray | str
+
 
 class _ImapIdleOps(Protocol):
-    def idle_start(self, timeout: float = ...) -> asyncio.Future[object]: ...
+    def idle_start(self, timeout: float = ...) -> Awaitable[None]: ...
 
-    def wait_server_push(self) -> asyncio.Future[object]: ...
+    def wait_server_push(self) -> Awaitable[ImapIdlePush]: ...
 
-    def idle_done(self) -> object: ...
+    def idle_done(self) -> None: ...
 
-    def logout(self) -> asyncio.Future[object]: ...
+    def logout(self) -> Awaitable[None]: ...
+
+
+def _finish_idle_after_wait_error(client: _ImapIdleOps, *, mailbox: str) -> None:
+    try:
+        _ = client.idle_done()
+    except Exception as exc:
+        logger.info(
+            "mail_idle_done_after_wait_failed",
+            mailbox=mailbox,
+            error=str(exc),
+        )
 
 
 def classify_idle_push(raw: str) -> MailIdleWakeKind:
@@ -39,7 +57,7 @@ class MailIdleSession:
     """Долгая IMAP SELECT + IDLE. Caller владеет lifecycle (aclose)."""
 
     def __init__(self, client: aioimaplib.IMAP4_SSL, *, mailbox: str) -> None:
-        self._client: Final[_ImapIdleOps] = cast(_ImapIdleOps, cast(object, client))
+        self._client: Final[_ImapIdleOps] = typed_view(client, aioimaplib.IMAP4_SSL, _ImapIdleOps)
         self._mailbox: Final[str] = mailbox
         self._closed: bool = False
 
@@ -68,30 +86,18 @@ class MailIdleSession:
                 raise MailTransportError(f"IMAP IDLE done after timeout failed: {exc}") from exc
             return MailIdleWake(kind=MailIdleWakeKind.TIMEOUT, raw="")
         except Exception as exc:
-            try:
-                _ = self._client.idle_done()
-            except Exception:
-                pass
+            _finish_idle_after_wait_error(self._client, mailbox=self._mailbox)
             raise MailTransportError(f"IMAP IDLE wait failed: {exc}") from exc
         try:
             _ = self._client.idle_done()
         except Exception as exc:
             raise MailTransportError(f"IMAP IDLE done failed: {exc}") from exc
-        if isinstance(push, (bytes, bytearray)):
-            raw = bytes(push).decode("utf-8", errors="replace")
+        if isinstance(push, list):
+            raw = " ".join(item.decode("utf-8", errors="replace") for item in push)
         elif isinstance(push, str):
             raw = push
-        elif isinstance(push, list):
-            parts: list[str] = []
-            push_items: list[object] = cast(list[object], push)
-            for item in push_items:
-                if isinstance(item, (bytes, bytearray)):
-                    parts.append(bytes(item).decode("utf-8", errors="replace"))
-                else:
-                    parts.append(str(item))
-            raw = " ".join(parts)
         else:
-            raw = str(push)
+            raw = bytes(push).decode("utf-8", errors="replace")
         return MailIdleWake(kind=classify_idle_push(raw), raw=raw)
 
     async def aclose(self) -> None:

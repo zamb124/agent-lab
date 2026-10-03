@@ -27,8 +27,9 @@ from core.context import get_context
 from core.db.storage import SharedStorage, Storage
 from core.di.boundary import http_di, task_di
 from core.di.kit import ProcessIdentity, ServiceDi, recipe
+from core.documents.tree_service import DocumentTreeService
 from core.files.chunked_upload import ChunkedUploadService
-from core.files.hooks import bind_document_placement, index_file_in_rag
+from core.files.hooks import index_file_in_rag
 from core.files.service import FilesService
 from core.identity.auth_service import AuthService
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
@@ -71,18 +72,20 @@ def billing_service(billing: BillingConfig, storage: SharedStorage) -> BillingSe
 
 
 @recipe
-def files_service(identity: ProcessIdentity) -> FilesService:
+def files_service(identity: ProcessIdentity, document_tree_service: DocumentTreeService) -> FilesService:
     return FilesService(
-        docs_bind_hook=bind_document_placement,
+        tree=document_tree_service,
         rag_index_hook=index_file_in_rag,
         files_route_segment=identity.files_route_segment,
     )
 
 
 @recipe
-def chunked_upload_service(identity: ProcessIdentity) -> ChunkedUploadService:
+def chunked_upload_service(
+    identity: ProcessIdentity, document_tree_service: DocumentTreeService
+) -> ChunkedUploadService:
     return ChunkedUploadService(
-        docs_bind_hook=bind_document_placement,
+        tree=document_tree_service,
         rag_index_hook=index_file_in_rag,
         files_route_segment=identity.files_route_segment,
     )
@@ -130,6 +133,7 @@ class PlatformDi(
     calendar_service: CalendarService
     chunked_upload_service: ChunkedUploadService
     company_integration_credential_service: CompanyIntegrationCredentialService
+    document_tree_service: DocumentTreeService
     files_service: FilesService
     mail_service: MailService
     namespace_service: NamespaceService

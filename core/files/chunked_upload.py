@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from pathlib import Path
 
 from pydantic import Field
 
 from core.clients.redis_client import RedisClient, RedisOperationError
 from core.config import get_settings
 from core.context import require_active_company, require_context
+from core.documents.tree_service import DocumentTreeService
 from core.files.create_spec import FileCreateSpec, FileSourceKind
 from core.files.models import FileRecord
+from core.files.object_key import object_key
 from core.files.object_store.gate import FileGate
 from core.files.object_store.s3_client import S3Client
-from core.files.service import DocsBindHook, FilesService, RagIndexHook
+from core.files.service import FilesService, RagIndexHook
 from core.files.storage import original_name_with_extension, to_ascii_s3_metadata
 from core.files.urls import normalize_files_route_segment
 from core.guest_runtime.source_budget import assert_code_agent_source_upload_fits
@@ -80,14 +81,15 @@ class ChunkedUploadService:
         self,
         *,
         files_route_segment: str,
+        tree: DocumentTreeService,
         rag_index_hook: RagIndexHook | None = None,
-        docs_bind_hook: DocsBindHook | None = None,
     ) -> None:
         self._files_route_segment: str = normalize_files_route_segment(files_route_segment)
+        self._tree: DocumentTreeService = tree
         self._files: FilesService = FilesService(
             files_route_segment=self._files_route_segment,
+            tree=tree,
             rag_index_hook=rag_index_hook,
-            docs_bind_hook=docs_bind_hook,
         )
 
     async def _client_for_session(self, session: ChunkedUploadSession) -> S3Client:
@@ -134,8 +136,7 @@ class ChunkedUploadService:
         file_id = f"file_{uuid.uuid4().hex[:12]}"
         upload_id = f"upl_{uuid.uuid4().hex}"
         effective_name = original_name_with_extension(original_name, content_type)
-        extension = Path(effective_name).suffix or ".bin"
-        s3_key = f"files/{file_id}_{uuid.uuid4().hex[:16]}{extension}"
+        s3_key = object_key(company_id, file_id, uuid.uuid4().hex[:16], effective_name)
 
         metadata: JsonObject = dict(spec.metadata) if spec.metadata else {}
         metadata["source_kind"] = _source_kind_wire(spec.source_kind)

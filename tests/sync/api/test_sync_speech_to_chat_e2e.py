@@ -9,13 +9,13 @@
      фикстурный Opus-файл `tests/fixtures/sync/speech_demo.ogg` через
      контейнер `agentlab_livekit_cli_test`.
   4. Speech-to-chat poll создаёт track-egress на микрофон публикатора,
-     egress пишет 2-секундные сегменты в MinIO `sync-speech/...`, воркер
+     egress пишет 2-секундные сегменты в S3 `sync-speech/...`, воркер
      обрабатывает (silence detect/trim) и через `op_messages_send` от лица
      `participant_identity` публикует `file/audio` сообщение с
      `source_speech_to_chat=True`.
 
 Без моков и monkeypatch: реальный sync_service, реальный sync_worker,
-реальные LiveKit + egress + cli + MinIO (`make test-up`).
+реальные LiveKit + egress + cli + S3 (`make test-up`).
 """
 
 from __future__ import annotations

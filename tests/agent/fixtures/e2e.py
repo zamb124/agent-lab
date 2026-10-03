@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -134,11 +133,14 @@ async def agent_tunnel_bus_pod_b(
     frontend_di,
     unique_id: str,
 ) -> AsyncIterator[None]:
-    from apps.agent.tunnel_bus import start_tunnel_bus_listener, stop_tunnel_bus_listener
+    from apps.agent.tunnel_bus import (
+        bind_pod_instance_id,
+        start_tunnel_bus_listener,
+        stop_tunnel_bus_listener,
+    )
 
     pod_name = f"pod-b-{unique_id}"
-    previous_hostname = os.environ.get("HOSTNAME")
-    os.environ["HOSTNAME"] = pod_name
+    previous_pod_instance_id = bind_pod_instance_id(pod_name)
     await stop_tunnel_bus_listener()
     await frontend_di.redis_client.connect()
     await start_tunnel_bus_listener(frontend_di.redis_client)
@@ -146,7 +148,4 @@ async def agent_tunnel_bus_pod_b(
         yield
     finally:
         await stop_tunnel_bus_listener()
-        if previous_hostname is None:
-            os.environ.pop("HOSTNAME", None)
-        else:
-            os.environ["HOSTNAME"] = previous_hostname
+        _ = bind_pod_instance_id(previous_pod_instance_id)

@@ -13,7 +13,7 @@ from a2a.types import (
     TaskState,
     TaskStatus,
 )
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from google.protobuf.json_format import MessageToDict
 from pydantic import Field
 
@@ -54,6 +54,7 @@ from core.models import StrictBaseModel
 from core.state import ExecutionState
 from core.tasks import enqueue
 from core.types import JsonObject, require_json_object
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -95,9 +96,10 @@ async def submit_task(request: TaskSubmitRequest, di: Di) -> JsonObject:
         session_id = request.session_id
         # Валидация формата session_id
         if ":" not in session_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"session_id must be in format 'flow_id:context_id', got: '{session_id}'",
+            raise WsCommandError(
+                "ws_invalid_payload",
+                f"session_id must be in format 'flow_id:context_id', got: '{session_id}'",
+                error_code="ws_invalid_payload",
             )
         # Извлекаем context_id из session_id
         context_id = session_id.split(":", 1)[1]
@@ -144,9 +146,11 @@ async def submit_task(request: TaskSubmitRequest, di: Di) -> JsonObject:
     if result.is_err:
         error_msg = str(result.error)
         logger.error("flows.api.task_failed", task_id=task_id, error=error_msg)
+        if error_msg == "":
+            error_msg = "Flow task failed"
         if "не найден" in error_msg:
-            raise HTTPException(status_code=404, detail=error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
+            raise WsCommandError("not_found", error_msg, error_code="not_found")
+        raise WsCommandError("internal", error_msg, error_code="internal")
 
     task_result = FlowTaskResult.model_validate(result.return_value)
     task_state = platform_task_state_to_a2a(task_result.task_state)

@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from apps.search.components import WORKER_RECIPES
+from apps.search.di import WORKER_RECIPES
 from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
 from core.di import http_di, task_di
 from core.di.platform import PlatformDi

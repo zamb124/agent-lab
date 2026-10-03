@@ -65,6 +65,7 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_a2a_projection_model_files.py` (`make lint`) — одна таблица проекции A2A на файл `apps/flows/src/models/a2a_projection/`.
 - `make check-a2a-fixtures` (в `make test`) — `VERSION` + sha256 pin на диске, без сети; `make check-a2a-fixtures-remote` — сверка с official, HTTP-ошибка = FAIL.
 - `tests/flows/a2a_conformance/` — conformance на реальном стеке (`make test-up`) без моков; builders — `tests/flows/_a2a_v1.py`.
 - `scripts/check_flow_ui_hard_cut.py` (`make lint`) — запрещённые имена второго UI-envelope.

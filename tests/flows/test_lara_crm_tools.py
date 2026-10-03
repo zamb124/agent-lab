@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.di import FlowsDi
-from apps.flows.src.clients.lara_client import LaraClient
+from apps.flows.src.services.lara_client import LaraClient
 from apps.flows.tools.crm.crm_tools import (
     crm_analyze_note_text,
     crm_create_note,

@@ -53,12 +53,13 @@ alwaysApply: false
 
 ## Исключения
 
-- Исключение: `os.environ` читают `core/config/loader.py`, entrypoint процесса и тесты; остальное — ratchet `os_environ`.
+- Исключение: `os.environ` читают `core/config/loader.py` (сборка Settings), `core/config/testing.py` (`TESTING` и `PYTEST_CURRENT_TEST`), `child_process_env` (`core/utils/process_env.py`), entrypoint без Settings (`apps/guest_runtime/examples/`, `apps/guest_runtime/shim/pid1.py`, `apps/test_a2a_sample/`) и тесты. Ratchet `os_environ` эти пути не считает.
 - Исключение: `calls.turn_secret` — единственный путь секрета в allowlist `scripts/check_conf_secrets.py`.
 - Исключение: сборка `state.variables` из секции `variables` flow (`FlowFactory._resolve_variables`) кладёт `None` для отсутствующей переменной компании. `[без гейта]`
 
 ## Гейты
 
+- `scripts/check_secrets_model_files.py` (`make lint`) — `SecretVariable` и `SecretVariableVersion` в разных модулях `core/secrets/models/`.
 - `scripts/check_conf_secrets.py` (`make lint`) — секреты `conf.json` только `YOUR_*`.
 - `scripts/check_conf_keys_declared.py` (`make lint`) — каждый ключ `conf.json` объявлен в Settings.
 - `scripts/check_repo_hygiene.py` (`make lint`) — корень репозитория без дампов, ключей и документов.

@@ -122,8 +122,8 @@ async def test_with_worker(rag_worker):
   `test_<hex>`, он едет по платформе как `X-Test-Scope`/TaskIQ label, MockLLM
   читает строго свою очередь `mock_llm:responses:<scope>`.
 - E2E-фазы `-n0` (Playwright/Electron) используют статический scope
-  `TEST_SCOPE_STATIC_E2E` (`tests/fixtures/e2e_scope.py` + env
-  `TEST_SCOPE_DEFAULT` у сервисов стека).
+  `TEST_SCOPE_STATIC_E2E` (`tests/fixtures/e2e_scope.py` + `test_scope_default`
+  у сервисов стека, ENV `TEST_SCOPE_DEFAULT`).
 
 ## Конфигурация окружения
 

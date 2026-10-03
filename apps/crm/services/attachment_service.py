@@ -25,7 +25,7 @@ from core.files.object_store.principals import SystemPrincipal
 from core.files.service import FilesService
 from core.logging import get_logger
 from core.rag import BaseRAGProvider
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 logger = get_logger(__name__)
 
@@ -55,7 +55,7 @@ class AttachmentService:
         return context.active_company.company_id
 
     @staticmethod
-    def _as_json_object(value: object, context: str) -> JsonObject:
+    def _as_json_object(value: JsonValue, context: str) -> JsonObject:
         return require_json_object(value, context)
 
     @staticmethod
@@ -66,7 +66,7 @@ class AttachmentService:
         return value
 
     @staticmethod
-    def _optional_string(value: object) -> str | None:
+    def _optional_string(value: JsonValue) -> str | None:
         if isinstance(value, str) and value.strip() != "":
             return value.strip()
         return None
@@ -112,7 +112,7 @@ class AttachmentService:
 
         index_response = self._as_json_object(
             type_cast(
-                object,
+                JsonValue,
                 await self._rag.index_file(
                     namespace,
                     document_id,
@@ -264,7 +264,7 @@ class AttachmentService:
                         "filename": file_record.original_name,
                         "status": file_record.status.value,
                         "metadata": self._as_json_object(
-                            type_cast(object, file_record.metadata),
+                            type_cast(JsonValue, file_record.metadata),
                             "file metadata",
                         ),
                         "size_bytes": file_record.file_size,
@@ -295,13 +295,13 @@ class AttachmentService:
                     }
                 )
                 continue
-            response = self._as_json_object(type_cast(object, response), "RAG status response")
+            response = self._as_json_object(type_cast(JsonValue, response), "RAG status response")
             display_name = response.get("filename") or response.get("document_name")
             extra = response.get("extra_metadata")
             extra_metadata: JsonObject = {}
             if isinstance(extra, dict):
                 extra_metadata = self._as_json_object(
-                    type_cast(object, extra),
+                    type_cast(JsonValue, extra),
                     "RAG status extra_metadata",
                 )
             if not isinstance(display_name, str) or display_name.strip() == "":

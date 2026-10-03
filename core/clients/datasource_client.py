@@ -18,7 +18,7 @@ from core.datasources.models import (
     DatasourceTestResult,
 )
 from core.pagination import OffsetPage
-from core.types import JsonObject, require_json_array, require_json_object
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 _API = "/flows/api/v1"
 _SERVICE = "flows"
@@ -30,7 +30,7 @@ class DatasourceClient:
             service_client if service_client is not None else ServiceClient()
         )
 
-    def _object(self, value: object, label: str) -> JsonObject:
+    def _object(self, value: JsonValue, label: str) -> JsonObject:
         return require_json_object(value, label)
 
     async def list_connectors(self) -> list[DatasourceConnectorSpec]:

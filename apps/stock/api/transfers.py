@@ -7,18 +7,46 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.stock.di import Di
-from apps.stock.models import StockDecision, StockMoveLine, StockTransfer, StockTransferState
+from apps.stock.models import (
+    StockDecision,
+    StockMoveLine,
+    StockTransfer,
+    StockTransferState,
+    StockWave,
+)
 from apps.stock.models.api import (
+    StockItemsResponse,
     StockMoveApplyDecisionPayload,
+    StockMoveLineExceptionPayload,
+    StockMoveLineNextPayload,
+    StockMoveLineNextResponse,
+    StockMoveLinesAssignPayload,
+    StockMoveLinesClaimPayload,
+    StockMoveLinesQueuePayload,
+    StockMoveLinesReleasePayload,
     StockMoveLineUpdatePayload,
     StockTransferCreatePayload,
     StockTransferDetail,
     StockTransferIdPayload,
     StockTransferReturnPayload,
     StockTransfersListPayload,
+    StockTransferValidatePayload,
+    StockWaveCreatePayload,
+    StockWaveIdPayload,
+    StockWavesListPayload,
+)
+from apps.stock.models.move_line import (
+    StockMoveLineClaimResult,
+    StockMoveLineExceptionResult,
 )
 from apps.stock.realtime.operations import (
     op_move_apply_decision,
+    op_move_lines_assign,
+    op_move_lines_claim,
+    op_move_lines_next,
+    op_move_lines_queue,
+    op_move_lines_release,
+    op_move_lines_report_exception,
     op_move_lines_update,
     op_transfers_assign,
     op_transfers_cancel,
@@ -28,6 +56,9 @@ from apps.stock.realtime.operations import (
     op_transfers_list,
     op_transfers_return,
     op_transfers_validate,
+    op_waves_create,
+    op_waves_list,
+    op_waves_release,
 )
 from core.context import require_context
 from core.pagination import OffsetPage
@@ -89,10 +120,12 @@ async def assign_transfer(di: Di, transfer_id: str) -> StockTransfer:
 
 
 @router.post("/transfers/{transfer_id}/validate", response_model=StockTransfer)
-async def validate_transfer(di: Di, transfer_id: str) -> StockTransfer:
-    return await op_transfers_validate(
-        StockTransferIdPayload(transfer_id=transfer_id), user=_user(), di=di
-    )
+async def validate_transfer(
+    di: Di, transfer_id: str, body: StockTransferValidatePayload
+) -> StockTransfer:
+    if body.transfer_id != transfer_id:
+        raise_invalid(ValueError("transfer_id mismatch"), error_code="path_id_mismatch")
+    return await op_transfers_validate(body, user=_user(), di=di)
 
 
 @router.post("/transfers/{transfer_id}/cancel", response_model=StockTransfer)
@@ -125,3 +158,77 @@ async def apply_decision(
     di: Di, body: StockMoveApplyDecisionPayload
 ) -> StockDecision:
     return await op_move_apply_decision(body, user=_user(), di=di)
+
+
+# --- Очередь заданий операторов ---
+
+
+@router.post(
+    "/move-lines/queue", response_model=StockItemsResponse[StockMoveLine]
+)
+async def move_lines_queue(
+    di: Di, body: StockMoveLinesQueuePayload
+) -> StockItemsResponse[StockMoveLine]:
+    return await op_move_lines_queue(body, user=_user(), di=di)
+
+
+@router.post("/move-lines/next", response_model=StockMoveLineNextResponse)
+async def move_lines_next(
+    di: Di, body: StockMoveLineNextPayload
+) -> StockMoveLineNextResponse:
+    return await op_move_lines_next(body, user=_user(), di=di)
+
+
+@router.post("/move-lines/claim", response_model=StockMoveLineClaimResult)
+async def move_lines_claim(
+    di: Di, body: StockMoveLinesClaimPayload
+) -> StockMoveLineClaimResult:
+    return await op_move_lines_claim(body, user=_user(), di=di)
+
+
+@router.post("/move-lines/assign", response_model=StockMoveLineClaimResult)
+async def move_lines_assign(
+    di: Di, body: StockMoveLinesAssignPayload
+) -> StockMoveLineClaimResult:
+    return await op_move_lines_assign(body, user=_user(), di=di)
+
+
+@router.post("/move-lines/release", response_model=StockMoveLineClaimResult)
+async def move_lines_release(
+    di: Di, body: StockMoveLinesReleasePayload
+) -> StockMoveLineClaimResult:
+    return await op_move_lines_release(body, user=_user(), di=di)
+
+
+@router.post(
+    "/move-lines/report-exception",
+    response_model=StockMoveLineExceptionResult,
+)
+async def move_lines_report_exception(
+    di: Di, body: StockMoveLineExceptionPayload
+) -> StockMoveLineExceptionResult:
+    return await op_move_lines_report_exception(body, user=_user(), di=di)
+
+
+# --- Волны сборки ---
+
+
+@router.post("/waves/list", response_model=StockItemsResponse[StockWave])
+async def waves_list(
+    di: Di, body: StockWavesListPayload
+) -> StockItemsResponse[StockWave]:
+    return await op_waves_list(body, user=_user(), di=di)
+
+
+@router.post("/waves", response_model=StockWave)
+async def waves_create(di: Di, body: StockWaveCreatePayload) -> StockWave:
+    return await op_waves_create(body, user=_user(), di=di)
+
+
+@router.post("/waves/{wave_id}/release", response_model=StockWave)
+async def waves_release(
+    di: Di, wave_id: str, body: StockWaveIdPayload
+) -> StockWave:
+    if body.wave_id != wave_id:
+        raise_invalid(ValueError("wave_id mismatch"), error_code="path_id_mismatch")
+    return await op_waves_release(body, user=_user(), di=di)

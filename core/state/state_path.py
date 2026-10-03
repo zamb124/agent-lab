@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-from core.state.execution_state import ExecutionState
+from core.state.execution_state import ExecutionState, ExecutionStateValue
 from core.state.mutation_policy import raise_if_frozen_field
 from core.types import JsonObject, JsonValue, require_json_object
 
 
-def _object_copy(value: object, path: str) -> JsonObject:
+def _object_copy(value: ExecutionStateValue | None, path: str) -> JsonObject:
     """Промежуточный узел пути: отсутствует — новый объект, скаляр или список — ошибка."""
     if value is None:
         return {}

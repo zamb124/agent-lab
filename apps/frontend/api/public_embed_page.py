@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from apps.frontend.api.public_session_security import (
@@ -20,6 +20,7 @@ from core.logging import get_logger
 from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.models.identity_models import Company
 from core.utils.tokens import get_token_service
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -52,7 +53,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin must be an absolute http(s) URL")
+        raise WsCommandError("ws_invalid_payload", "origin must be an absolute http(s) URL", error_code="ws_invalid_payload")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -65,32 +66,34 @@ async def issue_embed_page_session(
     embed_id = body.embed_id.strip()
     origin = _normalize_origin(body.origin)
     if not origin:
-        raise HTTPException(status_code=400, detail="origin is required")
+        raise WsCommandError("ws_invalid_payload", "origin is required", error_code="ws_invalid_payload")
 
     config = await EmbedConfig.get(embed_id)
     if config is None:
-        raise HTTPException(status_code=404, detail="Widget not found")
+        raise WsCommandError("not_found", "Widget not found", error_code="not_found")
 
     company = await Company.get(config.company_id)
     if company is None:
-        raise HTTPException(status_code=404, detail="Widget not found")
+        raise WsCommandError("not_found", "Widget not found", error_code="not_found")
 
     if config.preview_share_link:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise WsCommandError("not_found", "Configuration not found", error_code="not_found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Widget is disabled")
+        raise WsCommandError("forbidden", "Widget is disabled", error_code="forbidden")
 
     if config.presentation != "page":
-        raise HTTPException(
-            status_code=403,
-            detail="Fullscreen page is available only when presentation=page",
+        raise WsCommandError(
+            "forbidden",
+            "Fullscreen page is available only when presentation=page",
+            error_code="forbidden",
         )
 
     page_origin = f"{request.url.scheme}://{request.url.netloc}"
     if origin != page_origin:
-        raise HTTPException(
-            status_code=403,
-            detail="origin must match the first-party host of the page",
+        raise WsCommandError(
+            "forbidden",
+            "origin must match the first-party host of the page",
+            error_code="forbidden",
         )
 
     await enforce_public_session_issue_rate_limit(

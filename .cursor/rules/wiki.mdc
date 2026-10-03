@@ -14,7 +14,7 @@ alwaysApply: false
 
 ## Модель
 
-- `WikiPage` (`wiki_page_id`, таблица `wiki_pages`): `namespace`, `parent_page_id`, `root_page_id`, `depth`, `position`, `title`, `icon`, `cover_url`, `content` (ProseMirror — источник правды), `text_markdown` (производный, пишет только `WikiService`), `company_visible`, `is_published`, `is_full_width`; `root_page_id` и `depth` пересчитываются при перемещении.
+- `WikiPage` (`apps/wiki/models/page.py`, `wiki_page_id`, таблица `wiki_pages`): `namespace`, `parent_page_id`, `root_page_id`, `depth`, `position`, `title`, `icon`, `cover_url`, `content` (ProseMirror — источник правды), `text_markdown` (производный, пишет только `WikiService`), `company_visible`, `is_published`, `is_full_width`; `root_page_id` и `depth` пересчитываются при перемещении.
 - Узел дерева — `WikiPageSummary` без содержимого; версия — `wiki_revision_id` (`WikiRevisionSummary` без содержимого в списке); комментарий — `wiki_comment_id` (`WikiComment`, `anchor_text` — цитата, не позиция).
 - Имена `document_id` (RAG) и `file_id` (файл) для страницы запрещены.
 - Схема содержимого — `apps/wiki/content/schema.py` (`WIKI_NODES`); браузерная — генерируемый `core/frontend/static/assets/prosemirror/wiki-schema.json`.
@@ -65,6 +65,7 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_wiki_model_files.py` (`make lint`) — одна таблица wiki на файл `apps/wiki/models/`.
 - `scripts/generate_wiki_prosemirror_schema.py --check` + `tests/wiki/test_wiki_schema_parity.py` — Python ≡ JSON схемы.
 - `tests/wiki/test_wiki_markdown_coverage.py` (каждый узел, кроме `BLOCK_NODES_WITHOUT_MARKDOWN`), `test_wiki_markdown_corpus.py`, `test_wiki_markdown_roundtrip.py`.
 - `scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py` (`make check-events-canon`) — wiki в `FACTORY_CANON_SERVICES`; `tests/wiki/**` — реальная БД и RAG.

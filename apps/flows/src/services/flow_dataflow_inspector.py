@@ -10,7 +10,6 @@ import copy
 import re
 from collections import defaultdict, deque
 from collections.abc import Mapping, Sequence
-from typing import Literal, cast
 
 from apps.flows.src.models import (
     DataflowAvailability,
@@ -36,10 +35,11 @@ from apps.flows.src.models import (
     GraphNodeConfig,
     TriggerConfig,
 )
+from apps.flows.src.triggers.output_condition import parse_numeric_literal
 from core.code_contract import CodeContract, scan_code_contract
 from core.flow_ui.document import FlowUIDocument, input_field_type_name
 from core.state.mutation_policy import FROZEN_STATE_FIELDS
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, model_json_object, require_json_object
 from core.variables import scan_prompt_template
 
 SYSTEM_STATE_FIELDS: dict[str, str] = {
@@ -80,9 +80,11 @@ def inspect_flow_dataflow(
     interface: FlowUIDocument | None = None,
 ) -> DataflowInspectResult:
     node_payloads: dict[str, JsonObject] = {
-        node_id: require_json_object(
-            cast(object, node_config.model_dump(mode="json", by_alias=True, exclude_none=True)),
+        node_id: model_json_object(
+            node_config,
             f"nodes.{node_id}",
+            by_alias=True,
+            exclude_none=True,
         )
         for node_id, node_config in nodes.items()
         if node_id
@@ -1422,14 +1424,17 @@ def _parse_mapping_source(source: str) -> DataflowMappingSource:
     return DataflowMappingSource(kind="const")
 
 
+_MAPPING_REF_RE = re.compile(r"@(state|var):([A-Za-z0-9_.\-\[\]]+)")
+
+
 def _find_mapping_refs(value: JsonValue, config_path: str) -> list[DataflowConfigRef]:
     refs: list[DataflowConfigRef] = []
     if isinstance(value, str):
-        matches = cast(
-            list[tuple[Literal["state", "var"], str]],
-            re.findall(r"@(state|var):([A-Za-z0-9_.\-\[\]]+)", value),
-        )
-        for kind, path in matches:
+        for match in _MAPPING_REF_RE.finditer(value):
+            kind = match.group(1)
+            path = match.group(2)
+            if kind != "state" and kind != "var":
+                raise ValueError(f"mapping ref kind must be state or var, got {kind!r}")
             refs.append(DataflowConfigRef(kind=kind, path=path, config_path=config_path))
     elif isinstance(value, dict):
         value_obj = require_json_object(value, config_path)
@@ -1675,16 +1680,12 @@ def _type_of_literal(value: str) -> str:
         return "boolean"
     if v in {"null", "None"}:
         return "null"
-    try:
-        _ = int(v)
+    number = parse_numeric_literal(v)
+    if isinstance(number, int):
         return "integer"
-    except ValueError:
-        pass
-    try:
-        _ = float(v)
+    if isinstance(number, float):
         return "number"
-    except ValueError:
-        return "string"
+    return "string"
 
 
 def _sample_value(value: JsonValue) -> JsonValue:

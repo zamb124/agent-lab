@@ -20,7 +20,7 @@ async def test_search_via_rag_asgi_hybrid_channels(
     auth_headers_system: dict[str, str],
 ) -> None:
     """
-    Поиск идёт в реальный RAG FastAPI через ASGI; эмбеддинги — тестовый контур (PGVECTOR_TEST_MOCK_EMBEDDINGS).
+    Поиск идёт в реальный RAG FastAPI через ASGI; эмбеддинги — детерминированный клиент тестового контура.
     """
 
     ns = f"test_rag_res_{uuid.uuid4().hex[:10]}"

@@ -1,10 +1,11 @@
 """HTTP/WS API language server session для code-runner-python."""
 
-from fastapi import APIRouter, HTTPException, Response, WebSocket
+from fastapi import APIRouter, Response, WebSocket
 
 from apps.code_runner_python.di import CodeRunnerPythonDi, Di
 from core.capabilities.models import CodeLspSession, LspWorkspace
 from core.di import require_di
+from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/lsp", tags=["code-lsp"])
 
@@ -17,7 +18,7 @@ async def create_lsp_session(di: Di, workspace: LspWorkspace) -> CodeLspSession:
 @router.get("/session/{session_id}", status_code=204)
 async def get_lsp_session(di: Di, session_id: str) -> Response:
     if not di.lsp_manager.exists(session_id):
-        raise HTTPException(status_code=404, detail="language server session not found")
+        raise WsCommandError("not_found", "language server session not found", error_code="not_found")
     return Response(status_code=204)
 
 

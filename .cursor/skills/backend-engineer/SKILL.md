@@ -15,7 +15,7 @@ description: "Backend-разработка Платформы: новая фич
 
 ## Порядок реализации
 
-1. **Модель.** `apps/<svc>/models/<entity>.py`, `@classmethod` на `cls.objects`, имя по `database.mdc` § Имена методов. Новая таблица или колонка — `migrations/<db>/0001_initial.py`.
+1. **Модель.** `apps/<svc>/models/<entity>.py`, `@classmethod` на `cls.objects`, имя по `database.mdc` § Имена методов. Новая таблица или колонка — следующий файл `migrations/<db>/NNNN_<name>.py` через `makemigrations`.
 2. **Сервис.** Метод с именем логики: Check, инварианты, `publish_event_*`, `enqueue`. Зависимости — параметры конструктора; Kit соберёт их по типам.
 3. **DI.** Поле `apps/<process>/di.py` — только если его читает boundary; конфиг → примитивы или ресурс с teardown — `@recipe` (`architecture.mdc` § Service Kit DI).
 4. **Команда.** Payload и результат → `op_<entity>_<verb>` → `<SVC>_OPERATIONS` → REST-зеркало → UI-фабрика (`architecture.mdc` § Новая команда).

@@ -514,6 +514,12 @@ ROUTE_RULES: list[RouteRule] = [
     RouteRule("/worktracker/", auth_required=False, context_type="anonymous"),
     RouteRule("/worktracker/*", auth_required=False, context_type="anonymous"),
 
+    # Stock (WMS) Service
+    RouteRule("/stock/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/stock", auth_required=False, context_type="anonymous"),
+    RouteRule("/stock/", auth_required=False, context_type="anonymous"),
+    RouteRule("/stock/*", auth_required=False, context_type="anonymous"),
+
     # Secrets Service
     RouteRule("/secrets/api/v1/*", context_type="api", auth_required=True),
     RouteRule("/secrets/api/auth/*", context_type="api", auth_required=True),

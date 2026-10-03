@@ -16,8 +16,8 @@ alwaysApply: false
 
 ## Модель
 
-- `CompanyMailConnection` (`core/mail/models.py`), таблица `company_mail_connections`, PK `company_mail_connection_id`: `scope` ∈ `company` | `personal`, `owner_user_id` (обязателен у `personal`, запрещён у `company`), `mail_domain`, `provider` ∈ `ispmanager` | `generic_imap_smtp`, хосты и порты IMAP/SMTP, `use_ssl`, `supports_provision`, `status`, `ispmanager` (JSONB). Подключение `company` одно на компанию (частичный уникальный индекс); `company.subdomain` сайта ≠ `mail_domain`.
-- `MailboxBinding` (`core/mail/models.py`), таблица `mailbox_bindings`, PK `mailbox_binding_id`, уникальность `(company_id, email_address)`: `company_mail_connection_id` (обязателен), `user_id` (`null` у `role`), `kind` ∈ `user` | `role`, `email_address`, `local_part`, `sync_enabled`, `is_default`, `calendar_color`, `calendar_autolink_status`, `calendar_autolink_detail`, `password_encrypted`. Поля подключения (`connection_scope`, IMAP/SMTP) в таблицу не пишутся — их заполняет `MailService.public_binding`.
+- `CompanyMailConnection` (`core/mail/models/company_mail_connection.py`), таблица `company_mail_connections`, PK `company_mail_connection_id`: `scope` ∈ `company` | `personal`, `owner_user_id` (обязателен у `personal`, запрещён у `company`), `mail_domain`, `provider` ∈ `ispmanager` | `generic_imap_smtp`, хосты и порты IMAP/SMTP, `use_ssl`, `supports_provision`, `status`, `ispmanager` (JSONB). Подключение `company` одно на компанию (частичный уникальный индекс); `company.subdomain` сайта ≠ `mail_domain`.
+- `MailboxBinding` (`core/mail/models/mailbox_binding.py`), таблица `mailbox_bindings`, PK `mailbox_binding_id`, уникальность `(company_id, email_address)`: `company_mail_connection_id` (обязателен), `user_id` (`null` у `role`), `kind` ∈ `user` | `role`, `email_address`, `local_part`, `sync_enabled`, `is_default`, `calendar_color`, `calendar_autolink_status`, `calendar_autolink_detail`, `password_encrypted`. Поля подключения (`connection_scope`, IMAP/SMTP) в таблицу не пишутся — их заполняет `MailService.public_binding`.
 - Локальная копия ящика: `StoredMailboxFolder` (`mailbox_folders`, ключ `{mailbox_binding_id}:{folder_name}`, `sort_index`), `StoredMailMessage` (`mail_messages`, PK `mail_message_id`, уникальность `(mailbox_binding_id, folder, uid)`, флаги, `rag_index_status` ∈ `ready` | `pending` | `failed` | `skipped`), `MailboxSyncCursor` (`mailbox_sync_cursors`, ключ `{mailbox_binding_id}:{folder}`).
 - ACL ящика — OpenFGA `mailbox_binding` (`owner`, `member`, `manager`) плюс `company#can_admin`; таблицы участников нет; tuple-helpers — `core/mail/authz/tuples.py`.
 - `CalendarEvent` (`core/models/calendar_models.py`), таблица `calendar_events`, PK `event_id`, уникальность `(company_id, source, source_id)`: `source` (`CalendarEventSource`) — происхождение события, не провайдер; `namespace`, `kind`, `start_at`, `end_at`, `attendees`, `external_refs`, `mailbox_binding_id`.
@@ -77,6 +77,7 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_mail_model_files.py` (`make lint`) — одна таблица почты на файл `core/mail/models/`.
 - `tests/core/mail/test_mail_multi_mailbox.py` — много ящиков у пользователя, ровно один `is_default`, `GET /bindings/me`.
 - `tests/core/mail/test_mail_local_first.py` — кэш папок, чтение списка и треда из базы.
 - `tests/core/mail/test_mail_local_dev.py` — пароли из `mail.local_dev`, без смены паролей на ISP.

@@ -25,7 +25,8 @@ from apps.crm.db.company_init_lock import crm_company_init_lock
 from apps.crm.models.company_mapping import CompanyMapping
 from apps.crm.models.crm_entity import CRMEntity, entity_namespace, index_crm_entity
 from apps.crm.models.entity_type import EntityType
-from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.namespace_template import NamespaceTemplate
+from apps.crm.models.namespace_template_type import NamespaceTemplateType
 from apps.crm.models.relationship import Relationship
 from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService

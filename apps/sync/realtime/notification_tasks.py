@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from apps.sync.models.channel import SyncChannelMember
+from apps.sync.models.channel_member import SyncChannelMember
 from apps.sync.realtime.task_names import (
     DELIVER_CHANNEL_MESSAGE_NOTIFICATION,
     DELIVER_SYNC_MENTION_NOTIFICATION,

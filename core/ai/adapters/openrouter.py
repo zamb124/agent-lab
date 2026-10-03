@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import cast, override
+from typing import override
 
+from core.ai.adapters.catalog_base import string_headers_json
 from core.ai.adapters.openai_compatible import OpenAICompatibleModelCatalogAdapter
 from core.ai.models import AIModelRecord, AIRuntimeEndpoint, ArtificialAnalysisIndices
 from core.ai.providers import AICapability
 from core.ai.scoring import normalize_aa_model_slug
 from core.config import BaseSettings
 from core.config.llm_openai_compat import resolve_provider_openai_v1_base_url
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonValue, require_json_object
 
 _OPENROUTER_EMBEDDING_MODELS_URL = "https://openrouter.ai/api/v1/embeddings/models"
 _OPENROUTER_RERANK_MODELS_URL = "https://openrouter.ai/api/v1/models?output_modalities=rerank"
@@ -104,7 +105,7 @@ class OpenRouterModelCatalogAdapter(OpenAICompatibleModelCatalogAdapter):
             capability=capability,
             base_url=base_url,
             endpoint_url=_OPENROUTER_RERANK_URL if capability == AICapability.RERANK else None,
-            headers=cast(JsonObject, self.provider_model_list_headers()),
+            headers=string_headers_json(self.provider_model_list_headers()),
         )
 
     @override

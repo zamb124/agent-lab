@@ -6,7 +6,7 @@
 
 - **Без моков** (кроме LLM)
 - **Реальный PostgreSQL + pgvector** на порту 5433
-- **Реальный MinIO** на порту 9002
+- **Реальный S3 (SeaweedFS)** на порту 19002
 - **Централизованные фикстуры** в `tests/conftest.py`
 - **Изоляция данных** через `unique_namespace_name`
 
@@ -66,7 +66,7 @@ make test-rag
 ```
 
 Эта команда:
-1. Поднимает docker-compose сервисы (postgres, redis, minio)
+1. Поднимает docker-compose сервисы (postgres, redis, seaweedfs)
 2. Ждет 5 секунд готовности сервисов
 3. Запускает pytest для `tests/rag/`
 
@@ -245,7 +245,7 @@ docker-compose -f docker-compose-test.yaml restart postgres-test
 Убедитесь что сервисы запущены:
 
 ```bash
-docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
+docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test seaweedfs-test
 ```
 
 Подождите несколько секунд для healthcheck.

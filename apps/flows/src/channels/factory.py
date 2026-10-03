@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from apps.flows.src.a2a.task_projection_service import A2ATaskProjectionService
 from apps.flows.src.contracts import (
@@ -21,6 +20,7 @@ from core.authz.service import AuthzService
 from core.clients.redis_client import RedisClient
 from core.db.storage import Storage
 from core.files.service import FilesService
+from core.imports import imported_attr
 from core.mail.service import MailService
 from core.models.context_models import Context
 from core.variables.service import VariablesService
@@ -67,11 +67,10 @@ _CHANNEL_REGISTRY: dict[str, str] = {
 def _load_channel_class(path: str) -> ChannelClass:
     module_path, class_name = path.split(":", 1)
     module = importlib.import_module(module_path)
-    module_attrs = cast(Mapping[str, object], vars(module))
-    cls = module_attrs.get(class_name)
+    cls = imported_attr(module, class_name, ChannelClass)
     if cls is None:
         raise ValueError(f"Channel class not found: {path}")
-    return cast(ChannelClass, cls)
+    return cls
 
 
 def register_channel(channel_class: type[ChannelT]) -> type[ChannelT]:

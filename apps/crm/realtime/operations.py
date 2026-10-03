@@ -95,7 +95,8 @@ from apps.crm.models.graph import (
     RelatedEntitiesResponse,
     ShortestPathResponse,
 )
-from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.namespace_template import NamespaceTemplate
+from apps.crm.models.namespace_template_type import NamespaceTemplateType
 from apps.crm.models.relationship import Relationship
 from apps.crm.models.relationship_type import RelationshipType
 from apps.crm.models.suggest import CRMSuggest

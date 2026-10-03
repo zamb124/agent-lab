@@ -37,7 +37,7 @@ alwaysApply: false
 1. `setup_tracing(settings.tracing)` и `set_tracing_service_name(name)` выполняет runner (`create_service_app`, `build_worker` → `init_worker_tracing`); алиас `tracing` открывает `init_oxyde_databases`.
 2. `tracing.postgres_enabled=true` без `database.tracing_url` — `raise` на старте.
 3. База — `platform_tracing` (`migrations/services.json`, сервис `tracing`); создание и накат → `database.mdc`.
-4. Конфиг: `tracing.enabled`, `tracing.postgres_enabled`, `tracing.tempo_http_url`, `logging.loki_query_url` (пусто — база query из `logging.loki_url`); OTLP endpoint — `OTEL_EXPORTER_OTLP_ENDPOINT` (`core/tracing/provider.py`).
+4. Конфиг: `tracing.enabled`, `tracing.postgres_enabled`, `tracing.tempo_http_url`, `logging.loki_query_url` (пусто — база query из `logging.loki_url`); OTLP gRPC — `tracing.otlp_endpoint` (ENV `TRACING__OTLP_ENDPOINT`); пусто — `tracing.tempo_endpoint` при `tracing.tempo_enabled` (`core/tracing/provider.py`).
 
 ### Чтение
 

@@ -11,13 +11,14 @@
 from typing import Protocol
 
 import litserve as ls
-from fastapi import HTTPException, Request
+from fastapi import Request
 
 from apps.provider_litserve.provider_litserve_http_schemas import VADSegmentsResponseBody
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 from core.models.voice_models import VADSegment
 from core.types import JsonValue
+from core.websocket import WsCommandError
 
 from .engines import LocalVADEngine, VADDetectionInput, parse_vad_body
 
@@ -64,7 +65,10 @@ class VADLitAPI(ls.LitAPI):
                 threshold_override=x.threshold_override,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            detail = str(exc)
+            if detail == "":
+                detail = "VAD rejected the request"
+            raise WsCommandError("unprocessable", detail, error_code="ws_invalid_payload") from exc
 
     def encode_response(self, output: list[VADSegment], **kwargs: JsonValue) -> VADSegmentsResponseBody:
         _ = kwargs

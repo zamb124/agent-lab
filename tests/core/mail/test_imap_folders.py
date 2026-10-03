@@ -35,7 +35,7 @@ from tests.core.mail.fakes import RecordingMailServerPort
 FIXTURES = Path(__file__).parent / "fixtures" / "imap_list"
 
 
-def _load_fixture(name: str) -> list[object]:
+def _load_fixture(name: str) -> list[str]:
     text = (FIXTURES / name).read_text(encoding="utf-8")
     return [line for line in text.splitlines() if line.strip()]
 

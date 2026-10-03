@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from core.clients.documents_client import DocumentsClient
 from core.config import get_settings
-from core.documents.placement import DocsPlacementAnchor
-from core.documents.placement_paths import build_path_segments
+from core.documents.paths import source_catalog_path
 from core.files.create_spec import FileCreateSpec, FileSourceKind
 from core.guest_runtime.source_tree import walk_code_agent_catalog
 
@@ -42,13 +41,9 @@ async def assert_code_agent_source_upload_fits(
     if node_id is None or node_id.strip() == "":
         raise ValueError("CODE_AGENT_SOURCE node_id is required")
     documents = DocumentsClient()
-    segments = build_path_segments(
-        DocsPlacementAnchor(
-            source_kind="code_agent_source",
-            flow_id=flow_id,
-            flow_slug=spec.source_ref.flow_slug,
-            node_id=node_id,
-        )
+    segments = source_catalog_path(
+        FileSourceKind.CODE_AGENT_SOURCE,
+        spec.source_ref,
     )
     ensured = await documents.ensure_catalog_path(segments)
     existing_files = await walk_code_agent_catalog(documents, ensured.catalog_id)

@@ -154,8 +154,12 @@ async def send_smtp_message(
     finally:
         try:
             _ = await smtp.quit()
-        except aiosmtplib.SMTPException:
-            pass
+        except aiosmtplib.SMTPException as exc:
+            logger.info(
+                "flows_email_smtp_quit_failed",
+                smtp_host=smtp_host,
+                error=str(exc),
+            )
 
     return {
         "message_id": message_id,

@@ -5,15 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, TypedDict
 from urllib.parse import quote, urljoin
 
 import httpx
-import yaml
 from pydantic import ValidationError
 
 from apps.flows.config import get_settings
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.models.mcp_catalog import (
     MCPAuthPolicy,
@@ -24,8 +22,15 @@ from apps.flows.src.models.mcp_catalog import (
     compute_catalog_snapshot_hash,
 )
 from apps.flows.src.services.mcp_catalog_ids import catalog_id_from_registry_name
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from core.http import get_httpx_client
 from core.logging import get_logger
+from core.types import (
+    JsonObject,
+    JsonValue,
+    parse_json_object,
+    parse_yaml_value,
+)
 
 logger = get_logger(__name__)
 
@@ -33,24 +38,6 @@ logger = get_logger(__name__)
 class RegistryRemote(TypedDict):
     type: str
     url: str
-
-
-class RegistryServerPayload(TypedDict, total=False):
-    name: str
-    title: str
-    description: str
-    version: str
-    remotes: list[RegistryRemote]
-
-
-class RegistryListItem(TypedDict, total=False):
-    server: RegistryServerPayload
-    _meta: dict[str, object]
-
-
-class RegistryListResponse(TypedDict, total=False):
-    servers: list[RegistryListItem]
-    metadata: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -86,13 +73,13 @@ def load_mcp_catalog_allowlist() -> dict[str, MCPCatalogAllowlistEntry]:
     if not allowlist_path.is_file():
         return {}
     raw_text = allowlist_path.read_text(encoding="utf-8")
-    raw_payload: object = cast(object, yaml.safe_load(raw_text))
+    raw_payload = parse_yaml_value(raw_text, "MCP allowlist")
     if raw_payload is None:
         return {}
     if not isinstance(raw_payload, list):
         raise ValueError(f"MCP allowlist must be a yaml list: {allowlist_path}")
     result: dict[str, MCPCatalogAllowlistEntry] = {}
-    for raw_item in cast(list[object], raw_payload):
+    for raw_item in raw_payload:
         item = MCPCatalogAllowlistItemPayload.model_validate(raw_item)
         result[item.catalog_id] = MCPCatalogAllowlistEntry(
             catalog_id=item.catalog_id,
@@ -109,47 +96,44 @@ def load_mcp_catalog_allowlist() -> dict[str, MCPCatalogAllowlistEntry]:
     return result
 
 
-def _parse_registry_remote(raw: object) -> RegistryRemote | None:
+def _parse_registry_remote(raw: JsonValue) -> RegistryRemote | None:
     if not isinstance(raw, dict):
         return None
-    raw_mapping = cast(dict[object, object], raw)
-    remote_type = raw_mapping.get("type")
-    remote_url = raw_mapping.get("url")
+    remote_type = raw.get("type")
+    remote_url = raw.get("url")
     if not isinstance(remote_type, str) or not isinstance(remote_url, str):
         return None
     return {"type": remote_type, "url": remote_url}
 
 
-def _registry_list_items_from_page(page: RegistryListResponse) -> list[RegistryListItem]:
-    servers_raw: object = cast(dict[object, object], cast(object, page)).get("servers")
+def _registry_list_items_from_page(page: JsonObject) -> list[JsonObject]:
+    servers_raw = page.get("servers")
     if servers_raw is None:
         return []
     if not isinstance(servers_raw, list):
         raise ValueError("registry servers must be list")
-    items: list[RegistryListItem] = []
-    for raw_item in cast(list[object], servers_raw):
+    items: list[JsonObject] = []
+    for raw_item in servers_raw:
         if not isinstance(raw_item, dict):
             continue
-        items.append(cast(RegistryListItem, cast(object, raw_item)))
+        items.append(raw_item)
     return items
 
 
-def _registry_server_payload(raw: object) -> RegistryServerPayload | None:
+def _registry_server_payload(raw: JsonValue | None) -> JsonObject | None:
     if not isinstance(raw, dict):
         return None
-    return cast(RegistryServerPayload, cast(object, raw))
+    return raw
 
 
-def _is_latest_registry_item(item: RegistryListItem) -> bool:
-    meta_raw: object = item.get("_meta")
+def _is_latest_registry_item(item: JsonObject) -> bool:
+    meta_raw = item.get("_meta")
     if not isinstance(meta_raw, dict):
         return True
-    meta = cast(dict[object, object], meta_raw)
-    official_raw: object = meta.get("io.modelcontextprotocol.registry/official")
+    official_raw = meta_raw.get("io.modelcontextprotocol.registry/official")
     if not isinstance(official_raw, dict):
         return True
-    official = cast(dict[object, object], official_raw)
-    is_latest_raw: object = official.get("isLatest")
+    is_latest_raw = official_raw.get("isLatest")
     if is_latest_raw is None:
         return True
     if not isinstance(is_latest_raw, bool):
@@ -197,7 +181,7 @@ async def _fetch_registry_page(
     base_url: str,
     cursor: str | None,
     page_limit: int,
-) -> RegistryListResponse:
+) -> JsonObject:
     path = f"/v0/servers?limit={page_limit}"
     if cursor is not None:
         path = f"{path}&cursor={quote(cursor, safe='')}"
@@ -205,10 +189,7 @@ async def _fetch_registry_page(
     async with get_httpx_client(timeout=60.0) as client:
         response = await client.get(url, headers={"Accept": "application/json"})
         _ = response.raise_for_status()
-    raw_json: object = cast(object, response.json())
-    if not isinstance(raw_json, dict):
-        raise ValueError("registry response must be object")
-    return cast(RegistryListResponse, cast(object, raw_json))
+    return parse_json_object(response.text, "registry response")
 
 
 async def _verify_catalog_entry(
@@ -340,7 +321,7 @@ async def _upsert_allowlist_seed_entries(
 
 def _entry_from_registry(
     *,
-    server_payload: RegistryServerPayload,
+    server_payload: JsonObject,
     allowlist: dict[str, MCPCatalogAllowlistEntry],
     crawled_at: datetime,
 ) -> MCPCatalogEntry | None:

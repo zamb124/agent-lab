@@ -130,7 +130,7 @@ class OAuthService:
         """
         Генерирует OAuth authorization URL.
 
-        State сохраняется в PostgreSQL Storage (force_global, TTL 600s).
+        State сохраняется в PostgreSQL Storage (ключ integration_oauth_state:, TTL 600s).
         Если redirect_uri не указан, используется дефолтный callback интеграций.
 
         amocrm_subdomain: поддомен amo (без .amocrm.ru) — обязателен для provider amocrm.
@@ -200,7 +200,6 @@ class OAuthService:
             key=state_key,
             value=json.dumps(state_payload),
             ttl=OAUTH_STATE_TTL,
-            force_global=True,
         )
         if oauth_config.provider == IntegrationProvider.AMOCRM:
             query = build_amocrm_auth_query(
@@ -239,7 +238,7 @@ class OAuthService:
         if not state_token.strip():
             return None
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token.strip()}"
-        raw_state = await self._storage.get(key=state_key, force_global=True)
+        raw_state = await self._storage.get(key=state_key)
         if raw_state is None:
             return None
         payload = parse_json_object(raw_state, "oauth.state.peek")
@@ -266,10 +265,10 @@ class OAuthService:
             post_auth_redirect_origin — origin для финального редиректа или None.
         """
         state_key = f"{OAUTH_STATE_PREFIX}:{state_token}"
-        raw_state = await self._storage.get(key=state_key, force_global=True)
+        raw_state = await self._storage.get(key=state_key)
         if raw_state is None:
             raise ValueError("OAuth state is invalid or expired")
-        _ = await self._storage.delete(key=state_key, force_global=True)
+        _ = await self._storage.delete(key=state_key)
 
         state_payload = parse_json_object(raw_state, "oauth.state")
 

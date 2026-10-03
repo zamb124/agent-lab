@@ -104,7 +104,7 @@ async def _send_new_event_notifications(
     sent = 0
     for event_id in new_event_ids:
         dedup_key = f"calendar:notify:{company_id}:{user_id}:{provider.value}:{event_id}"
-        existing = await di.shared_storage.get(key=dedup_key, force_global=True)
+        existing = await di.shared_storage.get(key=dedup_key)
         if existing is not None:
             continue
         await publish_event_to_user(
@@ -137,7 +137,6 @@ async def _send_new_event_notifications(
             key=dedup_key,
             value=json.dumps({"sent_at": datetime.now(timezone.utc).isoformat()}),
             ttl=dedup_ttl_seconds,
-            force_global=True,
         )
         sent += 1
     return sent

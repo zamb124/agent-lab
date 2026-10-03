@@ -210,10 +210,10 @@ spec:
                       key: postgres-password
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
-                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: minio-root-user }
+                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: s3-access-key }
                 - name: AWS_SECRET_ACCESS_KEY
                   valueFrom:
-                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: minio-root-password }
+                    secretKeyRef: { name: {{ .Values.platformSecretName }}, key: s3-secret-key }
               command:
                 - sh
                 - -c
@@ -221,7 +221,7 @@ spec:
                   ts=$(date -u +%Y%m%dT%H%M%SZ)
                   pg_dumpall -h postgres -U platform_user --clean --if-exists | gzip > /tmp/dump-$ts.sql.gz
                   apk add --no-cache aws-cli
-                  aws --endpoint-url http://minio:9000 \
+                  aws --endpoint-url http://seaweedfs:8333 \
                     s3 cp /tmp/dump-$ts.sql.gz s3://platform/backups/dump-$ts.sql.gz
 ```
 

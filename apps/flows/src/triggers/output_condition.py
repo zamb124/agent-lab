@@ -8,8 +8,19 @@
   (например `@state:triggers.my_id.context.flag`), справа — литерал (строка в кавычках, true/false, число).
 """
 
+import re
+
 from apps.flows.src.mapping import MappingResolver
 from core.types import JsonObject, JsonValue, require_json_value
+
+_INT_LITERAL = re.compile(r"[+-]?\d(?:_?\d)*\Z")
+_FLOAT_LITERAL = re.compile(
+    r"[+-]?(?:\d(?:_?\d)*)?\.\d(?:_?\d)*(?:[eE][+-]?\d(?:_?\d)*)?\Z"
+    + r"|[+-]?\d(?:_?\d)*\.(?:[eE][+-]?\d(?:_?\d)*)?\Z"
+    + r"|[+-]?\d(?:_?\d)*[eE][+-]?\d(?:_?\d)*\Z"
+    + r"|[+-]?(?:inf(?:inity)?|nan)\Z",
+    re.IGNORECASE,
+)
 
 
 def parse_output_condition_literal(value: str) -> JsonValue:
@@ -26,17 +37,18 @@ def parse_output_condition_literal(value: str) -> JsonValue:
     if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
 
-    try:
-        return int(value)
-    except ValueError:
-        pass
-
-    try:
-        return float(value)
-    except ValueError:
-        pass
-
+    number = parse_numeric_literal(value)
+    if number is not None:
+        return number
     return value
+
+
+def parse_numeric_literal(value: str) -> int | float | None:
+    if _INT_LITERAL.fullmatch(value) is not None:
+        return int(value)
+    if _FLOAT_LITERAL.fullmatch(value) is not None:
+        return float(value)
+    return None
 
 
 def evaluate_output_action_condition(condition: str, state: JsonObject) -> bool:
@@ -72,4 +84,8 @@ def evaluate_output_action_condition(condition: str, state: JsonObject) -> bool:
     return True
 
 
-__all__ = ["evaluate_output_action_condition", "parse_output_condition_literal"]
+__all__ = [
+    "evaluate_output_action_condition",
+    "parse_numeric_literal",
+    "parse_output_condition_literal",
+]

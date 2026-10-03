@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.db.storage import Storage
 from core.models.identity_models import Company
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 
 class PaymentStatus(str, Enum):
@@ -48,7 +48,7 @@ class TinkoffNotificationPayload(BaseModel):
 
     @field_validator("PaymentId", "ErrorCode", mode="before")
     @classmethod
-    def _coerce_str(cls, value: object) -> str:
+    def _coerce_str(cls, value: JsonValue) -> str:
         if isinstance(value, bool):
             raise ValueError("boolean is not a valid Tinkoff id/code")
         if isinstance(value, int):
@@ -59,7 +59,7 @@ class TinkoffNotificationPayload(BaseModel):
 
     @field_validator("Amount", mode="before")
     @classmethod
-    def _coerce_amount(cls, value: object) -> int:
+    def _coerce_amount(cls, value: JsonValue) -> int:
         if isinstance(value, bool):
             raise ValueError("boolean is not a valid Amount")
         if isinstance(value, int):
@@ -137,7 +137,6 @@ class Transaction(BaseModel):
         async with atomic(using="shared"):
             data = await storage.get(
                 transaction_storage_key(transaction),
-                force_global=True,
                 for_update=True,
             )
             stored = cls.model_validate_json(data) if data is not None else None
@@ -160,7 +159,6 @@ class Transaction(BaseModel):
                     ExternalPaymentClaim(
                         transaction_id=effective.transaction_id
                     ).model_dump_json(),
-                    force_global=True,
                 )
                 if not claimed:
                     raise ValueError(
@@ -170,7 +168,6 @@ class Transaction(BaseModel):
             _ = await storage.set(
                 transaction_storage_key(effective),
                 effective.model_dump_json(),
-                force_global=True,
             )
             return await Company.add_balance(effective.company_id, effective.amount)
 

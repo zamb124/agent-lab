@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
 from apps.worktracker.di import WorktrackerDi
+from core.authz.backfill_limit import parse_backfill_limit
 from core.config import get_settings
 from core.di import ProcessIdentity, open_di
 from core.logging import get_logger
@@ -53,10 +52,8 @@ async def backfill_worktracker_authz(*, limit: int | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill Worktracker OpenFGA tuples")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    written = asyncio.run(backfill_worktracker_authz(limit=cast(int | None, args.limit)))
+    limit = parse_backfill_limit("Backfill Worktracker OpenFGA tuples", argv)
+    written = asyncio.run(backfill_worktracker_authz(limit=limit))
     _ = sys.stdout.write(f"tuples_written={written}\n")
     return 0
 

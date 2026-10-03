@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.decorator import tool
 from core.clients.files_client import FilesClient
 from core.clients.google_docs_client import GoogleDocsClient

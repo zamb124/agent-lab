@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 import uuid
 from typing import TYPE_CHECKING
 
@@ -27,7 +28,8 @@ from core.clients.redis_client import RedisClient
 from core.db.storage import Storage
 from core.logging import get_logger
 from core.types import JsonObject, parse_json_object
-from core.utils.background import run_with_log_context
+from core.utils.background import finish_background_task, run_with_log_context
+from core.utils.process_env import pod_name_env
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -39,7 +41,8 @@ TUNNEL_MCP_RESPONSE_CHANNEL = "platform:agent_tunnel_mcp_response"
 TUNNEL_DISCONNECT_CHANNEL = "platform:agent_tunnel_disconnect"
 TUNNEL_TOOLKITS_UPDATED_CHANNEL = "platform:agent_tunnel_toolkits_updated"
 
-POD_INSTANCE_ID = os.environ.get("HOSTNAME", f"frontend-{uuid.uuid4().hex[:8]}")
+_pod_instance_override: str | None = None
+_process_pod_instance_id: str | None = None
 
 _tunnel_bus_storage: Storage | None = None
 
@@ -49,8 +52,30 @@ def configure_tunnel_bus_storage(storage: Storage) -> None:
     _tunnel_bus_storage = storage
 
 
+def bind_pod_instance_id(pod_instance_id: str | None) -> str | None:
+    """Подмена id пода в том же интерпретаторе. Пустая строка запрещена. None снимает подмену."""
+    global _pod_instance_override
+    if pod_instance_id is not None and pod_instance_id.strip() == "":
+        raise ValueError("pod_instance_id must be non-empty")
+    previous = _pod_instance_override
+    _pod_instance_override = pod_instance_id
+    return previous
+
+
 def get_pod_instance_id() -> str:
-    return os.environ.get("HOSTNAME", POD_INSTANCE_ID)
+    """Имя пода: HOSTNAME окружения (в Kubernetes — имя пода), иначе hostname+pid процесса."""
+    if _pod_instance_override is not None:
+        return _pod_instance_override
+    global _process_pod_instance_id
+    if _process_pod_instance_id is None:
+        hostname = (pod_name_env() or "").strip()
+        if hostname == "":
+            hostname = socket.gethostname().strip()
+            if hostname == "":
+                raise RuntimeError("pod hostname is empty")
+            hostname = f"{hostname}-{os.getpid()}"
+        _process_pod_instance_id = hostname
+    return _process_pod_instance_id
 
 _listener_task: asyncio.Task[None] | None = None
 _listener_lock = asyncio.Lock()
@@ -75,14 +100,14 @@ async def start_tunnel_bus_listener(redis_client: RedisClient) -> None:
 async def stop_tunnel_bus_listener() -> None:
     global _listener_task
     async with _listener_lock:
-        if _listener_task is None:
+        task = _listener_task
+        if task is None:
             return
-        _ = _listener_task.cancel()
         try:
-            await _listener_task
-        except asyncio.CancelledError:
-            pass
-        _listener_task = None
+            await finish_background_task(task)
+        finally:
+            if _listener_task is task:
+                _listener_task = None
 
 
 async def _tunnel_bus_loop(redis_client: RedisClient) -> None:

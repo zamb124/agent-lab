@@ -43,7 +43,7 @@ async def create_lead(body: LeadCreateBody, di: Di) -> LeadCreateResponse:
         created_at=datetime.now(timezone.utc),
     )
     _ = await di.shared_storage.set(
-        f"{REQUEST_STORAGE_PREFIX}{lead_request_id}", record.model_dump_json(), force_global=True
+        f"{REQUEST_STORAGE_PREFIX}{lead_request_id}", record.model_dump_json()
     )
     logger.info("landing.lead_saved", lead_request_id=lead_request_id)
     return LeadCreateResponse(

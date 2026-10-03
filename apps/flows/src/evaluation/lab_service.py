@@ -14,11 +14,10 @@ import zlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, cast
+from typing import Literal
 
 from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 from google.protobuf.json_format import MessageToDict
-from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import Field
 
@@ -151,6 +150,7 @@ from apps.flows.src.runtime.execution_context import CodeRunnerRegistry
 from apps.flows.src.runtime.nodes import NodeConstructor, create_node
 from apps.flows.src.services.flow_factory import FlowFactory
 from apps.flows.src.tasks.task_names import TASK_EXECUTE_EVALUATION_RUN
+from apps.flows.src.tools.json_schema_parameters import validate_json_schema_instance
 from apps.flows.src.tools.registry import ToolRegistry
 from core.a2a import coerce_usage_token_count, get_part_text, part_has_text
 from core.ai.providers import AICapability
@@ -2438,10 +2438,8 @@ class EvaluationLabService:
         response: str,
     ) -> CheckOutcome:
         target = self._source_value(check.source, check.state_path, state_json, response)
-        validator = Draft202012Validator(check.json_schema)
-        validate = cast(Callable[[JsonValue], None], validator.validate)
         try:
-            validate(target)
+            validate_json_schema_instance(check.json_schema, target)
         except JsonSchemaValidationError:
             return CheckOutcome(scores={"result": 0.0}, passed=False)
         return CheckOutcome(scores={"result": 10.0}, passed=True)

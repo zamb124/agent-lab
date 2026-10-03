@@ -8,11 +8,11 @@ import asyncio
 import random
 import time
 import uuid
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, ClassVar, Literal, TypedDict, cast
+from typing import Annotated, ClassVar, Literal, TypedDict
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Query, Response
 from playwright.async_api import Error as PlaywrightError
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +31,7 @@ from apps.browser.services.interaction_profiles import (
     InteractionProfileName,
     get_interaction_profile,
 )
+from apps.browser.services.page_evaluate import evaluate_json_value
 from apps.browser.services.runtime_facade import BrowserRuntimeFacade
 from apps.browser.services.snapshot_refs import (
     RefMap,
@@ -51,7 +52,8 @@ from core.clients.browser.control_types import (
 )
 from core.context import get_context
 from core.logging import get_logger
-from core.types import JsonObject
+from core.types import JsonObject, require_json_object
+from core.websocket import WsCommandError, raise_conflict, raise_not_found
 
 logger = get_logger(__name__)
 
@@ -103,12 +105,10 @@ async def wait_for_agent_control(runtime: BrowserRuntimeFacade, session_id: str)
         if takeover is None:
             return
         if time.monotonic() >= deadline:
-            raise HTTPException(
-                status_code=423,
-                detail=(
-                    f"browser session {session_id} is under human control by {takeover.owner}; "
-                    "release human takeover to resume agent control"
-                ),
+            raise WsCommandError(
+                "locked",
+                f"browser session {session_id} is under human control by {takeover.owner}; release human takeover to resume agent control",
+                error_code="forbidden",
             )
         await asyncio.sleep(AGENT_CONTROL_TAKEOVER_POLL_SEC)
 
@@ -350,10 +350,7 @@ async def create_control_session(
     endpoint_key = body.endpoint_key if body.endpoint_key else settings.default_endpoint_key
     ctx = body.context
     if ctx.page_mode != body.page_mode:
-        raise HTTPException(
-            status_code=422,
-            detail="context.page_mode must match page_mode",
-        )
+        raise WsCommandError("unprocessable", "context.page_mode must match page_mode", error_code="ws_invalid_payload")
     _ = get_interaction_profile(ctx.interaction_profile)
     sig = ContextSignature(
         proxy_policy=ctx.proxy_policy,
@@ -389,7 +386,7 @@ async def create_control_session(
             meta={"transport": "http", "path": "/control/sessions"},
             error={"kind": "capability_error", "detail": exc.to_dict()},
         )
-        raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+        raise WsCommandError("not_implemented", exc.message, error_code="unavailable", error_params=exc.to_dict()) from exc
     runtime.observe_store.set_interaction_config(
         sid,
         profile=ctx.interaction_profile,
@@ -425,17 +422,17 @@ async def control_navigate(
             try:
                 page = await runtime.lease_manager.swap_active_page_for_session(session_id)
             except KeyError as exc:
-                raise HTTPException(status_code=404, detail=str(exc)) from exc
+                raise_not_found(exc)
             except RuntimeError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                raise_conflict(exc)
             runtime.observe_store.clear_refs(session_id)
         else:
             try:
                 page = await runtime.lease_manager.get_page_for_session(session_id)
             except KeyError as exc:
-                raise HTTPException(status_code=404, detail=str(exc)) from exc
+                raise_not_found(exc)
             except RuntimeError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                raise_conflict(exc)
         req = BrowserFetchRequest(
             url=body.url,
             wait_policy=body.wait_policy,
@@ -453,14 +450,14 @@ async def control_navigate(
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/navigate"},
                 error={"kind": "capability_error", "detail": exc.to_dict()},
             )
-            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+            raise WsCommandError("not_implemented", exc.message, error_code="unavailable", error_params=exc.to_dict()) from exc
 
         # После навигации даём небольшой "поведенческий" шум в профилях human/fast,
         # чтобы приближать сессию к пользовательской (crawl4ai-like simulate_user).
         try:
             inter, profile, rnd = _interaction_for_session(runtime, session_id)
             await inter.post_navigate_signals(page, profile=profile, rnd=rnd)
-        except HTTPException:
+        except WsCommandError:
             raise
         except Exception:
             # Поведенческий слой не должен ломать навигацию: это best-effort сигнал,
@@ -500,9 +497,9 @@ async def control_observe(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         payload: ControlObserveResponse = {
             "session_id": session_id,
             "url": page.url,
@@ -524,7 +521,7 @@ async def control_observe(
             ax = await dom_accessibility_tree_dict_from_page(page)
             snap_text, refs = build_interactive_snapshot_with_refs(ax)
         except PlaywrightError as exc:
-            raise HTTPException(status_code=502, detail=f"observe playwright error for {session_id}: {exc}") from exc
+            raise WsCommandError("upstream", f"observe playwright error for {session_id}: {exc}", error_code="upstream") from exc
         snapshot: ControlSnapshotResponse = {
             "schema": "browser.control.snapshot.v1",
             "mode": "interactive",
@@ -561,9 +558,9 @@ async def control_action(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         try:
             out = await runtime.control_adapter.run_action(
                 page,
@@ -577,7 +574,7 @@ async def control_action(
             )
             return out
         except PlaywrightError as exc:
-            raise HTTPException(status_code=502, detail=f"action playwright error for {session_id}: {exc}") from exc
+            raise WsCommandError("upstream", f"action playwright error for {session_id}: {exc}", error_code="upstream") from exc
         except BrowserCapabilityError as exc:
             _log_control_event(
                 op="control.action",
@@ -585,21 +582,21 @@ async def control_action(
                 meta={"transport": "http", "path": f"/control/sessions/{session_id}/action"},
                 error={"kind": "capability_error", "detail": exc.to_dict()},
             )
-            raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+            raise WsCommandError("not_implemented", exc.message, error_code="unavailable", error_params=exc.to_dict()) from exc
 
 
 def _locator_from_ref(page: BrowserPage, refs: RefMap, raw_ref: str) -> BrowserLocator:
     ref = parse_ref(raw_ref)
     if ref not in refs:
-        raise HTTPException(status_code=422, detail=f"ref was not found in the last snapshot: {raw_ref!r}")
+        raise WsCommandError("unprocessable", f"ref was not found in the last snapshot: {raw_ref!r}", error_code="ws_invalid_payload")
     meta = refs[ref]
     role = meta.get("role")
     name = meta.get("name")
     nth = meta.get("nth")
     if not role:
-        raise HTTPException(status_code=500, detail=f"refs[{ref}].role must be a non-empty string")
+        raise WsCommandError("internal", f"refs[{ref}].role must be a non-empty string", error_code="internal")
     if nth < 0:
-        raise HTTPException(status_code=500, detail=f"refs[{ref}].nth must be int >= 0")
+        raise WsCommandError("internal", f"refs[{ref}].nth must be int >= 0", error_code="internal")
     loc = page.get_by_role(role, name=name, exact=True)
     if nth:
         loc = loc.nth(nth)
@@ -615,7 +612,7 @@ def _interaction_for_session(
         profile = get_interaction_profile(profile_name)
         seed, step = runtime.observe_store.next_interaction_nonce(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     # Детерминированный RNG: одна сессия -> одна последовательность, отличная между действиями.
     mixed = (seed + (step + 1) * 1_000_003) & ((1 << 64) - 1)
     rnd = InteractionRng(random.Random(mixed))
@@ -634,20 +631,20 @@ async def control_click(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         try:
             refs = runtime.observe_store.get_refs(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         loc = _locator_from_ref(page, refs, body.ref)
         try:
             await loc.wait_for(state="visible", timeout=body.timeout_ms)
             inter, profile, rnd = _interaction_for_session(runtime, session_id)
             await inter.click(page, loc, profile=profile, rnd=rnd, timeout_ms=body.timeout_ms)
         except PlaywrightError as exc:
-            raise HTTPException(status_code=502, detail=f"click playwright error for {session_id}: {exc}") from exc
+            raise WsCommandError("upstream", f"click playwright error for {session_id}: {exc}", error_code="upstream") from exc
         out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.click",
@@ -669,21 +666,22 @@ async def _viewport_size(
         height = size["height"]
         if width > 0 and height > 0:
             return float(width), float(height)
-    js_size = cast(
-        object,
-        await page.evaluate(
+    try:
+        raw_size = await evaluate_json_value(
+            page,
             "() => ({ "
             + "width: window.innerWidth || document.documentElement.clientWidth, "
             + "height: window.innerHeight || document.documentElement.clientHeight "
-            + "})"
-        ),
-    )
-    if isinstance(js_size, dict):
-        js_size_map = cast(Mapping[object, object], js_size)
-        width = js_size_map.get("width")
-        height = js_size_map.get("height")
-        if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
-            return float(width), float(height)
+            + "})",
+            "viewport",
+        )
+        js_size = require_json_object(raw_size, "viewport")
+    except ValueError:
+        return float(fallback_width), float(fallback_height)
+    width = js_size.get("width")
+    height = js_size.get("height")
+    if isinstance(width, (int, float)) and isinstance(height, (int, float)) and width > 0 and height > 0:
+        return float(width), float(height)
     return float(fallback_width), float(fallback_height)
 
 
@@ -698,9 +696,9 @@ async def control_pointer_click(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     try:
         viewport_width, viewport_height = await _viewport_size(
             page,
@@ -717,9 +715,10 @@ async def control_pointer_click(
         )
         page_url = page.url
     except PlaywrightError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=f"browser page is not available for pointer click: {exc}",
+        raise WsCommandError(
+            "conflict",
+            f"browser page is not available for pointer click: {exc}",
+            error_code="conflict",
         ) from exc
     out = ControlPointerClickResponse(
         ok=True,
@@ -748,11 +747,11 @@ async def control_human_takeover(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     if page.is_closed():
-        raise HTTPException(status_code=410, detail="browser page is closed")
+        raise WsCommandError("gone", "browser page is closed", error_code="gone")
     record = await runtime.lease_manager.begin_human_takeover(session_id, owner=body.owner)
     out = ControlHumanTakeoverResponse(ok=True, human_takeover=True, owner=record.owner)
     _log_control_event(
@@ -795,15 +794,16 @@ async def control_pointer_key(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     try:
         await page.keyboard.press(body.key)
     except PlaywrightError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=f"browser page is not available for keyboard input: {exc}",
+        raise WsCommandError(
+            "conflict",
+            f"browser page is not available for keyboard input: {exc}",
+            error_code="conflict",
         ) from exc
     out = ControlOkResponse(ok=True)
     _log_control_event(
@@ -825,15 +825,16 @@ async def control_pointer_text(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     try:
         await page.keyboard.type(body.text)
     except PlaywrightError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=f"browser page is not available for text input: {exc}",
+        raise WsCommandError(
+            "conflict",
+            f"browser page is not available for text input: {exc}",
+            error_code="conflict",
         ) from exc
     out = ControlOkResponse(ok=True)
     _log_control_event(
@@ -856,13 +857,13 @@ async def control_fill(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         try:
             refs = runtime.observe_store.get_refs(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         loc = _locator_from_ref(page, refs, body.ref)
         try:
             await loc.wait_for(state="visible", timeout=body.timeout_ms)
@@ -877,7 +878,7 @@ async def control_fill(
                 typing_delay_ms=body.typing_delay_ms,
             )
         except PlaywrightError as exc:
-            raise HTTPException(status_code=502, detail=f"fill playwright error for {session_id}: {exc}") from exc
+            raise WsCommandError("upstream", f"fill playwright error for {session_id}: {exc}", error_code="upstream") from exc
         out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.fill",
@@ -899,9 +900,9 @@ async def control_press(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         inter, profile, rnd = _interaction_for_session(runtime, session_id)
         await inter.press(page, body.key, profile=profile, rnd=rnd)
         out = ControlOkResponse(ok=True)
@@ -925,18 +926,18 @@ async def control_wait(
         try:
             page = await runtime.lease_manager.get_page_for_session(session_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_not_found(exc)
         except RuntimeError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise_conflict(exc)
         try:
             if body.load_state is not None:
                 await page.wait_for_load_state(body.load_state, timeout=body.timeout_ms)
             if body.selector is not None:
                 _ = await page.wait_for_selector(body.selector, timeout=body.timeout_ms)
         except PlaywrightError as exc:
-            raise HTTPException(status_code=502, detail=f"wait playwright error for {session_id}: {exc}") from exc
+            raise WsCommandError("upstream", f"wait playwright error for {session_id}: {exc}", error_code="upstream") from exc
         if body.load_state is None and body.selector is None:
-            raise HTTPException(status_code=422, detail="selector and/or load_state is required")
+            raise WsCommandError("unprocessable", "selector and/or load_state is required", error_code="ws_invalid_payload")
         out = ControlOkResponse(ok=True)
         _log_control_event(
             op="control.wait",
@@ -965,9 +966,9 @@ async def control_session_status(
                 human_takeover=False,
                 human_takeover_owner=None,
             )
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
 
     closed = bool(page.is_closed())
     title = ""
@@ -1004,11 +1005,11 @@ async def control_session_screenshot(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     if page.is_closed():
-        raise HTTPException(status_code=410, detail="browser page is closed")
+        raise WsCommandError("gone", "browser page is closed", error_code="gone")
 
     try:
         if image_format == "jpeg":
@@ -1027,7 +1028,7 @@ async def control_session_screenshot(
                 animations="disabled",
             )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"screenshot failed: {exc}") from exc
+        raise WsCommandError("upstream", f"screenshot failed: {exc}", error_code="upstream") from exc
     return Response(
         content=body,
         media_type=f"image/{image_format}",
@@ -1089,9 +1090,9 @@ async def save_control_session_state(
     try:
         page = await runtime.lease_manager.get_page_for_session(session_id)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise_conflict(exc)
     state_key = await runtime.interactor.save_state(page.context, body.shared_storage_key)
     _log_control_event(
         op="control.save_state",

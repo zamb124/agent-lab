@@ -6,17 +6,10 @@ from apps.browser.config import get_browser_settings
 from apps.browser.models.types import BrowserRuntimeSettingsView
 from apps.browser.services.runtime_facade import BrowserRuntimeFacade
 from core.clients.redis_client import RedisClient
-from core.documents.placement import DocsBindResult, DocsPlacement
+from core.authz.factory import build_authz_service
+from core.config import get_settings
+from core.documents.tree_service import DocumentTreeService
 from core.files.service import FilesService
-
-
-async def _test_docs_bind_hook(placement: DocsPlacement) -> DocsBindResult:
-    return DocsBindResult(
-        file_id=placement.file_id,
-        catalog_id="test-catalog",
-        created=True,
-        catalog_path=placement.path_segments if placement.path_segments is not None else [],
-    )
 
 
 def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
@@ -34,6 +27,6 @@ def build_test_facade(view: BrowserRuntimeSettingsView) -> BrowserRuntimeFacade:
     redis_client = RedisClient(redis_url)
     files_service = FilesService(
         files_route_segment="browser",
-        docs_bind_hook=_test_docs_bind_hook,
+        tree=DocumentTreeService(build_authz_service(get_settings().openfga)),
     )
     return BrowserRuntimeFacade(view, redis_client=redis_client, files_service=files_service)

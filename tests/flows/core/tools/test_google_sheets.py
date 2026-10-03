@@ -5,19 +5,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
-from core.context import reset_context, set_context
-from core.models.context_models import Context
-from core.models.identity_models import Company, User
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_append_rows,
     sheets_create_spreadsheet,
     sheets_get_values,
     sheets_share,
 )
+from core.context import reset_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Literal, TypeVar, assert_never
+from typing import Literal, TypeVar
 
 from pydantic import Field
 
@@ -32,12 +32,10 @@ from core.data_tables.models import (
     DataTableQueryResult,
     DataTableRow,
     DataTableSchemaSnapshot,
-    DataTableScope,
     DataTableUpdateRowRequest,
     DataTableUpdateRowResponse,
 )
 from core.data_tables.service import DataTableNotFoundError
-from core.documents.placement import DocsPlacement, DocsPlacementAnchor
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
 from core.files.object_store.principals import SystemPrincipal
@@ -125,7 +123,7 @@ async def _run(awaitable: Awaitable[T]) -> T:
 async def _require_view(di: Di, file_id: str) -> None:
     _ = require_active_company()
     try:
-        await di.authz_service.require_can_view(AuthzObject.office_document(file_id))
+        await di.authz_service.require_can_view(AuthzObject.document_file(file_id))
     except AuthzDenied as exc:
         raise_forbidden(exc)
 
@@ -133,7 +131,7 @@ async def _require_view(di: Di, file_id: str) -> None:
 async def _require_edit(di: Di, file_id: str) -> None:
     _ = require_active_company()
     try:
-        await di.authz_service.require_can_edit(AuthzObject.office_document(file_id))
+        await di.authz_service.require_can_edit(AuthzObject.document_file(file_id))
     except AuthzDenied as exc:
         raise_forbidden(exc)
 
@@ -147,66 +145,13 @@ def _resolved_namespace(explicit: str | None) -> str:
     raise_invalid(ValueError("namespace is required"))
 
 
-def _placement_anchor(
-    scope: DataTableScope,
-    *,
-    flow_id: str | None,
-    session_id: str | None,
-) -> DocsPlacementAnchor:
-    if scope == "office_document":
-        return DocsPlacementAnchor(source_kind="office_manual")
-    if scope == "flow_asset":
-        return DocsPlacementAnchor(source_kind="flow_asset", flow_id=flow_id, session_id=session_id)
-    if scope == "flow_session":
-        return DocsPlacementAnchor(
-            source_kind="flow_session",
-            flow_id=flow_id,
-            session_id=session_id,
-        )
-    assert_never(scope)
-
-
-def _data_table_placement(
-    *,
-    file_id: str,
-    title: str,
-    scope: DataTableScope,
-    namespace: str,
-    flow_id: str | None,
-    session_id: str | None,
-) -> DocsPlacement:
-    path_segments: list[str] | None = ["Tables"] if scope == "office_document" else None
-    return DocsPlacement(
-        namespace=namespace,
-        file_id=file_id,
-        title=title,
-        path_segments=path_segments,
-        anchor=_placement_anchor(scope, flow_id=flow_id, session_id=session_id),
-    )
-
-
-async def _bind_or_delete(
-    di: Di, record: FileRecord, placement: DocsPlacement, user: User
-) -> FileRecord:
-    company = require_active_company()
-    try:
-        _ = await di.docs_placement_service.bind(
-            placement,
-            company_id=company.company_id,
-            user_id=user.user_id,
-        )
-    except Exception:
-        _ = await di.files_service.delete(record.file_id)
-        raise
-    return record
-
-
 async def op_data_tables_create(
     payload: DataTableCreateRequest,
     *,
     user: User,
     di: Di,
 ) -> FileRecord:
+    _ = user
     _ = require_active_company()
     namespace = _resolved_namespace(payload.namespace)
     record = await _run(
@@ -219,15 +164,7 @@ async def op_data_tables_create(
             namespace=namespace,
         )
     )
-    placement = _data_table_placement(
-        file_id=record.file_id,
-        title=record.original_name,
-        scope=payload.scope,
-        namespace=namespace,
-        flow_id=payload.flow_id,
-        session_id=payload.session_id,
-    )
-    return await _bind_or_delete(di, record, placement, user)
+    return record
 
 
 async def op_data_tables_get(
@@ -247,8 +184,9 @@ async def op_data_tables_promote(
     user: User,
     di: Di,
 ) -> FileRecord:
+    _ = user
     await _require_edit(di, payload.file_id)
-    namespace = _resolved_namespace(None)
+    _ = _resolved_namespace(None)
     record = await _run(
         di.data_table_service.promote_session_to_asset(
             payload.file_id,
@@ -256,15 +194,7 @@ async def op_data_tables_promote(
             original_name=payload.original_name,
         )
     )
-    placement = _data_table_placement(
-        file_id=record.file_id,
-        title=record.original_name,
-        scope="flow_asset",
-        namespace=namespace,
-        flow_id=payload.flow_id,
-        session_id=None,
-    )
-    return await _bind_or_delete(di, record, placement, user)
+    return record
 
 
 async def op_data_tables_table_create(

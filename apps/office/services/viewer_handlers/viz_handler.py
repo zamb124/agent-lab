@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from botocore.exceptions import ClientError
 
@@ -22,6 +22,23 @@ from core.files.object_store.principals import SystemPrincipal
 from core.logging import get_logger
 from core.types import JsonObject, require_json_object
 from core.viz.models import VIZ_CONTENT_TYPE, parse_viz_document_bytes
+
+_VIZ_KINDS: tuple[VizViewerKind, ...] = ("chart", "flowchart", "gantt", "sequence", "timeline")
+_VIZ_ENGINES: tuple[VizViewerEngine, ...] = ("echarts", "mermaid")
+
+
+def _viz_kind(value: str) -> VizViewerKind | None:
+    for kind in _VIZ_KINDS:
+        if kind == value:
+            return kind
+    return None
+
+
+def _viz_engine(value: str) -> VizViewerEngine | None:
+    for engine in _VIZ_ENGINES:
+        if engine == value:
+            return engine
+    return None
 
 logger = get_logger(__name__)
 
@@ -59,15 +76,11 @@ class VizViewerHandler:
         kind_raw = document.get("kind")
         engine_raw = document.get("engine")
         title_value = document.get("title")
-        if not isinstance(kind_raw, str) or kind_raw not in {
-            "chart",
-            "flowchart",
-            "gantt",
-            "sequence",
-            "timeline",
-        }:
+        kind = _viz_kind(kind_raw) if isinstance(kind_raw, str) else None
+        if kind is None:
             raise ValueError("viz.document.kind invalid")
-        if not isinstance(engine_raw, str) or engine_raw not in {"echarts", "mermaid"}:
+        engine = _viz_engine(engine_raw) if isinstance(engine_raw, str) else None
+        if engine is None:
             raise ValueError("viz.document.engine invalid")
         if not isinstance(title_value, str) or title_value.strip() == "":
             raise ValueError("viz.document.title must be a non-empty string")
@@ -84,8 +97,8 @@ class VizViewerHandler:
             viz=VizOpenPayload(
                 stream_url=stream_url,
                 content_type=normalized,
-                kind=cast(VizViewerKind, kind_raw),
-                engine=cast(VizViewerEngine, engine_raw),
+                kind=kind,
+                engine=engine,
                 title=title_value,
                 document=document,
             ),

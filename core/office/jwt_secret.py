@@ -2,23 +2,44 @@
 
 from __future__ import annotations
 
-import os
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from core.config.loader import load_merged_config
 from core.types import require_json_object
 
 
+class _OfficeJwtBlock(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
+
+    jwt_secret: str = ""
+
+
+class _OnlyOfficeJwtEnv(BaseSettings):
+    """ENV ``OFFICE__JWT_SECRET``. JSON services.office сюда не входит."""
+
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+        env_nested_delimiter="__",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    office: _OfficeJwtBlock = Field(default_factory=_OfficeJwtBlock)
+
+
 def resolve_onlyoffice_jwt_secret() -> str:
     """
-    Секрет DS / editor JWT из ENV или конфига сервиса office.
+    Секрет DS / editor JWT.
 
-    ENV ``OFFICE__JWT_SECRET`` имеет приоритет: ``load_merged_config`` вырезает
-    ключи, перекрытые окружением (канон Pydantic Settings), поэтому сырой JSON
-    после merge не содержит ``jwt_secret`` при заданном ENV.
+    ``OFFICE__JWT_SECRET`` имеет приоритет: ``load_merged_config`` вырезает
+    ключи, перекрытые окружением, поэтому сырой JSON после merge не содержит
+    ``jwt_secret``, когда переменная задана.
     """
-    env_secret = os.environ.get("OFFICE__JWT_SECRET")
-    if env_secret is not None and env_secret.strip():
-        return env_secret.strip()
+    from_env = _OnlyOfficeJwtEnv().office.jwt_secret.strip()
+    if from_env != "":
+        return from_env
 
     merged = load_merged_config(service_name="office", silent=True)
     office_section = merged.get("office")

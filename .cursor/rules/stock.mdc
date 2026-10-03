@@ -1,7 +1,8 @@
 ---
-description: "Stock/WMS (apps/stock): леджер StockMove, проекция StockQuant, append-only StockValueLayer, движок, оценка, рефлекс StockDecision. Читать при правке apps/stock"
+description: "Stock/WMS (apps/stock): леджер StockMove, проекция StockQuant, append-only StockValueLayer, lane-сериализация команд, движок, оценка, рефлекс StockDecision. Читать при правке apps/stock"
 globs:
   - "apps/stock/**"
+  - "apps/stock_worker/**"
   - "core/clients/stock_client.py"
   - "apps/flows/tools/stock/**"
   - "tests/stock/**"
@@ -10,48 +11,100 @@ alwaysApply: false
 
 # Stock
 
-Складской учёт компании по модели Odoo `stock` + `stock_account`: любое изменение количества — `StockMove` из локации A в локацию B, стоимость — отдельный append-only журнал `StockValueLayer`. REST — `/stock/api/v1/`, SPA — `/stock`, команды — `STOCK_OPERATIONS`, DI — `StockDi`.
+Складской учёт компании по модели Odoo `stock` + `stock_account` + элементы WMS (SAP EWM): любое изменение количества — `StockMove` из локации A в локацию B, стоимость — отдельный append-only журнал `StockValueLayer`. Таблица — свой модуль `apps/stock/models/`. REST — `/stock/api/v1/`, SPA — `/stock`, команды — `STOCK_OPERATIONS`, DI — `StockDi`.
 
 ## Модель
 
-- `StockLocation` (`location_id`, `usage`: `view`/`internal`/`supplier`/`customer`/`inventory`/`production`/`transit`); виртуальные локации создаёт `init_company_stock`, поэтому приход, расход и инвентаризация — пары `usage`, а не отдельные сущности.
-- `StockWarehouse` (`warehouse_id`) — площадка компании (`view_location_id`, `stock_location_id`), объект FGA `stock_warehouse`.
-- `StockProduct` + `StockProductTemplate` (`tracking` `none`/`lot`/`serial`, `is_storable`, `valuation_method`, `standard_price`).
-- `StockOperationType` (`code` `incoming`/`outgoing`/`internal`, `reservation_policy`, `backorder_policy`, `putaway_mode` `rule`/`inline`/`shadow`, `putaway_flow_id`); `StockTransfer` — документ-группировка move (`state` — проекция, `backorder_of_id`, `return_of_id`).
-- `StockMove` (`draft → confirmed → partially_available → assigned → done`, `waiting`, `cancel`; `returned_move_id`), `StockMoveLine` — lot/package/reserved/done детализация.
-- `StockQuant` — ключ `(company, product, location, lot, package, owner)` unique `NULLS NOT DISTINCT`, `available = quantity - reserved_quantity`, `in_date` для FIFO, `inventory_quantity` — черновик инвентаризации.
-- `StockValueLayer` (`entry_no`, `entry_kind`, signed `quantity`/`value`, `unit_cost`, `remaining_*`, `qty_after`/`value_after`, `price_source`, снимок `valuation_method`, `origin_layer_id`) + `StockValueLayerConsumption`; `StockDecision` (`reflex_point` `putaway`/`removal`/`qc_route`/`receipt_lines`, кандидаты, выбор, `status`); `StockBarcodeIndex` — `(company_id, barcode)` unique → сущность.
-- Контрагент и владелец остатка — `partner_entity_id`/`owner_entity_id` (id CRM-сущности без FK в чужую БД).
+- `StockLocation` (`location_id`, `usage`: `view`/`bin`/`container`/`partner`/`transit`/`adjustment` + `partner_role` `vendor`/`customer`); `parent_path` — материализованный путь `/id/id/` для префиксных запросов поддерева (`list_in_subtree`, `list_subtree_ids`), `complete_name`, `level` (ярус ячейки), `pick_sequence`, `putaway_blocked`/`removal_blocked`, `allow_negative`, `storage_type_id`, `container_type_id`. Виртуальные локации (`partner:*`, `adjustment`, `transit`) создаёт `init_company_stock` с детерминированными id `{company}:partner:vendor` и т.п., поэтому приход, расход и инвентаризация — пары `usage`, а не отдельные сущности. Дети — только под `view` и `container`-в-`container`.
+- `StockLocation` с `usage=container` — контейнер (паллета/короб/тоут/тележка): перемещается сменой `parent_id` + rebind `parent_path` поддерева (`StockMove.move_container_in_lane`), содержимое — свои quant'ы + вложенные контейнеры. Тип — `StockContainerType` (`kind` `pallet`/`box`/`bag`/`tote`/`cart`/`other`, габариты, `allowed_parent_type_ids`).
+- `StockStorageType` — конфигурация ячейки/зоны: `container_policy` `any`/`loose_only`/`container_only`, `allowed_container_type_ids`, `max_containers`, `product_mixing` `mixed`/`same_product`/`empty_only`, `allow_mixed_lots`, `max_weight`/`max_volume`, `putaway_strategies`, `removal_strategy`. Чистые правила — `models/storage_rules.py` (`check_placement`, `resource_allows` → `error_code` или `None`).
+- `StockResourceType` (ограничения ресурса: `allowed_container_type_ids`, `handles_loose`, `max_level`, `max_load_weight`, `storage_type_ids`-зоны) + `StockResource` (единица: `code`, `current_user_id` — оператор входит сканом метки из `stock_barcodes` в начале смены через `login_in_lane`/`logout_in_lane`).
+- Упаковка товара — строка `stock_uom` с `product_id` (AUoM в стиле SAP): `factor` = «базовых единиц в упаковке» × factor базовой ЕИ, `container_type_id` (принятая тара), вес/объём. Отдельной таблицы нет: `UnitOfMeasure.convert` переводит «3 коробки» в базу сам, уники — частичные `(company_id,name) WHERE product_id IS NULL` и `(company_id,product_id,name) WHERE product_id IS NOT NULL`. API отдаёт проекцию `StockPackagingView` (`packaging_id`=`uom_id`, `quantity`=`factor/factor базовой ЕИ`); код GTIN — в `stock_barcodes`→`packaging`. Отлична от физического контейнера-локации.
+- `StockWarehouse` (`warehouse_id`) — площадка компании (`view_location_id`, `stock_location_id`, `layout_preset`), объект FGA `stock_warehouse`.
+- `StockProduct` (`tracking` `none`/`lot`/`serial`, `is_storable`, `valuation_method`, `standard_price`, `weight`/`volume`, сроки `use_expiration`/`expiration_days`/`best_before_days`/`removal_days`/`alert_days`, `removal_strategy`).
+- `StockLot` — партия/серия с датами `expiration_at`/`best_before_at`/`removal_at`/`alert_at`.
+- `StockOperationType` (`code` `incoming`/`outgoing`/`internal`, `reservation_policy`, `backorder_policy` `always`/`never`/`ask`, `putaway_mode` `rule`/`inline`/`shadow`, `create_lots`/`use_existing_lots`, `return_operation_type_id`, `name_prefix`); `StockTransfer` — документ-группировка move (`state` — проекция, `backorder_of_id`, `return_of_id`, `priority`, `date_deadline`).
+- `StockMove` (`draft → confirmed → partially_available → assigned → done`, `waiting`, `cancel`; `returned_move_id`, `warehouse_id`, `priority`, `date_deadline`, `route_id`, `move_origin_id`/`move_dest_id` — звенья маршрутной цепочки), `StockMoveLine` — lot/container/reserved/done детализация + поля задания (`kind` `quantity`/`container`/`count`, `state`, `container_id`, `assigned_user_id`, `resource_id`, `claimed_at`, `wave_id`, `stop_order`, `sequence`, `priority`, `done_at`/`done_by_user_id`).
+- `StockRoute` (`steps` JSONB: `sequence`, `operation_type_id`, `source_id`/`dest_id`, `delay`) — pull-цепочки: строка накладной разворачивается в плечи, каждое следующее `waiting` до проводки предыдущего (`activate_in_lane` после publish, в полосе ЕГО склада); `route_id` на move не даёт putaway перебить приёмник плеча.
+- `StockWave` (`draft → released → done`, `warehouse_id`, `user_id`) — пачка строк заданий; `stops` JSONB — путевой лист рейса: `transfer_id` остановок в порядке объезда, строка получает `stop_order` = индекс своей накладной (строки без накладной — в хвост); `refresh_state` закрывает волну, когда её строки исполнены. Очередь заданий (`StockMoveLine.list_queue`) сортируется `-priority, stop_order, sequence, created_at`: сначала приоритет, затем остановки рейса, внутри остановки — `sequence` = `pick_sequence` рабочей ячейки.
+- `StockPutawayRule` (`location_in_id` → `location_out_id`, фильтры `product_id`/`category`/`owner_entity_id`, `sequence`, `is_active`) — настраиваемый первый уровень размещения; `candidates_for` фильтрует по приёмнику строки + совпадению фильтров, частное правило сильнее общего; CRUD — `rule_service.*_putaway_rule`, команды `stock/putaway_rules/*`.
+- `StockReorderRule` (`warehouse_id`, `product_id`, `min`/`max`, `route_id`, `active`) — точки пополнения; тик создаёт transfer по разнице min, дедуп по `origin_document_id=rule_id` среди открытых move.
+- `StockQuant` — ключ `(company, product, location, lot, owner)` unique `NULLS NOT DISTINCT`, денормализованные `warehouse_id`/`removal_at`, `available = quantity - reserved_quantity`, `in_date` для FIFO, `inventory_quantity`/`inventory_counted_at`/`inventory_user_id` — черновик инвентаризации.
+- `StockValueLayer` (`entry_no`, `entry_kind`, signed `quantity`/`value`, `unit_cost`, `remaining_*`, `qty_after`/`value_after`, `price_source`, снимок `valuation_method`, `origin_layer_id`) + `StockValueLayerConsumption`; `StockDecision` (`reflex_point` `putaway`/`removal`/`qc_route`/`receipt_lines`, кандидаты, выбор, `status`); `StockBarcodeIndex` — `(company_id, barcode)` unique → сущность (`entity_type` `product`/`packaging`/`location`/`container`/`lot`/`transfer`/`resource`). ЕДИНСТВЕННАЯ точка хранения кодов: у сущностей нет своих `barcode`-колонок, один код = один носитель, у сущности может быть несколько кодов. Привязка — `StockBarcodeIndex.bind` (no-op при той же сущности, `barcode_conflict` при чужой; вызывается и из lane-тел — накладная и её код коммитятся атомарно); перепривязка — `BarcodeService.replace` (release_entity + bind).
+- Контрагент и владелец остатка — `partner_entity_id`/`owner_entity_id` (id CRM-сущности без FK в чужую БД; `owner_entity_id` — консигнация, не оценивается).
+- GS1: `models/gs1.py` — чистый парсер (`]C1`/`]d2` префиксы, FNC1=GS, AI `00`/`01`/`02`/`10`/`11`/`15`/`17`/`21`/`30`/`37`/`310x`); `BarcodeService.resolve` — сырой код в индексе → GS1-семантика (GTIN→запись индекса product/packaging; GTIN+lot_name/serial→`StockLot.by_name` внутри товара; SSCC→запись container/location) → извлечённые AI как записи индекса.
+
+## Архетипы складов и сценарии
+
+Одно ядро покрывает спектр от микросклада до сети РЦ — разница только в настройках, не в сущностях. Ось настройки: `layout_preset` + `StockLocation` дерево, `StockOperationType` политики, `StockRoute` цепочки, `StockPutawayRule`/`StockStorageType` правила, `StockReorderRule` точки, `owner_entity_id` владельцы.
+
+| Архетип | Топология | Ключевые настройки |
+|---|---|---|
+| Микросклад (1 человек, без ТСД) | `SIMPLE` (одна ячейка Stock) | `auto_validate=True` — confirm = done одной кнопкой; `backorder_policy=never` |
+| Даркстор (ТСД, скорость) | `STANDARD` (Receiving/Pick/Packing/Shipping) | `reservation_policy=at_confirm`, scan-потоки `pick`/`pack`/`ship`, волны по рейсам |
+| Продовольственный средний | `STANDARD` + зоны-холод/тепло через `StockStorageType` | `tracking=lot` + `removal_strategy=fefo`, `use_expiration`, cycle-count по `cycle_count_days` типа |
+| Фулфилмент e-commerce (много владельцев) | `STANDARD` + `owner_entity_id` на transfer | правила putaway c `owner_entity_id` (зоны владельцев), `list_quants(owner_entity_id=…)` |
+| Промтовары (серийники IMEI) | `STANDARD` | `tracking=serial`, scan `pick` требует скан серии (`serial` слот), qty всегда 1 |
+| Крупный оптово-продовольственный РЦ | `DISTRIBUTION_CENTER` (Dock→QC→Storage{Bulk,Forward Pick}→Clean Floor→Packing→Shipping Dock + Quarantine) | маршрут «пик бай лайн»: `pick`(Bulk/ForwardPick) → `internal` на Clean Floor (сортировка по машинам — `zone_location_id` на очереди) → `internal` Packing (паллеты по путевому листу — `sequence` строк) → `internal` Shipping Dock → `outgoing`; пополнение forward-зоны — `StockReorderRule.route_id` (Bulk→Forward цепочкой) |
+| Ответхранение (3PL, много владельцев) | `STANDARD`/`DISTRIBUTION_CENTER` | `owner_entity_id` на каждом quant/move/правиле; консигнация не оценивается (слои только внешней границы); биллинг — внешний, по `stock/quant/changed` |
+
+Сеть РЦ — несколько `StockWarehouse` + межскладские `StockRoute` (плечо-перевозка через `transit`-локацию; активация каждого плеча — отдельная полоса его склада, полосы не вложены).
+
+## Полосы и транзакции
+
+Каждая мутация леджера — одна `run_in_lanes` в полосе склада `stock_wh:<company>:<warehouse_id>` (без склада — `stock_company:<company>:ledger`, см. `database.mdc` § Полосы):
+
+1. Граница транзакции — `*_in_lane` classmethod модели (`create_in_lane`/`confirm_in_lane`/`assign_in_lane`/`validate_in_lane`/`cancel_in_lane`/`return_in_lane`/`unreserve_move_in_lane` на `StockTransfer`, `release_in_lane`/`update_line_in_lane`/`apply_inventory_in_lane`/`move_container_in_lane`/`post_lines_in_lane`/`activate_in_lane` на `StockMove`, `claim_in_lane`/`release_in_lane`/`report_exception_in_lane` на `StockMoveLine`, `create/release/assign_in_lane` на `StockWave`, `set_inventory_in_lane` на `StockQuant`, `login_in_lane`/`logout_in_lane` на `StockResource`, `apply_in_lane` на `StockDecision`, `adjust_in_lane` на `StockValueLayer`). Внутри — только tx-free шаги `confirm_step`/`reserve_step`/`post_step`/`release_step`/`cancel_step`; свой `atomic` им запрещён.
+2. Сервис (`move_engine`, `warehouse_service` — склады/типы операций/накладные, `catalog_service` — товары/ЕИ/партии/упаковки, `topology_service` — локации/типы/тара/ресурсы, `placement_service` — putaway+removal+quants, `rule_service` — putaway/reorder-правила/маршруты, `task_service` — очередь заданий + `update_move_line`, `wave_service`, `valuation_service`, `barcode_service`) строит план вне транзакции (проверки, putaway-рефлекс с A2A), зовёт один `*_in_lane`, затем `publish_lane_run`. Прямой `publish_*` из сервиса запрещён — события едут в `LaneCommit.events` (`company_event` в `models/events.py`).
+3. `idempotency_key`: явный из payload → `command_event_id` WS-команды (`core.context.command`, ставится в `execute_realtime_command`) → uuid7; helper — `command_idempotency_key()` (`core/request_scope`). Replay по ключу возвращает сохранённый результат без повторной мутации.
+4. Имя документа `WH/IN/00001` — `LaneScope.next_value("stock_transfer_name:<prefix>")` (no-gap курсор в той же tx).
+5. `StockDecision` рефлекса пишется в теле полосы (`decisions` параметр `confirm/assign/validate_in_lane`), не до входа.
 
 ## Инварианты
 
-1. `StockQuant` пишет только `StockMoveEngine` (`services/move_engine.py`) внутри своей транзакции: `reserved_quantity` — `assign`/`unreserve`, `quantity` — `done`.
-2. Слои стоимости пишутся в той же транзакции, что `done`; `done` без слоёв для метода ≠ `unvalued` невозможен; событие — уведомление после commit.
-3. `StockValueLayer` append-only: коррекция и сторно — новые слои (`entry_kind` `revaluation`/`correction`, `origin_layer_id`); `entry_no` — nogap per company через `StockLedgerCounter` (`SELECT FOR UPDATE` в той же транзакции); running balance — company + product.
-4. `valuation_method` обязателен (`standard`/`average`/`fifo`/`unvalued`); смена при наличии слоёв — `conflict`; `unit_price` на move — цена документа (`price_source=document`).
-5. Оценка по паре `usage`: внешняя → internal `+qty`, internal → внешняя `−qty`, internal → internal — пара слоёв по текущей себестоимости, return — `unit_cost` исходного move; `fifo` потребляет `remaining_quantity > 0` по `entry_no`.
-6. Стратегии removal (`fifo` по `in_date`) и valuation — реестр по коду; нет реализации — `raise`.
-7. Движок: `confirm`, `assign` (incoming — точка рефлекса putaway), `unreserve`, `done`/`validate` (частичное — backorder по `backorder_policy`), `cancel`, `return_`, `inventory_set` + `inventory_apply` (move `internal ↔ inventory` на дельту); tracking `none` с lot или `serial` с qty ∉ {0, 1} — `raise`.
+1. `StockQuant` мутирует только `post_step`/`reserve_step`/`release_step` внутри lane-транзакции: `reserved_quantity` — резерв/снятие, `quantity` — `done` по строкам. Постинг line-level: `line.location_id`/`location_dest_id` авторитетны; остаток хранится только на valued-локациях (`STOCK_QUANT_USAGES` = `bin`/`container`/`transit`); `view` на конце строки — `location_usage_invalid` (зона — агрегат, проводка в/из неё теряла бы или создавала товар без quant'а); источник `view` на move легален — резерв спускается по поддереву зоны до quant-локаций, внешним источником считаются только `STOCK_EXTERNAL_USAGES` = `partner`/`adjustment`; списание источника до проверки `insufficient_stock` не идёт; `allow_negative=False` + уход ниже нуля — `insufficient_stock`; `reserved_quantity` ниже нуля — `reservation_underflow`. Строка `kind=container` — rebind поддерева контейнера + перенос quant'ов на локации поддерева.
+2. Слои стоимости пишутся в той же транзакции, что `done`; `done` без слоёв для метода ≠ `unvalued` невозможен; событие — уведомление после commit через `LaneCommit`.
+3. `StockValueLayer` append-only: коррекция и сторно — новые слои (`entry_kind` `revaluation`/`correction`, `origin_layer_id`); `entry_no` — nogap per company через `LaneCursor` полосы `stock_ledger:<company>:entry_no` (строка курсора `FOR UPDATE` до конца транзакции) до чтения баланса — писатель ждёт предыдущий commit; running balance — company + product. Ручные слои — только `adjust_in_lane` (полоса компании).
+4. `valuation_method` обязателен (`standard`/`average`/`fifo`/`unvalued`); смена при наличии слоёв — `conflict` и идёт под `LaneCursor.lock` той же полосы журнала — ждёт незакоммиченных писателей слоёв; `unit_price` на move — цена документа (`price_source=document`).
+5. Оценка только на внешней границе (`STOCK_EXTERNAL_USAGES` = `partner`/`adjustment`): внешняя → valued `+qty`, valued → внешняя `−qty`, valued → valued (внутри компании) — слоёв нет; return — `unit_cost` исходного move (клиентский возврат входит по цене ухода, vendor-return выходит по входящему слою); consignment (`owner_entity_id` ≠ company) не оценивается; `fifo` потребляет `remaining_quantity > 0` по `entry_no`.
+6. Стратегии removal (`fifo` по `in_date`, `fefo` по `removal_at`, `lifo`) и valuation — реестр по коду; нет реализации — `raise`.
+7. Движок: `confirm`, `assign` (incoming — точка рефлекса putaway), `unreserve`, `validate` (частичное — `backorder_policy`: `always`/`never`/`ask`; `ask` без явного флага — `raise`), `cancel`, `return_`, `inventory_set` + `inventory_apply` (move `bin ↔ adjustment` на дельту); tracking `none` с lot — `lot_not_allowed`, `serial` с qty ∉ {0, 1} — `serial_quantity_invalid`; post на dst проверяет `check_placement` (storage_type) и `putaway_blocked`.
 8. ИИ не пишет quant и слои: рефлекс — между `confirm` и `assign`, ядро собирает кандидатов, flow выбирает из них; ответ вне кандидатов, пустой или таймаут — `raise`, move остаётся `confirmed`.
 9. Доступ — OpenFGA `stock_warehouse`: чтение остатков, слоёв и пульса — `can_view`; `validate`, `inventory_apply`, `revalue`, правка рефлекса — `can_edit`; `stock_access_service` пишет tuples.
+10. Топология: локация-родитель — `view` или `container`-в-`container` (`StockContainerType.allowed_parent_type_ids`); `move_container_in_lane` лочит контейнер, запрещает циклы, dst `view` и непустой контейнер → `partner` (`container_not_empty`: отгрузка заполненной тары — только через `post_step`, иначе товар уедет мимо леджера), перепривязывает поддерево; ресурс `login_in_lane`/`logout_in_lane` сериализованы полосой склада.
+11. Цепочки: `waiting`-плечо не резервируется и не проводится, пока `move_origin_id` не `done`; активация — отдельный lane-run после publish исходного коммита (полосы не вложены); split-строки наследуют `wave_id`, `stop_order`, `sequence` и route-поля.
+12. Scan: `models/scan.py` — чистая машина потоков (`receive`/`pick`/`move`/`putaway`/`count`/`container_move`), `ScanService.commit` → один `post_lines_in_lane` (всё или ничего), `kind=count`-строки не проводятся и пишут `inventory_quantity`-черновик + `last_count_at`; `container_move` из слотов контекста, не из `lines`.
+
+## stock_worker
+
+`apps/stock_worker` — только фон, без синхронных команд. Тики (`MaintenanceService`, регистрация в `ensure_platform_schedules`): `reconcile` (reserved на quant = Σ quantity открытых строк, orphan-строки → release/закрытие зависших move; идемпотентность — почасовой бакет), `claims_gc` (освобождение `claimed_at` старше TTL), `reorder` (transfer по StockReorderRule), `cycle_count` (`count`-строки на просроченные bin'ы по `last_count_at`), `lane_relay` (`relay_lane_commits` догоняет `published_at IS NULL`), `lane_gc` (`expire_lane_commits` за окном идемпотентности).
+
+## Трейсинг
+
+Мутации — `traced_operation` (`stock.<entity>.<verb>`, `operation_category="stock_mutation"`, атрибуты `platform.tenant.company_id`/`stock.warehouse_id`): `transfer.create/confirm/assign/validate/cancel`, `move.chain_activate`, `quant.inventory_set`, `move.inventory_apply`, `scan.commit`/`scan.count_commit`, `move_line.claim/assign/release/exception`. Тики — `stock.maintenance.*` (`operation_category="maintenance"`).
 
 ## Контракты
 
-- События: `stock/move/done` (`unit_cost`, `value`, `value_layer_ids`), `stock/transfer/done`, `stock/quant/changed`, `stock/valuation/changed`; payload несёт поля фильтров триггеров (`warehouse_id`, `operation_code`, `state`, `product_id`, `location_id`, `location_dest_id`, `transfer_id`, `move_id`, `quantity`, `value`, `entry_kind`).
+- События: `stock/move/done` (`unit_cost`, `value`, `value_layer_ids`), `stock/transfer/done`, `stock/quant/changed`, `stock/valuation/changed`; payload несёт поля фильтров триггеров (`warehouse_id`, `operation_code`, `state`, `product_id`, `location_id`, `location_dest_id`, `transfer_id`, `move_id`, `quantity`, `value`, `entry_kind`). Доставка — at-least-once из `LaneCommit` (быстрый `publish_lane_run` + догоняющий `relay_lane_commits`), дедупликация bus по `event_id`.
 - Инициализация компании — `stock/company/init_requested` (`POST /stock/api/v1/internal/company/init`) из idle `company_init_new_company`, идемпотентно.
 
 ## Интеграции
 
-- WorkItem links `stock_transfer`, `stock_location` (`core/worktracker/models.py`).
+- WorkItem links `stock_transfer`, `stock_location` (`core/worktracker/models/work_item.py`).
 - Tools `stock_*` (`apps/flows/tools/stock/`) — тонкие над `core/clients/stock_client.py`, без записи quant и слоёв.
 
 ## Запреты
 
-1. `save()` на `StockQuant` вне движка; update/delete `StockValueLayer`; PG sequence для `entry_no`.
+1. `save()`/`update`/`create` на `StockQuant` вне `post_step`/`reserve_step`/`release_step`; update/delete `StockValueLayer`; PG sequence для `entry_no` и имён документов; своя таблица счётчиков — только курсор `lane_cursors`.
 2. Дефолтная стратегия removal или valuation в runtime.
 3. FK в базы других сервисов.
+4. `atomic`/`.objects`/`execute_raw` в `apps/stock/services/`; `atomic` внутри `*_step`; прямой `publish_event*` для stock-событий вне `LaneCommit`.
+5. Повторный ключ идемпотентности с другим `command_type` — `idempotency_key_reused`.
 
 ## Гейты
 
-- `tests/stock/test_stock_domain.py`, `tests/stock/test_stock_valuation_math.py`, `tests/stock/test_stock_api.py` — движок, оценка, API.
+- `scripts/check_stock_service_queries.py` (`make lint`) — сервисы без `objects`/`execute_raw`/`atomic`; в `apps/stock/models` один `PlatformModel` на файл (payload/утилиты — `enums.py`, `common.py`, `api.py`, `valuation.py`, `events.py`).
+- `tests/stock/test_stock_domain.py`, `tests/stock/test_stock_valuation_math.py`, `tests/stock/test_stock_api.py`, `tests/stock/test_stock_ledger_lanes.py` — движок, оценка, API, lane-инварианты.
+- `tests/stock/test_stock_topology.py` — топология: storage/container types, контейнеры, ресурсы, packaging; `tests/stock/test_stock_gs1.py` — парсер GS1 и `storage_rules`; `tests/stock/test_stock_removal.py` — removal-стратегии; `tests/stock/test_stock_scan.py` — scan-машина/коммит, волны, исключения; `tests/stock/test_stock_routes.py` — маршрутные цепочки; `tests/stock/test_stock_maintenance.py` — тики stock_worker; `tests/stock/test_stock_concurrency.py` — параллельные резервы/проводки, reconcile-гонка; `tests/stock/test_stock_scenarios.py` — архетипы: пресеты топологии, putaway-CRUD/владельцы, reorder→маршрут, owner-фильтр остатков, auto_validate.
+- `tests/core/lanes/` — примитив `run_in_lanes`.
 - Единственный писатель quant и слоёв `[без гейта]`.

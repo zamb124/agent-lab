@@ -10,22 +10,21 @@ user/company/session/namespace при успешной авторизации; �
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import cast, override
+from typing import override
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from core.app_state import (
-    PlatformAppState,
     read_reissue_auth_token,
     read_session_token_override,
+    require_platform_app_state,
     require_request_trace_id,
 )
 from core.authz.service import AuthzService
-from core.config import get_settings
 from core.context import reset_context, set_context
 from core.context.job_context import resolve_user_roles_in_company
 from core.di.boundary import require_di
@@ -43,7 +42,7 @@ from core.logging.attributes import (
 from core.models.api_key import ApiKeyRecord
 from core.models.context_models import Context
 from core.models.identity_models import Company, User, UserStatus
-from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
+from core.platform_brand.resolver import resolve_brand_or_primary
 from core.utils.auth_session_rebind import attach_session_auth_cookie, rebind_session_to_company
 from core.utils.domain import extract_subdomain
 from core.utils.tokens import TokenData, TokenType, get_token_service
@@ -81,21 +80,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.route_matcher: RouteMatcher = RouteMatcher()
 
-    def _app_state(self, request: Request) -> PlatformAppState:
-        app = cast(FastAPI, request.app)
-        if not hasattr(app.state, "di") or not hasattr(app.state, "settings"):
-            raise RuntimeError("Platform app state is not configured")
-        return cast(PlatformAppState, cast(object, app.state))
-
     def _resolve_error_page_platform_name(self, request: Request) -> str:
-        host = request.headers.get("host")
-        if host is not None and str(host).strip():
-            try:
-                return resolve_brand(str(host).strip()).platform_name
-            except UnknownPlatformDomainError:
-                pass
-        settings = get_settings()
-        return settings.platform_brands[settings.primary_platform_domain].platform_name
+        return resolve_brand_or_primary(request.headers.get("host")).platform_name
 
     def _trace_id_from_state(self, request: Request) -> str:
         return require_request_trace_id(request)
@@ -366,7 +352,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         )
 
     def _auth_disabled_auto_context_allowed(self, request: Request, rule: RouteRule) -> bool:
-        settings = self._app_state(request).settings
+        settings = require_platform_app_state(request).settings
         auth = settings.auth
         if auth.enabled:
             return False
@@ -386,7 +372,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         trace_id: str,
         context_type: RouteContextType,
     ) -> Context:
-        settings = self._app_state(request).settings
+        settings = require_platform_app_state(request).settings
         auth = settings.auth
         company_id = auth.dev_auto_company_id
         company = await Company.get(company_id)

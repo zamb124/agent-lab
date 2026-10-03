@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from core.logging import get_logger
+from core.types import JsonValue
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,7 @@ class SagaStep:
     name: str
     execute_fn: Callable[[], Awaitable[None]] | None
     compensate_fn: Callable[[], Awaitable[None]] | None
-    data: object | None = None
+    data: JsonValue | None = None
     executed: bool = False
 
 

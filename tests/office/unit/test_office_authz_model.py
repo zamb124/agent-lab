@@ -1,18 +1,18 @@
-"""Unit smoke: office_catalog / office_document OpenFGA model."""
+"""Unit smoke: document_catalog / document_file OpenFGA model."""
 
 from __future__ import annotations
 
 import pytest
 
-from apps.office.authz.tuples import (
-    office_catalog_company_link,
-    office_catalog_company_viewer_tuple,
-    office_catalog_member_tuple,
-    office_catalog_owner_tuple,
-    office_catalog_parent_tuple,
-    office_document_catalog_link,
-    office_document_member_tuple,
-    office_document_owner_tuple,
+from core.documents.authz.tuples import (
+    document_catalog_company_link,
+    document_catalog_company_viewer_tuple,
+    document_catalog_member_tuple,
+    document_catalog_owner_tuple,
+    document_catalog_parent_tuple,
+    document_file_catalog_link,
+    document_file_member_tuple,
+    document_file_owner_tuple,
 )
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
@@ -24,7 +24,7 @@ pytestmark = [pytest.mark.timeout(60)]
 
 
 @pytest.mark.asyncio
-async def test_office_catalog_parent_ttu_and_company_visible(
+async def test_document_catalog_parent_ttu_and_company_visible(
     authz_service: AuthzService,
     unique_id: str,
     frontend_di,
@@ -59,16 +59,16 @@ async def test_office_catalog_parent_ttu_and_company_visible(
 
     await authz_service.write(
         [
-            office_catalog_owner_tuple(parent_id, owner_id),
-            office_catalog_company_link(parent_id, company_id),
-            office_catalog_company_viewer_tuple(parent_id, company_id),
-            office_catalog_owner_tuple(child_id, owner_id),
-            office_catalog_parent_tuple(child_id, parent_id),
+            document_catalog_owner_tuple(parent_id, owner_id),
+            document_catalog_company_link(parent_id, company_id),
+            document_catalog_company_viewer_tuple(parent_id, company_id),
+            document_catalog_owner_tuple(child_id, owner_id),
+            document_catalog_parent_tuple(child_id, parent_id),
         ]
     )
 
-    parent = AuthzObject.office_catalog(parent_id)
-    child = AuthzObject.office_catalog(child_id)
+    parent = AuthzObject.document_catalog(parent_id)
+    child = AuthzObject.document_catalog(child_id)
     assert await authz_service.can_view(parent, user_id=member_id) is True
     assert await authz_service.can_view(child, user_id=member_id) is True
     assert await authz_service.can_view(child, user_id=peer_id) is False
@@ -77,7 +77,7 @@ async def test_office_catalog_parent_ttu_and_company_visible(
 
 
 @pytest.mark.asyncio
-async def test_office_document_inherits_catalog_and_direct_member(
+async def test_document_file_inherits_catalog_and_direct_member(
     authz_service: AuthzService,
     unique_id: str,
 ) -> None:
@@ -89,13 +89,13 @@ async def test_office_document_inherits_catalog_and_direct_member(
 
     await authz_service.write(
         [
-            office_catalog_owner_tuple(catalog_id, owner_id),
-            office_catalog_member_tuple(catalog_id, editor_id, AuthzRelation.EDITOR),
-            office_document_owner_tuple(file_id, owner_id),
-            office_document_catalog_link(file_id, catalog_id),
+            document_catalog_owner_tuple(catalog_id, owner_id),
+            document_catalog_member_tuple(catalog_id, editor_id, AuthzRelation.EDITOR),
+            document_file_owner_tuple(file_id, owner_id),
+            document_file_catalog_link(file_id, catalog_id),
         ]
     )
-    doc = AuthzObject.office_document(file_id)
+    doc = AuthzObject.document_file(file_id)
     assert await authz_service.can_view(doc, user_id=owner_id) is True
     assert await authz_service.can_view(doc, user_id=editor_id) is True
     assert await authz_service.can_edit(doc, user_id=editor_id) is True
@@ -105,7 +105,7 @@ async def test_office_document_inherits_catalog_and_direct_member(
 
 
 @pytest.mark.asyncio
-async def test_office_document_direct_viewer_without_catalog_edit(
+async def test_document_file_direct_viewer_without_catalog_edit(
     authz_service: AuthzService,
     unique_id: str,
 ) -> None:
@@ -116,18 +116,18 @@ async def test_office_document_direct_viewer_without_catalog_edit(
 
     await authz_service.write(
         [
-            office_catalog_owner_tuple(catalog_id, owner_id),
-            office_document_owner_tuple(file_id, owner_id),
-            office_document_catalog_link(file_id, catalog_id),
-            office_document_member_tuple(file_id, viewer_id, AuthzRelation.VIEWER),
+            document_catalog_owner_tuple(catalog_id, owner_id),
+            document_file_owner_tuple(file_id, owner_id),
+            document_file_catalog_link(file_id, catalog_id),
+            document_file_member_tuple(file_id, viewer_id, AuthzRelation.VIEWER),
         ]
     )
-    doc = AuthzObject.office_document(file_id)
+    doc = AuthzObject.document_file(file_id)
     assert await authz_service.can_view(doc, user_id=viewer_id) is True
     assert await authz_service.can_edit(doc, user_id=viewer_id) is False
     assert (
         await authz_service.can_view(
-            AuthzObject.office_catalog(catalog_id), user_id=viewer_id
+            AuthzObject.document_catalog(catalog_id), user_id=viewer_id
         )
         is False
     )

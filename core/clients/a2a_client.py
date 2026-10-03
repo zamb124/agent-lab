@@ -321,11 +321,14 @@ class A2AClient:
     def build_request_headers(self, headers: dict[str, str] | None) -> dict[str, str]:
         """Заголовки платформенного вызова: Bearer/внутренний контекст компании, trace, test scope, A2A-Version."""
         request_headers = dict(headers or {})
+        has_explicit_auth = any(key.lower() == "authorization" for key in request_headers)
         context = get_context()
         if context:
-            if context.auth_token and "Authorization" not in request_headers:
+            if context.auth_token and not has_explicit_auth:
                 request_headers["Authorization"] = f"Bearer {context.auth_token}"
-            if context.active_company is not None:
+            # Подписанный internal-контекст — только при отсутствии чужой авторизации,
+            # иначе peer примет контекстного пользователя за автора запроса.
+            if context.active_company is not None and not has_explicit_auth:
                 request_headers.update(
                     build_internal_context_headers(
                         company_id=context.active_company.company_id,

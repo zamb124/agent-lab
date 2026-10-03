@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import ClassVar, Literal, Self, override
 
-import yaml
 from oxyde import Field as DbField
 from pydantic import ConfigDict, Field, model_validator
 
@@ -15,7 +14,7 @@ from core.context.context import require_active_company
 from core.logging import get_logger
 from core.models.base import StrictBaseModel
 from core.models.platform_model import CompanyScopedModel
-from core.types import require_json_object
+from core.types import parse_yaml_value, require_json_object
 
 logger = get_logger(__name__)
 
@@ -221,8 +220,8 @@ class AgentToolkit(CompanyScopedModel):
         if not registry_path.exists():
             logger.warning("flows.agent_toolkits", registry_path=registry_path)
             return 0
-        with open(registry_path, encoding="utf-8") as registry_file:
-            registry_raw = require_json_object(yaml.safe_load(registry_file) or {}, "registry.yaml")
+        loaded = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
+        registry_raw = {} if loaded is None else require_json_object(loaded, "registry.yaml")
         bundle_registry = FlowBundleRegistry.model_validate(registry_raw)
         loaded_count = 0
         for entry in bundle_registry.agent_toolkits:

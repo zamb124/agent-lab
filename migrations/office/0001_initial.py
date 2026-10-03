@@ -1,6 +1,6 @@
 """Auto-generated migration.
 
-Created: 2026-09-22 21:03:47
+Created: 2026-09-25 16:17:17
 """
 
 depends_on = None
@@ -259,10 +259,10 @@ def upgrade(ctx):
         ],
     )
     ctx.create_table(
-        "office_document_catalogs",
+        "document_links",
         fields=[
             {
-                'name': 'catalog_id',
+                'name': 'link_id',
                 'column_type': {
                     'kind': 'string',
                     'length': 64
@@ -294,10 +294,10 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
-                'name': 'title',
+                'name': 'target_kind',
                 'column_type': {
                     'kind': 'string',
-                    'length': 500
+                    'length': 16
                 },
                 'db_type': None,
                 'nullable': False,
@@ -305,158 +305,20 @@ def upgrade(ctx):
                 'unique': False,
                 'default': None,
                 'auto_increment': False,
-                'max_length': 500,
+                'max_length': 16,
                 'max_digits': None,
                 'decimal_places': None
             },
             {
-                'name': 'owner_user_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 100
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 100,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'created_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'namespace',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': "'default'",
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'parent_catalog_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'rag_index_enabled',
-                'column_type': {
-                    'kind': 'boolean'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': 'FALSE',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'rag_index_include_subcatalogs',
-                'column_type': {
-                    'kind': 'boolean'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': 'FALSE',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'rag_index_search_options',
-                'column_type': {
-                    'kind': 'json_binary'
-                },
-                'db_type': 'JSONB',
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'rag_index_updated_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_enabled',
-                'column_type': {
-                    'kind': 'boolean'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': 'FALSE',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_token_hash',
+                'name': 'target_id',
                 'column_type': {
                     'kind': 'string',
                     'length': 128
                 },
                 'db_type': None,
-                'nullable': True,
+                'nullable': False,
                 'primary_key': False,
-                'unique': True,
+                'unique': False,
                 'default': None,
                 'auto_increment': False,
                 'max_length': 128,
@@ -464,7 +326,38 @@ def upgrade(ctx):
                 'decimal_places': None
             },
             {
-                'name': 'link_permission',
+                'name': 'enabled',
+                'column_type': {
+                    'kind': 'boolean'
+                },
+                'db_type': None,
+                'nullable': False,
+                'primary_key': False,
+                'unique': False,
+                'default': 'FALSE',
+                'auto_increment': False,
+                'max_length': None,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'token_hash',
+                'column_type': {
+                    'kind': 'string',
+                    'length': 128
+                },
+                'db_type': None,
+                'nullable': True,
+                'primary_key': False,
+                'unique': False,
+                'default': None,
+                'auto_increment': False,
+                'max_length': 128,
+                'max_digits': None,
+                'decimal_places': None
+            },
+            {
+                'name': 'permission',
                 'column_type': {
                     'kind': 'string',
                     'length': 16
@@ -476,143 +369,6 @@ def upgrade(ctx):
                 'default': "'viewer'",
                 'auto_increment': False,
                 'max_length': 16,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_updated_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            }
-        ],
-        indexes=[
-            {
-                'name': 'office_document_catalogs_company_id_namespace_idx',
-                'fields': [
-                    'company_id',
-                    'namespace'
-                ],
-                'unique': False,
-                'method': None
-            },
-            {
-                'name': 'office_document_catalogs_company_id_namespace_parent_catalog_id_idx',
-                'fields': [
-                    'company_id',
-                    'namespace',
-                    'parent_catalog_id'
-                ],
-                'unique': False,
-                'method': None
-            },
-            {
-                'name': 'office_document_catalogs_company_id_idx',
-                'fields': [
-                    'company_id'
-                ],
-                'unique': False,
-                'method': None
-            },
-            {
-                'name': 'office_document_catalogs_parent_catalog_id_idx',
-                'fields': [
-                    'parent_catalog_id'
-                ],
-                'unique': False,
-                'method': None
-            }
-        ],
-    )
-    ctx.create_table(
-        "office_document_bindings",
-        fields=[
-            {
-                'name': 'file_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 128
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': True,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 128,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'company_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 100
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 100,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'catalog_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'file_category',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 32
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 32,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'title',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 500
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 500,
                 'max_digits': None,
                 'decimal_places': None
             },
@@ -661,186 +417,31 @@ def upgrade(ctx):
                 'max_length': None,
                 'max_digits': None,
                 'decimal_places': None
-            },
-            {
-                'name': 'namespace',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 64
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': "'default'",
-                'auto_increment': False,
-                'max_length': 64,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'onlyoffice_document_type',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 16
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 16,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'deleted_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'deleted_by_user_id',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 100
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 100,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_enabled',
-                'column_type': {
-                    'kind': 'boolean'
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': 'FALSE',
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_token_hash',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 128
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': 128,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_permission',
-                'column_type': {
-                    'kind': 'string',
-                    'length': 16
-                },
-                'db_type': None,
-                'nullable': False,
-                'primary_key': False,
-                'unique': False,
-                'default': "'viewer'",
-                'auto_increment': False,
-                'max_length': 16,
-                'max_digits': None,
-                'decimal_places': None
-            },
-            {
-                'name': 'link_updated_at',
-                'column_type': {
-                    'kind': 'date_time'
-                },
-                'db_type': None,
-                'nullable': True,
-                'primary_key': False,
-                'unique': False,
-                'default': None,
-                'auto_increment': False,
-                'max_length': None,
-                'max_digits': None,
-                'decimal_places': None
             }
         ],
         indexes=[
             {
-                'name': 'office_document_bindings_company_id_namespace_created_at_idx',
+                'name': 'document_links_target_kind_target_id_idx',
                 'fields': [
-                    'company_id',
-                    'namespace',
-                    'created_at'
+                    'target_kind',
+                    'target_id'
                 ],
-                'unique': False,
+                'unique': True,
                 'method': None
             },
             {
-                'name': 'office_document_bindings_company_id_namespace_deleted_at_idx',
+                'name': 'document_links_token_hash_idx',
                 'fields': [
-                    'company_id',
-                    'namespace',
-                    'deleted_at'
-                ],
-                'unique': False,
-                'method': None
-            },
-            {
-                'name': 'office_document_bindings_company_id_namespace_file_id_idx',
-                'fields': [
-                    'company_id',
-                    'namespace',
-                    'file_id'
+                    'token_hash'
                 ],
                 'unique': True,
                 'method': None,
-                'where': 'deleted_at IS NULL'
+                'where': 'token_hash IS NOT NULL'
             },
             {
-                'name': 'office_document_bindings_link_token_hash_idx',
-                'fields': [
-                    'link_token_hash'
-                ],
-                'unique': True,
-                'method': None,
-                'where': 'link_token_hash IS NOT NULL'
-            },
-            {
-                'name': 'office_document_bindings_company_id_idx',
+                'name': 'document_links_company_id_idx',
                 'fields': [
                     'company_id'
-                ],
-                'unique': False,
-                'method': None
-            },
-            {
-                'name': 'office_document_bindings_catalog_id_idx',
-                'fields': [
-                    'catalog_id'
                 ],
                 'unique': False,
                 'method': None
@@ -851,7 +452,6 @@ def upgrade(ctx):
 
 def downgrade(ctx):
     """Revert migration."""
-    ctx.drop_table("office_document_bindings")
-    ctx.drop_table("office_document_catalogs")
+    ctx.drop_table("document_links")
     ctx.drop_table("office_document_events")
     ctx.drop_table("office_document_revisions")

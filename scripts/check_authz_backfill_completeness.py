@@ -23,10 +23,12 @@ _FGA_ONLY_NO_SQL_SOURCE: frozenset[str] = frozenset(
         # Mail managers/members beyond owner+company
         "mailbox_binding_member_tuple",
         "mailbox_binding_manager_tuple",
-        # Office catalog members / company_visible (structural owner is SQL)
-        "office_catalog_member_tuple",
-        "office_catalog_company_viewer_tuple",
-        "office_document_member_tuple",
+        # Document members / company_visible / source (structural owner is SQL)
+        "document_catalog_member_tuple",
+        "document_catalog_company_viewer_tuple",
+        "document_catalog_source_tuple",
+        "document_file_member_tuple",
+        "document_file_source_tuple",
         # Worktracker queue members
         "work_queue_member_tuple",
         # Flows: owner may be "system" for seeds; group/company viewers are FGA grants
@@ -51,11 +53,21 @@ def _tuple_modules() -> list[Path]:
     return sorted({p.resolve() for p in paths if p.is_file()})
 
 
+_EXTRA_BACKFILL: dict[str, str] = {
+    "core/documents/authz/tuples.py": "apps/office/authz/backfill.py",
+}
+
+
 def _backfill_text_for(tuples_path: Path) -> str:
+    parts: list[str] = []
     sibling = tuples_path.with_name("backfill.py")
     if sibling.is_file():
-        return sibling.read_text(encoding="utf-8")
-    return ""
+        parts.append(sibling.read_text(encoding="utf-8"))
+    extra = _EXTRA_BACKFILL.get(tuples_path.relative_to(_ROOT).as_posix())
+    if extra is not None:
+        extra_path = _ROOT / extra
+        parts.append(extra_path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
 
 
 def main() -> int:

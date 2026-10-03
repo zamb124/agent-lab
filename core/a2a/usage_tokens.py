@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from core.types import JsonValue
 
-def coerce_usage_token_count(raw: object, field: str) -> int:
+
+def coerce_usage_token_count(raw: JsonValue, field: str) -> int:
     """Целые токены после Struct JSON часто приходят как float (7.0)."""
     if isinstance(raw, bool):
         raise ValueError(f"{field} must be an integer")

@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import Final
 
-from apps.wiki.models.domain import WikiPage, WikiVisibility
+from apps.wiki.models.domain import WikiVisibility
+from apps.wiki.models.page import WikiPage
 from apps.wiki.services.rag_metadata import build_wiki_chunk_metadata
 from core.clients.rag_client import RagClient
 from core.clients.service_client import ServiceClientError

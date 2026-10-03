@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Annotated, ClassVar, Literal, Self, cast, override
+from typing import Annotated, ClassVar, Literal, Self, override
 
 from oxyde import Field as DbField
 from oxyde import Index, Query, execute_raw
@@ -47,7 +47,7 @@ _PAGE = 1000
 Permission = str | list[str] | None
 
 
-def _parse_flow_config_int(value: object, field_name: str) -> int:
+def _parse_flow_config_int(value: JsonValue, field_name: str) -> int:
     if isinstance(value, bool):
         raise ValueError(f"{field_name}: expected integer, got bool")
     if isinstance(value, int):
@@ -88,7 +88,9 @@ class FlowVariableConfig(VariableEntry):
     """
 
 
-def normalize_flow_variables_map(raw: Mapping[str, object]) -> dict[str, FlowVariableConfig]:
+def normalize_flow_variables_map(
+    raw: Mapping[str, JsonValue | FlowVariableConfig],
+) -> dict[str, FlowVariableConfig]:
     """Нормализует scalar/wrapped JSON в dict[str, FlowVariableConfig]."""
     normalized = normalize_variables_map(raw)
     result: dict[str, FlowVariableConfig] = {}
@@ -100,18 +102,18 @@ def normalize_flow_variables_map(raw: Mapping[str, object]) -> dict[str, FlowVar
     return result
 
 
-def normalize_flow_variables_payload(data: object) -> object:
+def normalize_flow_variables_payload(
+    data: JsonValue,
+) -> JsonValue | dict[str, JsonValue | dict[str, FlowVariableConfig]]:
     """Нормализует scalar JSON variables в строгий FlowVariableConfig payload."""
     if not isinstance(data, dict):
         return data
-    raw = cast(Mapping[str, object], data)
-    variables = raw.get("variables")
+    variables = data.get("variables")
     if not isinstance(variables, dict):
-        return dict(raw)
-
-    out = dict(raw)
-    out["variables"] = normalize_flow_variables_map(cast(Mapping[str, object], variables))
-    return out
+        return data
+    payload: dict[str, JsonValue | dict[str, FlowVariableConfig]] = dict(data)
+    payload["variables"] = normalize_flow_variables_map(variables)
+    return payload
 
 
 EdgeConditionOperator = Literal["==", "!=", ">", "<", ">=", "<=", "in"]
@@ -251,7 +253,9 @@ class BranchConfig(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_variables(cls, data: object) -> object:
+    def _normalize_variables(
+        cls, data: JsonValue
+    ) -> JsonValue | dict[str, JsonValue | dict[str, FlowVariableConfig]]:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
         return normalize_flow_variables_payload(data)
 
@@ -397,7 +401,7 @@ class FlowConfig(CompanyScopedModel):
 
     @field_validator("timeout", mode="before")
     @classmethod
-    def validate_flow_timeout_seconds(cls, v: object) -> int | None:
+    def validate_flow_timeout_seconds(cls, v: JsonValue) -> int | None:
         if v is None:
             return None
         iv = _parse_flow_config_int(v, "timeout")
@@ -428,7 +432,9 @@ class FlowConfig(CompanyScopedModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_variables(cls, data: object) -> object:
+    def _normalize_variables(
+        cls, data: JsonValue
+    ) -> JsonValue | dict[str, JsonValue | dict[str, FlowVariableConfig]]:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
         return normalize_flow_variables_payload(data)
 

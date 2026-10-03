@@ -16,7 +16,7 @@ from pydantic import Field, model_validator
 from core.files.models import FileRecord
 from core.files.urls import files_download_url
 from core.models import StrictBaseModel
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 DOWNLOAD_FILE_ID_RE = re.compile(r"/files/download/([^/?#]+)")
 
@@ -60,9 +60,12 @@ class FileRef(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def accept_stored_record(cls, value: object) -> object:
+    def accept_stored_record(cls, value: JsonValue | FileRecord | FileRef) -> JsonValue | FileRef:
         if isinstance(value, FileRecord):
-            return stored_file_ref(value).model_dump()
+            return require_json_object(
+                stored_file_ref(value).model_dump(mode="json"),
+                "FileRef",
+            )
         return value
 
     @model_validator(mode="after")

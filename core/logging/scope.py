@@ -44,6 +44,7 @@ from core.logging.context import (
     get_log_context,
     restore_log_context,
 )
+from core.types import JsonObject, JsonValue
 
 LogScope = Literal["system", "request"]
 
@@ -85,7 +86,7 @@ class ScopeToken:
 
     scope_token: Token[LogScope]
     auth_token: Token[bool]
-    snapshot: dict[str, object]
+    snapshot: JsonObject
 
 
 def get_log_scope() -> LogScope:
@@ -104,7 +105,7 @@ def enter_request_scope(
     user_id: str | None = None,
     company_id: str | None = None,
     requires_user: bool = False,
-    **extra: object,
+    **extra: JsonValue,
 ) -> ScopeToken:
     """
     Перевести логирование в request-скоуп и забиндить обязательные поля.
@@ -141,7 +142,7 @@ def enter_request_scope(
 
     snapshot = get_log_context()
 
-    fields: dict[str, object] = {
+    fields: JsonObject = {
         LOG_REQUEST_ID: request_id,
         LOG_TRACE_ID: trace_id,
         LOG_SERVICE_NAME: service_name,
@@ -187,7 +188,7 @@ class RequestLogScope:
         user_id: str | None = None,
         company_id: str | None = None,
         requires_user: bool = False,
-        **extra: object,
+        **extra: JsonValue,
     ) -> None:
         self._request_id: str = request_id
         self._trace_id: str = trace_id
@@ -195,7 +196,7 @@ class RequestLogScope:
         self._user_id: str | None = user_id
         self._company_id: str | None = company_id
         self._requires_user: bool = requires_user
-        self._extra: dict[str, object] = extra
+        self._extra: JsonObject = extra
         self._token: ScopeToken | None = None
 
     def __enter__(self) -> "RequestLogScope":
@@ -239,11 +240,11 @@ class SystemLogScope:
     в тех местах, где сознательно нет request_id/trace_id.
     """
 
-    def __init__(self, **extra: object) -> None:
-        self._extra: dict[str, object] = {k: v for k, v in extra.items() if v not in (None, "")}
+    def __init__(self, **extra: JsonValue) -> None:
+        self._extra: JsonObject = {k: v for k, v in extra.items() if v not in (None, "")}
         self._scope_token: Token[LogScope] | None = None
         self._auth_token: Token[bool] | None = None
-        self._snapshot: dict[str, object] = {}
+        self._snapshot: JsonObject = {}
 
     def __enter__(self) -> "SystemLogScope":
         self._snapshot = get_log_context()

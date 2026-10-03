@@ -3,7 +3,7 @@
 
 Включает:
 - base.py - StrictBaseModel
-- identity_models.py - User, Company, AuthSession
+- identity_models/ - User, Company, AuthSession, Namespace
 - i18n_models.py - Language, Translation
 - context_models.py - Context
 """

@@ -62,11 +62,11 @@ class _RedisPubSubMessage(TypedDict):
 
 
 class _RedisPipeline(Protocol):
-    def ttl(self, key: str) -> object: ...
+    def ttl(self, key: str) -> None: ...
 
-    def get(self, key: str) -> object: ...
+    def get(self, key: str) -> None: ...
 
-    def execute(self) -> Awaitable[list[object]]: ...
+    def execute(self) -> Awaitable[list[int | str | None]]: ...
 
 
 class _RedisPipelineFactory(Protocol):
@@ -88,6 +88,17 @@ class _RedisSdkPubSub:
     async def aclose(self) -> None:
         command = type_cast(Callable[[], Awaitable[None]], self._raw.aclose)
         await command()
+
+    async def close_subscription(self, channel: str) -> None:
+        try:
+            await self.unsubscribe(channel)
+            await self.aclose()
+        except (RedisError, OSError, asyncio.TimeoutError) as exc:
+            logger.info(
+                "redis.subscribe_close_failed",
+                channel=channel,
+                error=str(exc),
+            )
 
     async def get_message(
         self,
@@ -864,8 +875,4 @@ class RedisClient:
                     else:
                         break
         finally:
-            try:
-                await pubsub.unsubscribe(channel)
-                await pubsub.aclose()
-            except (RedisError, OSError, asyncio.TimeoutError):
-                pass
+            await pubsub.close_subscription(channel)

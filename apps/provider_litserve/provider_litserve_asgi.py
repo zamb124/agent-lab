@@ -14,8 +14,8 @@ from __future__ import annotations
 import time
 from typing import Annotated
 
-from fastapi import Body, FastAPI
-from fastapi.responses import PlainTextResponse
+from fastapi import Body, FastAPI, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from apps.provider_litserve.embedding.api import EmbeddingLitAPI
 from apps.provider_litserve.openai_server_contracts import (
@@ -31,6 +31,7 @@ from apps.provider_litserve.provider_litserve_http_schemas import (
 from apps.provider_litserve.reranker.api import RerankerLitAPI
 from apps.provider_litserve.runtime_models import runtime_api_model_ids
 from core.config.models import ProviderLitserveInfraConfig
+from core.websocket import WsCommandError, command_failure_payload, ws_command_error_status
 
 
 def create_provider_litserve_asgi_app(
@@ -150,5 +151,16 @@ def create_provider_litserve_asgi_app(
         summary="Реранк по запросу и пассажам",
         response_description="``scores[i]`` соответствует ``passages[i]``.",
     )(post_v1_rerank)
+
+    @app.exception_handler(WsCommandError)
+    async def _ws_command_error_handler(
+        _request: Request, exc: WsCommandError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=ws_command_error_status(exc),
+            content=command_failure_payload(exc),
+        )
+
+    _ = _ws_command_error_handler
 
     return app

@@ -49,12 +49,35 @@ _MIME_TO_DTYPE_AND_EXT: dict[str, tuple[str, str]] = {
 }
 
 
+def _onlyoffice_type_from_filename(filename: str) -> tuple[str, str] | None:
+    ext = Path(filename).suffix.lower().lstrip(".")
+    if ext in _ONLYOFFICE_WORD_EXTS:
+        return "word", ext
+    if ext in _ONLYOFFICE_CELL_EXTS:
+        return "cell", ext
+    if ext in _ONLYOFFICE_SLIDE_EXTS:
+        return "slide", ext
+    return None
+
+
+def _mime_onlyoffice_type(content_type: str | None) -> tuple[str, str] | None:
+    header = "" if content_type is None else content_type
+    ct = header.split(";")[0].strip().lower()
+    return _MIME_TO_DTYPE_AND_EXT.get(ct)
+
+
+def _upload_filename(filename: str) -> str:
+    stripped = filename.strip()
+    if stripped == "":
+        return "document"
+    return stripped
+
+
 def supports_onlyoffice_viewer(filename: str, content_type: str | None) -> bool:
-    try:
-        _ = onlyoffice_document_type_for_upload(filename, content_type)
+    raw = _upload_filename(filename)
+    if _onlyoffice_type_from_filename(raw) is not None:
         return True
-    except ValueError:
-        return False
+    return _mime_onlyoffice_type(content_type) is not None
 
 
 def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
@@ -62,15 +85,12 @@ def onlyoffice_document_type_and_file_type(filename: str) -> tuple[str, str]:
     Возвращает:
         (documentType, fileType) — например ("word", "docx").
     """
+    mapped = _onlyoffice_type_from_filename(filename)
+    if mapped is not None:
+        return mapped
     ext = Path(filename).suffix.lower().lstrip(".")
     if not ext:
         raise ValueError("File has no extension")
-    if ext in _ONLYOFFICE_WORD_EXTS:
-        return "word", ext
-    if ext in _ONLYOFFICE_CELL_EXTS:
-        return "cell", ext
-    if ext in _ONLYOFFICE_SLIDE_EXTS:
-        return "slide", ext
     raise ValueError(
         f"Unsupported extension for OnlyOffice: .{ext} "
         + "(expected doc/docx/pdf/xls/xlsx/ppt/pptx and odt/ods/odp/rtf/txt/csv)"
@@ -81,18 +101,19 @@ def onlyoffice_document_type_for_upload(filename: str, content_type: str | None)
     """
     Тип привязки для POST /documents: сначала по имени файла, иначе по MIME (браузеры часто шлют «blob» без расширения).
     """
-    raw = (filename or "").strip() or "document"
-    try:
-        return onlyoffice_document_type_and_file_type(raw)
-    except ValueError:
-        pass
-    ct = (content_type or "").split(";")[0].strip().lower()
-    mapped = _MIME_TO_DTYPE_AND_EXT.get(ct)
-    if mapped is not None:
-        return mapped
+    raw = _upload_filename(filename)
+    from_name = _onlyoffice_type_from_filename(raw)
+    if from_name is not None:
+        return from_name
+    from_mime = _mime_onlyoffice_type(content_type)
+    if from_mime is not None:
+        return from_mime
+    header = "" if content_type is None else content_type
+    ct = header.split(";")[0].strip().lower()
+    mime_label = ct if ct != "" else "none"
     raise ValueError(
         f"Unsupported file type: could not determine from name «{raw}» "
-        + f"and MIME «{ct or 'none'}»"
+        + f"and MIME «{mime_label}»"
     )
 
 
@@ -104,11 +125,11 @@ def resolve_onlyoffice_document_type_for_editor(
     Тип редактора в JWT для OnlyOffice: должен совпадать с document.fileType.
     Иначе DS открывает неверный модуль (например Word для .xlsx), если в БД устарел document_type.
     """
-    try:
-        dtype, _ = onlyoffice_document_type_and_file_type(original_name)
-        return dtype
-    except ValueError:
+    mapped = _onlyoffice_type_from_filename(original_name)
+    if mapped is None:
         return stored_document_type
+    document_type, _file_type = mapped
+    return document_type
 
 
 def onlyoffice_file_type_for_binding(document_type: str, original_name: str) -> str:

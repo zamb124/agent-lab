@@ -6,7 +6,7 @@ from typing import Annotated
 from urllib.parse import quote as url_quote
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from apps.agent.desktop.build_contract import VALID_PLATFORMS
@@ -31,8 +31,9 @@ from core.app_state import get_request_token_data
 from core.config import get_settings
 from core.context import require_context
 from core.logging import get_logger
-from core.platform_brand.resolver import UnknownPlatformDomainError, resolve_brand
+from core.platform_brand.resolver import resolve_brand_or_primary
 from core.utils.tokens import TokenService
+from core.websocket import WsCommandError, raise_not_found
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -43,9 +44,10 @@ DEVICE_TOKEN_EXPIRES = 30 * 86400
 @router.get("/download/{platform}", tags=["agent", "public"])
 async def download_agent(platform: str, request: Request) -> RedirectResponse:
     if platform not in VALID_PLATFORMS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
+            error_code="ws_invalid_payload",
         )
     settings = get_settings().agent
     brand_host = request.headers.get("host")
@@ -67,12 +69,13 @@ async def download_agent(platform: str, request: Request) -> RedirectResponse:
             github_repo=settings.releases.github_repo,
             status_code=exc.response.status_code,
         )
-        raise HTTPException(
-            status_code=404,
-            detail=(
+        raise WsCommandError(
+            "not_found",
+            (
                 f"GitHub release is unavailable for {settings.releases.github_owner}/"
                 f"{settings.releases.github_repo}: HTTP {exc.response.status_code}"
             ),
+            error_code="not_found",
         ) from exc
     except (FileNotFoundError, ValueError) as exc:
         logger.warning(
@@ -80,19 +83,20 @@ async def download_agent(platform: str, request: Request) -> RedirectResponse:
             platform=platform,
             detail=str(exc),
         )
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise_not_found(exc)
     return RedirectResponse(url=url)
 
 
 @router.get("/releases/artifact/{platform}", tags=["agent", "public"])
 async def serve_local_release_artifact(platform: str) -> FileResponse:
     if platform not in VALID_PLATFORMS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"Unsupported platform: {platform!r}. Allowed: {sorted(VALID_PLATFORMS)}",
+            error_code="ws_invalid_payload",
         )
     if not use_local_release_artifact():
-        raise HTTPException(status_code=404, detail="Local release artifacts disabled")
+        raise WsCommandError("not_found", "Local release artifacts disabled", error_code="not_found")
     artifact_path = resolve_local_release_artifact_path(platform)
     return FileResponse(
         path=str(artifact_path),
@@ -116,15 +120,7 @@ async def agent_discover(
 
 
 def _resolve_agent_page_brand(request: Request) -> tuple[str, str]:
-    host = request.headers.get("host")
-    if host is not None and str(host).strip():
-        try:
-            brand = resolve_brand(str(host).strip())
-            return brand.agent_product_name, brand.platform_name
-        except UnknownPlatformDomainError:
-            pass
-    settings = get_settings()
-    brand = settings.platform_brands[settings.primary_platform_domain]
+    brand = resolve_brand_or_primary(request.headers.get("host"))
     return brand.agent_product_name, brand.platform_name
 
 
@@ -142,7 +138,7 @@ def _render_login_page(
 
     if already_logged_in:
         if not session_token:
-            raise HTTPException(status_code=500, detail="session token is required for agent login redirect")
+            raise WsCommandError("internal", "session token is required for agent login redirect", error_code="internal")
         redirect_escaped_token = url_quote(session_token, safe="")
         body = f"""
         <div class="card">
@@ -244,7 +240,7 @@ async def issue_device_token(
     user = context.user
     company = context.active_company
     if company is None:
-        raise HTTPException(status_code=400, detail="Company is not selected")
+        raise WsCommandError("ws_invalid_payload", "Company is not selected", error_code="ws_invalid_payload")
 
     token_service = TokenService()
     token = token_service.create_token(
@@ -268,7 +264,7 @@ async def register_agent_device_with_auth(
     context = require_context()
     company = context.active_company
     if company is None:
-        raise HTTPException(status_code=400, detail="Company is not selected")
+        raise WsCommandError("ws_invalid_payload", "Company is not selected", error_code="ws_invalid_payload")
     return await register_device_with_auth(
         di,
         body,

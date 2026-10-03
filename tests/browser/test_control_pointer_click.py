@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from typing import Iterator
 
 import pytest
-from fastapi import HTTPException
 
 from apps.browser.api import control
 from core.authz.models import AuthzObject
@@ -14,6 +13,7 @@ from core.clients.browser.control_types import (
     ControlPointerClickResponse,
     ControlPointerTextBody,
 )
+from core.websocket import WsCommandError
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -153,12 +153,12 @@ async def test_control_click_times_out_during_human_takeover(monkeypatch: pytest
     di = _ControlCall(_HumanTakeoverLeaseManager())
     monkeypatch.setattr(control, "AGENT_CONTROL_TAKEOVER_WAIT_SEC", 0.0)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(WsCommandError) as exc_info:
         await control.control_click(
             "sess-1",
             control.ControlClickBody(ref="@e1"),
             di,  # pyright: ignore[reportArgumentType]
         )
 
-    assert exc_info.value.status_code == 423
-    assert "under human control" in str(exc_info.value.detail)
+    assert exc_info.value.code == "locked"
+    assert "under human control" in exc_info.value.detail

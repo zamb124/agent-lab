@@ -30,32 +30,12 @@ SKIP_DIR_NAMES: frozenset[str] = frozenset(
         "dist",
         "build",
         ".venv",
-        "versions",
     }
 )
 
 ALLOWED_SUFFIXES: frozenset[str] = frozenset(
     {".py", ".js", ".mdc", ".md", ".json", ".sh", ".yml", ".yaml"}
 )
-
-# Historical Alembic revisions may still mention binding_id.
-SKIP_PATH_PREFIXES: tuple[Path, ...] = (
-    REPO_ROOT / "migrations" / "office" / "versions",
-)
-
-
-def _is_skipped(path: Path) -> bool:
-    resolved = path.resolve()
-    for prefix in SKIP_PATH_PREFIXES:
-        try:
-            resolved.relative_to(prefix.resolve())
-            return True
-        except ValueError:
-            continue
-    if path.name == "check_office_file_id_canon.py":
-        return True
-    return False
-
 
 def main() -> int:
     errors: list[str] = []
@@ -68,8 +48,6 @@ def main() -> int:
             if any(part in SKIP_DIR_NAMES for part in path.parts):
                 continue
             if path.suffix not in ALLOWED_SUFFIXES:
-                continue
-            if _is_skipped(path):
                 continue
             try:
                 text = path.read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-"""Office BFF: DataTable FileRecord create/page/mutate via MinIO."""
+"""Office BFF: DataTable FileRecord create/page/mutate via S3."""
 
 from __future__ import annotations
 

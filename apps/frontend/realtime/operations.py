@@ -6,9 +6,9 @@ from pydantic import Field
 
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.frontend.di import Di
-from apps.office.db.models import OfficeDocumentBinding
 from core.ai.models import AIModelRecord
 from core.ai.providers import PROVIDER_LITSERVE
+from core.files.models import FileRecord
 from core.models import StrictBaseModel
 from core.models.identity_models import SYSTEM_COMPANY_ID, User
 from core.rag.constants import RAG_IN_PROCESS_PROVIDER_ID
@@ -34,7 +34,7 @@ async def op_dashboard_stats(
     scope = require_company()
     flow_index = await FlowConfig.list_index()
     rag_namespaces = await get_rag_provider(RAG_IN_PROCESS_PROVIDER_ID).list_namespaces()
-    documents_total = await OfficeDocumentBinding.count_alive_bindings(scope.company_id)
+    documents_total = await FileRecord.count_alive(scope.company_id)
     litserve_total: int | None = None
     if scope.company_id == SYSTEM_COMPANY_ID:
         litserve_total = len(await AIModelRecord.list_by_provider(PROVIDER_LITSERVE))

@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import json
 import secrets
-from collections.abc import Mapping
 from dataclasses import asdict
-from typing import cast
 from urllib.parse import urlparse
+
+from pydantic import TypeAdapter, ValidationError
 
 from apps.browser.models.types import (
     BrowserContextHandle,
@@ -24,7 +24,11 @@ from apps.browser.models.types import (
     PageMode,
     SessionStateBlob,
 )
+from apps.browser.services.page_evaluate import evaluate_json_value
 from core.clients.redis_client import RedisClient, RedisOperationError
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
+
+_STORAGE_STATE_ADAPTER: TypeAdapter[BrowserStorageState] = TypeAdapter(BrowserStorageState)
 
 _KEY_PREFIX = "browser:session_state:"
 
@@ -65,22 +69,22 @@ class SessionStateStore:
 
     @staticmethod
     def _deserialize(raw: str) -> SessionStateBlob:
-        data = cast(Mapping[str, object], json.loads(raw))
+        data = parse_json_object(raw, "session state")
         return SessionStateBlob(
-            shared_storage_key=cast(str, data["shared_storage_key"]),
-            storage_state=cast(BrowserStorageState, data["storage_state"]),
-            session_storage_by_origin=cast(dict[str, dict[str, str]], data["session_storage_by_origin"]),
-            current_url=cast(str, data["current_url"]),
-            proxy_policy=cast(str, data["proxy_policy"]),
-            anti_bot_tier=cast(str, data["anti_bot_tier"]),
-            locale=cast(str, data["locale"]),
-            timezone_id=cast(str, data["timezone_id"]),
-            user_agent=cast("str | None", data["user_agent"]),
-            page_mode=cast(PageMode, data["page_mode"]),
-            permissions_fingerprint=cast(str, data["permissions_fingerprint"]),
-            last_snapshot_ref=cast("str | None", data["last_snapshot_ref"]),
-            pause_ttl_soft_sec=cast("int | None", data["pause_ttl_soft_sec"]),
-            pause_ttl_hard_sec=cast("int | None", data["pause_ttl_hard_sec"]),
+            shared_storage_key=_require_str(data, "shared_storage_key"),
+            storage_state=_storage_state(data["storage_state"]),
+            session_storage_by_origin=_session_storage_by_origin(data["session_storage_by_origin"]),
+            current_url=_require_str(data, "current_url"),
+            proxy_policy=_require_str(data, "proxy_policy"),
+            anti_bot_tier=_require_str(data, "anti_bot_tier"),
+            locale=_require_str(data, "locale"),
+            timezone_id=_require_str(data, "timezone_id"),
+            user_agent=_optional_str(data, "user_agent"),
+            page_mode=_page_mode(data["page_mode"]),
+            permissions_fingerprint=_require_str(data, "permissions_fingerprint"),
+            last_snapshot_ref=_optional_str(data, "last_snapshot_ref"),
+            pause_ttl_soft_sec=_optional_int(data, "pause_ttl_soft_sec"),
+            pause_ttl_hard_sec=_optional_int(data, "pause_ttl_hard_sec"),
         )
 
     async def put(self, blob: SessionStateBlob) -> str:
@@ -114,9 +118,9 @@ class SessionStateStore:
         _ = origin_from_url(current_url)
         storage_state = await context.storage_state()
         origin = origin_from_url(current_url)
-        raw_session_storage = cast(
-            object,
-            await page.evaluate(
+        dumped = require_json_object(
+            await evaluate_json_value(
+                page,
                 """() => {
                 const out = {};
                 for (let i = 0; i < sessionStorage.length; i++) {
@@ -127,15 +131,14 @@ class SessionStateStore:
                     }
                 }
                 return out;
-            }"""
+            }""",
+                "sessionStorage",
             ),
+            "sessionStorage",
         )
-        if not isinstance(raw_session_storage, dict):
-            raise ValueError("sessionStorage dump must be a JSON object")
-        raw_session_storage_map = cast(Mapping[object, object], raw_session_storage)
         session_storage_dump: dict[str, str] = {}
-        for key, value in raw_session_storage_map.items():
-            if not isinstance(key, str) or not isinstance(value, str):
+        for key, value in dumped.items():
+            if not isinstance(value, str):
                 raise ValueError("sessionStorage dump must contain only string -> string")
             session_storage_dump[key] = value
         by_origin: dict[str, dict[str, str]] = {origin: dict(session_storage_dump)}
@@ -171,6 +174,64 @@ class SessionStateStore:
         if not blob.current_url:
             raise RuntimeError("SessionStateBlob.current_url must be a non-empty string")
         return blob.current_url
+
+
+def _require_str(data: JsonObject, field_name: str) -> str:
+    value = data[field_name]
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    return value
+
+
+def _optional_str(data: JsonObject, field_name: str) -> str | None:
+    value = data[field_name]
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string or null")
+    return value
+
+
+def _optional_int(data: JsonObject, field_name: str) -> int | None:
+    value = data[field_name]
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field_name} must be an int or null")
+    return value
+
+
+def _page_mode(value: JsonValue) -> PageMode:
+    if value == "interactive":
+        return "interactive"
+    if value == "crawl":
+        return "crawl"
+    if value == "lite":
+        return "lite"
+    raise ValueError(f"page_mode is invalid: {value!r}")
+
+
+def _storage_state(value: JsonValue) -> BrowserStorageState:
+    try:
+        return _STORAGE_STATE_ADAPTER.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError("storage_state must be a Playwright storage state") from exc
+
+
+def _session_storage_by_origin(value: JsonValue) -> dict[str, dict[str, str]]:
+    if not isinstance(value, dict):
+        raise ValueError("session_storage_by_origin must be a JSON object")
+    by_origin: dict[str, dict[str, str]] = {}
+    for origin, entries in value.items():
+        if not isinstance(entries, dict):
+            raise ValueError("session_storage_by_origin values must be JSON objects")
+        bucket: dict[str, str] = {}
+        for key, item in entries.items():
+            if not isinstance(item, str):
+                raise ValueError("sessionStorage values must be strings")
+            bucket[key] = item
+        by_origin[origin] = bucket
+    return by_origin
 
 
 def origin_from_url(url: str) -> str:

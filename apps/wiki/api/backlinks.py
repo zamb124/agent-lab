@@ -7,7 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from apps.wiki.di import Di
-from apps.wiki.models.domain import WikiBacklink, WikiLinkTargetKind
+from apps.wiki.models.domain import (
+    WikiBacklink,
+    WikiLinkTargetKind,
+)
 from apps.wiki.realtime.operations import WikiBacklinksPayload, op_backlinks_list
 from core.context import require_context
 from core.pagination import ListResponse

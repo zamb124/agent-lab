@@ -1,4 +1,4 @@
-.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-minio-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
+.PHONY: help runtime-bootstrap dev dev-up dev-down dev-logs dev-clean dev-seaweedfs-restart dev-bootstrap-postgres openfga-backfill stress lint lint-ts lint-file mcp-branding-seed agent agent-ensure agent-release ui ui-doc sync-example-docs
 .PHONY: test-frontend test-rag test-crawl-llm-live
 .PHONY: check-ui-canon check-i18n check-i18n-keys check-inline-docs check-ui-factories check-command-rest-mirror check-platform-events-canon check-realtime-canon check-core-frontend-canon check-embed-esm check-events-canon check-logging check-voice-resolver check-speakable-parity check-voice-canon check-field-canon check-rag-post-retrieval-rerank check-company-ai check-files-canon check-tool-tags check-taskiq-canon check-dependency-injection-canon check-a2a-fixtures check-a2a-fixtures-remote build-i18n
 .PHONY: clean-i18n-unused base
@@ -43,14 +43,14 @@ runtime-bootstrap:
 
 dev: dev-up
 
-# Development инфраструктура: postgres :54321, redis :63791, MinIO :19001/19011, Chromium CDP :9222
+# Development инфраструктура: postgres :54321, redis :63791, SeaweedFS :19001/19011, Chromium CDP :9222
 dev-up: runtime-bootstrap
-	@echo "Запуск Development окружения (БД/Redis/MinIO/OpenFGA в Docker)..."
+	@echo "Запуск Development окружения (БД/Redis/SeaweedFS/OpenFGA в Docker)..."
 	docker-compose -f docker-compose-dev.yaml up -d
 	@echo "Bootstrap OpenFGA store + model → reports/openfga-dev.env..."
 	@uv run python scripts/openfga_env_bootstrap.py --api-url http://127.0.0.1:9090 --env-path reports/openfga-dev.env
 	@$(MAKE) openfga-backfill
-	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, MinIO: 19001/19011, OpenFGA: 9090, Chromium CDP: 9222)"
+	@echo "Dev окружение запущено (PostgreSQL: 54321, Redis: 63791, SeaweedFS: 19001/19011, OpenFGA: 9090, Chromium CDP: 9222)"
 
 # SQL roster / domain rows → OpenFGA tuples (идемпотентно). Нужен reports/openfga-dev.env.
 openfga-backfill:
@@ -81,10 +81,10 @@ dev-clean:
 	@echo "Полная очистка Development окружения (включая volumes)..."
 	docker-compose -f docker-compose-dev.yaml down -v
 
-# Перезапуск только MinIO: при RequestTimeTooSkewed (подпись с хоста vs время в контейнере MinIO)
-dev-minio-restart:
-	docker-compose -f docker-compose-dev.yaml restart minio
-	@echo "MinIO dev перезапущен. Проверка UTC: date -u и docker exec agentlab_minio_dev date -u"
+# Перезапуск только SeaweedFS: при RequestTimeTooSkewed (подпись с хоста vs время в контейнере SeaweedFS)
+dev-seaweedfs-restart:
+	docker-compose -f docker-compose-dev.yaml restart seaweedfs
+	@echo "SeaweedFS dev перезапущен. Проверка UTC: date -u и docker exec agentlab_seaweedfs_dev date -u"
 
 # Недостающие БД на старом томе Postgres + накат 0001_initial.
 dev-bootstrap-postgres:
@@ -109,10 +109,10 @@ test-frontend:
 	@echo "Запуск всех frontend тестов..."
 	uv run pytest tests/frontend/api/ -v
 
-# RAG тесты (с pgvector и MinIO)
+# RAG тесты (с pgvector и SeaweedFS)
 test-rag:
-	@echo "Запуск RAG тестов (pgvector + MinIO)..."
-	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test minio-test
+	@echo "Запуск RAG тестов (pgvector + SeaweedFS)..."
+	docker-compose -f docker-compose-test.yaml up -d postgres-test redis-test seaweedfs-test
 	uv run pytest tests/rag/ -v --tb=short
 
 test-crawl-llm-live:
@@ -441,12 +441,12 @@ help:
 	@echo "============================================================================"
 	@echo "Локальная разработка (Docker для БД/Redis, Python — на хосте):"
 	@echo "============================================================================"
-	@echo "  make dev-up          - Инфра: Postgres :54321, Redis :63791, MinIO, OpenFGA :9090 (+ bootstrap reports/openfga-dev.env + backfill tuples)"
+	@echo "  make dev-up          - Инфра: Postgres :54321, Redis :63791, SeaweedFS, OpenFGA :9090 (+ bootstrap reports/openfga-dev.env + backfill tuples)"
 	@echo "  make openfga-backfill - SQL roster/domain → OpenFGA tuples (после нового store / wipe)"
 	@echo "  make dev-down        - Остановить dev"
 	@echo "  make dev-logs        - Логи dev"
 	@echo "  make dev-clean       - Полная очистка (включая volumes)"
-	@echo "  make dev-minio-restart - Перезапуск MinIO (фикс RequestTimeTooSkewed на macOS)"
+	@echo "  make dev-seaweedfs-restart - Перезапуск SeaweedFS (фикс RequestTimeTooSkewed на macOS)"
 	@echo ""
 	@echo "  make app             - все Python-сервисы через mprocs (нужен make dev-up / openfga-dev.env)"
 	@echo "  make app APP_KILL=1  - то же, освободив порты HTTP-сервисов перед запуском"

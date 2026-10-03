@@ -153,6 +153,7 @@ async def init_company_resources(
             bundles_dir=bundles_dir,
             registry_path=registry_path,
             flow_access_service=di.flow_access_service,
+            files_service=di.files_service,
         )
 
         # Универсальный метод - работает и для system и для company

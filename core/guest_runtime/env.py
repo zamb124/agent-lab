@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
 GUEST_IDLE_TTL_MIN = 1
 GUEST_IDLE_TTL_MAX = 86400
@@ -40,6 +41,23 @@ def guest_env_key_is_reserved(key: str) -> bool:
     if key in _RESERVED_GUEST_ENV_KEYS:
         return True
     return any(key.startswith(prefix) for prefix in _RESERVED_GUEST_ENV_PREFIXES)
+
+
+def guest_host_path(parent: Mapping[str, str]) -> str:
+    """PATH процесса фермы. Пустой PATH не годится ни docker, ни inprocess."""
+    path = parent.get("PATH")
+    if path is None or path.strip() == "":
+        raise RuntimeError("PATH is required for guest env")
+    return path
+
+
+def apply_inprocess_host_env(env: dict[str, str], parent: Mapping[str, str]) -> None:
+    """inprocess копирует PATH и непустые HOME и LANG процесса фермы."""
+    env["PATH"] = guest_host_path(parent)
+    for key in ("HOME", "LANG"):
+        value = parent.get(key)
+        if value is not None and value.strip() != "":
+            env[key] = value
 
 
 def validate_guest_env(guest_env: dict[str, str]) -> dict[str, str]:

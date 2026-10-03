@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, Response
 
 from apps.flows.config import FLOWS_PUBLIC_API_PREFIX, get_settings
@@ -47,6 +47,7 @@ from core.clients.browser.control_types import (
 from core.context import require_context
 from core.http import ProxyStrategy, get_httpx_client
 from core.types import parse_json_object
+from core.websocket import WsCommandError
 
 router = APIRouter(tags=["browser-preview"])
 
@@ -57,7 +58,7 @@ def _verify_token_or_403(*, token: str, session_id: str) -> BrowserPreviewTokenC
     try:
         return verify_browser_preview_token(token=token, session_id=session_id)
     except ValueError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise WsCommandError("forbidden", str(exc), error_code="forbidden") from exc
 
 
 def _browser_control_url(session_id: str, suffix: str) -> str:
@@ -90,7 +91,7 @@ async def _browser_get(
             _ = await response.aread()
             return response
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=_http_error_detail(exc)) from exc
+        raise WsCommandError("upstream", _http_error_detail(exc), error_code="upstream") from exc
 
 
 def _response_detail(response: httpx.Response) -> str:
@@ -113,10 +114,35 @@ def _response_detail(response: httpx.Response) -> str:
     return response.reason_phrase or "browser upstream error"
 
 
+_BROWSER_UPSTREAM_TRANSPORT: dict[int, tuple[str, str]] = {
+    400: ("ws_invalid_payload", "ws_invalid_payload"),
+    401: ("unauthorized", "unauthorized"),
+    403: ("forbidden", "forbidden"),
+    404: ("not_found", "not_found"),
+    409: ("conflict", "conflict"),
+    410: ("gone", "gone"),
+    422: ("unprocessable", "ws_invalid_payload"),
+    429: ("rate_limited", "rate_limited"),
+    500: ("internal", "internal"),
+    501: ("not_implemented", "unavailable"),
+    502: ("upstream", "upstream"),
+    503: ("unavailable", "unavailable"),
+    504: ("gateway_timeout", "upstream"),
+}
+
+
 def _raise_upstream_error(response: httpx.Response) -> None:
     if response.status_code < 400:
         return
-    raise HTTPException(status_code=response.status_code, detail=_response_detail(response))
+    pair = _BROWSER_UPSTREAM_TRANSPORT.get(response.status_code)
+    if pair is None:
+        if response.status_code >= 500:
+            transport, error_code = "upstream", "upstream"
+        else:
+            transport, error_code = "ws_invalid_payload", "ws_invalid_payload"
+    else:
+        transport, error_code = pair
+    raise WsCommandError(transport, _response_detail(response), error_code=error_code)
 
 
 @router.get("/sessions/{session_id}/status", response_model=ControlSessionStatusResponse)

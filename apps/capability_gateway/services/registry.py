@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Literal, cast
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -91,7 +91,13 @@ from core.clients.speech_override import SpeechOverride, SpeechProviderName, Spe
 from core.clients.speech_provider_catalog import STT_TTS_PROVIDER_IDS, VOICE_RESPONSE_FORMAT_IDS
 from core.data_tables.service import DataTableService
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
-from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
+from core.files.create_spec import (
+    RUNTIME_FLOW_ID,
+    FileCreateSpec,
+    FilePostCreate,
+    FileSourceKind,
+    FileSourceRef,
+)
 from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.object_store.gate import FileGate
@@ -113,6 +119,7 @@ from core.types import (
     JsonObject,
     JsonValue,
     OtelAttributeValue,
+    parse_json_value,
     require_json_object,
     require_json_value,
 )
@@ -225,17 +232,19 @@ _SPEECH_RESPONSE_FORMATS = VOICE_RESPONSE_FORMAT_IDS
 def _speech_provider(value: str | None) -> SpeechProviderName | None:
     if value is None:
         return None
-    if value not in _SPEECH_PROVIDERS:
-        raise ValueError(f"Unknown speech provider: {value}")
-    return cast(SpeechProviderName, value)
+    for provider in _SPEECH_PROVIDERS:
+        if value == provider:
+            return provider
+    raise ValueError(f"Unknown speech provider: {value}")
 
 
 def _speech_response_format(value: str | None) -> SpeechResponseFormat | None:
     if value is None:
         return None
-    if value not in _SPEECH_RESPONSE_FORMATS:
-        raise ValueError(f"Unknown speech response format: {value}")
-    return cast(SpeechResponseFormat, value)
+    for response_format in _SPEECH_RESPONSE_FORMATS:
+        if value == response_format:
+            return response_format
+    raise ValueError(f"Unknown speech response format: {value}")
 
 
 def _supported_languages() -> list[CapabilityLanguage]:
@@ -461,9 +470,15 @@ def _http_query_params(params: JsonObject) -> dict[str, str]:
 
 
 def _content_mode(value: str) -> ContentMode:
-    if value not in {"auto", "markdown", "base64", "raw"}:
-        raise ValueError("content_mode must be one of: auto, markdown, base64, raw")
-    return cast(ContentMode, value)
+    if value == "auto":
+        return "auto"
+    if value == "markdown":
+        return "markdown"
+    if value == "base64":
+        return "base64"
+    if value == "raw":
+        return "raw"
+    raise ValueError("content_mode must be one of: auto, markdown, base64, raw")
 
 
 def _active_company(context: Context) -> Company:
@@ -917,7 +932,7 @@ class CapabilityRegistry:
 
     async def _load_tool_definitions(self) -> dict[str, CapabilityDefinition]:
         retry_delays = (0.2, 0.5, 1.0)
-        raw_manifest: object | None = None
+        raw_manifest: JsonValue | None = None
         last_error: ServiceClientError | None = None
         for attempt, retry_delay in enumerate((*retry_delays, None), start=1):
             try:
@@ -1808,7 +1823,7 @@ class CapabilityRegistry:
             files_service=self._files_service,
             default_spec=FileCreateSpec(
                 source_kind=FileSourceKind.FLOW_ASSET,
-                source_ref=FileSourceRef(flow_id="runtime"),
+                source_ref=FileSourceRef(flow_id=RUNTIME_FLOW_ID),
                 retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
             ),
         )
@@ -2175,9 +2190,8 @@ class CapabilityRegistry:
             if not stripped:
                 continue
             try:
-                loaded = cast(object, json.loads(stripped))
-                return require_json_value(loaded, "state.extract_json.result")
-            except json.JSONDecodeError:
+                return parse_json_value(stripped, "state.extract_json.result")
+            except ValueError:
                 continue
         return None
 
@@ -2195,7 +2209,13 @@ class CapabilityRegistry:
         self._reject_positional_args(request)
         content = _required_string(request.kwargs.get("content"), "content")
         buttons = _optional_array(request.kwargs.get("buttons"), "buttons")
-        if buttons is None or not all(isinstance(button, str) for button in buttons):
+        button_labels: list[str] = []
+        if buttons is not None:
+            for button in buttons:
+                if not isinstance(button, str):
+                    raise TypeError("buttons must be array of strings")
+                button_labels.append(button)
+        if buttons is None:
             raise TypeError("buttons must be array of strings")
         message = await self._state_add_agent_message(
             request.model_copy(update={"kwargs": {"content": content}})
@@ -2207,7 +2227,7 @@ class CapabilityRegistry:
                 blocks=[
                     FlowUISuggestedPrompts(
                         block_id="suggested-prompts",
-                        items=[cast(str, button) for button in buttons],
+                        items=button_labels,
                     )
                 ],
             ),

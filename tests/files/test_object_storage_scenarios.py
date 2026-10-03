@@ -1,4 +1,4 @@
-"""Сценарии двух MinIO: probe, ротация, chunked, перенос, недоступность, доступ, egress."""
+"""Сценарии двух S3-хранилищ: probe, ротация, chunked, перенос, недоступность, доступ, egress."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ from tests.files.test_company_object_storage import _bind_company, _ensure_bucke
 _EXT = "http://127.0.0.1:19003"
 _KEY = "extadmin"
 _SECRET = "extadminsecret"
-_EXT_CONTAINER = "agentlab_minio_ext_test"
+_EXT_CONTAINER = "agentlab_seaweedfs_ext_test"
 
 
 def _spec(kind: str) -> FileCreateSpec:
@@ -70,7 +70,7 @@ async def _connect(service: CompanyStorageService, company_id: str, *, name: str
     return await service.create(
         company_id,
         name=name,
-        provider="minio",
+        provider="seaweedfs",
         endpoint_url=_EXT,
         region_name="us-east-1",
         bucket_name=bucket,
@@ -90,12 +90,12 @@ async def test_probe_rejects_bad_endpoint_without_active_row():
         for endpoint, key in (
             ("http://192.0.2.1", _KEY),
             ("http://10.1.2.3", _KEY),
-            ("http://minio.cluster.local", _KEY),
+            ("http://seaweedfs.cluster.local", _KEY),
             (_EXT, "not-a-key"),
         ):
             with pytest.raises(ValueError):
                 await service.probe(
-                    provider="minio",
+                    provider="seaweedfs",
                     endpoint_url=endpoint,
                     region_name="us-east-1",
                     bucket_name="ext-a",
@@ -107,7 +107,7 @@ async def test_probe_rejects_bad_endpoint_without_active_row():
             await service.create(
                 company_id,
                 name="bad",
-                provider="minio",
+                provider="seaweedfs",
                 endpoint_url=_EXT,
                 region_name="us-east-1",
                 bucket_name="ext-a",
@@ -163,7 +163,10 @@ async def test_chunked_upload_stays_on_the_session_storage(frontend_di):
         first = await _connect(service, company_id, name="ext-a", bucket="ext-a")
         second = await _connect(service, company_id, name="ext-b", bucket="ext-b")
         _ = await service.set_route(company_id, source_kind=None, storage_id=first.storage_id)
-        chunked = ChunkedUploadService(files_route_segment="frontend")
+        chunked = ChunkedUploadService(
+            files_route_segment="frontend",
+            tree=frontend_di.document_tree_service,
+        )
         body = b"chunked-pinned"
         started = await chunked.init_upload(
             spec=_spec("generated_ephemeral"),
@@ -234,7 +237,7 @@ async def test_migration_resumes_and_delete_follows_remaining_files(frontend_di)
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(90)
-async def test_stopped_company_minio_is_unavailable_and_skips_platform(frontend_di):
+async def test_stopped_company_s3_is_unavailable_and_skips_platform(frontend_di):
     await _ensure_bucket(_EXT, _KEY, _SECRET, "ext-a")
     company_id = f"co_{uuid.uuid4().hex[:10]}"
     service = CompanyStorageService()
@@ -273,7 +276,7 @@ async def test_stopped_company_minio_is_unavailable_and_skips_platform(frontend_
                 except Exception:
                     await asyncio.sleep(1)
             if not ready:
-                raise RuntimeError("minio-test-ext did not come back")
+                raise RuntimeError("seaweedfs-test-ext did not come back")
         assert await FileRecord.count_for_storage(PLATFORM_STORAGE_ID) == platform_before
     finally:
         reset_context(token)
@@ -396,8 +399,10 @@ async def test_call_recording_egress_pins_storage_id(frontend_di):
             storage_id=later.storage_id,
         )
         _ = await _register_platform_file_record_for_call_recording(
+            files_service=frontend_di.files_service,
             raw_file_id=f"file_{uuid.uuid4().hex[:12]}",
             company_id=company_id,
+            channel_id=f"ch_{uuid.uuid4().hex[:8]}",
             call_id=call_id,
             recording_id=recording_id,
             started_by_user_id="user_recording",

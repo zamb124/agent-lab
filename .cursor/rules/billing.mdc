@@ -18,7 +18,7 @@ alwaysApply: false
 - `UsageRecord` (`usage_id`, `usage_type`, `resource_name`, `quantity`, `cost`, `metadata`); `UsageType` — `core/models/billing_models.py`.
 - `SettlementRulesDocument` (`core/billing/settlement_rules.py`): `application_mode` (`all_matching`/`first_win`), `SettlementRule` (`rule_id`, `match`, `resource_name`, `resource_name_from_span`, `usage_type`, `quantity_from` `const:N`/`attr:<ключ>`, `exclusive_group`, `priority`); хранится per company в `billing:company:{company_id}:settlement_rules_json`.
 - Дефолтный каталог правил и перечень покрытых `operation_name` — `core/billing/default_settlement_rules.py` (LLM, BYOK `llm:byok`, `flows.llm_resource.*`, embedding, rerank, STT/TTS, LiveKit usage, guest runtime).
-- Прайс: `settings.billing.resource_base_prices` → глобальный override `billing:resource_base_prices_json` → per company `billing:company:{company_id}:resource_base_prices_json` (`get_effective_resource_base_prices_for_company`) × множитель тарифа `DEFAULT_TARIFF_PRICES`/`Company.tariff_plan`. Ключ ресурса — `category:resource`; категории — `llm`, `embedding`, `livekit`, `guest`, wildcard `*`.
+- Прайс: `settings.billing.resource_base_prices` → глобальный override `billing:resource_base_prices_json` → per company `billing:company:{company_id}:resource_base_prices_json` (`get_effective_resource_base_prices_for_company`) × множитель тарифа `DEFAULT_TARIFF_PRICES`/`Company.tariff_plan`. Ключи `billing:` в Storage не получают префикс компании запроса. Ключ ресурса — `category:resource`; категории — `llm`, `embedding`, `livekit`, `guest`, wildcard `*`.
 - Платёж — `Transaction` (`transaction_id`, `payment_provider`, `external_payment_id`, `payment_url`).
 
 ## Канон
@@ -42,7 +42,7 @@ alwaysApply: false
 ### Платежи Т-Банк
 
 1. Единственный провайдер — интернет-эквайринг Т-Банка nonPCI (`core/clients/payment/tinkoff_provider.py`); карта вводится только на форме банка, `FinishAuthorize`/`CardData` запрещены.
-2. `POST /frontend/api/billing/topup` → `PaymentService.create_payment` → `Init` (`Amount` в копейках, `PayType=O`, `OrderId` = `{company_id}:{hex12}`); нет `PaymentURL` или `Success=false` — `raise`.
+2. `POST /frontend/api/billing/topup` → `PaymentService.create_payment` → `Init` (`Amount` в копейках, `PayType=O`, `OrderId` = `{company_id}:{hex12}`); нет `PaymentURL` или `Success=false` — `raise`. Ключи Storage `payment:`, `payment_external:` и `payment_notification:` не получают префикс компании запроса: webhook приходит без сессии плательщика.
 3. Token — `compute_tinkoff_token` (корневые скаляры без `Token`/`DATA`/`Receipt` + `Password`, сортировка, SHA-256).
 4. `NotificationURL` — `{platform_public_base_url}/api/v1/payments/webhook/{registry_name}`; Success/Fail URL — `{subdomain}.{apex Host}/billing?payment=...` по `Context.host`.
 5. Webhook отвечает HTTP 200 телом `OK`, в том числе на неверный Token и неизвестный `OrderId` (без зачисления); не-JSON — не 200; неизвестный провайдер — 404.

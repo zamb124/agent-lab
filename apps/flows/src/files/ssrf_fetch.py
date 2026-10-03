@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import cast
 from urllib.parse import urlparse
 
 from core.config.testing import is_testing
-from core.http import get_httpx_client
+from core.http import get_httpx_client, http_header_text
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -101,7 +100,7 @@ async def fetch_public_url_bytes(
                 f"Part.url exceeds size limit {max_bytes} bytes (got {len(data)})"
             )
         content_type: str | None = None
-        content_type_header = cast(object | None, response.headers.get("content-type"))
-        if isinstance(content_type_header, str) and content_type_header.strip():
+        content_type_header = http_header_text(response.headers, "content-type")
+        if content_type_header is not None and content_type_header.strip():
             content_type = content_type_header.split(";", 1)[0].strip()
         return data, content_type

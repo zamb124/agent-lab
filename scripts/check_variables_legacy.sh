@@ -17,7 +17,6 @@ GLOB_EXCLUDES=(
   --glob '!docs/openapi/**'
   --glob '!.cursor/plans/**'
   --glob '!scripts/check_variables_legacy.sh'
-  --glob '!migrations/shared/versions/*drop_legacy_variables*'
   --glob '!core/frontend/static/assets/**'
 )
 

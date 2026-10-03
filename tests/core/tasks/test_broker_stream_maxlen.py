@@ -49,7 +49,7 @@ async def test_create_broker_passes_maxlen_from_config(monkeypatch: pytest.Monke
     monkeypatch.setattr(broker_module, "RedisAsyncResultBackend", lambda **_: MagicMock())
     monkeypatch.setattr(broker_module, "get_settings", lambda: fake_settings)
     monkeypatch.setattr(broker_module, "build_logging_middleware", lambda **_: MagicMock())
-    monkeypatch.setattr(broker_module, "session_lock_middleware", MagicMock())
+    monkeypatch.setattr(broker_module, "SessionLockMiddleware", lambda **_: MagicMock())
 
     try:
         created = broker_module.create_broker(queue_name="search", service_name="search_worker")

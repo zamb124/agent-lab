@@ -7,7 +7,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.clients.code_runner_client import CodeRunnerClient
+from apps.flows.src.services.code_runner_client import CodeRunnerClient
 from apps.flows.src.tools.decorator import tool
 from core.ai.models import ResolvedAIModel
 from core.ai.providers import AICapability, split_provider_prefixed_model
@@ -58,8 +58,18 @@ class SandboxCodegenArgs(BaseModel):
         None,
         description="Optional JSON Schema text describing the expected generated-code result.",
     )
-    max_iterations: int = Field(5, ge=1, le=20)
-    max_doc_chars: int = Field(120_000, ge=5_000, le=500_000)
+    max_iterations: int = Field(
+        5,
+        ge=1,
+        le=20,
+        description="Max generate-execute-feedback attempts before giving up.",
+    )
+    max_doc_chars: int = Field(
+        120_000,
+        ge=5_000,
+        le=500_000,
+        description="Max characters of capability documentation injected into the codegen prompt.",
+    )
     model: str = Field(
         default="",
         description=(

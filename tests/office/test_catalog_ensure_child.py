@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from apps.office.db.models import OfficeDocumentCatalog
+from core.documents.catalog import DocumentCatalog
 
 _COMPANY_ID = "system"
 
@@ -17,7 +17,7 @@ async def test_parallel_ensure_child_catalog_creates_one_catalog(unique_id: str)
 
     results = await asyncio.gather(
         *(
-            OfficeDocumentCatalog.ensure_child_catalog(
+            DocumentCatalog.ensure_child(
                 company_id=_COMPANY_ID,
                 namespace=namespace,
                 parent_catalog_id=None,
@@ -36,7 +36,7 @@ async def test_parallel_ensure_child_catalog_creates_one_catalog(unique_id: str)
 async def test_ensure_child_catalog_requires_owner_only_to_create(unique_id: str) -> None:
     namespace = f"ns_ensure_owner_{unique_id}"
     with pytest.raises(ValueError, match="owner_user_id is required"):
-        _ = await OfficeDocumentCatalog.ensure_child_catalog(
+        _ = await DocumentCatalog.ensure_child(
             company_id=_COMPANY_ID,
             namespace=namespace,
             parent_catalog_id=None,
@@ -44,14 +44,14 @@ async def test_ensure_child_catalog_requires_owner_only_to_create(unique_id: str
             owner_user_id="",
         )
 
-    created, was_created = await OfficeDocumentCatalog.ensure_child_catalog(
+    created, was_created = await DocumentCatalog.ensure_child(
         company_id=_COMPANY_ID,
         namespace=namespace,
         parent_catalog_id=None,
         title="Flows",
         owner_user_id="test_user",
     )
-    existing, created_again = await OfficeDocumentCatalog.ensure_child_catalog(
+    existing, created_again = await DocumentCatalog.ensure_child(
         company_id=_COMPANY_ID,
         namespace=namespace,
         parent_catalog_id=None,

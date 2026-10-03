@@ -56,11 +56,7 @@ rg --files apps core | rg '_queries\.py$'
 rg -n 'def (get_by|find|load|fetch|read|save|remove)_\w+' -g '**/models/**' -g '**/models.py' apps core
 ```
 
-**M5. Миграция кроме `0001_initial.py`.** Норма: `database.mdc`. Цель: одна ревизия на базу.
-
-```bash
-rg --files migrations | rg -v '/0001_initial\.py$|services\.json$|__init__\.py$'
-```
+**M5. Разрыв цепочки миграций.** Норма: `database.mdc` § Миграции. Цель: `0001_initial.py` и дальше `NNNN_<name>.py` без пропусков. Детектор: `scripts/check_migration_files_canon.py`.
 
 ## D — композиция процесса
 

@@ -10,12 +10,13 @@ from dataclasses import dataclass
 
 from apps.crm.models.crm_entity import CRMEntity
 from apps.flows.src.models.flow_config import FlowConfig
-from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.sync.models.channel import SyncChannel
-from apps.wiki.models.domain import WikiPage
+from apps.wiki.models.page import WikiPage
 from core.authz.explorer import AuthzExplorerObjectHit, AuthzTitleStatus
 from core.authz.ids import format_namespace_key, parse_flow_branch_key, parse_namespace_key
 from core.authz.types import AuthzObjectType
+from core.documents.catalog import DocumentCatalog
+from core.files.models import FileRecord
 from core.mail.models import MailboxBinding
 from core.worktracker.models import WorkQueue
 
@@ -52,10 +53,10 @@ def explorer_hrefs(
         _company_id, ns = parse_namespace_key(object_key)
         href = f"/crm/namespaces/{ns}"
         return href, ""
-    if object_type is AuthzObjectType.OFFICE_DOCUMENT:
+    if object_type is AuthzObjectType.DOCUMENT_FILE:
         href = f"/documents/edit/{object_key}"
         return href, f"{href}?access=1"
-    if object_type is AuthzObjectType.OFFICE_CATALOG:
+    if object_type is AuthzObjectType.DOCUMENT_CATALOG:
         return "/documents", f"/documents?catalog_id={object_key}&access=1"
     if object_type is AuthzObjectType.FLOW:
         _company_id, flow_id = parse_namespace_key(object_key)
@@ -150,9 +151,9 @@ class AuthzExplorerHydrator:
             return await self._hydrate_wiki_page(object_key, company_id)
         if object_type is AuthzObjectType.CRM_ENTITY:
             return await self._hydrate_crm_entity(object_key, company_id)
-        if object_type is AuthzObjectType.OFFICE_CATALOG:
+        if object_type is AuthzObjectType.DOCUMENT_CATALOG:
             return await self._hydrate_office_catalog(object_key, company_id)
-        if object_type is AuthzObjectType.OFFICE_DOCUMENT:
+        if object_type is AuthzObjectType.DOCUMENT_FILE:
             return await self._hydrate_office_document(object_key, company_id)
         if object_type is AuthzObjectType.FLOW:
             return await self._hydrate_flow(object_key, company_id)
@@ -211,12 +212,14 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_office_catalog(self, catalog_id: str, company_id: str) -> AuthzHydratedObject:
-        catalog = await OfficeDocumentCatalog.catalog_for_company(catalog_id, company_id)
+        catalog = await DocumentCatalog.get(catalog_id)
+        if catalog is not None and catalog.company_id != company_id:
+            catalog = None
         if catalog is None:
-            return _missing(AuthzObjectType.OFFICE_CATALOG, catalog_id)
+            return _missing(AuthzObjectType.DOCUMENT_CATALOG, catalog_id)
         title = _clean_title(catalog.title)
         return _hydrated(
-            AuthzObjectType.OFFICE_CATALOG,
+            AuthzObjectType.DOCUMENT_CATALOG,
             catalog_id,
             title=title,
             status=_title_status(title),
@@ -225,16 +228,17 @@ class AuthzExplorerHydrator:
         )
 
     async def _hydrate_office_document(self, file_id: str, company_id: str) -> AuthzHydratedObject:
-        binding = await OfficeDocumentBinding.binding_for_company(file_id, company_id)
-        if binding is None or binding.deleted_at is not None:
-            return _missing(AuthzObjectType.OFFICE_DOCUMENT, file_id)
-        title = _clean_title(binding.title)
+        binding = await FileRecord.for_company(file_id, company_id)
+        if binding is None or binding.deleted_at is not None or binding.catalog_id is None:
+            return _missing(AuthzObjectType.DOCUMENT_FILE, file_id)
+        catalog = await DocumentCatalog.get(binding.catalog_id)
+        title = _clean_title(binding.original_name)
         return _hydrated(
-            AuthzObjectType.OFFICE_DOCUMENT,
+            AuthzObjectType.DOCUMENT_FILE,
             file_id,
             title=title,
             status=_title_status(title),
-            namespace=binding.namespace,
+            namespace=catalog.namespace if catalog is not None else "",
             company_id=binding.company_id,
         )
 
@@ -332,7 +336,7 @@ class AuthzExplorerHydrator:
             types = (
                 AuthzObjectType.WIKI_PAGE,
                 AuthzObjectType.CRM_ENTITY,
-                AuthzObjectType.OFFICE_DOCUMENT,
+                AuthzObjectType.DOCUMENT_FILE,
                 AuthzObjectType.FLOW,
                 AuthzObjectType.SYNC_CHANNEL,
             )
@@ -354,9 +358,9 @@ class AuthzExplorerHydrator:
             return await self._search_wiki(company_id, query)
         if object_type is AuthzObjectType.CRM_ENTITY:
             return await self._search_crm(company_id, query)
-        if object_type is AuthzObjectType.OFFICE_DOCUMENT:
+        if object_type is AuthzObjectType.DOCUMENT_FILE:
             return await self._search_office_documents(company_id, query)
-        if object_type is AuthzObjectType.OFFICE_CATALOG:
+        if object_type is AuthzObjectType.DOCUMENT_CATALOG:
             return await self._search_office_catalogs(company_id, query)
         if object_type is AuthzObjectType.FLOW:
             return await self._search_flows(company_id, query)
@@ -385,24 +389,20 @@ class AuthzExplorerHydrator:
         ]
 
     async def _search_office_documents(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        bindings = await OfficeDocumentBinding.search_bindings_by_title(
-            company_id,
-            query,
-            _SEARCH_LIMIT,
-        )
+        bindings = await FileRecord.search_by_name(company_id, query, _SEARCH_LIMIT)
         return [
-            _hit(AuthzObjectType.OFFICE_DOCUMENT, binding.file_id, _clean_title(binding.title), binding.namespace)
+            _hit(AuthzObjectType.DOCUMENT_FILE, binding.file_id, _clean_title(binding.original_name), "")
             for binding in bindings
         ]
 
     async def _search_office_catalogs(self, company_id: str, query: str) -> list[AuthzExplorerObjectHit]:
-        catalogs = await OfficeDocumentCatalog.search_catalogs_by_title(
+        catalogs = await DocumentCatalog.search_by_title(
             company_id,
             query,
             _SEARCH_LIMIT,
         )
         return [
-            _hit(AuthzObjectType.OFFICE_CATALOG, catalog.catalog_id, _clean_title(catalog.title), catalog.namespace)
+            _hit(AuthzObjectType.DOCUMENT_CATALOG, catalog.catalog_id, _clean_title(catalog.title), catalog.namespace)
             for catalog in catalogs
         ]
 

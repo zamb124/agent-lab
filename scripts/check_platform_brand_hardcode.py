@@ -44,7 +44,7 @@ ALLOWLIST_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "core" / "config" / "models.py",
     REPO_ROOT / "core" / "utils" / "domain.py",
     REPO_ROOT / "core" / "utils" / "subdomain.py",
-    REPO_ROOT / "core" / "models" / "identity_models.py",
+    REPO_ROOT / "core" / "models" / "identity_models",
     REPO_ROOT / "core" / "ai" / "providers" / "__init__.py",
     REPO_ROOT / "core" / "ai" / "providers" / "specs.py",
     REPO_ROOT / "core" / "frontend" / "pwa" / "manifest.json",
@@ -100,7 +100,14 @@ BRAND_LITERAL_LINE_ALLOWLIST_SUBSTRINGS: tuple[str, ...] = (
 def _is_allowlisted(path: Path) -> bool:
     resolved = path.resolve()
     for allowed in ALLOWLIST_PATHS:
-        if resolved == allowed.resolve():
+        target = allowed.resolve()
+        if resolved == target:
+            return True
+        if target.is_dir():
+            try:
+                resolved.relative_to(target)
+            except ValueError:
+                continue
             return True
     return False
 

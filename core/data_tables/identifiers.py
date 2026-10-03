@@ -17,17 +17,26 @@ _RESERVED_NAMES: frozenset[str] = frozenset(
 )
 
 
-def validate_ident(name: str, *, kind: str) -> str:
+def _ident_problem(name: str, *, kind: str) -> str | None:
     value = name.strip()
-    if not value:
-        raise ValueError(f"{kind} name is required")
+    if value == "":
+        return f"{kind} name is required"
     if value in _RESERVED_NAMES or value.startswith(_RESERVED_PREFIXES):
-        raise ValueError(f"{kind} name {value!r} is reserved")
-    if not _IDENT_RE.fullmatch(value):
-        raise ValueError(
-            f"{kind} name {value!r} must match ^[a-z][a-z0-9_]{{0,62}}$"
-        )
-    return value
+        return f"{kind} name {value!r} is reserved"
+    if _IDENT_RE.fullmatch(value) is None:
+        return f"{kind} name {value!r} must match ^[a-z][a-z0-9_]{{0,62}}$"
+    return None
+
+
+def validate_ident(name: str, *, kind: str) -> str:
+    problem = _ident_problem(name, kind=kind)
+    if problem is not None:
+        raise ValueError(problem)
+    return name.strip()
+
+
+def is_valid_ident(name: str) -> bool:
+    return _ident_problem(name, kind="ident") is None
 
 
 def quote_sql_ident(name: str) -> str:

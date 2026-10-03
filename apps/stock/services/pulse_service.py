@@ -6,11 +6,9 @@ from datetime import UTC
 from decimal import Decimal
 
 from apps.stock.models import (
-    StockLocation,
     StockMove,
     StockOperationType,
     StockProduct,
-    StockProductTemplate,
     StockQuant,
     StockTransfer,
     StockValueLayer,
@@ -60,10 +58,7 @@ class PulseService:
             )
             for t in transfers
         ]
-        location_ids = await StockLocation.list_subtree_ids(
-            company_id, warehouse.stock_location_id
-        )
-        quants = await StockQuant.list_for_warehouse(company_id, location_ids)
+        quants = await StockQuant.list_for_warehouse(company_id, warehouse_id)
         product_ids = sorted({q.product_id for q in quants})
         products = await StockProduct.by_ids(company_id, product_ids)
         last_moves = await StockMove.list_last_move_at(company_id, product_ids)
@@ -108,12 +103,7 @@ class PulseService:
                 result[product_id] = quantize(last.value_after / last.qty_after)
                 continue
             product = products.get(product_id)
-            template = (
-                await StockProductTemplate.by_id(company_id, product.template_id)
-                if product is not None
-                else None
-            )
             result[product_id] = (
-                template.standard_price if template is not None else Decimal("0")
+                product.standard_price if product is not None else Decimal("0")
             )
         return result

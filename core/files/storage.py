@@ -17,6 +17,7 @@ from core.files.audio_transcode import (
 )
 from core.files.create_spec import FileSourceKind
 from core.files.models import FileRecord, FileStatus
+from core.files.object_key import object_key
 from core.files.object_store.gate import raise_storage_unavailable
 from core.files.object_store.pool import client_for
 from core.files.object_store.resolver import resolve_for_record, resolve_for_write
@@ -97,8 +98,7 @@ class FileStorage:
             effective_name = f"{stem}.m4a"
 
         file_hash = hashlib.sha256(data).hexdigest()[:16]
-        extension = Path(effective_name).suffix or ".bin"
-        s3_key = f"files/{file_id}_{file_hash}{extension}"
+        s3_key = object_key(company_id, file_id, file_hash, effective_name)
 
         resolved = await resolve_for_write(company_id, source_kind)
         s3_client = await client_for(resolved)
@@ -217,9 +217,7 @@ class FileStorage:
         return True
 
 
-def retention_fields_from_spec(retention_spec: object) -> tuple[FileRetentionKind, int]:
-    if not isinstance(retention_spec, FileRetentionSpec):
-        raise TypeError("retention must be FileRetentionSpec")
+def retention_fields_from_spec(retention_spec: FileRetentionSpec) -> tuple[FileRetentionKind, int]:
     kind = retention_spec.kind
     ttl_seconds = resolve_retention_ttl_seconds(retention_spec)
     return kind, ttl_seconds

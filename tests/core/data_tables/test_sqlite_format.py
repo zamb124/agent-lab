@@ -23,6 +23,15 @@ from core.data_tables.sqlite_format import (
 )
 
 
+def test_csv_reserved_header_becomes_col_index() -> None:
+    columns, rows = parse_tabular_bytes(
+        b"row_id,Customer Name\n1,Ada\n",
+        source_format="csv",
+    )
+    assert [column.name for column in columns] == ["col_1", "customer_name"]
+    assert rows == [{"col_1": "1", "customer_name": "Ada"}]
+
+
 def test_validate_ident_rejects_reserved_and_invalid() -> None:
     assert validate_ident("leads", kind="table") == "leads"
     with pytest.raises(ValueError, match="reserved"):

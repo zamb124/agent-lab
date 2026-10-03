@@ -19,6 +19,15 @@ _FORWARDED_PROTO = b"x-forwarded-proto"
 _FORWARDED_FOR = b"x-forwarded-for"
 _FORWARDED_HOST = b"x-forwarded-host"
 
+type ScopeScalar = str | bytes | int | None
+type ScopeTuple = tuple[ScopeScalar, ...]
+type ScopeCandidate = ScopeTuple | ScopeScalar | list[ScopeTuple | ScopeScalar]
+type ScopeField = ScopeCandidate | list[ScopeCandidate] | None
+
+
+def _scope_field(scope: Scope, key: str) -> ScopeField:
+    return cast(ScopeField, scope.get(key))
+
 
 def _first_csv_token(value: bytes) -> str:
     decoded: str = value.decode("latin-1")
@@ -27,25 +36,32 @@ def _first_csv_token(value: bytes) -> str:
     return first_token.strip()
 
 
-def _unpack_host_port(raw: object) -> tuple[str, int] | None:
-    if not isinstance(raw, tuple):
+def _unpack_host_port(raw: ScopeField) -> tuple[str, int] | None:
+    if not isinstance(raw, tuple) or len(raw) != 2:
         return None
-    raw_tuple = cast(tuple[object, ...], raw)
-    if len(raw_tuple) != 2:
+    host, port = raw
+    if not isinstance(host, str) or not isinstance(port, int):
         return None
-    host_obj, port_obj = raw_tuple
-    if not isinstance(host_obj, str) or not isinstance(port_obj, int):
-        return None
-    return host_obj, port_obj
+    return host, port
 
 
-def _is_bytes_pair(value: object) -> TypeGuard[tuple[bytes, bytes]]:
-    if not isinstance(value, tuple):
+def _is_bytes_pair(value: ScopeCandidate) -> TypeGuard[tuple[bytes, bytes]]:
+    if not isinstance(value, tuple) or len(value) != 2:
         return False
-    value_tuple = cast(tuple[object, ...], value)
-    if len(value_tuple) != 2:
-        return False
-    return isinstance(value_tuple[0], bytes) and isinstance(value_tuple[1], bytes)
+    return isinstance(value[0], bytes) and isinstance(value[1], bytes)
+
+
+def _header_pairs(raw: ScopeField) -> list[tuple[bytes, bytes]]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise TypeError("scope['headers'] must be list[tuple[bytes, bytes]]")
+    pairs: list[tuple[bytes, bytes]] = []
+    for item in raw:
+        if not _is_bytes_pair(item):
+            raise TypeError("scope['headers'] must be list[tuple[bytes, bytes]]")
+        pairs.append(item)
+    return pairs
 
 
 class ProxyHeadersMiddleware:
@@ -66,25 +82,14 @@ class ProxyHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        client = _unpack_host_port(scope.get("client"))
+        client = _unpack_host_port(_scope_field(scope, "client"))
         client_host = client[0] if client is not None else None
 
         if not self.trust_all and client_host not in self.trusted_hosts:
             await self.app(scope, receive, send)
             return
 
-        raw_headers_obj = cast(object, scope.get("headers"))
-        if raw_headers_obj is None:
-            raw_headers: list[tuple[bytes, bytes]] = []
-        elif not isinstance(raw_headers_obj, list):
-            raise TypeError("scope['headers'] must be list[tuple[bytes, bytes]]")
-        else:
-            header_items = cast(list[object], raw_headers_obj)
-            raw_headers = []
-            for header_item in header_items:
-                if not _is_bytes_pair(header_item):
-                    raise TypeError("scope['headers'] must be list[tuple[bytes, bytes]]")
-                raw_headers.append(header_item)
+        raw_headers = _header_pairs(_scope_field(scope, "headers"))
         headers: dict[bytes, bytes] = dict(raw_headers)
 
         proto = headers.get(_FORWARDED_PROTO)
@@ -100,7 +105,7 @@ class ProxyHeadersMiddleware:
         forwarded_host = headers.get(_FORWARDED_HOST)
         if forwarded_host:
             host = _first_csv_token(forwarded_host)
-            server = _unpack_host_port(scope.get("server"))
+            server = _unpack_host_port(_scope_field(scope, "server"))
             if host and server is not None:
                 hostname = host.split(":", 1)[0]
                 scope["server"] = (hostname, server[1])

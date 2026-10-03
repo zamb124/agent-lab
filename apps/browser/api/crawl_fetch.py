@@ -7,7 +7,7 @@ import random
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from playwright._impl._errors import is_target_closed_error
 from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -38,6 +38,7 @@ from core.logging.attributes import (
     LOG_EXCEPTION_TYPE,
     LOG_HTTP_STATUS_CODE,
 )
+from core.websocket import WsCommandError, ws_command_error_status
 
 router = APIRouter(prefix="/control/crawl", tags=["browser-crawl-fetch"])
 logger = get_logger(__name__)
@@ -94,9 +95,10 @@ async def crawl_fetch(
     try:
         _ = await asyncio.wait_for(semaphore.acquire(), timeout=0.01)
     except TimeoutError as exc:
-        raise HTTPException(
-            status_code=429,
-            detail="crawl fetch concurrency limit exceeded",
+        raise WsCommandError(
+            "rate_limited",
+            "crawl fetch concurrency limit exceeded",
+            error_code="rate_limited",
         ) from exc
     endpoint_key = settings.default_endpoint_key
     sig = ContextSignature(
@@ -157,16 +159,26 @@ async def crawl_fetch(
                     try:
                         fetched = await runtime.control_adapter.navigate(page, fetch_req)
                     except BrowserCapabilityError as exc:
-                        raise HTTPException(status_code=501, detail=exc.to_dict()) from exc
+                        raise WsCommandError(
+                            "not_implemented",
+                            exc.message,
+                            error_code="unavailable",
+                            error_params=exc.to_dict(),
+                        ) from exc
                     except PlaywrightTimeoutError as exc:
-                        raise HTTPException(
-                            status_code=504,
-                            detail=f"browser navigation timeout for {body.url}",
+                        raise WsCommandError(
+                            "gateway_timeout",
+                            f"browser navigation timeout for {body.url}",
+                            error_code="upstream",
                         ) from exc
                     await _post_navigate_crawl_signals(page)
                     html = await page.content()
                 if not html.strip():
-                    raise HTTPException(status_code=502, detail="browser fetch returned empty html")
+                    raise WsCommandError(
+                        "upstream",
+                        "browser fetch returned empty html",
+                        error_code="upstream",
+                    )
                 duration_ms = int((time.monotonic() - started_at) * 1000)
                 logger.info(
                     EVENT_BROWSER_CRAWL_FETCH_COMPLETED,
@@ -202,16 +214,16 @@ async def crawl_fetch(
                     continue
                 raise
         raise RuntimeError("crawl_fetch: exhausted retries")
-    except HTTPException as exc:
+    except WsCommandError as exc:
         duration_ms = int((time.monotonic() - started_at) * 1000)
         logger.error(
             EVENT_BROWSER_CRAWL_FETCH_FAILED,
             **{
                 LOG_CRAWL_CANONICAL_URL: canonical_url[:256],
                 LOG_CRAWL_FETCH_DURATION_MS: duration_ms,
-                LOG_HTTP_STATUS_CODE: exc.status_code,
-                LOG_EXCEPTION_TYPE: "HTTPException",
-                LOG_EXCEPTION_MESSAGE: str(exc.detail),
+                LOG_HTTP_STATUS_CODE: ws_command_error_status(exc),
+                LOG_EXCEPTION_TYPE: "WsCommandError",
+                LOG_EXCEPTION_MESSAGE: exc.detail,
             },
         )
         raise

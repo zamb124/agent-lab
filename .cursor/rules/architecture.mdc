@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Архитектура взаимодействия
 
-Как процессы и слои разговаривают: один транспорт команд, один объект композиции процесса, одна форма ошибок. Куда писать код и запреты → `main.mdc`.
+Один транспорт команд, один объект композиции, одна форма ошибок. Куда писать код → `main.mdc`.
 
 ## Транспорт
 
@@ -31,6 +31,7 @@ alwaysApply: true
 4. Команда без аргументов принимает `core.websocket.EmptyPayload`; свой `<Svc>EmptyPayload` запрещён.
 5. `op_*`, общий для нескольких сервисов, живёт в `core/` и регистрируется каталогами сервисов: `core/namespace/operations.py::op_namespaces_list`, `core/identity/team_operations.py::op_team_members_list`.
 6. `op_*` ставит тяжёлую работу через `enqueue`; сама команда исполняется in-process. Шаблон `op_*` → `main.mdc` § Куда писать код.
+7. Команда с эффектом в леджере (остатки, деньги, счётчики) несёт `idempotency_key` в payload и исполняется через `run_in_lanes` → `database.mdc` § Полосы.
 
 ### Исключения
 
@@ -107,7 +108,7 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 1. Runner: HTTP — `create_service_app(name, Settings, <Svc>Di, database=..., operations=..., lifecycle=(...), routers=[...])` → `app.state.di`; TaskIQ — `build_worker(broker, ..., di_class=..., lifecycle=(...))` → `TaskiqState.di`; CLI и backfill — `async with open_di(<Svc>Di, settings=..., identity=..., database=...) as di`; тест — lifespan приложения или `open_di`.
 2. Boundary получает DI одним параметром `di: Di`: FastAPI — `http_di`, TaskIQ `@platform_task` — `task_di`, ASGI/WS без `Depends` — `require_di(websocket, <Svc>Di)`, `TaskiqState` — `require_task_di(state, <Svc>Di)`.
 3. Boundary: `main.py`, `di.py`, `api/**`, `realtime/**`, `tasks/**`, `*_tasks.py`, `*operations.py`, `worker.py`, `backfill.py`, CLI `main`, `tests/**`; в `core/` — роутеры, middleware, runner, `op_*`. Boundary передаёт внутрь конкретный `di.<component>`; service, model, runtime, node, client, registry, helper не видят `di`.
-4. Request/event scope живёт в `core.context` и в DI не копируется; session-зависимости WS создаются на входе и передаются явно; flow execution — cohesive контракт runtime, не bag сервисов.
+4. Request/event scope — `core.context`, в DI не копируется; session-зависимости WS передаются. Flow execution — контракт runtime, не bag сервисов.
 5. `create_service_app(operations=...)` вызывает `register_operations(<SVC>_OPERATIONS, <Svc>Di)`; internal command endpoint передаёт в `dispatch_ws_command(type, payload, user, di)` DI своего ASGI-приложения.
 
 ### Запреты DI
@@ -116,7 +117,7 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 2. Передача `di` или bag сервисов в доменный код; Protocol, зеркалящий поля DI.
 3. Recipe для класса, который Kit собирает из `__init__`; ручная сборка компонента в runner или boundary.
 4. `dependency=None` с fallback к global getter, property/setter injection, provider callback ради разрыва цикла; `Callable[[], Service]` — только когда отложенное создание — доменный контракт фабрики.
-5. Второй DI runtime (Dishka, dependency-injector, punq); process-scoped клиент, созданный в handler; импорт `di.py` другого процесса.
+5. Второй DI runtime (Dishka, dependency-injector, punq); process-scoped клиент в handler; импорт `di.py` другого процесса. Исключение: воркер импортирует recipe-кортеж из `di.py` владельца.
 6. `*Deps`, `*Context`, `*Runtime`, прячущий длинный constructor; допустим только cohesive контракт одного lifecycle домена (`FlowExecutionContext`), не раздающий сервисы.
 7. Маскировка цикла импортов или object graph через `TYPE_CHECKING`, lazy, provider, setter: цикл чинится слоями — contracts, enums, Pydantic-типы ниже, orchestration выше.
 
@@ -161,6 +162,7 @@ Di = Annotated[WikiDi, http_di(WikiDi), task_di(WikiDi)]
 - `scripts/check_command_rest_mirror.py` — `restMirror`, FastAPI route, `transport: 'ws'`.
 - `scripts/check_realtime_canon.py` — Centrifugo HTTP только у bus `realtime`.
 - `scripts/check_backend_error_i18n.py` — `error_code` ru ≡ en, кириллица в `raise`.
+- `scripts/check_no_service_components.py` — в корне процесса нет `components.py`.
 - `scripts/check_dependency_injection_canon.py` — контракт `di.py`, DI только на boundary.
 - `scripts/check_ratchet_counts.py` — ratchet `http_exception_in_services`.
 - `tests/core/di/test_service_kit.py`, `tests/core/realtime/test_command_owners.py`, `tests/realtime/test_*_commands.py`.

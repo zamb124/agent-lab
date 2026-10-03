@@ -36,14 +36,19 @@ from core.http.egress_route_preference import (
     normalized_http_origin,
 )
 from core.logging import get_logger
-from core.types import require_json_value
+from core.types import JsonValue, require_json_value
 
 logger = get_logger(__name__)
 
-_CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
 
-# Ключи, допустимые в httpx.request(...), но не в httpx.AsyncClient(...).
-_HTTPX_REQUEST_ONLY_KEYS = frozenset({"content", "data", "files", "json", "extensions"})
+def http_header_text(headers: httpx.Headers, name: str) -> str | None:
+    """Строковое значение заголовка. ``Headers.get`` в stub httpx возвращает Any."""
+    value = cast(object, headers.get(name))
+    if isinstance(value, str):
+        return value
+    return None
+
+_CONNECT_RETRY_EXCEPTIONS = (httpx.ConnectError, httpx.ConnectTimeout)
 
 # Базовый набор статусов для SMART (401 добавляется через settings.proxy.retry_http_401_via_proxy).
 HTTP_STATUS_RETRY_VIA_PROXY = frozenset({403, 429, 451})
@@ -62,7 +67,7 @@ class HttpRequestKwargs(TypedDict, total=False):
     content: RequestContent | None
     data: RequestData | None
     files: RequestFiles | None
-    json: object | None
+    json: JsonValue | None
     params: QueryParamTypes | None
     headers: HeaderTypes | None
     cookies: CookieTypes | None
@@ -93,9 +98,7 @@ class HttpClientKwargs(TypedDict, total=False):
 def _normalized_request_kwargs(kwargs: HttpRequestKwargs) -> HttpRequestKwargs:
     if "json" not in kwargs or kwargs["json"] is None:
         return kwargs
-    normalized = dict(kwargs)
-    normalized["json"] = require_json_value(kwargs["json"], "http request json")
-    return cast(HttpRequestKwargs, cast(object, normalized))
+    return {**kwargs, "json": require_json_value(kwargs["json"], "http request json")}
 
 
 async def _send_request(
@@ -109,10 +112,18 @@ async def _send_request(
 
 def _httpx_async_client_kwargs(merged_kwargs: HttpRequestKwargs) -> HttpClientKwargs:
     """Отделяет kwargs конструктора AsyncClient от параметров одного HTTP-запроса."""
-    client_kwargs = {
-        k: v for k, v in merged_kwargs.items() if k not in _HTTPX_REQUEST_ONLY_KEYS
-    }
-    return cast(HttpClientKwargs, cast(object, client_kwargs))
+    client_kwargs: HttpClientKwargs = {}
+    if "auth" in merged_kwargs:
+        client_kwargs["auth"] = merged_kwargs["auth"]
+    if "params" in merged_kwargs:
+        client_kwargs["params"] = merged_kwargs["params"]
+    if "headers" in merged_kwargs:
+        client_kwargs["headers"] = merged_kwargs["headers"]
+    if "cookies" in merged_kwargs:
+        client_kwargs["cookies"] = merged_kwargs["cookies"]
+    if "follow_redirects" in merged_kwargs:
+        client_kwargs["follow_redirects"] = merged_kwargs["follow_redirects"]
+    return client_kwargs
 
 
 PUBLIC_OAUTH_DIRECT_ATTEMPTS_BEFORE_PROXY = 3
@@ -227,8 +238,12 @@ async def request_public_oauth(
             httpx_client_kwargs=hck,
             **kwargs,
         )
-    except _CONNECT_RETRY_EXCEPTIONS:
-        pass
+    except _CONNECT_RETRY_EXCEPTIONS as exc:
+        logger.warning(
+            "http.direct_burst.exhausted",
+            url=url,
+            exception_type=type(exc).__name__,
+        )
 
     if _platform_proxy_active():
         try:
@@ -307,10 +322,7 @@ async def request_with_strategy(
         origin = normalized_http_origin(url)
         prefer = False
         if _platform_proxy_active():
-            try:
-                prefer = await egress_prefer_proxy_get(origin)
-            except Exception:
-                pass
+            prefer = await egress_prefer_proxy_get(origin)
 
         if not prefer:
             try:
@@ -321,8 +333,12 @@ async def request_with_strategy(
                     attempts=direct_attempts,
                     **kwargs,
                 )
-            except _CONNECT_RETRY_EXCEPTIONS:
-                pass
+            except _CONNECT_RETRY_EXCEPTIONS as exc:
+                logger.warning(
+                    "http.direct_burst.exhausted",
+                    url=url,
+                    exception_type=type(exc).__name__,
+                )
 
         if _platform_proxy_active():
             try:
@@ -334,19 +350,15 @@ async def request_with_strategy(
                     **client_kw,
                 ) as client:
                     resp = await client.request(method.upper(), url, **kwargs)
-                    # Запоминаем: этот origin работает через прокси
-                    try:
-                        await egress_prefer_proxy_set(origin)
-                    except Exception:
-                        pass
+                    await egress_prefer_proxy_set(origin)
                     return resp
-            except _CONNECT_RETRY_EXCEPTIONS:
-                logger.warning("http.event", url=url)
-                # Прокси тоже не работает — сбрасываем предпочтение
-                try:
-                    await egress_prefer_proxy_delete(origin)
-                except Exception:
-                    pass
+            except _CONNECT_RETRY_EXCEPTIONS as exc:
+                logger.warning(
+                    "http.proxy.connect_failed",
+                    url=url,
+                    exception_type=type(exc).__name__,
+                )
+                await egress_prefer_proxy_delete(origin)
 
         return await _request_direct_burst(
             method,

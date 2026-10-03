@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from core.ai.llm_config import LLMCallConfig
 from core.ai.providers import (
@@ -363,22 +363,20 @@ def _resolve_llm_call_config(
     provider_config = None
     if resolved_provider in OPENAI_COMPATIBLE_LLM_PROVIDER_SLUGS:
         provider_config = _configured_openai_compatible_provider(settings, resolved_provider)
-        if resolved_provider == "openrouter":
-            openrouter_config = cast(OpenRouterProviderConfig, provider_config)
+        if isinstance(provider_config, OpenRouterProviderConfig):
             default_headers = {
-                "HTTP-Referer": openrouter_config.site_url,
-                "X-Title": openrouter_config.site_name,
+                "HTTP-Referer": provider_config.site_url,
+                "X-Title": provider_config.site_name,
             }
         elif resolved_provider == "github":
             default_headers = _github_default_headers(settings)
-        elif resolved_provider == "yandex":
-            yandex_config = cast(YandexLLMProviderConfig, provider_config)
-            if not yandex_config.folder_id or not str(yandex_config.folder_id).strip():
+        elif isinstance(provider_config, YandexLLMProviderConfig):
+            if not provider_config.folder_id or not str(provider_config.folder_id).strip():
                 raise ValueError("Yandex LLM folder_id is not configured")
-            folder_id = str(yandex_config.folder_id).strip()
+            folder_id = str(provider_config.folder_id).strip()
             candidate_model = normalize_yandex_resource_model_uri(candidate_model, folder_id)
             default_headers = _yandex_auth_headers(
-                api_key=collect_provider_api_keys(yandex_config)[0],
+                api_key=collect_provider_api_keys(provider_config)[0],
                 folder_id=folder_id,
             )
     elif resolved_provider == "custom_openai_compatible":

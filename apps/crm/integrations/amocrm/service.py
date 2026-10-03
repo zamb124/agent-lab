@@ -8,7 +8,7 @@ import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
-from typing import cast
+from typing import Protocol
 
 from apps.crm.constants_graph import BELONGS_TO_RELATIONSHIP_TYPE
 from apps.crm.integrations.amocrm.mapping import (
@@ -21,6 +21,7 @@ from apps.crm.models.api import NoteProcessingConfig
 from apps.crm.models.crm_entity import CRMEntity
 from apps.crm.models.entity_type import EntityType
 from apps.crm.models.relationship import Relationship
+from apps.crm.models.task import CRMTask
 from apps.crm.services.crm_entity_access_service import CrmEntityAccessService
 from apps.crm.services.crm_work_item_service import CrmTaskWorkSeed
 from apps.crm.services.entity_service import EntityService
@@ -31,9 +32,12 @@ from core.http.client import get_httpx_client
 from core.identity.integration_external_author import IntegrationExternalAuthorService
 from core.integrations.models import IntegrationProvider
 from core.integrations.oauth_service import OAuthService, OAuthTokenRefreshError
+from core.logging import get_logger
 from core.namespace import NamespaceService
 from core.rag import BaseRAGProvider
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue, parse_json_object
+
+logger = get_logger(__name__)
 
 AMO_RPS_DELAY_SEC = 0.15
 AMO_PROGRESS_BATCH = 500
@@ -52,10 +56,46 @@ AmoProgressFn = Callable[[str, int], Awaitable[None]]
 AmoItemMapper = Callable[[JsonObject, str, str, str, str, str], Awaitable[None]]
 
 
-def _as_json_object(value: object) -> JsonObject | None:
+def _as_json_object(value: JsonValue) -> JsonObject | None:
     if isinstance(value, dict):
-        return cast(JsonObject, value)
+        return value
     return None
+
+
+class NoteAnalyzeStarter(Protocol):
+    async def start_note_analyze(
+        self,
+        *,
+        note_id: str,
+        note_name: str,
+        namespace: str,
+        mode: str,
+        config: NoteProcessingConfig,
+    ) -> CRMTask: ...
+
+
+async def start_imported_note_analyze(
+    starter: NoteAnalyzeStarter,
+    *,
+    note_id: str,
+    note_name: str,
+    namespace: str,
+) -> None:
+    """Ставит анализ новой импортированной заметки. Уже идущий анализ импорт не останавливает."""
+    try:
+        _ = await starter.start_note_analyze(
+            note_id=note_id,
+            note_name=note_name,
+            namespace=namespace,
+            mode="analyze",
+            config=NoteProcessingConfig(),
+        )
+    except ActiveTaskExistsError as exc:
+        logger.info(
+            "amocrm_note_analyze_already_running",
+            note_id=note_id,
+            existing_task_id=exc.existing_task_id,
+        )
 
 
 class AmoCRMIntegrationService:
@@ -146,11 +186,7 @@ class AmoCRMIntegrationService:
             return {}
         if not response.content.strip():
             return {}
-        payload = cast(object, response.json())
-        payload_obj = _as_json_object(payload)
-        if payload_obj is None:
-            raise ValueError("AmoCRM API returned non-object JSON")
-        return payload_obj
+        return parse_json_object(response.text, "AmoCRM response")
 
     def _next_page_url(self, payload: JsonObject) -> str | None:
         links = payload.get("_links")
@@ -174,14 +210,16 @@ class AmoCRMIntegrationService:
         if not isinstance(raw, list):
             return []
         out: list[JsonObject] = []
-        for item in cast(list[object], raw):
+        for item in raw:
             item_obj = _as_json_object(item)
             if item_obj is not None:
                 out.append(item_obj)
         return out
 
     @staticmethod
-    def _amo_ids_from_embedded_dict(emb: object, key: str) -> list[str]:
+    def _amo_ids_from_embedded_dict(emb: JsonValue | None, key: str) -> list[str]:
+        if emb is None:
+            return []
         emb_obj = _as_json_object(emb)
         if emb_obj is None:
             return []
@@ -189,7 +227,7 @@ class AmoCRMIntegrationService:
         if not isinstance(items, list):
             return []
         out: list[str] = []
-        for item_raw in cast(list[object], items):
+        for item_raw in items:
             item = _as_json_object(item_raw)
             if item is None:
                 continue
@@ -271,7 +309,7 @@ class AmoCRMIntegrationService:
         return s.replace("[", "(").replace("]", ")")
 
     @staticmethod
-    def _amo_users_directory_from_api(users: list[object]) -> dict[str, dict[str, str]]:
+    def _amo_users_directory_from_api(users: list[JsonValue]) -> dict[str, dict[str, str]]:
         out: dict[str, dict[str, str]] = {}
         for raw_item in users:
             raw = _as_json_object(raw_item)
@@ -295,7 +333,7 @@ class AmoCRMIntegrationService:
         *,
         company_id: str,
         account_key: str,
-        amo_author_id: object,
+        amo_author_id: JsonValue,
         amo_users_by_id: dict[str, dict[str, str]],
     ) -> str:
         if amo_author_id is None:
@@ -326,7 +364,7 @@ class AmoCRMIntegrationService:
         )
 
     @staticmethod
-    def _note_date_from_amo_created_at(created: object) -> date:
+    def _note_date_from_amo_created_at(created: JsonValue) -> date:
         """
         AmoCRM v4 отдаёт created_at как unix-seconds (число); в ответах бывает строка.
         Без распознанной даты ежедневник (фильтр по note_date) не покажет заметку.
@@ -403,16 +441,12 @@ class AmoCRMIntegrationService:
             user_id=sync_user_id,
         )
         if created and auto_note_ai_analyze:
-            try:
-                _ = await self._task_service.start_note_analyze(
-                    note_id=ent.entity_id,
-                    note_name=ent.name,
-                    namespace=namespace,
-                    mode="analyze",
-                    config=NoteProcessingConfig(),
-                )
-            except ActiveTaskExistsError:
-                pass
+            await start_imported_note_analyze(
+                self._task_service,
+                note_id=ent.entity_id,
+                note_name=ent.name,
+                namespace=namespace,
+            )
         return True
 
     async def _import_notes_for_amo_parent(
@@ -452,7 +486,7 @@ class AmoCRMIntegrationService:
             url = self._next_page_url(payload)
 
     @staticmethod
-    def _canonical_entity_type_for_amo_task_parent(amo_entity_type: object) -> str | None:
+    def _canonical_entity_type_for_amo_task_parent(amo_entity_type: JsonValue) -> str | None:
         if not isinstance(amo_entity_type, str):
             return None
         s = amo_entity_type.strip().lower()
@@ -465,7 +499,7 @@ class AmoCRMIntegrationService:
         return None
 
     @staticmethod
-    def _amo_timestamp_to_date(ts: object) -> date | None:
+    def _amo_timestamp_to_date(ts: JsonValue) -> date | None:
         if not isinstance(ts, (int, float)):
             return None
         iv = int(ts)
@@ -712,9 +746,7 @@ class AmoCRMIntegrationService:
         )
         embedded_prefetch = _as_json_object(users_payload_prefetch.get("_embedded"))
         users_raw_cached = embedded_prefetch.get("users") if embedded_prefetch is not None else None
-        users_list_cached = (
-            cast(list[object], users_raw_cached) if isinstance(users_raw_cached, list) else []
-        )
+        users_list_cached = users_raw_cached if isinstance(users_raw_cached, list) else []
         _ = self._amo_users_directory_from_api(users_list_cached)
 
         if on_progress is not None:
@@ -1085,7 +1117,7 @@ class AmoCRMIntegrationService:
             )
             embedded = _as_json_object(data.get("_embedded"))
             fields_raw = embedded.get("custom_fields") if embedded is not None else None
-            fields = cast(list[object], fields_raw) if isinstance(fields_raw, list) else []
+            fields = fields_raw if isinstance(fields_raw, list) else []
             et = await EntityType.by_company_namespace_and_type_id(
                 company_id=company_id,
                 namespace=namespace_name,

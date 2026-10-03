@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from apps.stock.models.enums import (
     StockLocationUsage,
+    StockPartnerRole,
     ValuationMethod,
     ValuationPriceSource,
     ValueEntryKind,
@@ -22,11 +23,13 @@ from apps.stock.models.valuation import (
     quantize,
 )
 
-INTERNAL = StockLocationUsage.INTERNAL
-SUPPLIER = StockLocationUsage.SUPPLIER
-CUSTOMER = StockLocationUsage.CUSTOMER
-INVENTORY = StockLocationUsage.INVENTORY
-PRODUCTION = StockLocationUsage.PRODUCTION
+BIN = StockLocationUsage.BIN
+CONTAINER = StockLocationUsage.CONTAINER
+PARTNER = StockLocationUsage.PARTNER
+TRANSIT = StockLocationUsage.TRANSIT
+ADJUSTMENT = StockLocationUsage.ADJUSTMENT
+VENDOR = StockPartnerRole.VENDOR
+CUSTOMER_ROLE = StockPartnerRole.CUSTOMER
 
 
 class TestQuantize:
@@ -40,47 +43,60 @@ class TestQuantize:
 
 
 class TestClassifyEntry:
-    def test_supplier_to_internal_is_inbound(self) -> None:
-        assert classify_entry(SUPPLIER, INTERNAL, is_return=False) == [
-            ValueEntryKind.INBOUND
-        ]
+    def test_vendor_to_bin_is_inbound(self) -> None:
+        assert classify_entry(
+            PARTNER, BIN, is_return=False, src_partner_role=VENDOR
+        ) == [ValueEntryKind.INBOUND]
 
-    def test_internal_to_customer_is_outbound(self) -> None:
-        assert classify_entry(INTERNAL, CUSTOMER, is_return=False) == [
-            ValueEntryKind.OUTBOUND
-        ]
+    def test_bin_to_customer_is_outbound(self) -> None:
+        assert classify_entry(
+            BIN, PARTNER, is_return=False
+        ) == [ValueEntryKind.OUTBOUND]
 
-    def test_internal_to_internal_is_out_in_pair(self) -> None:
-        assert classify_entry(INTERNAL, INTERNAL, is_return=False) == [
-            ValueEntryKind.INTERNAL_OUT,
-            ValueEntryKind.INTERNAL_IN,
-        ]
+    def test_valued_to_valued_writes_nothing(self) -> None:
+        assert classify_entry(BIN, CONTAINER, is_return=False) == []
+        assert classify_entry(BIN, TRANSIT, is_return=False) == []
+        assert classify_entry(BIN, BIN, is_return=False) == []
 
     def test_inventory_gain_and_loss(self) -> None:
-        assert classify_entry(INVENTORY, INTERNAL, is_return=False) == [
+        assert classify_entry(ADJUSTMENT, BIN, is_return=False) == [
             ValueEntryKind.INVENTORY_GAIN
         ]
-        assert classify_entry(INTERNAL, INVENTORY, is_return=False) == [
+        assert classify_entry(BIN, ADJUSTMENT, is_return=False) == [
             ValueEntryKind.INVENTORY_LOSS
         ]
 
     def test_returns(self) -> None:
-        assert classify_entry(CUSTOMER, INTERNAL, is_return=False) == [
-            ValueEntryKind.RETURN
-        ]
-        assert classify_entry(SUPPLIER, INTERNAL, is_return=True) == [
-            ValueEntryKind.RETURN
-        ]
+        # Возврат от клиента — по partner_role, без флага.
+        assert classify_entry(
+            PARTNER, BIN, is_return=False, src_partner_role=CUSTOMER_ROLE
+        ) == [ValueEntryKind.RETURN]
+        # Возврат от поставщика (брак принятого) — по флагу.
+        assert classify_entry(
+            PARTNER, BIN, is_return=True, src_partner_role=VENDOR
+        ) == [ValueEntryKind.RETURN]
         # Возврат поставщику — исходящий (отрицательный) по стоимости origin.
-        assert classify_entry(INTERNAL, SUPPLIER, is_return=True) == [
-            ValueEntryKind.OUTBOUND
-        ]
+        assert classify_entry(
+            BIN, PARTNER, is_return=True, src_partner_role=VENDOR
+        ) == [ValueEntryKind.OUTBOUND]
 
     def test_virtual_to_virtual_writes_nothing(self) -> None:
-        assert classify_entry(SUPPLIER, CUSTOMER, is_return=False) == []
-        assert classify_entry(INTERNAL, PRODUCTION, is_return=False) == [
-            ValueEntryKind.OUTBOUND
-        ]
+        assert classify_entry(PARTNER, PARTNER, is_return=False) == []
+        assert classify_entry(PARTNER, ADJUSTMENT, is_return=False) == []
+
+    def test_consigned_stock_writes_nothing(self) -> None:
+        assert (
+            classify_entry(
+                BIN, PARTNER, is_return=False, owner_entity_id="ent1"
+            )
+            == []
+        )
+        assert (
+            classify_entry(
+                PARTNER, BIN, is_return=False, owner_entity_id="ent1"
+            )
+            == []
+        )
 
 
 class TestInboundUnitCost:

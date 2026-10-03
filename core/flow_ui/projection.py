@@ -21,6 +21,7 @@ from core.flow_ui.document import (
     FlowUIDocument,
     FlowUIFileCard,
     FlowUIHtml,
+    FlowUIImageUrlMarker,
     FlowUIStatePathMarker,
     FlowUITemplateText,
     iter_blocks,
@@ -38,15 +39,35 @@ def template_paths(text: str) -> list[str]:
     return [ref.name for ref in scan_prompt_template(text).refs]
 
 
-def _has_markers(metadata: Sequence[object]) -> tuple[bool, bool]:
+type FlowUIFieldMarker = FlowUITemplateText | FlowUIStatePathMarker | FlowUIImageUrlMarker
+type FlowUIAnnotation = type | types.GenericAlias | types.UnionType | None
+type FlowUIAnnotationArg = FlowUIAnnotation | FlowUIFieldMarker
+type FlowUIFieldValue = (
+    str
+    | int
+    | float
+    | bool
+    | None
+    | FlowUIBlockBase
+    | BaseModel
+    | JsonValue
+    | list[FlowUIFieldValue]
+)
+
+
+def _annotation_args(annotation: FlowUIAnnotationArg) -> tuple[FlowUIAnnotationArg, ...]:
+    return cast(tuple[FlowUIAnnotationArg, ...], get_args(annotation))
+
+
+def _has_markers(metadata: Sequence[FlowUIAnnotationArg]) -> tuple[bool, bool]:
     template = any(isinstance(meta, FlowUITemplateText) for meta in metadata)
     state_path = any(isinstance(meta, FlowUIStatePathMarker) for meta in metadata)
     return template, state_path
 
 
-def _annotation_markers(annotation: object) -> tuple[bool, bool]:
+def _annotation_markers(annotation: FlowUIAnnotationArg) -> tuple[bool, bool]:
     origin = get_origin(annotation)
-    args: tuple[object, ...] = get_args(annotation)
+    args = _annotation_args(annotation)
     if origin is Annotated:
         template, state_path = _has_markers(args[1:])
         inner_template, inner_path = _annotation_markers(args[0])
@@ -71,7 +92,7 @@ class _BlockReferences:
 
 
 def _collect_from_value(
-    value: object, *, template: bool, state_path: bool, out: _BlockReferences
+    value: FlowUIFieldValue, *, template: bool, state_path: bool, out: _BlockReferences
 ) -> None:
     if isinstance(value, str):
         if state_path:
@@ -88,7 +109,7 @@ def _collect_from_value(
         _collect_from_model(value, out)
         return
     if isinstance(value, list):
-        for item in cast(list[object], value):
+        for item in value:
             _collect_from_value(item, template=template, state_path=state_path, out=out)
 
 
@@ -97,7 +118,7 @@ def _collect_from_model(model: BaseModel, out: _BlockReferences) -> None:
         template, state_path = _has_markers(info.metadata)
         inner_template, inner_path = _annotation_markers(info.annotation)
         _collect_from_value(
-            cast(object, getattr(model, name)),
+            cast(FlowUIFieldValue, getattr(model, name)),
             template=template or inner_template,
             state_path=state_path or inner_path,
             out=out,

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from apps.flows.src.clients.mcp_client import MCPClient
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
 from apps.flows.src.observability.flow_timing import (
@@ -12,6 +11,7 @@ from apps.flows.src.observability.flow_timing import (
     maybe_record_flow_terminal,
     record_flow_task_enqueued,
 )
+from apps.flows.src.services.mcp_client import MCPClient
 from core.clients.llm import setup_mock_responses
 from core.logging.attributes import (
     LOG_FLOW_FIRST_CHUNK_MS,

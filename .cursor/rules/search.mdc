@@ -15,7 +15,7 @@ alwaysApply: false
 
 ## Модель
 
-- БД `platform_search` (`DATABASE__SEARCH_URL`): `SearchIndexDefinition` (`core/search/index_models.py`, реестр `search_indexes` с `SearchIndexRetrievalConfig` и `indexing_profile_key`), `CrawlProfile`, `CrawlDomain`, `CrawlUrl`, `CrawlJob` (`core/crawl/models.py`).
+- БД `platform_search` (`DATABASE__SEARCH_URL`): `SearchIndexDefinition` (`core/search/index_models.py`, реестр `search_indexes` с `SearchIndexRetrievalConfig` и `indexing_profile_key`), `CrawlProfile`, `CrawlDomain`, `CrawlUrl`, `CrawlJob` (`core/crawl/models/`).
 - Read path: `IndexSearchProvider` → `RagClient.search` по namespace индекса; meta-search — `MetaSearchService` с провайдерами компании (`Company.metadata.search_providers`).
 - Профиль индексации `runet_web` — `rag.index_profiles.runet_web` через `resolve_index_profile` (`split.strategy=semantic`, lexical включён).
 
@@ -53,5 +53,6 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_crawl_model_files.py` (`make lint`) — одна таблица краула на файл `core/crawl/models/`.
 - `tests/realtime/test_search_commands.py` — WS ≡ REST `SEARCH_OPERATIONS`.
 - Ранжирование — `scripts/eval_search_quality.py` `[без гейта]`.

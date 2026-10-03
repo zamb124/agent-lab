@@ -269,10 +269,8 @@ def build_canvas_result_preview(
     return ""
 
 
-def execution_state_to_diff_json(state: object) -> JsonObject:
+def execution_state_to_diff_json(state: ExecutionState) -> JsonObject:
     """Сериализует ExecutionState в JSON для diff без flow_config."""
-    if not isinstance(state, ExecutionState):
-        raise TypeError("execution_state_to_diff_json: state must be ExecutionState")
     raw = state.model_dump(mode="json", exclude_none=False)
     raw.pop("flow_config", None)
     return require_json_object(raw, "ExecutionState")

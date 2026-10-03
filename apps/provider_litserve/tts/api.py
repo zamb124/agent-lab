@@ -13,13 +13,14 @@
 from typing import Literal, Protocol
 
 import litserve as ls
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.responses import Response
 
 from apps.provider_litserve.shared import resolve_torch_device
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
 from core.types import JsonValue
+from core.websocket import WsCommandError
 
 from .engines import TTSSynthesisInput, TTSWarmupInfo, get_local_tts_engine, parse_tts_body
 
@@ -91,8 +92,11 @@ class TTSLitAPI(ls.LitAPI):
                 sample_rate_override=x.sample_rate_override,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except HTTPException:
+            detail = str(exc)
+            if detail == "":
+                detail = "TTS synthesis rejected the request"
+            raise WsCommandError("unprocessable", detail, error_code="ws_invalid_payload") from exc
+        except WsCommandError:
             raise
         except Exception as exc:
             logger.exception(
@@ -101,7 +105,10 @@ class TTSLitAPI(ls.LitAPI):
                 voice_override=x.voice_override,
                 text_chars=len(x.text),
             )
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            detail = str(exc)
+            if detail == "":
+                detail = "TTS synthesis failed"
+            raise WsCommandError("internal", detail, error_code="internal") from exc
 
     def encode_response(self, output: bytes, **kwargs: JsonValue) -> Response:
         _ = kwargs

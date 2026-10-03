@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
-from typing import cast
 
 from core.files.reader.models import UniversalPage
-from core.types import JsonValue, require_json_value
+from core.types import JsonValue, parse_json_value
 
 _MAX_STRUCT_ROWS: int = 5
 _MAX_KEYS: int = 40
@@ -60,10 +58,8 @@ def summarize_json(text: str) -> str:
     if not stripped:
         return ""
     try:
-        parsed: JsonValue = require_json_value(
-            cast(object, json.loads(stripped)), "summarize_json"
-        )
-    except (ValueError, TypeError):
+        parsed: JsonValue = parse_json_value(stripped, "summarize_json")
+    except ValueError:
         return summarize_outline(text)
     lines = _summarize_json_value(parsed)
     return "\n".join(lines[:_MAX_OUTLINE_LINES])

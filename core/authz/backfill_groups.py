@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.factory import build_authz_service
 from core.authz.group_sync import delete_unscoped_group_tuples, sync_user_groups
 from core.authz.ids import PLATFORM_ADMIN_GROUP
@@ -51,10 +50,7 @@ async def backfill_user_groups(*, limit: int | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill User.groups into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill User.groups into OpenFGA", argv)
     written = asyncio.run(backfill_user_groups(limit=limit))
     _ = sys.stdout.write(f"synced={written}\n")
     return 0

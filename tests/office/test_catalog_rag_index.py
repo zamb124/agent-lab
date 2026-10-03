@@ -1,7 +1,7 @@
 """
 Office catalog RAG index: end-to-end сценарии без моков.
 
-Инфраструктура: PostgreSQL, MinIO, rag_service (HTTP :9002), rag_worker (TaskIQ queue rag),
+Инфраструктура: PostgreSQL, S3, rag_service (HTTP :9002), rag_worker (TaskIQ queue rag),
 office_client (ASGI), rag_client (ASGI). Все мутации индекса — через real TaskIQ worker.
 """
 
@@ -228,6 +228,11 @@ async def _assert_file_record_preserved(file_id: str) -> None:
     assert file_record.file_id == file_id
 
 
+async def _assert_file_record_removed(file_id: str) -> None:
+    file_record = await FileRecord.get(file_id)
+    assert file_record is None
+
+
 @pytest.mark.asyncio
 async def test_enable_creates_namespace_and_sets_flag(
     office_client,
@@ -260,8 +265,10 @@ async def test_enable_creates_namespace_and_sets_flag(
         "rag_index_updated_at": status_payload["rag_index_updated_at"],
     }
     assert status_payload["rag_index_updated_at"] is not None
-    assert status_payload["platform_defaults"]["rrf_k"] is not None
-    assert status_payload["platform_defaults"]["per_channel_top_k"] is not None
+    platform_defaults = status_payload["platform_defaults"]
+    assert isinstance(platform_defaults, dict)
+    assert platform_defaults["rrf_k"] is not None
+    assert platform_defaults["per_channel_top_k"] is not None
 
     probe = await rag_client.post(
         f"/rag/api/v1/namespaces/{rag_namespace_id}/search",
@@ -762,7 +769,7 @@ async def test_permanent_delete_unindexes_document(
         query=needle,
         file_id=file_id,
     )
-    await _assert_file_record_preserved(file_id)
+    await _assert_file_record_removed(file_id)
 
 
 @pytest.mark.asyncio
@@ -1073,7 +1080,7 @@ async def test_delete_catalog_disables_rag_namespace(
         rag_namespace_id,
         auth_headers_system,
     )
-    await _assert_file_record_preserved(file_id)
+    await _assert_file_record_removed(file_id)
 
 
 @pytest.mark.asyncio

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.factory import build_authz_service
 from core.config import get_settings
@@ -47,10 +46,7 @@ async def backfill_company_members(*, limit: int | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill company membership into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill company membership into OpenFGA", argv)
     written = asyncio.run(backfill_company_members(limit=limit))
     _ = sys.stdout.write(f"synced={written}\n")
     return 0

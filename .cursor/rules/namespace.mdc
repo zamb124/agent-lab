@@ -46,4 +46,5 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_identity_model_files.py` (`make lint`) — одна таблица идентичности на файл `core/models/identity_models/`.
 - `scripts/check_authz_dual_write.py`, `scripts/check_authz_backfill_completeness.py` (`make lint`) — dual-write и backfill `platform_namespace` (`core/namespace/authz/`).

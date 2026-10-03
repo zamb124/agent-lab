@@ -63,6 +63,9 @@ DOMAIN_FLOWS_ONLY_ALLOWLIST: frozenset[str] = frozenset(
         "crm/entity/updated",
         "crm/entity/deleted",
         "worktracker/work_item/assigned",
+        # Леджер склада: факт проведённого движения — фильтры/триггеры
+        # в flows (мувы не имеют своего list-ресурса, живут внутри накладной).
+        "stock/move/done",
     }
 )
 
@@ -97,7 +100,7 @@ REGISTER_CALL_RE = re.compile(
 PUBLISH_CALL_RE = re.compile(
     r"\b(?:publish_event(?:_to_user|_to_users|_to_company|_broadcast)?"
     r"|publish_domain_event|publish_realtime_events|publish_crm_entity_event"
-    r"|publish_work_item_events|publish_crm_note_event)\s*\(",
+    r"|publish_work_item_events|publish_crm_note_event|company_event)\s*\(",
 )
 IDENT_RE = re.compile(r"\b([A-Z][A-Z0-9_]*)\b")
 FOR_USER_FANOUT_PUBLISH_RE = re.compile(

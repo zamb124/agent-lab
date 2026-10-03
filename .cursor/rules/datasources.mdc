@@ -19,7 +19,7 @@ alwaysApply: false
 
 - `DatasourceConnectorSpec` (`connector_id`): `postgres`, `mysql`, `clickhouse` — платформенные (`core/datasources/catalog.py`, без `company_id`, не сохраняются); `mcp` и `flow` — stamp-коннекторы компании.
 - `DatasourceConnection` (`datasource_id`): host, port, `database_name`, username, `password_encrypted` (Fernet `encrypt_secret`), `ssl_mode`, `allowed_operations` (по умолчанию `["select"]`), `statement_timeout_ms` (15 с), `max_rows` (1000).
-- Модели — `core/datasources/models.py`; сценарий и dispatch протокола — `DatasourceService` (`core/datasources/service.py`); `test` = introspect с `as_test=True`.
+- Модели — `core/datasources/models/`: `DatasourceConnectorSpec` в `connector_spec.py`, `DatasourceConnection` в `connection.py`, контракты протокола в `contracts.py`. Сценарий и dispatch — `DatasourceService` (`core/datasources/service.py`); `test` = introspect с `as_test=True`.
 - Нода — `{connector_id, datasource_id, datasource_operation, sql}`; протокол один: `introspect`, `query`, `execute`.
 
 ## Инварианты
@@ -54,5 +54,6 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_datasource_model_files.py` (`make lint`) — коннектор и подключение datasource в разных модулях.
 - `scripts/check_authz_backfill_completeness.py` (`make lint`) — backfill `datasource` (`uv run python -m core.datasources.authz.backfill`).
 - `tests/fixtures/datasources.py` (`customer_datasource`, БД `platform_datasource_customer`), `test_datasource_flow_connector.py`, `tests/fixtures/mcp_modes_stub.py`.

@@ -8,6 +8,10 @@ import sys
 import urllib.error
 import urllib.request
 
+type CapabilityValue = (
+    str | int | float | bool | None | list[CapabilityValue] | dict[str, CapabilityValue]
+)
+
 
 def _require_env(name: str) -> str:
     value = os.environ.get(name)
@@ -24,7 +28,7 @@ def _request_headers() -> dict[str, str]:
     return headers
 
 
-def _call_capability(name: str, **kwargs: object) -> dict[str, object]:
+def _call_capability(name: str, **kwargs: CapabilityValue) -> dict[str, CapabilityValue]:
     gateway = _require_env("CAPABILITY_GATEWAY_URL")
     context_raw = _require_env("PLATFORM_CAPABILITY_CONTEXT")
     context = json.loads(context_raw)

@@ -247,6 +247,11 @@ SERVICES = {
         "worker_app": "apps.sync_worker.worker:worker_app",
         "workers": "1",
     },
+    "stock_worker": {
+        "type": "taskiq-worker",
+        "worker_app": "apps.stock_worker.worker:worker_app",
+        "workers": "1",
+    },
     "crm_worker": {
         "type": "taskiq-worker",
         "worker_app": "apps.crm_worker.worker:worker_app",

@@ -10,7 +10,7 @@ alwaysApply: false
 
 # Исполнение flows
 
-Flows исполняются как durable workflow: append-only ledger `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Ядро — `DurableWorkflowRuntime` (`apps/flows/src/durable_execution/manager.py`), модели — `apps/flows/src/durable_execution/models.py` (алиас `flows`, `__global_model__ = True`, методы передают `company_id` сами).
+Flows исполняются как durable workflow: append-only ledger `workflow_events` — источник истины, `ExecutionState` — projection, Redis — cache. Ядро — `DurableWorkflowRuntime` (`apps/flows/src/durable_execution/manager.py`), модели — `apps/flows/src/durable_execution/models/` (алиас `flows`, `__global_model__ = True`, методы передают `company_id` сами).
 
 ## Модель
 
@@ -55,7 +55,7 @@ Flows исполняются как durable workflow: append-only ledger `workfl
 1. `FlowInterrupt(question=...)` или `FlowInterrupt(body=UserMessageInterrupt|OperatorTaskInterrupt|OAuthInterrupt|HandoffInterrupt)` останавливает выполнение; `state.interrupt` — `InterruptData` `{body, system, correlation_id?}` (`core/state/interrupt.py`); плоская форма `{question, context}` запрещена.
 2. Запись прерывания — только `InterruptManager.apply_interrupt`; канал дополняет `system` через `enrich_system_from_channel` (`apps/flows/src/state/interrupt_manager.py`).
 3. `state.interrupt_path` — путь к месту прерывания; `nested_states` — только activity-local вложенные tools; `child_workflows` — durable-связи `FlowNode`; `current_nodes` — точка resume.
-4. HITL: `hitl_node` и tool `hitl_operator_task` через `HitlWorkItemService` создают `WorkItem(kind=operator_handoff, blocking=True)`; resume находит завершённый WorkItem по `correlation_id` (`find_work_item_by_correlation`, `core/worktracker/models.py`), идемпотентен; HTTP wake запрещён → `worktracker.mdc`. `handoff_mode` (`single_reply`/`takeover`) — режим HITL, не agent handoff.
+4. HITL: `hitl_node` и tool `hitl_operator_task` через `HitlWorkItemService` создают `WorkItem(kind=operator_handoff, blocking=True)`; resume находит завершённый WorkItem по `correlation_id` (`find_work_item_by_correlation`, `core/worktracker/models/work_item.py`), идемпотентен; HTTP wake запрещён → `worktracker.mdc`. `handoff_mode` (`single_reply`/`takeover`) — режим HITL, не agent handoff.
 5. OAuth: `OAuthInterrupt` → `TASK_STATE_INPUT_REQUIRED` с `metadata.platform_oauth_continue=true`; после callback — `enqueue(TASK_PROCESS_FLOW, is_resume=True, ...)` без участия пользователя.
 6. Agent handoff: `HandoffInterrupt`; ответ пользователя маршрутизирует channel layer (`resolve_execution_target`) → `handoff.mdc`.
 7. Resume: projection через `workflow_runtime.get_state`, ответ пользователя, новое событие `user_input_applied`; после `OperatorTaskInterrupt` worker выходит, продолжение — `SubscribeToTask`.
@@ -83,5 +83,6 @@ Flows исполняются как durable workflow: append-only ledger `workfl
 
 ## Гейты
 
+- `scripts/check_durable_model_files.py` (`make lint`) — одна таблица durable execution на файл `apps/flows/src/durable_execution/models/`.
 - `scripts/check_strict_agent_architecture.py` (`make lint`) — удалённые runtime-символы flows.
 - Инварианты ledger (append-only, activity key, boundary-коммит) `[без гейта]`.

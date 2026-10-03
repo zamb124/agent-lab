@@ -11,7 +11,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar, Literal, cast, override
+from typing import ClassVar, Literal, override
 
 from oxyde import Field as DbField
 from pydantic import (
@@ -70,7 +70,7 @@ def _parse_config_int(value: JsonValue, field_name: str) -> int:
     raise ValueError(f"{field_name}: expected integer, got {type(value).__name__}")
 
 
-def _blank_optional_str(value: object) -> object:
+def _blank_optional_str(value: JsonValue) -> JsonValue:
     if isinstance(value, str) and value.strip() == "":
         return None
     return value
@@ -80,12 +80,12 @@ def _assert_datasource_node_surface(
     *,
     connector_id: str | None,
     prompt: str | None,
-    tools: Sequence[object],
+    tools: Sequence[FlowToolReference | ToolReference | JsonObject | str],
     agent_skills: Sequence[str],
-    react: object | None,
+    react: "ReactConfig | None",
     structured_output: bool,
-    llm: object | None,
-    llm_context: object | None,
+    llm: "NodeLLMConfig | None",
+    llm_context: LLMContextPatch | None,
     llm_context_resource_key: str | None,
 ) -> None:
     if connector_id is None or not connector_id.strip():
@@ -483,7 +483,7 @@ class NodeConfig(CompanyScopedModel):
 
     @field_validator("git_url", "source_sha", mode="before")
     @classmethod
-    def _blank_git_provenance(cls, value: object) -> object:
+    def _blank_git_provenance(cls, value: JsonValue) -> JsonValue:
         return _blank_optional_str(value)
     invoke_kind: Literal["cli", "a2a"] | None = DbField(
         default=None,
@@ -882,7 +882,7 @@ class GraphNodeConfig(StrictBaseModel):
 
     @field_validator("git_url", "source_sha", mode="before")
     @classmethod
-    def _blank_git_provenance(cls, value: object) -> object:
+    def _blank_git_provenance(cls, value: JsonValue) -> JsonValue:
         return _blank_optional_str(value)
     invoke_kind: Literal["cli", "a2a"] | None = Field(default=None)
     invoke_argv: list[str] = Field(default_factory=list)
@@ -944,13 +944,15 @@ class GraphNodeConfig(StrictBaseModel):
 
     @field_validator("tools", mode="before")
     @classmethod
-    def validate_flow_tool_references(cls, value: object) -> object:
+    def validate_flow_tool_references(
+        cls, value: JsonValue
+    ) -> JsonValue | list[FlowToolReference | JsonValue]:
         if not isinstance(value, list):
             return value
-        normalized: list[object] = []
-        for index, item in enumerate(cast(list[object], value)):
+        normalized: list[FlowToolReference | JsonValue] = []
+        for index, item in enumerate(value):
             if isinstance(item, dict):
-                item_object = cast(JsonObject, item)
+                item_object = item
                 if item_object.get("type") == NodeType.FLOW.value:
                     try:
                         normalized.append(FlowToolReference.model_validate(item_object))

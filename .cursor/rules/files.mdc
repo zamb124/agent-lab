@@ -1,5 +1,5 @@
 ---
-description: "Файлы: FilesService, FileCreateSpec, chunked upload, Documents bind, download, retention, DataTable, S3/MinIO, реестр типов, FileReader. Читать при работе с байтами файла"
+description: "Файлы: FilesService, FileCreateSpec, chunked upload, Documents bind, download, retention, DataTable, S3/SeaweedFS, реестр типов, FileReader. Читать при работе с байтами файла"
 globs:
   - "core/files/**"
   - "core/documents/**"
@@ -35,16 +35,16 @@ alwaysApply: false
 
 ### Documents bind
 
-1. Каждый durable `FilesService.create`/`register_s3` получает `DocsPlacement` и строку в Документах (`FilesService._bind_after_create` → `DocumentsClient` → Office `DocsPlacementService`) либо exempt; сбой bind — компенсация `FilesService.delete` и `raise`.
-2. Placement — `default_docs_placement(source_kind, source_ref)`, дерево путей — `core/documents/placement_paths.py` (`Mail/…`, `Sync/…`, `Flows/…`, `Flows/{flow}/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`); namespace — `resolve_namespace_or_raise()`; caller заполняет полный `source_ref`.
-3. Exempt — `office_document` (Office биндит сам), `generated_ephemeral`, `platform_auxiliary`.
+1. Каждый durable `FilesService.create`/`register_s3` кладётся в дерево `DocumentTreeService.place` (`core/documents/tree_service.py`) либо exempt; сбой размещения — компенсация `FilesService.delete` и `raise`.
+2. Путь источника — `source_catalog_path` (`core/documents/paths.py`): `Mail/…`, `Sync/…`, `Flows/…`, `Flows/{flow}/code_agent/{node_id}/…`, `Networkle/…`, `Worktracker/…`, `Wiki/…`. Явный путь — `DocumentPlacement.catalog_path`. Namespace — `resolve_namespace_or_raise()`.
+3. `office_document` не получает автоматический путь источника: каталог задаёт `DocumentPlacement`, и `place` кладёт файл в дерево. Без каталога остаются `generated_ephemeral` и `platform_auxiliary`.
 4. Новый источник — `FileSourceKind` + строка registry + placement или exempt, не новый HTTP endpoint. Источники со своим контрактом: `MAIL_MESSAGE` (идемпотентность — `MailAttachmentFileIndex`), `CODE_AGENT_SOURCE` (`node_id` обязателен → `guest_runtime.mdc`), `WIKI_PAGE` (`wiki_page_id` + `namespace_id`, retention permanent).
 
 ### Выдача
 
 1. Download — `GET /{segment}/api/v1/files/download/{file_id}`: streaming + `Range`/206 (`stream_s3_file`); любой сервис с Files router отдаёт любой `file_id`; `file_id` из URL любого segment — `file_id_from_download_url`.
 2. `is_public=true` разрешает анонимный download; непубличный без компании — 403.
-3. Наружу — только same-origin URL; `get_public_url()` и прямой URL S3/MinIO в ответах запрещены.
+3. Наружу — только same-origin URL; `get_public_url()` и прямой URL S3 в ответах запрещены.
 
 ### DataTable
 
@@ -58,10 +58,10 @@ Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_
 ### S3
 
 1. Байты читает и пишет только `FileGate` (`core/files/object_store/gate.py`). `aioboto3` и `S3ClientFactory` — внутри `core/files/object_store`.
-2. Платформенный MinIO — `settings.s3` (`storage_id=platform`). Хранилище компании — `ObjectStorage`; маршрут записи — `StorageRoute` по `FileSourceKind`, иначе дефолт компании, иначе `platform`. `FileRecord.storage_id` — адрес уже записанных байтов, маршрут его не меняет.
+2. Платформенное S3-хранилище — `settings.s3` (`storage_id=platform`). Хранилище компании — `ObjectStorage`; маршрут записи — `StorageRoute` по `FileSourceKind`, иначе дефолт компании, иначе `platform`. `FileRecord.storage_id` — адрес уже записанных байтов, маршрут его не меняет.
 3. Доступ — `authorize_file`: публичный файл, `SignedFileGrant` на свой `file_id`, иначе компания принципала совпадает с `FileRecord.company_id`; сессия дополнительно проверяет `company#can_view` и родителя по `source_kind`.
 4. Новое подключение становится `active` только после probe. Смена endpoint — новая строка и перенос `storage_migration_tick`. Удаление при живых файлах — `conflict`.
-5. MinIO создаёт бакет при первой записи, если `provider=minio`. Прокси для MinIO и localhost выключен. Сдвиг часов SigV4 — `core/files/s3_sigv4_clock.py`.
+5. Self-hosted S3 (SeaweedFS, MinIO) создаёт бакет при первой записи, если `provider` ∈ {seaweedfs, minio}. Прокси для self-hosted S3 и localhost выключен. Сдвиг часов SigV4 — `core/files/s3_sigv4_clock.py`.
 
 ### Типы в UI
 
@@ -81,7 +81,7 @@ Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_
 1. FormData/`UploadFile` single-shot на Files API, `single_shot_max_bytes`, `createMultipartFileUploadOp`, фабрики `*/file_upload`, base64/DataURL байтов в Flow UI, публичном поиске и payload.
 2. Durable `FileRecord` без Documents bind (кроме exempt).
 3. `FileReader.read_raw`, `_get_or_extract`, `build_file_extract` в `apps/` и `core/rag/`; отдельный RAG-only extract.
-4. Моки `S3Client` в тестах — реальный MinIO (фикстура `minio_bucket`).
+4. Моки `S3Client` в тестах — реальный S3 (фикстура `s3_bucket`).
 
 ## Исключения
 
@@ -91,6 +91,7 @@ Purge — TaskIQ `file_retention_purge_tick` (idle, cron `files.retention.purge_
 
 ## Гейты
 
+- `scripts/check_sync_file_upload_op.py` (`make lint`) — подтверждение upload Sync читает файл через `FilesService.require_stored_file_ref`.
 - `scripts/check_files_canon.py` (`make lint`) — каждый `FileSourceKind` в auto-map или exempt.
 - `scripts/check_object_store_canon.py` (`make lint`) — `S3ClientFactory` и `aioboto3` только в `core/files/object_store`.
 - `scripts/check_files_ui_canon.sh` (`make lint`) — chunked upload в UI.

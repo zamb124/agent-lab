@@ -28,57 +28,73 @@ DataTableScopeArg = Literal["flow_asset", "flow_session"]
 class TablesCreateArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    name: str
-    columns: list[DataTableColumnSpec]
-    scope: DataTableScopeArg = "flow_session"
-    table_name: str = "data"
-    original_name: str | None = None
+    name: str = Field(
+        description="Human-readable DataTable name; base of the .sqlite filename when original_name is not set",
+    )
+    columns: list[DataTableColumnSpec] = Field(description="Column definitions of the first table")
+    scope: DataTableScopeArg = Field(
+        "flow_session",
+        description="flow_session — lives with the session TTL; flow_asset — permanent file under Flows/{flow}",
+    )
+    table_name: str = Field("data", description="Name of the first SQL table to create")
+    original_name: str | None = Field(
+        None,
+        description="Explicit .sqlite filename; defaults to {name}.sqlite",
+    )
 
 
 class TablesFileIdArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
 
 
 class TablesSchemaArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
-    table_name: str | None = None
-    columns: list[DataTableColumnSpec] | None = None
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
+    table_name: str | None = Field(None, description="Table to create; omit to only read the schema")
+    columns: list[DataTableColumnSpec] | None = Field(
+        None,
+        description="Column definitions; a single-item list on an existing table adds one column",
+    )
 
 
 class TablesQueryArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
-    sql: str
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
+    sql: str = Field(
+        description=(
+            "One SELECT/INSERT/UPDATE/DELETE statement; "
+            "DDL, ATTACH, PRAGMA and multiple statements are forbidden"
+        ),
+    )
 
 
 class TablesInsertArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
-    table_name: str
-    rows: list[JsonObject]
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
+    table_name: str = Field(description="Target table name")
+    rows: list[JsonObject] = Field(description="Rows as JSON objects keyed by column name")
 
 
 class TablesUpdateArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
-    table_name: str
-    row_id: int
-    values: JsonObject
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
+    table_name: str = Field(description="Target table name")
+    row_id: int = Field(description="row_id of the row to update")
+    values: JsonObject = Field(description="Column name → new value map")
 
 
 class TablesDeleteRowsArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    file_id: str
-    table_name: str
-    row_ids: list[int] = Field(min_length=1)
+    file_id: str = Field(description="file_id of the DataTable (.sqlite) file")
+    table_name: str = Field(description="Target table name")
+    row_ids: list[int] = Field(min_length=1, description="row_id values to delete")
 
 
 def _dump(payload: BaseModel, label: str) -> JsonObject:

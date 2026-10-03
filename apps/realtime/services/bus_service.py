@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import cast
 
 from oxyde.exceptions import IntegrityError
 
@@ -244,14 +243,11 @@ class RealtimeBusService:
 async def _xadd_platform_event(event: PlatformEvent) -> None:
     settings = get_settings()
     client = events_redis_client()
-    added_id = cast(
-        object,
-        await client.xadd(
-            PLATFORM_EVENTS_STREAM,
-            {"event": event.model_dump_json()},
-            maxlen=settings.events.stream_maxlen,
-            approximate=True,
-        ),
+    added_id = await client.xadd(
+        PLATFORM_EVENTS_STREAM,
+        {"event": event.model_dump_json()},
+        maxlen=settings.events.stream_maxlen,
+        approximate=True,
     )
     if not isinstance(added_id, str) or not added_id:
         raise RuntimeError(f"XADD platform:events failed for {event.event_id}")

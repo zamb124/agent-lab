@@ -10,7 +10,6 @@ import pytest
 from apps.capability_gateway.services.worktracker_capabilities import (
     WORKTRACKER_CLIENT_METHOD_NAMES,
 )
-from apps.flows.src.clients.worktracker_client import WorktrackerClient
 from core.capabilities import (
     CapabilityCallRequest,
     CapabilityExecutionContext,
@@ -18,6 +17,7 @@ from core.capabilities import (
     execution_token_exp,
     issue_execution_token,
 )
+from core.clients.worktracker_client import WorktrackerClient
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.models.identity_models import Company, User

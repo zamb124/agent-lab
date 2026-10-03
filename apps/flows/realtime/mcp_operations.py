@@ -6,7 +6,6 @@ from apps.flows.di import Di
 from apps.flows.realtime.operations import (
     require_company_member,
 )
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import (
     MCPServerConfig,
     MCPServerDeletedResponse,
@@ -45,6 +44,7 @@ from apps.flows.src.services.mcp_catalog_store import (
     list_store_catalog_entries,
     uninstall_catalog_entry_from_company,
 )
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.services.mcp_server_display_order import sort_mcp_servers_for_display
 from apps.flows.src.services.mcp_server_search import filter_mcp_servers_by_search
 from apps.flows.src.services.mcp_sync import resolve_mcp_client_variables, sync_mcp_server_tools

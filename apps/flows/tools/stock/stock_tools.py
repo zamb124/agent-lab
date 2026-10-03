@@ -83,7 +83,7 @@ async def stock_quants_list(
 
 @tool(
     name="stock_products_list",
-    description="Lists stock products (SKU + template + valuation_method).",
+    description="Lists stock products (SKU + valuation_method).",
     tags=_TAGS,
     permission=_PERM,
     parameters_model=StockProductsListArgs,
@@ -99,7 +99,7 @@ async def stock_products_list(
 @tool(
     name="stock_products_create",
     description=(
-        "Creates a stock product (template + variant). valuation_method is "
+        "Creates a stock product. valuation_method is "
         "required: standard | average | fifo | unvalued."
     ),
     tags=_TAGS,
@@ -291,8 +291,9 @@ async def stock_transfers_cancel(
 @tool(
     name="stock_barcode_resolve",
     description=(
-        "Resolves a barcode to its entity (product|location|package|lot|"
-        "transfer) via the stock barcode index."
+        "Resolves a barcode to its entity (product|packaging|location|"
+        "container|lot|transfer|resource) via the stock barcode index and "
+        "GS1 semantics."
     ),
     tags=_TAGS,
     permission=_PERM,

@@ -6,7 +6,7 @@ from pydantic import Field, model_validator
 
 from core.flow_ui.document import FlowUIDocument
 from core.models import StrictBaseModel
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 from .enums import MergeMode
 from .flow_config import (
@@ -43,7 +43,9 @@ class BranchPayload(StrictBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_variables(cls, data: object) -> object:
+    def _normalize_variables(
+        cls, data: JsonValue
+    ) -> JsonValue | dict[str, JsonValue | dict[str, FlowVariableConfig]]:
         """Нормализует variables: простые значения -> FlowVariableConfig."""
         return normalize_flow_variables_payload(data)
 

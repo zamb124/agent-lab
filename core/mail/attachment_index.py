@@ -23,7 +23,6 @@ class MailAttachmentFileIndex:
     ) -> str | None:
         raw = await self._storage.get(
             self._key(mailbox_binding_id, mail_uid, attachment_index),
-            force_global=True,
         )
         if raw is None:
             return None
@@ -47,5 +46,4 @@ class MailAttachmentFileIndex:
         _ = await self._storage.set(
             self._key(mailbox_binding_id, mail_uid, attachment_index),
             json.dumps(file_id),
-            force_global=True,
         )

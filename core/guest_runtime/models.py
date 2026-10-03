@@ -9,7 +9,7 @@ from typing import ClassVar, Self, override
 from oxyde import Field as DbField
 from pydantic import ConfigDict, Field, field_validator
 
-from core.documents.placement_paths import validate_relative_dir
+from core.documents.names import validate_relative_dir
 from core.errors.boundary import PlatformConflictError
 from core.guest_runtime.env import (
     GUEST_IDLE_TTL_MAX,
@@ -18,6 +18,7 @@ from core.guest_runtime.env import (
 )
 from core.models.base import StrictBaseModel
 from core.models.platform_model import PlatformModel
+from core.types import JsonValue
 
 
 class GuestInvokeKind(StrEnum):
@@ -275,7 +276,7 @@ class CodeAgentRebuildRequest(CodeAgentNodeRefPayload):
 
     @field_validator("git_url", "source_sha", mode="before")
     @classmethod
-    def _blank_git_field(cls, value: object) -> str | None:
+    def _blank_git_field(cls, value: JsonValue) -> str | None:
         if value is None:
             return None
         if not isinstance(value, str):

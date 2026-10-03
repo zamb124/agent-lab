@@ -4,7 +4,6 @@ RAG провайдер на базе pgvector (PostgreSQL).
 """
 
 import math
-import os
 import uuid
 from datetime import datetime, timezone
 from typing import Literal, override
@@ -371,6 +370,11 @@ def _normalize_embedding_api_key(raw: str | None) -> str:
     return s
 
 
+def deterministic_embeddings_enabled() -> bool:
+    """Тестовый контур или rag.embedding.mock: клиент без внешнего embedding API."""
+    return is_testing() or get_settings().rag.embedding.mock
+
+
 class PgVectorProvider(BaseRAGProvider):
     """
     RAG провайдер на базе pgvector.
@@ -420,11 +424,7 @@ class PgVectorProvider(BaseRAGProvider):
                 **embedding_extra_headers,
             }
 
-        use_deterministic_embeddings = (
-            is_testing()
-            or os.environ.get("RAG__EMBEDDING__MOCK") == "true"
-            or os.environ.get("PGVECTOR_TEST_MOCK_EMBEDDINGS") == "true"
-        )
+        use_deterministic_embeddings = deterministic_embeddings_enabled()
         self._embedding_client: AIEmbeddingClient = create_embedding_client_from_runtime(
             provider=embedding_runtime.provider,
             model=model,

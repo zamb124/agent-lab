@@ -18,7 +18,9 @@ from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTu
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
 from core.logging import get_logger
-from core.types import JsonObject, require_json_object, require_json_value
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
+
+CrmPublicValue = JsonValue | date | datetime
 
 logger = get_logger(__name__)
 
@@ -193,7 +195,7 @@ class CrmEntityAccessService:
                     self._set_nested_value(result, field_path, value)
         return result
 
-    def _get_nested_value(self, entity: CRMEntity, path: str) -> object | None:
+    def _get_nested_value(self, entity: CRMEntity, path: str) -> CrmPublicValue | None:
         keys = [key for key in path.split(".") if key]
         if not keys:
             return None
@@ -206,8 +208,8 @@ class CrmEntityAccessService:
         return self._get_entity_public_field(entity, keys[0])
 
     @staticmethod
-    def _get_entity_public_field(entity: CRMEntity, field_name: str) -> object | None:
-        mapping: dict[str, object | None] = {
+    def _get_entity_public_field(entity: CRMEntity, field_name: str) -> CrmPublicValue | None:
+        mapping: dict[str, CrmPublicValue | None] = {
             "entity_id": entity.entity_id,
             "company_id": entity.company_id,
             "namespace": entity.namespace,
@@ -229,8 +231,8 @@ class CrmEntityAccessService:
         return mapping.get(field_name)
 
     @staticmethod
-    def _get_json_path_value(obj: JsonObject, keys: list[str]) -> object | None:
-        value: object = obj
+    def _get_json_path_value(obj: JsonObject, keys: list[str]) -> JsonValue | None:
+        value: JsonValue = obj
         for key in keys:
             nested = CrmEntityAccessService._as_nested_json_object(value)
             if nested is None:
@@ -239,13 +241,13 @@ class CrmEntityAccessService:
         return value
 
     @staticmethod
-    def _as_nested_json_object(value: object) -> JsonObject | None:
+    def _as_nested_json_object(value: JsonValue | None) -> JsonObject | None:
         try:
             return require_json_object(value, "nested access object")
         except ValueError:
             return None
 
-    def _set_nested_value(self, obj: JsonObject, path: str, value: object) -> None:
+    def _set_nested_value(self, obj: JsonObject, path: str, value: CrmPublicValue) -> None:
         keys = [key for key in path.split(".") if key]
         if not keys:
             return

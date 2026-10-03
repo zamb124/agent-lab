@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from typing import ClassVar, Protocol, TypeAlias, TypedDict
 
 import torch
-from fastapi import HTTPException, Request
+from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field
 from silero_vad import get_speech_timestamps, load_silero_vad
 
@@ -30,6 +30,7 @@ from core.config.models import (
 from core.logging import get_logger
 from core.models.voice_models import VADSegment
 from core.types import JsonValue
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -68,7 +69,7 @@ class VADDetectionInput(BaseModel):
 
 def _coerce_audio_bytes(raw: VADRawValue | None) -> bytes:
     if raw is None:
-        raise HTTPException(status_code=422, detail="VAD: audio (or file) field is required")
+        raise WsCommandError("unprocessable", "VAD: audio (or file) field is required", error_code="ws_invalid_payload")
     if isinstance(raw, bytes):
         audio_bytes = raw
     elif isinstance(raw, bytearray | memoryview):
@@ -77,16 +78,16 @@ def _coerce_audio_bytes(raw: VADRawValue | None) -> bytes:
         byte_values: list[int] = []
         for item in raw:
             if not isinstance(item, int) or isinstance(item, bool):
-                raise HTTPException(status_code=422, detail="VAD: audio must be bytes or list[int]")
+                raise WsCommandError("unprocessable", "VAD: audio must be bytes or list[int]", error_code="ws_invalid_payload")
             byte_values.append(item)
         try:
             audio_bytes = bytes(byte_values)
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail="VAD: audio contains a byte outside 0..255") from exc
+            raise WsCommandError("unprocessable", "VAD: audio contains a byte outside 0..255", error_code="ws_invalid_payload") from exc
     else:
-        raise HTTPException(status_code=422, detail="VAD: audio must be bytes or list[int]")
+        raise WsCommandError("unprocessable", "VAD: audio must be bytes or list[int]", error_code="ws_invalid_payload")
     if len(audio_bytes) == 0:
-        raise HTTPException(status_code=422, detail="VAD: audio (or file) field is required")
+        raise WsCommandError("unprocessable", "VAD: audio (or file) field is required", error_code="ws_invalid_payload")
     return audio_bytes
 
 
@@ -101,7 +102,7 @@ def parse_vad_body(
     ``sample_rate`` (опционально, переопределяет дефолт модели).
     """
     if isinstance(raw, Request):
-        raise HTTPException(status_code=422, detail="VAD: LitServe must pass a prepared request body")
+        raise WsCommandError("unprocessable", "VAD: LitServe must pass a prepared request body", error_code="ws_invalid_payload")
 
     audio_raw = raw.get("audio")
     if audio_raw is None:
@@ -114,13 +115,14 @@ def parse_vad_body(
     elif isinstance(model_raw, str):
         requested_model = model_raw.strip()
     else:
-        raise HTTPException(status_code=422, detail="VAD: model must be a string")
+        raise WsCommandError("unprocessable", "VAD: model must be a string", error_code="ws_invalid_payload")
     if requested_model == "":
         requested_model = default_api_model_id.strip()
     if requested_model == "":
-        raise HTTPException(
-            status_code=422,
-            detail="VAD: model is required (explicitly or vad_default_api_model_id in config)",
+        raise WsCommandError(
+            "unprocessable",
+            "VAD: model is required (explicitly or vad_default_api_model_id in config)",
+            error_code="ws_invalid_payload",
         )
 
     sample_rate_raw = raw.get("sample_rate")
@@ -129,7 +131,7 @@ def parse_vad_body(
     elif isinstance(sample_rate_raw, int) and not isinstance(sample_rate_raw, bool):
         sample_rate_override = sample_rate_raw
     else:
-        raise HTTPException(status_code=422, detail="VAD: sample_rate must be an integer")
+        raise WsCommandError("unprocessable", "VAD: sample_rate must be an integer", error_code="ws_invalid_payload")
 
     threshold_raw = raw.get("threshold")
     if threshold_raw is None:
@@ -137,7 +139,7 @@ def parse_vad_body(
     elif isinstance(threshold_raw, int | float) and not isinstance(threshold_raw, bool):
         threshold_override = float(threshold_raw)
     else:
-        raise HTTPException(status_code=422, detail="VAD: threshold must be a number")
+        raise WsCommandError("unprocessable", "VAD: threshold must be a number", error_code="ws_invalid_payload")
 
     return VADDetectionInput(
         audio_bytes=audio_bytes,

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,23 @@ FilterOp = Literal["eq", "ne", "contains"]
 _MAX_DEPTH = 6
 _STRING_OPS: tuple[FilterOp, ...] = ("eq", "ne", "contains")
 _SCALAR_OPS: tuple[FilterOp, ...] = ("eq", "ne")
+_SCALAR_JSON_TYPES: tuple[Literal["string", "integer", "number", "boolean"], ...] = (
+    "string",
+    "integer",
+    "number",
+    "boolean",
+)
+
+
+def _scalar_filter_kind(
+    json_type: str | None,
+) -> Literal["string", "integer", "number", "boolean"] | None:
+    if json_type is None:
+        return None
+    for kind in _SCALAR_JSON_TYPES:
+        if kind == json_type:
+            return kind
+    return None
 
 
 class PlatformEventFilterField(BaseModel):
@@ -125,8 +142,8 @@ def _walk(
         return
 
     json_type = _primary_type(resolved)
-    if json_type in {"string", "integer", "number", "boolean"} and path_segments:
-        kind = cast(FilterValueKind, json_type)
+    kind = _scalar_filter_kind(json_type)
+    if kind is not None and path_segments:
         ops = list(_STRING_OPS) if kind == "string" else list(_SCALAR_OPS)
         fields.append(
             _leaf_field(
@@ -160,8 +177,8 @@ def _walk(
                 )
                 return
             item_type = _primary_type(items_resolved)
-            if item_type in {"string", "integer", "number", "boolean"}:
-                kind = cast(FilterValueKind, item_type)
+            kind = _scalar_filter_kind(item_type)
+            if kind is not None:
                 fields.append(
                     _leaf_field(
                         path_segments=path_segments,

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from apps.frontend.di import Di
@@ -37,6 +37,7 @@ from core.middleware.auth.company_resolver import build_service_base_url
 from core.models.embed_models import EmbedConfig, EmbedStatus
 from core.pagination import OffsetPage
 from core.utils.tokens import get_token_service
+from core.websocket import WsCommandError
 
 router = APIRouter(prefix="/api/embed/configs", tags=["embed_configs"])
 
@@ -118,15 +119,15 @@ async def issue_embed_session_token(
     await di.authz_service.require_can_view(AuthzObject.company(company.company_id), user_id=user.user_id)
     config = await EmbedConfig.embed_for_company(embed_id, company.company_id)
     if not config or config.preview_share_link:
-        raise HTTPException(status_code=404, detail="Configuration not found")
+        raise WsCommandError("not_found", "Configuration not found", error_code="not_found")
     if config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Widget configuration is disabled")
+        raise WsCommandError("forbidden", "Widget configuration is disabled", error_code="forbidden")
     origin = (request_data.origin or "").strip()
     if config.allowed_origins:
         if not origin:
-            raise HTTPException(status_code=400, detail="origin is required for a restricted embed")
+            raise WsCommandError("ws_invalid_payload", "origin is required for a restricted embed", error_code="ws_invalid_payload")
         if origin not in config.allowed_origins:
-            raise HTTPException(status_code=403, detail="origin is not allowed for this configuration")
+            raise WsCommandError("forbidden", "origin is not allowed for this configuration", error_code="forbidden")
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=request_data.expires_in_seconds)
     token = get_token_service().create_embed_session_token(
         user_id=user.user_id,

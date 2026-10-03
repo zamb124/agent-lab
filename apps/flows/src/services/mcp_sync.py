@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.enums import CodeMode
 from apps.flows.src.models.mcp import MCPDiscoveredTool, MCPServerConfig
 from apps.flows.src.models.tool_reference import ToolReference
 from apps.flows.src.services.flow_access_service import FlowAccessService
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from apps.flows.tools.builtin_specs import require_not_builtin_tool_id
 from core.context import get_context, require_active_company

@@ -20,7 +20,13 @@ from core.config import get_settings
 from core.context import get_context
 from core.http import get_httpx_client
 from core.http.client import HttpRequestKwargs
-from core.internal_context_headers import build_internal_context_headers
+from core.internal_context_headers import (
+    HEADER_COMPANY_ID,
+    HEADER_ISSUED_AT,
+    HEADER_SIGNATURE,
+    HEADER_USER_ID,
+    build_internal_context_headers,
+)
 from core.logging import get_log_context, get_logger
 from core.models.identity_models import is_platform_user_id
 from core.test_scope import TEST_SCOPE_HEADER, resolve_test_scope
@@ -57,7 +63,7 @@ class ServiceClientError(Exception):
         return self.status_code is not None and 400 <= self.status_code < 500
 
     def http_detail(self) -> JsonValue | str:
-        """Тело для HTTPException.detail: FastAPI `detail` из JSON peer-ответа, иначе текст."""
+        """Тело ошибки peer: поле `detail` из JSON ответа, иначе текст."""
         if self.response_text is None:
             return str(self)
         response_text = self.response_text.strip()
@@ -182,9 +188,25 @@ class ServiceClient:
             if not isinstance(extra_headers, Mapping):
                 raise ServiceClientError("headers must be a mapping")
             extra_headers_map = type_cast(Mapping[object, object], extra_headers)
+            # Явный Authorization вызывающего замещает контекстную идентичность:
+            # подписанные internal-заголовки отправлять нельзя — peer примет их за автора.
+            extra_pairs: list[tuple[str, str]] = []
+            has_explicit_auth = False
             for key, value in extra_headers_map.items():
                 if not isinstance(key, str) or not isinstance(value, str):
                     raise ServiceClientError("headers must contain only str keys and str values")
+                extra_pairs.append((key, value))
+                if key.lower() == "authorization":
+                    has_explicit_auth = True
+            if has_explicit_auth:
+                for internal_key in (
+                    HEADER_COMPANY_ID,
+                    HEADER_USER_ID,
+                    HEADER_ISSUED_AT,
+                    HEADER_SIGNATURE,
+                ):
+                    _ = headers.pop(internal_key, None)
+            for key, value in extra_pairs:
                 headers[key] = value
 
         try:

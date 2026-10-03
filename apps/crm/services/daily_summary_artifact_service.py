@@ -23,8 +23,8 @@ def _artifact_name(kind: str, namespace: str | None, *parts: str) -> str:
 
 
 class DailySummaryArtifactService:
-    def __init__(self) -> None:
-        self._files: FilesService = FilesService(files_route_segment="crm")
+    def __init__(self, files_service: FilesService) -> None:
+        self._files: FilesService = files_service
 
     async def put_daily_payload(
         self,

@@ -3,25 +3,40 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Protocol, cast
+from collections.abc import Awaitable
+from typing import Protocol
 
-from redis.asyncio.client import Redis
-
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class _RedisFromUrl(Protocol):
-    def __call__(self, url: str, *, decode_responses: bool) -> Redis: ...
+class _EventsRedis(Protocol):
+    def hset(self, name: str, *, mapping: dict[str, str]) -> Awaitable[int]: ...
+
+    def hgetall(self, name: str) -> Awaitable[dict[str, str]]: ...
+
+    def hdel(self, name: str, *keys: str) -> Awaitable[int]: ...
+
+    def xadd(
+        self,
+        name: str,
+        fields: dict[str, str],
+        *,
+        maxlen: int,
+        approximate: bool,
+    ) -> Awaitable[str | bytes]: ...
+
+    def aclose(self) -> Awaitable[None]: ...
 
 
-_events_client: Redis | None = None
+_events_client: _EventsRedis | None = None
 _events_client_loop: asyncio.AbstractEventLoop | None = None
 
 
-def events_redis_client() -> Redis:
+def events_redis_client() -> _EventsRedis:
     """Lazy Redis-клиент шины: один на текущий running event loop.
 
     Starlette ``TestClient`` поднимает отдельный loop на каждый ``with``-блок.
@@ -44,8 +59,7 @@ def events_redis_client() -> Redis:
     redis_url = settings.database.redis_url
     if not redis_url:
         raise RuntimeError("database.redis_url is required for platform events")
-    from_url = cast(_RedisFromUrl, Redis.from_url)
-    _events_client = from_url(redis_url, decode_responses=True)
+    _events_client = redis_client_from_url(_EventsRedis, redis_url, decode_responses=True)
     _events_client_loop = loop
     logger.info("platform_events.redis_client_initialized")
     return _events_client

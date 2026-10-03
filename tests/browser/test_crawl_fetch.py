@@ -7,11 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 
 from core.authz.models import AuthzObject
 from core.clients.browser.crawl_fetch_types import BrowserCrawlFetchRequest
 from core.clients.browser_fetch_client import BrowserFetchClient
+from core.websocket import WsCommandError
 
 pytestmark = pytest.mark.unit
 
@@ -46,14 +46,14 @@ async def test_crawl_fetch_returns_429_when_concurrency_limit_exceeded() -> None
 
     with patch.object(crawl_fetch_module, "_crawl_fetch_semaphore", return_value=_BlockedSemaphore()):
         with patch.object(crawl_fetch_module.asyncio, "wait_for", side_effect=_wait_for_timeout):
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(WsCommandError) as exc_info:
                 await crawl_fetch_module.crawl_fetch(
                     BrowserCrawlFetchRequest(url="https://example.com/page"),
                     di,  # pyright: ignore[reportArgumentType]
                 )
 
-    assert exc_info.value.status_code == 429
-    assert "concurrency limit" in str(exc_info.value.detail)
+    assert exc_info.value.code == "rate_limited"
+    assert "concurrency limit" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

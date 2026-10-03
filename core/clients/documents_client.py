@@ -31,12 +31,7 @@ from core.clients.documents_models import (
 from core.clients.files_client import FilesClient
 from core.clients.service_client import NAMESPACE_HEADER, ServiceClient
 from core.context import resolve_namespace_or_raise
-from core.documents.placement import (
-    DocsBindResult,
-    DocsEnsurePathRequest,
-    DocsEnsurePathResult,
-    DocsPlacement,
-)
+from core.documents.placement import DocumentEnsureRequest, DocumentEnsureResult
 from core.files.file_ref import FileRef
 from core.files.reader.engine import read_files_to_envelope
 from core.files.reader.models import CompressionMode, ReadFileArgs
@@ -63,7 +58,7 @@ class DocumentsClient:
         return {NAMESPACE_HEADER: resolve_namespace_or_raise()}
 
     @staticmethod
-    def _as_objects(value: object, label: str) -> list[JsonObject]:
+    def _as_objects(value: JsonValue, label: str) -> list[JsonObject]:
         items = require_json_array(value, label)
         return [require_json_object(item, f"{label}[{index}]") for index, item in enumerate(items)]
 
@@ -119,30 +114,16 @@ class DocumentsClient:
             return f"{_API}/catalogs/{rid}/access"
         return f"{_API}/documents/{rid}/access"
 
-    async def bind_file(self, placement: DocsPlacement) -> DocsBindResult:
-        body: JsonObject = require_json_object(
-            placement.model_dump(mode="json"),
-            "DocsPlacement",
-        )
-        response = await self._http.post(
-            "office",
-            f"{_API}/documents/bind",
-            json=body,
-            timeout=8.0,
-        )
-        payload = require_json_object(response, "DocumentsClient.bind_file")
-        return DocsBindResult.model_validate(payload)
-
     async def ensure_catalog_path(
         self, path_segments: list[str] | DocumentsEnsureCatalogPathArgs
-    ) -> DocsEnsurePathResult:
+    ) -> DocumentEnsureResult:
         if isinstance(path_segments, DocumentsEnsureCatalogPathArgs):
             segments = path_segments.path_segments
         else:
             segments = path_segments
         if not segments:
-            raise ValueError("path_segments required")
-        body = DocsEnsurePathRequest(path_segments=segments)
+            raise ValueError("catalog_path is required")
+        body = DocumentEnsureRequest(catalog_path=segments)
         raw = await self._http.post(
             "office",
             f"{_API}/catalogs/ensure-path",
@@ -151,7 +132,7 @@ class DocumentsClient:
             timeout=30.0,
         )
         payload = require_json_object(raw, "documents.ensure_catalog_path")
-        return DocsEnsurePathResult.model_validate(payload)
+        return DocumentEnsureResult.model_validate(payload)
 
     async def list_catalog_items(self, catalog_id: str | DocumentsCatalogIdArgs) -> JsonObject:
         cid = self._catalog_id(catalog_id)

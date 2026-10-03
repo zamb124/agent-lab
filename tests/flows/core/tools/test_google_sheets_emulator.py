@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
     sheets_append_rows,

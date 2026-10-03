@@ -26,7 +26,7 @@ from core.clients.sync_models import (
     SyncSendMessageArgs,
     SyncUpdateChannelArgs,
 )
-from core.types import JsonObject, require_json_array, require_json_object
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 _API = "/sync/api/v1"
 
@@ -114,7 +114,7 @@ class SyncClient:
         }
 
     @staticmethod
-    def _as_objects(value: object, label: str) -> list[JsonObject]:
+    def _as_objects(value: JsonValue, label: str) -> list[JsonObject]:
         items = require_json_array(value, label)
         return [require_json_object(item, f"{label}[{index}]") for index, item in enumerate(items)]
 

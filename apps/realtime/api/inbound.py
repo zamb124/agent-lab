@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 
 from apps.realtime.di import Di
 from core.context import reset_context, set_context
@@ -18,6 +18,7 @@ from core.realtime.models import (
 )
 from core.types import JsonObject
 from core.utils.tokens import get_token_service
+from core.websocket import WsCommandError, raise_invalid
 
 router = APIRouter()
 
@@ -31,32 +32,32 @@ async def centrifugo_inbound(
     di: Di,
 ) -> CentrifugoRpcResponse:
     if not inbound.user:
-        raise HTTPException(status_code=400, detail="Centrifugo inbound user is required")
+        raise WsCommandError("ws_invalid_payload", "Centrifugo inbound user is required", error_code="ws_invalid_payload")
     if inbound.method != _RPC_METHOD:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Centrifugo RPC method must be {_RPC_METHOD!r}, got {inbound.method!r}",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"Centrifugo RPC method must be {_RPC_METHOD!r}, got {inbound.method!r}",
+            error_code="ws_invalid_payload",
         )
     if inbound.data is None:
-        raise HTTPException(status_code=400, detail="Centrifugo RPC data is required")
+        raise WsCommandError("ws_invalid_payload", "Centrifugo RPC data is required", error_code="ws_invalid_payload")
     parsed = PlatformEvent.model_validate(inbound.data)
     if not is_command_event_type(parsed.type):
-        raise HTTPException(
-            status_code=400,
-            detail="Centrifugo inbound accepts only *_requested PlatformEvent",
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "Centrifugo inbound accepts only *_requested PlatformEvent",
+            error_code="ws_invalid_payload",
         )
     try:
         _ = owner_service_for_event_type(parsed.type)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_invalid(exc)
     company_from_meta = _company_id_from_connection_meta(inbound.meta)
     if company_from_meta is not None and parsed.company_id != company_from_meta:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"event.company_id {parsed.company_id!r} does not match connection meta "
-                f"{company_from_meta!r}"
-            ),
+        raise WsCommandError(
+            "ws_invalid_payload",
+            f"event.company_id {parsed.company_id!r} does not match connection meta {company_from_meta!r}",
+            error_code="ws_invalid_payload",
         )
     delivery = parsed.delivery
     if delivery is None:
@@ -101,19 +102,19 @@ async def _actor_context(
 ) -> Context:
     user = await User.get(user_id)
     if user is None:
-        raise HTTPException(status_code=401, detail=f"inbound user {user_id} not found")
+        raise WsCommandError("unauthorized", f"inbound user {user_id} not found", error_code="unauthorized")
     company = await Company.get(company_id)
     if company is None:
-        raise HTTPException(status_code=400, detail=f"company {company_id} not found")
+        raise WsCommandError("ws_invalid_payload", f"company {company_id} not found", error_code="ws_invalid_payload")
     auth_token = get_token_service().create_token(user_id, company_id=company_id)
     trace_raw = get_log_context().get("trace_id")
     trace_id = trace_raw if isinstance(trace_raw, str) and trace_raw else None
     host = request.headers.get("host")
     if host is None or host == "":
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     active_namespace = namespace.strip()
     if active_namespace == "":
-        raise HTTPException(status_code=400, detail="event.meta.namespace is required")
+        raise WsCommandError("ws_invalid_payload", "event.meta.namespace is required", error_code="ws_invalid_payload")
     return Context(
         user=user,
         active_company=company,
@@ -133,7 +134,7 @@ def _company_id_from_connection_meta(meta: JsonObject | None) -> str | None:
     if company_id is None:
         return None
     if not isinstance(company_id, str):
-        raise HTTPException(status_code=400, detail="connection meta.company_id must be string")
+        raise WsCommandError("ws_invalid_payload", "connection meta.company_id must be string", error_code="ws_invalid_payload")
     if company_id == "":
         return None
     return company_id

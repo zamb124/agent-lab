@@ -29,9 +29,9 @@ uv run pytest tests/ -n 5 -m "not integration and not network and not agent_buil
 2. `uv run python -m scripts.test_stack down` — остановка прошлого стека.
 3. `uv run python -m scripts.test_process_preflight_cleanup` (`scripts/test_process_preflight_cleanup.py`) — зачистка stale pytest, granian, TaskIQ и code-runner процессов по точным сигнатурам и портам.
 4. `uv run python scripts/ensure_test_compose_images.py` — GHCR auth (`gh auth login` + `docker login`), pull-or-build образов, файл `.env.test-compose-images`. Транспортную ошибку `docker manifest inspect` (IPv6 `socket is not connected`) скрипт ретраит; `unauthorized` — повторный login; `manifest unknown` — raise; сетевая ошибка не выдаётся за «нет образа».
-5. `docker-compose -f docker-compose-test.yaml up -d` — Postgres `:54322`, Redis `:63792`, redis-realtime `:63793`, Centrifugo `:19000`, MinIO `:19002`, OnlyOffice `:18088`, provider_litserve, `test-a2a-agent` `:18052`, LiveKit, Loki, Tempo, Alloy, Grafana.
+5. `docker-compose -f docker-compose-test.yaml up -d` — Postgres `:54322`, Redis `:63792`, redis-realtime `:63793`, Centrifugo `:19000`, SeaweedFS `:19002`, OnlyOffice `:18088`, provider_litserve, `test-a2a-agent` `:18052`, LiveKit, Loki, Tempo, Alloy, Grafana.
 6. `uv run python -m scripts.db_test_reset` (`scripts/db_test_reset.py`) — TRUNCATE managed-таблиц всех баз и Redis FLUSHDB. Backend Postgres завис в `BgworkerShutdown` и `pg_terminate_backend` не снимает lock'и — скрипт делает один `docker restart agentlab_postgres_test` и повторяет drain.
-7. `uv run python -m scripts.test_migrate` (`scripts/test_migrate.py`) — `0001_initial` всех сервисных баз и сид компании `system`.
+7. `uv run python -m scripts.test_migrate` (`scripts/test_migrate.py`) — цепочка миграций всех сервисных баз и сид компании `system`.
 8. OpenFGA — `openfga-migrate-test` и `openfga-test` (`:9093`), `scripts/openfga_env_bootstrap.py` пишет store и модель в `reports/openfga-test.env`.
 9. `WORKERS=$(WORKERS) uv run python -m scripts.test_stack up` (`scripts/test_stack.py`) — параллельный старт granian-сервисов (9001–9026) и TaskIQ-воркеров, параллельное ожидание readiness, манифест `/tmp/platform_test_stack.json` (`pytest_workers_requested`, `stack_scale_factor`, `stack_capacity`).
 
@@ -144,7 +144,7 @@ DB_PROFILE=0 PYTEST_WORKERS_PROFILE=0 TEST_COVERAGE=0 make test   # без пр�
 
 - **Полный E2E flows** (webhook → `process_flow_task` → LLM → channel HTTP): без `real_taskiq`; `sync_tools` исполняет `enqueue(TASK_PROCESS_FLOW, ...)` in-process, ответы — `mock_llm_redis`.
 - **Воркер с MockLLM** (`@pytest.mark.real_taskiq` + `mock_llm_redis`): воркер читает FIFO после `init_worker_testing_mock_llm` (`core/tasks/worker_bootstrap.py`) на старте; пример — `tests/rag/test_index_file_extract_e2e.py` (+ `rag_worker`).
-- **Эмбеддинги RAG без внешнего API**: `PgVectorProvider` (`core/rag/providers/pgvector_provider.py`) при `TESTING=true` (а также `RAG__EMBEDDING__MOCK=true` или `PGVECTOR_TEST_MOCK_EMBEDDINGS=true`) создаёт детерминированный embedding-клиент; процессы стека получают `TESTING=true` из `scripts/test_stack.py`.
+- **Эмбеддинги RAG без внешнего API**: `PgVectorProvider` (`core/rag/providers/pgvector_provider.py`) создаёт детерминированный embedding-клиент при `is_testing()` или `rag.embedding.mock` (ENV `RAG__EMBEDDING__MOCK`); процессы стека получают `TESTING=true` из `scripts/test_stack.py`.
 - **Исполняемый `llm_node` с MockLLM** — эталон `tests/flows/core/tools/test_google_docs_emulator_llm.py`.
 - **Handoff** — матрица и порядок очереди MockLLM → `handoff.mdc`; Flow UI conformance → `flow_ui.mdc`; A2A conformance (`tests/flows/a2a_conformance/`) → `a2a.mdc`.
 - **Квота по client IP**: фикстура с `ASGITransport(app=..., client=(ip, port))` и IP из `unique_id` (`tests/frontend/api/test_public_search_session.py`).

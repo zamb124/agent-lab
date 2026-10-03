@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import cast, override
+from typing import override
 
-from core.ai.adapters.catalog_base import BaseModelCatalogAdapter
+from core.ai.adapters.catalog_base import BaseModelCatalogAdapter, string_headers_json
 from core.ai.models import AIModelRecord, AIRuntimeEndpoint
 from core.ai.providers import PROVIDER_LITSERVE, AICapability
-from core.types import JsonObject
 
 
 class ProviderLitserveModelCatalogAdapter(BaseModelCatalogAdapter):
@@ -26,7 +25,7 @@ class ProviderLitserveModelCatalogAdapter(BaseModelCatalogAdapter):
             capability=capability,
             base_url=base_url,
             endpoint_url=endpoint_url,
-            headers=cast(JsonObject, self._provider_litserve_model_list_headers()),
+            headers=string_headers_json(self._provider_litserve_model_list_headers()),
         )
 
     @override

@@ -132,7 +132,7 @@ async def _send_new_mail_notifications(
                 f"mail:notify:{binding.company_id}:{user_id}:"
                 f"{binding.mailbox_binding_id}:{message.uid}"
             )
-            existing = await di.shared_storage.get(key=dedup_key, force_global=True)
+            existing = await di.shared_storage.get(key=dedup_key)
             if existing is not None:
                 continue
             from_display = message.from_address if message.from_address is not None else "—"
@@ -183,7 +183,6 @@ async def _send_new_mail_notifications(
                 key=dedup_key,
                 value=json.dumps({"sent_at": datetime.now(timezone.utc).isoformat()}),
                 ttl=dedup_ttl_seconds,
-                force_global=True,
             )
             sent += 1
     await _publish_message_upserted(

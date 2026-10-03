@@ -16,8 +16,8 @@ alwaysApply: false
 ## Модель
 
 - Capabilities — `AICapability` (`core.ai.providers`); спецификации провайдеров — `core.ai.providers` (новый провайдер добавляется там один раз, нестандартный discovery — adapter `core.ai.adapters.*`).
-- Каталог — `AIModelRecord` (`core/ai/models.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет.
-- Overlay оценок — `LLMModelScore` (таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`).
+- Каталог — `AIModelRecord` (`core/ai/models/model_record.py`, таблица `ai_models` в `platform_shared`, PK `ai_model_id` = `{provider}:{model_id}`): modalities, pricing/`is_free`, typed AA indices, размерности embedding; score и editorial в каталоге нет.
+- Overlay оценок — `LLMModelScore` (`core/ai/models/model_score.py`, таблица `llm_model_scores`, только компания `system`: `enabled`, `editorial_prior`, `note`).
 - Вызов — `LLMCallConfig` (`core/ai/llm_config.py`); выбор — `AIRequestRequirements`, `AISelection` (`core.ai.requirements`).
 - Модель — не строка: строка допустима только как выбор пользователя и сразу резолвится в typed record.
 
@@ -76,5 +76,6 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_ai_model_files.py` (`make lint`) — `AIModelRecord` и `LLMModelScore` в разных модулях.
 - `scripts/check_company_ai_canon.py` (`make check-events-canon`) — `core.ai` как единственный AI-слой.
 - `tests/core/ai/test_platform_model_scoring_fixtures.py`; `scripts/generate_llm_scoring_fixtures.py --check` (сеть + ключи) — drift scoring.

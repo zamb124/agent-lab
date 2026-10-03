@@ -46,16 +46,16 @@ tuples:
     object: wiki_page:root
   - user: user:anne
     relation: owner
-    object: office_catalog:docs
+    object: document_catalog:docs
   - user: company:acme
     relation: company
-    object: office_catalog:docs
+    object: document_catalog:docs
   - user: company:acme#member
     relation: viewer
-    object: office_catalog:docs
+    object: document_catalog:docs
   - user: user:dave
     relation: editor
-    object: office_catalog:docs
+    object: document_catalog:docs
   - user: company:acme
     relation: company
     object: sync_channel:ch1
@@ -267,12 +267,12 @@ tests:
   - name: office-company-view-only
     check:
       - user: user:bob
-        object: office_catalog:docs
+        object: document_catalog:docs
         assertions:
           can_view: true
           can_edit: false
       - user: user:dave
-        object: office_catalog:docs
+        object: document_catalog:docs
         assertions:
           can_view: true
           can_edit: true

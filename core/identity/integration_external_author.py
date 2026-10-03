@@ -74,7 +74,7 @@ class IntegrationExternalAuthorService:
             raise ValueError('account_key is required')
 
         key = integration_external_author_storage_key(company_id, prov, acc, ext)
-        cached = await self._storage.get(key, force_global=True)
+        cached = await self._storage.get(key)
         if cached:
             mapping = IntegrationExternalAuthorMapping.model_validate_json(cached)
             uid = mapping.user_id.strip()
@@ -83,7 +83,7 @@ class IntegrationExternalAuthorService:
             existing = await User.get(uid)
             if existing is not None:
                 return uid
-            _ = await self._storage.delete(key, force_global=True)
+            _ = await self._storage.delete(key)
 
         matches = await User.find_all_by_email_ci(email_norm)
         if len(matches) > 1:
@@ -135,7 +135,6 @@ class IntegrationExternalAuthorService:
         _ = await self._storage.set(
             key,
             mapping.model_dump_json(),
-            force_global=True,
         )
         return user.user_id
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -71,16 +71,18 @@ async def _require_company_view_when_user_context(
 def _speech_provider_name(value: str | None) -> SpeechProviderName | None:
     if value is None:
         return None
-    if value in STT_TTS_PROVIDER_IDS:
-        return cast(SpeechProviderName, value)
+    for provider in STT_TTS_PROVIDER_IDS:
+        if provider == value:
+            return provider
     raise ValueError(f"Unsupported speech provider: {value!r}")
 
 
 def _speech_override_provider_name(value: str | None) -> SpeechOverrideProviderName | None:
     if value is None:
         return None
-    if value in VAD_PROVIDER_IDS:
-        return cast(SpeechOverrideProviderName, value)
+    for provider in VAD_PROVIDER_IDS:
+        if provider == value:
+            return provider
     raise ValueError(f"Unsupported VAD provider: {value!r}")
 
 

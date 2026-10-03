@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, ClassVar
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,6 +35,7 @@ from core.search import PUBLIC_SEARCH_FLOW_ID, PUBLIC_SEARCH_SESSION_ISSUER, Pub
 from core.search.models import MetaSearchResponse, MetaSearchSerpMoreRequest, SerpClickEvent
 from core.types import JsonObject
 from core.utils.tokens import TokenType, get_token_service
+from core.websocket import WsCommandError, raise_not_found, raise_upstream
 
 logger = get_logger(__name__)
 
@@ -84,7 +85,7 @@ def _normalize_origin(raw: str) -> str:
         return ""
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="origin must be an HTTP(S) origin")
+        raise WsCommandError("ws_invalid_payload", "origin must be an HTTP(S) origin", error_code="ws_invalid_payload")
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
@@ -157,10 +158,10 @@ def _platform_user_roles(user: User) -> list[str]:
         return list(system_roles)
     active_company_id = user.active_company_id.strip()
     if active_company_id == "":
-        raise HTTPException(status_code=403, detail="User active company is not set")
+        raise WsCommandError("forbidden", "User active company is not set", error_code="forbidden")
     active_roles = user.companies.get(active_company_id)
     if active_roles is None or len(active_roles) == 0:
-        raise HTTPException(status_code=403, detail="User roles not found")
+        raise WsCommandError("forbidden", "User roles not found", error_code="forbidden")
     return list(active_roles)
 
 
@@ -171,23 +172,23 @@ async def issue_public_search_session(
     di: Di,
 ) -> PublicSearchSessionResponse:
     if body.mode not in PUBLIC_SEARCH_SPEC_BY_MODE:
-        raise HTTPException(status_code=400, detail="Unsupported search mode")
+        raise WsCommandError("ws_invalid_payload", "Unsupported search mode", error_code="ws_invalid_payload")
 
     configs = await ensure_public_search_embed_configs()
     config = configs[body.mode]
 
     referer = request.headers.get("referer", "")
     if not _referer_path_allowed(referer):
-        raise HTTPException(status_code=403, detail="Search is available only from the public search page")
+        raise WsCommandError("forbidden", "Search is available only from the public search page", error_code="forbidden")
 
     origin = _normalize_origin(body.origin)
     referer_origin = _origin_from_referer(referer)
     if origin == "" and referer_origin != "":
         origin = referer_origin
     if origin != "" and referer_origin != "" and origin != referer_origin:
-        raise HTTPException(status_code=403, detail="origin does not match the search page")
+        raise WsCommandError("forbidden", "origin does not match the search page", error_code="forbidden")
     if origin == "":
-        raise HTTPException(status_code=403, detail="origin is required for a public search session")
+        raise WsCommandError("forbidden", "origin is required for a public search session", error_code="forbidden")
 
     platform_user = await _resolve_platform_authenticated_user(request)
     if platform_user is None and body.consume_search_quota:
@@ -202,13 +203,13 @@ async def issue_public_search_session(
 
     persisted_config = await EmbedConfig.get(config.embed_id)
     if persisted_config is None or persisted_config.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=404, detail="Widget not found")
+        raise WsCommandError("not_found", "Widget not found", error_code="not_found")
     if persisted_config.status != EmbedStatus.ACTIVE:
-        raise HTTPException(status_code=403, detail="Widget is disabled")
+        raise WsCommandError("forbidden", "Widget is disabled", error_code="forbidden")
     if persisted_config.flow_id != PUBLIC_SEARCH_FLOW_ID:
-        raise HTTPException(status_code=500, detail="Search configuration is corrupt")
+        raise WsCommandError("internal", "Search configuration is corrupt", error_code="internal")
     if persisted_config.branch_id != config.branch_id:
-        raise HTTPException(status_code=500, detail="Search branch configuration is corrupt")
+        raise WsCommandError("internal", "Search branch configuration is corrupt", error_code="internal")
 
     embed_session_id = new_embed_session_id()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=body.expires_in_seconds)
@@ -280,18 +281,18 @@ def _validate_public_search_guest() -> None:
         return
     ctx = get_context()
     if ctx is None:
-        raise HTTPException(status_code=401, detail="Public search session is required")
+        raise WsCommandError("unauthorized", "Public search session is required", error_code="unauthorized")
     issued_by = ctx.user.attributes.get("issued_by")
     if issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
         auth_token = ctx.auth_token
         if auth_token is None or auth_token.strip() == "":
-            raise HTTPException(status_code=403, detail="Invalid session type for SERP")
+            raise WsCommandError("forbidden", "Invalid session type for SERP", error_code="forbidden")
         token_data = get_token_service().validate_token(auth_token)
         if token_data is None:
-            raise HTTPException(status_code=401, detail="Public search session is required")
+            raise WsCommandError("unauthorized", "Public search session is required", error_code="unauthorized")
         token_issued_by = token_data.metadata.get("issued_by")
         if token_issued_by != PUBLIC_SEARCH_SESSION_ISSUER:
-            raise HTTPException(status_code=403, detail="Invalid session type for SERP")
+            raise WsCommandError("forbidden", "Invalid session type for SERP", error_code="forbidden")
 
 
 @router.post("/serp/more", response_model=MetaSearchResponse)
@@ -316,8 +317,8 @@ async def public_search_serp_more(
     except Exception as exc:
         message = str(exc)
         if "404" in message or "serp cache expired" in message.lower():
-            raise HTTPException(status_code=404, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+            raise_not_found(exc)
+        raise_upstream(exc)
     return MetaSearchResponse.model_validate(payload)
 
 
@@ -336,7 +337,7 @@ async def public_search_serp_click(
             json=body.model_dump(mode="json"),
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise_upstream(exc)
 
 
 @router.get("/favicon")
@@ -349,7 +350,7 @@ async def public_search_favicon(
     if host.startswith("www."):
         host = host[4:]
     if not _DOMAIN_RE.match(host):
-        raise HTTPException(status_code=400, detail="invalid domain")
+        raise WsCommandError("ws_invalid_payload", "invalid domain", error_code="ws_invalid_payload")
     await enforce_public_session_issue_rate_limit(
         redis_client=di.redis_client,
         request=request,
@@ -359,14 +360,14 @@ async def public_search_favicon(
     async with get_httpx_client(timeout=5.0, follow_redirects=True) as http_client:
         response = await http_client.get(favicon_url)
         if response.status_code >= 400:
-            raise HTTPException(status_code=404, detail="favicon not found")
+            raise WsCommandError("not_found", "favicon not found", error_code="not_found")
         content_type = "image/x-icon"
         for header_name, header_value in response.headers.multi_items():
             if header_name.lower() == "content-type" and header_value.strip():
                 content_type = header_value.strip()
                 break
         if not content_type.startswith("image/"):
-            raise HTTPException(status_code=404, detail="favicon is not an image")
+            raise WsCommandError("not_found", "favicon is not an image", error_code="not_found")
         return Response(
             content=response.content,
             media_type=content_type,

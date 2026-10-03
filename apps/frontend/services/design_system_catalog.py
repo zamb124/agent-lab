@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, parse_yaml_value, require_json_object
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DS_ROOT = _REPO_ROOT / "tests" / "ui" / "design-system"
@@ -40,17 +38,22 @@ class UiKitCatalogEntry:
     deadline: str | None = None
 
 
-def _require_mapping(raw: object, label: str) -> JsonObject:
+def _require_mapping(raw: JsonValue, label: str) -> JsonObject:
     return require_json_object(raw, label)
+
+
+def _load_yaml_object(text: str, label: str) -> JsonObject:
+    loaded = parse_yaml_value(text, label)
+    if loaded is None:
+        empty: JsonObject = {}
+        return empty
+    return _require_mapping(loaded, label)
 
 
 def load_catalog() -> tuple[UiKitCatalogEntry, ...]:
     if not _CATALOG_PATH.is_file():
         raise FileNotFoundError(f"UI Kit catalog not found: {_CATALOG_PATH}")
-    catalog = _require_mapping(
-        yaml.safe_load(_CATALOG_PATH.read_text(encoding="utf-8")) or {},
-        "catalog.yaml",
-    )
+    catalog = _load_yaml_object(_CATALOG_PATH.read_text(encoding="utf-8"), "catalog.yaml")
     entries_raw = catalog.get("components")
     if not isinstance(entries_raw, list):
         raise ValueError("catalog.yaml components must be a list")
@@ -87,8 +90,8 @@ def load_manifest(component: str) -> UiKitManifest:
     manifest_path = _DS_ROOT / "components" / component / "manifest.yaml"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"manifest not found for {component}: {manifest_path}")
-    manifest = _require_mapping(
-        yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {},
+    manifest = _load_yaml_object(
+        manifest_path.read_text(encoding="utf-8"),
         f"{component} manifest.yaml",
     )
     import_path = manifest.get("import")

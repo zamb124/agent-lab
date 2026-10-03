@@ -9,13 +9,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.base import ToolArguments
 from apps.flows.src.tools.decorator import FunctionTool
-from core.context import reset_context, set_context
-from core.models.context_models import Context
-from core.models.identity_models import Company, User
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,
@@ -25,6 +22,9 @@ from apps.flows.tools.google_docs.google_docs import (
     gdocs_read_document,
     gdocs_share_document,
 )
+from core.context import reset_context, set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 

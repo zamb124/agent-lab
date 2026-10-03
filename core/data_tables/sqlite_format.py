@@ -31,6 +31,8 @@ from core.pagination import CursorPage, decode_cursor, encode_cursor
 from core.types import JsonObject, JsonValue, parse_json_value
 from core.utils.time import utcnow
 
+SqliteValue = str | int | float | bytes | None
+
 _SQLITE_TYPE: dict[DataTableColumnType, str] = {
     "text": "TEXT",
     "integer": "INTEGER",
@@ -42,8 +44,8 @@ _SQLITE_TYPE: dict[DataTableColumnType, str] = {
 }
 
 
-def _row_get(row: sqlite3.Row, key: str) -> object:
-    return cast(object, row[key])
+def _row_get(row: sqlite3.Row, key: str) -> SqliteValue:
+    return cast(SqliteValue, row[key])
 
 
 def _row_str(row: sqlite3.Row, key: str) -> str:
@@ -63,7 +65,7 @@ def _row_int(row: sqlite3.Row, key: str) -> int:
 def _execute(
     connection: sqlite3.Connection,
     sql: str,
-    params: Sequence[object] = (),
+    params: Sequence[SqliteValue] = (),
 ) -> sqlite3.Cursor:
     return connection.execute(sql, params)
 
@@ -72,18 +74,22 @@ def _sql(*parts: str) -> str:
     return "".join(parts)
 
 
+def _cursor_rows(cursor: sqlite3.Cursor) -> list[sqlite3.Row]:
+    return list(cast(Sequence[sqlite3.Row], cursor.fetchall()))
+
+
 def _fetchall(
     connection: sqlite3.Connection,
     sql: str,
-    params: Sequence[object] = (),
+    params: Sequence[SqliteValue] = (),
 ) -> list[sqlite3.Row]:
-    return list(cast(Sequence[sqlite3.Row], _execute(connection, sql, params).fetchall()))
+    return _cursor_rows(_execute(connection, sql, params))
 
 
 def _fetchone(
     connection: sqlite3.Connection,
     sql: str,
-    params: Sequence[object] = (),
+    params: Sequence[SqliteValue] = (),
 ) -> sqlite3.Row | None:
     return cast(sqlite3.Row | None, _execute(connection, sql, params).fetchone())
 
@@ -408,7 +414,7 @@ _BOOLEAN_TRUE = frozenset({"true", "1", "yes"})
 _BOOLEAN_FALSE = frozenset({"false", "0", "no"})
 
 
-def coerce_cell(column: DataTableColumnSnapshot, value: JsonValue) -> object:
+def coerce_cell(column: DataTableColumnSnapshot, value: JsonValue) -> SqliteValue:
     """Typed cell write. Excel/UI may send strings; empty → NULL when nullable."""
     parsed: JsonValue = value
     if isinstance(value, str) and value.strip() == "":
@@ -495,7 +501,7 @@ def _coerce_boolean(column_name: str, value: JsonValue) -> int:
     raise ValueError(f"column {column_name!r} expects boolean")
 
 
-def decode_cell(column: DataTableColumnSnapshot, raw: object) -> JsonValue:
+def decode_cell(column: DataTableColumnSnapshot, raw: SqliteValue) -> JsonValue:
     if raw is None:
         return None
     column_type = column.column_type
@@ -572,7 +578,7 @@ def update_row(
     if unknown:
         raise ValueError(f"unknown columns for {name}: {sorted(unknown)}")
     assignments = ["updated_at = ?"]
-    params: list[object] = [utcnow().replace(microsecond=0).isoformat()]
+    params: list[SqliteValue] = [utcnow().replace(microsecond=0).isoformat()]
     for column_name, raw in values.items():
         assignments.append(f"{quote_sql_ident(column_name)} = ?")
         params.append(coerce_cell(columns[column_name], raw))
@@ -615,7 +621,7 @@ def _append_column_q_clauses(
     columns: dict[str, DataTableColumnSnapshot],
     column_q: list[str] | None,
     clauses: list[str],
-    params: list[object],
+    params: list[SqliteValue],
 ) -> None:
     if column_q is None:
         return
@@ -665,7 +671,7 @@ def page_rows(
         order_column = sort_name
     direction = "ASC" if sort_dir == "asc" else "DESC"
     clauses: list[str] = []
-    params: list[object] = []
+    params: list[SqliteValue] = []
     if filter_column is not None:
         filter_name = validate_ident(filter_column, kind="column")
         if filter_name not in columns and filter_name not in SYSTEM_COLUMNS:
@@ -780,7 +786,7 @@ def execute_user_sql(
             raise ValueError("user SQL result column name is required")
         columns.append(name)
     rows: list[list[JsonValue]] = []
-    for fetched in cast(Sequence[sqlite3.Row], cursor.fetchall()):
+    for fetched in _cursor_rows(cursor):
         cells: list[JsonValue] = []
         for column_name in columns:
             value = _row_get(fetched, column_name)

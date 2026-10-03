@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Модель
 
-- Таблицы `database.rag_url`: `VectorDocument` (чанк: `content`, `embedding vector(1024)`, `embedding_model`, `content_tsv`, `metadata`, `company_id`) и `DocumentProcessingStatus` (`document_id`, `status`, `ttl_seconds`, `error_message`) — `core/db/models/rag.py`; `RAGDocument`, `RAGSearchResult`, `RAGNamespace` собираются из чанков.
+- Таблицы `database.rag_url`: `VectorDocument` (чанк: `content`, `embedding vector(1024)`, `embedding_model`, `content_tsv`, `metadata`, `company_id`) и `DocumentProcessingStatus` (`document_id`, `status`, `ttl_seconds`, `error_message`) — `core/db/models/rag/`; `RAGDocument`, `RAGSearchResult`, `RAGNamespace` собираются из чанков.
 - Каталог индекса — `namespace_id` = `Namespace.name` платформы (→ `namespace.mdc`); ключи `flow:{...}`, `{company_id}_{namespace}` запрещены.
 - Провайдер — `BaseRAGProvider` (`core/rag/base_provider.py`): namespaces, documents, `search`; реализации `core/rag/providers/{pgvector,agentset}_provider.py`; конструирование — только `get_rag_provider` (`rag.default_provider`); in-process id — `RAG_IN_PROCESS_PROVIDER_ID`.
 - `RAGSearchOptions` (`core/rag/models.py`: `channels`, `rrf_k`, `per_channel_top_k`, `rerank`, `rerank_max_candidates`, `retrieval`, `freshness_weight`, `freshness_half_life_days`) — единый контракт опций поиска.
@@ -33,6 +33,7 @@ alwaysApply: false
 8. TTL: `metadata.ttl_seconds` (≥ 0, `0` — без очистки; по умолчанию `rag.ttl.default_ttl_seconds`, нормализация — `core/rag/ttl.py`); очистка — `rag_cleanup_expired_documents_tick`; CRM индексирует с `ttl_seconds: 0`.
 9. Reembed — единственная точка `execute_reembed_tick` (`core/rag/reembed_stale_documents.py`): stale-чанки по компаниям, проверка `company_may_incur_billable_operation_charge`, контекст владельца чанка (`build_job_context`), эмбеддинги через `core.ai.runtime`; TaskIQ-обёртки — один вызов; orphan-чанки без `company_id` удаляет `rag_cleanup_orphan_company_chunks_tick`.
 10. LLM context использует RAG адаптерами `RAGLLMContextSource` и `RAGLLMContextMemoryStore` (`core/rag/`), политика → опции — `rag_search_options_override_from_retrieval` (`core/llm_context/retrieval_rag_bridge.py`).
+11. Детерминированные эмбеддинги pgvector — `deterministic_embeddings_enabled` (`core/rag/providers/pgvector_provider.py`): `is_testing()` или `rag.embedding.mock` (ENV `RAG__EMBEDDING__MOCK`).
 
 ## Контракты
 
@@ -60,6 +61,7 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_rag_model_files.py` (`make lint`) — `DocumentProcessingStatus` и `VectorDocument` в разных модулях.
 - `scripts/check_rag_post_retrieval_rerank_single.py` (`make check-events-canon`) — одна реализация реранка.
 - `tests/core/rag/test_search_options_contract.py`, `tests/core/rag/test_search_options_resolver.py` — сквозной контракт опций.
-- `tests/realtime/test_rag_commands.py` — WS ≡ REST; `tests/rag/` — API на реальном pgvector и MinIO.
+- `tests/realtime/test_rag_commands.py` — WS ≡ REST; `tests/rag/` — API на реальном pgvector и SeaweedFS.

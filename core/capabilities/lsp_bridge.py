@@ -20,28 +20,38 @@ from core.capabilities.lsp_stdio import (
 from core.logging import get_logger
 from core.types import parse_json_value, require_json_array
 from core.utils.background import run_with_log_context
+from core.utils.process_env import child_process_env
 
 logger = get_logger(__name__)
 
 _IDLE_TIMEOUT_SECONDS = 300.0
 
 
-async def _run_bridge() -> None:
-    session_id = os.environ["CODE_LSP_SESSION_ID"]
-    root = Path(os.environ["CODE_LSP_ROOT"])
+def bridge_invocation(argv: list[str]) -> tuple[str, Path, list[str]]:
+    """Аргументы процесса: session_id, корень vfs, JSON-список команды language server."""
+    if len(argv) != 4:
+        raise RuntimeError("lsp bridge expects session_id, root and command json")
+    session_id = argv[1].strip()
+    root_raw = argv[2].strip()
+    if session_id == "" or root_raw == "":
+        raise RuntimeError("lsp bridge session_id and root are required")
     raw_command = require_json_array(
-        parse_json_value(os.environ["CODE_LSP_COMMAND"], "CODE_LSP_COMMAND"),
-        "CODE_LSP_COMMAND",
+        parse_json_value(argv[3], "lsp bridge command"),
+        "lsp bridge command",
     )
     command: list[str] = []
     for item in raw_command:
-        if not isinstance(item, str):
-            raise RuntimeError("CODE_LSP_COMMAND must be a JSON list of strings")
+        if not isinstance(item, str) or item.strip() == "":
+            raise RuntimeError("lsp bridge command must be a JSON list of non-empty strings")
         command.append(item)
     if command == []:
-        raise RuntimeError("CODE_LSP_COMMAND must not be empty")
+        raise RuntimeError("lsp bridge command must not be empty")
+    return session_id, Path(root_raw), command
+
+
+async def _run_bridge(session_id: str, root: Path, command: list[str]) -> None:
     _ = (root / BRIDGE_PID_FILENAME).write_text(str(os.getpid()), encoding="utf-8")
-    env = os.environ.copy()
+    env = child_process_env()
     _ = env.pop("PYTHONPATH", None)
     env["PYTHONNOUSERSITE"] = "1"
     process = await asyncio.create_subprocess_exec(
@@ -106,7 +116,7 @@ async def _run_bridge() -> None:
             sockets = server.sockets
             if not sockets:
                 raise RuntimeError("language server bridge has no listening socket")
-            port_raw = _require_tcp_port(cast(object, sockets[0].getsockname()[1]))
+            port_raw = _require_tcp_port(cast(int, sockets[0].getsockname()[1]))
             _ = port_file.write_text(str(port_raw), encoding="utf-8")
             logger.info("code_lsp.bridge_listen", session_id=session_id, port=port_raw)
             _arm_idle()
@@ -122,8 +132,8 @@ async def _run_bridge() -> None:
                 _ = await process.wait()
 
 
-def _require_tcp_port(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+def _require_tcp_port(value: int) -> int:
+    if isinstance(value, bool):
         raise RuntimeError("language server bridge port must be int")
     if value <= 0 or value > 65535:
         raise RuntimeError("language server bridge port out of range")
@@ -131,7 +141,8 @@ def _require_tcp_port(value: object) -> int:
 
 
 def main() -> None:
-    asyncio.run(_run_bridge())
+    session_id, root, command = bridge_invocation(sys.argv)
+    asyncio.run(_run_bridge(session_id, root, command))
 
 
 if __name__ == "__main__":

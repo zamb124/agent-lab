@@ -11,7 +11,7 @@ def setup_database_before_tests():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_minio_bucket():
+def ensure_s3_bucket():
     yield
 
 

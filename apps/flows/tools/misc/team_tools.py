@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import Field
 
-from apps.flows.src.clients.team_client import TeamClient
 from apps.flows.src.tools.decorator import tool
+from core.clients.team_client import TeamClient
 from core.models import StrictBaseModel
 from core.types import JsonObject
 

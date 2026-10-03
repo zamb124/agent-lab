@@ -49,7 +49,7 @@ async def op_lead_requests_list(
     _ = user
     _ = await require_system_admin(di.authz_service)
     raw_records = await di.shared_storage.get_all_by_prefix(
-        REQUEST_STORAGE_PREFIX, limit=LEAD_REQUEST_SCAN_LIMIT, force_global=True
+        REQUEST_STORAGE_PREFIX, limit=LEAD_REQUEST_SCAN_LIMIT
     )
     records = [LeadRequestRecord.model_validate_json(value) for value in raw_records.values()]
     records.sort(key=_lead_request_sort_key, reverse=True)

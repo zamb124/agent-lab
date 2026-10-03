@@ -24,6 +24,7 @@ from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
 )
 from core.logging import get_logger
+from core.utils.process_env import child_process_env
 
 logger = get_logger(__name__)
 
@@ -85,13 +86,13 @@ class LspSessionManager:
             env = _bridge_process_env()
             if self._extra_env is not None:
                 env.update(self._extra_env)
-            env["CODE_LSP_SESSION_ID"] = session_id
-            env["CODE_LSP_ROOT"] = str(root)
-            env["CODE_LSP_COMMAND"] = json.dumps(command)
             bridge = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
                 "core.capabilities.lsp_bridge",
+                session_id,
+                str(root),
+                json.dumps(command),
                 cwd=str(_REPO_ROOT),
                 env=env,
                 stdout=asyncio.subprocess.DEVNULL,
@@ -217,14 +218,14 @@ class LspSessionManager:
 
 
 def _bridge_process_env() -> dict[str, str]:
-    env = os.environ.copy()
+    env = child_process_env()
     runtime_bin = str(platform_runtime_bin_dir())
     env["PATH"] = f"{runtime_bin}{os.pathsep}{env.get('PATH', '')}"
     pythonpath = env.get("PYTHONPATH", "")
     repo = str(_REPO_ROOT)
     env["PYTHONPATH"] = repo if pythonpath == "" else f"{repo}{os.pathsep}{pythonpath}"
     env["PYTHONNOUSERSITE"] = "1"
-    dotnet = resolve_runtime_executable("dotnet", override_env="CODE_RUNNER_DOTNET_BIN")
+    dotnet = resolve_runtime_executable("dotnet")
     if dotnet is not None:
         env["DOTNET_ROOT"] = str(Path(dotnet).resolve().parent)
     return env

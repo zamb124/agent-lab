@@ -18,10 +18,10 @@ from typing import TYPE_CHECKING, ClassVar, TypeAlias, override
 
 from pydantic import BaseModel
 
-from apps.flows.src.clients.external_api_client import ExternalAPIClient
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.external_api import ExternalAPIConfig, HTTPMethod
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.services.external_api_client import ExternalAPIClient
 from apps.flows.src.tools.authz_gate import check_tool_permission
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.src.tools.provider_schema import compile_openai_strict_parameters

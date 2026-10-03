@@ -11,7 +11,6 @@ import asyncio
 import contextlib
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +28,8 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
+from core.capabilities.runner_cache import code_runner_python_sandbox_site
+from core.capabilities.runner_pool import code_runner_pool_size
 from core.capabilities.sandbox_libraries import (
     PYTHON_ALLOWED_IMPORT_ROOTS,
     PYTHON_FORBIDDEN_BUILTIN_NAMES,
@@ -40,20 +41,13 @@ from core.tracing.operation_span import traced_operation
 
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_python"
-WORKER_POOL_ENV = "CODE_RUNNER_PYTHON_WORKERS"
 WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
-SANDBOX_SITE_ENV = "CODE_RUNNER_PYTHON_SANDBOX_SITE"
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 _SANDBOX_REQUIREMENTS = Path(__file__).resolve().parents[1] / "sandbox-requirements.txt"
 
 
 def ensure_python_sandbox_site() -> Path:
     """Ставит pandas/numpy/yaml/openpyxl в отдельный target, не в platform venv."""
-    cache_root = Path(
-        os.environ[SANDBOX_SITE_ENV]
-        if SANDBOX_SITE_ENV in os.environ
-        else str(_REPO_ROOT / ".cache" / "code-runner-python-sandbox-site")
-    )
+    cache_root = code_runner_python_sandbox_site()
     requirements_text = _SANDBOX_REQUIREMENTS.read_text(encoding="utf-8")
     digest = hashlib.sha256(requirements_text.encode("utf-8")).hexdigest()
     marker = cache_root / ".requirements.sha256"
@@ -388,10 +382,7 @@ class PythonSandboxExecutor:
         self._idle_workers.put_nowait(worker)
 
     def _worker_count(self) -> int:
-        raw = os.environ.get(WORKER_POOL_ENV)
-        if raw is None:
-            return max(2, min(8, (os.cpu_count() or 2)))
-        return max(1, int(raw))
+        return code_runner_pool_size("python")
 
     async def aclose(self) -> None:
         workers = list(self._workers)

@@ -50,7 +50,7 @@ _GROUP_FACTORY = re.compile(
 _BAD_AUTHZ_RELATION = re.compile(
     r"\bAuthzRelation\.(?!"
     r"OWNER|ADMIN|EDITOR|VIEWER|MEMBER|MANAGER|PARENT|COMPANY|PLATFORM|"
-    r"NAMESPACE|CATALOG|FLOW|COMPANY_VIEWER|CAN_SHARE|CAN_VIEW|CAN_EDIT|CAN_ADMIN"
+    r"NAMESPACE|CATALOG|SOURCE|LISTER|FLOW|COMPANY_VIEWER|CAN_SHARE|CAN_VIEW|CAN_EDIT|CAN_ADMIN|CAN_LIST"
     r")\w+\b"
 )
 _UI_JWT_ADMIN_GATE = re.compile(
@@ -285,20 +285,31 @@ def main() -> int:
                 "use SyncChannelAccessService / list_settings_user_ids"
             )
 
+    channel_service = _ROOT / "apps/sync/services/channel_service.py"
     ops = _ROOT / "apps/sync/realtime/operations.py"
-    if ops.is_file():
+    if channel_service.is_file() and ops.is_file():
+        service_text = channel_service.read_text(encoding="utf-8")
         ops_text = ops.read_text(encoding="utf-8")
-        if (
-            "async def op_channels_list" in ops_text
-            and "_filter_channels_by_can_view" not in ops_text
-        ):
-            errors.append("op_channels_list must filter via _filter_channels_by_can_view")
-        if (
-            "async def op_company_shared_channels_list" in ops_text
-            and "_filter_channels_by_can_view" not in ops_text
-        ):
+        if "async def filter_visible" not in service_text or "batch_check" not in service_text:
             errors.append(
-                "op_company_shared_channels_list must filter via _filter_channels_by_can_view"
+                "SyncChannelService.filter_visible must intersect SQL candidates with FGA can_view"
+            )
+        if "await self.filter_visible(" not in service_text:
+            errors.append("SyncChannelService.list_channels must call filter_visible")
+        if "channel_service.list_channels" not in ops_text:
+            errors.append("op_channels_list must list via SyncChannelService.list_channels")
+        if "channel_service.list_shared_channels" not in ops_text:
+            errors.append(
+                "op_company_shared_channels_list must list via SyncChannelService.list_shared_channels"
+            )
+        shared_match = re.search(
+            r"async def list_shared_channels\(.*?(?=\n    async def |\Z)",
+            service_text,
+            re.DOTALL,
+        )
+        if shared_match is None or "await self.filter_visible(" not in shared_match.group(0):
+            errors.append(
+                "SyncChannelService.list_shared_channels must call filter_visible"
             )
 
     access_check_def = re.compile(

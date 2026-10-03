@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -96,6 +96,7 @@ from core.short_links.kinds import SHORT_LINK_KIND_FLOW_PREVIEW_EMBED
 from core.short_links.models import PlatformShortLink
 from core.short_links.payloads import FlowPreviewEmbedPayload
 from core.types import JsonObject, parse_json_object
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 _FRONTEND_DEV_CORS_ORIGIN_REGEX = (
@@ -419,7 +420,7 @@ async def health(di: Di):
 async def flow_ui_shared_session_page(request: Request, grant: str = "") -> Response:
     grant_id = grant.strip()
     if not grant_id:
-        raise HTTPException(status_code=404, detail="Share grant is required")
+        raise WsCommandError("not_found", "Share grant is required", error_code="not_found")
     if request.method.upper() == "HEAD":
         return Response(status_code=200, content=b"")
     return HTMLResponse(build_flow_ui_shared_session_html(grant_id=grant_id))
@@ -429,7 +430,7 @@ async def flow_ui_shared_session_page(request: Request, grant: str = "") -> Resp
 async def flow_embed_page_host(request: Request, embed: str = "") -> Response:
     embed_id = embed.strip()
     if not embed_id:
-        raise HTTPException(status_code=404, detail="embed is required")
+        raise WsCommandError("not_found", "embed is required", error_code="not_found")
     if request.method.upper() == "HEAD":
         return Response(status_code=200, content=b"")
     return HTMLResponse(build_flow_embed_page_html(embed_id=embed_id))
@@ -443,11 +444,11 @@ async def resolve_short_link(request: Request, di: Di, code: str):
         if row_head is not None and row_head.kind == SHORT_LINK_KIND_FLOW_PREVIEW_EMBED:
             now = datetime.now(UTC)
             if row_head.expires_at <= now:
-                raise HTTPException(status_code=404, detail="Link not found or expired")
+                raise WsCommandError("not_found", "Link not found or expired", error_code="not_found")
             return Response(status_code=200, content=b"")
         target_head = await di.short_link_service.resolve_absolute_redirect_url(trimmed)
         if target_head is None:
-            raise HTTPException(status_code=404, detail="Link not found or expired")
+            raise WsCommandError("not_found", "Link not found or expired", error_code="not_found")
         return Response(status_code=200, content=b"")
 
     row = await PlatformShortLink.delete_by_code_and_kind_returning(
@@ -456,14 +457,14 @@ async def resolve_short_link(request: Request, di: Di, code: str):
     if row is not None:
         now = datetime.now(UTC)
         if row.expires_at <= now:
-            raise HTTPException(status_code=404, detail="Link not found or expired")
+            raise WsCommandError("not_found", "Link not found or expired", error_code="not_found")
         payload = FlowPreviewEmbedPayload.model_validate(row.payload)
         loc_path = f"/flow-preview?h={quote(payload.handoff_id, safe='')}"
         return RedirectResponse(url=_short_link_redirect_location(loc_path), status_code=303)
 
     target = await di.short_link_service.resolve_absolute_redirect_url(trimmed)
     if target is None:
-        raise HTTPException(status_code=404, detail="Link not found or expired")
+        raise WsCommandError("not_found", "Link not found or expired", error_code="not_found")
     return RedirectResponse(url=_short_link_redirect_location(target), status_code=303)
 
 
@@ -551,7 +552,7 @@ async def get_public_legal(request: Request, di: Di) -> JSONResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     return JSONResponse(content=brand.legal.model_dump())
 
@@ -561,7 +562,7 @@ async def get_robots_txt(request: Request, di: Di) -> PlainTextResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     base_url = resolve_public_base_url(str(host).strip())
     robots_txt = (
         "User-agent: *\n"
@@ -587,7 +588,7 @@ async def get_sitemap_xml(request: Request, di: Di) -> Response:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     base_url = resolve_public_base_url(str(host).strip())
     sitemap_xml = _build_sitemap_xml(base_url=base_url)
     return Response(content=sitemap_xml, media_type="application/xml")
@@ -598,7 +599,7 @@ async def serve_llms_txt(request: Request, di: Di) -> PlainTextResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     base_url = resolve_public_base_url(str(host).strip())
     return PlainTextResponse(content=_build_llms_txt(base_url=base_url, brand=brand))
@@ -629,7 +630,7 @@ async def get_pwa_manifest(request: Request, di: Di) -> JSONResponse:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     manifest_payload: JsonObject = parse_json_object(
         _PWA_MANIFEST_TEMPLATE_PATH.read_text(encoding="utf-8"),
@@ -649,7 +650,7 @@ async def get_pwa_service_worker(request: Request, di: Di) -> Response:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     body = _render_pwa_brand_template(_PWA_SW_TEMPLATE_PATH, brand.platform_name)
     return Response(
@@ -668,7 +669,7 @@ async def get_pwa_offline_page(request: Request, di: Di) -> Response:
     _ = di
     host = request.headers.get("host")
     if host is None or not str(host).strip():
-        raise HTTPException(status_code=400, detail="Host header is required")
+        raise WsCommandError("ws_invalid_payload", "Host header is required", error_code="ws_invalid_payload")
     brand = resolve_brand(str(host).strip())
     body = _render_pwa_brand_template(_PWA_OFFLINE_TEMPLATE_PATH, brand.platform_name)
     return Response(content=body, media_type="text/html; charset=utf-8")
@@ -687,7 +688,7 @@ if _agent_static_path.exists():
 def _frontend_spa_index_response() -> FileResponse:
     index_path = ui_path / "index.html"
     if not index_path.exists():
-        raise HTTPException(status_code=404, detail="Frontend UI not built yet")
+        raise WsCommandError("not_found", "Frontend UI not built yet", error_code="not_found")
     return FileResponse(index_path)
 
 
@@ -719,13 +720,13 @@ async def serve_spa(di: Di, full_path: str = ""):
         "design-system/", "frontend/design-system/",
     )
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
-        raise HTTPException(status_code=404)
+        raise WsCommandError("not_found", "Not found", error_code="not_found")
 
     index_path = ui_path / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
 
-    raise HTTPException(status_code=404, detail="Frontend UI not built yet")
+    raise WsCommandError("not_found", "Frontend UI not built yet", error_code="not_found")
 
 
 

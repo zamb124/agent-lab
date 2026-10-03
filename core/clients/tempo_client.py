@@ -6,6 +6,7 @@ platform-trace-viewer и build_span_tree (как _serialize_span репозит�
 """
 
 import base64
+import math
 from datetime import datetime, timezone
 
 import httpx
@@ -112,6 +113,25 @@ def _normalize_status(status: JsonObject | None) -> str:
     return _STATUS_CODE_MAP.get(int(code), "UNSET")
 
 
+def _unix_nano(value: JsonValue) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None
+        return int(value)
+    text = value.strip()
+    if text.startswith(("+", "-")):
+        digits = text[1:]
+    else:
+        digits = text
+    if digits == "" or not digits.isdigit():
+        return None
+    return int(text)
+
+
 def parse_otlp_trace(body: JsonObject) -> list[JsonObject]:
     """
     Парсит тело ответа Tempo GET /api/traces/{traceID} (OTLP JSON) в список
@@ -155,18 +175,11 @@ def parse_otlp_trace(body: JsonObject) -> list[JsonObject]:
 
                 start_ns = span.get("startTimeUnixNano")
                 end_ns = span.get("endTimeUnixNano")
-
+                start_nano = _unix_nano(start_ns)
+                end_nano = _unix_nano(end_ns)
                 duration_ms: int | None = None
-                if (
-                    isinstance(start_ns, str | int | float)
-                    and not isinstance(start_ns, bool)
-                    and isinstance(end_ns, str | int | float)
-                    and not isinstance(end_ns, bool)
-                ):
-                    try:
-                        duration_ms = max(0, int((int(end_ns) - int(start_ns)) / 1_000_000))
-                    except (ValueError, TypeError):
-                        pass
+                if start_nano is not None and end_nano is not None:
+                    duration_ms = max(0, int((end_nano - start_nano) / 1_000_000))
 
                 raw_attrs = span.get("attributes", [])
                 attrs = _parse_otlp_attributes(raw_attrs if isinstance(raw_attrs, list) else [])

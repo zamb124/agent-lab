@@ -18,7 +18,8 @@ from typing import Final
 from pydantic import Field
 
 from apps.wiki.base_model import WikiBaseModel
-from apps.wiki.models.domain import WikiPage, WikiVisibility
+from apps.wiki.models.domain import WikiVisibility
+from apps.wiki.models.page import WikiPage
 from core.rag.models import RAGMetadata, RAGMetadataFilter
 
 WIKI_SOURCE_KIND: Final[str] = "wiki_page"

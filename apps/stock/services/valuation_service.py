@@ -1,8 +1,11 @@
-"""Запросы стоимости и ручные корректировки журнала `StockValueLayer`.
+"""Сервис оценки запасов — «книга стоимости» склада для бухгалтера.
 
-Писать слои умеет только журнал (`write_for_done_move` в tx движка,
-`write_adjustment` — revalue/correction). Сервис — адаптер сценариев и
-агрегация для `stock/valuation/*` команд.
+Здесь отвечают на вопросы «сколько стоит остаток товара», «почему
+сумма такая» и вносят ручные бухгалтерские поправки (переоценка,
+сторно). Писать слои умеет только сам журнал: ``write_for_done_move``
+в транзакции движения и ``write_adjustment`` для ручных записей.
+Сервис — адаптер: читает журнал и формирует ручные записи через
+``adjust_in_lane``.
 """
 
 from __future__ import annotations
@@ -10,20 +13,28 @@ from __future__ import annotations
 from decimal import Decimal
 
 from apps.stock.models import (
-    StockLocation,
     StockProduct,
     StockQuant,
     StockValueLayer,
+    StockWarehouse,
     ValueEntryKind,
 )
+from apps.stock.models.common import STOCK_DB
 from apps.stock.models.valuation import quantize
-from apps.stock.services.ids import new_id
 from core.errors.boundary import PlatformConflictError, PlatformNotFoundError
+from core.lanes import publish_lane_run
 from core.pagination import OffsetPage
+from core.request_scope import command_idempotency_key
 
 
 class ProductValue:
-    """`stock/valuation/product_value`: qty/value/avg по продукту."""
+    """Ответ «сколько стоит товар»: количество, сумма, средняя цена.
+
+    ``quantity`` — остаток в штуках (из журнала по компании или по
+    quant'ам склада); ``value`` — стоимость запаса в деньгах;
+    ``avg_cost`` — средняя себестоимость единицы (value/quantity):
+    «по сколько в среднем куплена штука, лежащая сейчас на складе».
+    """
 
     def __init__(
         self,
@@ -41,6 +52,13 @@ class ProductValue:
         self.warehouse_id: str | None = warehouse_id
 
 
+async def _require_product(company_id: str, product_id: str) -> StockProduct:
+    product = await StockProduct.by_id(company_id, product_id)
+    if product is None:
+        raise PlatformNotFoundError("Product not found", error_code="product_not_found")
+    return product
+
+
 class ValuationService:
     """Чтение журнала + `revalue`/`correction` (единственная точка ручных слоёв)."""
 
@@ -53,6 +71,13 @@ class ValuationService:
         limit: int,
         offset: int,
     ) -> OffsetPage[StockValueLayer]:
+        """Лента проводок журнала стоимости — «карточка счёта товара».
+
+        Каждая строка — одна хозоперация с количеством, ценой и балансом
+        «после»: история, по которой видно, откуда взялась текущая
+        оценка (приходы по счетам, списания по себестоимости, ручные
+        переоценки).
+        """
         rows = await StockValueLayer.list_for_company(
             company_id,
             product_id=product_id,
@@ -72,6 +97,14 @@ class ValuationService:
         product_id: str,
         warehouse_id: str | None,
     ) -> ProductValue:
+        """Оценка остатка одного товара — «сколько он стоит на складе».
+
+        Без ``warehouse_id`` — по компании целиком: баланс из последней
+        записи журнала (``qty_after``/``value_after``) — это и есть
+        складская стоимость. С ``warehouse_id`` — количество считается
+        по quant'ам склада (куда физически лежит), а цена берётся по
+        средней себестоимости компании.
+        """
         product = await StockProduct.by_id(company_id, product_id)
         if product is None:
             raise PlatformNotFoundError(
@@ -81,10 +114,12 @@ class ValuationService:
         total_value = last.value_after if last is not None else Decimal("0")
         total_qty = last.qty_after if last is not None else Decimal("0")
         if warehouse_id is not None:
-            warehouse = await self._warehouse_stock_location_ids(
-                company_id, warehouse_id
-            )
-            quants = await StockQuant.list_for_warehouse(company_id, warehouse)
+            warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
+            if warehouse is None:
+                raise PlatformNotFoundError(
+                    "Warehouse not found", error_code="warehouse_not_found"
+                )
+            quants = await StockQuant.list_for_warehouse(company_id, warehouse_id)
             qty = sum(
                 (q.quantity for q in quants if q.product_id == product_id),
                 Decimal("0"),
@@ -122,8 +157,24 @@ class ValuationService:
         value_delta: Decimal | None,
         new_price: Decimal | None,
         description: str,
+        idempotency_key: str | None = None,
+        actor_user_id: str = "system",
+        command_type: str = "stock/valuation/revalue_requested",
+        causation_id: str | None = None,
     ) -> StockValueLayer:
-        """Ручная переоценка: `Δvalue` явно или через `new_price` на остаток."""
+        """Переоценка запаса — «переписать цену всего остатка товара».
+
+        Два способа (ровно один обязателен):
+          * ``value_delta`` — «добавь/убавь сумму запаса на N ₽»
+            (уценка просрочки −3000 ₽);
+          * ``new_price`` — «с этого момента единица стоит X ₽»:
+            дельта вычисляется как ``new_price × остаток − текущая
+            стоимость``.
+
+        Пишется запись ``revaluation`` в журнал — количество не меняется
+        (quantity_delta=0), только сумма. Нулевая дельта или пустой
+        остаток — конфликт: переоценивать «ничего» бессмысленно.
+        """
         if (value_delta is None) == (new_price is None):
             raise PlatformConflictError(
                 "Pass exactly one of value_delta/new_price",
@@ -144,7 +195,8 @@ class ValuationService:
             raise PlatformConflictError(
                 "Revaluation delta is zero", error_code="revalue_delta_zero"
             )
-        return await StockValueLayer.write_adjustment(
+        product = await _require_product(company_id, product_id)
+        run = await StockValueLayer.adjust_in_lane(
             company_id=company_id,
             product_id=product_id,
             entry_kind=ValueEntryKind.REVALUATION,
@@ -152,8 +204,14 @@ class ValuationService:
             quantity_delta=Decimal("0"),
             description=description,
             origin_layer_id=None,
-            layer_id_factory=lambda: new_id("svl"),
+            valuation_method=product.valuation_method,
+            idempotency_key=command_idempotency_key(idempotency_key),
+            actor_user_id=actor_user_id,
+            command_type=command_type,
+            causation_id=causation_id,
         )
+        await publish_lane_run(run, using=STOCK_DB)
+        return run.result
 
     async def correction(
         self,
@@ -163,16 +221,26 @@ class ValuationService:
         quantity_delta: Decimal,
         value_delta: Decimal,
         description: str,
+        idempotency_key: str | None = None,
+        actor_user_id: str = "system",
+        command_type: str = "stock/valuation/correction_requested",
+        causation_id: str | None = None,
     ) -> StockValueLayer:
-        """Корректирующий слой к существующему (`origin_layer_id`)."""
-        origin = await StockValueLayer.objects.filter(
-            company_id=company_id, layer_id=origin_layer_id
-        ).get_or_none()
+        """Сторно конкретной записи журнала — «исправляем ошибку».
+
+        Указывает на ошибочную проводку (``origin_layer_id``) и пишет
+        запись ``correction`` с дельтами количества/суммы — сторнировать
+        можно и частично (исправили 2 из 10 шт по неверной цене).
+        Исходная запись не трогается — история остаётся честной,
+        исправление видно как отдельная запись со ссылкой.
+        """
+        origin = await StockValueLayer.by_id(company_id, origin_layer_id)
         if origin is None:
             raise PlatformNotFoundError(
                 "Origin layer not found", error_code="layer_not_found"
             )
-        return await StockValueLayer.write_adjustment(
+        product = await _require_product(company_id, origin.product_id)
+        run = await StockValueLayer.adjust_in_lane(
             company_id=company_id,
             product_id=origin.product_id,
             entry_kind=ValueEntryKind.CORRECTION,
@@ -180,19 +248,13 @@ class ValuationService:
             quantity_delta=quantity_delta,
             description=description,
             origin_layer_id=origin_layer_id,
-            layer_id_factory=lambda: new_id("svl"),
+            valuation_method=product.valuation_method,
+            idempotency_key=command_idempotency_key(idempotency_key),
+            actor_user_id=actor_user_id,
+            command_type=command_type,
+            causation_id=causation_id,
         )
+        await publish_lane_run(run, using=STOCK_DB)
+        return run.result
 
-    async def _warehouse_stock_location_ids(
-        self, company_id: str, warehouse_id: str
-    ) -> list[str]:
-        from apps.stock.models import StockWarehouse
 
-        warehouse = await StockWarehouse.by_id(company_id, warehouse_id)
-        if warehouse is None:
-            raise PlatformNotFoundError(
-                "Warehouse not found", error_code="warehouse_not_found"
-            )
-        return await StockLocation.list_subtree_ids(
-            company_id, warehouse.stock_location_id
-        )

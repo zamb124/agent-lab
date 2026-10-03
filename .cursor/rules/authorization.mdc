@@ -46,7 +46,7 @@ alwaysApply: false
 | `platform_namespace` | всегда | `company#member` viewer и editor | `core/namespace/authz/` |
 | `crm_namespace`, `crm_entity` | всегда | namespace — viewer и editor; entity public — `user:*` viewer | `apps/crm/authz/` |
 | `wiki_page` | всегда | `company_viewer` (не каскадирует через `parent`) | `apps/wiki/authz/` |
-| `office_catalog` / `office_document` | каталог — всегда / документ — нет | viewer каталога, документ — через `parent` | `apps/office/authz/` |
+| `document_catalog` / `document_file` | каталог — всегда / файл — через `catalog` | `lister` корня, `source` якоря, viewer каталога | `core/documents/authz/` |
 | `sync_channel` | всегда | не пишется; `can_view = can_edit` = member ∨ admin ∨ owner | `apps/sync/authz/` |
 | `work_queue` | всегда | не пишется; `can_admin = owner` | `apps/worktracker/authz/` |
 | `mailbox_binding` | всегда | не пишется; `admin from company` | `core/mail/authz/` |

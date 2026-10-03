@@ -1,37 +1,15 @@
 """EmbedConfig: ``presentation`` и ``position`` — независимые типизированные поля.
 
 ``presentation`` выбирает drawer или полноэкранную страницу, ``position`` — только угол
-launcher-кнопки. Проверяются API create/patch, сниппет встраивания, public page-session
-и правило миграции ``shared_0035`` для legacy ``position=fullscreen``.
+launcher-кнопки. Проверяются API create/patch, сниппет встраивания и public page-session.
 """
 
 from __future__ import annotations
-
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
 
 import pytest
 from httpx import AsyncClient
 
 from core.types import JsonObject
-
-MIGRATION_PATH = Path("migrations/shared/versions/20260911_0035_embed_position_canon.py")
-
-
-def _load_migration() -> ModuleType:
-    name = "_embed_position_canon_migration"
-    loaded = sys.modules.get(name)
-    if loaded is not None:
-        return loaded
-    spec = importlib.util.spec_from_file_location(name, MIGRATION_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load migration {MIGRATION_PATH}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 async def _create(frontend_client: AsyncClient, auth_headers: dict[str, str], body: JsonObject) -> JsonObject:
@@ -156,26 +134,3 @@ async def test_public_page_session_rejects_foreign_origin_and_disabled_widget(
         assert denied.status_code == 403
     finally:
         _ = await frontend_client.delete(f"/frontend/api/embed/configs/{embed_id}", headers=auth_headers)
-
-
-class TestMigrationRule:
-    def test_legacy_fullscreen_becomes_page_presentation(self) -> None:
-        migration = _load_migration()
-        migrated = migration._canonical_embed_config({"position": "fullscreen", "presentation": "drawer"})  # pyright: ignore[reportPrivateUsage]
-        assert migrated == {"position": "bottom-right", "presentation": "page"}
-        migrated = migration._canonical_embed_config({"position": " FullScreen "})  # pyright: ignore[reportPrivateUsage]
-        assert migrated == {"position": "bottom-right", "presentation": "page"}
-
-    def test_unknown_legacy_corner_falls_back_to_default_corner_without_touching_presentation(self) -> None:
-        migration = _load_migration()
-        migrated = migration._canonical_embed_config({"position": "top-right", "presentation": "page"})  # pyright: ignore[reportPrivateUsage]
-        assert migrated == {"position": "bottom-right", "presentation": "page"}
-        kept = migration._canonical_embed_config({"position": "bottom-left"})  # pyright: ignore[reportPrivateUsage]
-        assert kept == {"position": "bottom-left"}
-
-    def test_non_string_position_fails_the_migration(self) -> None:
-        migration = _load_migration()
-        with pytest.raises(ValueError, match="position must be a string"):
-            _ = migration._canonical_embed_config({"position": None})  # pyright: ignore[reportPrivateUsage]
-        with pytest.raises(RuntimeError, match="cannot be reverted"):
-            migration.downgrade()

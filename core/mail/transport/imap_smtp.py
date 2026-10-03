@@ -6,11 +6,12 @@ import asyncio
 from collections.abc import Awaitable, Sequence
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
-from typing import Final, Protocol, cast, final
+from typing import Final, Protocol, final
 
 import aioimaplib
 import aiosmtplib
 
+from core.imports import typed_view
 from core.mail.exceptions import (
     MailFolderCreateError,
     MailMailboxNotFoundError,
@@ -19,6 +20,7 @@ from core.mail.exceptions import (
 )
 from core.mail.imap_folders import (
     STANDARD_ENSURE_ROLES,
+    ImapResponseLine,
     build_mail_folder_list_result,
     is_imap_already_exists_response,
     parse_imap_list_lines,
@@ -48,42 +50,45 @@ from core.mail.transport.idle_session import MailIdleSession
 
 class _ImapCommandResponse(Protocol):
     result: str
-    lines: list[object]
-
-
-class _ImapListClient(Protocol):
-    def list(self, reference_name: str, mailbox_pattern: str) -> Awaitable[_ImapCommandResponse]: ...
-
-
-class _ImapNamespaceClient(Protocol):
-    def namespace(self) -> Awaitable[_ImapCommandResponse]: ...
-
-
-class _ImapCreateClient(Protocol):
-    def create(self, mailbox_name: str) -> Awaitable[_ImapCommandResponse]: ...
-
-
-class _ImapStatusClient(Protocol):
-    def status(self, mailbox: str, names: str) -> Awaitable[_ImapCommandResponse]: ...
+    lines: list[ImapResponseLine]
 
 
 class _ImapProtocolCapabilities(Protocol):
     capabilities: set[str] | frozenset[str] | list[str] | tuple[str, ...]
 
 
-class _ImapCapabilityClient(Protocol):
+class _ImapSdk(Protocol):
+    """Методы aioimaplib, которых нет в stub IMAP4_SSL."""
+
+    timeout: float
+
     def has_capability(self, capability: str) -> bool: ...
 
     @property
     def protocol(self) -> _ImapProtocolCapabilities: ...
 
+    def namespace(self) -> Awaitable[_ImapCommandResponse]: ...
 
-class _ImapTimeoutClient(Protocol):
-    timeout: float
+    def list(self, reference_name: str, mailbox_pattern: str) -> Awaitable[_ImapCommandResponse]: ...
 
+    def status(self, mailbox: str, names: str) -> Awaitable[_ImapCommandResponse]: ...
 
-class _ImapExpungeClient(Protocol):
+    def create(self, mailbox_name: str) -> Awaitable[_ImapCommandResponse]: ...
+
+    def append(
+        self,
+        message_bytes: bytes,
+        mailbox: str = "INBOX",
+        flags: str | None = None,
+    ) -> Awaitable[_ImapCommandResponse]: ...
+
+    def select(self, mailbox: str) -> Awaitable[_ImapCommandResponse]: ...
+
     def expunge(self) -> Awaitable[_ImapCommandResponse]: ...
+
+
+def _imap_sdk(client: aioimaplib.IMAP4_SSL) -> _ImapSdk:
+    return typed_view(client, aioimaplib.IMAP4_SSL, _ImapSdk)
 
 
 _HEADER_FETCH = (
@@ -128,7 +133,7 @@ def _parse_message_flags_blob(flags_blob: str) -> MailMessageFlags:
     )
 
 
-def _extract_flags_blob_from_fetch(fetch_lines: Sequence[object]) -> str | None:
+def _extract_flags_blob_from_fetch(fetch_lines: Sequence[ImapResponseLine]) -> str | None:
     for item in fetch_lines:
         text = _decode_imap_line(item).upper()
         marker = "FLAGS"
@@ -154,7 +159,7 @@ def _extract_flags_blob_from_fetch(fetch_lines: Sequence[object]) -> str | None:
     return None
 
 
-def _extract_message_flags_from_fetch(fetch_lines: Sequence[object]) -> MailMessageFlags:
+def _extract_message_flags_from_fetch(fetch_lines: Sequence[ImapResponseLine]) -> MailMessageFlags:
     """FLAGS из FETCH. Нет FLAGS → unread=True (не угадываем Seen)."""
     blob = _extract_flags_blob_from_fetch(fetch_lines)
     if blob is None:
@@ -255,7 +260,7 @@ def _parse_status_attr_blob(blob: str) -> tuple[int, int] | None:
     return messages, unseen
 
 
-def _parse_status_counts(lines: Sequence[object]) -> tuple[int, int]:
+def _parse_status_counts(lines: Sequence[ImapResponseLine]) -> tuple[int, int]:
     """Из строк STATUS → (MESSAGES, UNSEEN).
 
     aioimaplib часто отдаёт untagged без `* STATUS ` — только
@@ -294,19 +299,16 @@ def _quote_mailbox_name(name: str) -> str:
 
 
 def _client_capabilities(client: aioimaplib.IMAP4_SSL) -> list[str]:
-    capability_client = cast(_ImapCapabilityClient, cast(object, client))
-    raw_caps = capability_client.protocol.capabilities
+    raw_caps = _imap_sdk(client).protocol.capabilities
     return sorted(str(item) for item in raw_caps)
 
-def _decode_imap_line(line: object) -> str:
-    if isinstance(line, bytes):
-        return line.decode("utf-8", errors="replace")
+def _decode_imap_line(line: ImapResponseLine) -> str:
     if isinstance(line, str):
         return line
-    return str(line)
+    return line.decode("utf-8", errors="replace")
 
 
-def _parse_uidvalidity(select_lines: list[object]) -> int:
+def _parse_uidvalidity(select_lines: list[ImapResponseLine]) -> int:
     for line in select_lines:
         text = _decode_imap_line(line).upper()
         marker = "UIDVALIDITY "
@@ -325,7 +327,7 @@ def _parse_uidvalidity(select_lines: list[object]) -> int:
     raise RuntimeError("IMAP SELECT response missing UIDVALIDITY")
 
 
-def _parse_uid_list(search_lines: list[object]) -> list[str]:
+def _parse_uid_list(search_lines: list[ImapResponseLine]) -> list[str]:
     uids: list[str] = []
     for line in search_lines:
         text = _decode_imap_line(line)
@@ -335,17 +337,7 @@ def _parse_uid_list(search_lines: list[object]) -> list[str]:
     return uids
 
 
-class _ImapAppendClient(Protocol):
-    def append(
-        self,
-        message_bytes: bytes,
-        mailbox: str = "INBOX",
-        flags: str | None = None,
-        date: object | None = None,
-    ) -> Awaitable[_ImapCommandResponse]: ...
-
-
-def _extract_header_bytes(fetch_lines: Sequence[object]) -> bytes | None:
+def _extract_header_bytes(fetch_lines: Sequence[ImapResponseLine]) -> bytes | None:
     for item in fetch_lines:
         if not isinstance(item, (bytes, bytearray)):
             continue
@@ -364,7 +356,7 @@ def _extract_header_bytes(fetch_lines: Sequence[object]) -> bytes | None:
     return None
 
 
-def _extract_rfc822_bytes(fetch_lines: Sequence[object]) -> bytes | None:
+def _extract_rfc822_bytes(fetch_lines: Sequence[ImapResponseLine]) -> bytes | None:
     raw_bytes: bytes | None = None
     for item in fetch_lines:
         if not isinstance(item, (bytes, bytearray)):
@@ -426,7 +418,7 @@ class ImapSmtpTransport:
         last_error: Exception | None = None
         for attempt in range(3):
             client = aioimaplib.IMAP4_SSL(host=self._imap_host, port=self._imap_port)
-            cast(_ImapTimeoutClient, cast(object, client)).timeout = timeout
+            _imap_sdk(client).timeout = timeout
             try:
                 await client.wait_hello_from_server()
                 return client
@@ -557,8 +549,7 @@ class ImapSmtpTransport:
         client = await self._login_imap(binding_secret)
         try:
             sent_name = await self._resolve_sent_mailbox_name(client)
-            append_client = cast(_ImapAppendClient, cast(object, client))
-            append_response = await append_client.append(
+            append_response = await _imap_sdk(client).append(
                 raw_message,
                 mailbox=_quote_mailbox_name(sent_name),
                 flags=r"(\Seen)",
@@ -575,33 +566,28 @@ class ImapSmtpTransport:
         client: aioimaplib.IMAP4_SSL,
         mailbox_name: str,
     ) -> _ImapCommandResponse:
-        select_response = cast(
-            _ImapCommandResponse,
-            cast(object, await client.select(_quote_mailbox_name(mailbox_name))),
-        )
+        select_response = await _imap_sdk(client).select(_quote_mailbox_name(mailbox_name))
         if select_response.result != "OK":
             raise MailMailboxNotFoundError(folder_name=mailbox_name)
         return select_response
 
     async def _list_folders_on_client(self, client: aioimaplib.IMAP4_SSL) -> MailFolderListResult:
+        sdk = _imap_sdk(client)
         capabilities = _client_capabilities(client)
         namespace_prefix = ""
         namespace_delimiter: str | None = None
-        capability_client = cast(_ImapCapabilityClient, cast(object, client))
-        if capability_client.has_capability("NAMESPACE"):
-            ns_client = cast(_ImapNamespaceClient, cast(object, client))
-            ns_response = await ns_client.namespace()
+        if sdk.has_capability("NAMESPACE"):
+            ns_response = await sdk.namespace()
             if ns_response.result == "OK":
                 namespace_prefix, namespace_delimiter = parse_namespace_personal_prefix(
                     list(ns_response.lines)
                 )
-        list_client = cast(_ImapListClient, cast(object, client))
-        list_response = await list_client.list('""', "*")
+        list_response = await sdk.list('""', "*")
         if list_response.result != "OK":
             raise MailTransportError(f"IMAP LIST failed: {list_response}")
         entries = parse_imap_list_lines(list(list_response.lines))
         if not entries:
-            list_percent = await list_client.list('""', "%")
+            list_percent = await sdk.list('""', "%")
             if list_percent.result == "OK":
                 entries = parse_imap_list_lines(list(list_percent.lines))
         base = build_mail_folder_list_result(
@@ -617,8 +603,7 @@ class ImapSmtpTransport:
         client: aioimaplib.IMAP4_SSL,
         mailbox_name: str,
     ) -> tuple[int, int]:
-        status_client = cast(_ImapStatusClient, cast(object, client))
-        status_response = await status_client.status(
+        status_response = await _imap_sdk(client).status(
             _quote_mailbox_name(mailbox_name),
             "(MESSAGES UNSEEN)",
         )
@@ -661,18 +646,17 @@ class ImapSmtpTransport:
         name: str,
         role: MailFolderRole | None,
     ) -> None:
-        create_client = cast(_ImapCreateClient, cast(object, client))
-        capability_client = cast(_ImapCapabilityClient, cast(object, client))
+        sdk = _imap_sdk(client)
         quoted = _quote_mailbox_name(name)
         create_arg = quoted
-        if role is not None and capability_client.has_capability("SPECIAL-USE"):
+        if role is not None and sdk.has_capability("SPECIAL-USE"):
             use_flag = special_use_flag_for_role(role)
             if use_flag is not None:
                 create_arg = f"{quoted} (USE ({use_flag}))"
-        create_response = await create_client.create(create_arg)
+        create_response = await sdk.create(create_arg)
         if create_response.result == "OK":
             return
-        if is_imap_already_exists_response(create_response):
+        if is_imap_already_exists_response(str(create_response)):
             return
         raise MailFolderCreateError(
             folder_name=name,
@@ -1037,10 +1021,10 @@ class ImapSmtpTransport:
         client = await self._login_imap(binding_secret)
         try:
             _ = await self._select_exact(client, mailbox)
-            capability_client = cast(_ImapCapabilityClient, cast(object, client))
+            sdk = _imap_sdk(client)
             dest_quoted = _quote_mailbox_name(destination_folder)
             destination_uid: str | None = None
-            if capability_client.has_capability("MOVE"):
+            if sdk.has_capability("MOVE"):
                 move_response = await client.uid("move", uid, dest_quoted)
                 if move_response.result != "OK":
                     raise MailTransportError(
@@ -1069,8 +1053,7 @@ class ImapSmtpTransport:
                     )
                 expunge_response = await client.uid("expunge", uid)
                 if expunge_response.result != "OK":
-                    expunge_client = cast(_ImapExpungeClient, cast(object, client))
-                    expunge_all = await expunge_client.expunge()
+                    expunge_all = await sdk.expunge()
                     if expunge_all.result != "OK":
                         raise MailTransportError(
                             f"IMAP EXPUNGE failed after COPY uid={uid}: {expunge_all}"
@@ -1103,15 +1086,13 @@ class ImapSmtpTransport:
                     )
                 expunge_response = await client.uid("expunge", uid)
                 if expunge_response.result != "OK":
-                    expunge_client = cast(_ImapExpungeClient, cast(object, client))
-                    expunge_all = await expunge_client.expunge()
+                    expunge_all = await _imap_sdk(client).expunge()
                     if expunge_all.result != "OK":
                         raise MailTransportError(
                             f"IMAP EXPUNGE failed uid={uid}: {expunge_all}"
                         )
                 return
-            expunge_client = cast(_ImapExpungeClient, cast(object, client))
-            expunge_all = await expunge_client.expunge()
+            expunge_all = await _imap_sdk(client).expunge()
             if expunge_all.result != "OK":
                 raise MailTransportError(f"IMAP EXPUNGE failed: {expunge_all}")
         finally:
@@ -1131,8 +1112,7 @@ class ImapSmtpTransport:
             raise ValueError("raw_message is required")
         client = await self._login_imap(binding_secret)
         try:
-            append_client = cast(_ImapAppendClient, cast(object, client))
-            append_response = await append_client.append(
+            append_response = await _imap_sdk(client).append(
                 raw_message,
                 mailbox=_quote_mailbox_name(mailbox),
                 flags=flags,

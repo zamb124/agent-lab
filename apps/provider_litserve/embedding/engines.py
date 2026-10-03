@@ -7,7 +7,6 @@ from collections.abc import Iterator
 from typing import Literal, Protocol
 
 import torch
-from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 from sentence_transformers import SentenceTransformer
 
@@ -21,6 +20,7 @@ from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
 from core.types import JsonValue
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -56,11 +56,19 @@ def parse_embedding_body(raw: BaseModel | JsonValue) -> OpenAIEmbeddingsRequest:
     else:
         raw_payload = raw
     if not isinstance(raw_payload, dict):
-        raise HTTPException(status_code=422, detail="Request body: JSON object expected")
+        raise WsCommandError(
+            "unprocessable",
+            "Request body: JSON object expected",
+            error_code="ws_invalid_payload",
+        )
     try:
         body = OpenAIEmbeddingsRequest.model_validate(raw_payload)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors()) from e
+        raise WsCommandError(
+            "unprocessable",
+            "Request body failed validation",
+            error_code="ws_invalid_payload",
+        ) from e
     return body
 
 
@@ -112,9 +120,11 @@ class LocalEmbeddingEngine:
         if hf_model_id is None:
             allowed = sorted(self.allowed_model_ids())
             logger.warning("provider_litserve.post.v1.embeddings.unknown_embedding_model.request", request=requested_model, allowed=allowed)
-            raise HTTPException(
-                status_code=422,
-                detail={
+            raise WsCommandError(
+                "unprocessable",
+                f"Embedding: unknown model {requested_model!r}",
+                error_code="ws_invalid_payload",
+                error_params={
                     "reason": "unknown_embedding_model",
                     "model": requested_model,
                     "allowed": allowed,
@@ -127,9 +137,11 @@ class LocalEmbeddingEngine:
 
         max_n = 256
         if len(texts) > max_n:
-            raise HTTPException(
-                status_code=422,
-                detail={"reason": "too_many_inputs", "max": max_n, "got": len(texts)},
+            raise WsCommandError(
+                "unprocessable",
+                "Embedding: too many inputs",
+                error_code="ws_invalid_payload",
+                error_params={"reason": "too_many_inputs", "max": max_n, "got": len(texts)},
             )
 
         model = self._ensure_model(hf_model_id)

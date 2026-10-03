@@ -8,9 +8,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
 
-import yaml
 from pydantic import Field, TypeAdapter, field_validator
 
 from apps.flows.config import get_settings
@@ -99,6 +97,7 @@ from core.types import (
     JsonObject,
     JsonValue,
     parse_json_object,
+    parse_yaml_value,
     require_json_array,
     require_json_object,
     require_json_value,
@@ -448,8 +447,7 @@ def build_bundle_index(flows_root: Path) -> dict[str, str]:
     if not registry_path.exists():
         raise_internal(RuntimeError(f"Registry not found: {registry_path}"))
 
-    with open(registry_path, "r", encoding="utf-8") as registry_file:
-        loaded_raw: object = cast(object, yaml.safe_load(registry_file))
+    loaded_raw = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
     if loaded_raw is None:
         raise_internal(RuntimeError("registry.yaml is empty"))
     registry_data = require_json_object(loaded_raw, "registry.yaml")
@@ -496,6 +494,7 @@ async def get_bundle_update_flags(
         bundles_dir=flows_root / "bundles",
         registry_path=flows_root / "registry.yaml",
         flow_access_service=di.flow_access_service,
+        files_service=di.files_service,
     )
     loader.load_registry_yaml()
     for flow_cfg in file_flows:
@@ -945,8 +944,7 @@ async def op_flows_store_bundles(
     bundles_dir = flows_root / "bundles"
     if not registry_path.exists():
         raise_internal(RuntimeError(f"Registry not found: {registry_path}"))
-    with open(registry_path, "r", encoding="utf-8") as registry_file:
-        loaded_raw: object = cast(object, yaml.safe_load(registry_file))
+    loaded_raw = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
     if loaded_raw is None:
         raise_internal(RuntimeError("registry.yaml is empty"))
     registry_data = require_json_object(loaded_raw, "registry.yaml")
@@ -1062,6 +1060,7 @@ async def op_flows_reload_from_bundle(
         bundles_dir=flows_root / "bundles",
         registry_path=flows_root / "registry.yaml",
         flow_access_service=di.flow_access_service,
+        files_service=di.files_service,
     )
     try:
         loaded_id = await loader.reload_flow_bundle(payload.flow_id)

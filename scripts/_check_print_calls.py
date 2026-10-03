@@ -106,7 +106,7 @@ def main() -> int:
         rel = path.as_posix()
         if any(rel.startswith(prefix) or prefix in rel for prefix in excluded):
             continue
-        if "/__pycache__/" in rel or "/migrations/versions/" in rel:
+        if "/__pycache__/" in rel:
             continue
         for lineno, text in _scan_file(path):
             print(f"{rel}:{lineno}:{text}")

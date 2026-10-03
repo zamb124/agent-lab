@@ -7,23 +7,6 @@
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
 
-const STOCK_PUSH_EVENTS = [
-    'stock/move/done',
-    'stock/transfer/done',
-    'stock/quant/changed',
-    'stock/valuation/changed',
-];
-
-function mergeById(state, payload, idField) {
-    const item = payload;
-    const id = item[idField];
-    const index = state.items.findIndex((row) => row && row[idField] === id);
-    const items = index === -1
-        ? [...state.items, item]
-        : state.items.map((row, position) => (position === index ? item : row));
-    return { ...state, items, byId: { ...state.byId, [id]: item } };
-}
-
 export const stockProductsResource = createResourceCollection({
     name: 'stock/products',
     baseUrl: '/stock/api/v1/products',
@@ -45,7 +28,16 @@ export const stockLocationsResource = createResourceCollection({
     wsTimeoutMs: 8_000,
     itemsPath: 'items',
     listQuery: () => ({}),
-    extraReducer: (state, event) => state,
+    extraReducer: (state, event) => {
+        if (event.type !== 'stock/container/moved' || !event.payload) return state;
+        const payload = event.payload;
+        const index = state.items.findIndex((row) => row && row.location_id === payload.container_id);
+        if (index === -1) return state;
+        const items = state.items.map((row, position) => (
+            position === index ? { ...row, parent_id: payload.to_parent_id } : row
+        ));
+        return { ...state, items };
+    },
 });
 
 export const stockWarehousesResource = createResourceCollection({
@@ -100,6 +92,68 @@ export const stockQuantsResource = createResourceCollection({
         const items = state.items.map((row, position) => (
             position === index
                 ? { ...row, quantity: payload.quantity, reserved_quantity: payload.reserved_quantity }
+                : row
+        ));
+        return { ...state, items };
+    },
+});
+
+export const stockQueueResource = createResourceCollection({
+    name: 'stock/queue',
+    baseUrl: '/stock/api/v1/move-lines/queue',
+    idField: 'move_line_id',
+    operations: ['list'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    itemsPath: 'items',
+    listQuery: () => ({}),
+    restMirror: {
+        list: { method: 'POST', path: '/stock/api/v1/move-lines/queue' },
+    },
+    extraReducer: (state, event) => {
+        if (!event.payload || !event.payload.move_line_id) return state;
+        if (event.type === 'stock/move_line/assigned') {
+            const payload = event.payload;
+            const index = state.items.findIndex((row) => row && row.move_line_id === payload.move_line_id);
+            const patch = {
+                assigned_user_id: payload.assigned_user_id,
+                resource_id: payload.resource_id,
+            };
+            const items = index === -1
+                ? [...state.items, payload]
+                : state.items.map((row, position) => (position === index ? { ...row, ...patch } : row));
+            return { ...state, items };
+        }
+        if (event.type === 'stock/move_line/exception') {
+            const items = state.items.filter(
+                (row) => row && row.move_line_id !== event.payload.move_line_id,
+            );
+            return { ...state, items };
+        }
+        return state;
+    },
+});
+
+export const stockWavesResource = createResourceCollection({
+    name: 'stock/waves',
+    baseUrl: '/stock/api/v1/waves/list',
+    idField: 'wave_id',
+    operations: ['list'],
+    transport: 'ws',
+    wsTimeoutMs: 8_000,
+    itemsPath: 'items',
+    listQuery: () => ({}),
+    restMirror: {
+        list: { method: 'POST', path: '/stock/api/v1/waves/list' },
+    },
+    extraReducer: (state, event) => {
+        if (event.type !== 'stock/wave/released' || !event.payload) return state;
+        const payload = event.payload;
+        const index = state.items.findIndex((row) => row && row.wave_id === payload.wave_id);
+        if (index === -1) return state;
+        const items = state.items.map((row, position) => (
+            position === index
+                ? { ...row, state: 'released', released_at: payload.released_at }
                 : row
         ));
         return { ...state, items };

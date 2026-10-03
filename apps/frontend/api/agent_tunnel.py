@@ -5,7 +5,7 @@ WebSocket tunnel HumanitecAgent: исходящее соединение с ПК
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from apps.agent.service import (
     get_device_record,
@@ -22,6 +22,7 @@ from apps.frontend.di import Di
 from core.logging import get_logger
 from core.types import JsonObject, parse_json_object
 from core.utils.tokens import TokenService
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent-tunnel"])
@@ -31,16 +32,20 @@ def _device_id_from_token(token: str) -> tuple[str, str | None]:
     token_service = TokenService()
     token_data = token_service.validate_token(token)
     if token_data is None:
-        raise HTTPException(status_code=401, detail="Invalid device token")
+        raise WsCommandError("unauthorized", "Invalid device token", error_code="unauthorized")
     metadata = token_data.metadata
     token_purpose = metadata.get("token_purpose")
     if token_purpose != "device":
-        raise HTTPException(status_code=401, detail="Token is not a device token")
+        raise WsCommandError("unauthorized", "Token is not a device token", error_code="unauthorized")
     device_id = metadata.get("device_id")
     if not isinstance(device_id, str) or not device_id:
-        raise HTTPException(status_code=401, detail="device_id is missing from the token")
+        raise WsCommandError("unauthorized", "device_id is missing from the token", error_code="unauthorized")
     if device_id == "pending":
-        raise HTTPException(status_code=401, detail="device token is not bound to a device yet")
+        raise WsCommandError(
+            "unauthorized",
+            "device token is not bound to a device yet",
+            error_code="unauthorized",
+        )
     device_jti = metadata.get("jti")
     resolved_jti = device_jti if isinstance(device_jti, str) and device_jti else None
     return device_id, resolved_jti
@@ -57,8 +62,8 @@ async def agent_tunnel_websocket(
     try:
         device_id, device_jti = _device_id_from_token(token)
         device = await get_device_record(di, device_id)
-    except HTTPException as exc:
-        await websocket.close(code=4401, reason=str(exc.detail))
+    except WsCommandError as exc:
+        await websocket.close(code=4401, reason=exc.detail)
         return
 
     if not device.is_active:

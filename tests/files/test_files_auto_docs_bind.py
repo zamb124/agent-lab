@@ -1,113 +1,57 @@
-"""FilesService auto DocsPlacement on durable create."""
+"""Создание durable-файла само кладёт его в дерево каталогов."""
 
 from __future__ import annotations
 
 import pytest
 
-from core.clients.service_client import ServiceClientError
-from core.documents.placement import DocsBindResult, DocsPlacement
+from core.authz.factory import build_authz_service
+from core.config import get_settings
+from core.documents.catalog import DocumentCatalog
+from core.documents.tree_service import DocumentTreeService
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
 from tests.fixtures.s3 import require_s3_configured
 
 
-@pytest.mark.asyncio
-async def test_create_durable_source_auto_binds(app, unique_id: str) -> None:
-    _ = app
-    require_s3_configured()
-
-    binds: list[DocsPlacement] = []
-
-    async def recording_bind(placement: DocsPlacement) -> DocsBindResult:
-        binds.append(placement)
-        return DocsBindResult(
-            file_id=placement.file_id,
-            catalog_id="cat-auto",
-            created=True,
-            catalog_path=["Sync", "ch-auto"],
-        )
-
-    service = FilesService(
+def _service() -> FilesService:
+    return FilesService(
         files_route_segment="frontend",
-        docs_bind_hook=recording_bind,
+        tree=DocumentTreeService(build_authz_service(get_settings().openfga)),
     )
 
-    record = await service.create(
+
+@pytest.mark.asyncio
+async def test_create_durable_source_creates_catalog_chain(app, unique_id: str) -> None:
+    _ = app
+    require_s3_configured()
+    channel_id = f"ch-{unique_id}"
+    record = await _service().create(
         FileCreateSpec(
             source_kind=FileSourceKind.SYNC_MESSAGE,
-            source_ref=FileSourceRef(channel_id=f"ch-{unique_id}"),
+            source_ref=FileSourceRef(channel_id=channel_id),
             retention=default_retention_for_source(FileSourceKind.SYNC_MESSAGE),
         ),
         f"auto-bind-{unique_id}".encode("utf-8"),
         original_name=f"auto-{unique_id}.txt",
         content_type="text/plain",
     )
-    assert len(binds) == 1
-    assert binds[0].file_id == record.file_id
-    assert binds[0].anchor is not None
-    assert binds[0].anchor.channel_id == f"ch-{unique_id}"
+    assert record.catalog_id is not None
+    catalog = await DocumentCatalog.get(record.catalog_id)
+    assert catalog is not None
+    assert catalog.title == channel_id
+    assert catalog.parent_catalog_id is not None
+    parent = await DocumentCatalog.get(catalog.parent_catalog_id)
+    assert parent is not None
+    assert parent.title == "Sync"
+    assert parent.parent_catalog_id is None
 
 
 @pytest.mark.asyncio
-async def test_create_durable_source_fails_closed_when_office_bind_unavailable(
-    app, unique_id: str
-) -> None:
+async def test_create_exempt_source_has_no_catalog(app, unique_id: str) -> None:
     _ = app
     require_s3_configured()
-
-    bound_file_ids: list[str] = []
-
-    async def failing_bind(placement: DocsPlacement) -> DocsBindResult:
-        bound_file_ids.append(placement.file_id)
-        raise ServiceClientError("office unavailable")
-
-    service = FilesService(
-        files_route_segment="frontend",
-        docs_bind_hook=failing_bind,
-    )
-
-    with pytest.raises(ServiceClientError, match="office unavailable"):
-        _ = await service.create(
-            FileCreateSpec(
-                source_kind=FileSourceKind.MAIL_MESSAGE,
-                source_ref=FileSourceRef(
-                    mailbox_binding_id=f"mb-{unique_id}",
-                    mail_uid=f"uid-{unique_id}",
-                    mailbox_email=f"user.{unique_id}@example.com",
-                ),
-                retention=default_retention_for_source(FileSourceKind.MAIL_MESSAGE),
-            ),
-            f"mail-bind-fail-{unique_id}".encode("utf-8"),
-            original_name=f"mail-{unique_id}.txt",
-            content_type="text/plain",
-        )
-    assert len(bound_file_ids) == 1
-    loaded = await service.get_optional(bound_file_ids[0])
-    assert loaded is None
-
-
-@pytest.mark.asyncio
-async def test_create_exempt_source_skips_bind(app, unique_id: str) -> None:
-    _ = app
-    require_s3_configured()
-
-    binds: list[DocsPlacement] = []
-
-    async def recording_bind(placement: DocsPlacement) -> DocsBindResult:
-        binds.append(placement)
-        return DocsBindResult(
-            file_id=placement.file_id,
-            catalog_id="cat",
-            created=True,
-            catalog_path=[],
-        )
-
-    service = FilesService(
-        files_route_segment="frontend",
-        docs_bind_hook=recording_bind,
-    )
-    _ = await service.create(
+    record = await _service().create(
         FileCreateSpec(
             source_kind=FileSourceKind.PLATFORM_AUXILIARY,
             source_ref=FileSourceRef(),
@@ -117,4 +61,5 @@ async def test_create_exempt_source_skips_bind(app, unique_id: str) -> None:
         original_name=f"exempt-{unique_id}.txt",
         content_type="text/plain",
     )
-    assert binds == []
+    assert record.catalog_id is None
+    assert record.source_kind == FileSourceKind.PLATFORM_AUXILIARY.value

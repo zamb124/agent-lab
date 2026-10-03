@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 from apps.crm.constants_graph import NOTE_ROOT_ENTITY_TYPE_ID
 from apps.crm.models.api import (
@@ -69,9 +69,8 @@ def _task_data_str_list(data: JsonObject, key: str) -> list[str]:
         return []
     if not isinstance(raw, list):
         raise ValueError(f"task data field {key!r} must be list[str]")
-    raw_items = cast(list[object], raw)
     out: list[str] = []
-    for item in raw_items:
+    for item in raw:
         if not isinstance(item, str):
             raise ValueError(f"task data field {key!r} must contain only strings")
         out.append(item)

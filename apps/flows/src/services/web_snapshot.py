@@ -9,8 +9,8 @@ from collections.abc import Awaitable
 from typing import override
 from urllib.parse import urlparse
 
-from apps.flows.src.clients.mcp_client import get_mcp_client
 from apps.flows.src.models.mcp import MCPServerConfig
+from apps.flows.src.services.mcp_client import get_mcp_client
 from core.files.reader import FileReader
 from core.files.reader.models import ReadFileArgs
 from core.state import ExecutionState

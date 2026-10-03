@@ -10,8 +10,8 @@ import uuid
 import httpx
 import pytest
 
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig, MCPTransportType
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from core.integrations.mcp import MCP_PROTOCOL_VERSION, MCPToolDefinition
 
 

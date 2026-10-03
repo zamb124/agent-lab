@@ -8,11 +8,12 @@ from datetime import UTC, datetime
 from typing import ClassVar, Self, TypedDict
 
 from oxyde import Field as DbField
-from oxyde import Index, atomic, execute_raw
+from oxyde import Index, atomic
 from oxyde.exceptions import UniqueViolationError
 from oxyde.queries.select import Query
 from pydantic import model_validator
 
+from apps.crm.models.catalog_revision import EntityTypeCatalogRevision
 from core.context import require_active_company
 from core.models.platform_model import PlatformModel
 from core.types import JsonObject
@@ -320,36 +321,6 @@ class EntityType(PlatformModel):
         if deleted > 0:
             invalidate_company(resolved_company_id)
         return deleted > 0
-
-
-class EntityTypeCatalogRevision(PlatformModel):
-    """Поколение каталога ``EntityType``. Плюс один в той же транзакции, что запись типа."""
-
-    __database_alias__: ClassVar[str | None] = "crm"
-    __global_model__: ClassVar[bool] = True
-
-    class Meta:
-        is_table: bool = True
-        table_name: str = "entity_type_catalog_revision"
-
-    company_id: str = DbField(db_pk=True, max_length=100)
-    revision: int
-
-    @classmethod
-    async def catalog_revision(cls, company_id: str) -> int:
-        row = await cls.objects.filter(company_id=company_id).get_or_none()
-        if row is None:
-            return 0
-        return row.revision
-
-    @classmethod
-    async def bump_catalog_revision(cls, company_id: str) -> None:
-        _ = cls
-        _ = await execute_raw(
-            "INSERT INTO entity_type_catalog_revision (company_id, revision) VALUES ($1, 1) ON CONFLICT (company_id) DO UPDATE SET revision = entity_type_catalog_revision.revision + 1",
-            [company_id],
-            using="crm",
-        )
 
 
 def resolve_entity_type_company(company_id: str | None) -> str:

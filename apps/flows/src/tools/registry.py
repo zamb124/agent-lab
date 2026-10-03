@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Sequence
-from typing import cast
 
 from apps.flows.src.contracts import FlowFactoryProtocol
 from apps.flows.src.models import FlowToolReference, MCPServerConfig, NodeConfig, ToolReference
@@ -27,7 +26,7 @@ from apps.flows.src.tools.node_wrapper import NodeAsToolWrapper
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS, builtin_tool_ids
 from core.capabilities.source_sanitize import reject_forbidden_platform_imports
 from core.logging import get_logger
-from core.types import JsonObject
+from core.types import JsonObject, model_json_object
 
 logger = get_logger(__name__)
 
@@ -207,10 +206,12 @@ class ToolRegistry:
                 raise ValueError(
                     f"Tool '{tid}': no inline code in config and no template in tool_repository"
                 )
-            stored_payload = cast(JsonObject, stored.model_dump(mode="json", exclude_none=True))
-            override_payload = cast(
-                JsonObject,
-                ref.model_dump(mode="json", exclude_unset=True, exclude_none=True),
+            stored_payload = model_json_object(stored, "ToolReference", exclude_none=True)
+            override_payload = model_json_object(
+                ref,
+                "ToolReference",
+                exclude_unset=True,
+                exclude_none=True,
             )
             ref = ToolReference.model_validate({**stored_payload, **override_payload})
             has_inline_code = bool(ref.code and ref.code.strip())
@@ -332,10 +333,7 @@ class ToolRegistry:
         constructor = self._node_constructor
         if constructor is None:
             raise RuntimeError(f"Node tool '{config.node_id}' requires a node constructor")
-        node_dict = cast(
-            JsonObject,
-            config.model_dump(mode="json", exclude_none=True),
-        )
+        node_dict = model_json_object(config, "NodeConfig", exclude_none=True)
         _ = node_dict.pop("tool_id", None)
         node = constructor.materialize(
             config.node_id,

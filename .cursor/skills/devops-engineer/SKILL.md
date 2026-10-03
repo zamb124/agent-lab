@@ -76,7 +76,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 |---|---|---|---|---|---|
 | postgres | StatefulSet | master | `postgres.nodeName` | 50Gi | 7 сервисных БД (pgvector/pg17) |
 | redis | StatefulSet | master | `redis.nodeName` | 10Gi | TaskIQ broker, sessions, кэш, pub/sub UI events |
-| minio | StatefulSet | master | `minio.nodeName` | 50Gi | платформенное объектное хранилище, ClusterIP `minio:9000` |
+| seaweedfs | StatefulSet | master | `seaweedfs.nodeName` | 50Gi | платформенное объектное хранилище, ClusterIP `seaweedfs:8333` |
 | loki | StatefulSet | master | `observability.loki.nodeName` | 100Gi | Логи 14 дней |
 | tempo | StatefulSet | master | `observability.tempo.nodeName` | 50Gi | Trace OTel 7 дней |
 | grafana | Deployment | master | `observability.grafana.nodeName` | 10Gi | UI + provisioned dashboards/alerts |
@@ -90,7 +90,7 @@ gh secret set KUBECONFIG_B64 --repo "$(git remote get-url origin | sed -E 's/.*[
 | nvidia-device-plugin | DaemonSet | master | — (label `accelerator=nvidia-gpu`) | — | NVIDIA k8s-device-plugin v0.19.1 — публикует `nvidia.com/gpu` в Allocatable |
 | portainer | Deployment (community-аддон, если `microk8s enable portainer` прошёл) | master | — (вне Helm-чарта) | — | UI кластера на NodePort `30777` / `30779`; сейчас на BM аддон disabled |
 | 4 Ingress | platform / livekit / onlyoffice / grafana | — | — | — | TLS через wildcard Secret `platform-tls` (выпускается `setup-wildcard-tls.sh`) |
-| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | `db_migrate upgrade`: `0001_initial` и запись в `oxyde_migrations`, ожидание advisory lock |
+| Init-containers `wait-postgres` + `db-migrate` | в каждом app/worker pod | — | — | — | `db_migrate upgrade`: неприменённые `NNNN_<name>.py` и запись в `oxyde_migrations`, ожидание advisory lock |
 
 ## Базовые команды
 

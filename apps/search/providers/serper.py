@@ -10,7 +10,7 @@ from apps.search.config import SearchSerperConfig
 from apps.search.providers.common import display_url, int_rank, provider_status, string_field
 from core.http import ProxyStrategy, get_httpx_client
 from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchResult
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 
 class SerperSearchProvider:
@@ -65,7 +65,7 @@ class SerperSearchProvider:
         return results, provider_status(started, ok=True, results_count=len(results))
 
 
-def parse_serper_results(payload: object, *, limit: int) -> list[WebSearchResult]:
+def parse_serper_results(payload: JsonValue, *, limit: int) -> list[WebSearchResult]:
     try:
         payload_object = require_json_object(payload, "serper payload")
     except ValueError:

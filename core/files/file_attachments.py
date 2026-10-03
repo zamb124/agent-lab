@@ -9,11 +9,12 @@ from collections.abc import Iterable, Sequence
 from pydantic import TypeAdapter
 
 from core.files.file_ref import FileRef
+from core.types import JsonValue
 
 _FILE_REFS_ADAPTER: TypeAdapter[list[FileRef]] = TypeAdapter(list[FileRef])
 
 
-def parse_file_refs(raw: object) -> list[FileRef]:
+def parse_file_refs(raw: JsonValue) -> list[FileRef]:
     if raw is None:
         return []
     if isinstance(raw, list):

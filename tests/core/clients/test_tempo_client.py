@@ -193,6 +193,30 @@ class TestParseOtlpTrace:
     def test_empty_batches(self):
         assert parse_otlp_trace({"batches": []}) == []
 
+    def test_unparseable_timestamps_leave_duration_empty(self):
+        body = {
+            "batches": [
+                {
+                    "scopeSpans": [
+                        {
+                            "spans": [
+                                {
+                                    "traceId": "abcdef1234567890abcdef1234567890",
+                                    "spanId": "1234567890abcdef",
+                                    "name": "flow.run",
+                                    "startTimeUnixNano": "1700000000000000000",
+                                    "endTimeUnixNano": "not-a-number",
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+        spans = parse_otlp_trace(body)
+        assert len(spans) == 1
+        assert spans[0]["duration_ms"] is None
+
 
 # ---------------------------------------------------------------------------
 # TempoClient (с мок httpx)

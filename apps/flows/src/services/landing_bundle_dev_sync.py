@@ -8,18 +8,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 from apps.flows.config import FlowSettings
 from apps.flows.src.models.bundle_registry import FlowBundleRegistry
 from apps.flows.src.services.flow_access_service import FlowAccessService
 from apps.flows.src.services.flows_loader import FlowsLoader
 from core.context import clear_context, set_context
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models.identity_models import Company, User
-from core.types import require_json_object
+from core.types import parse_yaml_value, require_json_object
 
 logger = get_logger(__name__)
 
@@ -27,8 +26,8 @@ logger = get_logger(__name__)
 def landing_public_demo_bundle_ids_from_registry(registry_path: Path) -> tuple[str, ...]:
     if not registry_path.is_file():
         return ()
-    with open(registry_path, "r", encoding="utf-8") as f:
-        registry_data = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
+    loaded = parse_yaml_value(registry_path.read_text(encoding="utf-8"), "registry.yaml")
+    registry_data = {} if loaded is None else require_json_object(loaded, "registry.yaml")
     registry = FlowBundleRegistry.model_validate(registry_data)
     return tuple(
         entry.id
@@ -40,6 +39,7 @@ def landing_public_demo_bundle_ids_from_registry(registry_path: Path) -> tuple[s
 async def sync_landing_public_demo_flows_from_bundles(
     flow_access_service: FlowAccessService,
     settings: FlowSettings,
+    files_service: FilesService,
 ) -> None:
     if settings.server.env != "development":
         return
@@ -74,6 +74,7 @@ async def sync_landing_public_demo_flows_from_bundles(
             bundles_dir=bundles_dir,
             registry_path=registry_path,
             flow_access_service=flow_access_service,
+            files_service=files_service,
         )
         for bundle_id in bundle_ids:
             try:

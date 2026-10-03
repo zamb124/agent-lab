@@ -67,27 +67,31 @@ type wiki_page
     define can_admin: owner
     define can_share: can_admin
 
-type office_catalog
+type document_catalog
   relations
-    define owner: [user]
-    define parent: [office_catalog]
     define company: [company]
-    define viewer: [user, company#member] or owner or viewer from parent
-    define editor: [user] or owner or editor from parent
+    define parent: [document_catalog]
+    define source: [mailbox_binding, sync_channel, crm_entity, flow, work_queue, wiki_page]
+    define owner: [user]
+    define lister: [company#member]
+    define viewer: [user, company#member] or owner or viewer from parent or can_view from source
+    define editor: [user] or owner or editor from parent or can_edit from source
     define can_view: viewer or editor
+    define can_list: can_view or lister
     define can_edit: editor
-    define can_admin: owner
+    define can_admin: owner or admin from company
     define can_share: can_admin
 
-type office_document
+type document_file
   relations
     define owner: [user]
-    define catalog: [office_catalog]
-    define viewer: [user] or owner or viewer from catalog
-    define editor: [user] or owner or editor from catalog
+    define catalog: [document_catalog]
+    define source: [mailbox_binding, sync_channel, crm_entity, flow, work_queue, wiki_page]
+    define viewer: [user] or owner or viewer from catalog or can_view from source
+    define editor: [user] or owner or editor from catalog or can_edit from source
     define can_view: viewer or editor
     define can_edit: editor
-    define can_admin: owner
+    define can_admin: owner or can_admin from catalog
     define can_share: can_admin
 
 type sync_channel

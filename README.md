@@ -36,7 +36,7 @@ uv sync --group browser
 # Локальные секреты (OAuth, LLM-ключи) — скопировать и заполнить
 cp conf.local.json.example conf.local.json
 
-# Инфраструктура (Postgres :54321, Redis :63791, MinIO :19001/19011, Chromium CDP :9222)
+# Инфраструктура (Postgres :54321, Redis :63791, SeaweedFS :19001/19011, Chromium CDP :9222)
 make dev-up
 
 # Создать недостающие БД + Alembic upgrade
@@ -62,7 +62,7 @@ HTTP-сервисы стартуют через **Granian** (Rust ASGI, не uvi
 make lint            # ruff + basedpyright + architecture gates + frontend canon
 make test            # python lint + frontend-core + unit + retry-failed
 make test-unit       # Только unit/API (без UI)
-make test-rag        # RAG-тесты с pgvector + MinIO
+make test-rag        # RAG-тесты с pgvector + SeaweedFS
 make test-ui         # Playwright E2E
 make ui-doc          # UI + E2E doc scenarios + сборка docs/scenarios
 ```
@@ -156,7 +156,7 @@ agent-lab/
 
 - **Python 3.14t** (free-threaded, PEP 779), **UV**, **FastAPI**, **Granian** (Rust ASGI)
 - **Pydantic v2**, **SQLAlchemy** async, **Alembic**
-- **PostgreSQL** + pgvector, **Redis**, **TaskIQ**, **MinIO**/S3
+- **PostgreSQL** + pgvector, **Redis**, **TaskIQ**, **SeaweedFS**/S3
 - **Lit 3**, нативный EventBus, **Playwright**
 - Observability (prod): OTEL, Loki, Tempo, Grafana, Alloy
 - Документация: **Zensical**

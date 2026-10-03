@@ -8,7 +8,8 @@ from fastapi import APIRouter, Query
 
 from apps.wiki.di import Di
 from apps.wiki.models.api import WikiPageResponse
-from apps.wiki.models.domain import WikiRevision, WikiRevisionSummary
+from apps.wiki.models.domain import WikiRevisionSummary
+from apps.wiki.models.revision import WikiRevision
 from apps.wiki.realtime.operations import (
     WikiRevisionIdPayload,
     WikiRevisionsListPayload,

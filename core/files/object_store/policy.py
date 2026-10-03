@@ -5,7 +5,7 @@ from __future__ import annotations
 from core.authz.models import AuthzObject
 from core.authz.service import AuthzService
 from core.errors.boundary import PlatformAccessDeniedError
-from core.files.create_spec import FileSourceKind
+from core.files.create_spec import RUNTIME_FLOW_ID, FileSourceKind
 from core.files.models import FileRecord
 from core.files.object_store.principals import (
     AnonymousPrincipal,
@@ -46,7 +46,7 @@ async def _parent_check(authz: AuthzService, record: FileRecord) -> None:
         return
     ref = _source_ref(record)
     if kind is FileSourceKind.OFFICE_DOCUMENT:
-        await authz.require_can_view(AuthzObject.office_document(record.file_id))
+        await authz.require_can_view(AuthzObject.document_file(record.file_id))
         return
     channel_id = _ref_str(ref, "channel_id")
     if kind in (
@@ -71,7 +71,11 @@ async def _parent_check(authz: AuthzService, record: FileRecord) -> None:
         return
     flow_id = _ref_str(ref, "flow_id")
     if kind in (FileSourceKind.FLOW_ASSET, FileSourceKind.FLOW_SESSION, FileSourceKind.CODE_AGENT_SOURCE):
-        if flow_id is not None and record.company_id is not None:
+        if (
+            flow_id is not None
+            and flow_id != RUNTIME_FLOW_ID
+            and record.company_id is not None
+        ):
             await authz.require_can_view(AuthzObject.flow(flow_id, company_id=record.company_id))
         return
     mailbox_binding_id = _ref_str(ref, "mailbox_binding_id")

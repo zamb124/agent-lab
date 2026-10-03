@@ -19,17 +19,15 @@ Event-driven side-effect (daily/period summary, note markdown format) при enq
 
 E2E UI (Playwright): браузер шлёт ``X-Test-Scope`` per xdist-worker
 (``test_e2e_gwN``, см. ``tests/ui/e2e_worker.py``); pytest биндит тот же scope
-для ``flows_seed_mock_llm``. Desktop/agent E2E без заголовка — fallback
-``TEST_SCOPE_DEFAULT`` / ``TEST_SCOPE_STATIC_E2E``.
+для ``flows_seed_mock_llm``. Desktop/agent E2E без заголовка читает
+``test_scope_default`` (ENV ``TEST_SCOPE_DEFAULT``, значение ``test_e2e_static``).
 
 Вне TESTING слой мёртв: заголовок не читается, env не смотрится.
 """
 
 from __future__ import annotations
 
-import os
-
-from core.config import is_testing
+from core.config import get_settings, is_testing
 from core.logging.attributes import LOG_TEST_SCOPE
 from core.logging.context import get_log_context
 
@@ -47,10 +45,10 @@ def resolve_test_scope() -> str | None:
         return value.strip()
     if not is_testing():
         return None
-    default_scope = os.environ.get(TEST_SCOPE_DEFAULT_ENV)
-    if default_scope and default_scope.strip():
-        return default_scope.strip()
-    return None
+    default_scope = get_settings().test_scope_default.strip()
+    if default_scope == "":
+        return None
+    return default_scope
 
 
 def side_effect_test_scope(test_scope: str, kind: str) -> str:

@@ -106,7 +106,7 @@ spec:
               value: "http://127.0.0.1:9222"
             {{- end }}
             {{- if eq $name "code-runner-python" }}
-            - name: CODE_RUNNER_PYTHON_WORKERS
+            - name: CODE_RUNNER__PYTHON_WORKERS
               value: "2"
             {{- end }}
             {{- if eq $name "guest-runtime" }}

@@ -20,14 +20,15 @@ Documents (`apps/office`) — каталог файлов компании по�
 
 ## Модель
 
-- `office_document_catalogs` — дерево каталогов namespace (`parent_catalog_id`), настройки видимости и RAG-индекса каталога.
-- `office_document_bindings` — placement файла в каталоге, PK = `file_id` (+ `company_id`, `namespace`); публичный id документа — `file_id`, второй id запрещён; `document_type` (`word`/`cell`/`slide`) — только для JWT OnlyOffice.
-- Публичная ссылка — `link_enabled`, `link_token_hash`, `link_permission` ∈ `viewer`/`editor` на каталоге или binding; неверный permission — 400.
+- Таблицы office — `apps/office/models/`: `DocumentLink` (`link.py`), `OfficeDocumentRevision` (`revision.py`), `OfficeDocumentEvent` (`event.py`).
+- `document_catalogs` (`DocumentCatalog`, `core/documents/catalog.py`, база `shared`) — дерево каталогов namespace любой глубины (`parent_catalog_id`), имя у родителя уникально по `title_key`.
+- Место файла — `FileRecord.catalog_id`; публичный id документа — `file_id`. `document_links` (`DocumentLink`) — публичная ссылка каталога или файла.
+- Публичная ссылка — `link_enabled`, `link_token_hash`, `link_permission` ∈ `viewer`/`editor` на `DocumentLink`; неверный permission — 400.
 - `OfficeIntegrationConfig` (`services.office.office`, ENV `OFFICE__*`): `document_server_public_url` (origin страницы `/documents`), `callback_public_base_url` (origin, с которого Document Server зовёт `office-download` и callback), `jwt_secret`.
 
 ## Инварианты
 
-1. Доступ с сессией — только OpenFGA (`office_catalog`, `office_document` наследует каталог через `catalog`, вложенность — `parent`; company-visible — `company#member` viewer) → `authorization.mdc`; `OfficeAccessService` пишет tuples, `owner_user_id` каталога — зеркало для восстановления.
+1. Доступ с сессией — только OpenFGA (`document_catalog`, `document_file` наследует каталог через `catalog`, вложенность — `parent`; company-visible — `company#member` viewer) → `authorization.mdc`; `OfficeAccessService` пишет tuples, `owner_user_id` каталога — зеркало для восстановления.
 2. Анонимный доступ — token AuthN публичной ссылки, не FGA; публичный каталог показывает только документы с собственным `link_enabled=true`; URL — `{origin}/documents/p/{raw_token}`.
 3. Документ без каталога запрещён: create/upload в BFF требует явный `catalog_id`; корень namespace — только каталоги.
 4. Открытие любого файла платформы — `GET /documents/api/v1/files/{file_id}/editor-config` → `DocumentOpenConfigResponse` (`handler`, `capabilities`, typed payload) из реестра handlers (`core/documents/viewer/` + `apps/office/services/viewer_handlers/`, `DocumentViewerService`); UI — `this.openFile(...)` → модалка `platform.file_viewer` → `<platform-document-viewer-host>`.
@@ -75,6 +76,7 @@ Documents (`apps/office`) — каталог файлов компании по�
 
 ## Гейты
 
+- `scripts/check_office_model_files.py` (`make lint`) — одна таблица на файл `apps/office/models/`, каталога db внутри office нет.
 - `scripts/check_office_file_id_canon.py` (`make lint`) — один публичный id `file_id`.
 - `scripts/check_ui_canon.sh`, `scripts/check_command_rest_mirror.py` (`make check-events-canon`) — office в `FACTORY_CANON_SERVICES`, маппинг `office → documents`.
 - `tests/realtime/test_office_commands.py` — WS ≡ REST всех `OFFICE_OPERATIONS`; `tests/office/` — доступ, публичные ссылки, viewer, callback, catalog RAG index (OpenFGA обязателен).

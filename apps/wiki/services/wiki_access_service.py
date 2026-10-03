@@ -13,10 +13,10 @@ from apps.wiki.authz.tuples import (
 )
 from apps.wiki.models.domain import (
     WikiAccessMemberRelation,
-    WikiPage,
     WikiPageAccess,
     WikiPageMember,
 )
+from apps.wiki.models.page import WikiPage
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind

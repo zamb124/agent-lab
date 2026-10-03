@@ -114,8 +114,9 @@ apps/<svc>/
 apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только если задачи лежат в tasks/ воркера
 ```
 
-- Одна таблица — один файл `models/<entity>.py`; shared-таблица — файл в `core/<domain>/`. Миграция — один `migrations/<db>/0001_initial.py` → `database.mdc`. `[без гейта]`
-- `apps/<svc>/db/`, `db/repositories/`, `components.py`, `dependencies.py`, `container.py`, `*_queries.py` не существуют; `di.py` содержит только `<Svc>Di`, recipes и alias `Di`. `[без гейта]`
+- Одна таблица — один файл `models/<entity>.py`; shared-таблица — файл в `core/<domain>/`. Миграции — цепочка `migrations/<db>/NNNN_<name>.py` от `0001_initial.py` → `database.mdc`. `[без гейта]`
+- `components.py` в корне процесса нет: recipes — в `di.py`. Гейт: `scripts/check_no_service_components.py`.
+- `apps/<svc>/db/`, `db/repositories/`, `dependencies.py`, `container.py`, `*_queries.py` не существуют; `di.py` содержит только `<Svc>Di`, recipes и alias `Di`. `[без гейта]`
 - Общее — из `create_service_app` (`core/app/factory.py`): middleware, платформенные роутеры, health, tracing/logging lifecycle, каталог событий, `static_mounts`, `/{segment}/services`. Свой lifespan, `on_startup`/`on_shutdown`, `@app.exception_handler`, `app.add_middleware` в `main.py` запрещены → `architecture.mdc` § App-level поведение. `[без гейта]`
 - Статика и SPA-fallback — только `mount_service_spa` (`core/app/spa.py`) после собственных маршрутов.
 - Сервис без UI (`secrets`, `scheduler`, `realtime`, `browser`, `capability_gateway`, `code_runner_*`, `guest_runtime`, `provider_litserve`) — подмножество той же схемы без новых папок. Домен с моделями в `core/` (`worktracker`, `rag`) держит в `apps/<svc>/` только `api/`, `realtime/`, `ui/`.
@@ -131,7 +132,7 @@ apps/<svc>_worker/  # broker.py + worker.py + tasks/; di.py — только е�
 
 `core/` не импортирует `apps/`. `[без гейта]` `apps/<a>` не импортирует `apps/<b>`, кроме воркера своего владельца, `*.tasks.task_names`, моделей владельца и библиотечных доменов. Гейт: `scripts/check_cross_service_imports.py`.
 
-`core/` — общая библиотека: `di`, `app`, `config`, `context`, `db`, `models`, `events`, `realtime`, `websocket`, `authz`, `auth`, `identity`, `files`, `documents`, `data_tables`, `ai`, `llm_context`, `rag`, `worktracker`, `namespace`, `mail`, `calendar`, `tracing`, `logging`, `billing`, `payments`, `tasks`, `scheduler`, `flow_ui`, `a2a`, `state`, `variables`, `capabilities`, `frontend`, `i18n`, `pagination.py`, `types.py`, `errors`, `clients`. Клиенты к сервисам и внешним API — только `core/clients/`. `[без гейта]`
+`core/` — общая библиотека: `di`, `app`, `config`, `context`, `db`, `models`, `events`, `realtime`, `websocket`, `authz`, `auth`, `identity`, `files`, `documents`, `data_tables`, `ai`, `llm_context`, `rag`, `worktracker`, `namespace`, `mail`, `calendar`, `tracing`, `logging`, `billing`, `payments`, `tasks`, `scheduler`, `flow_ui`, `a2a`, `state`, `variables`, `capabilities`, `frontend`, `i18n`, `lanes`, `pagination.py`, `types.py`, `errors`, `clients`. Клиенты к сервисам и внешним API — только `core/clients/`. `[без гейта]`
 
 ## Типизация
 

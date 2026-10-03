@@ -1,11 +1,12 @@
 """
-Накат ``0001_initial`` на тестовые базы.
+Накат цепочки миграций на тестовые базы.
 
 Вызывается из ``make test-up`` до старта стека. pytest миграции не применяет:
-``setup_database_before_tests`` только проверяет запись ``0001_initial``.
+``setup_database_before_tests`` только проверяет, что каждый файл цепочки
+есть в ``oxyde_migrations``.
 
-База со старыми таблицами и без этой записи не накатывается: её удаляют и
-поднимают пустой. Сид компании ``system`` нужен до старта сервисов.
+База со старыми таблицами и без записи ``0001_initial`` не накатывается: её
+удаляют и поднимают пустой. Сид компании ``system`` нужен до старта сервисов.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ async def _run() -> int:
     bootstrap_migration_registry()
     await run_migrations_async()
     await _seed_system_company()
-    print("test_migrate: 0001_initial применён, компания system есть")
+    print("test_migrate: цепочка миграций применена, компания system есть")
     return 0
 
 

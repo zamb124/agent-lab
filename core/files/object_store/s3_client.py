@@ -1,6 +1,6 @@
 """
 S3 клиент для работы с объектным хранилищем.
-Поддерживает AWS S3 и совместимые сервисы (Yandex Object Storage, MinIO, VK Cloud).
+Поддерживает AWS S3 и совместимые сервисы (Yandex Object Storage, SeaweedFS, MinIO, VK Cloud).
 
 ВАЖНО: БЕЗ try-except блоков - fail-fast подход.
 """
@@ -19,7 +19,6 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from core.config import get_settings
-from core.context import get_context
 from core.files.object_storage import PLATFORM_STORAGE_ID
 from core.files.s3_sigv4_clock import ensure_sigv4_clock_aligned_with_endpoint
 from core.logging import get_logger
@@ -69,7 +68,7 @@ class S3Client:
             secret_access_key: Секретный ключ
             region_name: Регион
             endpoint_url: URL эндпоинта S3 (для совместимых сервисов)
-            provider_name: Имя провайдера (aws, yandex, minio, vkcloud)
+            provider_name: Имя провайдера (aws, yandex, seaweedfs, minio, vkcloud)
             bucket_config_key: Ключ из settings.s3.buckets для FileRecord.s3_bucket (только из фабрики)
         """
         if not bucket_name:
@@ -90,8 +89,8 @@ class S3Client:
         self._session: aioboto3.Session | None = None
         self._client: aioboto3.S3ServiceClient | None = None
         self._client_lock: asyncio.Lock | None = None
-        self._minio_bucket_lock: asyncio.Lock | None = None
-        self._minio_ready_buckets: set[str] = set()
+        self._bucket_lock: asyncio.Lock | None = None
+        self._ready_buckets: set[str] = set()
 
     def require_bucket_config_key(self) -> str:
         """Ключ из settings.s3.buckets для поля FileRecord.s3_bucket."""
@@ -104,10 +103,10 @@ class S3Client:
 
     def _s3_endpoint_should_not_use_http_proxy(self) -> bool:
         """
-        Иначе botocore подставит HTTP(S)_PROXY из окружения: запрос к MinIO на
-        localhost уйдёт на внешний прокси, ответ часто приходит как InvalidAccessKeyId.
+        Иначе botocore подставит HTTP(S)_PROXY из окружения: запрос к S3-хранилищу
+        на localhost уйдёт на внешний прокси, ответ часто приходит как InvalidAccessKeyId.
         """
-        if self.provider_name == "minio":
+        if self.provider_name in ("minio", "seaweedfs"):
             return True
         raw = self.endpoint_url
         if raw is None or raw == "":
@@ -166,20 +165,21 @@ class S3Client:
 
         return self._client
 
-    async def _ensure_minio_bucket_exists(self, bucket: str) -> None:
+    async def _ensure_bucket_exists(self, bucket: str) -> None:
         """
-        MinIO не создаёт bucket при первом PutObject. Имя берётся только из конфига
-        (self.bucket_name / аргумент), без захардкоженных строк в коде.
+        Self-hosted S3 (SeaweedFS, MinIO) не создаёт bucket при первом PutObject.
+        Имя берётся только из конфига (self.bucket_name / аргумент), без
+        захардкоженных строк в коде.
         Облачные S3 (Selectel, AWS) bucket создаёт администратор — не трогаем.
         """
-        if self.provider_name != "minio":
+        if self.provider_name not in ("minio", "seaweedfs"):
             return
-        if bucket in self._minio_ready_buckets:
+        if bucket in self._ready_buckets:
             return
-        if self._minio_bucket_lock is None:
-            self._minio_bucket_lock = asyncio.Lock()
-        async with self._minio_bucket_lock:
-            if bucket in self._minio_ready_buckets:
+        if self._bucket_lock is None:
+            self._bucket_lock = asyncio.Lock()
+        async with self._bucket_lock:
+            if bucket in self._ready_buckets:
                 return
             client = await self._get_client()
             try:
@@ -192,12 +192,12 @@ class S3Client:
                     raise
                 try:
                     await client.create_bucket(Bucket=bucket)
-                    logger.info("files.s3.minio.bucket", bucket=bucket)
+                    logger.info("files.s3.bucket", bucket=bucket)
                 except ClientError as create_exc:
                     ccode = create_exc.response["Error"]["Code"]
                     if ccode not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
                         raise
-            self._minio_ready_buckets.add(bucket)
+            self._ready_buckets.add(bucket)
 
     async def close(self) -> None:
         """Закрывает соединения клиента"""
@@ -249,7 +249,7 @@ class S3Client:
         if target_bucket == "":
             raise ValueError("Bucket is not specified")
 
-        await self._ensure_minio_bucket_exists(target_bucket)
+        await self._ensure_bucket_exists(target_bucket)
         client = await self._get_client()
 
         extra_args: aioboto3.S3UploadExtraArgs = {}
@@ -299,7 +299,7 @@ class S3Client:
         if target_bucket == "":
             raise ValueError("Bucket is not specified")
 
-        await self._ensure_minio_bucket_exists(target_bucket)
+        await self._ensure_bucket_exists(target_bucket)
         client = await self._get_client()
 
         put_object_request: aioboto3.S3PutObjectRequest = {
@@ -334,7 +334,7 @@ class S3Client:
             raise ValueError("Bucket is not specified")
         if content_type == "":
             raise ValueError("content_type cannot be empty")
-        await self._ensure_minio_bucket_exists(target_bucket)
+        await self._ensure_bucket_exists(target_bucket)
         client = await self._get_client()
         params: aioboto3.S3CreateMultipartUploadRequest = {
             "Bucket": target_bucket,
@@ -801,52 +801,3 @@ class S3ClientFactory:
     @staticmethod
     def create_default_client() -> S3Client:
         return S3ClientFactory.create_platform_client()
-
-def build_s3_key_for_company(company_slug: str, relative_path: str) -> str:
-    """
-    Строит S3 ключ с префиксом компании.
-
-    Аргументы:
-        company_slug: Slug компании (subdomain или company_id)
-        relative_path: Относительный путь (например "rag/namespace/file.pdf")
-
-    Возвращает:
-        Полный ключ: "company_slug/relative_path"
-
-    Example:
-        >>> build_s3_key_for_company("system", "rag/ns1/doc.pdf")
-        "system/rag/ns1/doc.pdf"
-    """
-    return f"{company_slug}/{relative_path.lstrip('/')}"
-
-def build_s3_key_from_context(relative_path: str) -> str:
-    """
-    Строит S3 ключ из текущего контекста запроса.
-
-    Автоматически определяет company_slug из активной компании в контексте.
-
-    Аргументы:
-        relative_path: Относительный путь
-
-    Возвращает:
-        Полный ключ с префиксом компании из контекста
-
-    Исключения:
-        ValueError: Если контекст или компания не найдены
-
-    Example:
-        >>> # При активной компании "system"
-        >>> build_s3_key_from_context("rag/ns1/doc.pdf")
-        "system/rag/ns1/doc.pdf"
-    """
-    context = get_context()
-    if context is None:
-        raise ValueError("Context is not set for building an S3 key")
-    if not context.active_company:
-        raise ValueError("Company is not set in context for building an S3 key")
-
-    company_slug = context.active_company.subdomain or context.active_company.company_id
-    if not company_slug:
-        raise ValueError(f"Company subdomain and company_id are empty: {context.active_company}")
-
-    return build_s3_key_for_company(company_slug, relative_path)

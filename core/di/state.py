@@ -13,6 +13,7 @@ from starlette.requests import HTTPConnection
 from taskiq import TaskiqState
 
 from core.di.kit import ServiceDi
+from core.imports import typed_view
 
 
 class _DiState(Protocol):
@@ -25,9 +26,17 @@ def _app_of(source: HTTPConnection | Starlette) -> Starlette:
     return cast(Starlette, source.app)
 
 
+def _di_from_app_state(app: Starlette) -> ServiceDi:
+    return typed_view(app.state, type(app.state), _DiState).di
+
+
+def _di_from_task_state(state: TaskiqState) -> ServiceDi:
+    return typed_view(state, TaskiqState, _DiState).di
+
+
 def set_app_di(app: Starlette, di: ServiceDi) -> ServiceDi | None:
     """Открыть DI приложения; результат — DI внешнего lifespan для ``reset_app_di``."""
-    previous = cast(_DiState, cast(object, app.state)).di if hasattr(app.state, "di") else None
+    previous = _di_from_app_state(app) if hasattr(app.state, "di") else None
     app.state.di = di
     return previous
 
@@ -43,7 +52,7 @@ def app_di(source: HTTPConnection | Starlette) -> ServiceDi:
     app = _app_of(source)
     if not hasattr(app.state, "di"):
         raise RuntimeError("Service DI is not open: the ASGI lifespan is not running")
-    return cast(_DiState, cast(object, app.state)).di
+    return _di_from_app_state(app)
 
 
 def set_task_di(state: TaskiqState, di: ServiceDi) -> None:
@@ -59,4 +68,4 @@ def clear_task_di(state: TaskiqState) -> None:
 def task_state_di(state: TaskiqState) -> ServiceDi:
     if "di" not in state:
         raise RuntimeError("Service DI is not open: the worker startup did not build it")
-    return cast(_DiState, cast(object, state)).di
+    return _di_from_task_state(state)

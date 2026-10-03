@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from typing import TypeAlias
 
-from apps.flows.src.clients.device_client import DeviceClient
-from apps.flows.src.clients.flow_schedule_client import FlowScheduleClient
-from apps.flows.src.clients.flows_client import FlowsClient
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
-from apps.flows.src.clients.hitl_client import HitlClient
-from apps.flows.src.clients.lara_client import LaraClient
-from apps.flows.src.clients.worktracker_client import WorktrackerClient
+from apps.flows.src.services.device_client import DeviceClient
+from apps.flows.src.services.flow_schedule_client import FlowScheduleClient
+from apps.flows.src.services.flows_client import FlowsClient
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.hitl_client import HitlClient
 from apps.flows.src.services.hitl_work_item_service import HitlWorkItemService
+from apps.flows.src.services.lara_client import LaraClient
 from apps.flows.src.services.lara_facade import LaraFacade
 from apps.flows.src.services.schedule_service import ScheduleService
 from apps.flows.src.services.tool_approval import ToolApprovalStore
 from core.clients.redis_client import RedisClient
+from core.clients.worktracker_client import WorktrackerClient
 from core.integrations.company_credentials import CompanyIntegrationCredentialService
 from core.integrations.oauth_service import OAuthService
 from core.worktracker.service import WorkItemService

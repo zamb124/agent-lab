@@ -16,7 +16,7 @@ from core.context import require_active_company
 from core.logging import get_logger
 from core.models.platform_model import PlatformModel
 from core.pagination import CursorPage
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
@@ -325,7 +325,7 @@ class Relationship(PlatformModel):
             )
 
 
-def _relationship_from_row(row: object) -> Relationship:
+def _relationship_from_row(row: JsonValue) -> Relationship:
     parsed = require_json_object(row, "relationship")
     raw_item = parsed["item"]
     if isinstance(raw_item, str):

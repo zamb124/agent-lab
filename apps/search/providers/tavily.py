@@ -10,7 +10,7 @@ from apps.search.config import SearchTavilyConfig
 from apps.search.providers.common import display_url, provider_status, string_field
 from core.http import ProxyStrategy, get_httpx_client
 from core.search import MetaSearchProviderStatus, MetaSearchRequest, WebSearchResult
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 
 class TavilySearchProvider:
@@ -67,7 +67,7 @@ class TavilySearchProvider:
         return results, provider_status(started, ok=True, results_count=len(results))
 
 
-def parse_tavily_results(payload: object, *, limit: int) -> list[WebSearchResult]:
+def parse_tavily_results(payload: JsonValue, *, limit: int) -> list[WebSearchResult]:
     try:
         payload_object = require_json_object(payload, "tavily payload")
     except ValueError:
@@ -104,7 +104,7 @@ def parse_tavily_results(payload: object, *, limit: int) -> list[WebSearchResult
     return results
 
 
-def _score(value: object) -> float:
+def _score(value: JsonValue) -> float:
     if isinstance(value, int | float) and value >= 0:
         return float(value)
     return 0.0

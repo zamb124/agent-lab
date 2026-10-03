@@ -79,7 +79,36 @@ class Storage:
     def _company_key(self, key: str, force_global: bool = False) -> str:
         if force_global:
             return key
-        if key.startswith(("company:", "subdomain:", "web_notification:", "media_group:")):
+        if key.startswith(
+            (
+                "company:",
+                "subdomain:",
+                "web_notification:",
+                "media_group:",
+                # Устройства и pairing ищутся по глобальному id до компании в контексте.
+                # company_id лежит в записи, а не в префиксе ключа.
+                "agent_pairing:",
+                "agent_device:",
+                "agent_tunnel_online:",
+                "agent_token_deny:",
+                "agent_token_jti_deny:",
+                # Маркер сида и дедуп email-триггера: company_id уже внутри ключа.
+                "flows:",
+                # Дедуп уведомлений и индекс вложений: компания и ящик уже внутри ключа.
+                "mail:notify:",
+                "mail_attachment:",
+                "calendar:notify:",
+                # Прайс и settlement: глобальный каталог или company_id уже в ключе.
+                "billing:",
+                # Платёж и webhook: company_id или id операции провайдера уже в ключе.
+                "payment:",
+                "payment_external:",
+                "payment_notification:",
+                # OAuth callback и внешний автор: токен или company_id уже в ключе.
+                "integration_oauth_state:",
+                "integration_ext_author:",
+            )
+        ):
             return key
         if self.get_context_func is not None:
             context = self.get_context_func()

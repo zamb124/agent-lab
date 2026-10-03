@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Пустые сервисные БД Postgres и сброс Redis под одну миграцию 0001_initial.
+# Пустые сервисные БД Postgres и сброс Redis. Дальше db-migrate накатывает цепочку с 0001_initial.
 # Старая схема не переносится: базы дропаются и создаются заново.
 # Перед запуском — make k8s-backup. После — деплой нового образа (init db-migrate).
 #
 #   CONFIRM=1 bash deploy/scripts/reset-service-databases.sh
 #
-# Не трогает PVC, Loki, Tempo, Grafana и MinIO.
+# Не трогает PVC, Loki, Tempo, Grafana и SeaweedFS.
 
 set -euo pipefail
 
@@ -96,5 +96,5 @@ fi
 log_section "Databases"
 $K exec -n "$NS" postgres-0 -- psql -U platform_user -d postgres -c '\l'
 
-log_ok "Сервисные БД пустые. Дальше — деплой: init db-migrate накатит 0001_initial, bootstrap создаст store OpenFGA."
+log_ok "Сервисные БД пустые. Дальше — деплой: init db-migrate накатит цепочку миграций, bootstrap создаст store OpenFGA."
 print_summary

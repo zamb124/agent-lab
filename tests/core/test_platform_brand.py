@@ -2,10 +2,12 @@
 
 import pytest
 
+from core.config import get_settings
 from core.platform_brand.resolver import (
     UnknownPlatformDomainError,
     resolve_auth_apple_client_id,
     resolve_brand,
+    resolve_brand_or_primary,
     resolve_embed_origins,
     resolve_flows_webhook_public_base_url,
     resolve_infrastructure_service_url,
@@ -42,6 +44,15 @@ def test_resolve_brand_linnex() -> None:
 def test_resolve_brand_unknown_raises() -> None:
     with pytest.raises(UnknownPlatformDomainError):
         resolve_brand("evil.example.com")
+
+
+def test_resolve_brand_or_primary_unknown_host_uses_primary_domain() -> None:
+    settings = get_settings()
+    primary = settings.platform_brands[settings.primary_platform_domain]
+    assert resolve_brand_or_primary(None) == primary
+    assert resolve_brand_or_primary("") == primary
+    assert resolve_brand_or_primary("evil.example.com") == primary
+    assert resolve_brand_or_primary("linnex.io").platform_name == "Linnex"
 
 
 def test_extract_base_domain_linnex() -> None:
@@ -89,6 +100,11 @@ def test_resolve_auth_apple_client_id_humanitec_fallback() -> None:
 
 def test_resolve_vapid_email_linnex() -> None:
     assert resolve_vapid_email("linnex.io") == "admin@linnex.io"
+
+
+def test_resolve_vapid_email_unknown_host_uses_push_default() -> None:
+    assert resolve_vapid_email("evil.example.com") == get_settings().push.vapid_email
+    assert resolve_vapid_email(None) == get_settings().push.vapid_email
 
 
 def test_resolve_oauth_brand_origin_from_host() -> None:

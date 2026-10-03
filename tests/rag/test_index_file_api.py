@@ -7,12 +7,14 @@ import hashlib
 
 import pytest
 
-from core.files.create_spec import FileSourceKind
-from core.files.default_storage import get_default_storage
+from apps.rag.di import RagDi
+from core.context import clear_context, get_context, set_context
+from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
 from core.files.object_store.s3_client import S3ClientFactory
 from core.files.registry import default_retention_for_source
-from core.files.storage import retention_fields_from_spec
+from core.models.context_models import Context
+from core.models.identity_models import Company, User
 from tests.rag.helpers import upload_rag_document_bytes
 
 pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(120)]
@@ -20,26 +22,41 @@ pytestmark = [pytest.mark.real_taskiq, pytest.mark.timeout(120)]
 
 async def _persist_test_file_record(
     *,
+    di: RagDi,
     data: bytes,
     original_name: str,
     content_type: str,
     uploaded_by: str,
     company_id: str,
+    namespace_id: str,
 ) -> FileRecord:
-    retention = default_retention_for_source(FileSourceKind.RAG_DOCUMENT)
-    retention_kind, ttl_seconds = retention_fields_from_spec(retention)
-    storage = get_default_storage()
-    return await storage.upload_bytes(
-        data=data,
-        original_name=original_name,
-        content_type=content_type,
-        uploaded_by=uploaded_by,
-        company_id=company_id,
-        is_public=False,
-        retention_kind=retention_kind,
-        ttl_seconds=ttl_seconds,
-        metadata={"source_kind": FileSourceKind.RAG_DOCUMENT.value},
+    previous = get_context()
+    _ = set_context(
+        Context(
+            user=User(user_id=uploaded_by, name=uploaded_by, active_company_id=company_id),
+            host="rag-test.local",
+            session_id="rag-index-file",
+            channel="test",
+            active_company=Company(company_id=company_id, name=company_id),
+            trace_id="rag-index-file",
+        )
     )
+    try:
+        return await di.files_service.create(
+            FileCreateSpec(
+                source_kind=FileSourceKind.RAG_DOCUMENT,
+                source_ref=FileSourceRef(namespace_id=namespace_id),
+                retention=default_retention_for_source(FileSourceKind.RAG_DOCUMENT),
+            ),
+            data,
+            original_name=original_name,
+            content_type=content_type,
+        )
+    finally:
+        if previous is not None:
+            _ = set_context(previous)
+        else:
+            clear_context()
 
 
 async def _wait_rag_document_completed(
@@ -70,6 +87,7 @@ async def _wait_rag_document_completed(
 @pytest.mark.asyncio
 async def test_index_file_returns_202_without_new_s3_object(
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -81,6 +99,8 @@ async def test_index_file_returns_202_without_new_s3_object(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(
@@ -122,6 +142,7 @@ async def test_index_file_returns_202_without_new_s3_object(
 @pytest.mark.asyncio
 async def test_index_file_processing_completes_and_searchable(
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -134,6 +155,8 @@ async def test_index_file_processing_completes_and_searchable(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(
@@ -174,6 +197,7 @@ async def test_index_file_processing_completes_and_searchable(
 @pytest.mark.asyncio
 async def test_index_only_delete_preserves_file_record(
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -185,6 +209,8 @@ async def test_index_only_delete_preserves_file_record(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(
@@ -224,6 +250,7 @@ async def test_index_only_delete_preserves_file_record(
 @pytest.mark.asyncio
 async def test_index_file_reindex_replaces_chunks(
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -236,6 +263,8 @@ async def test_index_file_reindex_replaces_chunks(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(
@@ -296,6 +325,7 @@ async def test_index_file_reindex_replaces_chunks(
 @pytest.mark.asyncio
 async def test_index_file_rejects_foreign_company_file(
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -307,6 +337,8 @@ async def test_index_file_rejects_foreign_company_file(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="other-company-id",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(
@@ -328,6 +360,7 @@ async def test_index_file_rejects_foreign_company_file(
 async def test_full_delete_document_removes_file_record_but_index_only_does_not(
     frontend_client,
     rag_client,
+    rag_di,
     rag_worker,
     unique_namespace_name,
     auth_headers_system,
@@ -339,6 +372,8 @@ async def test_full_delete_document_removes_file_record_but_index_only_does_not(
         content_type="text/plain",
         uploaded_by="system_admin",
         company_id="system",
+        namespace_id=unique_namespace_name,
+        di=rag_di,
     )
 
     ns_response = await rag_client.post(

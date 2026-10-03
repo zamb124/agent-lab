@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Form, UploadFile
 from pydantic import BaseModel
 
 from apps.voice.di import Di
@@ -24,6 +24,7 @@ from core.context import get_context, require_context
 from core.files.audio_probe import probe_audio_duration_seconds_from_upload
 from core.files.media.ffmpeg_wav import transcode_audio_bytes_to_wav_pcm16_mono
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 
@@ -68,10 +69,7 @@ async def transcribe_audio(
     """Транскрибирует загруженный аудиофайл через платформенный STT-провайдер."""
     audio_bytes = await file.read()
     if not audio_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="File is empty.",
-        )
+        raise WsCommandError("unprocessable", "File is empty.", error_code="ws_invalid_payload")
 
     filename = file.filename or "audio.bin"
     content_type = file.content_type or "application/octet-stream"
@@ -79,9 +77,10 @@ async def transcribe_audio(
     ctx = require_context()
     company = ctx.active_company
     if company is None or company.company_id == "":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Active company is not set in the request context.",
+        raise WsCommandError(
+            "unauthorized",
+            "Active company is not set in the request context.",
+            error_code="unauthorized",
         )
     company_id = company.company_id
 
@@ -104,10 +103,7 @@ async def transcribe_audio(
             content_type=content_type,
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        raise WsCommandError("unprocessable", str(exc), error_code="ws_invalid_payload") from exc
 
     wav_file_name = "voice-input.wav"
     wav_content_type = "audio/wav"

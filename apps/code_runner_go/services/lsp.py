@@ -9,28 +9,20 @@ from pathlib import Path
 
 from core.capabilities.lsp_commands import run_exclusive_lsp_install
 from core.capabilities.models import LspWorkspace
+from core.capabilities.runner_cache import code_runner_lsp_cache_root
 from core.capabilities.runtime_executables import (
     platform_runtime_bin_dir,
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-GO_BIN_ENV = "CODE_RUNNER_GO_BIN"
+from core.utils.process_env import child_process_env
 
 
 def go_lsp_command() -> list[str]:
     existing = shutil.which("gopls")
     if existing is not None:
         return [existing, "serve"]
-    cache = (
-        Path(
-            os.environ["CODE_RUNNER_LSP_CACHE"]
-            if "CODE_RUNNER_LSP_CACHE" in os.environ
-            else str(_REPO_ROOT / ".cache")
-        )
-        / "code-runner-go-lsp"
-    )
+    cache = code_runner_lsp_cache_root() / "code-runner-go-lsp"
     gobin = cache / "bin"
     binary = gobin / "gopls"
 
@@ -40,11 +32,11 @@ def go_lsp_command() -> list[str]:
     def install() -> None:
         if ready():
             return
-        go_bin = resolve_runtime_executable("go", override_env=GO_BIN_ENV)
+        go_bin = resolve_runtime_executable("go")
         if go_bin is None:
-            raise RuntimeError(runtime_executable_required_message("go", override_env=GO_BIN_ENV))
+            raise RuntimeError(runtime_executable_required_message("go"))
         gobin.mkdir(parents=True, exist_ok=True)
-        env = os.environ.copy()
+        env = child_process_env()
         env["PATH"] = f"{platform_runtime_bin_dir()}{os.pathsep}{env.get('PATH', '')}"
         env["GOBIN"] = str(gobin)
         completed = subprocess.run(

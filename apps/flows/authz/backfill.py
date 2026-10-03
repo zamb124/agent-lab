@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
 from apps.flows.authz.tuples import (
     flow_branch_company_viewer_tuple,
@@ -26,6 +24,7 @@ from apps.flows.authz.tuples import (
 )
 from apps.flows.src.models.flow_config import FlowConfig
 from apps.flows.src.models.tool_reference import ToolReference
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.factory import build_authz_service
 from core.authz.models import AuthzObject, AuthzTuple
 from core.authz.platform_sync import ensure_platform_global_admin
@@ -293,10 +292,7 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill flows/tools into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill flows/tools into OpenFGA", argv)
     flows_written, tools_written, shares_written = asyncio.run(
         backfill_flows_authz(limit=limit)
     )

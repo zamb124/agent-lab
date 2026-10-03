@@ -1,8 +1,8 @@
-"""Offline AI scoring / catalog fixture tests — без PostgreSQL / Redis / MinIO / OpenFGA.
+"""Offline AI scoring / catalog fixture tests — без PostgreSQL / Redis / SeaweedFS / OpenFGA.
 
 `test-static` гоняет `test_platform_model_scoring_fixtures.py` до `test-up`.
 Корневые session autouse (`setup_database_before_tests`, Redis notify,
-MinIO, `ensure_default_test_user_authz` → OpenFGA) иначе виснут / валят gate.
+SeaweedFS, `ensure_default_test_user_authz` → OpenFGA) иначе виснут / валят gate.
 Паттерн как в `tests/clients/conftest.py` / `tests/utils/conftest.py`.
 """
 
@@ -17,7 +17,7 @@ def setup_database_before_tests():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_minio_bucket():
+def ensure_s3_bucket():
     yield
 
 

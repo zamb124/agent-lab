@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from apps.flows.src.clients.lara_client import LaraClient
+from apps.flows.src.services.lara_client import LaraClient
 from apps.flows.src.tools.decorator import tool
 from core.clients.crm_client import CrmClient
 from core.clients.crm_models import (

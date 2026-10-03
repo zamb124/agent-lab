@@ -7,7 +7,7 @@ import pytest
 # Игнорируем тест, если мы не в docker-compose (нет доступа к инфраструктуре observability)
 # Проверяем наличие ENV, который задается только в tests_runner
 pytestmark = pytest.mark.skipif(
-    not os.getenv("TESTING") or not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    not os.getenv("TESTING") or not os.getenv("TRACING__OTLP_ENDPOINT"),
     reason="Requires test environment with observability stack",
 )
 

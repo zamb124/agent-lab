@@ -90,7 +90,6 @@ from apps.office.realtime.operations import (
     op_documents_access_update,
     op_documents_ai_summary,
     op_documents_append_text,
-    op_documents_bind,
     op_documents_copy,
     op_documents_create_from_file,
     op_documents_deleted_list,
@@ -118,7 +117,7 @@ from apps.office.realtime.operations import (
     op_namespaces_templates,
 )
 from core.data_tables.models import DataTableCreateRequest
-from core.documents.placement import DocsEnsurePathRequest, DocsPlacement
+from core.documents.placement import DocumentEnsureRequest
 from core.identity.team_operations import TEAM_MEMBERS_LIST_OPERATION
 from core.namespace.operations import NamespacesListPayload, op_namespaces_list
 from core.websocket import EmptyPayload, Operation, RegisteredOperation
@@ -141,7 +140,7 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeDi]] = {
         payload_model=EmptyPayload, fn=op_catalogs_list
     ),
     "office/catalogs/ensure_path_requested": Operation(
-        payload_model=DocsEnsurePathRequest, fn=op_catalogs_ensure_path
+        payload_model=DocumentEnsureRequest, fn=op_catalogs_ensure_path
     ),
     "office/catalogs/create_requested": Operation(
         payload_model=OfficeCatalogCreateRequest, fn=op_catalogs_create
@@ -199,9 +198,6 @@ OFFICE_OPERATIONS: dict[str, RegisteredOperation[OfficeDi]] = {
     ),
     "office/documents/create_from_file_requested": Operation(
         payload_model=OfficeDocumentFromFileRequest, fn=op_documents_create_from_file
-    ),
-    "office/documents/bind_requested": Operation(
-        payload_model=DocsPlacement, fn=op_documents_bind
     ),
     "office/documents/rag_statuses_requested": Operation(
         payload_model=OfficeDocumentsRagIndexStatusesRequest, fn=op_documents_rag_statuses

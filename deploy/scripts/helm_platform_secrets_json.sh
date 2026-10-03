@@ -36,8 +36,8 @@ jq -n \
   --arg pushApnsPrivateKey "${PUSH_APNS_PRIVATE_KEY:-}" \
   --arg pushFcmCredentialsJson "${PUSH_FCM_CREDENTIALS_JSON:-}" \
   --arg pushFcmProjectId "${PUSH_FCM_PROJECT_ID:-}" \
-  --arg minioRootUser "${MINIO_ROOT_USER:-}" \
-  --arg minioRootPassword "${MINIO_ROOT_PASSWORD:-}" \
+  --arg s3AccessKey "${S3_ACCESS_KEY:-}" \
+  --arg s3SecretKey "${S3_SECRET_KEY:-}" \
   --arg livekitApiKey "${LIVEKIT_API_KEY:-}" \
   --arg livekitApiSecret "${LIVEKIT_API_SECRET:-}" \
   --arg centrifugoApiKey "${CENTRIFUGO_API_KEY:-}" \
@@ -116,8 +116,8 @@ jq -n \
     pushApnsPrivateKey: $pushApnsPrivateKey,
     pushFcmCredentialsJson: $pushFcmCredentialsJson,
     pushFcmProjectId: $pushFcmProjectId,
-    minioRootUser: $minioRootUser,
-    minioRootPassword: $minioRootPassword,
+    s3AccessKey: $s3AccessKey,
+    s3SecretKey: $s3SecretKey,
     livekitApiKey: $livekitApiKey,
     livekitApiSecret: $livekitApiSecret,
     centrifugoApiKey: $centrifugoApiKey,

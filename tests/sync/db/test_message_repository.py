@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.models.channel import SyncChannel, SyncChannelMember
-from apps.sync.models.message import SyncMessage, SyncMessageContent
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.channel_member import SyncChannelMember
+from apps.sync.models.message import SyncMessage
+from apps.sync.models.message_content import SyncMessageContent
 from apps.sync.models.messages import MessageContentModel, MessageContentType, TextPlainContent
 from apps.sync.models.threads import SyncThread
 

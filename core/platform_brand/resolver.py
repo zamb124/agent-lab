@@ -7,7 +7,10 @@ from urllib.parse import urlparse
 from core.config import get_settings
 from core.config.models import PlatformBrandConfig
 from core.context import get_context
+from core.logging import get_logger
 from core.utils.domain import extract_base_domain, get_protocol, is_local, split_host_port
+
+logger = get_logger(__name__)
 
 
 class UnknownPlatformDomainError(ValueError):
@@ -32,6 +35,24 @@ def resolve_brand(host: str) -> PlatformBrandConfig:
     if brand is None:
         raise UnknownPlatformDomainError(f"unsupported platform domain: {base_domain}")
     return brand
+
+
+def resolve_brand_or_primary(host: str | None) -> PlatformBrandConfig:
+    """Бренд Host. Пустой или неизвестный Host — primary_platform_domain."""
+    settings = get_settings()
+    primary = settings.platform_brands[settings.primary_platform_domain]
+    if host is None or host.strip() == "":
+        return primary
+    normalized = host.strip()
+    try:
+        return resolve_brand(normalized)
+    except UnknownPlatformDomainError as exc:
+        logger.info(
+            "platform_brand_unknown_host",
+            host=normalized,
+            error=str(exc),
+        )
+        return primary
 
 
 def resolve_public_base_url(host: str) -> str:
@@ -96,14 +117,20 @@ def resolve_auth_apple_client_id(host: str) -> str:
 
 def resolve_vapid_email(host: str | None = None) -> str:
     """VAPID sub email для push: per-brand или deployment default."""
-    if host is not None and str(host).strip():
-        try:
-            brand = resolve_brand(str(host).strip())
-            if brand.vapid_email is not None and str(brand.vapid_email).strip():
-                return str(brand.vapid_email).strip()
-        except UnknownPlatformDomainError:
-            pass
     settings = get_settings()
+    if host is not None and host.strip() != "":
+        normalized = host.strip()
+        try:
+            brand = resolve_brand(normalized)
+        except UnknownPlatformDomainError as exc:
+            logger.info(
+                "platform_brand_unknown_host",
+                host=normalized,
+                error=str(exc),
+            )
+        else:
+            if brand.vapid_email is not None and brand.vapid_email.strip() != "":
+                return brand.vapid_email.strip()
     return settings.push.vapid_email
 
 

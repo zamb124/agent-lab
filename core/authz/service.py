@@ -342,10 +342,13 @@ class AuthzService:
         self._assert_enabled()
         response = cast(
             _ExpandResponseView,
-            await self._client.expand(
-                obj,
-                relation,
-                consistency=self._resolve_consistency(consistency),
+            cast(
+                object,
+                await self._client.expand(
+                    obj,
+                    relation,
+                    consistency=self._resolve_consistency(consistency),
+                ),
             ),
         )
         tree = response.tree

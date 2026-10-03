@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +26,8 @@ from core.capabilities import (
     code_validation_failed_response,
     verify_execution_context,
 )
+from core.capabilities.runner_cache import code_runner_node_sandbox_modules
+from core.capabilities.runner_pool import code_runner_pool_size
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
@@ -37,8 +38,6 @@ from core.tracing.operation_span import traced_operation
 
 CAPABILITY_CALL_PATH = "/capability-gateway/api/v1/capabilities/call"
 SERVICE_NAME = "code_runner_node"
-WORKER_POOL_ENV = "CODE_RUNNER_NODE_WORKERS"
-NODE_BIN_ENV = "CODE_RUNNER_NODE_BIN"
 WORKER_IPC_STREAM_LIMIT_BYTES = 64 * 1024 * 1024
 _REWRITE_ALLOWED_IMPORTS_JS = """
             function rewriteAllowedImports(source) {
@@ -81,18 +80,12 @@ _REWRITE_ALLOWED_IMPORTS_JS = """
               return rewritten;
             }
 """.strip()
-SANDBOX_MODULES_ENV = "CODE_RUNNER_NODE_SANDBOX_MODULES"
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 _SANDBOX_PACKAGE_JSON = Path(__file__).resolve().parents[1] / "sandbox_modules" / "package.json"
 
 
 def ensure_node_sandbox_modules() -> Path:
     """Прединсталл allowlisted npm packages в отдельный prefix, не в platform node_modules."""
-    cache_root = Path(
-        os.environ[SANDBOX_MODULES_ENV]
-        if SANDBOX_MODULES_ENV in os.environ
-        else str(_REPO_ROOT / ".cache" / "code-runner-node-sandbox-modules")
-    )
+    cache_root = code_runner_node_sandbox_modules()
     package_bytes = _SANDBOX_PACKAGE_JSON.read_bytes()
     digest = hashlib.sha256(package_bytes).hexdigest()
     marker = cache_root / ".package.sha256"
@@ -382,14 +375,9 @@ class NodeSandboxExecutor:
         """
         async with self._pool_lock:
             if not self._workers:
-                node_bin = resolve_runtime_executable("node", override_env=NODE_BIN_ENV)
+                node_bin = resolve_runtime_executable("node")
                 if node_bin is None:
-                    raise RuntimeError(
-                        runtime_executable_required_message(
-                            "node",
-                            override_env=NODE_BIN_ENV,
-                        )
-                    )
+                    raise RuntimeError(runtime_executable_required_message("node"))
                 gateway_url = get_settings().server.get_service_url("capability_gateway")
                 count = self._worker_count()
                 self._workers = [
@@ -409,10 +397,7 @@ class NodeSandboxExecutor:
         self._idle_workers.put_nowait(worker)
 
     def _worker_count(self) -> int:
-        raw = os.environ.get(WORKER_POOL_ENV)
-        if raw is None:
-            return max(2, min(8, (os.cpu_count() or 2)))
-        return max(1, int(raw))
+        return code_runner_pool_size("node")
 
     def _failed_response(
         self,

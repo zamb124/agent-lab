@@ -67,12 +67,12 @@ class AuthzObject:
         return cls(AuthzObjectType.WIKI_PAGE, wiki_page_id)
 
     @classmethod
-    def office_catalog(cls, catalog_id: str) -> "AuthzObject":
-        return cls(AuthzObjectType.OFFICE_CATALOG, catalog_id)
+    def document_catalog(cls, catalog_id: str) -> "AuthzObject":
+        return cls(AuthzObjectType.DOCUMENT_CATALOG, catalog_id)
 
     @classmethod
-    def office_document(cls, file_id: str) -> "AuthzObject":
-        return cls(AuthzObjectType.OFFICE_DOCUMENT, file_id)
+    def document_file(cls, file_id: str) -> "AuthzObject":
+        return cls(AuthzObjectType.DOCUMENT_FILE, file_id)
 
     @classmethod
     def sync_channel(cls, channel_id: str) -> "AuthzObject":

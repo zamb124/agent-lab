@@ -22,7 +22,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from apps.wiki.di import WikiDi
-from apps.wiki.models.domain import WikiPage
+from apps.wiki.models.page import WikiPage
 from apps.wiki.services.rag_index import WikiRagIndexService
 from apps.wiki.services.wiki_service import WikiService
 from core.di import require_di

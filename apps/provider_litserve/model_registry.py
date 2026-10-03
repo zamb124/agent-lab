@@ -40,22 +40,38 @@ class AudioModelEntry(Protocol):
     hf_model_id: str
 
 
+def _cell(row: sqlite3.Row, column: str) -> str | int | float | bytes | None:
+    return cast(str | int | float | bytes | None, row[column])
+
+
+def _fetch_row(
+    conn: sqlite3.Connection,
+    sql: str,
+    parameters: tuple[str, ...] = (),
+) -> sqlite3.Row | None:
+    return cast(sqlite3.Row | None, conn.execute(sql, parameters).fetchone())
+
+
+def _fetch_rows(conn: sqlite3.Connection, sql: str) -> Sequence[sqlite3.Row]:
+    return cast(Sequence[sqlite3.Row], conn.execute(sql).fetchall())
+
+
 def _row_required_str(row: sqlite3.Row, column: str) -> str:
-    value = cast(str | int | float | bytes | None, row[column])
+    value = _cell(row, column)
     if isinstance(value, str):
         return value
     raise TypeError(f"models.{column} must be TEXT")
 
 
 def _row_optional_str(row: sqlite3.Row, column: str) -> str | None:
-    value = cast(str | int | float | bytes | None, row[column])
+    value = _cell(row, column)
     if value is None or isinstance(value, str):
         return value
     raise TypeError(f"models.{column} must be TEXT or NULL")
 
 
 def _row_required_int(row: sqlite3.Row, column: str) -> int:
-    value = cast(str | int | float | bytes | None, row[column])
+    value = _cell(row, column)
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"models.{column} must be INTEGER")
     return value
@@ -280,9 +296,7 @@ CREATE TABLE models (
 
 def _migrate_models_table_if_needed(conn: sqlite3.Connection) -> None:
     """Idempotent: если CHECK у таблицы не покрывает новые kind'ы, пересоздать."""
-    row = cast(sqlite3.Row | None, conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'"
-    ).fetchone())
+    row = _fetch_row(conn, "SELECT sql FROM sqlite_master WHERE type='table' AND name='models'")
     if row is None:
         return
     current_sql = _row_required_str(row, "sql")
@@ -304,9 +318,7 @@ def _migrate_models_table_if_needed(conn: sqlite3.Connection) -> None:
 
 def init_registry(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
-        existing = cast(sqlite3.Row | None, conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='models'"
-        ).fetchone())
+        existing = _fetch_row(conn, "SELECT name FROM sqlite_master WHERE type='table' AND name='models'")
         if existing is None:
             _ = conn.execute(_MODELS_TABLE_SQL)
         else:
@@ -360,7 +372,7 @@ def _default_seed_models(cfg: ProviderLitserveInfraConfig) -> list[tuple[ModelKi
 
 def bootstrap_defaults_if_empty(cfg: ProviderLitserveInfraConfig) -> None:
     with _connect(cfg) as conn:
-        row = cast(sqlite3.Row | None, conn.execute("SELECT COUNT(*) AS total FROM models").fetchone())
+        row = _fetch_row(conn, "SELECT COUNT(*) AS total FROM models")
         if row is None:
             raise RuntimeError("model registry count query returned no row")
         if _row_required_int(row, "total") > 0:
@@ -384,14 +396,15 @@ def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
     seed_models = _default_seed_models(cfg)
     with _connect(cfg) as conn:
         for kind, hf_model_id, api_model_id in seed_models:
-            row = cast(sqlite3.Row | None, conn.execute(
+            row = _fetch_row(
+                conn,
                 """
                 SELECT model_id, kind, hf_model_id
                 FROM models
                 WHERE api_model_id = ?
                 """,
                 (api_model_id,),
-            ).fetchone())
+            )
             if row is None:
                 _ = conn.execute(
                     """
@@ -417,26 +430,28 @@ def sync_defaults_from_config(cfg: ProviderLitserveInfraConfig) -> None:
 
 def list_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
-        rows = cast(Sequence[sqlite3.Row], conn.execute(
+        rows = _fetch_rows(
+            conn,
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             ORDER BY created_at DESC
-            """
-        ).fetchall())
+            """,
+        )
     return [_registry_model_from_row(row) for row in rows]
 
 
 def list_ready_active_models(cfg: ProviderLitserveInfraConfig) -> list[RegistryModel]:
     with _connect(cfg) as conn:
-        rows = cast(Sequence[sqlite3.Row], conn.execute(
+        rows = _fetch_rows(
+            conn,
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE status = 'ready'
             ORDER BY created_at DESC
-            """
-        ).fetchall())
+            """,
+        )
     return [_registry_model_from_row(row) for row in rows]
 
 
@@ -448,9 +463,10 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
     now = utcnow_iso()
     model_id = str(uuid4())
     with _connect(cfg) as conn:
-        existing = cast(
-            sqlite3.Row | None,
-            conn.execute("SELECT model_id FROM models WHERE api_model_id = ?", (api_model_id.strip(),)).fetchone(),
+        existing = _fetch_row(
+            conn,
+            "SELECT model_id FROM models WHERE api_model_id = ?",
+            (api_model_id.strip(),),
         )
         if existing is None:
             _ = conn.execute(
@@ -470,14 +486,15 @@ def create_or_replace_model(cfg: ProviderLitserveInfraConfig, *, kind: ModelKind
                 """,
                 (kind, hf_model_id.strip(), now, model_id),
             )
-        row = cast(sqlite3.Row | None, conn.execute(
+        row = _fetch_row(
+            conn,
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE model_id = ?
             """,
             (model_id,),
-        ).fetchone())
+        )
     if row is None:
         raise RuntimeError(f"model registry write did not return model row: {model_id}")
     return _registry_model_from_row(row)
@@ -500,14 +517,15 @@ def mark_model_deleted(cfg: ProviderLitserveInfraConfig, *, model_id: str) -> No
 
 def get_model(cfg: ProviderLitserveInfraConfig, *, model_id: str) -> RegistryModel:
     with _connect(cfg) as conn:
-        row = cast(sqlite3.Row | None, conn.execute(
+        row = _fetch_row(
+            conn,
             """
             SELECT model_id, kind, hf_model_id, api_model_id, status, error, created_at, updated_at
             FROM models
             WHERE model_id = ?
             """,
             (model_id,),
-        ).fetchone())
+        )
     if row is None:
         raise ValueError(f"model not found: {model_id}")
     return _registry_model_from_row(row)

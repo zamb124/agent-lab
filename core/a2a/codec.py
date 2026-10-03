@@ -329,15 +329,14 @@ def get_part_data(part: Part) -> JsonValue:
     return json_from_value(part.data)
 
 
-def messages_from_json_list(items: Sequence[object]) -> list[Message]:
+def messages_from_json_list(items: Sequence[JsonValue | Message]) -> list[Message]:
     """Нормализует list[Message|dict] в list[Message] (для Pydantic validators)."""
     result: list[Message] = []
     for item in items:
         if isinstance(item, Message):
             result.append(item)
         elif isinstance(item, dict):
-            payload = require_json_object(cast(JsonObject, item), "Message")
-            result.append(message_from_json_dict(payload))
+            result.append(message_from_json_dict(item))
         else:
             raise ValueError(f"Expected Message or dict, got {type(item)}")
     return result

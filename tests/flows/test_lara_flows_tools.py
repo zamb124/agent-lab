@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 
 from apps.flows.di import FlowsDi
-from apps.flows.src.clients.flows_client import FlowsClient
+from apps.flows.src.services.flows_client import FlowsClient
 from apps.flows.src.services.tool_approval import ToolApprovalStore
 from apps.flows.tools.flows.flows_editor_tools import (
     flows_get_node,

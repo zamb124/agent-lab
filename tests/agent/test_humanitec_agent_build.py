@@ -21,6 +21,7 @@ from apps.agent.desktop.build_contract import (
     load_default_distro_config,
 )
 from apps.agent.desktop.ui_branding import verify_no_goose_docs_urls
+from core.capabilities.runtime_executables import platform_runtime_dir
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_ROOT = REPO_ROOT / "apps" / "agent" / "desktop"
@@ -50,7 +51,7 @@ def run_apply_branding() -> None:
 
 def _tool_path_env() -> dict[str, str]:
     env = os.environ.copy()
-    runtime_dir = Path(os.environ.get("PLATFORM_RUNTIME_DIR", "~/.cache/agent-lab/runtimes")).expanduser()
+    runtime_dir = platform_runtime_dir()
     runtime_bin = runtime_dir / "bin"
     env["PATH"] = f"{runtime_bin}:{env.get('PATH', '')}"
     cargo_home = runtime_dir / "cargo"

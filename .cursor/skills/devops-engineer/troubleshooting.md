@@ -16,7 +16,7 @@ kubectl logs -n platform $POD --tail=200
 **Типовые причины:**
 - ENV не задан → проверить `kubectl get secret platform-secrets -n platform -o yaml | grep <key>`. Решение: `make k8s-secrets-sync`.
 - Postgres недоступен → init-контейнер **`wait-postgres`** в `Init:CrashLoopBackOff`. `kubectl logs <pod> -c wait-postgres`. Дальше — секция 4.
-- Миграции упали → init-контейнер **`db-migrate`** в `Init:Error`. `kubectl logs <pod> -c db-migrate` показывает stack trace `python -m scripts.db_migrate upgrade`. Параллельный старт ждёт advisory lock и запись `0001_initial` в `oxyde_migrations`. База, в которой уже есть таблицы и нет этой записи, не накатывается: её нужно поднять пустой. После фикса pod сам прогонит `upgrade` при следующем старте.
+- Миграции упали → init-контейнер **`db-migrate`** в `Init:Error`. `kubectl logs <pod> -c db-migrate` показывает stack trace `python -m scripts.db_migrate upgrade`. Параллельный старт ждёт advisory lock и дописывает в `oxyde_migrations` файлы, которых там ещё нет. База, в которой уже есть таблицы и нет записи `0001_initial`, не накатывается: её нужно поднять пустой. После фикса pod сам прогонит `upgrade` при следующем старте.
 - OOMKilled → `kubectl describe pod` → Events показывают OOMKilled. Решение: поднять `resources.limits.memory` в `values.yaml`.
 - Образ не подгрузился (`ImagePullBackOff`) — см. секцию 2.
 
@@ -163,7 +163,7 @@ kubectl exec -n platform deployment/alloy -c alloy -- env | grep OTEL
 ```
 
 **Причины:**
-- Сервис не отправляет trace в Alloy → проверить `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317` в Pod env.
+- Сервис не отправляет trace в Alloy → проверить `TRACING__OTLP_ENDPOINT=http://alloy:4317` в Pod env.
 - Alloy не форвардит → лог alloy.
 - Tempo переполнен → проверить PVC.
 

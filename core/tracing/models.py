@@ -42,6 +42,8 @@ class TraceSpanEvent(BaseModel):
 
 ADMIN_SPANS_MAX_LIMIT = 100
 
+_STATUS_MESSAGE_MAX_LEN = 255
+
 _FacetColumn = Literal[
     "company_id",
     "user_id",
@@ -354,7 +356,12 @@ class Span(PlatformModel):
             attributes[trace_attr.ATTR_RESOURCE_TYPE] = span.resource_type
         if span.resource_id is not None and trace_attr.ATTR_RESOURCE_ID not in attributes:
             attributes[trace_attr.ATTR_RESOURCE_ID] = span.resource_id
-        stored = span.model_copy(update={"attributes": attributes})
+        status_message = span.status_message
+        if status_message is not None and len(status_message) > _STATUS_MESSAGE_MAX_LEN:
+            status_message = status_message[: _STATUS_MESSAGE_MAX_LEN]
+        stored = span.model_copy(
+            update={"attributes": attributes, "status_message": status_message}
+        )
         try:
             _ = await Span.objects.create(instance=stored)
         except IntegrityError:

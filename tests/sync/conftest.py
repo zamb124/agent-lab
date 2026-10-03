@@ -19,10 +19,10 @@ for _k, _v in TEST_DATABASE_ENV.items():
 os.environ.setdefault("S3__ENABLED", "true")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "test-bucket")
 os.environ.setdefault("S3__ENDPOINT_URL", "http://localhost:19002")
-os.environ.setdefault("S3__ACCESS_KEY_ID", "minioadmin")
-os.environ.setdefault("S3__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__ACCESS_KEY_ID", "s3admin")
+os.environ.setdefault("S3__SECRET_ACCESS_KEY", "s3admin")
 os.environ.setdefault("S3__BUCKET_NAME", "test-bucket")
-os.environ.setdefault("S3__PROVIDER", "minio")
+os.environ.setdefault("S3__PROVIDER", "seaweedfs")
 
 _SYNC_DI = None
 os.environ.setdefault("VOICE__STT__PROVIDER", "mock")

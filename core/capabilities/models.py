@@ -25,6 +25,13 @@ CAPABILITY_LANGUAGES: tuple[CapabilityLanguage, ...] = (
     "csharp",
 )
 CAPABILITY_LANGUAGE_SET: frozenset[str] = frozenset(CAPABILITY_LANGUAGES)
+
+
+def match_capability_language(language: str) -> CapabilityLanguage | None:
+    for known in CAPABILITY_LANGUAGES:
+        if known == language:
+            return known
+    return None
 CapabilityExecutionMode: TypeAlias = Literal["sync", "async"]
 CapabilityCallStatus: TypeAlias = Literal["ok", "interrupt"]
 CodeExecutionStatus: TypeAlias = Literal["completed", "interrupted", "failed"]

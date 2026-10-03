@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from huggingface_hub import scan_cache_dir, snapshot_download
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,7 @@ from apps.provider_litserve.model_registry import (
 )
 from apps.provider_litserve.runtime_models import reload_runtime_catalog_from_sqlite
 from core.utils.tokens import get_token_service
+from core.websocket import WsCommandError
 
 SYSTEM_COMPANY_ID = "system"
 
@@ -44,15 +45,15 @@ def system_auth_dependency(request: Request) -> None:
     if auth_header:
         prefix = "Bearer "
         if not auth_header.startswith(prefix):
-            raise HTTPException(status_code=401, detail="Invalid Authorization header")
+            raise WsCommandError("unauthorized", "Invalid Authorization header", error_code="unauthorized")
         token = auth_header[len(prefix):].strip()
     if not token:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise WsCommandError("unauthorized", "Authentication required", error_code="unauthorized")
     token_data = get_token_service().validate_token(token)
     if token_data is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise WsCommandError("unauthorized", "Invalid token", error_code="unauthorized")
     if token_data.company_id != SYSTEM_COMPANY_ID:
-        raise HTTPException(status_code=403, detail="System company required")
+        raise WsCommandError("forbidden", "System company required", error_code="forbidden")
 
 
 _SYSTEM_AUTH_DEPENDENCY = [Depends(system_auth_dependency)]

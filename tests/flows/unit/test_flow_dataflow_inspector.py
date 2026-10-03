@@ -1,7 +1,7 @@
 from pydantic import TypeAdapter
 
 from apps.flows.src.models import Edge, FlowVariableConfig, GraphNodeConfig
-from apps.flows.src.services.flow_dataflow_inspector import inspect_flow_dataflow
+from apps.flows.src.services.flow_dataflow_inspector import _type_of_literal, inspect_flow_dataflow
 from tests.flows.fixtures.reflection import reflection_policy
 
 _GRAPH_NODES_ADAPTER: TypeAdapter[dict[str, GraphNodeConfig]] = TypeAdapter(dict[str, GraphNodeConfig])
@@ -17,6 +17,15 @@ def _edges(payload: list[dict[str, object]]) -> list[Edge]:
 
 def _variables(payload: dict[str, object]) -> dict[str, FlowVariableConfig]:
     return {key: FlowVariableConfig.model_validate(value) for key, value in payload.items()}
+
+
+def test_type_of_literal_number_or_string() -> None:
+    assert _type_of_literal("1") == "integer"
+    assert _type_of_literal("1.5") == "number"
+    assert _type_of_literal("1e2") == "number"
+    assert _type_of_literal("true") == "boolean"
+    assert _type_of_literal("null") == "null"
+    assert _type_of_literal("ready") == "string"
 
 
 def test_inspector_propagates_code_return_and_output_mapping():

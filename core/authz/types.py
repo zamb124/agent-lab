@@ -12,8 +12,8 @@ class AuthzObjectType(StrEnum):
     CRM_NAMESPACE = "crm_namespace"
     CRM_ENTITY = "crm_entity"
     WIKI_PAGE = "wiki_page"
-    OFFICE_CATALOG = "office_catalog"
-    OFFICE_DOCUMENT = "office_document"
+    DOCUMENT_CATALOG = "document_catalog"
+    DOCUMENT_FILE = "document_file"
     SYNC_CHANNEL = "sync_channel"
     WORK_QUEUE = "work_queue"
     MAILBOX_BINDING = "mailbox_binding"
@@ -45,12 +45,15 @@ class AuthzRelation(StrEnum):
     PLATFORM = "platform"
     NAMESPACE = "namespace"
     CATALOG = "catalog"
+    SOURCE = "source"
+    LISTER = "lister"
     FLOW = "flow"
     COMPANY_VIEWER = "company_viewer"
     CAN_SHARE = "can_share"
     CAN_VIEW = "can_view"
     CAN_EDIT = "can_edit"
     CAN_ADMIN = "can_admin"
+    CAN_LIST = "can_list"
 
 
 class AuthzSubjectKind(StrEnum):

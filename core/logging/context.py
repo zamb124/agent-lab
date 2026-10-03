@@ -11,14 +11,17 @@
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
+from collections.abc import Generator
+from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
 from typing import cast
 
 import structlog
 
+from core.types import JsonObject, JsonValue, require_json_object
 
-def bind_log_context(**fields: object) -> None:
+
+def bind_log_context(**fields: JsonValue) -> None:
     """
     Добавить поля в лог-контекст текущей contextvar-копии.
 
@@ -43,12 +46,21 @@ def clear_log_context() -> None:
     structlog.contextvars.clear_contextvars()
 
 
-def get_log_context() -> dict[str, object]:
+def get_log_context() -> JsonObject:
     """Вернуть копию текущего лог-контекста (для отладки и тестов)."""
-    return cast(dict[str, object], dict(structlog.contextvars.get_contextvars()))
+    return require_json_object(
+        cast(object, structlog.contextvars.get_contextvars()),
+        "log_context",
+    )
 
 
-def restore_log_context(snapshot: dict[str, object]) -> None:
+@contextmanager
+def _bound_log_fields(fields: JsonObject) -> Generator[None, None, None]:
+    with structlog.contextvars.bound_contextvars(**fields):
+        yield
+
+
+def restore_log_context(snapshot: JsonObject) -> None:
     """Восстановить лог-контекст из snapshot (используется при выходе из скоупа)."""
     structlog.contextvars.clear_contextvars()
     if snapshot:
@@ -65,18 +77,15 @@ class LogContextScope:
             await do_work()
     """
 
-    def __init__(self, **fields: object) -> None:
-        self._fields: dict[str, object] = {
+    def __init__(self, **fields: JsonValue) -> None:
+        self._fields: JsonObject = {
             key: value for key, value in fields.items() if value not in (None, "")
         }
-        self._cm: AbstractContextManager[object] | None = None
+        self._cm: AbstractContextManager[None] | None = None
 
     def __enter__(self) -> "LogContextScope":
         if self._fields:
-            self._cm = cast(
-                AbstractContextManager[object],
-                structlog.contextvars.bound_contextvars(**self._fields),
-            )
+            self._cm = _bound_log_fields(self._fields)
             _ = self._cm.__enter__()
         return self
 

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar, Literal, Self, cast, override
+from typing import ClassVar, Literal, Self, override
 
-import yaml
 from oxyde import Field as DbField
 from pydantic import ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -17,7 +16,7 @@ from core.files.file_ref import FileRef
 from core.logging import get_logger
 from core.models import StrictBaseModel
 from core.models.platform_model import CompanyScopedModel
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, parse_yaml_value, require_json_object
 
 logger = get_logger(__name__)
 
@@ -319,10 +318,10 @@ def parse_skill_md(markdown: str, *, agent_skill_id: str | None = None) -> Agent
     body = match.group("body").strip()
     if not body:
         raise ValueError("SKILL.md body is empty")
-    loaded_raw: object = cast(object, yaml.safe_load(frontmatter_raw))
+    loaded_raw = parse_yaml_value(frontmatter_raw, "SKILL.md frontmatter")
     if not isinstance(loaded_raw, dict):
         raise ValueError("SKILL.md frontmatter must be a YAML mapping")
-    frontmatter = require_json_object(cast(object, loaded_raw), "skill_md.frontmatter")
+    frontmatter = require_json_object(loaded_raw, "skill_md.frontmatter")
 
     name = _require_frontmatter_str(frontmatter, "name")
     description = _require_frontmatter_str(frontmatter, "description")

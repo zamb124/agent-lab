@@ -1,14 +1,12 @@
 """Typed reads for LiveKit SDK objects at the sync realtime boundary.
 
-LiveKit SDK отдаёт protobuf-объекты (ParticipantInfo/TrackInfo/EgressInfo). isinstance против
-runtime_checkable Protocol с data-member для protobuf-дескрипторов возвращает False даже при
-заполненном поле, поэтому читаем значение через hasattr-гард (строгая проверка формы: нет
-атрибута -> raise) и cast к Protocol для типобезопасного доступа.
+LiveKit SDK отдаёт protobuf-объекты (ParticipantInfo/TrackInfo/EgressInfo). Поле читается
+через Protocol; нет атрибута — raise, пустая строка для egress — ошибка, для identity и sid — None.
 """
 
 from __future__ import annotations
 
-from typing import Protocol, cast
+from typing import Protocol
 
 
 class LiveKitEgressInfo(Protocol):
@@ -23,28 +21,25 @@ class LiveKitTrack(Protocol):
     sid: str
 
 
-def read_livekit_egress_id(egress_info: object) -> str:
+def read_livekit_egress_id(egress_info: LiveKitEgressInfo) -> str:
     if not hasattr(egress_info, "egress_id"):
         raise RuntimeError("LiveKit egress_info missing egress_id")
-    egress_id = cast(LiveKitEgressInfo, egress_info).egress_id
-    if egress_id == "":
+    if egress_info.egress_id == "":
         raise RuntimeError("LiveKit did not return egress_id after recording start.")
-    return egress_id
+    return egress_info.egress_id
 
 
-def read_livekit_participant_identity(participant: object) -> str | None:
+def read_livekit_participant_identity(participant: LiveKitParticipant) -> str | None:
     if not hasattr(participant, "identity"):
         raise RuntimeError("LiveKit participant missing identity")
-    identity = cast(LiveKitParticipant, participant).identity
-    if identity == "":
+    if participant.identity == "":
         return None
-    return identity
+    return participant.identity
 
 
-def read_livekit_track_sid(track: object) -> str | None:
+def read_livekit_track_sid(track: LiveKitTrack) -> str | None:
     if not hasattr(track, "sid"):
         raise RuntimeError("LiveKit track missing sid")
-    track_sid = cast(LiveKitTrack, track).sid
-    if track_sid == "":
+    if track.sid == "":
         return None
-    return track_sid
+    return track.sid

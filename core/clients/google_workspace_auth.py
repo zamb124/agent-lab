@@ -3,11 +3,43 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import ClassVar
+from typing import ClassVar, Protocol, cast
 
+from google.auth.transport.requests import Request as AuthRequest
+from google.oauth2 import service_account as sa
 from pydantic import ConfigDict, model_validator
 
 from core.models.base import StrictBaseModel
+from core.types import JsonObject, JsonValue
+
+
+class GoogleServiceAccountCredentials(Protocol):
+    valid: bool
+    token: str | None
+
+    def refresh(self, request: AuthRequest) -> None: ...
+
+    def with_subject(self, subject: str) -> GoogleServiceAccountCredentials: ...
+
+
+class _FromServiceAccountInfo(Protocol):
+    def __call__(
+        self,
+        info: JsonObject,
+        *,
+        scopes: list[str],
+    ) -> GoogleServiceAccountCredentials: ...
+
+
+def google_service_account_credentials(
+    info: JsonObject,
+    scopes: list[str],
+) -> GoogleServiceAccountCredentials:
+    from_service_account_info = cast(
+        _FromServiceAccountInfo,
+        sa.Credentials.from_service_account_info,
+    )
+    return from_service_account_info(info, scopes=scopes)
 
 
 class GoogleAuthMaterial(StrictBaseModel):
@@ -39,7 +71,7 @@ class GoogleAuthMaterial(StrictBaseModel):
 
 
 def auth_material_from_execution_variables(
-    variables: Mapping[str, object],
+    variables: Mapping[str, JsonValue],
 ) -> GoogleAuthMaterial | None:
     """
     Explicit ExecutionState.variables override for Google auth.
@@ -62,7 +94,7 @@ def auth_material_from_execution_variables(
     )
 
 
-def _optional_nonempty_str(value: object) -> str | None:
+def _optional_nonempty_str(value: JsonValue) -> str | None:
     if isinstance(value, str) and value.strip() != "":
         return value
     return None

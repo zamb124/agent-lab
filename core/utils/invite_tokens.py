@@ -8,12 +8,12 @@
 import uuid
 from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
-from typing import Protocol, cast
+from typing import Protocol
 
 import jwt
-import redis.asyncio as aioredis
 from pydantic import BaseModel, Field
 
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.logging import get_logger
 
@@ -39,21 +39,10 @@ class _InviteRedisClient(Protocol):
     def aclose(self) -> Awaitable[None]: ...
 
 
-class _InviteRedisFromUrl(Protocol):
-    def __call__(
-        self,
-        url: str,
-        *,
-        decode_responses: bool,
-        socket_connect_timeout: int,
-        socket_timeout: int,
-    ) -> _InviteRedisClient: ...
-
-
 def _invite_redis_client() -> _InviteRedisClient:
     settings = get_settings()
-    redis_from_url = cast(_InviteRedisFromUrl, aioredis.from_url)
-    return redis_from_url(
+    return redis_client_from_url(
+        _InviteRedisClient,
         settings.database.redis_url,
         decode_responses=True,
         socket_connect_timeout=5,

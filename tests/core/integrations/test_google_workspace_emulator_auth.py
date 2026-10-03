@@ -11,8 +11,8 @@ import httpx
 import pytest
 
 from apps.flows.di import FlowsDi
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.runtime.exceptions import FlowInterrupt
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from core.authz.errors import AuthzDenied
 from core.authz.service import AuthzService
 from core.clients.google_sheets_client import GoogleSheetsClient

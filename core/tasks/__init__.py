@@ -27,7 +27,7 @@ from core.tasks.registry import (
     registered_queue_brokers,
     scheduled_task_specs,
 )
-from core.tasks.session_lock import SessionLockMiddleware, session_lock_middleware
+from core.tasks.session_lock import SessionLockMiddleware, SessionLockTimeoutError
 
 __all__ = [
     "SessionLockMiddleware",
@@ -43,5 +43,5 @@ __all__ = [
     "registered_queue_brokers",
     "resolve_broker_for_task",
     "scheduled_task_specs",
-    "session_lock_middleware",
+    "SessionLockTimeoutError",
 ]

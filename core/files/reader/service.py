@@ -14,11 +14,13 @@ import zipfile
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from email import policy
+from email.message import Message as EmailMessage
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import ClassVar, Literal, Protocol, TypedDict, TypeIs, cast
+from typing import BinaryIO, ClassVar, Literal, Protocol, TypedDict, TypeIs, cast, overload
 
 import ebooklib
 import extract_msg
@@ -71,7 +73,9 @@ from core.files.reader.vision import prepare_visual_payload
 from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
+from core.imports import module_sdk
 from core.tracing.operation_span import traced_operation
+from core.types import JsonObject, JsonValue
 
 SourceInput = Path | str | bytes
 
@@ -80,8 +84,12 @@ class _BytesReader(Protocol):
     def read(self, size: int = -1, /) -> bytes: ...
 
 
-def _as_object(value: object) -> object:
-    return value
+class _EmailContentMessage(Protocol):
+    def get_content(self) -> bytes | str | None: ...
+
+
+def _email_get_content(message: _EmailContentMessage) -> bytes | str | None:
+    return message.get_content()
 
 
 class _OleFileObject(Protocol):
@@ -91,8 +99,8 @@ class _OleFileObject(Protocol):
 
 
 class _OleFileModule(Protocol):
-    def isOleFile(self, filename: object) -> bool: ...
-    def OleFileIO(self, filename: object) -> _OleFileObject: ...
+    def isOleFile(self, filename: BinaryIO) -> bool: ...
+    def OleFileIO(self, filename: BinaryIO) -> _OleFileObject: ...
 
 
 class _PdfPixmap(Protocol):
@@ -109,10 +117,21 @@ class _PdfExtractedImage(TypedDict):
     height: int
 
 
+class _PdfMatrix(Protocol):
+    """Матрица масштаба страницы PDF."""
+
+
 class _PdfPage(Protocol):
-    def get_text(self, option: str = "text") -> object: ...
+    @overload
+    def get_text(self, option: Literal["text"] = "text") -> str: ...
+
+    @overload
+    def get_text(self, option: Literal["dict"]) -> JsonValue: ...
+
+    def get_text(self, option: str = "text") -> str | JsonValue: ...
+
     def get_images(self, *, full: bool) -> list[tuple[int, ...]]: ...
-    def get_pixmap(self, *, matrix: object) -> _PdfPixmap: ...
+    def get_pixmap(self, *, matrix: _PdfMatrix) -> _PdfPixmap: ...
 
 
 class _PdfDocument(Protocol):
@@ -127,12 +146,12 @@ class _PdfDocument(Protocol):
 
 class _FitzModule(Protocol):
     def open(self, *, stream: bytes, filetype: str) -> _PdfDocument: ...
-    def Matrix(self, zoom_x: int, zoom_y: int) -> object: ...
+    def Matrix(self, zoom_x: int, zoom_y: int) -> _PdfMatrix: ...
 
 
 class _UnstructuredMetadata(Protocol):
-    page_number: object | None
-    page_name: object | None
+    page_number: int | float | str | None
+    page_name: str | None
 
 
 class _UnstructuredElement(Protocol):
@@ -144,7 +163,7 @@ class _UnstructuredPartition(Protocol):
     def __call__(
         self,
         *,
-        file: object,
+        file: BinaryIO,
         metadata_filename: str,
         languages: list[str],
     ) -> Iterable[_UnstructuredElement]: ...
@@ -184,7 +203,7 @@ class _PptxShape(Protocol):
     text_frame: _PptxTextFrame
     has_table: bool
     table: _PptxTable
-    shape_type: object
+    shape_type: MSO_SHAPE_TYPE
     image: _PptxImage
 
 
@@ -197,24 +216,28 @@ class _PptxPresentation(Protocol):
 
 
 class _PptxPresentationFactory(Protocol):
-    def __call__(self, file: object) -> _PptxPresentation: ...
+    def __call__(self, file: BinaryIO) -> _PptxPresentation: ...
+
+
+class _OdfNode(Protocol):
+    """Узел документа OpenDocument, из которого читается текст."""
 
 
 class _OdfDocument(Protocol):
-    def getElementsByType(self, elt: object) -> Iterable[object]: ...
+    def getElementsByType(self, elt: type[_OdfNode]) -> Iterable[_OdfNode]: ...
 
 
 class _OdfOpenDocumentModule(Protocol):
-    def load(self, odffile: object) -> _OdfDocument: ...
+    def load(self, odffile: BinaryIO) -> _OdfDocument: ...
 
 
 class _OdfTextModule(Protocol):
-    P: object
-    H: object
+    P: type[_OdfNode]
+    H: type[_OdfNode]
 
 
 class _OdfTeletypeModule(Protocol):
-    def extractText(self, odfElement: object) -> str: ...
+    def extractText(self, odfElement: _OdfNode) -> str: ...
 
 
 class _EpubItem(Protocol):
@@ -222,24 +245,24 @@ class _EpubItem(Protocol):
 
 
 class _EpubBook(Protocol):
-    def get_items_of_type(self, item_type: object) -> Iterable[_EpubItem]: ...
+    def get_items_of_type(self, item_type: int) -> Iterable[_EpubItem]: ...
 
 
 class _EpubModule(Protocol):
-    def read_epub(self, name: str, options: object | None = None) -> _EpubBook: ...
+    def read_epub(self, name: str) -> _EpubBook: ...
 
 
 class _EbooklibModule(Protocol):
-    ITEM_DOCUMENT: object
+    ITEM_DOCUMENT: int
 
 
 class _MsgFile(Protocol):
-    subject: object | None
-    sender: object | None
-    to: object | None
-    cc: object | None
-    date: object | None
-    body: object | None
+    subject: str | datetime | None
+    sender: str | datetime | None
+    to: str | datetime | None
+    cc: str | datetime | None
+    date: str | datetime | None
+    body: str | datetime | None
 
     def close(self) -> None: ...
 
@@ -355,7 +378,7 @@ def guess_mime(file_name: str) -> str | None:
     return mime
 
 
-def _payload_to_text(payload: object) -> str:
+def _payload_to_text(payload: bytes | str | EmailMessage | None) -> str:
     if isinstance(payload, bytes):
         return payload.decode("utf-8", errors="replace")
     if isinstance(payload, str):
@@ -363,10 +386,10 @@ def _payload_to_text(payload: object) -> str:
     return ""
 
 
-def _text_or_none(value: object | None) -> str | None:
+def _text_or_none(value: str | datetime | None) -> str | None:
     if value is None:
         return None
-    text = str(value).strip()
+    text = value.strip() if isinstance(value, str) else str(value).strip()
     return text if text else None
 
 
@@ -499,7 +522,7 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> str | None:
     а вытаскивает читаемые ASCII/UTF-16 строки длиной >= 4 символов.
     Используется когда antiword не справляется (формат Word 95 / минимальные .doc).
     """
-    typed_olefile = cast(_OleFileModule, _as_object(olefile))
+    typed_olefile = module_sdk(olefile, _OleFileModule)
 
     if not typed_olefile.isOleFile(BytesIO(raw)):
         return None
@@ -517,15 +540,18 @@ def _extract_text_from_ole_word_stream(raw: bytes) -> str | None:
     # ASCII-строки длиной >= 4 печатаемых символов
     for match in re.finditer(rb"[\x20-\x7e\r\n\t]{4,}", stream):
         chunks.append(match.group().decode("ascii", errors="replace"))
-    # UTF-16 LE строки
-    try:
-        decoded16 = stream.decode("utf-16-le", errors="ignore")
-        for match in re.finditer(r"[\u0020-\u00ff\u0400-\u04ff\u0100-\u017f]{4,}", decoded16):
-            chunks.append(match.group())
-    except Exception:
-        pass
+    chunks.extend(_utf16_le_readable_chunks(stream))
     text = "\n".join(chunks).strip()
     return text or None
+
+
+def _utf16_le_readable_chunks(stream: bytes) -> list[str]:
+    """Читаемые куски WordDocument stream как UTF-16 LE. Битый хвост байт отбрасывается."""
+    decoded16 = stream.decode("utf-16-le", errors="ignore")
+    return [
+        match.group()
+        for match in re.finditer(r"[\u0020-\u00ff\u0400-\u04ff\u0100-\u017f]{4,}", decoded16)
+    ]
 
 
 def _kind_from_extension(ext: str) -> FileReadKind:
@@ -1029,8 +1055,7 @@ def page_text_for_merge(text: str) -> str:
 
 
 def _pdf_page_text(page: _PdfPage) -> str:
-    raw_text = page.get_text() or ""
-    return raw_text if isinstance(raw_text, str) else str(raw_text)
+    return page.get_text()
 
 
 def _pdf_mime_from_extracted(ext: str) -> str:
@@ -1118,21 +1143,16 @@ def _pdf_page_embedded_images(page: _PdfPage, doc: _PdfDocument) -> list[PdfPage
     return images
 
 
-def _require_str_object_map(value: object, where: str) -> dict[str, object]:
+def _require_str_object_map(value: JsonValue, where: str) -> JsonObject:
     if not isinstance(value, dict):
         raise FileReadError(f"{where} must be a dict")
-    mapping: dict[str, object] = {}
-    for key, item in cast(dict[object, object], value).items():
-        if not isinstance(key, str):
-            raise FileReadError(f"{where}: key must be str")
-        mapping[key] = item
-    return mapping
+    return value
 
 
-def _require_object_list(value: object, where: str) -> list[object]:
+def _require_object_list(value: JsonValue | None, where: str) -> list[JsonValue]:
     if not isinstance(value, list):
         raise FileReadError(f"{where} must be a list")
-    return cast(list[object], value)
+    return value
 
 
 def _pdf_structure_blocks(page: _PdfPage) -> list[ExtractBlock]:
@@ -1211,7 +1231,7 @@ def _pdf_is_locked(doc: _PdfDocument) -> bool:
 
 
 def pdf_page_count(raw: bytes) -> int:
-    fitz = cast(_FitzModule, _as_object(pymupdf))
+    fitz = module_sdk(pymupdf, _FitzModule)
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         return doc.page_count
@@ -1229,7 +1249,7 @@ def iter_pdf_read_pages(
 ) -> Iterable[ReadPage]:
     """Внутренний PDF-reader: по одной ReadPage, без накопления всех картинок документа."""
     del file_name
-    fitz = cast(_FitzModule, _as_object(pymupdf))
+    fitz = module_sdk(pymupdf, _FitzModule)
     doc = fitz.open(stream=raw, filetype="pdf")
     try:
         page_count = doc.page_count
@@ -1276,7 +1296,7 @@ def _read_pdf_sync(
     mime: str | None,
     opts: ReadOptions,
 ) -> FileReadResult:
-    fitz = cast(_FitzModule, _as_object(pymupdf))
+    fitz = module_sdk(pymupdf, _FitzModule)
 
     warnings: list[str] = []
     doc = fitz.open(stream=raw, filetype="pdf")
@@ -1594,12 +1614,9 @@ def _read_odt_sync(
 ) -> FileReadResult:
     """OpenDocument Text .odt через odfpy (ZIP+XML)."""
     del opts
-    teletype = cast(_OdfTeletypeModule, _as_object(odf_teletype))
-    odf_text_module = cast(_OdfTextModule, _as_object(odf_text))
-    opendocument = cast(
-        _OdfOpenDocumentModule,
-        _as_object(odf_opendocument),
-    )
+    teletype = module_sdk(odf_teletype, _OdfTeletypeModule)
+    odf_text_module = module_sdk(odf_text, _OdfTextModule)
+    opendocument = module_sdk(odf_opendocument, _OdfOpenDocumentModule)
 
     try:
         doc = opendocument.load(BytesIO(raw))
@@ -1635,8 +1652,8 @@ def _read_epub_sync(
 ) -> FileReadResult:
     """EPUB через EbookLib + BeautifulSoup; одна страница на главу."""
     del opts
-    typed_ebooklib = cast(_EbooklibModule, _as_object(ebooklib))
-    typed_epub = cast(_EpubModule, _as_object(epub))
+    typed_ebooklib = module_sdk(ebooklib, _EbooklibModule)
+    typed_epub = module_sdk(epub, _EpubModule)
 
     # ebooklib читает только с диска, поэтому пишем во временный файл
     with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as tmp:
@@ -1682,7 +1699,7 @@ def _read_msg_sync(
 ) -> FileReadResult:
     """Outlook .msg через extract-msg (чисто Python)."""
     del opts
-    typed_extract_msg = cast(_ExtractMsgModule, _as_object(extract_msg))
+    typed_extract_msg = module_sdk(extract_msg, _ExtractMsgModule)
 
     with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
         _ = tmp.write(raw)
@@ -1754,7 +1771,7 @@ def _read_eml_sync(
             ctype = part.get_content_type()
             if ctype == "text/plain" and part.get("Content-Disposition") is None:
                 try:
-                    body = _payload_to_text(cast(object, part.get_content()))
+                    body = _payload_to_text(_email_get_content(part))
                 except (LookupError, UnicodeDecodeError):
                     body = _payload_to_text(part.get_payload(decode=True))
                 break
@@ -1764,7 +1781,7 @@ def _read_eml_sync(
                 if ctype == "text/html":
                     try:
                         html = (
-                            _payload_to_text(cast(object, part.get_content()))
+                            _payload_to_text(_email_get_content(part))
                             if hasattr(part, "get_content")
                             else _payload_to_text(part.get_payload(decode=True))
                         )
@@ -1776,7 +1793,7 @@ def _read_eml_sync(
                     break
     else:
         try:
-            body = _payload_to_text(cast(object, msg.get_content()))
+            body = _payload_to_text(_email_get_content(msg))
         except (LookupError, UnicodeDecodeError):
             body = _payload_to_text(msg.get_payload(decode=True))
     if body:

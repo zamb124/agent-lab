@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
 from apps.crm.authz.tuples import (
     crm_entity_namespace_link,
@@ -17,6 +15,7 @@ from apps.crm.authz.tuples import (
 from apps.crm.config import get_crm_settings
 from apps.crm.di import CrmDi
 from apps.crm.models.crm_entity import CRMEntity
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.service import AuthzService
 from core.di import open_di
 from core.di.kit import ProcessIdentity
@@ -78,10 +77,7 @@ async def backfill_crm_authz(*, limit: int | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill CRM OpenFGA tuples")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill CRM OpenFGA tuples", argv)
     entities = asyncio.run(backfill_crm_authz(limit=limit))
     _ = sys.stdout.write(f"entities={entities}\n")
     return 0

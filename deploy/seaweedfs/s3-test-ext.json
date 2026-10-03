@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "ext",
+      "credentials": [
+        {
+          "accessKey": "extadmin",
+          "secretKey": "extadminsecret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

@@ -12,14 +12,10 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import json
 import mimetypes
 from pathlib import Path
 from types import FunctionType
-from typing import cast
 from urllib.parse import urlparse
-
-import yaml
 
 from apps.flows.src.models import (
     CodeMode,
@@ -36,20 +32,21 @@ from apps.flows.src.tools.decorator import FunctionTool
 from apps.flows.src.tools.json_schema_parameters import pydantic_model_to_parameters_schema
 from apps.flows.tools.builtin_specs import BUILTIN_TOOL_SPECS
 from core.context import get_context
-from core.files.create_spec import FileSourceKind
-from core.files.default_storage import get_default_storage
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.file_ref import stored_file_ref
 from core.files.models import FileRecord
 from core.files.reader import FileReader, ReadOptions
 from core.files.registry import default_retention_for_source
-from core.files.storage import retention_fields_from_spec
+from core.files.service import FilesService
 from core.llm_context import LLMContextPatch
 from core.logging import get_logger
 from core.types import (
     JsonArray,
     JsonObject,
     JsonValue,
+    parse_json_array,
     parse_json_object,
+    parse_yaml_value,
     require_json_array,
     require_json_object,
 )
@@ -89,9 +86,11 @@ class FlowsLoader:
         bundles_dir: Path,
         registry_path: Path | None = None,
         flow_access_service: FlowAccessService | None = None,
+        files_service: FilesService | None = None,
     ):
         self.bundles_dir: Path = bundles_dir
         self.flow_access_service: FlowAccessService | None = flow_access_service
+        self.files_service: FilesService | None = files_service
         self.registry_path: Path = registry_path or (bundles_dir / "registry.yaml")
         self._registry: JsonObject = {}
         self._bundle_registry: FlowBundleRegistry = FlowBundleRegistry()
@@ -120,8 +119,11 @@ class FlowsLoader:
             self._bundle_registry = FlowBundleRegistry()
             self._defaults = {}
             return
-        with open(self.registry_path, "r", encoding="utf-8") as f:
-            self._registry = require_json_object(yaml.safe_load(f) or {}, "registry.yaml")
+        loaded = parse_yaml_value(self.registry_path.read_text(encoding="utf-8"), "registry.yaml")
+        if loaded is None:
+            self._registry = {}
+        else:
+            self._registry = require_json_object(loaded, "registry.yaml")
         self._bundle_registry = FlowBundleRegistry.model_validate(self._registry)
         self._defaults = self._bundle_registry.defaults
 
@@ -344,7 +346,7 @@ class FlowsLoader:
         await self.preload_nodes_to_cache(bundle_id)
 
         with open(config_path, "r", encoding="utf-8") as f:
-            raw_config = require_json_object(cast(JsonValue, json.load(f)), "flow.json")
+            raw_config = parse_json_object(f.read(), "flow.json")
 
         nodes = await self._load_nodes_with_prompts(bundle_dir, raw_config)
         nodes = self._apply_defaults(nodes)
@@ -441,12 +443,11 @@ class FlowsLoader:
             content_type = (
                 guessed if isinstance(guessed, str) and guessed else "application/octet-stream"
             )
-            company_id = self._resolve_target_company_id()
             record = await self._upload_flow_asset_file(
                 data=data,
                 original_name=original_name,
                 content_type=content_type,
-                company_id=company_id,
+                flow_id=bundle_dir.name,
                 is_public=True,
             )
             url = record.download_url
@@ -463,7 +464,7 @@ class FlowsLoader:
     async def _load_nodes(self, bundle_dir: Path, nodes_path: Path) -> None:
         """Загружает ноды из nodes.json в БД."""
         with open(nodes_path, "r", encoding="utf-8") as f:
-            nodes_list = require_json_array(cast(JsonValue, json.load(f)), "nodes.json")
+            nodes_list = parse_json_array(f.read(), "nodes.json")
 
         for raw_node in nodes_list:
             if not isinstance(raw_node, dict):
@@ -476,7 +477,7 @@ class FlowsLoader:
 
             # Инлайним промпт из файла
             raw_node = self._inline_prompt_from_file(raw_node, bundle_dir)
-            raw_node = await self._materialize_node_files(raw_node, node_id)
+            raw_node = await self._materialize_node_files(raw_node, node_id, bundle_dir.name)
 
             # Конвертируем tools в List[ToolReference]
             tools = self._convert_tools(
@@ -545,25 +546,22 @@ class FlowsLoader:
         data: bytes,
         original_name: str,
         content_type: str,
-        company_id: str,
+        flow_id: str,
         is_public: bool,
     ) -> FileRecord:
-        retention = default_retention_for_source(FileSourceKind.FLOW_ASSET)
-        retention_kind, ttl_seconds = retention_fields_from_spec(retention)
-        storage = get_default_storage()
-        record = await storage.upload_bytes(
-            data=data,
+        if self.files_service is None:
+            raise RuntimeError("files_service required to place a flow asset in Documents")
+        return await self.files_service.create(
+            FileCreateSpec(
+                source_kind=FileSourceKind.FLOW_ASSET,
+                source_ref=FileSourceRef(flow_id=flow_id),
+                retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
+                post_create=FilePostCreate(is_public=is_public),
+            ),
+            data,
             original_name=original_name,
             content_type=content_type,
-            uploaded_by=None,
-            company_id=company_id,
-            is_public=is_public,
-            retention_kind=retention_kind,
-            ttl_seconds=ttl_seconds,
-            metadata={"source_kind": FileSourceKind.FLOW_ASSET.value},
-            source_kind=FileSourceKind.FLOW_ASSET,
         )
-        return record
 
     def _map_source_to_local_static(self, source: str) -> Path | None:
         parsed = urlparse(source)
@@ -600,6 +598,7 @@ class FlowsLoader:
         self,
         node: JsonObject,
         node_id: str,
+        flow_id: str,
     ) -> JsonObject:
         files = node.get("files")
         if not files:
@@ -607,7 +606,6 @@ class FlowsLoader:
         if not isinstance(files, list):
             raise ValueError(f"Node '{node_id}': files must be a list")
 
-        company_id = self._resolve_target_company_id()
         reader = FileReader()
 
         materialized: JsonArray = []
@@ -635,7 +633,7 @@ class FlowsLoader:
                 data=raw_bytes,
                 original_name=original_name,
                 content_type=content_type.strip(),
-                company_id=company_id,
+                flow_id=flow_id,
                 is_public=False,
             )
             item = stored_file_ref(record)
@@ -687,7 +685,7 @@ class FlowsLoader:
 
             # Инлайним function -> code
             self._inline_function_to_code(node, node_id)
-            node = await self._materialize_node_files(node, node_id)
+            node = await self._materialize_node_files(node, node_id, bundle_dir.name)
 
             # Устанавливаем name по умолчанию если не указан
             if "name" not in node:
@@ -738,10 +736,7 @@ class FlowsLoader:
         if not schema_path.exists():
             raise ValueError(f"output_schema file not found: {schema_path}")
         with open(schema_path, "r", encoding="utf-8") as f:
-            node["output_schema"] = require_json_object(
-                cast(JsonValue, json.load(f)),
-                f"{schema_path}.output_schema",
-            )
+            node["output_schema"] = parse_json_object(f.read(), f"{schema_path}.output_schema")
         del node["output_schema_file"]
         return node
 
@@ -868,7 +863,9 @@ class FlowsLoader:
                     node = self._inline_output_schema_file(node, bundle_dir)
 
                     self._inline_function_to_code(node, f"{branch_id}.{node_id}")
-                    node = await self._materialize_node_files(node, f"{branch_id}.{node_id}")
+                    node = await self._materialize_node_files(
+                        node, f"{branch_id}.{node_id}", bundle_dir.name
+                    )
                     processed_nodes[node_id] = node
 
                 branch_cfg["nodes"] = processed_nodes
@@ -1340,6 +1337,8 @@ class FlowsLoader:
 async def load_flows_to_db(
     flow_access_service: FlowAccessService,
     bundles_dir: Path | None = None,
+    *,
+    files_service: FilesService,
 ) -> tuple[list[str], list[str]]:
     """
     Загружает flows и nodes в БД из каталога с bundle-подпапками и registry.yaml.
@@ -1368,6 +1367,7 @@ async def load_flows_to_db(
         bundles_dir,
         registry_path=registry_path,
         flow_access_service=flow_access_service,
+        files_service=files_service,
     )
     return await loader.load_all()
 

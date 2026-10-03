@@ -8,12 +8,13 @@ URL PostgreSQL для pytest и дочерних процессов (uvicorn, Ta
   postgres  → 54322 (dev: 54321)
   redis     → 63792 (dev: 63791)
   redis-realtime → 63793 (dev: 8098)
-  minio     → 19002 (dev: 19001)
+  seaweedfs → 19002 (dev: 19001)
   livekit   → 7890  (dev: 7880)
   centrifugo → 19000 (dev: 8000)
   openfga   → 9093  (dev: 9090)
 """
 
+import os
 from pathlib import Path
 
 _POSTGRES_TEST = "postgresql+asyncpg://platform_user:admin@localhost:54322"
@@ -69,10 +70,10 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "S3__ENABLED": "true",
     "S3__ENDPOINT_URL": "http://localhost:19002",
     "S3__BUCKET_NAME": "test-bucket",
-    "S3__ACCESS_KEY_ID": "minioadmin",
-    "S3__SECRET_ACCESS_KEY": "minioadmin",
+    "S3__ACCESS_KEY_ID": "s3admin",
+    "S3__SECRET_ACCESS_KEY": "s3admin",
     "S3__REGION_NAME": "us-east-1",
-    "S3__PROVIDER": "minio",
+    "S3__PROVIDER": "seaweedfs",
     "S3__PATH_STYLE": "true",
     "LLM__PROVIDER": "openrouter",
     "LLM__OPENROUTER__API_KEY": "sk-test-key",
@@ -89,6 +90,22 @@ _TEST_SERVICE_ENV: dict[str, str] = {
     "VOICE__STT__PROVIDER": "mock",
     "VOICE__STT__MOCK_TRANSCRIPT_TEXT": "Тестовая транскрипция sync worker",
 }
+
+
+def ensure_local_no_proxy() -> None:
+    """Добавляет localhost/127.0.0.1/::1 в NO_PROXY текущего процесса.
+
+    urllib (readiness-пробы) и httpx (клиенты фикстур) честно ходят через
+    HTTP(S)_PROXY шелла: без bypass локальные адреса уезжают на внешний прокси,
+    который не видит localhost пользователя. Внешний egress при этом продолжает
+    идти через прокси — NO_PROXY только расширяет список обхода.
+    """
+    for key in ("NO_PROXY", "no_proxy"):
+        bypass = [part.strip() for part in os.environ.get(key, "").split(",") if part.strip()]
+        for host in ("localhost", "127.0.0.1", "::1"):
+            if host not in bypass:
+                bypass.append(host)
+        os.environ[key] = ",".join(bypass)
 
 
 def load_openfga_test_env_overlay() -> dict[str, str]:

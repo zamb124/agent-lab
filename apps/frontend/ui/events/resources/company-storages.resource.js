@@ -82,7 +82,7 @@ export const companyStorageCreateForm = createForm({
     },
     initial: {
         name: '',
-        provider: 'minio',
+        provider: 'seaweedfs',
         endpoint_url: '',
         region_name: 'us-east-1',
         bucket_name: '',

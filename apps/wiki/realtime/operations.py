@@ -38,16 +38,16 @@ from apps.wiki.models.api import (
     WikiSearchRequest,
     WikiTreeResponse,
 )
+from apps.wiki.models.comment import WikiComment
 from apps.wiki.models.domain import (
     WikiBacklink,
-    WikiComment,
     WikiLinkTargetKind,
     WikiPageAccess,
     WikiPageSummary,
-    WikiRevision,
     WikiRevisionSummary,
     WikiSearchHit,
 )
+from apps.wiki.models.revision import WikiRevision
 from core.authz.errors import AuthzDenied
 from core.authz.models import AuthzObject
 from core.errors.boundary import PlatformAccessDeniedError, PlatformNotFoundError

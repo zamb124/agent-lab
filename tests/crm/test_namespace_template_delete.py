@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.crm.models.namespace_template import NamespaceTemplate, NamespaceTemplateType
+from apps.crm.models.namespace_template import NamespaceTemplate
+from apps.crm.models.namespace_template_type import NamespaceTemplateType
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("crm_di")]
 

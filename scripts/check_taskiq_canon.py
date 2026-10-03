@@ -64,6 +64,7 @@ CREATE_BROKER_ALLOWLIST: frozenset[str] = frozenset(
         "apps/crm_worker/broker.py",
         "apps/crm_worker/summary_broker.py",
         "apps/search_worker/broker.py",
+        "apps/stock_worker/broker.py",
         "apps/sync/realtime/broker.py",
     }
 )

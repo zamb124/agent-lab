@@ -13,11 +13,13 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from typing import Protocol, cast
 
 from google.auth.transport.requests import Request as AuthRequest
-from google.oauth2 import service_account as sa
 
+from core.clients.google_workspace_auth import (
+    GoogleServiceAccountCredentials,
+    google_service_account_credentials,
+)
 from core.config import get_settings
 from core.config.models import GoogleWorkspaceApiBases
 from core.http import get_httpx_client
@@ -53,24 +55,6 @@ class GoogleDocsClientError(Exception):
     def __init__(self, status_code: int, message: str) -> None:
         self.status_code: int = status_code
         super().__init__(f"Google API {status_code}: {message}")
-
-
-class _GoogleCredentials(Protocol):
-    valid: bool
-    token: str | None
-
-    def refresh(self, request: AuthRequest) -> None: ...
-
-    def with_subject(self, subject: str) -> _GoogleCredentials: ...
-
-
-class _FromServiceAccountInfo(Protocol):
-    def __call__(
-        self,
-        info: JsonObject,
-        *,
-        scopes: list[str],
-    ) -> _GoogleCredentials: ...
 
 
 def _resolve_docs_api_base(
@@ -148,7 +132,7 @@ class GoogleDocsClient:
             _DEFAULT_DRIVE_UPLOAD_BASE,
         )
 
-        self._credentials: _GoogleCredentials | None = None
+        self._credentials: GoogleServiceAccountCredentials | None = None
         self._static_token: str | None = None
 
         if credentials_json:
@@ -158,13 +142,7 @@ class GoogleDocsClient:
                 and resolved_bases.token_uri.strip() != ""
             ):
                 info = {**info, "token_uri": resolved_bases.token_uri.strip()}
-            from_service_account_info = cast(
-                _FromServiceAccountInfo,
-                sa.Credentials.from_service_account_info,
-            )
-            creds = from_service_account_info(
-                info, scopes=_SCOPES
-            )
+            creds = google_service_account_credentials(info, _SCOPES)
             if subject:
                 creds = creds.with_subject(subject)
             self._credentials = creds

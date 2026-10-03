@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import shutil
 import tempfile
 import zipfile
@@ -15,8 +14,7 @@ from core.clients.files_client import FilesClient
 from core.clients.guest_runtime_client import GuestRuntimeClient
 from core.config import get_settings
 from core.context import require_active_company, require_context
-from core.documents.placement import DocsPlacementAnchor
-from core.documents.placement_paths import build_path_segments
+from core.documents.paths import source_catalog_path
 from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef
 from core.files.registry import default_retention_for_source
 from core.files.service import FilesService
@@ -42,6 +40,7 @@ from core.guest_runtime.source_budget import (
 )
 from core.guest_runtime.source_tree import walk_code_agent_catalog
 from core.types import JsonObject, require_json_object
+from core.utils.process_env import child_process_env
 
 
 class CodeAgentSourceService:
@@ -83,8 +82,7 @@ class CodeAgentSourceService:
         if git is None:
             raise RuntimeError("git is required for code_agent import-git")
         dest = Path(tempfile.mkdtemp(prefix="code-agent-git-"))
-        env = dict(os.environ)
-        env["GIT_TERMINAL_PROMPT"] = "0"
+        env = child_process_env({"GIT_TERMINAL_PROMPT": "0"})
         remote_url = normalize_code_agent_git_remote(git_url)
         try:
             if resolved_sha == "":
@@ -399,13 +397,9 @@ class CodeAgentSourceService:
         _ = require_context()
         _ = require_active_company()
         flow = await self._require_flow(flow_id)
-        segments = build_path_segments(
-            DocsPlacementAnchor(
-                source_kind="code_agent_source",
-                flow_id=flow_id,
-                flow_slug=flow.flow_id,
-                node_id=node_id,
-            )
+        segments = source_catalog_path(
+            FileSourceKind.CODE_AGENT_SOURCE,
+            FileSourceRef(flow_id=flow_id, flow_slug=flow.flow_id, node_id=node_id),
         )
         ensured = await self._documents.ensure_catalog_path(segments)
         # Дерево исходников создаётся и до сохранения ноды в графе (редактор ещё не нажал

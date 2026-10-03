@@ -9,15 +9,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from livekit.protocol.egress import EgressInfo
-from redis.asyncio.client import Redis
 
 import core.tracing.attributes as trace_attributes
 from apps.sync.di import Di
@@ -26,7 +25,8 @@ from apps.sync.message_read_helpers import message_read_from_entity
 from apps.sync.models.call import SyncCall
 from apps.sync.models.files import SyncFile
 from apps.sync.models.meetings import CallRecordingRead, SyncCallRecording
-from apps.sync.models.message import SyncMessage, SyncMessageContent
+from apps.sync.models.message import SyncMessage
+from apps.sync.models.message_content import SyncMessageContent
 from apps.sync.models.messages import (
     CallTranscriptContent,
     CallTranscriptEntry,
@@ -48,20 +48,24 @@ from apps.sync.realtime.task_names import (
 from apps.sync.sender_display import guest_display_name_from_sender_id, sender_brief_for_message
 from core.calls.livekit_client import LiveKitClient
 from core.clients.files_client import FilesClient
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
 from core.context.job_context import build_job_context
 from core.events import publish_events
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.media.audio_extract import extract_audio_from_video
 from core.files.media.chunked_stt import transcribe_audio_with_chunking
 from core.files.models import (
     STT_FAILED_ERROR_CODE,
     AudioAttachmentContent,
     AudioTranscriptionStatus,
-    FileRecord,
-    FileStatus,
     VideoAttachmentContent,
 )
+from core.files.object_store.pool import client_for
+from core.files.object_store.resolver import resolve_storage_id
+from core.files.registry import default_retention_for_source
+from core.files.service import FilesService
 from core.logging import get_logger
 from core.models.identity_models import Company, User
 from core.tasks import enqueue, platform_task
@@ -434,8 +438,10 @@ def _call_recording_s3_object_key(*, company_id: str, call_id: str, recording_id
 
 async def _register_platform_file_record_for_call_recording(
     *,
+    files_service: FilesService,
     raw_file_id: str,
     company_id: str,
+    channel_id: str,
     call_id: str,
     recording_id: str,
     started_by_user_id: str,
@@ -456,9 +462,6 @@ async def _register_platform_file_record_for_call_recording(
         call_id=call_id,
         recording_id=recording_id,
     )
-    from core.files.object_store.pool import client_for
-    from core.files.object_store.resolver import resolve_storage_id
-
     s3_client = await client_for(await resolve_storage_id(storage_id))
     meta = await s3_client.get_object_metadata(s3_key)
 
@@ -469,23 +472,52 @@ async def _register_platform_file_record_for_call_recording(
     if content_type == "":
         raise ValueError("S3 head_object for meeting recording: empty ContentType")
 
-    api_prefix = f"/{settings.server.name}/api/v1"
-    download_prefix = f"{api_prefix.rstrip('/')}/files/download"
-    file_record = FileRecord(
-        file_id=raw_file_id,
-        original_name=raw_original_name,
-        s3_key=s3_key,
-        storage_id=storage_id,
-        storage_url=raw_storage_url,
-        content_type=content_type,
-        file_size=content_length,
-        status=FileStatus.READY,
-        uploaded_by=started_by_user_id,
-        company_id=company_id,
-        is_public=True,
-        download_url=f"{download_prefix}/{raw_file_id}",
-    )
-    _ = await FileRecord.set(file_record)
+    previous = get_context()
+    active = previous.active_company if previous is not None else None
+    installed_context = active is None or active.company_id != company_id
+    if installed_context:
+        company = await Company.get(company_id)
+        if company is None:
+            raise ValueError(f"company not found: {company_id}")
+        user = await User.get(started_by_user_id)
+        if user is None:
+            raise ValueError(f"actor user not found: {started_by_user_id}")
+        _ = set_context(
+            build_job_context(
+                company=company,
+                user=user,
+                host="sync-worker.local",
+                trace_id=f"sync_finalize_recording:{recording_id}",
+                session_id=f"sync_finalize_recording:{recording_id}",
+                channel="sync_finalize_recording",
+            )
+        )
+    try:
+        _ = await files_service.register_s3(
+            FileCreateSpec(
+                source_kind=FileSourceKind.SYNC_CALL_RECORDING,
+                source_ref=FileSourceRef(
+                    channel_id=channel_id,
+                    call_id=call_id,
+                    recording_id=recording_id,
+                ),
+                retention=default_retention_for_source(FileSourceKind.SYNC_CALL_RECORDING),
+                post_create=FilePostCreate(is_public=False),
+                metadata={"storage_url": raw_storage_url},
+            ),
+            s3_key=s3_key,
+            storage_id=storage_id,
+            original_name=raw_original_name,
+            content_type=content_type,
+            file_size=content_length,
+            existing_file_id=raw_file_id,
+        )
+    finally:
+        if installed_context:
+            if previous is not None:
+                _ = set_context(previous)
+            else:
+                clear_context()
     return content_length
 
 
@@ -551,8 +583,10 @@ async def sync_finalize_recording_task(
             if raw_original_name == "":
                 raise ValueError(f"Failed to determine egress file name from URL: {raw_storage_url}")
             recording_file_size = await _register_platform_file_record_for_call_recording(
+                files_service=di.files_service,
                 raw_file_id=raw_file_id,
                 company_id=company_id,
+                channel_id=call.channel_id,
                 call_id=recording.call_id,
                 recording_id=recording.recording_id,
                 started_by_user_id=recording.started_by_user_id,
@@ -687,8 +721,7 @@ async def transcribe_audio_message_core(
     if redis_url.strip() == "":
         raise ValueError("database.redis_url is required for sync_transcribe_audio_message_task.")
 
-    redis_from_url = cast(Callable[[str], _TranscribeAudioRedis], Redis.from_url)
-    r = redis_from_url(redis_url)
+    r = redis_client_from_url(_TranscribeAudioRedis, redis_url, decode_responses=False)
     lock_key = f"sync:transcribe_audio:{company_id}:{message_id}"
     token = uuid4().hex
     lock_ttl = settings.transcribe_audio_redis_lock_ttl_seconds

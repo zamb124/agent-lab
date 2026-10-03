@@ -7,13 +7,11 @@
 
 from __future__ import annotations
 
-import json
-from typing import cast
 from urllib.parse import urlparse, urlunparse
 
 import httpx
 
-from core.types import require_json_object
+from core.types import parse_json_object
 
 
 async def fetch_browser_web_socket_debugger_url(
@@ -30,11 +28,8 @@ async def fetch_browser_web_socket_debugger_url(
         response = await client.get(version_url)
         _ = response.raise_for_status()
         try:
-            data = require_json_object(
-                cast(object, response.json()),
-                "CDP json/version response",
-            )
-        except json.JSONDecodeError as exc:
+            data = parse_json_object(response.text, "CDP json/version response")
+        except ValueError as exc:
             raise RuntimeError(
                 f"CDP json/version at {version_url!r} is not JSON: {response.text[:500]!r}"
             ) from exc

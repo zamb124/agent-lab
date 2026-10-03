@@ -21,7 +21,7 @@ from core.data_tables.models import (
 )
 from core.files.models import FileRecord
 from core.pagination import CursorPage
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 _API = "/documents/api/v1"
 
@@ -37,7 +37,7 @@ class DataTableClient:
     def _ns_headers(self) -> dict[str, str]:
         return {NAMESPACE_HEADER: resolve_namespace_or_raise()}
 
-    def _object(self, value: object, label: str) -> JsonObject:
+    def _object(self, value: JsonValue, label: str) -> JsonObject:
         return require_json_object(value, label)
 
     async def create(

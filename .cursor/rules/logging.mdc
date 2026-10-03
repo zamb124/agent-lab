@@ -21,6 +21,7 @@ alwaysApply: false
 5. Ошибка: `logger.exception("<event>", ...)` и `raise`; LLM-стрим — `log_llm_stream_response` (`core/clients/llm/logging.py`); HTTP access — одна строка `http_request` из `AccessLogMiddleware` (INFO 2xx/3xx, WARNING 4xx, ERROR 5xx).
 6. Конфиг — `LoggingConfig` (`core/config/models.py`): `level`, `format` `json`/`console`, sampling, `loggers_levels`, `max_string_len`, `drop_keys`, `grafana_public_url` + `grafana_loki_datasource_uid` (ссылка Explore в JSON-ошибке → `architecture.mdc` § Ошибки границы); невалидный конфиг — `LoggingMisconfigured`.
 7. `setup_logging` идемпотентен и вызывается платформой: HTTP — `create_service_app`, TaskIQ — `register_worker_events`, scheduler — `apps/scheduler/scheduler.py`.
+8. `deployment.environment` — `log_deployment_environment`: `test` при `is_testing()`; иначе `production`, если задан `server.deployment_version`; иначе `server.env` `local` или `test`; `development` и пустой релиз — `local`.
 
 ### request_id E2E
 

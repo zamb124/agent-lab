@@ -218,7 +218,7 @@ PROVIDER_WHITELIST_PATHS = (
     "core/integrations/models.py",
     "core/middleware/dev_inter_service_proxy.py",
     "core/models/calendar_models.py",
-    "core/models/identity_models.py",
+    "core/models/identity_models/",
     "core/models/voice_providers_catalog.py",
     "core/types.py",
     "core/rag/embedding_runtime.py",

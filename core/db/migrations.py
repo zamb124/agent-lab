@@ -1,8 +1,8 @@
 """Миграции Oxyde: диф зарегистрированных моделей против ``migrations/<db>/``.
 
 Таблицы ищутся по ``Meta.is_table = True`` в ``core/`` и ``apps/``. База строки —
-``__database_alias__`` или ``__database_aliases__``. Файл пишется, только если
-диф не пустой и в каталоге ещё нет нумерованной миграции.
+``__database_alias__`` или ``__database_aliases__``. Пустой каталог получает
+``0001_initial``; непустой — следующий ``NNNN_<name>.py`` по дифу.
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ def _assert_aliases_registered() -> None:
                 raise RuntimeError(f"{model.__name__} uses unknown database alias {alias}")
 
 
-def _json_object_from_schema(schema: object, field_name: str) -> JsonObject:
+def _json_object_from_schema(schema: JsonValue, field_name: str) -> JsonObject:
     return parse_json_object(json.dumps(schema), field_name)
 
 
@@ -180,6 +180,20 @@ def _prepend_vector_extension(path: Path) -> None:
     _ = path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
 
 
+def write_next_migration(
+    operations: list[JsonObject],
+    directory: Path,
+    *,
+    vector_database: bool,
+) -> Path:
+    """Пишет следующий файл цепочки. ``0001_initial`` получает ``CREATE EXTENSION vector``, следующий — нет."""
+    existing = sorted(directory.glob("[0-9]*.py"))
+    path = generate_migration_file(operations, directory, "initial" if not existing else None)
+    if vector_database and not existing:
+        _prepend_vector_extension(path)
+    return path
+
+
 def generate_migration_files(service: str | None = None) -> None:
     """Пишет миграцию по дифу моделей и уже лежащих файлов ``migrations/<db>/``."""
     register_migration_services()
@@ -195,33 +209,31 @@ def generate_migration_files(service: str | None = None) -> None:
             _replayed_schema_json(directory),
             _schema_json(_tables_for_alias(svc.name)),
         )
-        existing = sorted(directory.glob("[0-9]*.py"))
         if not operations:
             logger.info("oxyde_migration_unchanged", service=svc.name)
             continue
-        if existing:
-            raise RuntimeError(
-                f"{svc.name}: schema differs from {existing[-1].name}. Delete that file and generate the migration again.",
-            )
-        path = generate_migration_file(operations, directory, "initial")
-        if _postgres_database_name(svc.get_db_url()) in vector_databases:
-            _prepend_vector_extension(path)
+        path = write_next_migration(
+            operations,
+            directory,
+            vector_database=_postgres_database_name(svc.get_db_url()) in vector_databases,
+        )
         logger.info("oxyde_migration_written", service=svc.name, path=str(path))
 
 
-async def _initial_applied(db_url: str) -> bool:
+def _migration_stems(directory: Path) -> list[str]:
+    return sorted(path.stem for path in directory.glob("[0-9]*.py"))
+
+
+async def _applied_migration_names(db_url: str) -> set[str] | None:
     connection = await open_postgres_connection(db_url)
     try:
         try:
-            marker = await connection.fetchval(
-                "SELECT 1 FROM oxyde_migrations WHERE name = $1",
-                "0001_initial",
-            )
+            rows = await connection.fetch("SELECT name FROM oxyde_migrations")
         except UndefinedTableError:
-            return False
+            return None
     finally:
         await connection.close()
-    return marker is not None
+    return {str(row["name"]) for row in rows}
 
 
 async def _has_tables(db_url: str) -> bool:
@@ -241,28 +253,38 @@ async def _has_tables(db_url: str) -> bool:
     return count > 0
 
 
-async def _apply_service(service: ServiceDBConfig, db_url: str, directory: str) -> None:
-    """Накатывает каталог. Пока другой процесс держит lock или пишет ``0001``, ждёт."""
-    for _attempt in range(_MIGRATION_WAIT_ATTEMPTS):
-        if await _initial_applied(db_url):
+async def apply_service_migrations(
+    service: ServiceDBConfig,
+    db_url: str,
+    directory: str,
+    *,
+    wait_attempts: int = _MIGRATION_WAIT_ATTEMPTS,
+) -> None:
+    """Накатывает файлы, которых нет в ``oxyde_migrations``. Пока другой процесс держит lock, ждёт."""
+    stems = _migration_stems(Path(directory))
+    for _attempt in range(wait_attempts):
+        applied = await _applied_migration_names(db_url)
+        if applied is not None and set(stems).issubset(applied):
             logger.info("oxyde_migrations_already_applied", service=service.name)
             return
-        if await _has_tables(db_url):
+        initial_recorded = applied is not None and "0001_initial" in applied
+        if not initial_recorded and await _has_tables(db_url):
             await asyncio.sleep(2)
             continue
         try:
-            applied = await apply_migrations(directory, db_alias=service.name)
+            applied_now = await apply_migrations(directory, db_alias=service.name)
         except RuntimeError as exc:
             if _MIGRATION_LOCK_HELD not in str(exc):
                 raise
             await asyncio.sleep(2)
             continue
-        logger.info("oxyde_migrations_applied", service=service.name, applied=applied)
+        logger.info("oxyde_migrations_applied", service=service.name, applied=applied_now)
         return
-    if await _initial_applied(db_url):
+    applied = await _applied_migration_names(db_url)
+    if applied is not None and set(stems).issubset(applied):
         logger.info("oxyde_migrations_already_applied", service=service.name)
         return
-    if await _has_tables(db_url):
+    if (applied is None or "0001_initial" not in applied) and await _has_tables(db_url):
         raise RuntimeError(
             f"{service.name}: database already has tables and no oxyde migration 0001_initial. Drop the database and run upgrade again.",
         )
@@ -270,7 +292,7 @@ async def _apply_service(service: ServiceDBConfig, db_url: str, directory: str) 
 
 
 async def run_migrations_async(service: str | None = None) -> None:
-    """Применяет ``0001_initial`` к пустой базе. База со старыми таблицами — ошибка."""
+    """Применяет неприменённые файлы. База со старыми таблицами и без ``0001_initial`` — ошибка."""
     register_migration_services()
     settings = get_settings()
     shared_url = settings.database.shared_url
@@ -282,4 +304,4 @@ async def run_migrations_async(service: str | None = None) -> None:
     )
     root = get_project_root()
     for svc in services:
-        await _apply_service(svc, svc.get_db_url(), str(root / svc.migrations_dir))
+        await apply_service_migrations(svc, svc.get_db_url(), str(root / svc.migrations_dir))

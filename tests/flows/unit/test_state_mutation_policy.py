@@ -13,14 +13,16 @@ from apps.flows.src.runtime.nodes import BaseNode, NodeInputs, NodeRunResult
 from core.errors import FrozenStateFieldError
 from core.flow_ui.document import FlowUIMarkdownText
 from core.flow_ui.runtime import render_conversation
-from core.state import ExecutionState
+from core.state import (
+    ExecutionState,
+    assert_frozen_fields_unchanged,
+    snapshot_frozen_fields,
+)
 from core.state.mutation_policy import (
     FIELDS_COPY_FROM_RUNTIME_NODE_STATE,
     FROZEN_STATE_FIELDS,
     USER_TOOL_PARALLEL_STATE_MERGE_FIELDS,
-    assert_frozen_fields_unchanged,
     should_skip_field_on_runtime_node_state_merge,
-    snapshot_frozen_fields,
     user_code_state_mutation_guard,
 )
 from core.types import JsonObject

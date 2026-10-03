@@ -23,7 +23,9 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from tests.fixtures.test_database_env import TEST_DATABASE_ENV
+from tests.fixtures.test_database_env import TEST_DATABASE_ENV, ensure_local_no_proxy
+
+ensure_local_no_proxy()
 
 pytest_plugins = [
     "tests.hang_guard",
@@ -98,10 +100,10 @@ os.environ.setdefault("VOICE__STT__MOCK_TRANSCRIPT_TEXT", "Тестовая тр
 os.environ.setdefault("S3__ENABLED", "true")
 os.environ.setdefault("S3__ENDPOINT_URL", "http://localhost:19002")
 os.environ.setdefault("S3__BUCKET_NAME", "test-bucket")
-os.environ.setdefault("S3__ACCESS_KEY_ID", "minioadmin")
-os.environ.setdefault("S3__SECRET_ACCESS_KEY", "minioadmin")
+os.environ.setdefault("S3__ACCESS_KEY_ID", "s3admin")
+os.environ.setdefault("S3__SECRET_ACCESS_KEY", "s3admin")
 os.environ.setdefault("S3__REGION_NAME", "us-east-1")
-os.environ.setdefault("S3__PROVIDER", "minio")
+os.environ.setdefault("S3__PROVIDER", "seaweedfs")
 os.environ.setdefault("S3__PATH_STYLE", "true")
 from tests.fixtures.test_database_env import TEST_HS256_JWT_SECRET  # noqa: E402
 
@@ -137,12 +139,14 @@ from apps.worker_manifest import wire_brokers  # noqa: E402
 wire_brokers()
 
 import apps.flows_worker.broker as platform_broker_module  # noqa: E402
-from apps.flows.main import app as fastapi_app  # noqa: E402, F401 — импорт задаёт settings процесса тестов (flows)
-from apps.flows.src.models import FlowConfig, NodeConfig
+from apps.flows.main import (  # noqa: E402 — импорт задаёт settings процесса тестов (flows)
+    app as fastapi_app,  # noqa: F401
+)
+from apps.flows.src.models import FlowConfig, NodeConfig  # noqa: E402
 from apps.flows.src.tasks.flow_tasks import process_flow_task  # noqa: E402
 from core.clients.llm import MockLLM, get_global_mock_llm, setup_mock_responses  # noqa: E402
 from core.context import Context, User  # noqa: E402
-from core.models.identity_models import Company
+from core.models.identity_models import Company  # noqa: E402
 from core.tracing.provider import shutdown_tracing  # noqa: E402
 from tests.fixtures.ai_provider_defaults import make_test_company  # noqa: E402
 
@@ -339,7 +343,7 @@ def _is_notification_ws_e2e_test(nodeid: str) -> bool:
 
 
 def _is_files_s3_test(nodeid: str) -> bool:
-    """MinIO + Files API (chunked upload/download, retention purge): под -n10 >5s."""
+    """S3 + Files API (chunked upload/download, retention purge): под -n10 >5s."""
     if nodeid.startswith("tests/files/"):
         return True
     # Тот же purge_expired_batch через idle_worker tick: под -n10 >5s.
@@ -434,7 +438,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
                 item.add_marker(pytest.mark.timeout(180, func_only=True))
         elif _is_files_s3_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
-                # Chunked upload = несколько HTTP + MinIO + FGA company Check; под -n10 >5s.
+                # Chunked upload = несколько HTTP + S3 + FGA company Check; под -n10 >5s.
                 item.add_marker(pytest.mark.timeout(60, func_only=True))
         elif _is_flows_session_search_test(item.nodeid):
             if item.get_closest_marker("timeout") is None:
@@ -493,7 +497,9 @@ _FIRST_FAIL_DUMP = Path("/tmp/pytest-first-fail.txt")
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None]:
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, Any, None]:
     """xdist -x печатает traceback только после drain. Первый fail — сразу на диск."""
     _ = item
     outcome = yield
@@ -897,8 +903,9 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
     import apps.rag_worker.tasks.indexing_tasks as rag_indexing_tasks
     import apps.sync.realtime.handlers as sync_handlers_module
     import apps.sync.realtime.notification_tasks as sync_notification_tasks
-    import apps.sync.realtime.operations as sync_operations_module
     import apps.sync.realtime.tasks as sync_realtime_tasks
+    import apps.sync.services.message_service as sync_message_service_module
+    import apps.sync.services.recording_service as sync_recording_service_module
     import core.mail.enqueue as mail_enqueue_module
     import core.tasks.kicker as task_kicker_module
     from apps.crm_worker.tasks.task_names import (
@@ -1147,7 +1154,7 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
             )
         if handler is None:
             raise AssertionError(f"Неизвестный TaskIQ task: {spec.name!r}")
-        di_class = task_di_class(task_functions_behind_wrappers.get(handler, handler))
+        di_class = task_di_class(task_functions_behind_wrappers.get(handler, handler))  # pyright: ignore
         if di_class is not None:
             kwargs["di"] = await service_processes.di(di_class)
         if handler is sync_agent_kiq:
@@ -1180,7 +1187,8 @@ def sync_tools(request: pytest.FixtureRequest, service_processes):
         flows_company_module,
         crm_task_service_module,
         crm_entity_service_module,
-        sync_operations_module,
+        sync_message_service_module,
+        sync_recording_service_module,
         sync_handlers_module,
         sync_realtime_tasks,
         rag_operations_module,
@@ -1645,12 +1653,12 @@ def unique_namespace_name(unique_id):
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
-async def ensure_minio_bucket():
+async def ensure_s3_bucket():
     """
-    Гарантирует бакет test-bucket на тестовом MinIO (порт 19002, docker-compose-test).
+    Гарантирует бакет test-bucket на тестовом SeaweedFS (порт 19002, docker-compose-test).
 
-    Должен совпадать с S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL в этом conftest:
-    иначе бакет создаётся на одном хосте, а приложение (conf.json с 19001) пишет в другой — NoSuchBucket.
+    Должен совпадать с S3__ENDPOINT_URL в этом conftest:
+    иначе бакет создаётся на одном хосте, а приложение пишет в другой — NoSuchBucket.
     """
     try:
         import aioboto3
@@ -1660,16 +1668,16 @@ async def ensure_minio_bucket():
         async with session.client(
             "s3",
             endpoint_url="http://localhost:19002",
-            aws_access_key_id="minioadmin",
-            aws_secret_access_key="minioadmin",
+            aws_access_key_id="s3admin",
+            aws_secret_access_key="s3admin",
         ) as client:
             try:
                 await client.head_bucket(Bucket="test-bucket")
             except ClientError:
                 await client.create_bucket(Bucket="test-bucket")
-                print("Created test-bucket in MinIO (localhost:19002)")
+                print("Created test-bucket in SeaweedFS (localhost:19002)")
     except Exception as e:
-        print(f"Failed to ensure MinIO bucket test-bucket on localhost:19002: {e}")
+        print(f"Failed to ensure SeaweedFS bucket test-bucket on localhost:19002: {e}")
     yield
 
 

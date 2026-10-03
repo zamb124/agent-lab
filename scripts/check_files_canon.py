@@ -96,24 +96,26 @@ def _check_files_router_mount() -> list[str]:
 def _check_docs_placement_coverage() -> list[str]:
     """Every FileSourceKind must be auto-placement or explicit exempt."""
     from core.files.create_spec import FileSourceKind
-    from core.files.registry import (
-        DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS,
-        SOURCE_KIND_TO_DOCS_PLACEMENT,
-    )
+    from core.documents.paths import source_catalog_path
+    from core.files.create_spec import FileSourceRef
+    from core.files.registry import DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS, PLACED_SOURCE_KINDS
 
     errors: list[str] = []
     for kind in FileSourceKind:
-        if kind in DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS:
-            if kind in SOURCE_KIND_TO_DOCS_PLACEMENT:
-                errors.append(
-                    f"FileSourceKind.{kind.name} is both exempt and mapped for DocsPlacement"
-                )
-            continue
-        if kind not in SOURCE_KIND_TO_DOCS_PLACEMENT:
+        exempt = kind in DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS
+        placed = kind in PLACED_SOURCE_KINDS
+        if exempt == placed:
             errors.append(
-                f"FileSourceKind.{kind.name} missing from docs auto-placement mapping "
-                f"(add to SOURCE_KIND_TO_DOCS_PLACEMENT or DOCS_PLACEMENT_EXEMPT_SOURCE_KINDS)"
+                f"FileSourceKind.{kind.name} must be exactly one of exempt or placed"
             )
+        if not placed:
+            continue
+        try:
+            source_catalog_path(kind, FileSourceRef())
+        except ValueError:
+            continue
+        except Exception as exc:
+            errors.append(f"FileSourceKind.{kind.name} path builder failed closed: {exc}")
     return errors
 
 
@@ -170,12 +172,14 @@ def _check_a2a_stream_url_only() -> list[str]:
 def _check_mail_no_content_base64() -> list[str]:
     """Mail public attachment and modal: file_id only, no content_base64."""
     errors: list[str] = []
-    models = REPO_ROOT / "core" / "mail" / "models.py"
-    models_text = models.read_text(encoding="utf-8")
+    models_dir = REPO_ROOT / "core" / "mail" / "models"
+    models_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(models_dir.glob("*.py"))
+    )
     if "content_base64" in models_text:
-        errors.append("core/mail/models.py: content_base64 must be removed")
+        errors.append("core/mail/models: content_base64 must be removed")
     if "attachment.file_id required" not in models_text:
-        errors.append("core/mail/models.py: MailSendPayload must require attachment.file_id")
+        errors.append("core/mail/models: MailSendPayload must require attachment.file_id")
     modal = (
         REPO_ROOT
         / "core"

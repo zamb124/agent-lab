@@ -40,8 +40,8 @@ def skip_if_s3_fails(test_func):
 
 
 @pytest.fixture
-async def minio_bucket():
-    """Создает bucket в MinIO если его нет"""
+async def s3_bucket():
+    """Создает bucket в тестовом S3-хранилище если его нет"""
     bucket_name = get_test_bucket_name()
     try:
         client = S3ClientFactory.create_client_for_bucket(bucket_name)
@@ -96,9 +96,9 @@ class TestS3Integration:
         finally:
             await client.close()
 
-    async def test_upload_and_download_bytes(self, minio_bucket):
-        """Тест загрузки и скачивания данных в MinIO S3"""
-        client = minio_bucket
+    async def test_upload_and_download_bytes(self, s3_bucket):
+        """Тест загрузки и скачивания данных в S3"""
+        client = s3_bucket
 
         # Создаем тестовые данные
         test_data = b"Test file content for S3 integration test"
@@ -144,9 +144,9 @@ class TestS3Integration:
 
             await client.close()
 
-    async def test_upload_file_from_disk(self, minio_bucket):
-        """Тест загрузки файла с диска в MinIO S3"""
-        client = minio_bucket
+    async def test_upload_file_from_disk(self, s3_bucket):
+        """Тест загрузки файла с диска в S3"""
+        client = s3_bucket
 
         # Создаем временный файл
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -188,9 +188,9 @@ class TestS3Integration:
             download_path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_list_objects(self, minio_bucket):
+    async def test_list_objects(self, s3_bucket):
         """Тест получения списка объектов"""
-        client = minio_bucket
+        client = s3_bucket
 
         # Создаем несколько тестовых файлов
         test_prefix = f"test/list_{uuid.uuid4().hex[:8]}"
@@ -224,10 +224,10 @@ class TestS3Integration:
                 await client.delete_file(key)
             await client.close()
 
-    async def test_copy_object(self, minio_bucket):
+    async def test_copy_object(self, s3_bucket):
         """Тест копирования объектов"""
         skip_if_s3_disabled()
-        client = minio_bucket
+        client = s3_bucket
 
         # Создаем исходный файл
         source_key = f"test/copy_source_{uuid.uuid4().hex[:8]}.txt"
@@ -263,9 +263,9 @@ class TestS3Integration:
             await client.delete_file(source_key)
             await client.delete_file(dest_key)
 
-    async def test_presigned_url_generation(self, minio_bucket):
+    async def test_presigned_url_generation(self, s3_bucket):
         """Тест генерации подписанных URL"""
-        client = minio_bucket
+        client = s3_bucket
 
         test_key = f"test/presigned_{uuid.uuid4().hex[:8]}.txt"
         test_data = b"Content for presigned URL test"
@@ -307,10 +307,10 @@ class TestS3Integration:
 class TestS3WithDatabase:
     """Тесты S3 с сохранением записей в БД"""
 
-    async def test_file_record_creation_and_storage(self, di, minio_bucket):
+    async def test_file_record_creation_and_storage(self, di, s3_bucket):
         """Тест создания и сохранения записи о файле в БД"""
 
-        _ = minio_bucket
+        _ = s3_bucket
 
         # Создаем запись о файле
         file_record = FileRecord(
@@ -338,9 +338,9 @@ class TestS3WithDatabase:
         assert await FileRecord.set(stored_record)
         assert await FileRecord.delete_by_id(file_record.file_id)
 
-    async def test_full_s3_workflow_with_db(self, di, minio_bucket):
+    async def test_full_s3_workflow_with_db(self, di, s3_bucket):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
-        client = minio_bucket
+        client = s3_bucket
 
         # Создаем тестовые данные
         test_data = f"Integration test content {uuid.uuid4().hex[:8]}".encode()
@@ -486,8 +486,8 @@ class TestS3Configuration:
         assert "/api/v1/files/download/aws_test" in aws_url
         print(f"✅ AWS URL (прокси): {aws_url}")
 
-        minio_file = FileRecord(
-            file_id="minio_test",
+        s3_file = FileRecord(
+            file_id="s3_test",
             original_name="test.txt",
             s3_key="files/test.txt",
             storage_id=PLATFORM_STORAGE_ID,
@@ -495,7 +495,7 @@ class TestS3Configuration:
             file_size=100
         )
 
-        minio_url = minio_file.url
+        s3_url = s3_file.url
         # URL должен быть прокси через нашу платформу
-        assert "/api/v1/files/download/minio_test" in minio_url
-        print(f"✅ MinIO URL (прокси): {minio_url}")
+        assert "/api/v1/files/download/s3_test" in s3_url
+        print(f"✅ S3 URL (прокси): {s3_url}")

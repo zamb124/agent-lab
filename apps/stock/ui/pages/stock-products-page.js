@@ -1,5 +1,5 @@
 /**
- * Номенклатура склада: продукты и метод оценки шаблона.
+ * Номенклатура склада: продукты и метод оценки карточки.
  */
 
 import { html, css } from 'lit';
@@ -54,11 +54,11 @@ export class StockProductsPage extends PlatformPage {
                             <tbody>
                                 ${items.map((row) => html`
                                     <tr>
-                                        <td>${row.product.sku}</td>
-                                        <td>${row.template.name}</td>
-                                        <td>${row.template.valuation_method}</td>
-                                        <td class="num">${row.template.standard_price}</td>
-                                        <td>${row.template.tracking}</td>
+                                        <td>${row.sku}</td>
+                                        <td>${row.name}</td>
+                                        <td>${row.valuation_method}</td>
+                                        <td class="num">${row.standard_price}</td>
+                                        <td>${row.tracking}</td>
                                     </tr>
                                 `)}
                             </tbody>

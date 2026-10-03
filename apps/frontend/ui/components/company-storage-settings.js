@@ -29,7 +29,7 @@ const ROUTE_KINDS = Object.freeze([
 ]);
 
 const PROVIDERS = Object.freeze([
-    { value: 'minio', label: 'MinIO' },
+    { value: 'seaweedfs', label: 'SeaweedFS' },
     { value: 'aws', label: 'S3' },
 ]);
 

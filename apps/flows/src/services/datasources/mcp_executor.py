@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from time import perf_counter
 
-from apps.flows.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.flows.src.models.mcp import MCPServerConfig
+from apps.flows.src.services.mcp_client import MCPClient, MCPClientError
 from core.datasources.models import (
     DatasourceConnection,
     DatasourceConnectorSpec,

@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.decorator import tool
 from core.clients.google_sheets_client import GoogleSheetsClient
 from core.clients.google_sheets_models import (
@@ -118,7 +118,11 @@ class SheetsSpreadsheetIdArgs(BaseModel):
 class SheetsGetValuesArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
     range: str = Field(
         ...,
         min_length=1,
@@ -133,8 +137,16 @@ class SheetsGetValuesArgs(BaseModel):
 class SheetsUpdateValuesArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    range: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    range: str = Field(
+        ...,
+        min_length=1,
+        description="A1 range to overwrite, e.g. Sheet1!A1:C10.",
+    )
     values: list[SheetRowInput] = Field(
         ...,
         description="Rows of cells (bool/string/number). Overwrites the range.",
@@ -148,7 +160,11 @@ class SheetsUpdateValuesArgs(BaseModel):
 class SheetsAppendRowsArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
     range: str = Field(
         ...,
         min_length=1,
@@ -157,8 +173,15 @@ class SheetsAppendRowsArgs(BaseModel):
             "(not the same as Sheets Tables API)."
         ),
     )
-    values: list[SheetRowInput] = Field(..., min_length=1)
-    value_input_option: str = Field(ValueInputOption.USER_ENTERED.value)
+    values: list[SheetRowInput] = Field(
+        ...,
+        min_length=1,
+        description="Rows of cells (bool/string/number) appended after the logical table.",
+    )
+    value_input_option: str = Field(
+        ValueInputOption.USER_ENTERED.value,
+        description="RAW | USER_ENTERED (default USER_ENTERED).",
+    )
     insert_data_option: str = Field(
         InsertDataOption.INSERT_ROWS.value,
         description="OVERWRITE | INSERT_ROWS",
@@ -168,16 +191,35 @@ class SheetsAppendRowsArgs(BaseModel):
 class SheetsClearValuesArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    range: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    range: str = Field(
+        ...,
+        min_length=1,
+        description="A1 range to clear, e.g. Sheet1!A1:C10.",
+    )
 
 
 class SheetsBatchGetArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    ranges: list[str] = Field(..., min_length=1)
-    value_render_option: str = Field(ValueRenderOption.FORMATTED_VALUE.value)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    ranges: list[str] = Field(
+        ...,
+        min_length=1,
+        description="A1 ranges to read, e.g. [\"Sheet1!A1:C10\", \"Sheet2!A:A\"].",
+    )
+    value_render_option: str = Field(
+        ValueRenderOption.FORMATTED_VALUE.value,
+        description="FORMATTED_VALUE | UNFORMATTED_VALUE | FORMULA",
+    )
 
 
 class SheetsBatchUpdateItem(BaseModel):
@@ -198,22 +240,45 @@ class SheetsBatchUpdateItem(BaseModel):
 class SheetsBatchUpdateArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    data: list[SheetsBatchUpdateItem] = Field(..., min_length=1)
-    value_input_option: str = Field(ValueInputOption.USER_ENTERED.value)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    data: list[SheetsBatchUpdateItem] = Field(
+        ...,
+        min_length=1,
+        description="List of {range, values} writes applied in one values.batchUpdate call.",
+    )
+    value_input_option: str = Field(
+        ValueInputOption.USER_ENTERED.value,
+        description="RAW | USER_ENTERED (default USER_ENTERED).",
+    )
 
 
 class SheetsBatchClearArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    ranges: list[str] = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    ranges: list[str] = Field(
+        ...,
+        min_length=1,
+        description="A1 ranges to clear, e.g. [\"Sheet1!A1:C10\"].",
+    )
 
 
 class SheetsShareArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
     email: str | None = Field(None, description="Recipient email when anyone=false.")
     role: str = Field("reader", description="reader | commenter | writer")
     anyone: bool = Field(False, description="If true — anyone with the link.")
@@ -222,23 +287,35 @@ class SheetsShareArgs(BaseModel):
 class SheetsAddSheetArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    title: str = Field(..., min_length=1, description="New tab title.")
 
 
 class SheetsRenameSheetArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    sheet_id: int = Field(..., ge=0)
-    title: str = Field(..., min_length=1)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    sheet_id: int = Field(..., ge=0, description="Numeric sheet_id from sheets_get_metadata.")
+    title: str = Field(..., min_length=1, description="New tab title.")
 
 
 class SheetsDeleteSheetArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
-    spreadsheet_id: str = Field(..., min_length=1)
-    sheet_id: int = Field(..., ge=0)
+    spreadsheet_id: str = Field(
+        ...,
+        min_length=1,
+        description="Spreadsheet ID from the Google Sheets URL.",
+    )
+    sheet_id: int = Field(..., ge=0, description="Numeric sheet_id from sheets_get_metadata.")
 
 
 # ── tools ────────────────────────────────────────────────────────

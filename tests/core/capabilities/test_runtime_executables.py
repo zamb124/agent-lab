@@ -6,28 +6,53 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from core.capabilities.runtime_executables import (
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
+from core.config import get_settings
+from core.config.base import BaseSettings
 
 
 @contextmanager
-def _temporary_env(values: dict[str, str | None]) -> Iterator[None]:
-    previous = {key: os.environ.get(key) for key in values}
+def _runtime_lookup(
+    *,
+    runtime_dir: str,
+    path: str,
+    go_bin: str = "",
+    node_bin: str = "",
+) -> Iterator[None]:
+    settings = get_settings().code_runner
+    previous = (
+        settings.runtime_dir,
+        settings.go_bin,
+        settings.node_bin,
+        settings.npm_bin,
+        settings.dotnet_bin,
+    )
+    previous_path = os.environ.get("PATH")
+    settings.runtime_dir = runtime_dir
+    settings.go_bin = go_bin
+    settings.node_bin = node_bin
+    settings.npm_bin = ""
+    settings.dotnet_bin = ""
+    os.environ["PATH"] = path
     try:
-        for key, value in values.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
         yield
     finally:
-        for key, value in previous.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        (
+            settings.runtime_dir,
+            settings.go_bin,
+            settings.node_bin,
+            settings.npm_bin,
+            settings.dotnet_bin,
+        ) = previous
+        if previous_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = previous_path
 
 
 def _make_executable(path: Path) -> Path:
@@ -37,20 +62,17 @@ def _make_executable(path: Path) -> Path:
     return path
 
 
+def test_runtime_dir_reads_nested_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CODE_RUNNER__RUNTIME_DIR", "/tmp/platform-runtimes")
+    assert BaseSettings().code_runner.runtime_dir == "/tmp/platform-runtimes"
+
+
 def test_resolves_managed_runtime_bin_without_path(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtimes"
     go_bin = _make_executable(runtime_dir / "bin" / "go")
 
-    with _temporary_env(
-        {
-            "PLATFORM_RUNTIME_DIR": str(runtime_dir),
-            "CODE_RUNNER_GO_BIN": None,
-            "PATH": "",
-        }
-    ):
-        assert resolve_runtime_executable("go", override_env="CODE_RUNNER_GO_BIN") == str(
-            go_bin
-        )
+    with _runtime_lookup(runtime_dir=str(runtime_dir), path=""):
+        assert resolve_runtime_executable("go") == str(go_bin)
 
 
 def test_explicit_runtime_override_wins_over_managed_runtime(tmp_path: Path) -> None:
@@ -58,16 +80,8 @@ def test_explicit_runtime_override_wins_over_managed_runtime(tmp_path: Path) -> 
     _ = _make_executable(runtime_dir / "bin" / "go")
     override = _make_executable(tmp_path / "custom" / "go")
 
-    with _temporary_env(
-        {
-            "PLATFORM_RUNTIME_DIR": str(runtime_dir),
-            "CODE_RUNNER_GO_BIN": str(override),
-            "PATH": "",
-        }
-    ):
-        assert resolve_runtime_executable("go", override_env="CODE_RUNNER_GO_BIN") == str(
-            override
-        )
+    with _runtime_lookup(runtime_dir=str(runtime_dir), path="", go_bin=str(override)):
+        assert resolve_runtime_executable("go") == str(override)
 
 
 def test_invalid_explicit_runtime_override_is_not_silently_replaced(
@@ -76,14 +90,12 @@ def test_invalid_explicit_runtime_override_is_not_silently_replaced(
     runtime_dir = tmp_path / "runtimes"
     _ = _make_executable(runtime_dir / "bin" / "go")
 
-    with _temporary_env(
-        {
-            "PLATFORM_RUNTIME_DIR": str(runtime_dir),
-            "CODE_RUNNER_GO_BIN": str(tmp_path / "missing-go"),
-            "PATH": "",
-        }
+    with _runtime_lookup(
+        runtime_dir=str(runtime_dir),
+        path="",
+        go_bin=str(tmp_path / "missing-go"),
     ):
-        assert resolve_runtime_executable("go", override_env="CODE_RUNNER_GO_BIN") is None
+        assert resolve_runtime_executable("go") is None
 
 
 def test_resolves_path_runtime_when_managed_runtime_is_absent(tmp_path: Path) -> None:
@@ -91,34 +103,17 @@ def test_resolves_path_runtime_when_managed_runtime_is_absent(tmp_path: Path) ->
     path_bin = tmp_path / "path-bin"
     node_bin = _make_executable(path_bin / "node")
 
-    with _temporary_env(
-        {
-            "PLATFORM_RUNTIME_DIR": str(runtime_dir),
-            "CODE_RUNNER_NODE_BIN": None,
-            "PATH": str(path_bin),
-        }
-    ):
-        assert resolve_runtime_executable("node", override_env="CODE_RUNNER_NODE_BIN") == str(
-            node_bin
-        )
+    with _runtime_lookup(runtime_dir=str(runtime_dir), path=str(path_bin)):
+        assert resolve_runtime_executable("node") == str(node_bin)
 
 
 def test_missing_runtime_message_lists_canonical_sources(tmp_path: Path) -> None:
     runtime_dir = tmp_path / "runtimes"
 
-    with _temporary_env(
-        {
-            "PLATFORM_RUNTIME_DIR": str(runtime_dir),
-            "CODE_RUNNER_GO_BIN": None,
-            "PATH": "",
-        }
-    ):
-        message = runtime_executable_required_message(
-            "go",
-            override_env="CODE_RUNNER_GO_BIN",
-        )
+    with _runtime_lookup(runtime_dir=str(runtime_dir), path=""):
+        message = runtime_executable_required_message("go")
 
     assert "go executable is required" in message
-    assert "$PLATFORM_RUNTIME_DIR/bin/go" in message
+    assert "code_runner.runtime_dir/bin/go" in message
     assert "PATH:go" in message
-    assert "$CODE_RUNNER_GO_BIN" in message
+    assert "code_runner.go_bin" in message

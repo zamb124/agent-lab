@@ -5,14 +5,14 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Literal, cast
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import Field, TypeAdapter, model_validator
 
 from core.clients.llm.messages import LLMToolCall
 from core.models import StrictBaseModel
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object
 
 
 class InterruptKind(StrEnum):
@@ -156,15 +156,15 @@ class InterruptData(StrictBaseModel):
     @classmethod
     def _validate_interrupt_envelope(
         cls,
-        data: object,
-    ) -> object:
+        data: JsonValue | InterruptData,
+    ) -> JsonObject | InterruptData:
         if isinstance(data, InterruptData):
             return data
         if not isinstance(data, dict):
             raise ValueError(f"InterruptData: expected dict, got {type(data)}")
         if "body" not in data or "system" not in data:
             raise ValueError("InterruptData requires body and system")
-        return cast(object, data)
+        return data
 
 
 __all__ = [

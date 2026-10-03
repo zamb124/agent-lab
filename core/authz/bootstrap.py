@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 from pathlib import Path
-from typing import cast
 
 from core.authz.errors import AuthzConfigError
 from core.authz.http_admin import create_store, write_authorization_model
 from core.config import get_settings
 from core.logging import get_logger
-from core.types import JsonObject, require_json_object
+from core.types import JsonObject, parse_json_object, require_json_object
 
 logger = get_logger(__name__)
 
@@ -24,10 +22,7 @@ _STORE_NAME = "platform"
 def load_model_payload() -> tuple[str, list[JsonObject]]:
     if not _MODEL_JSON_PATH.is_file():
         raise AuthzConfigError(f"missing authorization model json: {_MODEL_JSON_PATH}")
-    payload = require_json_object(
-        cast(object, json.loads(_MODEL_JSON_PATH.read_text(encoding="utf-8"))),
-        "model.json",
-    )
+    payload = parse_json_object(_MODEL_JSON_PATH.read_text(encoding="utf-8"), "model.json")
     schema_version = payload.get("schema_version")
     type_definitions = payload.get("type_definitions")
     if not isinstance(schema_version, str) or not schema_version:
@@ -73,20 +68,24 @@ async def bootstrap_openfga(
     return resolved_store_id, model_id
 
 
+class BootstrapArgs(argparse.Namespace):
+    api_url: str | None = None
+    api_token: str | None = None
+    store_id: str | None = None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Bootstrap OpenFGA store and model")
     _ = parser.add_argument("--api-url", default=None)
     _ = parser.add_argument("--api-token", default=None)
     _ = parser.add_argument("--store-id", default=None)
-    args = parser.parse_args(argv)
-    api_url = cast(str | None, args.api_url)
-    api_token = cast(str | None, args.api_token)
-    store_id_arg = cast(str | None, args.store_id)
+    args = BootstrapArgs()
+    _ = parser.parse_args(argv, namespace=args)
     store_id, model_id = asyncio.run(
         bootstrap_openfga(
-            api_url=api_url,
-            api_token=api_token,
-            store_id=store_id_arg,
+            api_url=args.api_url,
+            api_token=args.api_token,
+            store_id=args.store_id,
         )
     )
     _ = sys.stdout.write(f"store_id={store_id}\n")

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
 from core.mail.models import MailFolder, MailFolderListResult, MailFolderRole
+
+ImapResponseLine = bytes | bytearray | str
 
 _LIST_LINE_RE = re.compile(
     r'^(?:\* LIST\s+)?\((?P<attrs>[^)]*)\) (?P<delim>"[^"]*"|NIL|\S+) (?P<name>.+)$',
@@ -51,15 +54,13 @@ class ParsedImapListEntry:
     delimiter: str | None
 
 
-def parse_imap_list_lines(lines: list[object]) -> list[ParsedImapListEntry]:
+def parse_imap_list_lines(lines: Sequence[ImapResponseLine]) -> list[ParsedImapListEntry]:
     entries: list[ParsedImapListEntry] = []
     for raw in lines:
-        if isinstance(raw, bytes):
-            text = raw.decode("utf-8", errors="replace")
-        elif isinstance(raw, str):
+        if isinstance(raw, str):
             text = raw
         else:
-            continue
+            text = raw.decode("utf-8", errors="replace")
         text = text.strip()
         # aioimaplib часто отдаёт untagged без "* LIST " — только "(attrs) delim name".
         if text.upper().startswith("LIST COMPLETED") or text.upper().startswith("OK "):
@@ -94,18 +95,16 @@ def parse_imap_list_lines(lines: list[object]) -> list[ParsedImapListEntry]:
     return entries
 
 
-def parse_namespace_personal_prefix(lines: list[object]) -> tuple[str, str | None]:
+def parse_namespace_personal_prefix(lines: Sequence[ImapResponseLine]) -> tuple[str, str | None]:
     """
     Вернуть (prefix, delimiter) персонального NAMESPACE.
     Пустой prefix и delimiter=None — если NAMESPACE недоступен/пуст.
     """
     for raw in lines:
-        if isinstance(raw, bytes):
-            text = raw.decode("utf-8", errors="replace")
-        elif isinstance(raw, str):
+        if isinstance(raw, str):
             text = raw
         else:
-            continue
+            text = raw.decode("utf-8", errors="replace")
         text = text.strip()
         # aioimaplib: "* NAMESPACE ..." или только '(("" ".")) NIL NIL'
         if text.upper().startswith("* NAMESPACE "):
@@ -210,9 +209,8 @@ def standard_folder_name(*, role: MailFolderRole, namespace_prefix: str) -> str:
     return f"{namespace_prefix}{local}"
 
 
-def is_imap_already_exists_response(response: object) -> bool:
-    text = str(response).upper()
-    return "ALREADYEXISTS" in text
+def is_imap_already_exists_response(response_text: str) -> bool:
+    return "ALREADYEXISTS" in response_text.upper()
 
 
 def special_use_flag_for_role(role: MailFolderRole) -> str | None:

@@ -36,7 +36,7 @@ def test_require_device_id_reads_variables() -> None:
 async def test_device_tools_list_propagates_tunnel_error(
     unique_id: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from apps.flows.src.clients.device_client import DeviceClient
+    from apps.flows.src.services.device_client import DeviceClient
 
     async def _offline_tools_list(self: DeviceClient, *_args: object, **_kwargs: object) -> object:
         raise ValueError(f"Device tunnel offline: offline-device-{unique_id}")

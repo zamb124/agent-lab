@@ -20,7 +20,6 @@ setup_logging(
     ),
 )
 
-from fastapi import HTTPException  # noqa: E402
 from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
@@ -78,7 +77,12 @@ from core.config.testing import is_testing  # noqa: E402
 from core.context import reset_context, set_context  # noqa: E402
 from core.db.storage import SharedStorage  # noqa: E402
 from core.di import recipe  # noqa: E402
-from core.files.create_spec import FileCreateSpec, FileSourceKind, FileSourceRef  # noqa: E402
+from core.files.create_spec import (  # noqa: E402
+    RUNTIME_FLOW_ID,
+    FileCreateSpec,
+    FileSourceKind,
+    FileSourceRef,
+)
 from core.files.registry import default_retention_for_source  # noqa: E402
 from core.files.service import FilesService  # noqa: E402
 from core.files.writer import FileWriter  # noqa: E402
@@ -89,6 +93,7 @@ from core.models.identity_models import Company, User  # noqa: E402
 from core.office.ai_settings import ONLYOFFICE_AI_BROWSER_CORS_ORIGINS  # noqa: E402
 from core.tasks import enqueue  # noqa: E402
 from core.variables.service import VariablesService  # noqa: E402
+from core.websocket import WsCommandError  # noqa: E402
 from core.worktracker.service import WorkItemService  # noqa: E402
 
 # side-effect: register platform event catalog types
@@ -156,7 +161,7 @@ async def boot_flows(
         files_service=files_service,
         default_spec=FileCreateSpec(
             source_kind=FileSourceKind.FLOW_ASSET,
-            source_ref=FileSourceRef(flow_id="runtime"),
+            source_ref=FileSourceRef(flow_id=RUNTIME_FLOW_ID),
             retention=default_retention_for_source(FileSourceKind.FLOW_ASSET),
         ),
     )
@@ -187,7 +192,9 @@ async def boot_flows(
     await start_tunnel_bus_listener(redis_client)
 
     if settings.server.env == "development" and not is_testing():
-        await sync_landing_public_demo_flows_from_bundles(flow_access_service, settings)
+        await sync_landing_public_demo_flows_from_bundles(
+            flow_access_service, settings, files_service
+        )
 
     # Production/dev system bootstrap: idle_worker → POST /internal/company/init → flows_worker.
     # Тяжёлый company/MCP init в HTTP-процессе flows запрещён (healthcheck + ownership).
@@ -209,10 +216,7 @@ async def boot_flows(
         startup_context = set_context(system_context)
         try:
             async with flows_bundle_seed_lock():
-                seed_marker = await shared_storage.get(
-                    "flows:testing_bundle_seed",
-                    force_global=True,
-                )
+                seed_marker = await shared_storage.get("flows:testing_bundle_seed")
                 if seed_marker == "done":
                     logger.info("flows.startup.seed_already_done")
                 else:
@@ -223,6 +227,7 @@ async def boot_flows(
                     logger.info("flows.bundles.testing.true")
                     loaded_flow_ids = await load_flows_to_db(
                         flow_access_service,
+                        files_service=files_service,
                     )
                     logger.info("flows.startup.flows_loaded", flow_ids=loaded_flow_ids)
                     try:
@@ -259,11 +264,7 @@ async def boot_flows(
                         "system",
                         member_user_ids=member_user_ids,
                     )
-                    _ = await shared_storage.set(
-                        "flows:testing_bundle_seed",
-                        '"done"',
-                        force_global=True,
-                    )
+                    _ = await shared_storage.set("flows:testing_bundle_seed", '"done"')
         except Exception as e:
             logger.error("flows.startup.system_migrate_failed", error=str(e), exc_info=True)
         finally:
@@ -410,7 +411,7 @@ async def ui_spa_flow(flow_id: str, rest: str = ""):
     """SPA: flow_chat / flow_editor и вложенные client-маршруты."""
     _ = rest
     if flow_id in ("api", "static", "ws"):
-        raise HTTPException(status_code=404, detail="Not Found")
+        raise WsCommandError("not_found", "Not Found", error_code="not_found")
     return HTMLResponse(content=_INDEX_HTML)
 
 

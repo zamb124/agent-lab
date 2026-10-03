@@ -13,13 +13,13 @@ alwaysApply: false
 ## Модель
 
 - `CRMEntity` (`apps/crm/models/crm_entity.py`), таблица `crm_entities`, PK `entity_id`: `namespace`, `entity_type`, `entity_subtype`, `name`, `description`, `status` (жизненный цикл записи, не канбан), `tags`, `attributes` (доменные поля), `note_date`, `attachment_ids`, `user_id` (автор), `source_entity_id`/`source_company_id` (копия по access request), `relevance` (поле записи). `full_type` — вычисляемое `entity_type:entity_subtype`; `search_vector` — generated `tsvector`, не поле модели.
-- `EntityType` (`apps/crm/models/entity_type.py`), таблица `entity_types`, ключ `(company_id, namespace, type_id)`: `parent_type_id`, `required_fields`/`optional_fields`, `prompt`, `public_fields`, флаги `extractable`, `check_duplicates`, `is_context_anchor`, `is_voice_target`, `is_event`, `auto_resolve_suggests`. `EntityTypeCatalogRevision` (тот же файл, PK `company_id`) — поколение каталога компании.
+- `EntityType` (`apps/crm/models/entity_type.py`), таблица `entity_types`, ключ `(company_id, namespace, type_id)`: `parent_type_id`, `required_fields`/`optional_fields`, `prompt`, `public_fields`, флаги `extractable`, `check_duplicates`, `is_context_anchor`, `is_voice_target`, `is_event`, `auto_resolve_suggests`. `EntityTypeCatalogRevision` (`apps/crm/models/catalog_revision.py`, PK `company_id`) — поколение каталога компании.
 - `Relationship` (`apps/crm/models/relationship.py`), таблица `relationships`, PK `relationship_id`, уникальность `(company_id, namespace, source_entity_id, target_entity_id, relationship_type)`: `weight` — стоимость ребра в пути, `confidence` — достоверность, `attributes`. Каталог типов связей — `RelationshipType` (`apps/crm/models/relationship_type.py`), ключ `(company_id, type_id)`.
-- `NamespaceTemplate`, `NamespaceTemplateType` (`apps/crm/models/namespace_template.py`): `template_key` — PK строки, `template_id` — продуктовый slug шаблона.
+- `NamespaceTemplate` (`apps/crm/models/namespace_template.py`), `NamespaceTemplateType` (`apps/crm/models/namespace_template_type.py`): `template_key` — PK строки, `template_id` — продуктовый slug шаблона.
 - `CRMTask` (`apps/crm/models/task.py`), таблица `crm_tasks`, PK `task_id` — журнал фоновых задач CRM, не пользовательская задача: `task_type`, `status`, `stage`, `progress_pct`, `data`, `cancel_requested`.
 - `CRMSuggest` (`apps/crm/models/suggest.py`), таблица `crm_suggests`, PK `suggest_id`: вид `duplicate` | `missed_entity`, статус `pending` | `resolved` | `dismissed` | `auto_resolved`.
 - `AccessRequest` (`apps/crm/models/access_request.py`), PK `access_request_id`; `CompanyMapping` (`apps/crm/models/company_mapping.py`), PK `company_id` — сущность самой компании в графе.
-- `NamespaceCRMSettings` (`core/models/identity_models.py`) — секция `Namespace.crm_settings`: голос заметок (`default_note_voice` ∈ `self` | `none` | `last`, `show_note_voice_ui`), `sidebar_navigation` (`null` — клиент строит ветку из разрешённых типов).
+- `NamespaceCRMSettings` (`core/models/identity_models/contracts.py`) — секция `Namespace.crm_settings`: голос заметок (`default_note_voice` ∈ `self` | `none` | `last`, `show_note_voice_ui`), `sidebar_navigation` (`null` — клиент строит ветку из разрешённых типов).
 - Системные типы, якоря контекста и шаблоны пространств — `apps/crm/system_templates.py` (`SYSTEM_ENTITY_TYPE_TEMPLATES`, `COMMON_NAMESPACE_ANCHOR_TYPES`, `NAMESPACE_TEMPLATE_SEEDS`); константы графа — `apps/crm/constants_graph.py`.
 - Ссылка интеграции — `ExternalRef` (`apps/crm/integrations/external_ref.py`) в `attributes.external_refs[source_id]`; `source_id` — `provider_id` коннектора из `IntegrationRegistry` (`apps/crm/integrations/registry.py`).
 
@@ -111,6 +111,8 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_crm_entity_type_model_files.py` (`make lint`) — `EntityType` и `EntityTypeCatalogRevision` в разных модулях.
+- `scripts/check_crm_namespace_template_model_files.py` (`make lint`) — `NamespaceTemplate` и `NamespaceTemplateType` в разных модулях.
 - `tests/realtime/test_crm_commands.py` — WS и REST дают один результат для всех `CRM_OPERATIONS`.
 - `scripts/check_command_rest_mirror.py` (`make lint`) — HTTP-фабрики CRM только из `COMMAND_WS_HTTP_ALLOWLIST`.
 - `scripts/check_authz_canon.py`, `scripts/check_authz_dual_write.py` (`make lint`) — OpenFGA единственный PDP; dual-write tuples в путях создания и удаления CRM.

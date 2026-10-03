@@ -267,12 +267,12 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: minio-root-user
+      key: s3-access-key
 - name: S3__SECRET_ACCESS_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
-      key: minio-root-password
+      key: s3-secret-key
 - name: PUSH__ENABLED
   value: "true"
 - name: PUSH__VAPID_PUBLIC_KEY
@@ -650,7 +650,7 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
       name: {{ .Values.platformSecretName }}
       key: mail-system-ispmanager-authinfo-password
       optional: true
-- name: OTEL_EXPORTER_OTLP_ENDPOINT
+- name: TRACING__OTLP_ENDPOINT
   value: http://alloy:4317
 - name: LOGGING__LOKI_QUERY_URL
   value: http://loki:3100

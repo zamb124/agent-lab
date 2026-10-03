@@ -4,11 +4,12 @@ API для скачивания SSL сертификата.
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
 from apps.flows.di import Di
 from core.logging import get_logger
+from core.websocket import WsCommandError
 
 router = APIRouter(tags=["certificate"])
 logger = get_logger(__name__)
@@ -27,9 +28,10 @@ async def download_certificate(di: Di):
 
     if not cert_path.exists():
         logger.warning("flows.ssl.cert_missing", path=str(cert_path))
-        raise HTTPException(
-            status_code=404,
-            detail="SSL certificate not found. Contact the administrator."
+        raise WsCommandError(
+            "not_found",
+            "SSL certificate not found. Contact the administrator.",
+            error_code="not_found",
         )
 
     logger.info("flows.ssl")

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -80,6 +79,7 @@ from core.clients.llm.openai_api_codec import (
 )
 from core.clients.nano_banana import NanoBananaClient
 from core.clients.redis_client import RedisClient
+from core.config import get_settings
 from core.context import get_context
 from core.db.storage import SharedStorage
 from core.files.models import FileRecord
@@ -106,7 +106,6 @@ from core.websocket.operation import ws_command_error_status
 
 logger = get_logger(__name__)
 
-AGENT_LLM_PROXY_USE_MOCK_AUTO_ENV = "AGENT_LLM_PROXY_USE_MOCK_AUTO"
 _LLM_PROXY_PATH_PREFIX = "/flows/api/v1/agent/llm/"
 
 
@@ -189,7 +188,7 @@ def _openai_error_type_for_status(status_code: int) -> str:
     return "invalid_request_error"
 
 
-def _http_exception_message(detail: object) -> str:
+def _http_exception_message(detail: JsonValue) -> str:
     if isinstance(detail, str):
         return detail
     return json.dumps(detail, ensure_ascii=False)
@@ -254,10 +253,10 @@ def _agent_llm_option_value(option: str | JsonObject) -> str | None:
 
 
 def _resolve_agent_llm_auto_mock_bridge(requested_model: str) -> ResolvedAIModel | None:
-    """Узкий testing-bridge: auto → mock только при AGENT_LLM_PROXY_USE_MOCK_AUTO=1 (стек E2E)."""
+    """Узкий testing-bridge: auto → mock только при agent.llm_proxy_use_mock_auto (стек E2E)."""
     if requested_model != HUMANITEC_LLM_AUTO_MODEL:
         return None
-    if os.environ.get(AGENT_LLM_PROXY_USE_MOCK_AUTO_ENV) != "1":
+    if not get_settings().agent.llm_proxy_use_mock_auto:
         return None
     return resolve_ai_model(
         AICapability.LLM_CHAT,

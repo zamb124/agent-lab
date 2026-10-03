@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
-from fastapi import FastAPI, Request
+from fastapi import Request
 
 from core.models.identity_models import Company
 from core.utils.tokens import TokenData
@@ -23,11 +23,15 @@ class PlatformAppState(Protocol):
     settings: BaseSettings
 
 
+class _PlatformApp(Protocol):
+    state: PlatformAppState
+
+
 def require_platform_app_state(request: Request) -> PlatformAppState:
-    app = cast(FastAPI, request.app)
+    app = cast(_PlatformApp, request.app)
     if not hasattr(app.state, "di") or not hasattr(app.state, "settings"):
         raise RuntimeError("Platform app state is not configured")
-    return cast(PlatformAppState, cast(object, app.state))
+    return app.state
 
 
 @runtime_checkable

@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.flows.src.clients.hitl_client import HitlClient
 from apps.flows.src.models.enums import ReactToolRole
 from apps.flows.src.models.hitl_schemas import build_hitl_handoff_command
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.runtime.tool_call_context import get_active_tool_call_context
+from apps.flows.src.services.hitl_client import HitlClient
 from apps.flows.src.tools.decorator import tool
 from apps.flows.tools.tool_access import STANDARD_USER_TOOL_GROUPS
 from core.state.interrupt import HandoffMode, OperatorTaskInterrupt

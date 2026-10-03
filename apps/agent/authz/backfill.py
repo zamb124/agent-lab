@@ -1,17 +1,18 @@
-"""Backfill OpenFGA tuples for agent devices from Redis/shared storage."""
+"""Backfill OpenFGA tuples for agent devices from the shared storage table."""
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
 from apps.agent.authz.tuples import agent_device_company_link, agent_device_owner_tuple
+from apps.agent.di import AgentDi
 from apps.agent.models import AgentDeviceRecord
-from core.authz.factory import build_authz_service
+from core.authz.backfill_limit import parse_backfill_limit
+from core.authz.service import AuthzService
 from core.config import get_settings
-from core.db.storage import Storage
+from core.db.storage import SharedStorage
+from core.di import ProcessIdentity, open_di
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -26,15 +27,31 @@ async def backfill_agent_devices(*, limit: int | None = None) -> int:
     if not settings.database.shared_url:
         raise RuntimeError("database.shared_url is required for agent device backfill")
 
-    authz = build_authz_service()
-    if not authz.enabled:
-        raise RuntimeError("openfga.enabled must be true for agent device backfill")
+    identity = ProcessIdentity(service_name="agent", files_route_segment="agent")
+    async with open_di(
+        AgentDi,
+        settings=settings,
+        identity=identity,
+        database="shared_url",
+    ) as di:
+        if not di.authz_service.enabled:
+            raise RuntimeError("openfga.enabled must be true for agent device backfill")
+        return await _write_device_tuples(
+            di.authz_service,
+            di.shared_storage,
+            limit=limit,
+        )
 
-    storage = Storage(db_url=str(settings.database.shared_url))
+
+async def _write_device_tuples(
+    authz: AuthzService,
+    storage: SharedStorage,
+    *,
+    limit: int | None,
+) -> int:
     records = await storage.get_all_by_prefix(
         DEVICE_KEY_PREFIX,
         limit=10_000,
-        force_global=True,
     )
     written = 0
     try:
@@ -60,10 +77,7 @@ async def backfill_agent_devices(*, limit: int | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill agent devices into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill agent devices into OpenFGA", argv)
     written = asyncio.run(backfill_agent_devices(limit=limit))
     _ = sys.stdout.write(f"synced={written}\n")
     return 0

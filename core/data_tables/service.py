@@ -7,7 +7,6 @@ import sqlite3
 import tempfile
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, assert_never, final
 
@@ -45,6 +44,7 @@ from core.data_tables.sqlite_format import (
     read_schema_snapshot,
     update_row,
 )
+from core.documents.placement import DocumentPlacement
 from core.files.checksum import compute_content_checksum_sha256
 from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import FileRecord
@@ -118,14 +118,19 @@ class DataTableService:
             metadata["flow_id"] = flow_id
         if session_id is not None:
             metadata["session_id"] = session_id
+        office_placement = (
+            DocumentPlacement(catalog_path=["Tables"])
+            if source_kind is FileSourceKind.OFFICE_DOCUMENT
+            else None
+        )
         spec = FileCreateSpec(
             source_kind=source_kind,
             source_ref=FileSourceRef(
                 flow_id=flow_id,
                 session_id=session_id,
-                entity_id=namespace if source_kind == FileSourceKind.OFFICE_DOCUMENT else None,
             ),
             retention=default_retention_for_source(source_kind),
+            placement=office_placement,
             post_create=FilePostCreate(is_public=False),
             metadata=require_json_object(metadata, "data_table.create.metadata")
             if metadata
@@ -509,33 +514,14 @@ class DataTableService:
     async def _upload_replaced(self, record: FileRecord, data: bytes) -> FileRecord:
         if len(data) == 0:
             raise ValueError("DataTable file cannot be empty")
-        checksum = compute_content_checksum_sha256(data)
-        file_hash = hashlib.sha256(data).hexdigest()[:16]
         suffix = Path(record.original_name).suffix.lower()
-        if suffix in {DATA_TABLE_EXTENSION, ".db"}:
-            extension = DATA_TABLE_EXTENSION
-        elif suffix == "":
-            extension = DATA_TABLE_EXTENSION
-        else:
+        if suffix not in {DATA_TABLE_EXTENSION, ".db", ""}:
             raise ValueError(
                 f"DataTable original_name must use {DATA_TABLE_EXTENSION}, got {record.original_name!r}"
             )
-        s3_key = f"files/{record.file_id}_{file_hash}{extension}"
-        s3 = await FileGate().client_for_storage_id(record.storage_id, record=record)
-        _ = await s3.upload_bytes(
-            data=data,
-            key=s3_key,
-            metadata={},
+        return await self._files_service.replace_content(
+            record,
+            data,
             content_type=DATA_TABLE_CONTENT_TYPE,
-            public=record.is_public,
+            expected_checksum=record.checksum,
         )
-        updated = record.model_copy(
-            update={
-                "s3_key": s3_key,
-                "file_size": len(data),
-                "checksum": checksum,
-                "content_type": DATA_TABLE_CONTENT_TYPE,
-                "updated_at": datetime.now(UTC),
-            }
-        )
-        return await self._files_service.save(updated)

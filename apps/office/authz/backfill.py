@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import sys
-from typing import cast
 
-from apps.office.authz.tuples import (
-    office_catalog_company_link,
-    office_catalog_owner_tuple,
-    office_catalog_parent_tuple,
-    office_document_catalog_link,
-    office_document_owner_tuple,
-)
-from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.di import OfficeDi
+from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.service import AuthzService
 from core.config import get_settings
 from core.di import open_di
 from core.di.kit import ProcessIdentity
+from core.documents.authz.tuples import (
+    document_catalog_company_link,
+    document_catalog_lister_tuple,
+    document_catalog_owner_tuple,
+    document_catalog_parent_tuple,
+    document_file_catalog_link,
+    document_file_owner_tuple,
+)
+from core.documents.catalog import DocumentCatalog
+from core.files.models import FileRecord
 from core.files.urls import resolve_files_route_segment
 from core.logging import get_logger
 
@@ -61,28 +62,29 @@ async def _write_office_authz_edges(authz: AuthzService, *, limit: int | None) -
     catalogs_written = 0
     documents_written = 0
 
-    catalog_rows = await OfficeDocumentCatalog.list_by_created_at(limit=limit)
-    binding_rows = await OfficeDocumentBinding.list_by_created_at(limit=limit)
+    catalog_rows = await DocumentCatalog.list_by_created_at(limit=limit)
+    file_limit = limit if limit is not None else 1000
+    binding_rows = await FileRecord.objects.filter(catalog_id__isnull=False).limit(file_limit).all()
 
     for row in catalog_rows:
-        catalog_id = row.catalog_id
-        owner_user_id = row.owner_user_id
-        company_id = row.company_id
-        parent_catalog_id = row.parent_catalog_id
         writes = [
-            office_catalog_owner_tuple(catalog_id, owner_user_id),
-            office_catalog_company_link(catalog_id, company_id),
+            document_catalog_owner_tuple(row.catalog_id, row.owner_user_id),
+            document_catalog_company_link(row.catalog_id, row.company_id),
         ]
-        if parent_catalog_id is not None:
-            writes.append(office_catalog_parent_tuple(catalog_id, parent_catalog_id))
+        if row.parent_catalog_id is None:
+            writes.append(document_catalog_lister_tuple(row.catalog_id, row.company_id))
+        else:
+            writes.append(document_catalog_parent_tuple(row.catalog_id, row.parent_catalog_id))
         await authz.write(writes)
         catalogs_written += len(writes)
 
     for binding in binding_rows:
+        if binding.catalog_id is None or binding.uploaded_by is None:
+            continue
         await authz.write(
             [
-                office_document_owner_tuple(binding.file_id, binding.created_by_user_id),
-                office_document_catalog_link(binding.file_id, binding.catalog_id),
+                document_file_owner_tuple(binding.file_id, binding.uploaded_by),
+                document_file_catalog_link(binding.file_id, binding.catalog_id),
             ]
         )
         documents_written += 1
@@ -91,10 +93,7 @@ async def _write_office_authz_edges(authz: AuthzService, *, limit: int | None) -
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backfill Office edges into OpenFGA")
-    _ = parser.add_argument("--limit", type=int, default=None)
-    args = parser.parse_args(argv)
-    limit: int | None = cast(int | None, args.limit)
+    limit = parse_backfill_limit("Backfill Office edges into OpenFGA", argv)
     catalogs, documents = asyncio.run(backfill_office_authz(limit=limit))
     _ = sys.stdout.write(f"catalog_tuples={catalogs}\n")
     _ = sys.stdout.write(f"documents={documents}\n")

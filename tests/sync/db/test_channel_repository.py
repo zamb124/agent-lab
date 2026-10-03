@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.sync.models.channel import SyncChannel, SyncChannelMember
+from apps.sync.models.channel import SyncChannel
+from apps.sync.models.channel_member import SyncChannelMember
 
 
 @pytest.mark.asyncio

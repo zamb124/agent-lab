@@ -607,7 +607,7 @@ async def op_flows_tools_create(
     if ps.get("type") != "object" or not isinstance(raw_properties, dict):
         raise_invalid(
             ValueError(
-                "parameters_schema must be JSON Schema object with type: object and properties"
+                "parameters_schema must be a JSON Schema object with type object and properties"
             )
         )
     entrypoint = payload.entrypoint

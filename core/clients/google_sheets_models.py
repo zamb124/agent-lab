@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from pydantic import ConfigDict, Field, field_validator
 
 from core.models.base import StrictBaseModel
+from core.types import JsonValue
 
 SheetCell = str | float | bool
 SheetCellInput = str | float | bool | int | None
@@ -74,7 +75,7 @@ def normalize_sheet_rows_for_write(
     return result
 
 
-def parse_sheet_cell(value: object) -> SheetCell:
+def parse_sheet_cell(value: JsonValue) -> SheetCell:
     """Parse a cell from Google values.get response."""
     if isinstance(value, bool):
         return value
@@ -87,17 +88,16 @@ def parse_sheet_cell(value: object) -> SheetCell:
     raise TypeError(f"Unexpected Sheet cell from Google API: {type(value).__name__}")
 
 
-def parse_sheet_rows(raw_values: object) -> list[SheetRow]:
+def parse_sheet_rows(raw_values: JsonValue) -> list[SheetRow]:
     if raw_values is None:
         return []
     if not isinstance(raw_values, list):
         raise TypeError("values must be a list of rows")
     rows: list[SheetRow] = []
-    for row_raw in cast(list[object], raw_values):
+    for row_raw in raw_values:
         if not isinstance(row_raw, list):
             raise TypeError("each values row must be a list")
-        cells = cast(list[object], row_raw)
-        rows.append([parse_sheet_cell(cell) for cell in cells])
+        rows.append([parse_sheet_cell(cell) for cell in row_raw])
     return rows
 
 

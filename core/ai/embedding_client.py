@@ -37,20 +37,23 @@ logger = get_logger(__name__)
 
 def _embedding_openrouter_attribution_headers() -> dict[str, str]:
     host = resolve_context_host()
-    if host is not None:
-        try:
-            brand = resolve_brand(host)
-            return {
-                "HTTP-Referer": resolve_public_base_url(host),
-                "X-Title": f"{brand.platform_name} RAG",
-            }
-        except UnknownPlatformDomainError:
-            pass
     settings = get_settings()
     primary_domain = settings.primary_platform_domain
     brand = settings.platform_brands[primary_domain]
+    referer = f"https://{primary_domain}"
+    if host is not None and host.strip() != "":
+        normalized = host.strip()
+        try:
+            brand = resolve_brand(normalized)
+            referer = resolve_public_base_url(normalized)
+        except UnknownPlatformDomainError as exc:
+            logger.info(
+                "platform_brand_unknown_host",
+                host=normalized,
+                error=str(exc),
+            )
     return {
-        "HTTP-Referer": f"https://{primary_domain}",
+        "HTTP-Referer": referer,
         "X-Title": f"{brand.platform_name} RAG",
     }
 

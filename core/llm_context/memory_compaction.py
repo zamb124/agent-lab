@@ -212,7 +212,7 @@ def _render_memory_recall_content(summary: str) -> str:
     return "[Compacted conversation memory]\n" + summary.strip()
 
 
-def _normalize_render_role(role_raw: object) -> str:
+def _normalize_render_role(role_raw: JsonValue) -> str:
     """A2A wire ROLE_* / short aliases → OpenAI-style labels for episode text."""
     if not isinstance(role_raw, str) or not role_raw:
         return "user"

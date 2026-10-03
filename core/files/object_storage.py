@@ -1,4 +1,4 @@
-"""Подключение S3 компании. Платформенный MinIO строкой не представлен."""
+"""Подключение S3 компании. Платформенное S3-хранилище строкой не представлено."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class ObjectStorage(PlatformModel):
 
     company_id: str = DbField(db_index=True)
     name: str = DbField()
-    provider: str = DbField(default="minio")
+    provider: str = DbField(default="seaweedfs")
     endpoint_url: str = DbField(db_type="TEXT")
     region_name: str = DbField()
     bucket_name: str = DbField()

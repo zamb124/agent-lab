@@ -1,11 +1,11 @@
 """Контракт локального реранкера (gateway / ``LocalRerankerEngine``) без поднятия HTTP."""
 
 import pytest
-from fastapi import HTTPException
 
 from apps.provider_litserve.openai_server_contracts import placeholder_rerank_scores
 from apps.provider_litserve.reranker.engines import LocalRerankerEngine, parse_rerank_body
 from core.config.models import ProviderLitserveInfraConfig
+from core.websocket import WsCommandError
 
 
 def _cfg(**kwargs: object) -> ProviderLitserveInfraConfig:
@@ -26,10 +26,10 @@ def test_engine_rerank_empty_passages() -> None:
 def test_engine_rerank_too_many_passages_422() -> None:
     eng = LocalRerankerEngine(_cfg(backend="placeholder", max_passages=2))
     eng.setup(None)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(WsCommandError) as ei:
         eng.rerank("q", ["a", "b", "c"])
-    assert {"status_code": ei.value.status_code, "reason": ei.value.detail["reason"]} == {
-        "status_code": 422,
+    assert {"code": ei.value.code, "reason": ei.value.error_params["reason"]} == {
+        "code": "unprocessable",
         "reason": "too_many_passages",
     }
 
@@ -47,12 +47,12 @@ def test_parse_rerank_body_valid() -> None:
 
 
 def test_parse_rerank_body_extra_field_forbidden() -> None:
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(WsCommandError) as ei:
         parse_rerank_body({"query": "q", "passages": [], "extra": 1})
-    assert {"status_code": ei.value.status_code} == {"status_code": 422}
+    assert ei.value.code == "unprocessable"
 
 
 def test_parse_rerank_body_not_object() -> None:
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(WsCommandError) as ei:
         parse_rerank_body([])
-    assert {"status_code": ei.value.status_code} == {"status_code": 422}
+    assert ei.value.code == "unprocessable"

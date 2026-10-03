@@ -23,12 +23,7 @@ SCAN_ROOTS: tuple[Path, ...] = (
 
 REDIS_FROM_URL_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "core/tasks/broker.py",
-        "core/utils/invite_tokens.py",
-        "core/events/redis_client.py",
-        "core/events/consumer.py",
-        "apps/sync/realtime/tasks.py",
-        "apps/sync/realtime/speech_to_chat_workflow.py",
+        "core/clients/redis_from_url.py",
     }
 )
 

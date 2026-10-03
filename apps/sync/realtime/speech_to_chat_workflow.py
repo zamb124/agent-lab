@@ -6,11 +6,11 @@ import asyncio
 import contextlib
 import hashlib
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -20,9 +20,7 @@ from livekit.api.twirp_client import TwirpError, TwirpErrorCode
 from livekit.protocol.egress import EgressInfo
 from livekit.protocol.models import TrackSource, TrackType
 from livekit.protocol.room import ListParticipantsRequest
-from redis.asyncio.client import Redis
 
-from apps.sync.di import Di
 from apps.sync.models.call import SyncCall
 from apps.sync.models.channel import SyncChannel
 from apps.sync.models.messages import (
@@ -31,13 +29,14 @@ from apps.sync.models.messages import (
     MessageCreate,
 )
 from apps.sync.models.speech_egress import SyncCallSpeechEgressTrack
-from apps.sync.realtime.handlers import send_message_with_side_effects
 from apps.sync.realtime.livekit_sdk_boundary import (
     read_livekit_participant_identity,
     read_livekit_track_sid,
 )
+from apps.sync.services.message_service import SyncMessageService
 from core.calls.livekit_client import LiveKitClient
 from core.calls.livekit_usage_spans import trace_livekit_egress_segmented_usage
+from core.clients.redis_from_url import redis_client_from_url
 from core.config import get_settings
 from core.context import clear_context, get_context, set_context
 from core.errors.boundary import PlatformNotFoundError
@@ -47,18 +46,24 @@ from core.files.audio_silence import (
     volumedetect_max_volume_db_from_bytes,
 )
 from core.files.audio_transcode import transcode_audio_bytes_to_m4a_aac
-from core.files.create_spec import FileSourceKind
-from core.files.default_storage import get_default_storage
+from core.files.create_spec import FileCreateSpec, FilePostCreate, FileSourceKind, FileSourceRef
 from core.files.models import AudioAttachmentContent, AudioTranscriptionStatus
 from core.files.object_store.gate import EgressTarget, FileGate
 from core.files.registry import default_retention_for_source
-from core.files.storage import retention_fields_from_spec
+from core.files.service import FilesService
 from core.http import get_httpx_client
 from core.logging import get_logger
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
 
 logger = get_logger(__name__)
+
+
+class SpeechPollDeps(Protocol):
+    @property
+    def files_service(self) -> FilesService: ...
+    @property
+    def message_service(self) -> SyncMessageService: ...
 
 _SPEECH_TO_CHAT_POLL_LOCK_RELEASE_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -92,8 +97,7 @@ class _SpeechToChatPollRedis(Protocol):
 
 
 def _speech_to_chat_poll_redis(redis_url: str) -> _SpeechToChatPollRedis:
-    from_url = cast(Callable[[str], _SpeechToChatPollRedis], Redis.from_url)
-    return from_url(redis_url)
+    return redis_client_from_url(_SpeechToChatPollRedis, redis_url, decode_responses=False)
 
 
 def _redis_eval_int(value: int | str | bytes | None, label: str) -> int:
@@ -338,7 +342,8 @@ async def _post_segment_file_as_message(
     file_size: int,
     content_type: str,
     call_id: str,
-    di: Di,
+    files_service: FilesService,
+    message_service: SyncMessageService,
 ) -> None:
     settings = get_settings()
     if not settings.s3.enabled or settings.s3.bucket_name == "":
@@ -398,53 +403,6 @@ async def _post_segment_file_as_message(
         raise ValueError("Failed to determine speech-to-chat segment duration.")
 
     checksum = hashlib.sha256(normalized_audio).hexdigest()
-    api_prefix = f"/{settings.server.name}/api/v1"
-    download_url_prefix = f"{api_prefix.rstrip('/')}/files/download"
-    retention = default_retention_for_source(FileSourceKind.SYNC_SPEECH_SEGMENT)
-    retention_kind, ttl_seconds = retention_fields_from_spec(retention)
-    storage = get_default_storage()
-    file_record = await storage.upload_bytes(
-        data=normalized_audio,
-        original_name=upload_name,
-        content_type=upload_mime,
-        uploaded_by=row.participant_identity,
-        company_id=row.company_id,
-        is_public=True,
-        retention_kind=retention_kind,
-        ttl_seconds=ttl_seconds,
-        metadata={"source_kind": FileSourceKind.SYNC_SPEECH_SEGMENT.value},
-        content_sha256_hex=checksum,
-        source_kind=FileSourceKind.SYNC_SPEECH_SEGMENT,
-    )
-    sync_download_url = f"{download_url_prefix}/{file_record.file_id}"
-    if file_record.download_url != sync_download_url:
-        file_record = file_record.model_copy(update={"download_url": sync_download_url})
-        file_record = await storage.save(file_record)
-
-    body = MessageCreate(
-        thread_id=None,
-        parent_message_id=None,
-        contents=[
-            MessageContentModel(
-                type=MessageContentType.FILE_AUDIO,
-                data=AudioAttachmentContent(
-                    file_id=file_record.file_id,
-                    original_name=file_record.original_name,
-                    content_type=file_record.content_type,
-                    file_size=file_record.file_size,
-                    duration_ms=duration_ms,
-                    waveform=None,
-                    transcription_status=AudioTranscriptionStatus.IDLE,
-                    transcription_text=None,
-                    transcription_error=None,
-                    source_speech_to_chat=True,
-                ),
-                order=0,
-            )
-        ],
-        mentioned_user_ids=None,
-        call_id=call_id,
-    )
     company = await Company.get(row.company_id)
     if company is None:
         raise ValueError(f"company not found: {row.company_id}")
@@ -468,11 +426,46 @@ async def _post_segment_file_as_message(
         )
     )
     try:
-        _ = await send_message_with_side_effects(
+        file_record = await files_service.create(
+            FileCreateSpec(
+                source_kind=FileSourceKind.SYNC_SPEECH_SEGMENT,
+                source_ref=FileSourceRef(channel_id=row.channel_id, call_id=call_id),
+                retention=default_retention_for_source(FileSourceKind.SYNC_SPEECH_SEGMENT),
+                post_create=FilePostCreate(is_public=False),
+            ),
+            normalized_audio,
+            original_name=upload_name,
+            content_type=upload_mime,
+            content_sha256_hex=checksum,
+        )
+        body = MessageCreate(
+            thread_id=None,
+            parent_message_id=None,
+            contents=[
+                MessageContentModel(
+                    type=MessageContentType.FILE_AUDIO,
+                    data=AudioAttachmentContent(
+                        file_id=file_record.file_id,
+                        original_name=file_record.original_name,
+                        content_type=file_record.content_type,
+                        file_size=file_record.file_size,
+                        duration_ms=duration_ms,
+                        waveform=None,
+                        transcription_status=AudioTranscriptionStatus.IDLE,
+                        transcription_text=None,
+                        transcription_error=None,
+                        source_speech_to_chat=True,
+                    ),
+                    order=0,
+                )
+            ],
+            mentioned_user_ids=None,
+            call_id=call_id,
+        )
+        _ = await message_service.send(
             channel_id=row.channel_id,
             body=body,
             user=participant,
-            di=di,
         )
     finally:
         if previous is not None:
@@ -486,7 +479,8 @@ async def process_new_files_for_egress_row(
     row: SyncCallSpeechEgressTrack,
     egress_info: EgressInfo | None,
     call_id: str,
-    di: Di,
+    files_service: FilesService,
+    message_service: SyncMessageService,
 ) -> None:
     budget = get_settings().calls.speech_to_chat.max_segments_per_poll_per_track
 
@@ -508,7 +502,8 @@ async def process_new_files_for_egress_row(
                 file_size=sz,
                 content_type=content_type,
                 call_id=call_id,
-                di=di,
+                files_service=files_service,
+                message_service=message_service,
             )
             segment_s3_key = f"{_speech_egress_s3_prefix(fresh)}{fn}"
             await SyncCallSpeechEgressTrack.mark_speech_egress_segments(
@@ -546,7 +541,8 @@ async def process_new_files_for_egress_row(
                 file_size=sz,
                 content_type=content_type,
                 call_id=call_id,
-                di=di,
+                files_service=files_service,
+                message_service=message_service,
             )
             n += 1
             last_obj_key = obj_key
@@ -599,7 +595,7 @@ def _s3_params_from_egress_target(target: EgressTarget) -> tuple[str, str, str, 
 
 
 async def run_speech_to_chat_poll_cycle(
-    *, call_id: str, company_id: str, di: Di
+    *, call_id: str, company_id: str, di: SpeechPollDeps
 ) -> SpeechToChatPollOutcome:
     """Определяет, ставить ли следующий тик TaskIQ и с обычной или увеличенной задержкой."""
     try:
@@ -668,7 +664,7 @@ async def run_speech_to_chat_poll_cycle(
         await r.aclose()
 
 
-async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str, di: Di) -> bool:
+async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str, di: SpeechPollDeps) -> bool:
     call = await SyncCall.require_company_call(call_id, company_id)
     if call.status != "active":
         return False
@@ -787,7 +783,11 @@ async def _run_speech_to_chat_poll_cycle_inner(*, call_id: str, company_id: str,
                 rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
                 for row in rows:
                     await process_new_files_for_egress_row(
-                        row=row, egress_info=None, call_id=call_id, di=di
+                        row=row,
+                        egress_info=None,
+                        call_id=call_id,
+                        files_service=di.files_service,
+                        message_service=di.message_service,
                     )
     except TimeoutError:
         logger.warning("sync.speech_to_chat", room=room_name)
@@ -802,7 +802,8 @@ async def stop_speech_egresses_for_call_room(
     company_id: str,
     room_name: str,
     actor_user_id: str,
-    di: Di,
+    files_service: FilesService,
+    message_service: SyncMessageService,
 ) -> None:
     rows = await SyncCallSpeechEgressTrack.list_for_call(call_id, company_id)
     if len(rows) == 0:
@@ -846,7 +847,11 @@ async def stop_speech_egresses_for_call_room(
                     )
                 if info is not None:
                     await process_new_files_for_egress_row(
-                        row=row, egress_info=info, call_id=call_id, di=di
+                        row=row,
+                        egress_info=info,
+                        call_id=call_id,
+                        files_service=files_service,
+                        message_service=message_service,
                     )
 
     now = datetime.now(UTC)

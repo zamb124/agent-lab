@@ -17,8 +17,9 @@ from typing import (
     cast,
 )
 
+import yaml
+from pydantic import BaseModel, SerializerFunctionWrapHandler, TypeAdapter, ValidationError
 from pydantic import JsonValue as PydanticJsonValue
-from pydantic import SerializerFunctionWrapHandler, TypeAdapter, ValidationError
 
 if TYPE_CHECKING:
     JsonScalar: TypeAlias = str | int | float | bool | None
@@ -153,6 +154,11 @@ _ASGI_RECEIVE_MESSAGE_ADAPTER: TypeAdapter[ASGIReceiveMessage] = TypeAdapter(ASG
 _TASKIQ_LABEL_VALUE_ADAPTER: TypeAdapter[TaskiqLabelValue] = TypeAdapter(TaskiqLabelValue)
 
 
+def parse_yaml_value(data: str, field_name: str = "value") -> JsonValue:
+    """Распарсить YAML-текст в JSON value. Пустой документ — None."""
+    return require_json_value(cast(JsonValue, yaml.safe_load(data)), field_name)
+
+
 def require_json_value(value: object, field_name: str = "value") -> JsonValue:
     """Проверить внешнее значение на совместимость с JSON."""
     try:
@@ -264,6 +270,27 @@ def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
     if last_exc is not None:
         raise ValueError(f"{field_name} must be JSON-compatible") from last_exc
     raise ValueError(f"{field_name} must be JSON-compatible")
+
+
+def model_json_object(
+    model: BaseModel,
+    field_name: str | None = None,
+    *,
+    by_alias: bool = False,
+    exclude_none: bool = False,
+    exclude_unset: bool = False,
+) -> JsonObject:
+    """JSON object из ``BaseModel.model_dump(mode='json')``."""
+    name = model.__class__.__name__ if field_name is None else field_name
+    return require_json_object(
+        model.model_dump(
+            mode="json",
+            by_alias=by_alias,
+            exclude_none=exclude_none,
+            exclude_unset=exclude_unset,
+        ),
+        name,
+    )
 
 
 def require_json_object(value: object, field_name: str = "value") -> JsonObject:

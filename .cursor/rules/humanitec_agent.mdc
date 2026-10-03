@@ -22,7 +22,7 @@ Desktop-клиент (Goose fork); на бренде `humanitec.ru` продук
 - Platform MCP — `flows` `/flows/api/v1/agent/platform-mcp[/{toolkit_id}]` (Streamable HTTP; desktop — `/platform-mcp/lara`), router `apps/flows/src/api/v1/platform_mcp.py`.
 - OpenAI LLM proxy — `flows` `/flows/api/v1/agent/llm/v1` (`models`, `chat/completions`, `images/generations`, OnlyOffice `/proxy`), `apps/flows/src/agent/llm_proxy.py`.
 - `AgentToolkit` (`apps/flows/src/models/agent_toolkit.py`, таблица `agent_toolkits`, PK `agent_toolkit_id` = `{company_id}:{toolkit_id}`, bootstrap из `registry.yaml`): `lara` (включён для desktop), `humanitec_core`, `networkle`, `docs`, `files`, `browser`; команды `op_flows_agent_toolkits_*`, catalog `GET /flows/api/v1/agent/toolkits` (device JWT → только `lara`).
-- Device — OpenFGA `agent_device` (`company` + `owner`) + запись Redis.
+- Device — OpenFGA `agent_device` (`company` + `owner`) + запись Storage. Ключи `agent_pairing:`, `agent_device:`, `agent_tunnel_online:`, `agent_token_deny:`, `agent_token_jti_deny:` не получают префикс компании: поиск по коду и `device_id` идёт без активного `company_id`, компания лежит в записи.
 
 ## Инварианты
 

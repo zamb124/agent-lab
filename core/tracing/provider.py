@@ -3,8 +3,7 @@
 """
 
 import atexit
-import os
-from typing import TYPE_CHECKING
+import sys
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -12,10 +11,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from core.config.models import TracingConfig
 from core.logging import get_logger
-
-if TYPE_CHECKING:
-    from .config import TracingConfig
 
 logger = get_logger(__name__)
 
@@ -44,7 +41,17 @@ def ensure_tracer_provider(service_name: str = "platform") -> TracerProvider:
     return _tracer_provider
 
 
-def setup_tracing(config: "TracingConfig") -> None:
+def _otlp_export_endpoint(config: TracingConfig) -> str:
+    """Адрес OTLP: явный otlp_endpoint, иначе tempo_endpoint при tempo_enabled."""
+    configured = config.otlp_endpoint.strip()
+    if configured != "":
+        return configured
+    if not config.tempo_enabled:
+        return ""
+    return config.tempo_endpoint.strip()
+
+
+def setup_tracing(config: TracingConfig) -> None:
     """
     Инициализирует OpenTelemetry трейсинг.
 
@@ -63,12 +70,8 @@ def setup_tracing(config: "TracingConfig") -> None:
 
     tracer_provider = ensure_tracer_provider(config.service_name)
 
-    # OTLP exporter: из ENV (docker-compose задаёт OTEL_EXPORTER_OTLP_ENDPOINT)
-    # или из config.tempo_enabled/tempo_endpoint. Сервисы не трогаем —
-    # достаточно одной ENV-переменной в compose для отправки трейсов в Alloy → Tempo.
-    otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if (otlp_endpoint or config.tempo_enabled) and not _otlp_configured:
-        endpoint = otlp_endpoint or config.tempo_endpoint
+    endpoint = _otlp_export_endpoint(config)
+    if endpoint != "" and not _otlp_configured:
         try:
             otlp_exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
             tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
@@ -84,8 +87,14 @@ def setup_tracing(config: "TracingConfig") -> None:
     logger.info("trace.initialized", service=config.service_name, sampling=config.sampling_rate)
 
 
+def _report_tracing_shutdown_failure(step: str, exc: BaseException) -> None:
+    _ = sys.stderr.write(
+        "[tracing] shutdown " + step + " failed: " + type(exc).__name__ + ": " + str(exc) + "\n"
+    )
+
+
 def shutdown_tracing() -> None:
-    """Останавливает OTel processors/exporters без логирования из atexit/pytest teardown."""
+    """Останавливает OTel processors. Ошибка flush или shutdown пишется в stderr: logger на atexit уже может быть закрыт."""
     global _initialized, _tracer_provider, _otlp_configured
 
     provider = _tracer_provider
@@ -97,12 +106,12 @@ def shutdown_tracing() -> None:
 
     try:
         _ = provider.force_flush(timeout_millis=1000)
-    except Exception:
-        pass
+    except Exception as exc:
+        _report_tracing_shutdown_failure("force_flush", exc)
     try:
         _ = provider.shutdown()
-    except Exception:
-        pass
+    except Exception as exc:
+        _report_tracing_shutdown_failure("shutdown", exc)
 
 
 def get_tracer_provider() -> TracerProvider | None:

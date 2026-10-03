@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Literal
 
 import torch
-from fastapi import HTTPException
 from FlagEmbedding import FlagLLMReranker
 from pydantic import BaseModel, ValidationError
 
@@ -18,6 +17,7 @@ from apps.provider_litserve.runtime_models import allowed_api_model_ids, resolve
 from core.config.models import ProviderLitserveInfraConfig
 from core.logging import get_logger
 from core.types import JsonObject, JsonValue
+from core.websocket import WsCommandError
 
 Backend = Literal["placeholder", "flagllm"]
 
@@ -41,11 +41,19 @@ def parse_rerank_body(raw: BaseModel | JsonValue) -> RerankQueryPassagesRequest:
     else:
         raw_payload = raw
     if not isinstance(raw_payload, dict):
-        raise HTTPException(status_code=422, detail="Request body: JSON object expected")
+        raise WsCommandError(
+            "unprocessable",
+            "Request body: JSON object expected",
+            error_code="ws_invalid_payload",
+        )
     try:
         body = RerankQueryPassagesRequest.model_validate(raw_payload)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors()) from e
+        raise WsCommandError(
+            "unprocessable",
+            "Request body failed validation",
+            error_code="ws_invalid_payload",
+        ) from e
     return body
 
 
@@ -104,25 +112,31 @@ class LocalRerankerEngine:
             detail: JsonObject = {"reason": "unknown_rerank_model", "model": canonical_model}
             if requested_model is not None:
                 detail["allowed"] = sorted(self.allowed_model_ids())
-            raise HTTPException(
-                status_code=422,
-                detail=detail,
+            raise WsCommandError(
+                "unprocessable",
+                f"Rerank: unknown model {canonical_model!r}",
+                error_code="ws_invalid_payload",
+                error_params=detail,
             )
         if not passages:
             return RerankResponseBody(scores=[])
         if len(passages) > self._cfg.max_passages:
-            raise HTTPException(
-                status_code=422,
-                detail={
+            raise WsCommandError(
+                "unprocessable",
+                "Rerank: too many passages",
+                error_code="ws_invalid_payload",
+                error_params={
                     "reason": "too_many_passages",
                     "max_passages": self._cfg.max_passages,
                     "got": len(passages),
                 },
             )
         if len(query) > self._cfg.max_query_chars:
-            raise HTTPException(
-                status_code=422,
-                detail={
+            raise WsCommandError(
+                "unprocessable",
+                "Rerank: query is too long",
+                error_code="ws_invalid_payload",
+                error_params={
                     "reason": "query_too_long",
                     "max_chars": self._cfg.max_query_chars,
                     "got": len(query),
@@ -130,9 +144,11 @@ class LocalRerankerEngine:
             )
         for i, p in enumerate(passages):
             if len(p) > self._cfg.max_passage_chars:
-                raise HTTPException(
-                    status_code=422,
-                    detail={
+                raise WsCommandError(
+                    "unprocessable",
+                    "Rerank: passage is too long",
+                    error_code="ws_invalid_payload",
+                    error_params={
                         "reason": "passage_too_long",
                         "index": i,
                         "max_chars": self._cfg.max_passage_chars,
@@ -150,8 +166,14 @@ class LocalRerankerEngine:
             max_length=self._cfg.max_length,
         )
         if len(scores) != len(passages):
-            raise HTTPException(
-                status_code=503,
-                detail={"reason": "scores_length_mismatch", "expected": len(passages), "got": len(scores)},
+            raise WsCommandError(
+                "unavailable",
+                "Rerank scores length does not match passages",
+                error_code="unavailable",
+                error_params={
+                    "reason": "scores_length_mismatch",
+                    "expected": len(passages),
+                    "got": len(scores),
+                },
             )
         return RerankResponseBody(scores=scores)

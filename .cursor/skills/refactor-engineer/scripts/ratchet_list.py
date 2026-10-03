@@ -49,7 +49,9 @@ def main() -> int:
         hits: list[tuple[str, int]] = []
         for path in gate._files(metric.roots):
             text = path.read_text(encoding="utf-8")
-            rel = str(path.relative_to(REPO))
+            rel = path.relative_to(REPO).as_posix()
+            if metric.name == "os_environ" and gate.os_environ_path_allowed(rel):
+                continue
             for match in regex.finditer(text):
                 hits.append((rel, text.count("\n", 0, match.start()) + 1))
         limit = baseline.get(metric.name)

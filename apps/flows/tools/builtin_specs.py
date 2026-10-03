@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib
 from functools import lru_cache
-from typing import Protocol, cast
+from typing import Protocol
+
+from core.imports import imported_attr
 
 
 class _NamedTool(Protocol):
@@ -243,12 +245,11 @@ def builtin_tool_ids() -> frozenset[str]:
     ids: list[str] = []
     for module_name, attr_name in BUILTIN_TOOL_SPECS:
         module = importlib.import_module(module_name)
-        raw_tool = module.__dict__.get(attr_name)
-        if raw_tool is None:
+        named = imported_attr(module, attr_name, _NamedTool)
+        if named is None:
             raise TypeError(
                 f"Builtin tool {module_name}.{attr_name} is missing"
             )
-        named = cast(_NamedTool, raw_tool)
         tool_name = named.name
         if not tool_name.strip():
             raise TypeError(

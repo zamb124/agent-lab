@@ -56,8 +56,7 @@ from core.models.context_models import Context
 from core.models.identity_models import Company, User
 from core.models.voice_providers_catalog import build_voice_providers_catalog_dto
 from core.platform_brand.resolver import (
-    UnknownPlatformDomainError,
-    resolve_brand,
+    resolve_brand_or_primary,
     resolve_context_host,
 )
 from core.request_scope import require_company_admin
@@ -252,16 +251,6 @@ def _voice_override_for_capability(
     raise TypeError(f"{capability.value} expects CompanyVoiceOverride")
 
 
-def _resolve_brand_for_ai_providers(host: str | None) -> PlatformBrandConfig:
-    if host is not None and str(host).strip():
-        try:
-            return resolve_brand(str(host).strip())
-        except UnknownPlatformDomainError:
-            pass
-    settings = get_settings()
-    return settings.platform_brands[settings.primary_platform_domain]
-
-
 def _provider_display_label(
     provider: str,
     default_label: str,
@@ -277,7 +266,7 @@ def _provider_display_label(
 
 
 def _llms_display_label_for_context() -> str:
-    return _resolve_brand_for_ai_providers(resolve_context_host()).llms_display_label
+    return resolve_brand_or_primary(resolve_context_host()).llms_display_label
 
 
 def _provider_catalog(
@@ -680,7 +669,7 @@ async def op_ai_providers_snapshot(
     _ = user
     company = await _require_admin_company(di)
     aip = _load_aip(company)
-    brand = _resolve_brand_for_ai_providers(payload.public_host)
+    brand = resolve_brand_or_primary(payload.public_host)
     humanitec_llms_models = await read_humanitec_llms_model_options(di.redis_client)
     return {
         "capabilities": _public_capabilities(aip),

@@ -187,6 +187,7 @@ class TestFlowsLoader:
             bundles_dir=bundles_dir,
             registry_path=registry_path,
             flow_access_service=di.flow_access_service,
+            files_service=di.files_service,
         )
         loaded_flows, loaded_nodes = await loader.load_all()
 

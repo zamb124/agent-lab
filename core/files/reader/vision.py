@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-from typing import Protocol, cast
+from types import ModuleType
+from typing import Protocol
 
 import pillow_heif  # pyright: ignore[reportMissingTypeStubs]
 from PIL import Image
 
 from core.files.reader.exceptions import FileReadError
 from core.files.reader.models import CompressionMode
+from core.imports import module_sdk
 from core.logging import get_logger
 
 # cairosvg зависит от нативной libcairo — опциональной в рантайме flows/worker.
@@ -19,17 +21,13 @@ from core.logging import get_logger
 try:
     import cairosvg  # pyright: ignore[reportMissingImports]
 
-    _cairosvg_raw: object | None = cairosvg
+    _cairosvg_raw: ModuleType | None = cairosvg
     _cairosvg_error: str = ""
 except (ImportError, OSError) as exc:
     _cairosvg_raw = None
     _cairosvg_error = str(exc)
 
 logger = get_logger(__name__)
-
-
-def _as_object(value: object) -> object:
-    return value
 
 
 class _CairoSvgModule(Protocol):
@@ -40,13 +38,13 @@ class _PillowHeifModule(Protocol):
     def register_heif_opener(self) -> None: ...
 
 
-cast(_PillowHeifModule, _as_object(pillow_heif)).register_heif_opener()
+module_sdk(pillow_heif, _PillowHeifModule).register_heif_opener()
 
 if _cairosvg_raw is None:
     _cairosvg: _CairoSvgModule | None = None
     logger.warning("files.cairosvg.libcairo.svg", _cairosvg_error=_cairosvg_error)
 else:
-    _cairosvg = cast(_CairoSvgModule, _as_object(_cairosvg_raw))
+    _cairosvg = module_sdk(_cairosvg_raw, _CairoSvgModule)
 
 _TRANSCODE_EXTENSIONS: frozenset[str] = frozenset({".heic", ".heif", ".avif", ".svg"})
 _TRANSCODE_MIME_TYPES: frozenset[str] = frozenset(

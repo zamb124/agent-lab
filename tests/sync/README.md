@@ -23,11 +23,11 @@
 uv run pytest tests/sync/ -v
 ```
 
-В тестовом окружении MinIO и bucket обязательны. Корневой [`tests/conftest.py`](../conftest.py) задаёт `S3__BUCKETS__TEST-BUCKET__ENDPOINT_URL=http://localhost:19002`, чтобы совпадать с `minio-test` из `docker-compose-test.yaml`.
+В тестовом окружении S3-хранилище и bucket обязательны. Корневой [`tests/conftest.py`](../conftest.py) задаёт `S3__ENDPOINT_URL=http://localhost:19002`, чтобы совпадать с `seaweedfs-test` из `docker-compose-test.yaml`.
 
 ## Критерии готовности (green)
 
-1. `uv run pytest tests/sync/ -v` проходит целиком при поднятой инфраструктуре: Postgres (порты из `TEST_DATABASE_ENV`), Redis (`63792`), MinIO с bucket из конфига, процесс **Sync HTTP** на `9005` для WebSocket-тестов, **sync_worker** в фикстурах.
+1. `uv run pytest tests/sync/ -v` проходит целиком при поднятой инфраструктуре: Postgres (порты из `TEST_DATABASE_ENV`), Redis (`63792`), SeaweedFS с bucket из конфига, процесс **Sync HTTP** на `9005` для WebSocket-тестов, **sync_worker** в фикстурах.
 2. `uv run pytest tests/sync/integration -v --cov=apps/sync/realtime --cov-fail-under=95` — coverage реестра/операций ≥95%.
 3. Нет подмены внутренних компонентов: реальные БД, Redis, TaskIQ, LiveKit (через `livekit-cli-test` контейнер).
 

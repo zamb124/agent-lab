@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from apps.flows.src.clients.google_workspace_client import GoogleWorkspaceClient
+from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
     gdocs_create_document,

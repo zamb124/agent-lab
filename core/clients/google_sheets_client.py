@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from typing import Final, Literal, Protocol, cast
+from typing import Final, Literal
 from urllib.parse import quote
 
 from google.auth.transport.requests import Request as AuthRequest
-from google.oauth2 import service_account as sa
 
 from core.clients.google_sheets_models import (
     AddSheetResult,
@@ -39,6 +38,10 @@ from core.clients.google_sheets_models import (
     ValueRenderOption,
     normalize_sheet_rows_for_write,
     parse_sheet_rows,
+)
+from core.clients.google_workspace_auth import (
+    GoogleServiceAccountCredentials,
+    google_service_account_credentials,
 )
 from core.clients.google_workspace_scopes import (
     GOOGLE_SCOPE_DRIVE_FILE,
@@ -75,24 +78,6 @@ class GoogleSheetsApiError(Exception):
         self.status_code: int = status_code
         self.google_error_status: str | None = google_error_status
         super().__init__(f"Google Sheets API {status_code}: {message}")
-
-
-class _GoogleCredentials(Protocol):
-    valid: bool
-    token: str | None
-
-    def refresh(self, request: AuthRequest) -> None: ...
-
-    def with_subject(self, subject: str) -> _GoogleCredentials: ...
-
-
-class _FromServiceAccountInfo(Protocol):
-    def __call__(
-        self,
-        info: JsonObject,
-        *,
-        scopes: list[str],
-    ) -> _GoogleCredentials: ...
 
 
 def spreadsheet_web_url(spreadsheet_id: str) -> str:
@@ -153,18 +138,14 @@ class GoogleSheetsClient:
             _DEFAULT_DRIVE_BASE,
         )
 
-        self._credentials: _GoogleCredentials | None = None
+        self._credentials: GoogleServiceAccountCredentials | None = None
         self._static_token: str | None = None
 
         if credentials_json:
             info = parse_json_object(credentials_json, "google.service_account")
             if resolved_bases.token_uri is not None and resolved_bases.token_uri.strip() != "":
                 info = {**info, "token_uri": resolved_bases.token_uri.strip()}
-            from_service_account_info = cast(
-                _FromServiceAccountInfo,
-                sa.Credentials.from_service_account_info,
-            )
-            creds = from_service_account_info(info, scopes=list(_SA_SCOPES))
+            creds = google_service_account_credentials(info, list(_SA_SCOPES))
             if subject:
                 creds = creds.with_subject(subject)
             self._credentials = creds
@@ -727,7 +708,7 @@ class GoogleSheetsClient:
         )
 
 
-def _optional_int(value: object) -> int | None:
+def _optional_int(value: JsonValue) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value

@@ -553,7 +553,7 @@ async def _setup_lead_requests(ctx: LiveCtx) -> JsonObject:
     return {"limit": 200}
 
 
-_EXT_MINIO = "http://127.0.0.1:19003"
+_EXT_S3 = "http://127.0.0.1:19003"
 _EXT_KEY = "extadmin"
 _EXT_SECRET = "extadminsecret"
 
@@ -564,7 +564,7 @@ async def _ensure_ext_bucket(bucket: str) -> None:
     session = aioboto3.Session()
     async with session.client(
         "s3",
-        endpoint_url=_EXT_MINIO,
+        endpoint_url=_EXT_S3,
         aws_access_key_id=_EXT_KEY,
         aws_secret_access_key=_EXT_SECRET,
         region_name="us-east-1",
@@ -578,8 +578,8 @@ async def _ensure_ext_bucket(bucket: str) -> None:
 def _storage_body(*, name: str, bucket: str) -> JsonObject:
     return {
         "name": name,
-        "provider": "minio",
-        "endpoint_url": _EXT_MINIO,
+        "provider": "seaweedfs",
+        "endpoint_url": _EXT_S3,
         "region_name": "us-east-1",
         "bucket_name": bucket,
         "path_style": True,
@@ -606,8 +606,8 @@ async def _create_live_storage(ctx: LiveCtx, *, bucket: str, name: str) -> str:
     row = await CompanyStorageService().create(
         ctx.principal.company_id,
         name=name,
-        provider="minio",
-        endpoint_url=_EXT_MINIO,
+        provider="seaweedfs",
+        endpoint_url=_EXT_S3,
         region_name="us-east-1",
         bucket_name=bucket,
         path_style=True,
@@ -826,7 +826,12 @@ _CASES: dict[str, OpCase] = {
         True,
     ),
     "frontend/platform_billing/company_prices_requested": OpCase(
-        RestMirror("GET", f"{_API}/platform-billing/prices/company/{{company_id}}", "none"), _setup_company_id, True
+        RestMirror("GET", f"{_API}/platform-billing/prices/company/{{company_id}}", "none"),
+        _setup_company_id,
+        True,
+        # storage_override — shared Redis state: параллельный company_prices_update
+        # на другом xdist-воркере может записать его между WS и REST вызовами.
+        volatile=frozenset({"storage_override"}),
     ),
     "frontend/platform_billing/company_prices_update_requested": OpCase(
         RestMirror("PUT", f"{_API}/platform-billing/prices/company/{{company_id}}", "body_key", body_key="catalog"),

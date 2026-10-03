@@ -9,7 +9,7 @@ API для приглашений в компанию по ссылке.
 from datetime import datetime, timezone
 
 import jwt
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 
 from apps.frontend.di import Di
@@ -33,6 +33,7 @@ from core.utils.invite_tokens import (
     get_invite_token_service,
     invite_jti_already_used,
 )
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/invites", tags=["invites"])
@@ -43,9 +44,10 @@ VALID_ROLES = ["owner", "admin", "developer", "viewer"]
 def _company_subdomain_for_response(company: Company) -> str:
     raw = company.subdomain
     if raw is None or raw.strip() == "":
-        raise HTTPException(
-            status_code=403,
-            detail="Company has no subdomain for sign-in.",
+        raise WsCommandError(
+            "forbidden",
+            "Company has no subdomain for sign-in.",
+            error_code="forbidden",
         )
     return raw.strip()
 
@@ -81,7 +83,7 @@ class PreviewInviteResponse(BaseModel):
 def _require_invite_user() -> User:
     context = get_context()
     if context is None:
-        raise HTTPException(status_code=401, detail="Authorization is required")
+        raise WsCommandError("unauthorized", "Authorization is required", error_code="unauthorized")
     return context.user
 
 
@@ -102,31 +104,31 @@ async def preview_invite(
     """
     code = body.short_code.strip()
     if code == "":
-        raise HTTPException(status_code=400, detail="Invite code is not set")
+        raise WsCommandError("ws_invalid_payload", "Invite code is not set", error_code="ws_invalid_payload")
 
     short = di.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
-        raise HTTPException(status_code=404, detail="Invite link not found or expired")
+        raise WsCommandError("not_found", "Invite link not found or expired", error_code="not_found")
 
     svc = get_invite_token_service()
     try:
         invite = svc.validate(jwt_str)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=410, detail="Invite link is stale")
+        raise WsCommandError("gone", "Invite link is stale", error_code="gone")
     except (jwt.InvalidTokenError, ValueError):
-        raise HTTPException(status_code=403, detail="Invalid invite link")
+        raise WsCommandError("forbidden", "Invalid invite link", error_code="forbidden")
 
     if await invite_jti_already_used(invite.jti):
-        raise HTTPException(status_code=410, detail="Invite link has already been used")
+        raise WsCommandError("gone", "Invite link has already been used", error_code="gone")
 
     company = await Company.get(invite.company_id)
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found or was deleted")
+        raise WsCommandError("not_found", "Company not found or was deleted", error_code="not_found")
 
     inviter = await User.get(invite.invited_by)
     if not inviter:
-        raise HTTPException(status_code=404, detail="Invite initiator not found")
+        raise WsCommandError("not_found", "Invite initiator not found", error_code="not_found")
 
     return PreviewInviteResponse(
         company_id=company.company_id,
@@ -153,24 +155,24 @@ async def accept_invite(
 
     code = body.short_code.strip()
     if code == "":
-        raise HTTPException(status_code=400, detail="Invite code is not set")
+        raise WsCommandError("ws_invalid_payload", "Invite code is not set", error_code="ws_invalid_payload")
 
     short = di.short_link_service
     jwt_str = await short.get_invite_jwt_by_code(code)
     if jwt_str is None:
-        raise HTTPException(status_code=404, detail="Invite link not found or expired")
+        raise WsCommandError("not_found", "Invite link not found or expired", error_code="not_found")
 
     svc = get_invite_token_service()
     try:
         invite = svc.validate(jwt_str)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=410, detail="Invite link is stale")
+        raise WsCommandError("gone", "Invite link is stale", error_code="gone")
     except (jwt.InvalidTokenError, ValueError):
-        raise HTTPException(status_code=403, detail="Invalid invite link")
+        raise WsCommandError("forbidden", "Invalid invite link", error_code="forbidden")
 
     company = await Company.get(invite.company_id)
     if not company:
-        raise HTTPException(status_code=404, detail="Company not found or was deleted")
+        raise WsCommandError("not_found", "Company not found or was deleted", error_code="not_found")
 
     # Уже участник: не расходуем одноразовый токен; активная компания и JWT
     # совпадают с компанией приглашения (тот же перевыпуск, что host-wins в middleware).
@@ -205,7 +207,7 @@ async def accept_invite(
     )
     burned = await burn_invite_token(invite.jti, ttl_seconds=remaining_seconds)
     if not burned:
-        raise HTTPException(status_code=410, detail="Invite link has already been used")
+        raise WsCommandError("gone", "Invite link has already been used", error_code="gone")
 
     # Добавляем пользователя в компанию
     roles = [invite.role]

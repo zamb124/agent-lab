@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from apps.realtime.di import Di
 from core.context import get_context
 from core.events.contract import PlatformEvent
 from core.models.context_models import Context
+from core.websocket import WsCommandError
 
 router = APIRouter()
 
@@ -20,7 +21,7 @@ async def get_terminal_platform_event(event_id: str, di: Di) -> PlatformEvent:
     try:
         terminal = await di.bus_service.get_terminal_for_causation(event_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"terminal for {event_id} not found") from None
+        raise WsCommandError("not_found", f"terminal for {event_id} not found", error_code="not_found") from None
     _require_readable_snapshot(
         terminal,
         user_id=context.user.user_id,
@@ -38,7 +39,7 @@ async def get_platform_event(event_id: str, di: Di) -> PlatformEvent:
     try:
         event = await di.bus_service.get_event(event_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"event {event_id} not found") from None
+        raise WsCommandError("not_found", f"event {event_id} not found", error_code="not_found") from None
     _require_readable_snapshot(
         event,
         user_id=context.user.user_id,
@@ -50,7 +51,7 @@ async def get_platform_event(event_id: str, di: Di) -> PlatformEvent:
 
 def _require_active_company_id(context: Context) -> str:
     if context.active_company is None:
-        raise HTTPException(status_code=403, detail="active company is required")
+        raise WsCommandError("forbidden", "active company is required", error_code="forbidden")
     return context.active_company.company_id
 
 
@@ -62,9 +63,9 @@ def _require_readable_snapshot(
     not_found_detail: str,
 ) -> None:
     if not _user_may_read_event(event, user_id=user_id):
-        raise HTTPException(status_code=404, detail=not_found_detail)
+        raise WsCommandError("not_found", not_found_detail, error_code="not_found")
     if event.company_id != company_id and event.company_id != "system":
-        raise HTTPException(status_code=404, detail=not_found_detail)
+        raise WsCommandError("not_found", not_found_detail, error_code="not_found")
 
 
 def _user_may_read_event(event: PlatformEvent, *, user_id: str) -> bool:

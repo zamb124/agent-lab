@@ -664,6 +664,18 @@ async def test_compute_daily_summary_raises_when_summary_empty(crm_di):
         await service.compute_daily_summary(date_str="2026-03-28", namespace=None)
 
 
+def test_extract_json_from_text_falls_through_invalid_fence(crm_di):
+    _set_test_context()
+    service = _build_service(crm_di)
+    fenced = service._extract_json_from_text('```json\n{"summary": "ok"}\n```')
+    assert fenced == {"summary": "ok"}
+    fallback = service._extract_json_from_text(
+        '```json\nnot-json\n```\n{"summary": "later"}'
+    )
+    assert fallback == {"summary": "later"}
+    assert service._extract_json_from_text("no braces here") == {}
+
+
 def test_extract_data_from_a2a_response_res_as_dict_not_string(crm_di):
     _set_test_context()
     service = _build_service(crm_di)

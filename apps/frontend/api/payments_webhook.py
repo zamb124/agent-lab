@@ -11,7 +11,7 @@ Webhook для приёма уведомлений от Т-Банка (JSON Noti
 иначе банк ретраит час/сутки/месяц.
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 
 from apps.frontend.di import Di
@@ -19,6 +19,7 @@ from core.clients.payment import PaymentProviderFactory
 from core.logging import get_logger
 from core.models.payment_models import TinkoffNotificationPayload
 from core.types import parse_json_object
+from core.websocket import WsCommandError
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments-webhook"])
@@ -33,8 +34,10 @@ async def payment_webhook(
     try:
         raw_body = parse_json_object(await request.body(), "Tinkoff webhook")
     except ValueError as exc:
-        raise HTTPException(
-            status_code=400, detail="Tinkoff webhook must be a JSON object"
+        raise WsCommandError(
+            "ws_invalid_payload",
+            "Tinkoff webhook must be a JSON object",
+            error_code="ws_invalid_payload",
         ) from exc
     logger.info(
         "payments.webhook_received",
@@ -47,7 +50,11 @@ async def payment_webhook(
     provider = PaymentProviderFactory.get_provider(provider_name)
     if not provider:
         logger.error("payments.webhook_provider_missing", provider=provider_name)
-        raise HTTPException(status_code=404, detail=f"Provider {provider_name} not found")
+        raise WsCommandError(
+            "not_found",
+            f"Provider {provider_name} not found",
+            error_code="not_found",
+        )
 
     verification = await provider.verify_webhook(raw_body)
 

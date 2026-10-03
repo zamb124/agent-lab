@@ -62,7 +62,7 @@ class CrmClient:
         return resolve_namespace_or_raise()
 
     @staticmethod
-    def _as_objects(value: object, label: str) -> list[JsonObject]:
+    def _as_objects(value: JsonValue, label: str) -> list[JsonObject]:
         items = require_json_array(value, label)
         return [require_json_object(item, f"{label}[{index}]") for index, item in enumerate(items)]
 

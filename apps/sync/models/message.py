@@ -12,9 +12,10 @@ from oxyde import Index, atomic, execute_raw
 from oxyde.queries.select import Query
 
 from apps.sync.models.lane_preview import ChannelLaneSummary, lane_preview_from_content
+from apps.sync.models.message_content import SyncMessageContent
 from apps.sync.models.messages import MessageContentModel, ReactionEntry
 from core.models.platform_model import PlatformModel
-from core.types import JsonObject, parse_json_object, require_json_object
+from core.types import JsonObject, JsonValue, parse_json_object, require_json_object
 
 
 class SyncMessage(PlatformModel):
@@ -419,57 +420,6 @@ class SyncMessage(PlatformModel):
         return base
 
 
-class SyncMessageContent(PlatformModel):
-    """Строка ``sync_message_contents``, алиас ``sync``, ``__global_model__``.
-
-    Первичный ключ в базе — ``id`` (BIGSERIAL). Поле модели — ``content_id``.
-    Колонка порядка — ``order``, поле модели — ``order_index``.
-    Ответ API — ``MessageContentModel``, не эта строка.
-    """
-
-    __database_alias__: ClassVar[str | None] = "sync"
-    __global_model__: ClassVar[bool] = True
-
-    class Meta:
-        is_table: bool = True
-        table_name: str = "sync_message_contents"
-        indexes: list[Index] = [
-            Index(["message_id"]),
-        ]
-
-    message_id: str = DbField(max_length=64)
-    type: str = DbField(max_length=64)
-    order_index: int = DbField(db_column="order", db_type="INTEGER")
-    data: JsonObject = DbField(db_type="JSONB")
-    content_id: int | None = DbField(default=None, db_pk=True, db_column="id")
-
-    @classmethod
-    async def list_for_message(cls, message_id: str) -> list[MessageContentModel]:
-        rows = await cls.objects.filter(message_id=message_id).order_by(
-            "order_index", "content_id"
-        ).all()
-        return [_content_model(row) for row in rows]
-
-
-class SyncMessageFile(PlatformModel):
-    """Строка ``sync_message_files``, алиас ``sync``, ``__global_model__``.
-
-    В базе ключ — пара ``(message_id, file_id)``. Oxyde помечает ``db_pk`` только
-    ``message_id``. ``save`` и PK-CRUD ``get``/``set``/``delete_by_id`` для неё не вызываются.
-    В ``0001`` ключ остаётся составным, оба внешних ключа ON DELETE CASCADE.
-    """
-
-    __database_alias__: ClassVar[str | None] = "sync"
-    __global_model__: ClassVar[bool] = True
-
-    class Meta:
-        is_table: bool = True
-        table_name: str = "sync_message_files"
-        unique_together: list[tuple[str, str]] = [("message_id", "file_id")]
-
-    message_id: str = DbField(db_pk=True, max_length=64)
-    file_id: str = DbField(max_length=64)
-    role: str = DbField(max_length=32)
 
 
 @dataclass(frozen=True)
@@ -485,18 +435,8 @@ def _content_data(block: MessageContentModel) -> JsonObject:
     return require_json_object(block.data.model_dump(mode="json"), "message content")
 
 
-def _content_model(row: SyncMessageContent) -> MessageContentModel:
-    raw_data = row.data
-    if isinstance(raw_data, str):
-        data = parse_json_object(raw_data, "message content")
-    else:
-        data = require_json_object(raw_data, "message content")
-    return MessageContentModel.model_validate(
-        {"type": row.type, "data": data, "order": row.order_index}
-    )
 
-
-def _str_cell(value: object, label: str) -> str:
+def _str_cell(value: JsonValue, label: str) -> str:
     if not isinstance(value, str) or value == "":
         raise ValueError(label)
     return value
@@ -536,13 +476,13 @@ async def _root_lane_after[TMessage: SyncMessage](
     return [*tied, *newer_sent_at]
 
 
-def _int_cell(value: object, label: str) -> int:
+def _int_cell(value: JsonValue, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(label)
     return value
 
 
-def _datetime_cell(value: object, label: str) -> datetime:
+def _datetime_cell(value: JsonValue | datetime, label: str) -> datetime:
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, str):

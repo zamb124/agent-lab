@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Literal, NotRequired, TypedDict, TypeGuard
 
-from core.types import JsonObject
+from core.types import JsonObject, JsonValue
 
 InteractiveRole = Literal[
     "button",
@@ -78,7 +78,7 @@ def is_interactive_role(value: str) -> TypeGuard[InteractiveRole]:
     return value in _INTERACTIVE_ROLES
 
 
-def _str(v: object) -> str:
+def _str(v: JsonValue) -> str:
     if v is None:
         return ""
     if isinstance(v, str):

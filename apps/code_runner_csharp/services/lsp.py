@@ -9,28 +9,20 @@ from pathlib import Path
 
 from core.capabilities.lsp_commands import run_exclusive_lsp_install
 from core.capabilities.models import LspWorkspace
+from core.capabilities.runner_cache import code_runner_lsp_cache_root
 from core.capabilities.runtime_executables import (
     platform_runtime_bin_dir,
     resolve_runtime_executable,
     runtime_executable_required_message,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-DOTNET_BIN_ENV = "CODE_RUNNER_DOTNET_BIN"
+from core.utils.process_env import child_process_env
 
 
 def csharp_lsp_command() -> list[str]:
     existing = shutil.which("csharp-ls")
     if existing is not None:
         return [existing]
-    cache = (
-        Path(
-            os.environ["CODE_RUNNER_LSP_CACHE"]
-            if "CODE_RUNNER_LSP_CACHE" in os.environ
-            else str(_REPO_ROOT / ".cache")
-        )
-        / "code-runner-csharp-lsp"
-    )
+    cache = code_runner_lsp_cache_root() / "code-runner-csharp-lsp"
     binary = cache / "csharp-ls"
 
     def ready() -> bool:
@@ -39,10 +31,10 @@ def csharp_lsp_command() -> list[str]:
     def install() -> None:
         if ready():
             return
-        dotnet = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
+        dotnet = resolve_runtime_executable("dotnet")
         if dotnet is None:
             raise RuntimeError(
-                runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV)
+                runtime_executable_required_message("dotnet")
             )
         cache.mkdir(parents=True, exist_ok=True)
         env = _dotnet_env(dotnet)
@@ -69,10 +61,10 @@ def csharp_lsp_command() -> list[str]:
 
 def prepare_csharp_lsp_workspace(root: Path, workspace: LspWorkspace) -> None:
     _ = workspace
-    dotnet = resolve_runtime_executable("dotnet", override_env=DOTNET_BIN_ENV)
+    dotnet = resolve_runtime_executable("dotnet")
     if dotnet is None:
         raise RuntimeError(
-            runtime_executable_required_message("dotnet", override_env=DOTNET_BIN_ENV)
+            runtime_executable_required_message("dotnet")
         )
     completed = subprocess.run(
         [dotnet, "restore", "--nologo"],
@@ -87,7 +79,7 @@ def prepare_csharp_lsp_workspace(root: Path, workspace: LspWorkspace) -> None:
 
 
 def _dotnet_env(dotnet: str) -> dict[str, str]:
-    env = os.environ.copy()
+    env = child_process_env()
     env["PATH"] = f"{platform_runtime_bin_dir()}{os.pathsep}{env.get('PATH', '')}"
     env["DOTNET_ROOT"] = str(Path(dotnet).resolve().parent)
     return env

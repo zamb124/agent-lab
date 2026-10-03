@@ -88,18 +88,18 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ),
     (
         "create_channel",
-        "apps/sync/realtime/handlers.py",
+        "apps/sync/services/channel_service.py",
         ("sync_channel_created",),
     ),
     (
-        "op_channels_add_member",
-        "apps/sync/realtime/operations.py",
+        "add_member",
+        "apps/sync/services/channel_service.py",
         ("set_member", "delete_channel_member"),
     ),
     (
         "sync_catalog_created",
         "apps/office/services/office_access_service.py",
-        ("office_catalog_owner_tuple", "authz.write"),
+        ("document_catalog_owner_tuple", "authz.write"),
     ),
     (
         "sync_catalog_deleted",
@@ -109,7 +109,7 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "sync_document_created",
         "apps/office/services/office_access_service.py",
-        ("office_document_owner_tuple",),
+        ("document_file_owner_tuple",),
     ),
     (
         "sync_document_deleted",
@@ -117,14 +117,14 @@ _MUTATORS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("authz.delete",),
     ),
     (
-        "op_catalogs_create",
-        "apps/office/realtime/operations.py",
-        ("sync_catalog_created",),
+        "ensure_path",
+        "core/documents/tree_service.py",
+        ("document_catalog_owner_tuple", "_sync_created"),
     ),
     (
-        "bind",
-        "apps/office/services/docs_placement_service.py",
-        ("sync_document_created",),
+        "place",
+        "core/documents/tree_service.py",
+        ("document_file_owner_tuple",),
     ),
     (
         "sync_flow_saved",
@@ -276,14 +276,14 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("except Exception",),
     ),
     (
-        "op_catalogs_create",
-        "apps/office/realtime/operations.py",
-        ("except Exception", "delete_catalog"),
+        "_sync_created",
+        "core/documents/tree_service.py",
+        ("except Exception", "delete_in_namespace"),
     ),
     (
-        "bind",
-        "apps/office/services/docs_placement_service.py",
-        ("except Exception", "delete_binding"),
+        "_bind_after_create",
+        "core/files/service.py",
+        ("except Exception", "delete"),
     ),
     (
         "patch_binding",
@@ -291,8 +291,8 @@ _CREATE_COMPENSATE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         ("except Exception",),
     ),
     (
-        "op_channels_add_member",
-        "apps/sync/realtime/operations.py",
+        "add_member",
+        "apps/sync/services/channel_service.py",
         ("except Exception", "delete_channel_member"),
     ),
     (

@@ -5,9 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
-
-import yaml
 
 from apps.flows.config import get_settings
 from apps.flows.src.models.mcp_branding import (
@@ -24,6 +21,7 @@ from apps.flows.src.services.mcp_defaults import build_default_mcp_servers
 from core.files.create_spec import FileCreateSpec
 from core.files.service import FilesService
 from core.logging import get_logger
+from core.types import parse_yaml_value
 
 logger = get_logger(__name__)
 
@@ -90,7 +88,7 @@ def load_mcp_branding_manifest(*, manifest_path: Path | None = None) -> MCPBrand
 
     bundle_dir = resolved_manifest_path.parent
     raw_text = resolved_manifest_path.read_text(encoding="utf-8")
-    raw_payload: object = cast(object, yaml.safe_load(raw_text))
+    raw_payload = parse_yaml_value(raw_text, "MCP branding manifest")
     manifest_payload = MCPBrandingManifestFilePayload.model_validate(raw_payload)
 
     default_icon = bundle_dir / manifest_payload.default_icon.strip()

@@ -319,10 +319,7 @@ async def dispatch_email_triggers_for_messages(
                     f"flows:email_trigger_fired:{binding.company_id}:"
                     f"{binding.mailbox_binding_id}:{flow_id}:{trigger_id}:{message.uid}"
                 )
-                existing = await shared_storage.get(
-                    key=dedup_key,
-                    force_global=True,
-                )
+                existing = await shared_storage.get(key=dedup_key)
                 if existing is not None:
                     continue
 
@@ -355,7 +352,6 @@ async def dispatch_email_triggers_for_messages(
                         {"fired_at": datetime.now(timezone.utc).isoformat()}
                     ),
                     ttl=dedup_ttl_seconds,
-                    force_global=True,
                 )
                 fired += 1
     finally:

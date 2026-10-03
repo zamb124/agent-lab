@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast, get_args
-
 from apps.flows.src.models.tool_contracts import (
     ConfirmationFloor,
     ToolArgumentSource,
@@ -23,10 +21,47 @@ _EMPTY_OBJECT_SCHEMA: JsonObject = {
     "additionalProperties": False,
 }
 
-_VALID_EFFECTS: frozenset[str] = frozenset(get_args(ToolEffect))
-_VALID_CONFIRMATION: frozenset[str] = frozenset(get_args(ConfirmationFloor))
-_VALID_IDEMPOTENCY: frozenset[str] = frozenset(get_args(ToolIdempotency))
-_VALID_ARGUMENT_SOURCES: frozenset[str] = frozenset(get_args(ToolArgumentSource))
+_EFFECTS: tuple[ToolEffect, ...] = (
+    "read",
+    "create",
+    "update",
+    "delete",
+    "external_send",
+    "financial",
+    "admin",
+    "code_execute",
+)
+_CONFIRMATION_FLOORS: tuple[ConfirmationFloor, ...] = ("none", "preview", "approval")
+_IDEMPOTENCY: tuple[ToolIdempotency, ...] = ("none", "supported", "required")
+_ARGUMENT_SOURCES: tuple[ToolArgumentSource, ...] = ("model", "binding", "runtime", "secret_ref")
+
+
+def _tool_effect(value: str, detail: str) -> ToolEffect:
+    for option in _EFFECTS:
+        if option == value:
+            return option
+    raise ValueError(detail)
+
+
+def _confirmation_floor(value: str, detail: str) -> ConfirmationFloor:
+    for option in _CONFIRMATION_FLOORS:
+        if option == value:
+            return option
+    raise ValueError(detail)
+
+
+def _idempotency(value: str, detail: str) -> ToolIdempotency:
+    for option in _IDEMPOTENCY:
+        if option == value:
+            return option
+    raise ValueError(detail)
+
+
+def _argument_source(value: str, detail: str) -> ToolArgumentSource:
+    for option in _ARGUMENT_SOURCES:
+        if option == value:
+            return option
+    raise ValueError(detail)
 
 
 def build_tool_definition_from_base_tool(tool: BaseTool) -> ToolDefinition:
@@ -58,33 +93,25 @@ def build_tool_definition_from_base_tool(tool: BaseTool) -> ToolDefinition:
                 + f"got {canonical_output.get('type')!r}"
             )
 
-    effects: list[ToolEffect] = []
-    for effect in tool.effects:
-        if effect not in _VALID_EFFECTS:
-            raise ValueError(f"BaseTool '{tool_name}' has unknown effect: {effect!r}")
-        effects.append(cast(ToolEffect, effect))
-
-    confirmation_raw = tool.confirmation_floor
-    if confirmation_raw not in _VALID_CONFIRMATION:
-        raise ValueError(
-            f"BaseTool '{tool_name}' has unknown confirmation_floor: {confirmation_raw!r}"
+    effects: list[ToolEffect] = [
+        _tool_effect(effect, f"BaseTool '{tool_name}' has unknown effect: {effect!r}")
+        for effect in tool.effects
+    ]
+    confirmation_floor = _confirmation_floor(
+        tool.confirmation_floor,
+        f"BaseTool '{tool_name}' has unknown confirmation_floor: {tool.confirmation_floor!r}",
+    )
+    idempotency = _idempotency(
+        tool.idempotency,
+        f"BaseTool '{tool_name}' has unknown idempotency: {tool.idempotency!r}",
+    )
+    argument_sources: dict[str, ToolArgumentSource] = {
+        arg_name: _argument_source(
+            source,
+            f"BaseTool '{tool_name}' argument {arg_name!r} has unknown source: {source!r}",
         )
-    confirmation_floor = cast(ConfirmationFloor, confirmation_raw)
-
-    idempotency_raw = tool.idempotency
-    if idempotency_raw not in _VALID_IDEMPOTENCY:
-        raise ValueError(
-            f"BaseTool '{tool_name}' has unknown idempotency: {idempotency_raw!r}"
-        )
-    idempotency = cast(ToolIdempotency, idempotency_raw)
-
-    argument_sources: dict[str, ToolArgumentSource] = {}
-    for arg_name, source in tool.argument_sources.items():
-        if source not in _VALID_ARGUMENT_SOURCES:
-            raise ValueError(
-                f"BaseTool '{tool_name}' argument {arg_name!r} has unknown source: {source!r}"
-            )
-        argument_sources[arg_name] = cast(ToolArgumentSource, source)
+        for arg_name, source in tool.argument_sources.items()
+    }
 
     provenance: JsonObject = {
         "owner": "platform",

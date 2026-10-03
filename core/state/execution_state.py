@@ -7,7 +7,7 @@ Zero-Guess: все системные поля явно типизированы
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from copy import deepcopy
 from typing import ClassVar, Literal, TypedDict, TypeVar, Unpack, cast, get_args, overload, override
 
 from a2a.types import Message
@@ -23,15 +23,19 @@ from pydantic import (
 from core.a2a.codec import messages_from_json_list, messages_to_json_list
 from core.agent_plan.models import AgentPlan
 from core.clients.llm.messages import LLMToolCall
+from core.errors import FrozenStateFieldError
 from core.files.file_ref import FileRef
 from core.flow_ui.document import FlowUIBlock
 from core.flow_ui.protocol import FlowUIAction, FlowUIEvent
 from core.models import FlexibleBaseModel, StrictBaseModel
 from core.reflection import ReflectionRecord
 from core.state.interrupt import InterruptData
-from core.state.mutation_policy import guard_setattr_if_user_code
+from core.state.mutation_policy import (
+    FROZEN_STATE_SNAPSHOT_FIELDS,
+    guard_setattr_if_user_code,
+)
 from core.state.trigger_runtime import TriggerRuntimeSnapshot
-from core.types import JsonObject, JsonValue, require_json_object
+from core.types import JsonObject, JsonValue, require_json_object, require_json_value
 
 ExecutionTaskState = Literal[
     "completed",
@@ -48,7 +52,6 @@ FORBIDDEN_EXECUTION_STATE_FIELD_NAMES: frozenset[str] = frozenset(
     {"terminal_status", "terminal_error", "mock", "ui_document", "ui_values"}
 )
 ChildWorkflowStatus = Literal["running", "suspended", "completed", "failed"]
-_GetDefault = TypeVar("_GetDefault")
 
 
 class ExecutionStateCreateKwargs(TypedDict, total=False):
@@ -187,13 +190,13 @@ class NestedStateData(FlexibleBaseModel):
 
     @field_validator("messages", mode="before")
     @classmethod
-    def validate_messages(cls, v: object) -> list[Message]:
+    def validate_messages(cls, v: JsonValue | list[Message]) -> list[Message]:
         """Конвертирует словари в protobuf Message."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"messages: expected list, got {type(v)}")
-        return messages_from_json_list(cast(list[object], v))
+        return messages_from_json_list(v)
 
     @field_serializer("messages", when_used="always")
     def serialize_messages(self, v: list[Message]) -> list[JsonObject]:
@@ -201,14 +204,16 @@ class NestedStateData(FlexibleBaseModel):
 
     @field_validator("interrupt_path", mode="before")
     @classmethod
-    def validate_interrupt_path(cls, v: object) -> list[InterruptPathItem]:
+    def validate_interrupt_path(
+        cls, v: JsonValue | list[InterruptPathItem]
+    ) -> list[InterruptPathItem]:
         """Конвертирует словари в объекты InterruptPathItem."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"interrupt_path: expected list, got {type(v)}")
         result: list[InterruptPathItem] = []
-        for i, item in enumerate(cast(list[object], v)):
+        for i, item in enumerate(v):
             if isinstance(item, InterruptPathItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -219,6 +224,38 @@ class NestedStateData(FlexibleBaseModel):
                     + 'Expected InterruptPathItem or dict.'
                 )
         return result
+
+
+ExecutionStateValue = (
+    JsonValue
+    | ExecutionTaskState
+    | list[Message]
+    | list[FileRef]
+    | list[InterruptPathItem]
+    | list[ExecutionExceptionRecord]
+    | list[ReflectionRecord]
+    | list[PromptHistoryItem]
+    | dict[str, TriggerRuntimeSnapshot]
+    | dict[str, NestedStateData]
+    | dict[str, ChildWorkflowLink]
+    | dict[str, bool]
+    | dict[str, list[str]]
+    | dict[str, list[FlowUIBlock]]
+    | dict[str, int]
+    | InterruptData
+    | AgentPlan
+    | FlowUIAction
+    | LLMToolCall
+)
+
+_GetDefault = TypeVar("_GetDefault", bound=ExecutionStateValue)
+
+
+def _trigger_field_dict[V](raw: dict[str, V]) -> dict[str, object]:
+    copied: dict[str, object] = {}
+    for key, value in raw.items():
+        copied[key] = cast(object, value)
+    return copied
 
 
 class ExecutionState(FlexibleBaseModel):
@@ -385,10 +422,10 @@ class ExecutionState(FlexibleBaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_forbidden_system_field_names(cls, value: object) -> object:
+    def reject_forbidden_system_field_names(cls, value: JsonValue) -> JsonValue:
         if not isinstance(value, dict):
             return value
-        raw = cast(Mapping[str, object], value)
+        raw = value
         forbidden_field_names = sorted(
             FORBIDDEN_EXECUTION_STATE_FIELD_NAMES.intersection(raw.keys())
         )
@@ -443,13 +480,13 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("messages", mode="before")
     @classmethod
-    def validate_messages(cls, v: object) -> list[Message]:
+    def validate_messages(cls, v: JsonValue | list[Message]) -> list[Message]:
         """Конвертирует словари в protobuf Message."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"messages: expected list, got {type(v)}")
-        return messages_from_json_list(cast(list[object], v))
+        return messages_from_json_list(v)
 
     @field_serializer("messages", when_used="always")
     def serialize_messages(self, v: list[Message]) -> list[JsonObject]:
@@ -457,13 +494,15 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("execution_exceptions", mode="before")
     @classmethod
-    def validate_execution_exceptions(cls, v: object) -> list[ExecutionExceptionRecord]:
+    def validate_execution_exceptions(
+        cls, v: JsonValue | list[ExecutionExceptionRecord]
+    ) -> list[ExecutionExceptionRecord]:
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"execution_exceptions: expected list, got {type(v)}")
         result: list[ExecutionExceptionRecord] = []
-        for idx, item in enumerate(cast(list[object], v)):
+        for idx, item in enumerate(v):
             if isinstance(item, ExecutionExceptionRecord):
                 result.append(item)
             elif isinstance(item, dict):
@@ -478,7 +517,7 @@ class ExecutionState(FlexibleBaseModel):
     @field_validator("triggers", mode="before")
     @classmethod
     def validate_triggers(
-        cls, v: object
+        cls, v: JsonValue | dict[str, TriggerRuntimeSnapshot]
     ) -> dict[str, TriggerRuntimeSnapshot]:
         if v is None or v == {}:
             return {}
@@ -486,14 +525,14 @@ class ExecutionState(FlexibleBaseModel):
             msg = f"triggers must be a dict, got {type(v).__name__}"
             raise TypeError(msg)
         out: dict[str, TriggerRuntimeSnapshot] = {}
-        for key, item in cast(Mapping[object, object], v).items():
-            if not isinstance(key, str):
-                msg = f"triggers keys must be str, got {type(key).__name__}"
+        for key, item in v.items():
+            if key == "":
+                msg = "triggers keys must be non-empty strings"
                 raise TypeError(msg)
             if isinstance(item, TriggerRuntimeSnapshot):
                 out[key] = item
             elif isinstance(item, dict):
-                raw_item = cast(Mapping[str, object], item)
+                raw_item = item
                 payload = raw_item.get("payload")
                 if not isinstance(payload, dict):
                     msg = f"triggers['{key}'] must include 'payload' as a dict"
@@ -503,8 +542,8 @@ class ExecutionState(FlexibleBaseModel):
                     msg = f"triggers['{key}'].context must be a dict"
                     raise TypeError(msg)
                 out[key] = TriggerRuntimeSnapshot(
-                    payload=dict(cast(Mapping[str, object], payload)),
-                    context=dict(cast(Mapping[str, object], ctx)),
+                    payload=_trigger_field_dict(payload),
+                    context=_trigger_field_dict(ctx),
                 )
             else:
                 msg = f"triggers['{key}'] must be TriggerRuntimeSnapshot or dict, got {type(item).__name__}"
@@ -548,21 +587,21 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("interrupt", mode="before")
     @classmethod
-    def validate_interrupt(cls, v: object) -> InterruptData | None:
+    def validate_interrupt(cls, v: JsonValue | InterruptData) -> InterruptData | None:
         """Конвертирует dict в InterruptData (для inline кода)."""
         if v is None:
             return None
         if isinstance(v, InterruptData):
             return v
         if isinstance(v, dict):
-            return InterruptData.model_validate(cast(object, v))
+            return InterruptData.model_validate(v)
         raise ValueError(
             f"Unexpected interrupt type: {type(v)}. "
             + 'Expected InterruptData or dict.'
         )
 
     @override
-    def __setattr__(self, name: str, value: object) -> None:
+    def __setattr__(self, name: str, value: ExecutionStateValue) -> None:
         """
         Перехватывает прямое присваивание атрибутов.
         Нормализует dict -> типизированные модели при присваивании.
@@ -576,24 +615,41 @@ class ExecutionState(FlexibleBaseModel):
                 + "Use terminal_task_state or terminal_task_error."
             )
         guard_setattr_if_user_code(name)
-        if name == "interrupt" and value is not None and isinstance(value, dict):
-            value = InterruptData.model_validate(cast(object, value))
-        if name == "child_workflows" and value is not None:
-            value = type(self).validate_child_workflows(value)
-        if name == "prompt_history" and value is not None:
-            value = ExecutionState.normalize_prompt_history(value)
+        assigned = value
+        if name == "interrupt" and assigned is not None and type(assigned) is not InterruptData:
+            value = InterruptData.model_validate(require_json_object(assigned, "interrupt"))
+        if name == "child_workflows" and assigned is not None:
+            if isinstance(assigned, dict) and all(
+                isinstance(item, ChildWorkflowLink) for item in assigned.values()
+            ):
+                value = assigned
+            else:
+                value = type(self).validate_child_workflows(
+                    require_json_object(assigned, "child_workflows")
+                )
+        if name == "prompt_history" and assigned is not None:
+            if isinstance(assigned, list) and all(
+                isinstance(item, PromptHistoryItem) for item in assigned
+            ):
+                value = assigned
+            else:
+                value = ExecutionState.normalize_prompt_history(
+                    require_json_value(assigned, "prompt_history")
+                )
         super().__setattr__(name, value)
 
     @field_validator("interrupt_path", mode="before")
     @classmethod
-    def validate_interrupt_path(cls, v: object) -> list[InterruptPathItem]:
+    def validate_interrupt_path(
+        cls, v: JsonValue | list[InterruptPathItem]
+    ) -> list[InterruptPathItem]:
         """Конвертирует словари в объекты InterruptPathItem."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"interrupt_path: expected list, got {type(v)}")
         result: list[InterruptPathItem] = []
-        for i, item in enumerate(cast(list[object], v)):
+        for i, item in enumerate(v):
             if isinstance(item, InterruptPathItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -655,19 +711,21 @@ class ExecutionState(FlexibleBaseModel):
     )
     @field_validator("child_workflows", mode="before")
     @classmethod
-    def validate_child_workflows(cls, v: object) -> dict[str, ChildWorkflowLink]:
+    def validate_child_workflows(
+        cls, v: JsonValue | dict[str, ChildWorkflowLink]
+    ) -> dict[str, ChildWorkflowLink]:
         if v is None or v == {}:
             return {}
         if not isinstance(v, dict):
             raise ValueError(f"child_workflows: expected dict, got {type(v)}")
         result: dict[str, ChildWorkflowLink] = {}
-        for key, item in cast(Mapping[object, object], v).items():
-            if not isinstance(key, str) or not key:
+        for key, item in v.items():
+            if key == "":
                 raise ValueError("child_workflows keys must be non-empty strings")
             if isinstance(item, ChildWorkflowLink):
                 result[key] = item
             elif isinstance(item, dict):
-                result[key] = ChildWorkflowLink.model_validate(cast(object, item))
+                result[key] = ChildWorkflowLink.model_validate(item)
             else:
                 raise ValueError(
                     f"child_workflows[{key!r}]: expected ChildWorkflowLink or dict, "
@@ -698,7 +756,7 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("agent_plan", mode="before")
     @classmethod
-    def _validate_agent_plan(cls, value: object) -> AgentPlan | None:
+    def _validate_agent_plan(cls, value: JsonValue | AgentPlan) -> AgentPlan | None:
         if value is None:
             return None
         if isinstance(value, AgentPlan):
@@ -776,14 +834,14 @@ class ExecutionState(FlexibleBaseModel):
     )
 
     @staticmethod
-    def normalize_prompt_history(v: object) -> list[PromptHistoryItem]:
+    def normalize_prompt_history(v: JsonValue | list[PromptHistoryItem]) -> list[PromptHistoryItem]:
         """Единая нормализация: dict/list dict -> List[PromptHistoryItem]."""
         if v is None or v == []:
             return []
         if not isinstance(v, list):
             raise ValueError(f"prompt_history: expected list, got {type(v)}")
         result: list[PromptHistoryItem] = []
-        for item in cast(list[object], v):
+        for item in v:
             if isinstance(item, PromptHistoryItem):
                 result.append(item)
             elif isinstance(item, dict):
@@ -796,7 +854,7 @@ class ExecutionState(FlexibleBaseModel):
 
     @field_validator("prompt_history", mode="before")
     @classmethod
-    def validate_prompt_history(cls, v: object) -> list[PromptHistoryItem]:
+    def validate_prompt_history(cls, v: JsonValue | list[PromptHistoryItem]) -> list[PromptHistoryItem]:
         return cls.normalize_prompt_history(v)
 
     @field_serializer("prompt_history", when_used="always")
@@ -857,15 +915,15 @@ class ExecutionState(FlexibleBaseModel):
             return key in self.__pydantic_extra__
         return False
 
-    def __getitem__(self, key: str) -> object:
+    def __getitem__(self, key: str) -> ExecutionStateValue:
         """Поддержка доступа через квадратные скобки."""
         if key in type(self).model_fields:
-            return cast(object, self.__dict__[key])
+            return cast(ExecutionStateValue, self.__dict__[key])
         if self.__pydantic_extra__ and key in self.__pydantic_extra__:
-            return cast(object, self.__pydantic_extra__[key])
+            return cast(ExecutionStateValue, self.__pydantic_extra__[key])
         raise KeyError(key)
 
-    def __setitem__(self, key: str, value: object) -> None:
+    def __setitem__(self, key: str, value: ExecutionStateValue) -> None:
         """Поддержка присваивания через квадратные скобки."""
         self.__setattr__(key, value)
 
@@ -879,17 +937,42 @@ class ExecutionState(FlexibleBaseModel):
     def get(self, key: Literal["tool_results"], default: JsonObject) -> JsonObject: ...
 
     @overload
-    def get(self, key: str, default: _GetDefault) -> object | _GetDefault: ...
+    def get(self, key: str, default: _GetDefault) -> ExecutionStateValue | _GetDefault: ...
 
     @overload
-    def get(self, key: str) -> object | None: ...
+    def get(self, key: str) -> ExecutionStateValue | None: ...
 
-    def get(self, key: str, default: object | None = None) -> object | None:
+    def get(self, key: str, default: ExecutionStateValue | None = None) -> ExecutionStateValue | None:
         """Поддержка метода get как у dict."""
         try:
             return self[key]
         except KeyError:
             return default
+
+
+def snapshot_frozen_fields(state: ExecutionState) -> dict[str, ExecutionStateValue]:
+    """Глубокий снимок frozen-полей до исполнения user/eval-кода.
+
+    Живёт в слое модели (не в mutation_policy): снимок хранит
+    ``ExecutionStateValue`` — политика состояния типом не оперирует.
+    """
+    out: dict[str, ExecutionStateValue] = {}
+    for key in FROZEN_STATE_SNAPSHOT_FIELDS:
+        out[key] = deepcopy(state[key])
+    return out
+
+
+def assert_frozen_fields_unchanged(
+    state: ExecutionState,
+    snapshot: dict[str, ExecutionStateValue],
+) -> None:
+    """Проверяет, что user/eval-код не поменял frozen-поля in-place."""
+    for key, old_val in snapshot.items():
+        if old_val != state[key]:
+            raise FrozenStateFieldError(
+                field=key,
+                reason="in_place_mutation",
+            )
 
 
 # Короткий алиас для удобства
@@ -909,4 +992,6 @@ __all__ = [
     "PromptHistoryItem",
     "ExecutionExceptionRecord",
     "ReflectionRecord",
+    "snapshot_frozen_fields",
+    "assert_frozen_fields_unchanged",
 ]

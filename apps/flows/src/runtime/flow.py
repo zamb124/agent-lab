@@ -74,6 +74,7 @@ from core.errors import (
 from core.flow_ui.document import FlowUIDocument
 from core.logging import get_logger
 from core.state import ExecutionState
+from core.state.execution_state import ExecutionStateValue
 from core.state.interrupt import HandoffInterrupt, OperatorTaskInterrupt
 from core.state.mutation_policy import (
     should_skip_field_on_runtime_node_state_merge,
@@ -84,6 +85,7 @@ from core.tracing.provider import is_tracing_enabled
 from core.types import (
     JsonArray,
     JsonObject,
+    JsonValue,
     parse_json_object,
     require_json_array,
     require_json_object,
@@ -1149,7 +1151,11 @@ class Flow:
             raise ValueError(message) from e
 
     @staticmethod
-    def _evaluate_binary_condition(left: object, op_str: str, right: object) -> bool:
+    def _evaluate_binary_condition(
+        left: ExecutionStateValue | None,
+        op_str: str,
+        right: JsonValue,
+    ) -> bool:
         if op_str == "==":
             return left == right
         if op_str == "!=":

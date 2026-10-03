@@ -13,9 +13,9 @@ alwaysApply: false
 
 ## Модель
 
-- `SyncChannel` (`apps/sync/models/channel.py`), таблица `sync_channels`, PK `channel_id`: тип `direct` | `group` | `topic` | `calendar_meeting`, `namespace` (slug `company_workspace`), `pinned_message_ids`, флаги `transcribe_voice_messages` и `speech_to_chat_enabled` поверх `Namespace.sync_settings` (`NamespaceSyncSettings`, `core/models/identity_models.py`).
-- `SyncChannelMember` (тот же файл), таблица `sync_channel_members`, ключ `(channel_id, user_id)` — dual-write зеркало настроек участника: `last_read_at` корневой ленты, `notifications_muted`; не PDP, колонки `role` нет.
-- `SyncThread` (`apps/sync/models/threads.py`), PK `thread_id`. `SyncMessage`, `SyncMessageContent`, `SyncMessageFile` (`apps/sync/models/message.py`): PK `message_id`, `thread_id`, `parent_message_id`, `call_id`, `reactions`, `deleted_at`, `forwarded_from_*`; полиморфное содержимое; вложения по `file_id`.
+- `SyncChannel` (`apps/sync/models/channel.py`), таблица `sync_channels`, PK `channel_id`: тип `direct` | `group` | `topic` | `calendar_meeting`, `namespace` (slug `company_workspace`), `pinned_message_ids`, флаги `transcribe_voice_messages` и `speech_to_chat_enabled` поверх `Namespace.sync_settings` (`NamespaceSyncSettings`, `core/models/identity_models/contracts.py`).
+- `SyncChannelMember` (`apps/sync/models/channel_member.py`), таблица `sync_channel_members`, ключ `(channel_id, user_id)` — dual-write зеркало настроек участника: `last_read_at` корневой ленты, `notifications_muted`; не PDP, колонки `role` нет.
+- `SyncThread` (`apps/sync/models/threads.py`), PK `thread_id`. `SyncMessage` (`apps/sync/models/message.py`), `SyncMessageContent` (`apps/sync/models/message_content.py`), `SyncMessageFile` (`apps/sync/models/message_file.py`): PK `message_id`, `thread_id`, `parent_message_id`, `call_id`, `reactions`, `deleted_at`, `forwarded_from_*`; полиморфное содержимое; вложения по `file_id`.
 - Блоки содержимого (`apps/sync/models/messages.py`): `text/plain` (`TextPlainContent.origin` ∈ `typed` | `speech`, длина до `SYNC_MESSAGE_TEXT_MAX_CHARS`), `file/audio`, `file/video` (`AudioAttachmentContent`, `VideoAttachmentContent` в `core/files/models.py`, статус транскрипции `idle` | `processing` | `done` | `failed`), `call/boundary` (`phase` ∈ `started` | `ended`, `call_id`).
 - `SyncCall` (`apps/sync/models/call.py`), PK `call_id`: `mode`, `status` ∈ `ringing` | `active` | `ended`, `livekit_room_name`, `created_by_user_id` — админ встречи. `SyncCallParticipant` (`apps/sync/models/call_participant.py`), PK `call_participant_id`, `status` ∈ `invited` | `joined` | `declined` | `left`.
 - `SyncCallLink` (`apps/sync/models/call_link.py`): `link_token`, `expires_at`, `is_persistent_channel_link`. `SyncCallRecording` (`apps/sync/models/meetings.py`), PK `recording_id`: `status` ∈ `requested` | `recording` | `uploaded` | `failed`, `provider_job_id`, `started_by_user_id`, `raw_file_id`. `SyncCallSpeechEgressTrack` (`apps/sync/models/speech_egress.py`) — сегменты речи по `(call_id, track_sid)`.
@@ -75,7 +75,7 @@ alwaysApply: false
 
 ## Контракты
 
-- Команды — `SYNC_OPERATIONS` (`apps/sync/realtime/command_router.py`); REST-зеркало — `apps/sync/api/**` под `/sync/api/v1/` → `architecture.mdc § REST-зеркало`.
+- Команды — `SYNC_OPERATIONS` (`apps/sync/realtime/command_router.py`); REST-зеркало — `apps/sync/api/**` под `/sync/api/v1/` → `architecture.mdc § REST-зеркало`. `op_channels_*` вызывает `SyncChannelService` (`apps/sync/services/channel_service.py`).
 - HTTP-фабрики Sync из `COMMAND_WS_HTTP_ALLOWLIST` (`scripts/check_command_rest_mirror.py`): `sync/call_join_info`, `sync/call_join_accept` — гостевой вход до сессии.
 - Публичные маршруты без auth: `/sync/api/v1/calls/join/*` и страница `/sync/join/{token}`.
 - Push (`apps/sync/events.py`): `sync/channel/created`, `member_added`, `read_updated`, `pins_changed`, `typing`; `sync/thread/created`; `sync/message/created`, `updated`, `deleted`, `reaction_changed`, `status_changed`; `sync/call/incoming`, `accepted`, `declined`, `ended`, `signaled`, `participant_joined`, `participant_left`, `recording_started`, `recording_stopped`, `recording_failed`, `admin_changed`; `sync/git_resource/upserted`.
@@ -98,6 +98,17 @@ alwaysApply: false
 
 ## Гейты
 
+- `scripts/check_sync_file_upload_op.py` (`make lint`) — `op_files_upload_completed` зовёт `FilesService.require_stored_file_ref`.
+- `scripts/check_sync_company_directory_ops.py` (`make lint`) — участники компании и общие каналы зовут `SyncChannelService`.
+- `scripts/check_sync_call_link_ops.py` (`make lint`) — ссылки на звонок и вход гостя зовут `SyncCallLinkService`.
+- `scripts/check_sync_call_session_ops.py` (`make lint`) — чтение звонка, токен, TURN, сигнал и передача админа зовут `SyncCallService`.
+- `scripts/check_sync_call_lifecycle_ops.py` (`make lint`) — приглашение, принятие, отказ и выход из звонка зовут `SyncCallService`.
+- `scripts/check_sync_call_recording_ops.py` (`make lint`) — старт и стоп записи звонка зовут `SyncCallRecordingService`.
+- `scripts/check_sync_thread_git_ops.py` (`make lint`) — `op_threads_*` и `op_git_resources_*` зовут сервис.
+- `scripts/check_sync_message_send.py` (`make lint`) — `send_message` живёт в `apps/sync/services/message_service.py`.
+- `scripts/check_sync_message_ops.py` (`make lint`) — `op_messages_*` зовёт `SyncMessageService`.
+- `scripts/check_sync_message_model_files.py` (`make lint`) — одна таблица на файл сообщения и канала.
+- `scripts/check_sync_channel_ops.py` (`make lint`) — `op_channels_*` не читает модели канала.
 - `tests/realtime/test_sync_commands.py` — WS и REST дают один результат для всех `SYNC_OPERATIONS`.
 - `scripts/check_command_rest_mirror.py` (`make lint`) — HTTP-фабрики Sync только из allowlist, имя push не совпадает с командой.
 - `scripts/check_files_canon.py` (`make lint`) — байты Sync только через chunked Files API.

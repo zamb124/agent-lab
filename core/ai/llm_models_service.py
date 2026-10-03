@@ -128,16 +128,28 @@ class LLMModelsService:
         return await self.sync_models_by_provider(settings.llm.provider)
 
     async def sync_all_providers(self) -> dict[str, int]:
-        """Sync models from every configured provider adapter."""
+        """Sync models from every configured provider adapter.
+
+        A failing provider is logged and skipped so one dead endpoint cannot
+        block the scheduled sync of the remaining providers.
+        """
         providers = [
             adapter.provider
             for adapter in self._registry().all()
             if adapter.is_configured()
         ]
-        counts = await asyncio.gather(
-            *(self.sync_models_by_provider(provider) for provider in providers)
+        outcomes = await asyncio.gather(
+            *(self.sync_models_by_provider(provider) for provider in providers),
+            return_exceptions=True,
         )
-        results = dict(zip(providers, counts, strict=True))
+        results: dict[str, int] = {}
+        for provider, outcome in zip(providers, outcomes, strict=True):
+            if isinstance(outcome, BaseException):
+                logger.warning(
+                    "ai.provider_sync_failed", provider=provider, error=str(outcome)
+                )
+                continue
+            results[provider] = outcome
 
         total = sum(results.values())
         logger.info("ai.event", total=total, results=results)

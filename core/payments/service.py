@@ -373,7 +373,7 @@ class PaymentService:
                 payment_provider=provider_type,
                 transaction_id=transaction_id,
             )
-            data = await self._storage.get(key, force_global=True)
+            data = await self._storage.get(key)
             if data is not None:
                 logger.debug("payments.transaction.found", key=key)
                 return Transaction.model_validate_json(data)
@@ -392,7 +392,6 @@ class PaymentService:
         raw_transactions = await self._storage.get_all_by_prefix(
             prefix,
             limit=offset + limit,
-            force_global=True,
         )
         for data in raw_transactions.values():
             transaction = Transaction.model_validate_json(data)
@@ -421,7 +420,6 @@ class PaymentService:
             newest_first=newest_first,
             created_after=created_after,
             created_before=created_before,
-            force_global=True,
         )
         return [Transaction.model_validate_json(payload) for payload in payloads]
 
@@ -480,7 +478,7 @@ class PaymentService:
 
         logger.debug("payments.transaction.save", key=key)
 
-        success = await self._storage.set(key, transaction.model_dump_json(), force_global=True)
+        success = await self._storage.set(key, transaction.model_dump_json())
 
         logger.debug("payments.transaction.saved", success=success)
 
@@ -491,7 +489,6 @@ class PaymentService:
         _ = await self._storage.set(
             f"payment_notification:{notification.notification_id}",
             notification.model_dump_json(),
-            force_global=True,
         )
 
     async def finalize_successful_payment(self, transaction: Transaction) -> bool:

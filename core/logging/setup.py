@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys
 
 import structlog
@@ -39,27 +38,30 @@ _initialized = False
 _initialized_for: tuple[str, str] | None = None
 
 
-def _resolve_environment() -> str:
-    """local / test / production по ENV."""
-    if is_testing():
+def log_deployment_environment(
+    *,
+    testing: bool,
+    server_env: str,
+    deployment_version: str | None,
+) -> str:
+    """Метка deployment.environment: test, production или local."""
+    if testing:
         return "test"
-    env = (
-        _safe_env("PLATFORM_ENV")
-        or _safe_env("DEPLOYMENT_ENV")
-        or _safe_env("ENV")
-    )
-    if env:
-        env_lower = env.lower()
-        if env_lower in {"local", "test", "production"}:
-            return env_lower
-    if _safe_env("DEPLOYMENT_VERSION") or _safe_env("SERVER__DEPLOYMENT_VERSION"):
+    if isinstance(deployment_version, str) and deployment_version.strip() != "":
         return "production"
+    configured = server_env.strip().lower()
+    if configured in {"local", "test"}:
+        return configured
     return "local"
 
 
-def _safe_env(name: str) -> str:
-    value = os.environ.get(name)
-    return value.strip() if isinstance(value, str) else ""
+def _resolve_environment() -> str:
+    server = get_settings().server
+    return log_deployment_environment(
+        testing=is_testing(),
+        server_env=server.env,
+        deployment_version=server.deployment_version,
+    )
 
 
 def _build_processors_chain(
@@ -159,7 +161,7 @@ def setup_logging(service_name: str, logging_config: LoggingConfig | None = None
     if _initialized:
         if _initialized_for == (service_name, format_name):
             return
-        if os.getenv("TESTING") == "true" or "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
+        if is_testing() or "pytest" in sys.modules:
             return
         raise LoggingMisconfigured(
             'setup_logging was already called with different parameters: '

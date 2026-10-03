@@ -1,5 +1,5 @@
 """
-BFF documents/office: реальные PostgreSQL (platform_office), MinIO, httpx; callback — GET с aiohttp (как URL от Document Server).
+BFF documents/office: реальные PostgreSQL (platform_office), S3, httpx; callback — GET с aiohttp (как URL от Document Server).
 """
 
 from __future__ import annotations
@@ -564,7 +564,7 @@ async def test_office_catalog_list_includes_rag_index_enabled(
 
 
 @pytest.mark.asyncio
-async def test_office_list_documents_marks_missing_file_without_500(
+async def test_office_list_documents_survives_deleted_file_without_500(
     office_client,
     auth_headers_system,
     unique_id,
@@ -579,7 +579,6 @@ async def test_office_list_documents_marks_missing_file_without_500(
     assert create_response.status_code == 200
     created = create_response.json()
     file_id = created["file_id"]
-    file_id = created["file_id"]
 
     deleted = await FileRecord.delete_by_id(file_id)
     assert deleted is True
@@ -592,13 +591,10 @@ async def test_office_list_documents_marks_missing_file_without_500(
     assert list_response.status_code == 200
     items = list_response.json()["items"]
     match = next((item for item in items if item["file_id"] == file_id), None)
-    assert match is not None
-    assert match["file_availability"] == "missing"
-    assert match["file_size"] == 0
-    assert match["title"] == title
+    assert match is None
 
     delete_response = await office_client.delete(
         f"/documents/api/v1/documents/{file_id}",
         headers=auth_headers_system,
     )
-    assert delete_response.status_code == 204
+    assert delete_response.status_code == 404

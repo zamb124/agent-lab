@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
-from typing import Final, Protocol, cast
+from collections.abc import Awaitable, Mapping, Sequence
+from typing import Final, Protocol
 
 from openfga_sdk import ClientConfiguration, OpenFgaClient, ReadRequestTupleKey
 from openfga_sdk.client.models import (
@@ -26,11 +26,13 @@ from openfga_sdk.client.models.write_conflict_opts import (
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.exceptions import ApiException, OpenApiException
 from openfga_sdk.models import ConsistencyPreference, FgaObject, UserTypeFilter
+from openfga_sdk.models.expand_response import ExpandResponse
 
 from core.authz.errors import AuthzConfigError, AuthzUnavailable
 from core.authz.ids import to_fga_object_id
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.types import AuthzConsistency, AuthzObjectType, AuthzRelation
+from core.imports import typed_view
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -56,7 +58,7 @@ def _is_openfga_write_retryable(exc: BaseException) -> bool:
     if "deadline_exceeded" in message or "request deadline exceeded" in message:
         return False
     if isinstance(exc, ApiException):
-        status = cast(object, exc.status)
+        status = _api_exception_view(exc).status
         if isinstance(status, int) and status in _WRITE_RETRYABLE_STATUSES:
             return True
         if exc.is_retryable():
@@ -123,6 +125,66 @@ class _TupleView(Protocol):
 class _ReadResponseView(Protocol):
     tuples: list[_TupleView] | None
     continuation_token: str | None
+
+
+_FgaCallOptions = Mapping[str, int | str | dict[str, int | str] | ConflictOptions]
+
+
+class _OpenFgaSdk(Protocol):
+    def check(
+        self,
+        body: ClientCheckRequest,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[_CheckResponseView]: ...
+
+    def list_objects(
+        self,
+        body: ClientListObjectsRequest,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[_ListObjectsResponseView]: ...
+
+    def list_users(
+        self,
+        body: ClientListUsersRequest,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[_ListUsersResponseView]: ...
+
+    def write(
+        self,
+        body: ClientWriteRequest,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[None]: ...
+
+    def expand(
+        self,
+        body: ClientExpandRequest,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[ExpandResponse]: ...
+
+    def read(
+        self,
+        body: ReadRequestTupleKey,
+        *,
+        options: _FgaCallOptions | None,
+    ) -> Awaitable[_ReadResponseView]: ...
+
+
+class _ApiExceptionView(Protocol):
+    status: int | None
+    body: bytes | str | None
+
+
+def _openfga_sdk(client: OpenFgaClient) -> _OpenFgaSdk:
+    return typed_view(client, OpenFgaClient, _OpenFgaSdk)
+
+
+def _api_exception_view(exc: ApiException) -> _ApiExceptionView:
+    return typed_view(exc, ApiException, _ApiExceptionView)
 
 
 def _fga_context(
@@ -202,7 +264,7 @@ class OpenFgaAuthzClient:
         context: Mapping[str, str | int] | None = None,
         consistency: AuthzConsistency | None = None,
     ) -> bool:
-        client = await self._get_client()
+        client = _openfga_sdk(await self._get_client())
         request = ClientCheckRequest(
             user=subject.fga_user,
             relation=relation.value,
@@ -211,10 +273,7 @@ class OpenFgaAuthzClient:
             context=_fga_context(context),
         )
         try:
-            response = cast(
-                _CheckResponseView,
-                await client.check(request, options=_consistency_options(consistency)),
-            )
+            response = await client.check(request, options=_consistency_options(consistency))
         except _OpenFgaTransportError as exc:
             raise AuthzUnavailable(f"OpenFGA check failed: {exc}") from exc
         if not isinstance(response.allowed, bool):
@@ -288,18 +347,15 @@ class OpenFgaAuthzClient:
         *,
         consistency: AuthzConsistency | None = None,
     ) -> list[AuthzObject]:
-        client = await self._get_client()
+        client = _openfga_sdk(await self._get_client())
         request = ClientListObjectsRequest(
             user=subject.fga_user,
             relation=relation.value,
             type=object_type.value,
         )
         try:
-            response = cast(
-                _ListObjectsResponseView,
-                await client.list_objects(
-                    request, options=_consistency_options(consistency)
-                ),
+            response = await client.list_objects(
+                request, options=_consistency_options(consistency)
             )
         except _OpenFgaTransportError as exc:
             raise AuthzUnavailable(f"OpenFGA list_objects failed: {exc}") from exc
@@ -323,7 +379,7 @@ class OpenFgaAuthzClient:
         user_filters: Sequence[AuthzObjectType] | None = None,
         consistency: AuthzConsistency | None = None,
     ) -> list[str]:
-        client = await self._get_client()
+        client = _openfga_sdk(await self._get_client())
         filters = [
             (
                 UserTypeFilter(type=t.value, relation="member")
@@ -341,18 +397,14 @@ class OpenFgaAuthzClient:
             user_filters=list(filters),
         )
         try:
-            response = cast(
-                _ListUsersResponseView,
-                await client.list_users(
-                    request, options=_consistency_options(consistency)
-                ),
+            response = await client.list_users(
+                request, options=_consistency_options(consistency)
             )
         except _OpenFgaTransportError as exc:
             detail = str(exc).strip()
             if not detail and isinstance(exc, ApiException):
-                status = cast(object, exc.status)
-                body = cast(object, exc.body)
-                detail = f"status={status!r} body={body!r}"
+                viewed = _api_exception_view(exc)
+                detail = f"status={viewed.status!r} body={viewed.body!r}"
             if not detail:
                 detail = repr(exc)
             raise AuthzUnavailable(f"OpenFGA list_users failed: {detail}") from exc
@@ -393,20 +445,17 @@ class OpenFgaAuthzClient:
         deletes_unique = list(delete_keys.values())
         if not writes_unique and not deletes_unique:
             return
-        client = await self._get_client()
+        client = _openfga_sdk(await self._get_client())
         request = ClientWriteRequest(
             writes=_to_client_tuples(writes_unique),
             deletes=_to_client_tuples(deletes_unique),
         )
-        write_options = cast(
-            dict[str, int | str | dict[str, int | str]],
-            {
-                "conflict": ConflictOptions(
-                    on_duplicate_writes=ClientWriteRequestOnDuplicateWrites.IGNORE,
-                    on_missing_deletes=ClientWriteRequestOnMissingDeletes.IGNORE,
-                )
-            },
-        )
+        write_options = {
+            "conflict": ConflictOptions(
+                on_duplicate_writes=ClientWriteRequestOnDuplicateWrites.IGNORE,
+                on_missing_deletes=ClientWriteRequestOnMissingDeletes.IGNORE,
+            )
+        }
         for attempt_index in range(_WRITE_RETRY_ATTEMPTS):
             try:
                 _ = await client.write(request, options=write_options)
@@ -426,14 +475,11 @@ class OpenFgaAuthzClient:
         relation: AuthzRelation,
         *,
         consistency: AuthzConsistency | None = None,
-    ) -> object:
-        client = await self._get_client()
+    ) -> ExpandResponse:
+        client = _openfga_sdk(await self._get_client())
         request = ClientExpandRequest(relation=relation.value, object=obj.fga_id)
         try:
-            return cast(
-                object,
-                await client.expand(request, options=_consistency_options(consistency)),
-            )
+            return await client.expand(request, options=_consistency_options(consistency))
         except _OpenFgaTransportError as exc:
             raise AuthzUnavailable(f"OpenFGA expand failed: {exc}") from exc
 
@@ -455,7 +501,7 @@ class OpenFgaAuthzClient:
         """
         if obj is None and object_type is None:
             raise AuthzConfigError("list_tuples requires obj or object_type")
-        client = await self._get_client()
+        client = _openfga_sdk(await self._get_client())
         type_filter: AuthzObjectType | None = None
         relation_filter: AuthzRelation | None = None
         if obj is not None:
@@ -488,9 +534,7 @@ class OpenFgaAuthzClient:
             if continuation_token is not None:
                 options["continuation_token"] = continuation_token
             try:
-                response = cast(
-                    _ReadResponseView, await client.read(body, options=options)
-                )
+                response = await client.read(body, options=options)
             except _OpenFgaTransportError as exc:
                 raise AuthzUnavailable(f"OpenFGA read failed: {exc}") from exc
             raw_tuples = response.tuples

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from apps.flows.src.clients.browser_client import BrowserClient
+from apps.flows.src.services.browser_client import BrowserClient
 from apps.flows.src.tools.decorator import tool
 from core.types import JsonObject, JsonValue
 
@@ -99,8 +99,8 @@ class BrowserDuckduckgoLinksBatchArgs(BaseModel):
         min_length=1,
         description="Список поисковых фраз; хотя бы одна непустая после нормализации.",
     )
-    server_id: str = Field("browser", min_length=1)
-    per_query_limit: int = Field(5, ge=1, le=50)
+    server_id: str = Field("browser", min_length=1, description="Id MCP-сервера браузера.")
+    per_query_limit: int = Field(5, ge=1, le=50, description="Максимум URL на запрос.")
 
     @field_validator("queries", mode="before")
     @classmethod
@@ -123,20 +123,38 @@ class BrowserPageMarkdownArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     url: str = Field(..., min_length=1, description="HTTP(S) URL страницы.")
-    server_id: str = Field("browser", min_length=1)
-    navigation_timeout_ms: int = Field(30000, ge=1)
-    ingest_source: str = Field("simple_crawler", min_length=1)
-    max_markdown_chars: int = Field(DEFAULT_BROWSER_MARKDOWN_MAX_CHARS, ge=1, le=50_000)
+    server_id: str = Field("browser", min_length=1, description="Id MCP-сервера браузера.")
+    navigation_timeout_ms: int = Field(30000, ge=1, description="Таймаут навигации, мс.")
+    ingest_source: str = Field(
+        "simple_crawler",
+        min_length=1,
+        description="Метаданные source для загрузки HTML в S3.",
+    )
+    max_markdown_chars: int = Field(
+        DEFAULT_BROWSER_MARKDOWN_MAX_CHARS,
+        ge=1,
+        le=50_000,
+        description="Жёсткий лимит символов markdown в ответе.",
+    )
 
 
 class BrowserPageSnapshotArgs(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    url: str = Field(..., min_length=1)
-    server_id: str = Field("browser", min_length=1)
-    navigation_timeout_ms: int = Field(30000, ge=1)
-    ingest_source: str = Field("simple_crawler", min_length=1)
-    max_markdown_chars: int = Field(DEFAULT_BROWSER_MARKDOWN_MAX_CHARS, ge=1, le=50_000)
+    url: str = Field(..., min_length=1, description="HTTP(S) URL страницы.")
+    server_id: str = Field("browser", min_length=1, description="Id MCP-сервера браузера.")
+    navigation_timeout_ms: int = Field(30000, ge=1, description="Таймаут навигации, мс.")
+    ingest_source: str = Field(
+        "simple_crawler",
+        min_length=1,
+        description="Метаданные source для загрузки HTML в S3.",
+    )
+    max_markdown_chars: int = Field(
+        DEFAULT_BROWSER_MARKDOWN_MAX_CHARS,
+        ge=1,
+        le=50_000,
+        description="Жёсткий лимит символов markdown в ответе.",
+    )
 
 
 @tool(

@@ -7,11 +7,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from core.files.file_ref import FileRef
-from core.types import JsonObject, require_json_array, require_json_object
+from core.types import JsonObject, JsonValue, require_json_array, require_json_object
 
 
 def validate_node_files_list(
-    files: object,
+    files: JsonValue,
     *,
     node_id: str,
 ) -> None:

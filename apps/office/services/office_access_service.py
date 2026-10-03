@@ -3,19 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Literal
 
-from apps.office.authz.tuples import (
-    office_catalog_company_link,
-    office_catalog_company_viewer_tuple,
-    office_catalog_member_tuple,
-    office_catalog_owner_tuple,
-    office_catalog_parent_tuple,
-    office_document_catalog_link,
-    office_document_owner_tuple,
-)
-from apps.office.db.models import OfficeDocumentBinding, OfficeDocumentCatalog
 from apps.office.models.api import (
     OfficeAccessMemberRelation,
     OfficePublicCatalogItem,
@@ -26,11 +15,25 @@ from apps.office.models.api import (
     OfficeResourceAccessResponse,
     OfficeResourceAccessRotateLinkResponse,
 )
+from apps.office.models.link import DocumentLink
+from apps.office.services.document_lifecycle import document_title
+from apps.office.services.file_binding_metadata import resolve_binding_metadata
 from apps.office.services.public_link_tokens import create_share_token
 from core.auth.utils import hash_token
 from core.authz.models import AuthzCheckItem, AuthzObject, AuthzSubject, AuthzTuple
 from core.authz.service import AuthzService
 from core.authz.types import AuthzRelation, AuthzSubjectKind
+from core.documents.authz.tuples import (
+    document_catalog_company_link,
+    document_catalog_company_viewer_tuple,
+    document_catalog_member_tuple,
+    document_catalog_owner_tuple,
+    document_catalog_parent_tuple,
+    document_file_catalog_link,
+    document_file_owner_tuple,
+)
+from core.documents.catalog import DocumentCatalog
+from core.files.models import FileRecord
 
 OfficeLinkPermission = Literal["viewer", "editor"]
 OfficeAccessResourceKind = Literal["catalog", "binding"]
@@ -44,8 +47,8 @@ _MEMBER_RELATIONS: tuple[AuthzRelation, ...] = (
 @dataclass(frozen=True)
 class PublicLinkTarget:
     kind: OfficeAccessResourceKind
-    catalog: OfficeDocumentCatalog | None
-    binding: OfficeDocumentBinding | None
+    catalog: DocumentCatalog | None
+    binding: FileRecord | None
     token_hash: str
 
 
@@ -64,29 +67,29 @@ class OfficeAccessService:
         return f"{base}/documents/p/{raw_token}"
 
     def _catalog_obj(self, catalog_id: str) -> AuthzObject:
-        return AuthzObject.office_catalog(catalog_id)
+        return AuthzObject.document_catalog(catalog_id)
 
     def _document_obj(self, file_id: str) -> AuthzObject:
-        return AuthzObject.office_document(file_id)
+        return AuthzObject.document_file(file_id)
 
     async def sync_catalog_created(
         self,
-        catalog: OfficeDocumentCatalog,
+        catalog: DocumentCatalog,
         *,
         owner_user_id: str,
         company_visible: bool,
     ) -> None:
         writes: list[AuthzTuple] = [
-            office_catalog_owner_tuple(catalog.catalog_id, owner_user_id),
-            office_catalog_company_link(catalog.catalog_id, catalog.company_id),
+            document_catalog_owner_tuple(catalog.catalog_id, owner_user_id),
+            document_catalog_company_link(catalog.catalog_id, catalog.company_id),
         ]
         if catalog.parent_catalog_id is not None:
             writes.append(
-                office_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id)
+                document_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id)
             )
         if company_visible:
             writes.append(
-                office_catalog_company_viewer_tuple(
+                document_catalog_company_viewer_tuple(
                     catalog.catalog_id, catalog.company_id
                 )
             )
@@ -99,28 +102,32 @@ class OfficeAccessService:
 
     async def sync_document_created(
         self,
-        binding: OfficeDocumentBinding,
+        record: FileRecord,
         *,
         owner_user_id: str,
     ) -> None:
+        if record.catalog_id is None:
+            raise ValueError("file has no catalog")
         await self._authz.write(
             [
-                office_document_owner_tuple(binding.file_id, owner_user_id),
-                office_document_catalog_link(binding.file_id, binding.catalog_id),
+                document_file_owner_tuple(record.file_id, owner_user_id),
+                document_file_catalog_link(record.file_id, record.catalog_id),
             ]
         )
 
     async def sync_document_moved(
         self,
-        binding: OfficeDocumentBinding,
+        record: FileRecord,
         *,
         old_catalog_id: str,
     ) -> None:
-        if old_catalog_id == binding.catalog_id:
+        if record.catalog_id is None:
+            raise ValueError("file has no catalog")
+        if old_catalog_id == record.catalog_id:
             return
         await self._authz.write_and_delete(
-            [office_document_catalog_link(binding.file_id, binding.catalog_id)],
-            [office_document_catalog_link(binding.file_id, old_catalog_id)],
+            [document_file_catalog_link(record.file_id, record.catalog_id)],
+            [document_file_catalog_link(record.file_id, old_catalog_id)],
         )
 
     async def sync_document_deleted(self, file_id: str) -> None:
@@ -130,12 +137,12 @@ class OfficeAccessService:
 
     async def set_catalog_company_visible(
         self,
-        catalog: OfficeDocumentCatalog,
+        catalog: DocumentCatalog,
         *,
         company_visible: bool,
     ) -> None:
-        link = office_catalog_company_link(catalog.catalog_id, catalog.company_id)
-        viewer = office_catalog_company_viewer_tuple(
+        link = document_catalog_company_link(catalog.catalog_id, catalog.company_id)
+        viewer = document_catalog_company_viewer_tuple(
             catalog.catalog_id, catalog.company_id
         )
         if company_visible:
@@ -151,25 +158,25 @@ class OfficeAccessService:
             for item in tuples
         )
 
-    async def ensure_catalog_authz(self, catalog: OfficeDocumentCatalog) -> None:
+    async def ensure_catalog_authz(self, catalog: DocumentCatalog) -> None:
         """Дописывает owner/company/parent, если SQL-запись есть, а tuples нет."""
         existing = await self._authz.list_tuples(self._catalog_obj(catalog.catalog_id))
         relations = {item.relation for item in existing}
         writes: list[AuthzTuple] = []
         if AuthzRelation.OWNER not in relations:
             writes.append(
-                office_catalog_owner_tuple(catalog.catalog_id, catalog.owner_user_id)
+                document_catalog_owner_tuple(catalog.catalog_id, catalog.owner_user_id)
             )
         if AuthzRelation.COMPANY not in relations:
             writes.append(
-                office_catalog_company_link(catalog.catalog_id, catalog.company_id)
+                document_catalog_company_link(catalog.catalog_id, catalog.company_id)
             )
         if (
             catalog.parent_catalog_id is not None
             and AuthzRelation.PARENT not in relations
         ):
             writes.append(
-                office_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id)
+                document_catalog_parent_tuple(catalog.catalog_id, catalog.parent_catalog_id)
             )
         if writes:
             await self._authz.write(writes)
@@ -186,31 +193,29 @@ class OfficeAccessService:
 
     async def user_can_view_document(
         self,
-        binding: OfficeDocumentBinding,
+        record: FileRecord,
         *,
         company_id: str,
-        namespace: str,
         user_id: str,
     ) -> bool:
-        if binding.company_id != company_id or binding.namespace != namespace:
+        if record.company_id != company_id or record.catalog_id is None:
             return False
-        if binding.deleted_at is not None:
+        if record.deleted_at is not None:
             return False
-        return await self._authz.can_view(self._document_obj(binding.file_id), user_id=user_id)
+        return await self._authz.can_view(self._document_obj(record.file_id), user_id=user_id)
 
     async def user_can_manage_trashed_binding(
         self,
-        binding: OfficeDocumentBinding,
+        record: FileRecord,
         *,
         company_id: str,
-        namespace: str,
         user_id: str,
     ) -> bool:
-        if binding.company_id != company_id or binding.namespace != namespace:
+        if record.company_id != company_id or record.catalog_id is None:
             return False
-        if binding.deleted_at is None:
+        if record.deleted_at is None:
             return False
-        return await self._authz.can_view(self._document_obj(binding.file_id), user_id=user_id)
+        return await self._authz.can_view(self._document_obj(record.file_id), user_id=user_id)
 
     async def list_accessible_catalogs_with_file_counts(
         self,
@@ -218,61 +223,64 @@ class OfficeAccessService:
         company_id: str,
         namespace: str,
         user_id: str,
-    ) -> list[tuple[OfficeDocumentCatalog, int]]:
-        candidates = await OfficeDocumentCatalog.catalogs_in_namespace(
-            company_id,
-            namespace,
-        )
+    ) -> list[tuple[DocumentCatalog, int]]:
+        candidates = await DocumentCatalog.list_in_namespace(company_id, namespace)
         if not candidates:
             return []
         checks = [
             AuthzCheckItem(
                 subject=AuthzSubject.user(user_id),
-                relation=AuthzRelation.CAN_VIEW,
+                relation=AuthzRelation.CAN_LIST,
                 obj=self._catalog_obj(catalog.catalog_id),
                 correlation_id=catalog.catalog_id,
             )
             for catalog in candidates
         ]
         allowed = await self._authz.batch_check(checks)
-        result: list[tuple[OfficeDocumentCatalog, int]] = []
+        result: list[tuple[DocumentCatalog, int]] = []
         for catalog, is_allowed in zip(candidates, allowed, strict=True):
             if not is_allowed:
                 continue
-            count = await OfficeDocumentBinding.count_bindings_in_catalog(catalog.catalog_id)
+            count = await FileRecord.count_in_catalog(catalog.catalog_id)
             result.append((catalog, count))
         return result
 
     async def binding_visible_in_public_catalog(
         self,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
     ) -> bool:
-        if binding.deleted_at is not None:
+        if binding.deleted_at is not None or binding.catalog_id is None:
             return False
-        return binding.link_enabled
+        link = await DocumentLink.for_target("file", binding.file_id)
+        return link is not None and link.enabled
 
     async def resolve_public_token(self, raw_token: str) -> PublicLinkTarget:
         normalized = raw_token.strip()
         if normalized == "":
             raise ValueError("token is required")
         token_hash = hash_token(normalized)
-        binding = await OfficeDocumentBinding.binding_by_enabled_link_token(token_hash)
-        if binding is not None:
+        link = await DocumentLink.by_enabled_token(token_hash)
+        if link is None:
+            raise ValueError("Link not found")
+        if link.target_kind == "file":
+            record = await FileRecord.get(link.target_id)
+            if record is None or record.deleted_at is not None:
+                raise ValueError("Link not found")
             return PublicLinkTarget(
                 kind="binding",
                 catalog=None,
-                binding=binding,
+                binding=record,
                 token_hash=token_hash,
             )
-        catalog = await OfficeDocumentCatalog.catalog_by_enabled_link_token(token_hash)
-        if catalog is not None:
-            return PublicLinkTarget(
-                kind="catalog",
-                catalog=catalog,
-                binding=None,
-                token_hash=token_hash,
-            )
-        raise ValueError("Link not found")
+        catalog = await DocumentCatalog.get(link.target_id)
+        if catalog is None:
+            raise ValueError("Link not found")
+        return PublicLinkTarget(
+            kind="catalog",
+            catalog=catalog,
+            binding=None,
+            token_hash=token_hash,
+        )
 
     async def _list_member_items(self, obj: AuthzObject) -> list[OfficeResourceAccessMemberItem]:
         items: list[OfficeResourceAccessMemberItem] = []
@@ -301,34 +309,38 @@ class OfficeAccessService:
         company_id: str,
         namespace: str,
     ) -> OfficeResourceAccessResponse:
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
+        catalog = await DocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         members = await self._list_member_items(self._catalog_obj(catalog_id))
+        link = await DocumentLink.for_target("catalog", catalog_id)
         return OfficeResourceAccessResponse(
             resource_kind="catalog",
             resource_id=catalog_id,
             company_visible=await self.catalog_is_company_visible(catalog_id, company_id),
-            link_enabled=catalog.link_enabled,
-            link_permission=_parse_link_permission(catalog.link_permission),
+            link_enabled=link.enabled if link is not None else False,
+            link_permission=_parse_link_permission(link.permission if link is not None else "viewer"),
             public_url=None,
             members=members,
         )
 
     async def get_binding_access(
         self,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
     ) -> OfficeResourceAccessResponse:
         members = await self._list_member_items(self._document_obj(binding.file_id))
+        if binding.catalog_id is None or binding.company_id is None:
+            raise ValueError("file has no catalog")
         company_visible = await self.catalog_is_company_visible(
             binding.catalog_id, binding.company_id
         )
+        link = await DocumentLink.for_target("file", binding.file_id)
         return OfficeResourceAccessResponse(
             resource_kind="binding",
             resource_id=binding.file_id,
             company_visible=company_visible,
-            link_enabled=binding.link_enabled,
-            link_permission=_parse_link_permission(binding.link_permission),
+            link_enabled=link.enabled if link is not None else False,
+            link_permission=_parse_link_permission(link.permission if link is not None else "viewer"),
             public_url=None,
             members=members,
         )
@@ -367,13 +379,19 @@ class OfficeAccessService:
         body: OfficeResourceAccessPatchRequest,
         origin: str,
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
+        catalog = await DocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         raw_token: str | None = None
-        link_enabled = catalog.link_enabled
-        link_token_hash = catalog.link_token_hash
-        link_permission = catalog.link_permission
+        current = await DocumentLink.ensure(
+            company_id=company_id,
+            target_kind="catalog",
+            target_id=catalog_id,
+            created_by_user_id=catalog.owner_user_id,
+        )
+        link_enabled = current.enabled
+        link_token_hash = current.token_hash
+        link_permission = current.permission
         if body.company_visible is not None:
             await self.set_catalog_company_visible(catalog, company_visible=body.company_visible)
             if body.company_visible and body.members:
@@ -390,11 +408,12 @@ class OfficeAccessService:
                 raw_token = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        catalog.link_enabled = link_enabled
-        catalog.link_token_hash = link_token_hash
-        catalog.link_permission = link_permission
-        catalog.link_updated_at = datetime.now(timezone.utc)
-        _ = await catalog.save()
+        _ = await DocumentLink.save_state(
+            current,
+            enabled=link_enabled,
+            token_hash=link_token_hash,
+            permission=link_permission,
+        )
         if body.members is not None:
             if await self.catalog_is_company_visible(catalog_id, company_id):
                 if body.members:
@@ -419,14 +438,22 @@ class OfficeAccessService:
 
     async def patch_binding_access(
         self,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
         body: OfficeResourceAccessPatchRequest,
         origin: str,
     ) -> tuple[OfficeResourceAccessResponse, str | None]:
         raw_token: str | None = None
-        link_enabled = binding.link_enabled
-        link_token_hash = binding.link_token_hash
-        link_permission = binding.link_permission
+        if binding.company_id is None or binding.uploaded_by is None:
+            raise ValueError("file has no owner")
+        current = await DocumentLink.ensure(
+            company_id=binding.company_id,
+            target_kind="file",
+            target_id=binding.file_id,
+            created_by_user_id=binding.uploaded_by,
+        )
+        link_enabled = current.enabled
+        link_token_hash = current.token_hash
+        link_permission = current.permission
         if body.company_visible is not None:
             raise ValueError("company_visible is set on the catalog, not on the document")
         if body.link_enabled is not None:
@@ -438,17 +465,18 @@ class OfficeAccessService:
                 link_token_hash = None
         if body.link_permission is not None:
             link_permission = body.link_permission
-        binding.link_enabled = link_enabled
-        binding.link_token_hash = link_token_hash
-        binding.link_permission = link_permission
-        binding.link_updated_at = datetime.now(timezone.utc)
-        _ = await binding.save()
+        _ = await DocumentLink.save_state(
+            current,
+            enabled=link_enabled,
+            token_hash=link_token_hash,
+            permission=link_permission,
+        )
         updated_binding = binding
         if body.members is not None:
             await self._replace_members(
                 self._document_obj(binding.file_id),
                 members=[(row.user_id, _member_to_relation(row.relation)) for row in body.members],
-                owner_user_id=binding.created_by_user_id,
+                owner_user_id=binding.uploaded_by,
             )
         response = await self.get_binding_access(updated_binding)
         if raw_token is not None:
@@ -466,7 +494,7 @@ class OfficeAccessService:
         user_id: str,
         relation: AuthzRelation = AuthzRelation.VIEWER,
     ) -> None:
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
+        catalog = await DocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
         if await self.catalog_is_company_visible(catalog_id, company_id):
@@ -474,7 +502,7 @@ class OfficeAccessService:
         owner_user_id = await self.resolve_catalog_owner_user_id(catalog_id)
         if user_id == owner_user_id:
             raise ValueError("Owner already has full access to the catalog")
-        await self._authz.write([office_catalog_member_tuple(catalog_id, user_id, relation)])
+        await self._authz.write([document_catalog_member_tuple(catalog_id, user_id, relation)])
 
     async def remove_catalog_member(self, catalog_id: str, user_id: str) -> None:
         owner_user_id = await self.resolve_catalog_owner_user_id(catalog_id)
@@ -482,8 +510,8 @@ class OfficeAccessService:
             raise ValueError("Cannot remove the owner from members")
         await self._authz.delete(
             [
-                office_catalog_member_tuple(catalog_id, user_id, AuthzRelation.VIEWER),
-                office_catalog_member_tuple(catalog_id, user_id, AuthzRelation.EDITOR),
+                document_catalog_member_tuple(catalog_id, user_id, AuthzRelation.VIEWER),
+                document_catalog_member_tuple(catalog_id, user_id, AuthzRelation.EDITOR),
             ]
         )
 
@@ -498,32 +526,38 @@ class OfficeAccessService:
         namespace: str,
         origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
-        catalog = await OfficeDocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
+        catalog = await DocumentCatalog.catalog_in_namespace(catalog_id, company_id, namespace)
         if catalog is None:
             raise ValueError("Catalog not found")
-        if not catalog.link_enabled:
+        link = await DocumentLink.for_target("catalog", catalog_id)
+        if link is None or not link.enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        catalog.link_enabled = True
-        catalog.link_token_hash = token_hash
-        catalog.link_updated_at = datetime.now(timezone.utc)
-        _ = await catalog.save()
+        _ = await DocumentLink.save_state(
+            link,
+            enabled=True,
+            token_hash=token_hash,
+            permission=link.permission,
+        )
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
 
     async def rotate_binding_link(
         self,
-        binding: OfficeDocumentBinding,
+        binding: FileRecord,
         origin: str,
     ) -> OfficeResourceAccessRotateLinkResponse:
-        if not binding.link_enabled:
+        link = await DocumentLink.for_target("file", binding.file_id)
+        if link is None or not link.enabled:
             raise ValueError("Public link is not enabled")
         raw_token, token_hash = create_share_token()
-        binding.link_enabled = True
-        binding.link_token_hash = token_hash
-        binding.link_updated_at = datetime.now(timezone.utc)
-        _ = await binding.save()
+        _ = await DocumentLink.save_state(
+            link,
+            enabled=True,
+            token_hash=token_hash,
+            permission=link.permission,
+        )
         return OfficeResourceAccessRotateLinkResponse(
             public_url=self.build_public_page_url(origin, raw_token),
         )
@@ -533,22 +567,26 @@ class OfficeAccessService:
             binding = target.binding
             if binding is None:
                 raise ValueError("binding is required")
+            link = await DocumentLink.for_target("file", binding.file_id)
+            permission = link.permission if link is not None else "viewer"
             return OfficePublicResolveResponse(
                 resource_kind="binding",
                 resource_id=binding.file_id,
-                title=binding.title,
-                link_permission=_parse_link_permission(binding.link_permission),
+                title=document_title(binding),
+                link_permission=_parse_link_permission(permission),
                 file_id=binding.file_id,
                 catalog_id=binding.catalog_id,
             )
         catalog = target.catalog
         if catalog is None:
             raise ValueError("catalog is required")
+        link = await DocumentLink.for_target("catalog", catalog.catalog_id)
+        permission = link.permission if link is not None else "viewer"
         return OfficePublicResolveResponse(
             resource_kind="catalog",
             resource_id=catalog.catalog_id,
             title=catalog.title,
-            link_permission=_parse_link_permission(catalog.link_permission),
+            link_permission=_parse_link_permission(permission),
             file_id=None,
             catalog_id=catalog.catalog_id,
         )
@@ -559,22 +597,27 @@ class OfficeAccessService:
         if target.kind != "catalog" or target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = target.catalog
-        bindings = await OfficeDocumentBinding.active_bindings_in_catalog(
+        bindings = await FileRecord.alive_in_catalog(
             company_id=catalog.company_id,
-            namespace=catalog.namespace,
             catalog_id=catalog.catalog_id,
         )
         items: list[OfficePublicCatalogItem] = []
         for binding in bindings:
             if not await self.binding_visible_in_public_catalog(binding):
                 continue
+            file_category, onlyoffice_document_type = resolve_binding_metadata(
+                binding.original_name,
+                binding.content_type.split(";", 1)[0].strip(),
+            )
+            link = await DocumentLink.for_target("file", binding.file_id)
+            permission = link.permission if link is not None else "viewer"
             items.append(
                 OfficePublicCatalogItem(
-                    title=binding.title,
+                    title=document_title(binding),
                     file_id=binding.file_id,
-                    file_category=binding.file_category,
-                    onlyoffice_document_type=binding.onlyoffice_document_type,
-                    link_permission=_parse_link_permission(binding.link_permission),
+                    file_category=file_category,
+                    onlyoffice_document_type=onlyoffice_document_type,
+                    link_permission=_parse_link_permission(permission),
                 )
             )
         return OfficePublicCatalogItemsResponse(
@@ -587,15 +630,11 @@ class OfficeAccessService:
         self,
         catalog_target: PublicLinkTarget,
         file_id: str,
-    ) -> OfficeDocumentBinding:
+    ) -> FileRecord:
         if catalog_target.kind != "catalog" or catalog_target.catalog is None:
             raise ValueError("Token does not belong to the catalog")
         catalog = catalog_target.catalog
-        binding = await OfficeDocumentBinding.binding_in_namespace(
-            file_id,
-            catalog.company_id,
-            catalog.namespace,
-        )
+        binding = await FileRecord.for_company(file_id, catalog.company_id)
         if binding is None or binding.deleted_at is not None:
             raise ValueError("File not found")
         if binding.catalog_id != catalog.catalog_id:

@@ -11,9 +11,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from apps.sync.models.calls import CallsJoinAcceptPayload
 from apps.sync.models.channels import ChannelCreate
 from apps.sync.realtime.operations import (
-    CallsJoinAcceptPayload,
     CallsRecordingStartPayload,
     ChannelsTypingPayload,
 )
