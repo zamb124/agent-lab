@@ -91,7 +91,7 @@ check_step \
   "${K} exec -n ${NS} postgres-0 -- psql -U platform_user -d openfga -tAc \"SELECT count(*) FROM tuple WHERE object_type='flow' AND object_id='system/lara'\" | grep -qE '^[1-9]'"
 
 check_step \
-  "group:admin#member не только user:system" \
-  "${K} exec -n ${NS} postgres-0 -- psql -U platform_user -d openfga -tAc \"SELECT count(*) FROM tuple WHERE object_type='group' AND object_id='admin' AND _user LIKE 'user:user_%'\" | grep -qE '^[1-9]'"
+  "scoped group имеет реального user:*" \
+  "${K} exec -n ${NS} postgres-0 -- psql -U platform_user -d openfga -tAc \"SELECT count(*) FROM tuple WHERE object_type='group' AND object_id LIKE '%/%' AND relation='member' AND _user LIKE 'user:user_%'\" | grep -qE '^[1-9]'"
 
 print_summary

@@ -10,6 +10,7 @@ from core.authz.factory import build_authz_service
 from core.authz.group_sync import delete_unscoped_group_tuples, sync_user_groups
 from core.authz.ids import PLATFORM_ADMIN_GROUP
 from core.config import get_settings
+from core.db.oxyde_runtime import close_oxyde_databases, init_oxyde_databases
 from core.logging import get_logger
 from core.models.identity_models import User
 
@@ -51,7 +52,21 @@ async def backfill_user_groups(*, limit: int | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     limit = parse_backfill_limit("Backfill User.groups into OpenFGA", argv)
-    written = asyncio.run(backfill_user_groups(limit=limit))
+
+    async def _run() -> int:
+        settings = get_settings()
+        shared_url = settings.database.shared_url
+        if shared_url is None or shared_url == "":
+            raise RuntimeError(
+                "database.shared_url is required for group authz backfill"
+            )
+        await init_oxyde_databases(default_url=shared_url, shared_url=shared_url)
+        try:
+            return await backfill_user_groups(limit=limit)
+        finally:
+            await close_oxyde_databases()
+
+    written = asyncio.run(_run())
     _ = sys.stdout.write(f"synced={written}\n")
     return 0
 

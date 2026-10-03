@@ -31,9 +31,11 @@ from core.authz.platform_sync import ensure_platform_global_admin
 from core.authz.service import AuthzService
 from core.authz.types import AuthzObjectType, AuthzRelation
 from core.config import get_settings
+from core.context.scope import set_active_company_id
 from core.db.oxyde_runtime import init_oxyde_databases
 from core.logging import get_logger
 from core.models.flow_ui_share import FlowUIShareGrant
+from core.models.identity_models import Company
 
 logger = get_logger(__name__)
 
@@ -167,85 +169,95 @@ async def backfill_flows_authz(*, limit: int | None = None) -> tuple[int, int, i
     tools_written = 0
     shares_written = 0
     try:
-        flow_offset = 0
+        companies = await Company.list(limit=1_000_000)
         stop_flows = False
-        while not stop_flows:
-            flow_page = await FlowConfig.list_current(limit=_KV_PAGE_SIZE, offset=flow_offset)
-            if len(flow_page) == 0:
+        for company in companies:
+            if stop_flows:
                 break
-            for config in flow_page:
-                if limit is not None and flows_written + tools_written + shares_written >= limit:
-                    stop_flows = True
+            set_active_company_id(company.company_id)
+            flow_offset = 0
+            while True:
+                flow_page = await FlowConfig.list_current(limit=_KV_PAGE_SIZE, offset=flow_offset)
+                if len(flow_page) == 0:
                     break
-                company_id = config.company_id
-                flow_id = config.flow_id
-                if company_id == "" or flow_id == "":
-                    raise ValueError("flow row requires company_id and flow_id")
-                flow_desired = [
-                    flow_company_link(flow_id, company_id),
-                    flow_platform_link(flow_id, company_id=company_id),
-                    *_flow_permission_writes(flow_id, company_id, config.permission),
-                ]
-                flow_existing = await authz.list_tuples(
-                    AuthzObject.flow(flow_id, company_id=company_id)
-                )
-                flow_desired_set = frozenset(flow_desired)
-                flow_existing_set = frozenset(flow_existing)
-                await authz.write_and_delete(
-                    list(flow_desired_set - flow_existing_set),
-                    [
-                        item
-                        for item in flow_existing_set - flow_desired_set
-                        if item.relation is not AuthzRelation.OWNER
-                    ],
-                )
-                for branch_id, branch in config.branches.items():
-                    branch_desired = _branch_permission_writes(
-                        flow_id, branch_id, company_id, branch.permission
+                for config in flow_page:
+                    if limit is not None and flows_written + tools_written + shares_written >= limit:
+                        stop_flows = True
+                        break
+                    company_id = config.company_id
+                    flow_id = config.flow_id
+                    if company_id == "" or flow_id == "":
+                        raise ValueError("flow row requires company_id and flow_id")
+                    flow_desired = [
+                        flow_company_link(flow_id, company_id),
+                        flow_platform_link(flow_id, company_id=company_id),
+                        *_flow_permission_writes(flow_id, company_id, config.permission),
+                    ]
+                    flow_existing = await authz.list_tuples(
+                        AuthzObject.flow(flow_id, company_id=company_id)
                     )
-                    branch_existing = await authz.list_tuples(
-                        AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
-                    )
-                    branch_desired_set = frozenset(branch_desired)
-                    branch_existing_set = frozenset(branch_existing)
+                    flow_desired_set = frozenset(flow_desired)
+                    flow_existing_set = frozenset(flow_existing)
                     await authz.write_and_delete(
-                        list(branch_desired_set - branch_existing_set),
-                        list(branch_existing_set - branch_desired_set),
+                        list(flow_desired_set - flow_existing_set),
+                        [
+                            item
+                            for item in flow_existing_set - flow_desired_set
+                            if item.relation is not AuthzRelation.OWNER
+                        ],
                     )
-                flows_written += 1
-            if len(flow_page) < _KV_PAGE_SIZE:
-                break
-            flow_offset += _KV_PAGE_SIZE
+                    for branch_id, branch in config.branches.items():
+                        branch_desired = _branch_permission_writes(
+                            flow_id, branch_id, company_id, branch.permission
+                        )
+                        branch_existing = await authz.list_tuples(
+                            AuthzObject.flow_branch(flow_id, branch_id, company_id=company_id)
+                        )
+                        branch_desired_set = frozenset(branch_desired)
+                        branch_existing_set = frozenset(branch_existing)
+                        await authz.write_and_delete(
+                            list(branch_desired_set - branch_existing_set),
+                            list(branch_existing_set - branch_desired_set),
+                        )
+                    flows_written += 1
+                if len(flow_page) < _KV_PAGE_SIZE:
+                    break
+                flow_offset += _KV_PAGE_SIZE
         logger.info("flows.authz.backfill.flows.written", written=flows_written)
 
         tool_desired_all: list[AuthzTuple] = []
-        tool_offset = 0
         stop_tools = False
-        while not stop_tools:
-            tool_page = await ToolReference.list_in_tool_id_order(
-                limit=_KV_PAGE_SIZE,
-                offset=tool_offset,
-            )
-            if len(tool_page) == 0:
+        for company in companies:
+            if stop_tools:
                 break
-            for tool in tool_page:
-                if limit is not None and flows_written + tools_written + shares_written >= limit:
-                    stop_tools = True
-                    break
-                company_id = tool.company_id
-                tool_id = tool.tool_id
-                if company_id == "" or tool_id == "":
-                    raise ValueError("tool row requires company_id and tool_id")
-                permission = tool.permission
-                tool_desired_all.extend(
-                    _tool_permission_writes(tool_id, company_id, permission)
+            set_active_company_id(company.company_id)
+            tool_offset = 0
+            while True:
+                tool_page = await ToolReference.list_in_tool_id_order(
+                    limit=_KV_PAGE_SIZE,
+                    offset=tool_offset,
                 )
-                tools_written += 1
-                if tools_written % 20000 == 0:
-                    logger.info("flows.authz.backfill.tools.scanned", scanned=tools_written)
-            if len(tool_page) < _KV_PAGE_SIZE:
-                break
-            tool_offset += _KV_PAGE_SIZE
+                if len(tool_page) == 0:
+                    break
+                for tool in tool_page:
+                    if limit is not None and flows_written + tools_written + shares_written >= limit:
+                        stop_tools = True
+                        break
+                    company_id = tool.company_id
+                    tool_id = tool.tool_id
+                    if company_id == "" or tool_id == "":
+                        raise ValueError("tool row requires company_id and tool_id")
+                    permission = tool.permission
+                    tool_desired_all.extend(
+                        _tool_permission_writes(tool_id, company_id, permission)
+                    )
+                    tools_written += 1
+                    if tools_written % 20000 == 0:
+                        logger.info("flows.authz.backfill.tools.scanned", scanned=tools_written)
+                if len(tool_page) < _KV_PAGE_SIZE:
+                    break
+                tool_offset += _KV_PAGE_SIZE
+        set_active_company_id(None)
         logger.info("flows.authz.backfill.tools.loaded", loaded=tools_written, desired_tuples=len(tool_desired_all))
         unscoped_tools = 0
         if limit is None:

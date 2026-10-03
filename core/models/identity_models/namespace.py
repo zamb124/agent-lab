@@ -126,16 +126,12 @@ class Namespace(CompanyScopedModel):
 
     @classmethod
     async def list_for_authz(cls, *, limit: int | None) -> list[Self]:
-        # Живая таблица ещё key/value. Менеджер отрезал бы одну компанию.
+        # Менеджер отрезал бы одну компанию — сырой запрос обходит scope.
         sql = (
-            "SELECT value->>'name' AS name, "
-            "value->>'company_id' AS company_id, "
-            "value->>'kind' AS kind, "
-            "value->>'owner_user_id' AS owner_user_id "
+            "SELECT name, company_id, kind, owner_user_id "
             "FROM namespaces "
-            "WHERE value->>'company_id' IS NOT NULL "
-            "AND value->>'name' IS NOT NULL "
-            "ORDER BY key"
+            "WHERE company_id IS NOT NULL "
+            "ORDER BY namespace_id"
         )
         params: list[int] = []
         if limit is not None:

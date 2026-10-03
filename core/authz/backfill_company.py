@@ -9,6 +9,7 @@ from core.authz.backfill_limit import parse_backfill_limit
 from core.authz.company_sync import sync_company_member_roles
 from core.authz.factory import build_authz_service
 from core.config import get_settings
+from core.db.oxyde_runtime import close_oxyde_databases, init_oxyde_databases
 from core.logging import get_logger
 from core.models.identity_models import Company
 
@@ -47,7 +48,21 @@ async def backfill_company_members(*, limit: int | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     limit = parse_backfill_limit("Backfill company membership into OpenFGA", argv)
-    written = asyncio.run(backfill_company_members(limit=limit))
+
+    async def _run() -> int:
+        settings = get_settings()
+        shared_url = settings.database.shared_url
+        if shared_url is None or shared_url == "":
+            raise RuntimeError(
+                "database.shared_url is required for company authz backfill"
+            )
+        await init_oxyde_databases(default_url=shared_url, shared_url=shared_url)
+        try:
+            return await backfill_company_members(limit=limit)
+        finally:
+            await close_oxyde_databases()
+
+    written = asyncio.run(_run())
     _ = sys.stdout.write(f"synced={written}\n")
     return 0
 
