@@ -465,7 +465,7 @@ class AuthService:
             avatar_url=user_info.avatar_url,
             metadata=user_info.raw_data,
         )
-        _ = await record.save()
+        _ = await UserProviderRecord.set(record)
 
     async def _update_provider_data(
         self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo

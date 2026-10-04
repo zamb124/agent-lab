@@ -139,4 +139,27 @@ class TestAuthLogin:
         assert "Invalid state" not in callback.text
         assert "state авторизации" not in callback.text
 
+    async def test_add_user_provider_upsert(self, frontend_di):
+        """_add_user_provider — upsert: первая запись создаётся, повторная обновляется.
+
+        Регрессия: save() на свежей записи делал UPDATE → NotFoundError → 500 на callback.
+        """
+        from core.models.identity_models import AuthProvider, ProviderUserInfo
+
+        auth_service = frontend_di.auth_service
+        info = ProviderUserInfo(
+            provider_user_id="test_upsert_uid_1",
+            email="upsert-test@example.com",
+            name="Upsert Test",
+        )
+        await auth_service._add_user_provider("user_test_upsert", AuthProvider.YANDEX, info)
+        info2 = info.model_copy(update={"email": "upsert-test2@example.com"})
+        await auth_service._add_user_provider("user_test_upsert", AuthProvider.YANDEX, info2)
+
+        from core.models.identity_models import UserProviderRecord
+
+        row = await UserProviderRecord.find_by_provider_user_id("test_upsert_uid_1")
+        assert row is not None
+        assert row.email == "upsert-test2@example.com"
+
 
