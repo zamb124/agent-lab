@@ -30,7 +30,7 @@ async def auth_callback(
     """Callback после OAuth авторизации"""
     auth_service: AuthService = di.auth_service
 
-    auth_state = await auth_service.get_auth_state(state)
+    auth_state = await auth_service.peek_auth_state(state)
     if not auth_state:
         raise WsCommandError("ws_invalid_payload", "Invalid state", error_code="ws_invalid_payload")
 

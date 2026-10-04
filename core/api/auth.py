@@ -274,7 +274,7 @@ async def _complete_oauth_callback(
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider_name}")
 
-    auth_state = await di.auth_service.get_auth_state(state)
+    auth_state = await di.auth_service.peek_auth_state(state)
     if not auth_state:
         if provider_name == AuthProvider.GOOGLE.value:
             calendar_service = di.calendar_service

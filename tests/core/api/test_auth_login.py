@@ -1,7 +1,13 @@
 """
 Тесты для эндпоинта /frontend/api/auth/login/{provider_name}
 """
+from urllib.parse import parse_qs, urlparse
+
 import pytest
+
+
+def _state_from_auth_url(auth_url: str) -> str:
+    return parse_qs(urlparse(auth_url).query)["state"][0]
 
 
 @pytest.mark.asyncio
@@ -100,5 +106,37 @@ class TestAuthLogin:
         data = response.json()
         assert data.get("provider") == "apple"
         assert "client_id=app.linnex.io" in data["auth_url"] or "client_id%3Dapp.linnex.io" in data["auth_url"]
+
+    async def test_callback_state_peek_does_not_consume(self, frontend_client, frontend_di):
+        """peek_auth_state не должен удалять state — одноразовое getdel остаётся в complete_auth."""
+        response = await frontend_client.get("/frontend/api/auth/login/yandex")
+        assert response.status_code == 200
+        state = _state_from_auth_url(response.json()["auth_url"])
+
+        auth_service = frontend_di.auth_service
+        assert await auth_service.peek_auth_state(state) is not None
+        assert await auth_service.peek_auth_state(state) is not None
+        assert await auth_service.get_auth_state(state) is not None
+        assert await auth_service.get_auth_state(state) is None
+
+    async def test_callback_with_live_state_passes_state_check(
+        self, frontend_client, frontend_di
+    ):
+        """Регрессия: callback читал state через getdel и complete_auth падал на втором getdel.
+
+        С живым state ошибка должна быть уже не «Invalid state», а дальше —
+        при обмене кода у провайдера.
+        """
+        response = await frontend_client.get("/frontend/api/auth/login/yandex")
+        assert response.status_code == 200
+        state = _state_from_auth_url(response.json()["auth_url"])
+
+        callback = await frontend_client.get(
+            "/auth/callback/yandex",
+            params={"state": state, "code": "fake-code"},
+        )
+        assert callback.status_code in (400, 500)
+        assert "Invalid state" not in callback.text
+        assert "state авторизации" not in callback.text
 
 

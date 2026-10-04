@@ -370,6 +370,17 @@ class AuthService:
             return None
         return AuthState.model_validate_json(data)
 
+    async def peek_auth_state(self, state: str) -> AuthState | None:
+        """Читает состояние без удаления — потребление одноразовое в complete_auth"""
+        if not state:
+            return None
+
+        key = f"auth_state:{state}"
+        data = await self._redis.get(key)
+        if data is None:
+            return None
+        return AuthState.model_validate_json(data)
+
     async def _cleanup_auth_state(self, state: str) -> None:
         """Удаляет временное состояние авторизации"""
         if state:
