@@ -237,7 +237,8 @@ class AuthService:
                 )
         except ValueError as e:
             error_msg = str(e)
-            if "ошибку: 400" in error_msg or "ошибку: 401" in error_msg:
+            lowered = error_msg.lower()
+            if "ошибку: 400" in lowered or "ошибку: 401" in lowered or "error: 400" in lowered or "error: 401" in lowered:
                 return AuthResult(success=False, error_message=error_msg)
             raise
 
