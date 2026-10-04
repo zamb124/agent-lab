@@ -200,7 +200,7 @@ env в одном container spec: Kubernetes strategic-merge patch падает 
 {{- end }}
 - name: SERVER__PLATFORM_PUBLIC_BASE_URL
   value: https://{{ required "publicBaseHost is required" .Values.publicBaseHost }}
-- name: AUTH__JWT_SECRET
+- name: AUTH__JWT_SECRET_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.platformSecretName }}
