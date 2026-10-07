@@ -189,7 +189,7 @@ class RealtimeBusService:
             raise
 
     async def _publish_to_centrifugo(self, event: PlatformEvent) -> None:
-        if event.delivery is None:
+        if event.delivery is None or is_command_event_type(event.type):
             return
         frame = require_json_object(
             event.model_dump(mode="json", exclude={"delivery"}),

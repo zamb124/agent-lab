@@ -53,9 +53,10 @@ alwaysApply: true
 
 1. У пользователя один сокет: Centrifugo `wss://{host}/realtime/connection/websocket`; кадр — `PlatformEvent`.
 2. Путь команды: RPC `platform.event` → `POST /realtime/api/v1/internal/centrifugo/inbound` → `RealtimeBusService.ingest` (`apps/realtime/services/bus_service.py`: `platform_event_log` идемпотентно по `event_id`, XADD `platform:events`, publish) → `POST /{owner}/api/internal/realtime/command` (`core/realtime/command_http.py`) → `dispatch_ws_command` → `op_*`.
-3. Команда без исхода за `realtime.command_deadline_seconds` получает синтетический `*_failed` `deadline_exceeded` (`sweep_expired_commands`).
-4. Connection JWT — это SESSION JWT (cookie `auth_token`, `iss=platform.session`, `channels`, `meta.company_id`); connect-proxy и `connection_token` запрещены.
-5. Клиент — `core/frontend/static/lib/events/effects/ws.effect.js` (`centrifuge-js`); `wsTimeoutMs` обязателен. Обрыв или timeout RPC ≠ `*_failed`: клиент читает `GET /realtime/api/v1/events/{event_id}/terminal`; повтор команды через HTTP запрещён.
+3. Команда — не UI-доставляемое событие: `delivery=None` всегда (inbound), `_publish_to_centrifugo` не публикует `*_requested`, клиент не диспатчит `*_requested`-кадры в bus (`ws.effect.js`). Иначе эхо команды редиспатчится как новый запрос — петля.
+4. Команда без исхода за `realtime.command_deadline_seconds` получает синтетический `*_failed` `deadline_exceeded` (`sweep_expired_commands`).
+5. Connection JWT — это SESSION JWT (cookie `auth_token`, `iss=platform.session`, `channels`, `meta.company_id`); connect-proxy и `connection_token` запрещены.
+6. Клиент — `core/frontend/static/lib/events/effects/ws.effect.js` (`centrifuge-js`); `wsTimeoutMs` обязателен. Обрыв или timeout RPC ≠ `*_failed`: клиент читает `GET /realtime/api/v1/events/{event_id}/terminal`; повтор команды через HTTP запрещён.
 
 ## Ошибки границы
 

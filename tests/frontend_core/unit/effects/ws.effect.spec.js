@@ -299,6 +299,33 @@ describe('ws.effect: push frames', () => {
         expect(pushed.payload).toEqual({ id: 'm1' });
     });
 
+    it('эхо *_requested команды не диспатчится в bus и не дублирует RPC', async () => {
+        const dispatched = [];
+        await _connect(dispatched);
+        const promise = platformWs.request({
+            type: 'svc/cmd/item_requested', payload: { x: 1 }, timeoutMs: 1000,
+            expectedSucceeded: 'svc/cmd/item_succeeded', expectedFailed: 'svc/cmd/item_failed',
+        });
+        const client = MockCentrifuge.latest();
+        const sent = client.rpcCalls[0].data;
+        client.emitPublication({
+            event_id: sent.event_id,
+            type: 'svc/cmd/item_requested',
+            company_id: 'c1',
+            payload: sent.payload,
+            meta: { ts: 0, source: 'ws', actor_user_id: 'u1', causation_id: sent.event_id },
+        });
+        expect(dispatched.find((d) => d.type === 'svc/cmd/item_requested')).toBeUndefined();
+        expect(client.rpcCalls).toHaveLength(1);
+        expect(dispatched.find((d) => d.type === CoreEvents.WS_FRAME_RECEIVED)).toBeDefined();
+        client.emitPublication({
+            type: 'svc/cmd/item_succeeded',
+            payload: { ok: true },
+            meta: { causation_id: sent.event_id },
+        });
+        await expect(promise).resolves.toEqual({ ok: true });
+    });
+
     it('publication с невалидным типом игнорируется без падения', async () => {
         const dispatched = [];
         await _connect(dispatched);

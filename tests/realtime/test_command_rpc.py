@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 
-from tests.realtime.centrifugo_ws import connect_centrifugo, rpc_platform_event, wait_platform_event
+from tests.realtime.centrifugo_ws import (
+    assert_no_platform_event,
+    connect_centrifugo,
+    rpc_platform_event,
+    wait_platform_event,
+)
 
 
 def _inbound_body(
@@ -201,6 +208,53 @@ async def test_command_rpc_failed_terminal_via_get(
         assert terminal["type"] == "sync/channels/update_failed"
         assert terminal["meta"]["causation_id"] == event_id
         assert terminal["payload"]["error_code"] == "forbidden"
+
+
+@pytest.mark.asyncio
+async def test_command_rpc_does_not_echo_requested_to_user_channel(
+    sync_service: None,
+    auth_token_system: str,
+    realtime_session_client: AsyncClient,
+    unique_id: str,
+) -> None:
+    _ = sync_service
+    event_id = f"e_noecho_{unique_id}"
+    async with connect_centrifugo(auth_token_system) as ws:
+        accepted = await rpc_platform_event(
+            ws,
+            event_type="sync/channels/update_requested",
+            payload={"channel_id": f"missing_{unique_id}", "body": {"name": "X"}},
+            company_id="system",
+            event_id=event_id,
+        )
+        assert accepted.get("accepted") is True
+        seen_types: list[str] = []
+        deadline = asyncio.get_running_loop().time() + 10.0
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise AssertionError(f"terminal update_failed not received; seen: {seen_types}")
+            frame = await ws.recv_platform_event(timeout=remaining)
+            frame_type = frame.get("type")
+            if not isinstance(frame_type, str):
+                continue
+            seen_types.append(frame_type)
+            meta = frame.get("meta")
+            if (
+                frame_type == "sync/channels/update_failed"
+                and isinstance(meta, dict)
+                and meta.get("causation_id") == event_id
+            ):
+                break
+        assert "sync/channels/update_requested" not in seen_types
+        await assert_no_platform_event(
+            ws,
+            type_="sync/channels/update_requested",
+            duration=1.5,
+        )
+    fetched = await realtime_session_client.get(f"/realtime/api/v1/events/{event_id}")
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["delivery"] is None
 
 
 @pytest.mark.asyncio

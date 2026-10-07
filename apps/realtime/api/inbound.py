@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 
 from apps.realtime.di import Di
 from core.context import reset_context, set_context
-from core.events.contract import EventDelivery, PlatformEvent
+from core.events.contract import PlatformEvent
 from core.logging import get_log_context
 from core.models.context_models import Context
 from core.models.identity_models import Company, User
@@ -59,12 +59,11 @@ async def centrifugo_inbound(
             f"event.company_id {parsed.company_id!r} does not match connection meta {company_from_meta!r}",
             error_code="ws_invalid_payload",
         )
-    delivery = parsed.delivery
-    if delivery is None:
-        delivery = EventDelivery(user_ids=[inbound.user])
+    # Команда — не UI-доставляемое событие: delivery всегда None,
+    # клиентский delivery игнорируется (эхо команды в каналы не уходит).
     event = parsed.model_copy(
         update={
-            "delivery": delivery,
+            "delivery": None,
             "meta": parsed.meta.model_copy(
                 update={"actor_user_id": inbound.user, "source": "ws"}
             ),

@@ -7,6 +7,10 @@
  * не является исходом бизнеса. Исход — publication `*_succeeded`/`*_failed`
  * с `meta.causation_id = event_id`. Timeout сокета ≠ `*_failed`.
  *
+ * В bus диспатчатся только push-факты и терминалы команд; кадры
+ * `*_requested` (эхо команды) отбрасываются — команда не является
+ * входящим событием клиента.
+ *
  * `getToken` читает cookie `auth_token` (SESSION JWT = connection JWT).
  * На localhost SDK ходит на `:8000/connection/websocket` (Centrifugo),
  * не через Granian.
@@ -120,6 +124,12 @@ function _newEventId() {
 
 function _dispatchPlatformEvent(frame) {
     if (!frame || typeof frame.type !== 'string') {
+        return;
+    }
+    // Команды (*_requested) — исходящий артефакт клиента, а не входящее событие:
+    // серверное эхо команды не попадает в bus, иначе effect фабрики перезапускает
+    // запрос и получается бесконечная петля.
+    if (frame.type.endsWith('_requested')) {
         return;
     }
     try {
