@@ -2,7 +2,7 @@
  * Компонент Glass Toast
  * Всплывающее уведомление
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassToast extends PlatformElement {

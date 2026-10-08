@@ -1,7 +1,7 @@
 /**
  * platform-echarts-host — Apache ECharts в Lit (lazy script, ResizeObserver, dispose).
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 const ECHARTS_URL = '/static/core/assets/js/echarts/echarts.min.js';

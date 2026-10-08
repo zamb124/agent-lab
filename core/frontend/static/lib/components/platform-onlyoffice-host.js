@@ -20,8 +20,8 @@
  *   4. `disconnectedCallback` корректно убивает редактор и observers.
  */
 
-import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
-import { guard } from '../../assets/js/lit/directives/guard.min.js';
+import { html, css, nothing } from 'lit';
+import { guard } from 'lit/directives/guard.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 const BOOT_WATCH_TIMEOUT_MS = 120_000;

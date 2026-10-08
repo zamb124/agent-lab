@@ -1,7 +1,7 @@
 /**
  * platform-mermaid-host — Mermaid SVG в Lit (lazy script, antiscript, platform theme).
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 const MERMAID_URL = '/static/core/assets/js/mermaid/mermaid.min.js';

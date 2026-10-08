@@ -21,7 +21,7 @@
  */
 
 import { css, html, nothing } from '../lit-shim.js';
-import { repeat } from '../../assets/js/lit/directives/repeat.min.js';
+import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';

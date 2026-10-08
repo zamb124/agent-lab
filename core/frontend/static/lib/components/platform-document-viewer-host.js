@@ -8,7 +8,7 @@
  * Остальные handlers → нативные Lit viewers без iframe.
  */
 
-import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-onlyoffice-host.js';
 import './platform-document-text-viewer.js';

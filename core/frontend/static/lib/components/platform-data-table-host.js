@@ -2,7 +2,7 @@
  * platform-data-table-host — native Lit grid for FileCategory.DATA_TABLE (.sqlite).
  * Rows come from office paging API; SQLite is never loaded in the browser.
  */
-import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { httpRequest } from '../events/http.js';
 import { hasPlatformBus } from '../events/bus-singleton.js';

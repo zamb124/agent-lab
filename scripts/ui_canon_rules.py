@@ -39,6 +39,9 @@ class UiCanonRule:
     fix: str
     path_exclude: str | None = None
     kind: Literal["content", "file"] = "content"
+    # Файлы embed-замыкания (внешние сайты без import-map) освобождены от
+    # правила — там относительные пути к assets/js/* каноничны.
+    exempt_in_embed_closure: bool = False
 
 
 RULES: tuple[UiCanonRule, ...] = (
@@ -87,6 +90,7 @@ RULES: tuple[UiCanonRule, ...] = (
         ("apps", "lib", "tests"),
         "hard",
         "from 'lit' / 'lit/directives/*' — vendored-путь дублирует модули",
+        exempt_in_embed_closure=True,
     ),
     UiCanonRule(
         "vendored_dep_path",
@@ -94,6 +98,7 @@ RULES: tuple[UiCanonRule, ...] = (
         ("apps", "lib", "tests"),
         "hard",
         "from 'marked' / 'centrifuge' — npm-пакет, не vendored-путь",
+        exempt_in_embed_closure=True,
     ),
     UiCanonRule(
         "extends_native",
@@ -193,15 +198,73 @@ def iter_scope_files(scope: str) -> list[Path]:
     return files
 
 
+_EMBED_ENTRYPOINTS = (
+    "core/frontend/static/lib/embed-flow-ui/flow-ui-embed-autoload.js",
+    "core/frontend/static/lib/flow-ui/shell/embed-autoload.js",
+    "core/frontend/static/lib/embed-chat/humanitec-embed-autoload.js",
+)
+
+_EMBED_IMPORT_RE = re.compile(
+    r"""(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]"""
+    r"""|import\s*['"]([^'"]+)['"]"""
+    r"""|import\(\s*['"]([^'"]+)['"]\s*\)"""
+)
+
+_embed_closure_cache: frozenset[str] | None = None
+
+
+def embed_closure() -> frozenset[str]:
+    """Файлы, загружаемые на внешних сайтах без import-map (embed-автолоады)."""
+    global _embed_closure_cache
+    if _embed_closure_cache is not None:
+        return _embed_closure_cache
+    from collections import deque
+
+    static_root = (REPO_ROOT / "core/frontend/static").resolve()
+    visited: set[Path] = set()
+    q: deque[Path] = deque()
+    for ep in _EMBED_ENTRYPOINTS:
+        p = (REPO_ROOT / ep).resolve()
+        if p.is_file():
+            visited.add(p)
+            q.append(p)
+    while q:
+        cur = q.popleft()
+        text = cur.read_text(encoding="utf-8")
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", text, flags=re.S)
+        for m in _EMBED_IMPORT_RE.finditer(text):
+            spec = next((g for g in m.groups() if g), None)
+            if spec is None or not spec.startswith((".", "/")):
+                continue
+            tgt = (cur.parent / spec).resolve()
+            if tgt.suffix == ".js" and not tgt.exists() and tgt.with_suffix(".ts").exists():
+                tgt = tgt.with_suffix(".ts")
+            if not tgt.exists() or tgt in visited:
+                continue
+            try:
+                tgt.relative_to(static_root)
+            except ValueError:
+                continue
+            visited.add(tgt)
+            q.append(tgt)
+    _embed_closure_cache = frozenset(
+        p.relative_to(REPO_ROOT).as_posix() for p in visited
+    )
+    return _embed_closure_cache
+
+
 def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
     """(path, rel, line_no, line) по правилу."""
     path_ex = re.compile(rule.path_exclude) if rule.path_exclude else None
+    embed_ex = embed_closure() if rule.exempt_in_embed_closure else frozenset()
     content_re = re.compile(rule.pattern) if rule.kind == "content" else None
     findings: list[tuple[Path, str, int, str]] = []
     for scope in rule.scopes:
         for path in iter_scope_files(scope):
             rel = path.relative_to(REPO_ROOT).as_posix()
             if path_ex and path_ex.search(rel):
+                continue
+            if rel in embed_ex:
                 continue
             if rule.kind == "file":
                 findings.append((path, rel, 0, rel))

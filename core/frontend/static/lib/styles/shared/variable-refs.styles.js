@@ -2,7 +2,7 @@
  * Shared styles for @var: / @state: / brace decorations and hover tooltips
  * in CodeMirror editors (markdown + variable-input).
  */
-import { css } from '../../../assets/js/lit/lit.min.js';
+import { css } from 'lit';
 
 export const variableRefsStyles = css`
     .cm-variable-required {

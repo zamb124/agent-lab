@@ -1,7 +1,7 @@
 /**
  * Компактный поиск для header/toolbar/sidebar модалок: dense pill, radius-full, glass-фон.
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './fields/platform-field.js';

@@ -2,7 +2,7 @@
  * Компонент Glass Button
  * Кнопка с glass morphism-эффектом
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-spinner.js';
 

@@ -7,7 +7,7 @@
  * `placement`: `auto` — не вылезать за верх вьюпорта (снизу от якоря), `top` / `bottom` — жёстко.
  * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
-import { html, css, nothing, unsafeCSS } from '../../assets/js/lit/lit.min.js';
+import { html, css, nothing, unsafeCSS } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveDocumentationHref } from '../utils/documentation-url.js';
 import './platform-popover.js';

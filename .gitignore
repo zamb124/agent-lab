@@ -103,3 +103,4 @@ tests/core/files/file_writer_output/
 # UI build artifacts (esbuild бандлы → apps/<svc>/ui-dist/, tsc incremental)
 **/ui-dist/
 *.tsbuildinfo
+/reports/ui-kostyli.json

@@ -3,7 +3,7 @@
  * VoiceMediaSession STT-only: PCM → WS /voice/api/ws/session/{id} → VAD → transcript final.
  * Событие `transcribed` detail: { text, provider }.
  */
-import { html, css } from '../../assets/js/lit/lit.min.js';
+import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { hasGetUserMediaApi } from '../utils/voice-recording.js';
 import { VoiceMediaSession } from '../voice/voice-media-session.js';

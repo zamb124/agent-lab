@@ -19,7 +19,7 @@
 import { CoreEvents, assertEventType } from '../contract.js';
 import { getActivePlatformNamespaceName } from '../../utils/platform-namespace.js';
 import { formatPlatformError } from '../../utils/platform-error-message.js';
-import { Centrifuge, UnauthorizedError } from '../../../assets/js/centrifuge/centrifuge.esm.min.js';
+import { Centrifuge, UnauthorizedError } from 'centrifuge';
 
 const BASE_DELAY_MS = 600;
 const MAX_DELAY_MS = 60_000;

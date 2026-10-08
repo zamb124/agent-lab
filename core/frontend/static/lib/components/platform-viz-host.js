@@ -6,7 +6,7 @@
  * - или `.openConfig` с handler=viz и payload.viz
  * - `compact` — для chat inline
  */
-import { html, css, nothing } from '../../assets/js/lit/lit.min.js';
+import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-echarts-host.js';
 import './platform-mermaid-host.js';
