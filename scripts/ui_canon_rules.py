@@ -38,6 +38,7 @@ class UiCanonRule:
     severity: Severity
     fix: str
     path_exclude: str | None = None
+    path_include: str | None = None
     kind: Literal["content", "file"] = "content"
     # Файлы embed-замыкания (внешние сайты без import-map) освобождены от
     # правила — там относительные пути к assets/js/* каноничны.
@@ -45,6 +46,9 @@ class UiCanonRule:
     # Сканировать код без // и /* */ комментариев (для правил про разметку,
     # где упоминание класса в комментарии — ложное срабатывание).
     strip_comments: bool = False
+    # Искать по всему тексту файла (нужно для тегов, чьи атрибуты живут
+    # на нескольких строках — lookahead до `>` не работает построчно).
+    multiline: bool = False
 
 
 RULES: tuple[UiCanonRule, ...] = (
@@ -124,11 +128,18 @@ RULES: tuple[UiCanonRule, ...] = (
     ),
     UiCanonRule(
         "raw_controls",
-        r"<(input|textarea|select)\b",
+        # Зеркало check_field_canon.sh: whitelist type=file|hidden|range|color|
+        # checkbox|radio|search и data-canon; иначе только <platform-field>.
+        # (?=[\s>/]) — чтобы <select-company-page> не совпадал с <select>.
+        r"<input(?=[\s>/])(?![^>]*\btype=[\"'](?:file|hidden|range|color|checkbox|radio|search)[\"'])(?![^>]*\bdata-canon=)[^>]*>"
+        r"|<textarea(?=[\s>/])(?![^>]*\bdata-canon=)[^>]*>"
+        r"|<select(?=[\s>/])(?![^>]*\bdata-canon=)[^>]*>",
         ("apps",),
         "hard",
         "<platform-field> — сырой тег только по whitelist ui_fields.mdc",
         path_exclude=r"check_field_canon|/vendor/|native-app",
+        path_include=r"^apps/[^/]+/ui/(pages|modals|components)/",
+        multiline=True,
     ),
     UiCanonRule(
         "manual_pill",
@@ -269,6 +280,7 @@ def embed_closure() -> frozenset[str]:
 def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
     """(path, rel, line_no, line) по правилу."""
     path_ex = re.compile(rule.path_exclude) if rule.path_exclude else None
+    path_in = re.compile(rule.path_include) if rule.path_include else None
     embed_ex = embed_closure() if rule.exempt_in_embed_closure else frozenset()
     content_re = re.compile(rule.pattern) if rule.kind == "content" else None
     findings: list[tuple[Path, str, int, str]] = []
@@ -276,6 +288,8 @@ def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
         for path in iter_scope_files(scope):
             rel = path.relative_to(REPO_ROOT).as_posix()
             if path_ex and path_ex.search(rel):
+                continue
+            if path_in and not path_in.search(rel):
                 continue
             if rel in embed_ex:
                 continue
@@ -293,6 +307,11 @@ def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
                 continue
             if rule.strip_comments:
                 raw_text = re.sub(r"//[^\n]*|/\*.*?\*/", "", raw_text, flags=re.S)
+            if rule.multiline:
+                for m in content_re.finditer(raw_text):
+                    line_no = raw_text.count("\n", 0, m.start()) + 1
+                    findings.append((path, rel, line_no, m.group(0)[:160].replace("\n", " ")))
+                continue
             lines = raw_text.splitlines()
             for i, line in enumerate(lines, 1):
                 if content_re.search(line):
