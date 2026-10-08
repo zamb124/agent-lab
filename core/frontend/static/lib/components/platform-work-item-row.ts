@@ -4,15 +4,39 @@
  */
 
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '../utils/work-item-deeplink.js';
+import type { OpController } from '../base/use-resource.js';
+import type { I18nState } from '../events/reducers/i18n.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 import './platform-icon.js';
 import './platform-user-chip.js';
 
 const STATES = Object.freeze(['open', 'in_progress', 'blocked', 'done', 'cancelled', 'failed']);
 
-function _assigneeUserId(item) {
+interface WorkItemAssignment {
+    assignee_kind?: string;
+    user_ids?: unknown[];
+    claimed_by_user_id?: unknown;
+}
+
+interface WorkItemLink {
+    link_kind?: string;
+    entity_id?: string;
+}
+
+interface WorkItemLite {
+    work_item_id?: string;
+    title?: string;
+    state?: string;
+    due_date?: string;
+    assignment?: WorkItemAssignment;
+    links?: WorkItemLink[];
+    [key: string]: unknown;
+}
+
+function _assigneeUserId(item: WorkItemLite): string {
     const assignment = item && item.assignment;
     if (!assignment || typeof assignment !== 'object') {
         return '';
@@ -31,7 +55,7 @@ function _assigneeUserId(item) {
     return '';
 }
 
-function _crmEntityId(item) {
+function _crmEntityId(item: WorkItemLite): string {
     if (!item || !Array.isArray(item.links)) {
         return '';
     }
@@ -46,14 +70,18 @@ function _crmEntityId(item) {
 export class PlatformWorkItemRow extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         item: { attribute: false },
         workItemId: { type: String, attribute: 'work-item-id' },
         selected: { type: Boolean, reflect: true },
         showPreview: { type: Boolean, attribute: 'show-preview' },
     };
+    declare item: WorkItemLite | null;
+    declare workItemId: string;
+    declare selected: boolean;
+    declare showPreview: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -136,12 +164,14 @@ export class PlatformWorkItemRow extends PlatformElement {
         this._getOp = null;
     }
 
-    connectedCallback() {
+    private _getOp: OpController | null;
+
+    override connectedCallback(): void {
         super.connectedCallback();
         this._getOp = this.useOp('worktracker/work_item_get');
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (
             (changed.has('workItemId') || changed.has('item'))
@@ -155,18 +185,18 @@ export class PlatformWorkItemRow extends PlatformElement {
         }
     }
 
-    _resolvedItem() {
+    _resolvedItem(): WorkItemLite | null {
         if (this.item && typeof this.item === 'object' && typeof this.item.work_item_id === 'string') {
             return this.item;
         }
-        const result = this._getOp && this._getOp.result;
+        const result = (this._getOp?.lastResult ?? null) as WorkItemLite | null;
         if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
             return result;
         }
         return null;
     }
 
-    _onOpen() {
+    _onOpen(): void {
         const item = this._resolvedItem();
         const id = item
             ? item.work_item_id
@@ -181,17 +211,17 @@ export class PlatformWorkItemRow extends PlatformElement {
             mobile: isMobileViewport(),
         });
         if (!this.hasAttribute('data-no-default-nav')) {
-            openWorkItemDetail(id);
+            openWorkItemDetail(id, this.bus as { dispatch?: (...args: unknown[]) => unknown });
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const item = this._resolvedItem();
         if (!item) {
             return html`<div class="loading">${this.t('work_item_badge.loading')}</div>`;
         }
-        const state = STATES.includes(item.state) ? item.state : 'open';
-        const locale = this.select((s) => s.i18n.locale).value;
+        const state = item.state && (STATES as readonly string[]).includes(item.state) ? item.state : 'open';
+        const locale = this.select((s) => (s.i18n as I18nState).locale).value ?? 'ru';
         const due = typeof item.due_date === 'string' && item.due_date.length >= 10
             ? formatPlatformDate(item.due_date, locale)
             : '';
@@ -199,7 +229,7 @@ export class PlatformWorkItemRow extends PlatformElement {
         return html`
             <div class="row" role="button" tabindex="0"
                 @click=${() => this._onOpen()}
-                @keydown=${(e) => {
+                @keydown=${(e: KeyboardEvent) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         this._onOpen();

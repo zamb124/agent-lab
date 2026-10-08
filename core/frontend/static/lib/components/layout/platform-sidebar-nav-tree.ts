@@ -6,6 +6,7 @@
  * Модель узла (группа): id, label, icon?, children[] (routeKey на группе не задаётся).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { sidebarNavItemStyles } from '../../styles/shared/sidebar.styles.js';
 import {
@@ -14,7 +15,16 @@ import {
 } from '../../utils/sidebar-nav-tree-preference.js';
 import '../platform-icon.js';
 
-function _normalizeSearch(search) {
+interface SidebarNavNode {
+    id: string;
+    label: string;
+    icon?: string;
+    routeKey?: string;
+    search?: string;
+    children?: SidebarNavNode[];
+}
+
+function _normalizeSearch(search: string | null | undefined): string {
     if (search === undefined || search === null) return '';
     if (typeof search !== 'string') {
         throw new Error('PlatformSidebarNavTree: search must be a string');
@@ -29,7 +39,7 @@ function _normalizeSearch(search) {
 export class PlatformSidebarNavTree extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         nodes: { type: Array },
         activeItemId: { type: String, attribute: 'active-item-id' },
         /** Совпадение с текущим URL: pathname без base + search */
@@ -41,8 +51,15 @@ export class PlatformSidebarNavTree extends PlatformElement {
          */
         storageScope: { type: String, attribute: 'storage-scope' },
     };
+    declare nodes: SidebarNavNode[];
+    declare activeItemId: string;
+    declare activePath: string;
+    declare collapsed: boolean;
+    declare storageScope: string;
 
-    static styles = [
+    private _expanded: Record<string, boolean | undefined>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         sidebarNavItemStyles,
         css`
@@ -95,7 +112,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         this._expanded = Object.create(null);
     }
 
-    willUpdate(changedProperties) {
+    override willUpdate(changedProperties: PropertyValues<this>): void {
         if (changedProperties.has('storageScope')) {
             const scope = this.storageScope;
             if (typeof scope === 'string' && scope.trim().length > 0) {
@@ -110,7 +127,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         super.willUpdate(changedProperties);
     }
 
-    _isLeafActive(node) {
+    _isLeafActive(node: SidebarNavNode): boolean {
         if (typeof node.id !== 'string' || node.id.length === 0) return false;
         if (this.activeItemId !== '' && node.id === this.activeItemId) return true;
         if (typeof this.activePath !== 'string' || this.activePath.length === 0) return false;
@@ -123,7 +140,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         return false;
     }
 
-    _toggleGroup(id) {
+    _toggleGroup(id: string): void {
         if (typeof id !== 'string' || id.length === 0) return;
         if (this.collapsed) return;
         const curExpanded = this._expanded[id] !== false;
@@ -142,7 +159,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         }
     }
 
-    _onLeafClick(node) {
+    _onLeafClick(node: SidebarNavNode): void {
         if (!node || typeof node.routeKey !== 'string' || node.routeKey.length === 0) {
             throw new Error('PlatformSidebarNavTree: leaf requires routeKey');
         }
@@ -154,7 +171,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         });
     }
 
-    _renderLeaf(node) {
+    _renderLeaf(node: SidebarNavNode): TemplateResult {
         const icon = typeof node.icon === 'string' && node.icon.length > 0 ? node.icon : 'chevron-right';
         const active = this._isLeafActive(node);
         return html`
@@ -173,7 +190,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         `;
     }
 
-    _renderGroup(node) {
+    _renderGroup(node: SidebarNavNode): TemplateResult {
         const id = node.id;
         const children = Array.isArray(node.children) ? node.children : [];
         const expanded = this._expanded[id] !== false;
@@ -201,7 +218,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         `;
     }
 
-    _renderNode(node) {
+    _renderNode(node: SidebarNavNode): TemplateResult {
         if (!node || typeof node !== 'object') {
             throw new Error('PlatformSidebarNavTree: invalid node');
         }
@@ -218,7 +235,7 @@ export class PlatformSidebarNavTree extends PlatformElement {
         return this._renderLeaf(node);
     }
 
-    render() {
+    override render(): TemplateResult {
         const nodes = Array.isArray(this.nodes) ? this.nodes : [];
         return html`${nodes.map((n) => this._renderNode(n))}`;
     }

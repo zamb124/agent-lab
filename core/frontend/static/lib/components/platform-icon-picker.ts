@@ -1,10 +1,11 @@
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-popover.js';
 
 export class PlatformIconPicker extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         icons: { type: Array },
         placeholder: { type: String },
@@ -12,8 +13,14 @@ export class PlatformIconPicker extends PlatformElement {
         _open: { state: true },
         _anchor: { state: true },
     };
+    declare value: string;
+    declare icons: unknown[];
+    declare placeholder: string;
+    declare disabled: boolean;
+    declare _open: unknown;
+    declare _anchor: unknown;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -119,7 +126,7 @@ export class PlatformIconPicker extends PlatformElement {
         this._anchor = null;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (this._anchor === null) {
             const trigger = this.renderRoot?.querySelector?.('.trigger');
@@ -140,7 +147,7 @@ export class PlatformIconPicker extends PlatformElement {
         this._open = !this._open;
     }
 
-    _selectIcon(iconName) {
+    _selectIcon(iconName: string): void {
         if (this.disabled) {
             return;
         }
@@ -153,7 +160,7 @@ export class PlatformIconPicker extends PlatformElement {
         }));
     }
 
-    _onTriggerKeyDown(event) {
+    _onTriggerKeyDown(event: KeyboardEvent): void {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             this._toggleOpen();
@@ -174,8 +181,8 @@ export class PlatformIconPicker extends PlatformElement {
         `;
     }
 
-    render() {
-        const options = Array.isArray(this.icons) ? this.icons : [];
+    override render(): TemplateResult {
+        const options: string[] = Array.isArray(this.icons) ? (this.icons as string[]) : [];
         return html`
             <button
                 type="button"
@@ -200,7 +207,7 @@ export class PlatformIconPicker extends PlatformElement {
             >
                 ${this._open ? html`
                     <div class="panel">
-                        ${options.map((iconName) => html`
+                        ${options.map((iconName: string) => html`
                             <button
                                 type="button"
                                 class="option ${this.value === iconName ? 'active' : ''}"

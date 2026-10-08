@@ -5,6 +5,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { COLOR_PALETTE } from '../utils/color-palette.js';
 
@@ -12,7 +13,7 @@ import { COLOR_PALETTE } from '../utils/color-palette.js';
  * @param {string | undefined | null} raw
  * @returns {{ mode: 'empty' | 'palette' | 'custom' | 'unknown', emitted: string }}
  */
-function parsePickerValue(raw) {
+function parsePickerValue(raw: string | undefined | null): { mode: 'empty' | 'palette' | 'custom' | 'unknown'; emitted: string } {
     const s = typeof raw === 'string' ? raw.trim() : '';
     if (!s) {
         return { mode: 'empty', emitted: '' };
@@ -33,8 +34,11 @@ function parsePickerValue(raw) {
 
 export class PlatformPaletteColorPicker extends PlatformElement {
     static i18nNamespace = 'platform';
+    declare value: string;
+    declare disabled: boolean;
+    declare allowClear: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -107,7 +111,7 @@ export class PlatformPaletteColorPicker extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         disabled: { type: Boolean, reflect: true },
         allowClear: { type: Boolean, attribute: 'allow-clear' },
@@ -120,7 +124,7 @@ export class PlatformPaletteColorPicker extends PlatformElement {
         this.allowClear = false;
     }
 
-    _emit(next) {
+    _emit(next: unknown): void {
         const v = typeof next === 'string' ? next : '';
         this.dispatchEvent(new CustomEvent('input', {
             detail: { value: v },
@@ -134,18 +138,18 @@ export class PlatformPaletteColorPicker extends PlatformElement {
         }));
     }
 
-    _onPickPalette(entry) {
+    _onPickPalette(entry: { key: string; dot: string }): void {
         if (this.disabled) return;
         this._emit(entry.dot);
     }
 
-    _onClear(ev) {
+    _onClear(ev: Event) {
         ev.preventDefault();
         if (this.disabled) return;
         this._emit('');
     }
 
-    render() {
+    override render(): TemplateResult {
         const parsed = parsePickerValue(this.value);
         const hasSomething = parsed.mode !== 'empty';
         const showCustom = parsed.mode === 'custom';

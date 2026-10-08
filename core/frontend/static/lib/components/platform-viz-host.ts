@@ -7,11 +7,33 @@
  * - `compact` — для chat inline
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-echarts-host.js';
 import './platform-mermaid-host.js';
 
-function vizPayloadFromOpenConfig(openConfig) {
+interface VizOpenConfig extends Record<string, unknown> {
+    handler?: string;
+    viz?: { document?: Record<string, unknown> };
+    file_id?: string;
+    title?: string;
+}
+
+interface VizDocument {
+    engine?: string;
+    kind?: string;
+    title?: string;
+    file_id?: string;
+    spec?: { option?: unknown; source?: string };
+    [key: string]: unknown;
+}
+
+interface VizEngineHost extends Element {
+    exportPngDataUrl?: () => string;
+    exportSvgMarkup?: () => string;
+}
+
+function vizPayloadFromOpenConfig(openConfig: VizOpenConfig | null | undefined): { document?: Record<string, unknown> } | null {
     if (!openConfig || typeof openConfig !== 'object') {
         return null;
     }
@@ -22,22 +44,25 @@ function vizPayloadFromOpenConfig(openConfig) {
     if (!payload || typeof payload !== 'object') {
         return null;
     }
-    return payload;
+    return payload as { document?: Record<string, unknown> };
 }
 
-function resolveDocument(openConfig, documentProp) {
+function resolveDocument(
+    openConfig: VizOpenConfig | null,
+    documentProp: VizDocument | null,
+): VizDocument | null {
     if (documentProp && typeof documentProp === 'object') {
         return documentProp;
     }
     const payload = vizPayloadFromOpenConfig(openConfig);
     if (payload?.document && typeof payload.document === 'object') {
-        return payload.document;
+        return payload.document as VizDocument;
     }
     return null;
 }
 
 export class PlatformVizHost extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         openConfig: { type: Object, attribute: false },
         document: { type: Object, attribute: false },
         fileId: { type: String, attribute: 'file-id' },
@@ -45,8 +70,14 @@ export class PlatformVizHost extends PlatformElement {
         compact: { type: Boolean, reflect: true },
         showToolbar: { type: Boolean, attribute: 'show-toolbar' },
     };
+    declare openConfig: VizOpenConfig | null;
+    declare document: VizDocument | null;
+    declare fileId: string;
+    declare suspended: boolean;
+    declare compact: boolean;
+    declare showToolbar: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -132,11 +163,11 @@ export class PlatformVizHost extends PlatformElement {
         this.showToolbar = true;
     }
 
-    _onEngineError(event) {
+    _onEngineError(event: CustomEvent<unknown>): void {
         this.emit('editor-error', event.detail || {});
     }
 
-    _openFullscreen() {
+    _openFullscreen(): void {
         const fileId =
             (typeof this.fileId === 'string' && this.fileId.length > 0 && this.fileId) ||
             (typeof this.openConfig?.file_id === 'string' && this.openConfig.file_id) ||
@@ -159,7 +190,7 @@ export class PlatformVizHost extends PlatformElement {
         );
     }
 
-    _export() {
+    _export(): void {
         const doc = resolveDocument(this.openConfig, this.document);
         if (!doc) {
             return;
@@ -167,7 +198,7 @@ export class PlatformVizHost extends PlatformElement {
         const engine = doc.engine;
         try {
             if (engine === 'echarts') {
-                const host = this.renderRoot?.querySelector('platform-echarts-host');
+                const host = this.renderRoot?.querySelector<VizEngineHost>('platform-echarts-host');
                 if (!host || typeof host.exportPngDataUrl !== 'function') {
                     throw new Error('echarts host not ready');
                 }
@@ -179,7 +210,7 @@ export class PlatformVizHost extends PlatformElement {
                 return;
             }
             if (engine === 'mermaid') {
-                const host = this.renderRoot?.querySelector('platform-mermaid-host');
+                const host = this.renderRoot?.querySelector<VizEngineHost>('platform-mermaid-host');
                 if (!host || typeof host.exportSvgMarkup !== 'function') {
                     throw new Error('mermaid host not ready');
                 }
@@ -202,7 +233,7 @@ export class PlatformVizHost extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const doc = resolveDocument(this.openConfig, this.document);
         if (!doc) {
             return html`<div class="state state-error">viz document required</div>`;
@@ -215,7 +246,7 @@ export class PlatformVizHost extends PlatformElement {
             (typeof this.fileId === 'string' && this.fileId) ||
             (typeof this.openConfig?.file_id === 'string' && this.openConfig.file_id) ||
             '';
-        let body = nothing;
+        let body: TemplateResult | typeof nothing = nothing;
         if (engine === 'echarts') {
             const option = doc.spec?.option;
             body = html`

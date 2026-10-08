@@ -4,24 +4,44 @@
  * Событие `transcribed` detail: { text, provider }.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { SelectController } from '../events/select-controller.js';
 import { hasGetUserMediaApi } from '../utils/voice-recording.js';
 import { VoiceMediaSession } from '../voice/voice-media-session.js';
+import type { VoiceTranscriptDetail } from '../voice/voice-media-session.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import './platform-icon.js';
+
+type VoiceDictationPhase = 'idle' | 'recording' | 'processing';
+
+interface AuthStateSlice {
+    activeCompanyId?: string;
+}
 
 export class PlatformVoiceDictation extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         disabled: { type: Boolean, reflect: true },
         language: { type: String },
         companyId: { type: String, attribute: 'company-id' },
         density: { type: String, reflect: true },
         _phase: { state: true },
     };
+    declare disabled: boolean;
+    declare language: string;
+    declare companyId: string;
+    declare density: string;
+    declare _phase: VoiceDictationPhase;
 
-    static styles = [
+    private _heardFinalText = false;
+    private _media: VoiceMediaSession | null = null;
+    private _companyIdSel: SelectController<string | undefined>;
+    private _onTranscriptBound: (event: Event) => void;
+    private _onErrorBound: (event: Event) => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -80,23 +100,19 @@ export class PlatformVoiceDictation extends PlatformElement {
         this.density = 'compact';
         this._phase = 'idle';
         this._heardFinalText = false;
-        /** @type {VoiceMediaSession | null} */
         this._media = null;
-        this._companyIdSel = this.select((s) => s.auth.activeCompanyId);
-        this._onTranscriptBound = (event) => this._onMediaTranscript(event);
-        this._onErrorBound = (event) => this._onMediaError(event);
+        this._companyIdSel = this.select((s) => (s.auth as AuthStateSlice | undefined)?.activeCompanyId);
+        this._onTranscriptBound = (event: Event) => this._onMediaTranscript(event);
+        this._onErrorBound = () => this._onMediaError();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._teardownMedia();
         this._phase = 'idle';
         super.disconnectedCallback();
     }
 
-    /**
-     * @returns {string}
-     */
-    _resolveCompanyId() {
+    _resolveCompanyId(): string {
         if (typeof this.companyId === 'string' && this.companyId.trim() !== '') {
             return this.companyId.trim();
         }
@@ -107,20 +123,14 @@ export class PlatformVoiceDictation extends PlatformElement {
         throw new Error('platform-voice-dictation: company_id required');
     }
 
-    /**
-     * @returns {Record<string, string>}
-     */
-    _sessionQuery() {
+    _sessionQuery(): Record<string, string> {
         if (typeof this.language !== 'string' || this.language.trim() === '') {
             return {};
         }
         return { language: this.language.trim() };
     }
 
-    /**
-     * @returns {string}
-     */
-    _tooltip() {
+    _tooltip(): string {
         if (this._phase === 'recording') {
             return this.t('voice_dictation.stop');
         }
@@ -130,14 +140,11 @@ export class PlatformVoiceDictation extends PlatformElement {
         return this.t('voice_dictation.start');
     }
 
-    /**
-     * @param {Event} event
-     */
-    _onMediaTranscript(event) {
+    _onMediaTranscript(event: Event): void {
         if (!(event instanceof Event)) {
             throw new Error('platform-voice-dictation: transcript event required');
         }
-        const detail = 'detail' in event ? event.detail : null;
+        const detail = 'detail' in event ? (event as CustomEvent<VoiceTranscriptDetail>).detail : null;
         if (!detail || typeof detail !== 'object') {
             throw new Error('platform-voice-dictation: transcript detail required');
         }
@@ -152,13 +159,13 @@ export class PlatformVoiceDictation extends PlatformElement {
         this.emit('transcribed', { text, provider: 'voice' });
     }
 
-    _onMediaError() {
+    _onMediaError(): void {
         this._teardownMedia();
         this._phase = 'idle';
         this.toast('toast.voice_dictation.failed', { type: 'error' });
     }
 
-    _teardownMedia() {
+    _teardownMedia(): void {
         if (this._media === null) {
             return;
         }
@@ -168,7 +175,7 @@ export class PlatformVoiceDictation extends PlatformElement {
         this._media = null;
     }
 
-    async _startSession() {
+    async _startSession(): Promise<void> {
         if (typeof window === 'undefined' || !window.isSecureContext) {
             this.toast('toast.voice_dictation.unavailable_https', { type: 'warning' });
             return;
@@ -200,7 +207,7 @@ export class PlatformVoiceDictation extends PlatformElement {
         media.addEventListener('error', this._onErrorBound);
     }
 
-    async _stopSession() {
+    async _stopSession(): Promise<void> {
         this._phase = 'processing';
         const media = this._media;
         if (media !== null && media.isConnected === true) {
@@ -213,7 +220,7 @@ export class PlatformVoiceDictation extends PlatformElement {
         this._phase = 'idle';
     }
 
-    async _onToggle() {
+    async _onToggle(): Promise<void> {
         if (this.disabled || this._phase === 'processing') {
             return;
         }
@@ -227,8 +234,8 @@ export class PlatformVoiceDictation extends PlatformElement {
         await this._startSession();
     }
 
-    render() {
-        const phaseClass = this._phase === 'idle' ? '' : this._phase;
+    override render(): TemplateResult {
+        const phaseClass: string = this._phase === 'idle' ? '' : this._phase;
         const iconName = this._phase === 'recording' ? 'square' : 'mic';
         return html`
             <button

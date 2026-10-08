@@ -2,23 +2,38 @@
  * platform-echarts-host — Apache ECharts в Lit (lazy script, ResizeObserver, dispose).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 const ECHARTS_URL = '/static/core/assets/js/echarts/echarts.min.js';
 
-let _echartsPromise = null;
+interface EchartsInstance {
+    setOption(option: unknown, opts?: { notMerge?: boolean }): void;
+    resize(): void;
+    dispose(): void;
+    getDataURL(opts: { type: string; pixelRatio?: number; backgroundColor?: string }): string;
+}
 
-function loadEcharts() {
-    if (typeof window !== 'undefined' && window.echarts) {
-        return Promise.resolve(window.echarts);
+interface EchartsApi {
+    init(el: HTMLElement, theme?: unknown, opts?: { renderer?: string }): EchartsInstance;
+}
+
+type EchartsWindow = Window & { echarts?: EchartsApi };
+
+let _echartsPromise: Promise<EchartsApi> | null = null;
+
+function loadEcharts(): Promise<EchartsApi> {
+    const w = window as EchartsWindow;
+    if (typeof window !== 'undefined' && w.echarts) {
+        return Promise.resolve(w.echarts);
     }
     if (_echartsPromise) {
         return _echartsPromise;
     }
-    _echartsPromise = new Promise((resolve, reject) => {
+    _echartsPromise = new Promise<EchartsApi>((resolve, reject) => {
         const existing = document.querySelector(`script[data-platform-echarts="1"]`);
-        if (existing && window.echarts) {
-            resolve(window.echarts);
+        if (existing && w.echarts) {
+            resolve(w.echarts);
             return;
         }
         const script = document.createElement('script');
@@ -26,11 +41,11 @@ function loadEcharts() {
         script.async = true;
         script.dataset.platformEcharts = '1';
         script.onload = () => {
-            if (!window.echarts) {
+            if (!w.echarts) {
                 reject(new Error('echarts global missing after load'));
                 return;
             }
-            resolve(window.echarts);
+            resolve(w.echarts);
         };
         script.onerror = () => reject(new Error(`echarts load failed: ${ECHARTS_URL}`));
         document.head.appendChild(script);
@@ -40,7 +55,7 @@ function loadEcharts() {
 
 function platformEchartsTheme() {
     const styles = getComputedStyle(document.documentElement);
-    const pick = (name, fallback) => {
+    const pick = (name: string, fallback: string): string => {
         const value = styles.getPropertyValue(name).trim();
         return value.length > 0 ? value : fallback;
     };
@@ -78,13 +93,16 @@ function platformEchartsTheme() {
 }
 
 export class PlatformEchartsHost extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         option: { type: Object, attribute: false },
         suspended: { type: Boolean, reflect: true },
         compact: { type: Boolean, reflect: true },
     };
+    declare option: Record<string, unknown> | null;
+    declare suspended: boolean;
+    declare compact: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -121,6 +139,11 @@ export class PlatformEchartsHost extends PlatformElement {
         `,
     ];
 
+    private _chart: EchartsInstance | null;
+    private _resizeObserver: ResizeObserver | null;
+    private _loadError: string;
+    private _bootToken: number;
+
     constructor() {
         super();
         this.option = null;
@@ -132,18 +155,18 @@ export class PlatformEchartsHost extends PlatformElement {
         this._bootToken = 0;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         if (changed.has('option') || changed.has('suspended')) {
             void this._syncChart();
         }
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         void this._syncChart();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._teardown();
         super.disconnectedCallback();
     }
@@ -185,7 +208,7 @@ export class PlatformEchartsHost extends PlatformElement {
                 return;
             }
             if (!this._chart) {
-                this._chart = echarts.init(root, null, { renderer: 'canvas' });
+                this._chart = echarts.init(root as HTMLElement, undefined, { renderer: 'canvas' });
                 this._resizeObserver = new ResizeObserver(() => {
                     if (this._chart && !this.suspended) {
                         this._chart.resize();
@@ -213,7 +236,7 @@ export class PlatformEchartsHost extends PlatformElement {
         return this._chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#0f172a' });
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this._loadError) {
             return html`<div class="state state-error">${this._loadError}</div>`;
         }

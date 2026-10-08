@@ -9,6 +9,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-onlyoffice-host.js';
 import './platform-document-text-viewer.js';
@@ -18,7 +19,16 @@ import './platform-document-binary-viewer.js';
 import './platform-viz-host.js';
 import './platform-data-table-host.js';
 
-function handlerPayload(openConfig) {
+interface DocumentOpenConfig extends Record<string, unknown> {
+    handler?: string;
+    original_name?: string;
+    content_type?: string;
+    file_id?: string;
+}
+
+type HandlerPayload = Record<string, unknown>;
+
+function handlerPayload(openConfig: DocumentOpenConfig | null | undefined): HandlerPayload | null {
     if (!openConfig || typeof openConfig !== 'object') {
         return null;
     }
@@ -30,18 +40,22 @@ function handlerPayload(openConfig) {
     if (!payload || typeof payload !== 'object') {
         return null;
     }
-    return payload;
+    return payload as HandlerPayload;
 }
 
 export class PlatformDocumentViewerHost extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         openConfig: { type: Object, attribute: false },
         fileId: { type: String, attribute: 'file-id' },
         viewMode: { type: String, attribute: 'view-mode' },
         suspended: { type: Boolean, reflect: true },
     };
+    declare openConfig: DocumentOpenConfig | null;
+    declare fileId: string;
+    declare viewMode: string;
+    declare suspended: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -65,7 +79,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         this.suspended = false;
     }
 
-    _textViewMode(payload) {
+    _textViewMode(payload: HandlerPayload): string {
         if (typeof this.viewMode === 'string' && this.viewMode.length > 0) {
             return this.viewMode;
         }
@@ -75,7 +89,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         return 'source';
     }
 
-    _textPresentation(payload) {
+    _textPresentation(payload: HandlerPayload): string {
         if (payload && typeof payload.presentation === 'string' && payload.presentation.length > 0) {
             return payload.presentation;
         }
@@ -101,15 +115,15 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         };
     }
 
-    _onEditorError(event) {
+    _onEditorError(event: CustomEvent<unknown>): void {
         this.emit('editor-error', event.detail || {});
     }
 
-    _onDocumentState(event) {
+    _onDocumentState(event: CustomEvent<unknown>): void {
         this.emit('document-state', event.detail || {});
     }
 
-    _renderNativeViewer() {
+    _renderNativeViewer(): TemplateResult | typeof nothing {
         const openConfig = this.openConfig;
         if (!openConfig) {
             return nothing;
@@ -185,7 +199,7 @@ export class PlatformDocumentViewerHost extends PlatformElement {
         return nothing;
     }
 
-    render() {
+    override render(): TemplateResult | typeof nothing {
         const openConfig = this.openConfig;
         if (!openConfig) {
             return nothing;

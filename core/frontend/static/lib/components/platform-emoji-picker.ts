@@ -13,6 +13,7 @@
  */
 
 import { css, html, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
@@ -80,12 +81,14 @@ export const EMOJI_CATEGORIES = Object.freeze([
 export class PlatformEmojiPicker extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         _query: { state: true },
     };
+    declare value: string;
+    declare _query: string;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -184,11 +187,11 @@ export class PlatformEmojiPicker extends PlatformElement {
         this._query = '';
     }
 
-    _onInput(event) {
-        this._query = event.target.value;
+    _onInput(event: Event) {
+        this._query = (event.target as HTMLInputElement).value;
     }
 
-    _select(emoji) {
+    _select(emoji: string): void {
         this.value = emoji;
         this.emit('emoji-select', { emoji });
     }
@@ -200,7 +203,7 @@ export class PlatformEmojiPicker extends PlatformElement {
 
     /** Отфильтрованные категории; пустые из выдачи убираются. */
     _visibleCategories() {
-        const query = this._query.trim().toLowerCase();
+        const query = (this._query || '').trim().toLowerCase();
         if (query === '') {
             return EMOJI_CATEGORIES.map((category) => ({ id: category.id, items: category.items }));
         }
@@ -218,7 +221,7 @@ export class PlatformEmojiPicker extends PlatformElement {
         return result;
     }
 
-    render() {
+    override render(): TemplateResult {
         const categories = this._visibleCategories();
         return html`
             <div class="search">

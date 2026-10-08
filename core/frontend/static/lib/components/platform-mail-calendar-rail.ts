@@ -3,21 +3,26 @@
  * Один layout (vertical left) на desktop и mobile — mail и calendar единообразны.
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
+import type { MailBindingRecord, MailState } from '../events/reducers/mail.js';
+import type { SelectController } from '../events/select-controller.js';
 import { initialsFromName } from '../utils/hash-string.js';
 import { resolvePaletteColor } from '../utils/color-palette.js';
 
 export class PlatformMailCalendarRail extends PlatformElement {
     static i18nNamespace = 'mail';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         surface: { type: String, reflect: true },
         showSettings: { type: Boolean, attribute: 'show-settings' },
     };
+    declare surface: string;
+    declare showSettings: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -96,21 +101,23 @@ export class PlatformMailCalendarRail extends PlatformElement {
         `,
     ];
 
+    private _mailSelect: SelectController<MailState>;
+
     constructor() {
         super();
         this.surface = 'mail';
         this.showSettings = false;
-        this._mailSelect = this.select((s) => s.mail);
+        this._mailSelect = this.select((s) => s.mail as MailState);
     }
 
-    _selectMailbox(mailboxBindingId) {
+    _selectMailbox(mailboxBindingId: unknown): void {
         if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
             throw new Error('platform-mail-calendar-rail: mailbox_binding_id required');
         }
         this.dispatch(MAIL_EVENTS.MAILBOX_SELECT, { mailbox_binding_id: mailboxBindingId });
     }
 
-    _switchSurface(nextSurface) {
+    _switchSurface(nextSurface: string): void {
         if (nextSurface !== 'mail' && nextSurface !== 'calendar') {
             throw new Error(`platform-mail-calendar-rail: unknown surface=${nextSurface}`);
         }
@@ -125,30 +132,30 @@ export class PlatformMailCalendarRail extends PlatformElement {
         });
     }
 
-    _onSettingsClick() {
+    _onSettingsClick(): void {
         this.dispatchEvent(new CustomEvent('settings-click', { bubbles: true, composed: true }));
     }
 
-    _avatarColor(binding) {
+    _avatarColor(binding: MailBindingRecord): string {
         const key = typeof binding.calendar_color === 'string' && binding.calendar_color.trim()
             ? binding.calendar_color.trim()
             : 'default';
         return resolvePaletteColor(key);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.setAttribute('role', 'navigation');
         this.setAttribute('aria-label', this.t('title'));
     }
 
-    render() {
-        const mail = this._mailSelect.value;
-        const bindings = Array.isArray(mail.bindings) ? mail.bindings : [];
+    override render(): TemplateResult {
+        const mail: MailState | undefined = this._mailSelect.value;
+        const bindings = Array.isArray(mail?.bindings) ? mail.bindings : [];
         return html`
-            ${bindings.map((binding) => {
-                const initials = initialsFromName(binding.local_part);
-                const active = binding.mailbox_binding_id === mail.activeMailboxBindingId;
+            ${bindings.map((binding: MailBindingRecord) => {
+                const initials = initialsFromName(typeof binding.local_part === 'string' ? binding.local_part : '');
+                const active = binding.mailbox_binding_id === mail?.activeMailboxBindingId;
                 const bg = this._avatarColor(binding);
                 const isRole = binding.kind === 'role';
                 const title = isRole

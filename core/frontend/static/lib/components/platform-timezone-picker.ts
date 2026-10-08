@@ -1,13 +1,15 @@
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { getCachedSortedIanaTimeZones } from '../utils/iana-timezones.js';
 import './platform-popover.js';
+import type { PlatformPopover } from './platform-popover.js';
 import './fields/platform-field-shell.js';
 
 const LIST_MAX = 200;
 
-function _filterZones(all, query, currentValue) {
+function _filterZones(all: string[], query: unknown, currentValue: unknown): string[] {
     const q = (query == null ? '' : String(query)).trim().toLowerCase();
     const out = [];
     if (
@@ -31,8 +33,19 @@ function _filterZones(all, query, currentValue) {
 
 export class PlatformTimezonePicker extends PlatformElement {
     static i18nNamespace = 'platform';
+    declare value: string;
+    declare label: string;
+    declare error: string;
+    declare placeholder: string;
+    declare disabled: boolean;
+    declare name: string;
+    declare _inputText: string;
+    declare _listOpen: boolean;
+    declare _anchor: HTMLElement | null;
+    private _allZones: string[];
+    private _skipNextBlurChange: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         formStyles,
         css`
@@ -67,7 +80,7 @@ export class PlatformTimezonePicker extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         label: { type: String },
         error: { type: String },
@@ -95,14 +108,14 @@ export class PlatformTimezonePicker extends PlatformElement {
         this._anchor = null;
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         if (changed.has('value')) {
             this._inputText = this.value;
         }
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (this._anchor === null) {
             const input = this.renderRoot?.querySelector?.('input.form-input');
@@ -111,35 +124,35 @@ export class PlatformTimezonePicker extends PlatformElement {
             }
         }
         if (this._listOpen && !this.disabled) {
-            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+            (this.renderRoot?.querySelector?.('platform-popover') as PlatformPopover | null)?.reposition();
         }
     }
 
-    _onPopoverDismiss() {
+    _onPopoverDismiss(): void {
         this._listOpen = false;
     }
 
-    get _visibleOptions() {
+    get _visibleOptions(): string[] {
         return _filterZones(this._allZones, this._inputText, this.value);
     }
 
-    _onInput(e) {
+    _onInput(e: Event) {
         if (this.disabled) {
             return;
         }
-        this._inputText = e.target.value;
+        this._inputText = (e.target as HTMLInputElement).value;
         this._listOpen = true;
         this.emit('input', { value: this._inputText });
     }
 
-    _onFocus() {
+    _onFocus(): void {
         if (this.disabled) {
             return;
         }
         this._listOpen = true;
     }
 
-    _onBlur() {
+    _onBlur(): void {
         window.setTimeout(() => {
             this._listOpen = false;
             if (this._skipNextBlurChange) {
@@ -153,11 +166,11 @@ export class PlatformTimezonePicker extends PlatformElement {
         }, 150);
     }
 
-    _onOptionMouseDown(e) {
+    _onOptionMouseDown(e: Event): void {
         e.preventDefault();
     }
 
-    _onPick(zone) {
+    _onPick(zone: string): void {
         this._inputText = zone;
         this._listOpen = false;
         this._skipNextBlurChange = true;
@@ -166,7 +179,7 @@ export class PlatformTimezonePicker extends PlatformElement {
         this.requestUpdate();
     }
 
-    render() {
+    override render(): TemplateResult {
         const opts = this._visibleOptions;
         const listId = 'tz-list';
         const hasLabel = typeof this.label === 'string' && this.label.length > 0;

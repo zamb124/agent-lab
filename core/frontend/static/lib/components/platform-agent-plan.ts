@@ -4,6 +4,7 @@
  */
 
 import { html, css, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
@@ -15,34 +16,49 @@ const STATUS_ICON = {
     failed: 'alert-triangle',
 };
 
-const KNOWN_STATUSES = new Set(Object.keys(STATUS_ICON));
+const KNOWN_STATUSES: ReadonlySet<string> = new Set(Object.keys(STATUS_ICON));
 
-function _asPlan(value) {
+interface AgentPlanStep {
+    status?: string;
+    title?: string;
+    [key: string]: unknown;
+}
+
+interface AgentPlanValue {
+    title?: string;
+    steps: AgentPlanStep[];
+    [key: string]: unknown;
+}
+
+function _asPlan(value: unknown): AgentPlanValue | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return null;
     }
-    const steps = Array.isArray(value.steps) ? value.steps : null;
+    const steps = Array.isArray((value as AgentPlanValue).steps) ? (value as AgentPlanValue).steps : null;
     if (steps === null || steps.length === 0) {
         return null;
     }
-    return value;
+    return value as AgentPlanValue;
 }
 
-function _stepStatus(step) {
+function _stepStatus(step: AgentPlanStep): keyof typeof STATUS_ICON {
     const raw = step && typeof step.status === 'string' ? step.status : 'pending';
-    return KNOWN_STATUSES.has(raw) ? raw : 'pending';
+    return (KNOWN_STATUSES.has(raw) ? raw : 'pending') as keyof typeof STATUS_ICON;
 }
 
 export class PlatformAgentPlan extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         plan: { attribute: false },
         compact: { type: Boolean, reflect: true },
         readonly: { type: Boolean, reflect: true },
     };
+    declare plan: unknown;
+    declare compact: boolean;
+    declare readonly: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -181,11 +197,11 @@ export class PlatformAgentPlan extends PlatformElement {
         this.readonly = true;
     }
 
-    _statusLabel(status) {
+    _statusLabel(status: string): string {
         return this.t(`agent_plan.status.${status}`);
     }
 
-    render() {
+    override render(): TemplateResult | typeof nothing {
         const plan = _asPlan(this.plan);
         if (plan === null) {
             return nothing;
@@ -202,9 +218,9 @@ export class PlatformAgentPlan extends PlatformElement {
                     <h3 class="header-title">${title}</h3>
                 </div>
                 <ul class="list">
-                    ${steps.map((step, index) => {
+                    ${steps.map((step: AgentPlanStep, index: number) => {
                         const status = _stepStatus(step);
-                        const icon = STATUS_ICON[status];
+                        const icon: string = STATUS_ICON[status];
                         const stepTitle =
                             step && typeof step.title === 'string' ? step.title : '';
                         return html`
