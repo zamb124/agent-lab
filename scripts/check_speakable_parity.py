@@ -7,9 +7,12 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _paths import js_or_ts
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY_PATH = ROOT / "apps" / "flows" / "src" / "streaming" / "speakable.py"
-JS_PATH = ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.js"
+JS_PATH = js_or_ts(ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.js")
 
 
 def _artifact_names_from_python(path: pathlib.Path) -> set[str]:

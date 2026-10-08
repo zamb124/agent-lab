@@ -682,10 +682,10 @@ def main() -> int:
         routes_total += len(_routes_of(svc))
         _collect_publish_event_types(svc_dir)
 
-        factory_files = list(sorted(ui_resources.rglob("*.js"))) if ui_resources.exists() else []
+        factory_files = list(sorted(p for g in ("*.js", "*.ts") for p in ui_resources.rglob(g))) if ui_resources.exists() else []
         if svc == "worktracker" and CORE_FACTORY_RESOURCES.exists():
-            factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob("work-items.resource.js")))
-            factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob("work-queues.resource.js")))
+            factory_files.extend(sorted(p for g in ("work-items.resource.js", "work-items.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)))
+            factory_files.extend(sorted(p for g in ("work-queues.resource.js", "work-queues.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)))
         if svc == "rag" and CORE_FACTORY_RESOURCES.exists():
             for factory_name in CORE_RAG_FACTORY_FILES:
                 factory_files.extend(sorted(CORE_FACTORY_RESOURCES.glob(factory_name)))

@@ -31,7 +31,7 @@ PY_SUFFIX = ".py"
 # Сколько символов тела-выражения arrow-функции просматривать: тело без
 # фигурных скобок не имеет однозначной границы без парсера JS.
 EXPRESSION_BODY_WINDOW = 200
-JS_SUFFIX = ".js"
+JS_SUFFIXES = {".js", ".ts"}
 
 FORBIDDEN_SUBSTRINGS = (
     "platform:ui_events",
@@ -535,7 +535,7 @@ def _check_push_reload(errors: list[str]) -> None:
     for root in _push_reload_roots():
         if not root.exists():
             continue
-        for path in sorted(root.rglob("*.js")):
+        for path in sorted(p for g in ("*.js", "*.ts") for p in root.rglob(g)):
             text = path.read_text(encoding="utf-8", errors="ignore")
             rel = str(path.relative_to(ROOT)).replace("\\", "/")
             method_bodies = _extract_method_bodies(text)
@@ -618,7 +618,7 @@ def _check_naming_and_docs(errors: list[str]) -> None:
 
 def _check_bare_push_literals_outside_types(errors: list[str]) -> None:
     """A9: domain push string literals только в events/resources или events/types."""
-    types_files = list((ROOT / "apps").glob("*/ui/events/types.js"))
+    types_files = [p for g in ("*/ui/events/types.js", "*/ui/events/types.ts") for p in (ROOT / "apps").glob(g)]
     banned_literals: set[str] = set()
     for path in types_files:
         text = path.read_text(encoding="utf-8", errors="ignore")
@@ -636,9 +636,9 @@ def _check_bare_push_literals_outside_types(errors: list[str]) -> None:
             root = svc_ui / kind
             if not root.exists():
                 continue
-            for path in root.rglob("*.js"):
+            for path in (p for g in ("*.js", "*.ts") for p in root.rglob(g)):
                 rel = str(path.relative_to(ROOT)).replace("\\", "/")
-                if "/events/resources/" in rel or "/events/types.js" in rel:
+                if "/events/resources/" in rel or "/events/types." in rel:
                     continue
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 for match in lit_re.finditer(text):
@@ -679,7 +679,7 @@ def main() -> int:
                 f"(no register_platform_event); sites: {locs}"
             )
 
-    js_files = _iter_files(("apps", "core/frontend"), {JS_SUFFIX})
+    js_files = _iter_files(("apps", "core/frontend"), JS_SUFFIXES)
     ui_consumed = _collect_ui_factory_consumed_types(js_files)
     flows_consumed = _collect_flows_durable_consumed_types(py_files, const_map)
     for event_type in sorted(registered):

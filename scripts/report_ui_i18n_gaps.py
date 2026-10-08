@@ -53,7 +53,7 @@ def scan_ui_dir(ui_dir: Path, root: Path) -> list[tuple[Path, int, str]]:
     hits: list[tuple[Path, int, str]] = []
     if not ui_dir.is_dir():
         return hits
-    for path in sorted(ui_dir.rglob("*.js")):
+    for path in sorted(p for g in ("*.js", "*.ts") for p in ui_dir.rglob(g)):
         if skip_file(path):
             continue
         try:

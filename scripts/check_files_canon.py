@@ -3,6 +3,12 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from _paths import js_or_ts
+
 import re
 import sys
 from pathlib import Path
@@ -119,7 +125,7 @@ def _check_docs_placement_coverage() -> list[str]:
     return errors
 
 
-FLOW_UI_HOST = (
+FLOW_UI_HOST = js_or_ts(
     REPO_ROOT
     / "core"
     / "frontend"
@@ -147,7 +153,7 @@ def _check_flow_ui_no_base64_upload() -> list[str]:
 def _check_a2a_stream_url_only() -> list[str]:
     """Platform A2A builder accepts only url/file_id file parts."""
     errors: list[str] = []
-    path = (
+    path = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -156,7 +162,7 @@ def _check_a2a_stream_url_only() -> list[str]:
         / "flow-ui"
         / "protocol"
         / "a2a-codec.js"
-    )
+)
     text = path.read_text(encoding="utf-8")
     if "typeof f.raw === 'string'" in text:
         errors.append("a2a-codec.js: buildA2aFileParts must not accept f.raw")
@@ -180,7 +186,7 @@ def _check_mail_no_content_base64() -> list[str]:
         errors.append("core/mail/models: content_base64 must be removed")
     if "attachment.file_id required" not in models_text:
         errors.append("core/mail/models: MailSendPayload must require attachment.file_id")
-    modal = (
+    modal = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -188,7 +194,7 @@ def _check_mail_no_content_base64() -> list[str]:
         / "lib"
         / "components"
         / "platform-mail-modal.js"
-    )
+)
     modal_text = modal.read_text(encoding="utf-8")
     if "content_base64" in modal_text:
         errors.append("platform-mail-modal.js: content_base64 download path forbidden")
@@ -206,14 +212,14 @@ def _check_mail_no_content_base64() -> list[str]:
 def _check_public_search_no_base64_upload() -> list[str]:
     """Public search: browser files → chunked upload + Part.url, not base64."""
     errors: list[str] = []
-    path = (
+    path = js_or_ts(
         REPO_ROOT
         / "apps"
         / "frontend"
         / "ui"
         / "_helpers"
         / "public-search-files.js"
-    )
+)
     text = path.read_text(encoding="utf-8")
     if "readAsDataURL" in text:
         errors.append("public-search-files.js: readAsDataURL forbidden")
@@ -223,7 +229,7 @@ def _check_public_search_no_base64_upload() -> list[str]:
         errors.append("public-search-files.js: must use uploadPlatformFile")
     if "uploadPublicSearchFilesForA2a" not in text:
         errors.append("public-search-files.js: uploadPublicSearchFilesForA2a required")
-    resource = (
+    resource = js_or_ts(
         REPO_ROOT
         / "apps"
         / "frontend"
@@ -231,7 +237,7 @@ def _check_public_search_no_base64_upload() -> list[str]:
         / "events"
         / "resources"
         / "public-search.resource.js"
-    )
+)
     resource_text = resource.read_text(encoding="utf-8")
     if "uploadPublicSearchFilesForA2a" not in resource_text:
         errors.append("public-search.resource.js: must call uploadPublicSearchFilesForA2a")
@@ -243,7 +249,7 @@ def _check_public_search_no_base64_upload() -> list[str]:
 def _check_markdown_editor_no_base64_attach() -> list[str]:
     """Mail compose attachments: chunked upload + file_id, not btoa(arrayBuffer)."""
     errors: list[str] = []
-    path = (
+    path = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -251,7 +257,7 @@ def _check_markdown_editor_no_base64_attach() -> list[str]:
         / "lib"
         / "components"
         / "platform-markdown-editor.js"
-    )
+)
     text = path.read_text(encoding="utf-8")
     if "content_base64" in text:
         errors.append("platform-markdown-editor.js: content_base64 attach forbidden")
@@ -261,7 +267,7 @@ def _check_markdown_editor_no_base64_attach() -> list[str]:
         errors.append("platform-markdown-editor.js: arrayBuffer file attach forbidden")
     if "uploadPlatformFile" not in text:
         errors.append("platform-markdown-editor.js: must use uploadPlatformFile")
-    reducer = (
+    reducer = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -270,7 +276,7 @@ def _check_markdown_editor_no_base64_attach() -> list[str]:
         / "events"
         / "reducers"
         / "mail.js"
-    )
+)
     reducer_text = reducer.read_text(encoding="utf-8")
     if "content_base64 required" in reducer_text:
         errors.append("mail.js reducer: content_base64 compose path must be removed")
@@ -293,7 +299,7 @@ def _check_chunked_only_upload() -> list[str]:
     if "single_shot_max_bytes" in config_path.read_text(encoding="utf-8"):
         errors.append("core/config/models.py: single_shot_max_bytes must be removed")
 
-    files_url_js = (
+    files_url_js = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -301,7 +307,7 @@ def _check_chunked_only_upload() -> list[str]:
         / "lib"
         / "utils"
         / "platform-files-url.js"
-    )
+)
     if not files_url_js.is_file():
         errors.append("platform-files-url.js must exist")
     else:
@@ -311,7 +317,7 @@ def _check_chunked_only_upload() -> list[str]:
         if "setPlatformFilesRouteSegment" not in files_url_text:
             errors.append("platform-files-url.js: setPlatformFilesRouteSegment required")
 
-    app_js = (
+    app_js = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -319,11 +325,11 @@ def _check_chunked_only_upload() -> list[str]:
         / "lib"
         / "base"
         / "PlatformApp.js"
-    )
+)
     if "setPlatformFilesRouteSegment" not in app_js.read_text(encoding="utf-8"):
         errors.append("PlatformApp.js: must bind files route segment via setPlatformFilesRouteSegment")
 
-    upload_js = (
+    upload_js = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -331,7 +337,7 @@ def _check_chunked_only_upload() -> list[str]:
         / "lib"
         / "utils"
         / "platform-file-upload.js"
-    )
+)
     upload_text = upload_js.read_text(encoding="utf-8")
     if "_uploadSingleShot" in upload_text or "singleShotMaxBytes" in upload_text:
         errors.append("platform-file-upload.js: single-shot branch must be removed")
@@ -342,7 +348,7 @@ def _check_chunked_only_upload() -> list[str]:
     if "resolvePlatformFilesApiBase" not in upload_text:
         errors.append("platform-file-upload.js: must use resolvePlatformFilesApiBase")
 
-    multipart_path = (
+    multipart_path = js_or_ts(
         REPO_ROOT
         / "core"
         / "frontend"
@@ -351,13 +357,13 @@ def _check_chunked_only_upload() -> list[str]:
         / "events"
         / "factories"
         / "_multipart-upload.js"
-    )
+)
     if multipart_path.is_file():
         errors.append("_multipart-upload.js must be deleted")
 
-    events_index = (
+    events_index = js_or_ts(
         REPO_ROOT / "core" / "frontend" / "static" / "lib" / "events" / "index.js"
-    )
+)
     if "createMultipartFileUploadOp" in events_index.read_text(encoding="utf-8"):
         errors.append("events/index.js: createMultipartFileUploadOp export must be removed")
 
@@ -372,7 +378,7 @@ def _check_chunked_only_upload() -> list[str]:
             / "resources"
             / "rag-documents.resource.js",
             "/frontend/api/v1/files/",
-        ),
+),
         (
             REPO_ROOT
             / "apps"
@@ -406,7 +412,7 @@ def _check_chunked_only_upload() -> list[str]:
         ),
     )
     for path, needle in forbidden_formdata_posts:
-        text = path.read_text(encoding="utf-8")
+        text = js_or_ts(path).read_text(encoding="utf-8")
         if needle in text:
             errors.append(f"{path.relative_to(REPO_ROOT)}: forbidden `{needle}` in upload path")
     return errors

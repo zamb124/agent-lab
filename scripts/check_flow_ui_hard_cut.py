@@ -34,7 +34,7 @@ from core.flow_ui.document import INPUT_BLOCK_TYPES, STATE_PATH_PATTERN, FlowUIB
 
 FLOW_UI_LIB = ROOT / "core/frontend/static/lib/flow-ui"
 EDITOR_DIR = ROOT / "apps/flows/ui/components/interface-editor"
-EDITOR_MODALS = sorted((ROOT / "apps/flows/ui/modals").glob("flows-interface-*.js"))
+EDITOR_MODALS = sorted(p for g in ("flows-interface-*.js", "flows-interface-*.ts") for p in (ROOT / "apps/flows/ui/modals").glob(g))
 SANDBOX_FIXTURE = ROOT / "tests/fixtures/flow_ui/html_sandbox.json"
 
 MAX_FILE_LINES = 600
@@ -174,8 +174,8 @@ def _line_count(path: Path) -> int:
 
 
 def _flow_ui_zone_files() -> list[Path]:
-    zone: list[Path] = sorted(FLOW_UI_LIB.rglob("*.js"))
-    zone.extend(sorted(EDITOR_DIR.glob("*.js")))
+    zone: list[Path] = sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g))
+    zone.extend(sorted(p for g in ("*.js", "*.ts") for p in EDITOR_DIR.glob(g)))
     zone.extend(EDITOR_MODALS)
     zone.extend(sorted((ROOT / "core/flow_ui").glob("*.py")))
     zone.extend(sorted((ROOT / "apps/flows/src/api/v1").glob("flow_ui*.py")))
@@ -228,7 +228,7 @@ def _js_renderer_keys() -> set[str]:
     table_start = re.compile(r"^export const [A-Z_]+_BLOCKS = Object\.freeze\(\{$")
     method = re.compile(r"^    ([a-z_]+)\([^)]*\) \{$")
     keys: set[str] = set()
-    for path in sorted((FLOW_UI_LIB / "blocks").glob("*.js")):
+    for path in sorted(p for g in ("*.js", "*.ts") for p in (FLOW_UI_LIB / "blocks").glob(g)):
         if path.name == "registry.js":
             continue
         inside_table = False
@@ -275,8 +275,8 @@ def _check_grammar_constants(failures: list[str]) -> None:
 
 
 def _check_budgets(failures: list[str]) -> None:
-    flow_ui_files = sorted(FLOW_UI_LIB.rglob("*.js"))
-    editor_files = sorted(EDITOR_DIR.glob("*.js")) + EDITOR_MODALS
+    flow_ui_files = sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g))
+    editor_files = sorted(p for g in ("*.js", "*.ts") for p in EDITOR_DIR.glob(g)) + EDITOR_MODALS
     for path in flow_ui_files + editor_files:
         lines = _line_count(path)
         if lines > MAX_FILE_LINES:
@@ -291,7 +291,7 @@ def _check_budgets(failures: list[str]) -> None:
 
 def _check_sandbox(failures: list[str]) -> None:
     forbidden = re.compile(r"allow-same-origin|unsafe-eval")
-    for path in sorted(FLOW_UI_LIB.rglob("*.js")):
+    for path in sorted(p for g in ("*.js", "*.ts") for p in FLOW_UI_LIB.rglob(g)):
         text = path.read_text(encoding="utf-8")
         for number, line in enumerate(text.splitlines(), start=1):
             if forbidden.search(line):

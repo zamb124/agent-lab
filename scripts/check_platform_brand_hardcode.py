@@ -30,7 +30,7 @@ SKIP_DIR_NAMES = frozenset(
     }
 )
 
-ALLOWLIST_SUFFIXES = frozenset({".py", ".js", ".html"})
+ALLOWLIST_SUFFIXES = frozenset({".py", ".js", ".ts", ".html"})
 
 HTML_ALLOWLIST_SUBSTRINGS = (
     "application/ld+json",

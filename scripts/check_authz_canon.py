@@ -143,7 +143,7 @@ def _iter_py_files(root: Path) -> list[Path]:
 
 def _iter_js_files(root: Path) -> list[Path]:
     files: list[Path] = []
-    for path in root.rglob("*.js"):
+    for path in (p for g in ("*.js", "*.ts") for p in root.rglob(g)):
         if any(part in {"__pycache__", ".venv", "node_modules", "dist"} for part in path.parts):
             continue
         files.append(path)

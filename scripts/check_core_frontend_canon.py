@@ -47,6 +47,16 @@ def fail(message: str) -> None:
     ERRORS.append(message)
 
 
+def _js_or_ts(path: Path) -> Path:
+    """Каноничный путь исходника: при миграции .js -> .ts sibling."""
+    if path.exists():
+        return path
+    ts = path.with_suffix('.ts')
+    if path.suffix == '.js' and ts.exists():
+        return ts
+    return path
+
+
 def _iter_js(*subdirs: str) -> list[Path]:
     files: list[Path] = []
     for sub in subdirs:
@@ -103,7 +113,7 @@ def check_events_zone() -> None:
         text = _strip_comments(path.read_text(encoding="utf-8"))
         first_part = rel.parts[0] if rel.parts else ""
         if re.search(r"\bfetch\s*\(", text):
-            if path != LIB / "events" / "http.js" and first_part != "effects":
+            if path != _js_or_ts(LIB / "events" / "http.js") and first_part != "effects":
                 fail(f"{path.relative_to(ROOT)}: fetch( is allowed only in events/http.js and events/effects/")
         if re.search(r"\bnew\s+WebSocket\s*\(", text) and first_part != "effects":
             fail(f"{path.relative_to(ROOT)}: new WebSocket allowed only in events/effects/")
@@ -117,9 +127,8 @@ def check_events_zone() -> None:
     ]
     fallback_files = [p for p in files if any(str(p).startswith(str(z)) for z in fallback_zones)]
     fallback_excluded = {
-        LIB / "events" / "factories" / "_internal.js",
-        LIB / "events" / "factories" / "_transport.js",
-        LIB / "events" / "factories" / "register.js",
+        _js_or_ts(LIB / "events" / "factories" / name)
+        for name in ("_internal.js", "_transport.js", "register.js")
     }
     fallback_pattern = re.compile(r"\)\s*\|\|\s*(\[\]|\{\}|null)|\?\?\s*(\[\]|\{\}|null|['\"][^'\"]*['\"])")
     for path in fallback_files:
@@ -132,7 +141,7 @@ def check_events_zone() -> None:
                 f"{path.relative_to(ROOT)}:{line}: fallback `|| [] | || {{}} | ?? ...` запрещён в reducers/factories — проверяйте payload явно и бросайте"
             )
 
-    contract_path = LIB / "events" / "contract.js"
+    contract_path = _js_or_ts(LIB / "events" / "contract.js")
     contract_text = contract_path.read_text(encoding="utf-8")
     block = re.search(r"export\s+const\s+CoreEvents\s*=\s*Object\.freeze\(\{(?P<body>[^}]+)\}", contract_text, re.S)
     if not block:
@@ -156,7 +165,7 @@ def check_base_zone() -> None:
     ) if False else None  # PlatformElement legitimately extends LitElement
 
     # Только в самом PlatformElement допускается `extends LitElement`.
-    pe_path = LIB / "platform-element" / "index.js"
+    pe_path = _js_or_ts(LIB / "platform-element" / "index.js")
     for path in files:
         if path == pe_path:
             continue
@@ -228,19 +237,19 @@ def check_components_zone() -> None:
     # platform-modal-stack, platform-confirm-modal — абстрактный базовый класс
     # для apps) — исключены.
     base_modals = {
-        "glass-modal.js",
-        "glass-form-modal.js",
-        "platform-modal-stack.js",
-        "platform-confirm-modal.js",  # абстрактный родитель для apps/<svc>/ui/modals/confirm-modal.js
+        "glass-modal",
+        "glass-form-modal",
+        "platform-modal-stack",
+        "platform-confirm-modal",  # абстрактный родитель для apps/<svc>/ui/modals/confirm-modal.js
     }
     modal_named_presentational = {
-        "platform-modal-search-field.js",
+        "platform-modal-search-field",
     }
     modal_files = [
         p for p in files
         if "modal" in p.name
-        and p.name not in base_modals
-        and p.name not in modal_named_presentational
+        and p.stem not in base_modals
+        and p.stem not in modal_named_presentational
     ]
     for path in modal_files:
         text = path.read_text(encoding="utf-8")
@@ -255,13 +264,13 @@ def check_components_zone() -> None:
     # ОБЯЗАНЫ иметь `static bottomSheetKind = '<scope>.<entity>'` + парный
     # `registerBottomSheetKind`. Базовые компоненты исключены.
     base_sheets = {
-        "platform-bottom-sheet.js",          # базовый класс
-        "platform-bottom-sheet-stack.js",    # рендерер стека
+        "platform-bottom-sheet",          # базовый класс
+        "platform-bottom-sheet-stack",    # рендерер стека
     }
     sheet_files = [
         p for p in files
-        if ("bottom-sheet" in p.name or p.name.endswith("-sheet.js"))
-        and p.name not in base_sheets
+        if ("bottom-sheet" in p.name or p.stem.endswith("-sheet"))
+        and p.stem not in base_sheets
     ]
     for path in sheet_files:
         text = path.read_text(encoding="utf-8")
@@ -283,7 +292,7 @@ def check_utils_zone() -> None:
         "utils/** must not import from apps/",
     )
     # fetch разрешён только для статических ассетов (CSS-стили — style-cache).
-    fetch_allowed = {LIB / "utils" / "style-cache.js"}
+    fetch_allowed = {_js_or_ts(LIB / "utils" / "style-cache.js")}
     for path in files:
         if path in fetch_allowed:
             continue
