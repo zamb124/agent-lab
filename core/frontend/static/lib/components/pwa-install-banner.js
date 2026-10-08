@@ -7,9 +7,11 @@ import { html, css } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
+import { platformStorageKey } from '../utils/storage-keys.js';
+import { storageGet, storageSet } from '../utils/platform-storage.js';
 import './platform-icon.js';
 
-const DISMISS_KEY = 'pwa-banner-dismissed';
+const DISMISS_KEY = platformStorageKey('core', 'pwa_banner_dismissed');
 
 function _detectPlatform() {
     const ua = navigator.userAgent;
@@ -66,7 +68,7 @@ export class PWAInstallBanner extends PlatformElement {
     constructor() {
         super();
         this.platform = _detectPlatform();
-        this._dismissed = !!localStorage.getItem(DISMISS_KEY);
+        this._dismissed = !!storageGet(DISMISS_KEY);
         this._pwaSelect = this.select((s) => ({
             installAvailable: s.pwa.installAvailable,
             installed: s.pwa.installed,
@@ -94,7 +96,7 @@ export class PWAInstallBanner extends PlatformElement {
 
     _dismiss() {
         this._dismissed = true;
-        localStorage.setItem(DISMISS_KEY, 'true');
+        storageSet(DISMISS_KEY, 'true');
     }
 
     render() {

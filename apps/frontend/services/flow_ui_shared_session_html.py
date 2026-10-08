@@ -8,7 +8,7 @@ import json
 from core.frontend.viewport import PLATFORM_MOBILE_VIEWPORT_CONTENT
 
 # Same key as core/frontend/static/lib/events/effects/theme.effect.js
-_PLATFORM_THEME_STORAGE_KEY = "platform_theme"
+_PLATFORM_THEME_STORAGE_KEY = "platform:core:theme"
 
 
 def build_flow_ui_shared_session_html(*, grant_id: str) -> str:

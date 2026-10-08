@@ -53,10 +53,8 @@ describe('authCompanyNavigationEffect', () => {
             },
         });
         const setItem = vi.fn();
-        vi.stubGlobal('window', {
-            location: loc,
-            localStorage: { setItem },
-        });
+        vi.stubGlobal('window', { location: loc });
+        vi.stubGlobal('localStorage', { setItem });
 
         const getState = () => ({
             companies: {
@@ -93,10 +91,8 @@ describe('authCompanyNavigationEffect', () => {
             },
         });
         const setItem = vi.fn();
-        vi.stubGlobal('window', {
-            location: loc,
-            localStorage: { setItem },
-        });
+        vi.stubGlobal('window', { location: loc });
+        vi.stubGlobal('localStorage', { setItem });
 
         const getState = () => ({
             companies: {
@@ -136,10 +132,8 @@ describe('authCompanyNavigationEffect', () => {
                 href = v;
             },
         });
-        vi.stubGlobal('window', {
-            location: loc,
-            localStorage: { setItem: vi.fn() },
-        });
+        vi.stubGlobal('window', { location: loc });
+        vi.stubGlobal('localStorage', { setItem: vi.fn() });
 
         const getState = () => ({ companies: { list: [{ company_id: 'c2', name: 'B' }] } });
         const dispatched = [];

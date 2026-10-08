@@ -3,13 +3,16 @@
  * Один ключ для всех SPA-сервисов; запись — из PlatformServiceSidebar при collapse-change.
  */
 
-export const SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY = 'platform:shell-sidebar-collapsed';
+import { platformStorageKey } from './storage-keys.js';
+import { storageGet, storageSet } from './platform-storage.js';
+
+export const SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY = platformStorageKey('core', 'shell_sidebar_collapsed');
 
 /**
  * @returns {boolean}
  */
 export function readShellSidebarCollapsed() {
-    const raw = window.localStorage.getItem(SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY);
+    const raw = storageGet(SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY);
     if (raw === null) {
         return false;
     }
@@ -29,5 +32,5 @@ export function writeShellSidebarCollapsed(collapsed) {
     if (typeof collapsed !== 'boolean') {
         throw new Error('writeShellSidebarCollapsed: expected boolean');
     }
-    window.localStorage.setItem(SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false');
+    storageSet(SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false');
 }

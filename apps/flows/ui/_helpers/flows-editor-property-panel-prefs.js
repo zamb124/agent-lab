@@ -9,6 +9,7 @@
  */
 
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 
 export const FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY = platformStorageKey(
     'flows',
@@ -55,7 +56,7 @@ export function normalizeAssistantWidth(value) {
  * @returns {{ property_panels?: Record<string, unknown>, property_panel?: Record<string, unknown>, assistant_width?: unknown }}
  */
 function _readRoot() {
-    const raw = globalThis.localStorage.getItem(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY);
+    const raw = storageGet(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY);
     if (raw === null) {
         return {};
     }
@@ -80,7 +81,7 @@ function _readRoot() {
  * @param {{ property_panels?: Record<string, unknown>, assistant_width?: number }} root
  */
 function _writeRoot(root) {
-    globalThis.localStorage.setItem(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY, JSON.stringify(root));
+    storageSetJson(FLOWS_EDITOR_PROPERTY_PANEL_PREFS_KEY, root);
 }
 
 /**

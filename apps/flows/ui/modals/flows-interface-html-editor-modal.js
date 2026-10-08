@@ -8,6 +8,7 @@ import { css, html, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageGetJson, storageSet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 import { htmlBlockState, htmlBoundPaths } from '@platform/lib/flow-ui/runtime/html-sandbox.js';
 import {
     FLOW_UI_API,
@@ -35,7 +36,7 @@ const DEFAULT_PANELS = Object.freeze({ preview: true, source: true, inspector: t
 
 function readStoredPanels() {
     try {
-        const raw = JSON.parse(localStorage.getItem(PANELS_KEY));
+        const raw = storageGetJson(PANELS_KEY);
         if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_PANELS };
         const next = { ...DEFAULT_PANELS };
         for (const name of PANEL_NAMES) {
@@ -171,7 +172,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         this._liveSource = next;
         this._originalSource = next;
         this._hydrated = true;
-        const stored = localStorage.getItem(LAYOUT_KEY);
+        const stored = storageGet(LAYOUT_KEY);
         if (stored === 'split' || stored === 'preview') this._layout = stored;
         this._panels = readStoredPanels();
         this._setStateText(JSON.stringify(this._initialTestState(), null, 2));
@@ -321,7 +322,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
 
     _setLayout(layout) {
         this._layout = layout;
-        localStorage.setItem(LAYOUT_KEY, layout);
+        storageSet(LAYOUT_KEY, layout);
     }
 
     _visiblePanelCount() {
@@ -333,7 +334,7 @@ export class FlowsInterfaceHtmlEditorModal extends PlatformModal {
         if (visible !== true && this._visiblePanelCount() <= 1 && this._panels[name]) return;
         const next = { ...this._panels, [name]: visible === true };
         this._panels = next;
-        localStorage.setItem(PANELS_KEY, JSON.stringify(next));
+        storageSetJson(PANELS_KEY, next);
         if (visible === true && name === 'preview') {
             this.updateComplete.then(() => this.renderRoot.querySelector('flow-ui-html-block')?.pushHost());
         }

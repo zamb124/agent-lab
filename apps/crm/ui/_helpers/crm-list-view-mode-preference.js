@@ -3,6 +3,7 @@
  */
 
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSet } from '@platform/lib/utils/platform-storage.js';
 
 const KEYS = Object.freeze({
     entities: platformStorageKey('crm', 'entities.view_mode'),
@@ -34,7 +35,7 @@ export function readCrmListViewMode(scope, fallback) {
     if (typeof window === 'undefined' || !window.localStorage) {
         return fallback;
     }
-    const raw = window.localStorage.getItem(_key(scope));
+    const raw = storageGet(_key(scope));
     if (raw === null) return fallback;
     return allowed.has(raw) ? raw : fallback;
 }
@@ -47,5 +48,5 @@ export function writeCrmListViewMode(scope, mode) {
     if (typeof window === 'undefined' || !window.localStorage) {
         return;
     }
-    window.localStorage.setItem(_key(scope), mode);
+    storageSet(_key(scope), mode);
 }

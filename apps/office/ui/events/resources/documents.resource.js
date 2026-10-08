@@ -21,6 +21,7 @@ import { createAsyncOp, createForm } from '@platform/lib/events/index.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 import { uploadPlatformFile } from '@platform/lib/utils/platform-file-upload.js';
 import { buildOfficeDocumentFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { nsHeader } from './_namespace-header.js';
@@ -33,7 +34,7 @@ const SEARCH_MODE_STORAGE_KEY = 'documents_explorer_search_mode';
 const RECENT_LIMIT = 20;
 
 function _readStoredSearchMode() {
-    const raw = window.localStorage.getItem(platformStorageKey('office', SEARCH_MODE_STORAGE_KEY));
+    const raw = storageGet(platformStorageKey('office', SEARCH_MODE_STORAGE_KEY));
     if (raw === 'files' || raw === 'semantic') {
         return raw;
     }
@@ -41,7 +42,7 @@ function _readStoredSearchMode() {
 }
 
 function _readStoredIds(storageKey) {
-    const raw = window.localStorage.getItem(platformStorageKey('office', storageKey));
+    const raw = storageGet(platformStorageKey('office', storageKey));
     if (typeof raw !== 'string' || raw.length === 0) {
         return [];
     }
@@ -53,7 +54,7 @@ function _readStoredIds(storageKey) {
 }
 
 function _writeStoredIds(storageKey, ids) {
-    window.localStorage.setItem(platformStorageKey('office', storageKey), JSON.stringify(ids));
+    storageSetJson(platformStorageKey('office', storageKey), ids);
 }
 
 function _normalizeCatalogIds(raw) {
@@ -391,10 +392,7 @@ export const documentsOp = createAsyncOp({
             if (searchMode !== 'files' && searchMode !== 'semantic') {
                 throw new Error('office/documents: searchMode must be files|semantic');
             }
-            window.localStorage.setItem(
-                platformStorageKey('office', SEARCH_MODE_STORAGE_KEY),
-                searchMode,
-            );
+            storageSet(platformStorageKey('office', SEARCH_MODE_STORAGE_KEY), searchMode);
             return { ...state, searchMode };
         }
         if (event.type === events.SET_SORT) {
@@ -493,10 +491,7 @@ export const documentsOp = createAsyncOp({
             ) {
                 throw new Error('office/documents: invalid explorerView');
             }
-            window.localStorage.setItem(
-                platformStorageKey('office', EXPLORER_VIEW_STORAGE_KEY),
-                explorerView,
-            );
+            storageSet(platformStorageKey('office', EXPLORER_VIEW_STORAGE_KEY), explorerView);
             return { ...state, explorerView, selectedCatalogId: null };
         }
         if (event.type === events.TOGGLE_STARRED) {

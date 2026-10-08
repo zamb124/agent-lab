@@ -1,6 +1,6 @@
 """
 Минимальная HTML-страница ошибок доступа к компании по Host/subdomain (без SPA).
-Тема: localStorage platform_theme, иначе prefers-color-scheme, иначе dark.
+Тема: localStorage platform:core:theme, иначе prefers-color-scheme, иначе dark.
 """
 
 import html
@@ -29,7 +29,7 @@ def build_company_access_error_html(
   <script>
   (function() {{
     var t = null;
-    try {{ t = localStorage.getItem('platform_theme'); }} catch (e) {{}}
+    try {{ t = localStorage.getItem('platform:core:theme'); }} catch (e) {{}}
     var m;
     if (t === 'light' || t === 'dark') {{
       m = t;

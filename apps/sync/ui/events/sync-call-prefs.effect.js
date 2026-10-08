@@ -13,8 +13,9 @@
  */
 
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
-const STORAGE_KEY = 'humanitec.sync.call_prefs';
+const STORAGE_KEY = platformStorageKey('sync', 'call_prefs');
 
 const PERSIST_EVENT_TYPES = new Set([
     'sync/call_prefs/camera_set',

@@ -3,7 +3,7 @@
 <head>
     <script>
         (function () {
-            var stored = localStorage.getItem('platform_theme');
+            var stored = localStorage.getItem('platform:core:theme');
             var mode = stored === 'light' || stored === 'dark' ? stored : 'dark';
             document.documentElement.setAttribute('data-theme', mode);
         })();

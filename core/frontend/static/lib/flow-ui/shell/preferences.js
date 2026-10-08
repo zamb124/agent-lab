@@ -1,7 +1,13 @@
 import { platformStorageKey } from '../../utils/storage-keys.js';
 import { parseStoredGeometry, toStoredGeometry } from './drawer-geometry.js';
 
-const PREFIX = 'linnex.flow-ui.preferences.v1';
+function _segment(raw) {
+    return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+}
+
+function _prefsKey(scope) {
+    return platformStorageKey('core', `flow_ui.preferences.${_segment(scope)}`);
+}
 const EMBED_GEOMETRY_FIELD = 'geometry';
 const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -70,7 +76,7 @@ export function writeEmbedDrawerGeometry(embedId, geometry) {
 export function readFlowUIPreferences(scope = 'global') {
     const storage = store();
     if (!storage) return {};
-    const raw = storage.getItem(`${PREFIX}:${scope}`);
+    const raw = storage.getItem(_prefsKey(scope));
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -88,7 +94,7 @@ export function writeFlowUIPreferences(scope, patch) {
         throw new Error('flow-ui preferences: patch object required');
     }
     storage.setItem(
-        `${PREFIX}:${scope}`,
+        _prefsKey(scope),
         JSON.stringify({ ...readFlowUIPreferences(scope), ...patch }),
     );
 }

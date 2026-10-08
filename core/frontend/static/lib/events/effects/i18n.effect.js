@@ -8,6 +8,7 @@
 import { CoreEvents } from '../contract.js';
 import { httpRequest } from '../http.js';
 import { PLATFORM_LOCALE_STORAGE_KEY, resolveInitialUiLocale } from '../../utils/i18n-initial-locale.js';
+import { storageSet } from '../../utils/platform-storage.js';
 import { i18nDefaultNamespaceForBaseUrl } from '../../utils/i18n-namespace.js';
 import { embedSafeFetchCredentials, platformAbsoluteUrl } from './embed-request-helpers.js';
 
@@ -45,7 +46,7 @@ export function createI18nEffect({ baseUrl, platformApexOrigin } = {}) {
                         credentials: embedSafeFetchCredentials(bundleUrl),
                     });
                     ctx.dispatch(CoreEvents.I18N_LOCALE_LOADED, { locale, bundle }, { causation_id: event.id, source: 'http' });
-                    localStorage.setItem(PLATFORM_LOCALE_STORAGE_KEY, locale);
+                    storageSet(PLATFORM_LOCALE_STORAGE_KEY, locale);
                     _writeLocaleCookie(locale);
                     ctx.dispatch(
                         CoreEvents.I18N_LOCALE_CHANGED,

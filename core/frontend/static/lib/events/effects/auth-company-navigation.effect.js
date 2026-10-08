@@ -8,8 +8,10 @@
 
 import { CoreEvents } from '../contract.js';
 import { buildCompanySubdomainUrl } from '../../utils/company-url.js';
+import { platformStorageKey } from '../../utils/storage-keys.js';
+import { storageSet } from '../../utils/platform-storage.js';
 
-const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
+export const COMPANY_SWITCH_STORAGE_KEY = platformStorageKey('core', 'company_switch');
 
 export function createAuthCompanyNavigationEffect() {
     return async function authCompanyNavigationEffect(event, ctx) {
@@ -51,7 +53,7 @@ export function createAuthCompanyNavigationEffect() {
 
         const subdomain = company.subdomain.trim();
         const payload = `${Date.now()}|${company.company_id}|${subdomain}`;
-        window.localStorage.setItem(COMPANY_SWITCH_STORAGE_KEY, payload);
+        storageSet(COMPANY_SWITCH_STORAGE_KEY, payload);
 
         const pathname =
             typeof window.location.pathname === 'string' ? window.location.pathname : '';

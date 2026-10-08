@@ -27,7 +27,7 @@ const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: {
 
 describe('createI18nEffect: bootstrap', () => {
     it('эмитит I18N_LOCALE_REQUESTED с stored locale', async () => {
-        storage.localStorage.setItem('platform_locale', 'en');
+        storage.localStorage.setItem('platform:core:locale', 'en');
         const dispatched = [];
         await createI18nEffect({ baseUrl: '/svc' })(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({}), dispatched));
         const req = dispatched.find((d) => d.type === CoreEvents.I18N_LOCALE_REQUESTED);
@@ -63,7 +63,7 @@ describe('createI18nEffect: LOCALE_REQUESTED', () => {
         const types = dispatched.map((d) => d.type);
         expect(types).toContain(CoreEvents.I18N_LOCALE_LOADED);
         expect(types).toContain(CoreEvents.I18N_LOCALE_CHANGED);
-        expect(storage.localStorage.getItem('platform_locale')).toBe('en');
+        expect(storage.localStorage.getItem('platform:core:locale')).toBe('en');
     });
 
     it('ошибка → LOCALE_FAILED', async () => {

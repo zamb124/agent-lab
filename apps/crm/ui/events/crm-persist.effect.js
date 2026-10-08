@@ -17,10 +17,11 @@
  */
 
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
 const KEYS = Object.freeze({
-    graphPanels: 'crm.graph_ui.panels',
-    graphViewState: 'crm.graph_view.state',
+    graphPanels: platformStorageKey('crm', 'graph_ui.panels'),
+    graphViewState: platformStorageKey('crm', 'graph_view.state'),
 });
 
 const HYDRATION_ACTIONS = Object.freeze({

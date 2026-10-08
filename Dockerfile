@@ -69,7 +69,8 @@ COPY scripts/build_ui.mjs ./scripts/
 COPY core/frontend/static ./core/frontend/static
 COPY apps/ ./apps/
 RUN npm run build:ui \
-    && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done
+    && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done \
+    && mkdir -p /out/core/frontend && cp -a core/frontend/embed-dist /out/core/frontend/embed-dist
 
 # ============================================
 # Финальные стадии - отличаются только CMD/EXPOSE
@@ -159,4 +160,5 @@ COPY --from=docs-builder /app/documentation-dist ./documentation-dist
 COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
 COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
 COPY --from=ui-builder /out/apps/ ./apps/
+COPY --from=ui-builder /out/core/frontend/embed-dist ./core/frontend/embed-dist
 EXPOSE 8001 8002 8003 8004 8005 8006 8008 8009 8010 8015 8016 8017 8018 8019 8020

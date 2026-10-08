@@ -8,8 +8,10 @@
  */
 
 import { CoreEvents } from '../contract.js';
+import { platformStorageKey } from '../../utils/storage-keys.js';
+import { storageGet, storageSet } from '../../utils/platform-storage.js';
 
-const STORAGE_KEY = 'platform_theme';
+const STORAGE_KEY = platformStorageKey('core', 'theme');
 
 /** @returns {'dark' | 'light' | null} */
 function _lockedDomThemeMode() {
@@ -63,7 +65,7 @@ export function createThemeEffect() {
 
         switch (event.type) {
             case CoreEvents.APP_BOOTSTRAP_STARTED: {
-                const stored = localStorage.getItem(STORAGE_KEY);
+                const stored = storageGet(STORAGE_KEY);
                 let mode;
                 let source;
                 if (stored === 'dark' || stored === 'light') {
@@ -82,7 +84,7 @@ export function createThemeEffect() {
                 const cur = ctx.getState().theme.mode;
                 const next = cur === 'dark' ? 'light' : 'dark';
                 _applyToDom(next);
-                localStorage.setItem(STORAGE_KEY, next);
+                storageSet(STORAGE_KEY, next);
                 ctx.dispatch(CoreEvents.THEME_CHANGED, { mode: next, source: 'user' }, { causation_id: event.id });
                 return;
             }
@@ -91,7 +93,7 @@ export function createThemeEffect() {
                 const mode = event.payload && event.payload.mode;
                 if (mode !== 'dark' && mode !== 'light') return;
                 _applyToDom(mode);
-                localStorage.setItem(STORAGE_KEY, mode);
+                storageSet(STORAGE_KEY, mode);
                 ctx.dispatch(CoreEvents.THEME_CHANGED, { mode, source: 'user' }, { causation_id: event.id });
                 return;
             }

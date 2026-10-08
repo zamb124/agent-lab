@@ -13,13 +13,14 @@
 
 import { CoreEvents } from '../contract.js';
 import { copyTextToClipboard } from '../../utils/clipboard.js';
+import { storageGet, storageSetJson } from '../../utils/platform-storage.js';
 
-const NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
+import { LAST_NAMESPACE_STORAGE_KEY as NAMESPACE_STORAGE_KEY } from '../../utils/platform-namespace.js';
 const ALL_SENTINEL = '__ALL__';
 
 function _readMap() {
     try {
-        const raw = window.localStorage.getItem(NAMESPACE_STORAGE_KEY);
+        const raw = storageGet(NAMESPACE_STORAGE_KEY);
         if (!raw) return {};
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
@@ -30,7 +31,7 @@ function _readMap() {
 }
 
 function _writeMap(map) {
-    window.localStorage.setItem(NAMESPACE_STORAGE_KEY, JSON.stringify(map));
+    storageSetJson(NAMESPACE_STORAGE_KEY, map);
 }
 
 export function createUiEffect() {

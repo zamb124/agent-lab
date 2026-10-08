@@ -88,7 +88,7 @@ RULES: tuple[UiCanonRule, ...] = (
         ("apps", "lib"),
         "hard",
         "platformStorageKey(...) + обёртки utils — прямой ключ запрещён",
-        path_exclude=r"platform-storage|storage-keys|native-app-shell|pwa\.effect|platform-brand",
+        path_exclude=r"platform-storage|storage-keys|storage\.effect|native-app-shell|pwa\.effect|platform-brand",
     ),
     UiCanonRule(
         "vendored_lit_path",

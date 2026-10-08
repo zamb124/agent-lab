@@ -4,6 +4,7 @@
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSet } from '@platform/lib/utils/platform-storage.js';
 import '@platform/lib/components/platform-icon.js';
 
 const DISMISS_STORAGE_KEY = platformStorageKey('frontend', 'landing.agent_download_card.dismissed');
@@ -182,14 +183,14 @@ export class LandingAgentDownloadCard extends PlatformElement {
         if (typeof window === 'undefined') {
             return;
         }
-        this._dismissed = window.localStorage.getItem(DISMISS_STORAGE_KEY) === '1';
+        this._dismissed = storageGet(DISMISS_STORAGE_KEY) === '1';
     }
 
     _dismiss(event) {
         event.preventDefault();
         event.stopPropagation();
         this._dismissed = true;
-        window.localStorage.setItem(DISMISS_STORAGE_KEY, '1');
+        storageSet(DISMISS_STORAGE_KEY, '1');
     }
 
     render() {

@@ -3,7 +3,11 @@
  * В storage только пары id -> false (явно свёрнута); отсутствие ключа у группы = развёрнута.
  */
 
-export const SIDEBAR_NAV_TREE_EXPANDED_STORAGE_PREFIX = 'platform:sidebar-nav-tree-expanded:';
+import { platformStorageKey } from './storage-keys.js';
+import { storageGet, storageSetJson } from './platform-storage.js';
+function _segment(raw) {
+    return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+}
 
 /**
  * @param {string} scope
@@ -13,7 +17,7 @@ function _storageKey(scope) {
     if (typeof scope !== 'string' || scope.trim().length === 0) {
         throw new Error('sidebar-nav-tree preference: scope must be non-empty string');
     }
-    return `${SIDEBAR_NAV_TREE_EXPANDED_STORAGE_PREFIX}${scope.trim()}`;
+    return platformStorageKey('core', `sidebar_nav_tree.${_segment(scope)}`);
 }
 
 /**
@@ -22,7 +26,7 @@ function _storageKey(scope) {
  */
 export function readSidebarNavTreeExpanded(scope) {
     const key = _storageKey(scope);
-    const raw = window.localStorage.getItem(key);
+    const raw = storageGet(key);
     if (raw === null) {
         return Object.create(null);
     }
@@ -85,5 +89,5 @@ export function writeSidebarNavTreeExpanded(scope, expandedById) {
         }
         throw new Error(`writeSidebarNavTreeExpanded: value for ${JSON.stringify(id)} must be true, false, or absent`);
     }
-    window.localStorage.setItem(key, JSON.stringify(compact));
+    storageSetJson(key, compact);
 }

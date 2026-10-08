@@ -5,6 +5,8 @@ import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
 import './platform-mail-calendar-rail.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
+import { platformStorageKey } from '../utils/storage-keys.js';
+import { storageGet, storageSet } from '../utils/platform-storage.js';
 import './platform-date-picker.js';
 import './platform-timezone-picker.js';
 import './platform-switch.js';
@@ -238,7 +240,7 @@ function eventMetadataHasSyncMeeting(metadata) {
 }
 
 const SYNC_LOGO_SRC = '/static/core/assets/service_logos/sync_logo.svg';
-const CALENDAR_VIEW_STORAGE_KEY = 'platform_calendar_view';
+const CALENDAR_VIEW_STORAGE_KEY = platformStorageKey('core', 'calendar_view');
 const VALID_VIEWS = ['day', 'week', 'month'];
 
 export class PlatformCalendarModal extends PlatformModal {
@@ -2136,7 +2138,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     constructor() {
         super();
-        const savedView = localStorage.getItem(CALENDAR_VIEW_STORAGE_KEY);
+        const savedView = storageGet(CALENDAR_VIEW_STORAGE_KEY);
         this._view = VALID_VIEWS.includes(savedView) ? savedView : 'month';
         this._anchorDate = toDateInputValue(new Date());
         this._saving = false;
@@ -2420,7 +2422,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _onViewChange(view) {
         this._view = view;
-        localStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, view);
+        storageSet(CALENDAR_VIEW_STORAGE_KEY, view);
         this._reload();
     }
 

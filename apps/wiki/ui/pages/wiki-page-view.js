@@ -19,6 +19,7 @@ import { CoreEvents } from '@platform/lib/events/contract.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 import { buildWikiPageFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { buildPlatformFileDownloadUrl } from '@platform/lib/utils/platform-files-url.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -396,7 +397,7 @@ export class WikiPageView extends PlatformPage {
 
     /** Раскладка панели переживает переход между страницами и перезагрузку. */
     _restorePanelState() {
-        const stored = window.localStorage.getItem(PANEL_STORAGE_KEY);
+        const stored = storageGet(PANEL_STORAGE_KEY);
         if (stored === null) {
             return;
         }
@@ -409,10 +410,7 @@ export class WikiPageView extends PlatformPage {
     }
 
     _persistPanelState() {
-        window.localStorage.setItem(
-            PANEL_STORAGE_KEY,
-            JSON.stringify({ open: this._panelOpen, tab: this._panelTab }),
-        );
+        storageSetJson(PANEL_STORAGE_KEY, { open: this._panelOpen, tab: this._panelTab });
     }
 
     /** Кнопка в шапке: та же вкладка закрывает панель, другая переключает. */

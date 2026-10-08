@@ -21,7 +21,7 @@ const ev = (type, payload = null) => ({ id: `id_${type}`, type, payload, meta: {
 
 describe('themeEffect: bootstrap', () => {
     it('из storage применяет mode и эмитит THEME_CHANGED', async () => {
-        storage.localStorage.setItem('platform_theme', 'light');
+        storage.localStorage.setItem('platform:core:theme', 'light');
         const effect = createThemeEffect();
         const dispatched = [];
         await effect(ev(CoreEvents.APP_BOOTSTRAP_STARTED), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
@@ -31,7 +31,7 @@ describe('themeEffect: bootstrap', () => {
     });
 
     it('data-platform-theme-lock=dark: DOM тёмный, state из storage светлый', async () => {
-        storage.localStorage.setItem('platform_theme', 'light');
+        storage.localStorage.setItem('platform:core:theme', 'light');
         dom.documentElement.setAttribute('data-platform-theme-lock', 'dark');
         const effect = createThemeEffect();
         const dispatched = [];
@@ -58,7 +58,7 @@ describe('themeEffect: SET_REQUESTED', () => {
         const effect = createThemeEffect();
         const dispatched = [];
         await effect(ev(CoreEvents.THEME_SET_REQUESTED, { mode: 'light' }), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
-        expect(storage.localStorage.getItem('platform_theme')).toBe('light');
+        expect(storage.localStorage.getItem('platform:core:theme')).toBe('light');
         expect(dom.documentElement.getAttribute('data-theme')).toBe('light');
         const changed = dispatched.find((d) => d.type === CoreEvents.THEME_CHANGED);
         expect(changed.payload).toEqual({ mode: 'light', source: 'user' });
@@ -69,7 +69,7 @@ describe('themeEffect: SET_REQUESTED', () => {
         const effect = createThemeEffect();
         const dispatched = [];
         await effect(ev(CoreEvents.THEME_SET_REQUESTED, { mode: 'light' }), buildCtx(() => ({ theme: { mode: 'dark', source: 'system' } }), dispatched));
-        expect(storage.localStorage.getItem('platform_theme')).toBe('light');
+        expect(storage.localStorage.getItem('platform:core:theme')).toBe('light');
         expect(dom.documentElement.getAttribute('data-theme')).toBe('dark');
         expect(dom.themeColorMeta.getAttribute('content')).toBe('#0a0a0c');
     });

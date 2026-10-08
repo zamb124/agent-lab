@@ -9,8 +9,10 @@
 
 import { CoreEvents } from '../events/contract.js';
 import { getPlatformBus } from '../events/bus-singleton.js';
+import { platformStorageKey } from './storage-keys.js';
+import { storageGet } from './platform-storage.js';
 
-const LAST_NAMESPACE_STORAGE_KEY = 'crm:last-namespace-by-company';
+export const LAST_NAMESPACE_STORAGE_KEY = platformStorageKey('crm', 'last_namespace_by_company');
 const ALL_NAMESPACES_SENTINEL = '__ALL__';
 
 /**
@@ -18,7 +20,7 @@ const ALL_NAMESPACES_SENTINEL = '__ALL__';
  */
 function readNamespaceMap() {
     try {
-        const raw = window.localStorage.getItem(LAST_NAMESPACE_STORAGE_KEY);
+        const raw = storageGet(LAST_NAMESPACE_STORAGE_KEY);
         if (!raw) {
             return null;
         }

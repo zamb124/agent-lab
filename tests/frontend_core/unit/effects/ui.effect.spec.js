@@ -32,14 +32,14 @@ describe('uiEffect: NAMESPACE_SELECT_REQUESTED', () => {
         const types = dispatched.map((d) => d.type);
         expect(types).toContain(CoreEvents.UI_NAMESPACE_CHANGED);
         expect(types).toContain(CoreEvents.UI_DOCUMENTS_RELOAD_REQUESTED);
-        const map = JSON.parse(storage.localStorage.getItem('crm:last-namespace-by-company'));
+        const map = JSON.parse(storage.localStorage.getItem('platform:crm:last_namespace_by_company'));
         expect(map.c1).toBe('public');
     });
 
     it('selection=null или "all" → __ALL__ в storage, "all" в payload CHANGED', async () => {
         const dispatched = [];
         await createUiEffect()(ev(CoreEvents.UI_NAMESPACE_SELECT_REQUESTED, { company_id: 'c1', selection: null }), buildCtx(() => ({}), dispatched));
-        const map = JSON.parse(storage.localStorage.getItem('crm:last-namespace-by-company'));
+        const map = JSON.parse(storage.localStorage.getItem('platform:crm:last_namespace_by_company'));
         expect(map.c1).toBe('__ALL__');
         const changed = dispatched.find((d) => d.type === CoreEvents.UI_NAMESPACE_CHANGED);
         expect(changed.payload.selection).toBe('all');

@@ -22,6 +22,7 @@ import { platformConfirm } from '@platform/lib/components/platform-confirm-modal
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { formatFileRetentionRemaining } from '@platform/lib/utils/format-file-retention.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSet } from '@platform/lib/utils/platform-storage.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-file-table.js';
 import '@platform/lib/components/platform-file-row.js';
@@ -92,7 +93,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
     }
 
     _restoreViewMode() {
-        const raw = window.localStorage.getItem(platformStorageKey('office', VIEW_MODE_STORAGE_KEY));
+        const raw = storageGet(platformStorageKey('office', VIEW_MODE_STORAGE_KEY));
         if (raw === 'list' || raw === 'grid') {
             this._documents.setViewMode({ viewMode: raw });
         }
@@ -100,7 +101,7 @@ export class OfficeDocumentsExplorerPage extends PlatformPage {
 
     _persistViewMode(mode) {
         if (mode !== 'list' && mode !== 'grid') return;
-        window.localStorage.setItem(platformStorageKey('office', VIEW_MODE_STORAGE_KEY), mode);
+        storageSet(platformStorageKey('office', VIEW_MODE_STORAGE_KEY), mode);
     }
 
     _onNamespaceReload() {

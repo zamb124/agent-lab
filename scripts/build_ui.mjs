@@ -16,6 +16,11 @@
  * URL-импорты (`import('/static/…')`, `import('/crm/ui/vendor/…')`) остаются
  * external — это осознанный lazy-load тяжёлых вендоров (CodeMirror, three).
  *
+ * Embed-виджеты (внешние сайты, стабильные URL `/static/core/lib/embed-…`)
+ * собираются в self-contained бандлы `core/frontend/embed-dist/`: внешний сайт
+ * не имеет import-map, поэтому lit и весь граф инлайнятся в один файл. Отдаёт
+ * их `core/app/spa.py::register_embed_bundle_routes` по тем же URL.
+ *
  * Использование:
  *   node scripts/build_ui.mjs [--dev] [--watch] [--apps=flows,crm]
  */
@@ -36,6 +41,15 @@ const appsArg = argv.find((a) => a.startsWith('--apps='));
 const APPS_FILTER = appsArg ? new Set(appsArg.slice('--apps='.length).split(',')) : null;
 
 const SOURCE_EXTS = new Set(['.ts', '.js', '.mjs', '.cjs', '.tsx', '.jsx']);
+
+/** Embed-точки входа: self-contained бандлы, отдаваемые по стабильным URL. */
+const LIB_DIR = path.join(CORE_STATIC, 'lib');
+const EMBED_DIST = path.join(ROOT, 'core', 'frontend', 'embed-dist');
+const EMBED_ENTRYPOINTS = [
+    'embed-flow-ui/flow-ui-embed-autoload.js',
+    'flow-ui/shell/embed-autoload.js',
+    'embed-chat/humanitec-embed-autoload.js',
+];
 
 /** Единый lit/@capacitor/vendored-resolver: предотвращает дубли модулей в бандле. */
 const vendoredDedupPlugin = {
@@ -183,7 +197,39 @@ async function buildApp({ svc, uiDir, entry, outDir }) {
     return result;
 }
 
+/**
+ * Embed-бандлы: один файл на entrypoint, весь граф (включая lit) инлайнится —
+ * внешний сайт грузит их без import-map. Выход зеркалит исходный относительный
+ * путь в lib/, чтобы spa.py мог отдать бандл по стабильному URL.
+ */
+async function buildEmbed() {
+    const entries = EMBED_ENTRYPOINTS.map((rel) => path.join(LIB_DIR, rel)).filter(existsSync);
+    if (!entries.length) return;
+    rmSync(EMBED_DIST, { recursive: true, force: true });
+    for (const entry of entries) {
+        const rel = path.relative(LIB_DIR, entry);
+        await esbuild.build({
+            entryPoints: [entry],
+            bundle: true,
+            splitting: false,
+            format: 'esm',
+            platform: 'browser',
+            target: 'es2022',
+            outfile: path.join(EMBED_DIST, rel),
+            minify: !DEV,
+            sourcemap: DEV ? 'inline' : 'linked',
+            logLevel: 'warning',
+            alias: {
+                '@platform/lib': LIB_DIR,
+            },
+            plugins: [vendoredDedupPlugin],
+        });
+        console.log(`[build-ui] embed: ${rel}`);
+    }
+}
+
 async function main() {
+    await buildEmbed();
     const apps = discoverApps();
     if (!apps.length) {
         console.error('[build-ui] entries not found (apps/*/ui/index.ts|index.js)');

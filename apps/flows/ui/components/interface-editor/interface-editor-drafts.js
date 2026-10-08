@@ -1,4 +1,5 @@
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 
 const DRAFTS_STORAGE_KEY = platformStorageKey('flows', 'interface_drafts');
 
@@ -9,7 +10,7 @@ export function stableStringify(value) {
 }
 
 export function readDrafts() {
-    const raw = globalThis.localStorage.getItem(DRAFTS_STORAGE_KEY);
+    const raw = storageGet(DRAFTS_STORAGE_KEY);
     return raw === null ? {} : JSON.parse(raw);
 }
 
@@ -17,7 +18,7 @@ export function writeDraft(documentKey, document) {
     const drafts = readDrafts();
     if (document === null) delete drafts[documentKey];
     else drafts[documentKey] = document;
-    globalThis.localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
+    storageSetJson(DRAFTS_STORAGE_KEY, drafts);
 }
 
 export function clearStoredInterfaceDraft(documentKey) {

@@ -22,6 +22,7 @@ import {
 } from '@platform/lib/utils/platform-namespace.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
 import '@platform/lib/components/layout/platform-sidebar-namespace-select.js';
@@ -220,7 +221,7 @@ export class WikiSidebar extends PlatformElement {
     }
 
     _readRecentCollapsed() {
-        const stored = window.localStorage.getItem(RECENT_STORAGE_KEY);
+        const stored = storageGet(RECENT_STORAGE_KEY);
         if (stored === null) {
             return false;
         }
@@ -232,10 +233,7 @@ export class WikiSidebar extends PlatformElement {
     }
 
     _persistRecentCollapsed() {
-        window.localStorage.setItem(
-            RECENT_STORAGE_KEY,
-            JSON.stringify({ collapsed: this._recentCollapsed }),
-        );
+        storageSetJson(RECENT_STORAGE_KEY, { collapsed: this._recentCollapsed });
     }
 
     _toggleRecent() {

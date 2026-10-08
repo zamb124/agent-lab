@@ -4,7 +4,9 @@
  * Допустимые значения для запроса бандла: ru | en.
  */
 
-export const PLATFORM_LOCALE_STORAGE_KEY = 'platform_locale';
+import { platformStorageKey } from './storage-keys.js';
+
+export const PLATFORM_LOCALE_STORAGE_KEY = platformStorageKey('core', 'locale');
 const LANGUAGE_COOKIE = 'language';
 
 function normalizeToSupportedLocale(raw) {

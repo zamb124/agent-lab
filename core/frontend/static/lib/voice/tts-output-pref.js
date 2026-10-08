@@ -5,6 +5,7 @@
  */
 
 import { platformStorageKey } from '../utils/storage-keys.js';
+import { storageGet, storageSet } from '../utils/platform-storage.js';
 
 const STORAGE_KEY = platformStorageKey('voice', 'tts_output_enabled');
 
@@ -36,7 +37,7 @@ export function readTtsOutputEnabled() {
     if (typeof window === 'undefined' || !window.localStorage) {
         return true;
     }
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = storageGet(STORAGE_KEY);
     if (raw === null) {
         return true;
     }
@@ -53,7 +54,7 @@ export function writeTtsOutputEnabled(enabled) {
     if (typeof enabled !== 'boolean') {
         throw new TypeError('writeTtsOutputEnabled: boolean required');
     }
-    window.localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0');
+    storageSet(STORAGE_KEY, enabled ? '1' : '0');
     window.dispatchEvent(
         new CustomEvent(TTS_OUTPUT_CHANGED_EVENT, {
             detail: { enabled },

@@ -3,7 +3,7 @@
   "fetch_outside_events": 0,
   "window_dialogs": 0,
   "createelement_modal": 0,
-  "localstorage_raw": 50,
+  "localstorage_raw": 0,
   "vendored_lit_path": 0,
   "vendored_dep_path": 0,
   "extends_native": 0,

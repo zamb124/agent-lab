@@ -7,6 +7,7 @@
  */
 
 import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSet } from '@platform/lib/utils/platform-storage.js';
 import { isPlainObject } from './flows-resolvers.js';
 
 export const EDITOR_LAYOUT_AGENT = 'agent';
@@ -82,7 +83,7 @@ export function readEditorLayoutPreference(flowId) {
     const key = _preferenceStorageKey(flowId);
     let raw = null;
     try {
-        raw = localStorage.getItem(key);
+        raw = storageGet(key);
     } catch (err) {
         throw new Error(`flow-editor-layout: localStorage.getItem failed: ${err}`);
     }
@@ -102,7 +103,7 @@ export function writeEditorLayoutPreference(flowId, layout) {
     }
     const key = _preferenceStorageKey(flowId);
     try {
-        localStorage.setItem(key, layout);
+        storageSet(key, layout);
     } catch (err) {
         throw new Error(`flow-editor-layout: localStorage.setItem failed: ${err}`);
     }

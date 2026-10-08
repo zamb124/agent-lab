@@ -7,7 +7,7 @@
  *     this.setLocale(...), this.openModal(...)
  *   - смена компании: dispatch AUTH_COMPANY_SWITCH_REQUESTED → AUTH_COMPANY_SWITCHED
  *     (auth-company-navigation.effect: редирект на subdomain).
- *     Между вкладками: localStorage 'platform:company-switch' + storage listener.
+ *     Между вкладками: storage-ключ COMPANY_SWITCH_STORAGE_KEY + storage listener.
  *   - меню: пункт Apps (модалка `platform.services`), затем Профиль
  *     (открывает `platform.user_info` модалку с формой профиля),
  *     Компания (если есть хотя бы одна в списке; «Создать компанию» — только
@@ -25,13 +25,13 @@ import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
 import { buildCompanySubdomainUrl } from '../utils/company-url.js';
+import { COMPANY_SWITCH_STORAGE_KEY } from '../events/effects/auth-company-navigation.effect.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 import './platform-icon.js';
 import './platform-popover.js';
 import './platform-calendar-modal.js';
 import './platform-mail-modal.js';
-const COMPANY_SWITCH_STORAGE_KEY = 'platform:company-switch';
 
 export class PlatformUser extends PlatformElement {
     static i18nNamespace = 'platform';

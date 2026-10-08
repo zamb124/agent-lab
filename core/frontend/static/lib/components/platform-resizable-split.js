@@ -19,6 +19,7 @@ import { css, html } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import { platformStorageKey } from '../utils/storage-keys.js';
+import { storageGet, storageSet } from '../utils/platform-storage.js';
 
 const KEYBOARD_STEP_PX = 16;
 
@@ -141,7 +142,7 @@ export class PlatformResizableSplit extends PlatformElement {
         if (key === null) {
             return;
         }
-        const stored = window.localStorage.getItem(key);
+        const stored = storageGet(key);
         if (stored === null) {
             return;
         }
@@ -156,7 +157,7 @@ export class PlatformResizableSplit extends PlatformElement {
         if (key === null) {
             return;
         }
-        window.localStorage.setItem(key, String(this.size));
+        storageSet(key, String(this.size));
     }
 
     _clamp(value) {

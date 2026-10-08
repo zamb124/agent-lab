@@ -3,7 +3,12 @@
  * и режиму (полный экран vs компактная вкладка карточки).
  */
 
-export const MINDMAP_VIEW_STORAGE_PREFIX = 'crm:mindmap-view:v1:';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
+import { storageGet, storageSetJson } from '@platform/lib/utils/platform-storage.js';
+
+function _segment(raw) {
+    return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+}
 
 const MIN_ZOOM = 0.12;
 const MAX_ZOOM = 4;
@@ -19,7 +24,7 @@ export function buildMindmapViewStorageKey(rootEntityId, compact) {
     }
     const id = rootEntityId.trim();
     const scope = compact === true ? 'c' : 'f';
-    return `${MINDMAP_VIEW_STORAGE_PREFIX}${encodeURIComponent(id)}:${scope}`;
+    return platformStorageKey('crm', `mindmap_view.v1.${_segment(id)}.${scope}`);
 }
 
 /**
@@ -37,7 +42,7 @@ function _isFiniteNumber(n) {
  */
 export function readMindmapView(rootEntityId, compact) {
     const key = buildMindmapViewStorageKey(rootEntityId, compact);
-    const raw = window.localStorage.getItem(key);
+    const raw = storageGet(key);
     if (raw === null) {
         return null;
     }
@@ -94,5 +99,5 @@ export function writeMindmapView(rootEntityId, compact, view) {
         panUx: view.panUx,
         panUy: view.panUy,
     };
-    window.localStorage.setItem(key, JSON.stringify(payload));
+    storageSetJson(key, payload);
 }

@@ -67,7 +67,7 @@ from apps.frontend.services.flow_ui_shared_session_html import (
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
-from core.app.spa import resolve_ui_static_dir
+from core.app.spa import register_embed_bundle_routes, resolve_ui_static_dir
 from core.app_state import get_request_correlation_ids
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
@@ -384,6 +384,7 @@ app.include_router(public_site_router)
 # Монтирование core/frontend (общая библиотека) - СНАЧАЛА монтируем статику!
 core_frontend_path = Path(__file__).parent.parent.parent / "core" / "frontend" / "static"
 if core_frontend_path.exists():
+    register_embed_bundle_routes(app)
     app.mount(
         "/static/core",
         StaticFiles(directory=str(core_frontend_path)),

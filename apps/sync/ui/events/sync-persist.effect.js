@@ -19,10 +19,11 @@
  */
 
 import { CoreEvents } from '@platform/lib/events/index.js';
+import { platformStorageKey } from '@platform/lib/utils/storage-keys.js';
 
 const KEYS = Object.freeze({
-    selectedChannelId:      'sync.chat.selectedChannelId',
-    sidebarSectionOpen:     'sync.ui.sidebarSectionOpen',
+    selectedChannelId:      platformStorageKey('sync', 'chat.selected_channel_id'),
+    sidebarSectionOpen:     platformStorageKey('sync', 'ui.sidebar_section_open'),
 });
 
 const HYDRATION_ACTIONS = Object.freeze({
