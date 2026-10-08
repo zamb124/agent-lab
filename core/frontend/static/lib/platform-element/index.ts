@@ -148,7 +148,7 @@ export class PlatformElement extends LitElement {
         this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
     }
 
-    t(key: string, vars?: Record<string, string | number>, namespace?: string): string {
+    t(key: string, vars?: Record<string, string | number> | null, namespace?: string): string {
         if (typeof key !== 'string' || key.length === 0) {
             throw new Error('PlatformElement.t: key required (non-empty string)');
         }

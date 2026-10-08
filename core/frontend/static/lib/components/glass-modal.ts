@@ -8,6 +8,7 @@
  * Общий modal.styles.js сюда не подмешиваем — там :host ломает разметку (flex + svg + оверлей).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { CoreEvents } from '../events/contract.js';
@@ -16,7 +17,7 @@ import './platform-icon.js';
 import './platform-button.js';
 
 export class GlassModal extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformElement.properties,
         open: { type: Boolean, reflect: true },
         closing: { type: Boolean, reflect: true },
@@ -36,7 +37,7 @@ export class GlassModal extends PlatformElement {
         skipEnterMotion: { type: Boolean, reflect: true, attribute: 'skip-enter-motion' },
     };
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             /*
@@ -698,6 +699,34 @@ export class GlassModal extends PlatformElement {
         `,
     ];
 
+    declare open: boolean;
+    declare closing: boolean;
+    declare size: string;
+    declare heading: string;
+    declare title: string;
+    declare hideHeaderClose: boolean;
+    declare headerSavePrimary: boolean;
+    declare skipEnterMotion: boolean;
+    declare _modalId: string | null;
+    declare _modalKind: string | null;
+    declare _isFullscreen: boolean;
+    declare _isDragging: boolean;
+    declare _position: { x: number | null; y: number | null };
+    declare _panelEnterActive: boolean;
+    declare _fullscreenMotionActive: boolean;
+    declare _fullscreenMotionRun: boolean;
+
+    _dragStart: { x: number; y: number };
+    _boundMouseMove: (e: MouseEvent) => void;
+    _boundMouseUp: () => void;
+    _boundEscape: (e: KeyboardEvent) => void;
+    _portalRestoreParent: ParentNode | null;
+    _portalRestoreNext: ChildNode | null;
+    _portalTransitionCleanup: (() => void) | null;
+    _portalRestoreFallbackTimer: ReturnType<typeof setTimeout> | null;
+    _closeMotionPromise: Promise<void> | null;
+    _fullscreenMotionPromise: Promise<void> | null;
+
     constructor() {
         super();
         this.open = false;
@@ -717,17 +746,11 @@ export class GlassModal extends PlatformElement {
         this._boundMouseMove = this._handleMouseMove.bind(this);
         this._boundMouseUp = this._handleMouseUp.bind(this);
         this._boundEscape = this._handleEscape.bind(this);
-        /** @type {ParentNode | null} */
         this._portalRestoreParent = null;
-        /** @type {ChildNode | null} */
         this._portalRestoreNext = null;
-        /** @type {(() => void) | null} */
         this._portalTransitionCleanup = null;
-        /** @type {ReturnType<typeof setTimeout> | null} */
         this._portalRestoreFallbackTimer = null;
-        /** @type {Promise<void> | null} */
         this._closeMotionPromise = null;
-        /** @type {Promise<void> | null} */
         this._fullscreenMotionPromise = null;
     }
 
@@ -737,7 +760,7 @@ export class GlassModal extends PlatformElement {
      * затем dispatch'ит UI_MODAL_CLOSED. Любая прямая мутация this.open=false
      * запрещена: source of truth — state.modals.stack.
      */
-    close() {
+    close(): void {
         if (!this._modalId) {
             throw new Error(
                 'GlassModal.close: _modalId is empty. Modals must be opened via dispatch(UI_MODAL_OPEN, { kind, props }) — direct mounting запрещён.',
@@ -746,7 +769,7 @@ export class GlassModal extends PlatformElement {
         this.dispatch(CoreEvents.UI_MODAL_CLOSE, { id: this._modalId });
     }
 
-    async requestPlatformClose() {
+    async requestPlatformClose(): Promise<void> {
         if (this._closeMotionPromise) {
             return this._closeMotionPromise;
         }
@@ -768,7 +791,7 @@ export class GlassModal extends PlatformElement {
         }
     }
 
-    toggleFullscreen() {
+    toggleFullscreen(): Promise<void> | undefined {
         if (this._fullscreenMotionPromise) {
             return this._fullscreenMotionPromise;
         }
@@ -778,7 +801,7 @@ export class GlassModal extends PlatformElement {
         return this._fullscreenMotionPromise;
     }
 
-    async _toggleFullscreenWithMotion() {
+    async _toggleFullscreenWithMotion(): Promise<void> {
         const modal = this.shadowRoot?.querySelector('.modal');
         const shouldAnimate = Boolean(
             modal
@@ -796,7 +819,7 @@ export class GlassModal extends PlatformElement {
             return;
         }
 
-        const first = modal.getBoundingClientRect();
+        const first = modal!.getBoundingClientRect();
         this._isFullscreen = !this._isFullscreen;
         if (this._isFullscreen) {
             this._position = { x: null, y: null };
@@ -856,19 +879,19 @@ export class GlassModal extends PlatformElement {
         this.requestUpdate();
     }
 
-    _handleEscape(e) {
+    _handleEscape(e: KeyboardEvent): void {
         if (e.key === 'Escape' && this.open) {
             this.close();
         }
     }
 
-    _handleOverlayClick(e) {
+    _handleOverlayClick(e: MouseEvent): void {
         if (e.target === e.currentTarget) {
             this.close();
         }
     }
 
-    _handleMouseDown(e) {
+    _handleMouseDown(e: MouseEvent): void {
         if (this._isFullscreen) return;
         if (e.button !== 0) {
             return;
@@ -906,15 +929,15 @@ export class GlassModal extends PlatformElement {
         }
 
         this._dragStart = {
-            x: e.clientX - this._position.x,
-            y: e.clientY - this._position.y,
+            x: e.clientX - (this._position.x as number),
+            y: e.clientY - (this._position.y as number),
         };
 
         document.addEventListener('mousemove', this._boundMouseMove);
         document.addEventListener('mouseup', this._boundMouseUp);
     }
 
-    _handleMouseMove(e) {
+    _handleMouseMove(e: MouseEvent): void {
         if (!this._isDragging) return;
 
         this._position = {
@@ -924,13 +947,13 @@ export class GlassModal extends PlatformElement {
         this.requestUpdate();
     }
 
-    _handleMouseUp() {
+    _handleMouseUp(): void {
         this._isDragging = false;
         document.removeEventListener('mousemove', this._boundMouseMove);
         document.removeEventListener('mouseup', this._boundMouseUp);
     }
 
-    _handlePanelEnterAnimationEnd(e) {
+    _handlePanelEnterAnimationEnd(e: AnimationEvent): void {
         if (e.animationName !== 'glassModalPanelIn') {
             return;
         }
@@ -940,7 +963,7 @@ export class GlassModal extends PlatformElement {
         this._panelEnterActive = false;
     }
 
-    willUpdate(changedProperties) {
+    override willUpdate(changedProperties: PropertyValues<this>): void {
         super.willUpdate(changedProperties);
         if (changedProperties.has('open') || changedProperties.has('closing')) {
             if (this.open && !this.closing && this.skipEnterMotion !== true) {
@@ -962,7 +985,7 @@ export class GlassModal extends PlatformElement {
         }
     }
 
-    async getUpdateComplete() {
+    override async getUpdateComplete(): Promise<boolean> {
         const complete = await super.getUpdateComplete();
         if (this.open || this.closing) {
             this._attachPortalToBody();
@@ -972,7 +995,7 @@ export class GlassModal extends PlatformElement {
         return complete;
     }
 
-    _clearPortalCloseHooks() {
+    _clearPortalCloseHooks(): void {
         if (typeof this._portalTransitionCleanup === 'function') {
             this._portalTransitionCleanup();
             this._portalTransitionCleanup = null;
@@ -983,7 +1006,7 @@ export class GlassModal extends PlatformElement {
         }
     }
 
-    _attachPortalToBody() {
+    _attachPortalToBody(): void {
         if ((!this.open && !this.closing) || this.parentNode === document.body) {
             if (this.parentNode === document.body) {
                 this.setAttribute('data-portal', '');
@@ -996,7 +1019,7 @@ export class GlassModal extends PlatformElement {
         this.setAttribute('data-portal', '');
     }
 
-    _schedulePortalRestoreAfterCloseAnimation() {
+    _schedulePortalRestoreAfterCloseAnimation(): void {
         this._clearPortalCloseHooks();
         const restore = () => {
             if (!this.open && !this.closing && this.parentNode === document.body) {
@@ -1012,7 +1035,7 @@ export class GlassModal extends PlatformElement {
         }, 500);
     }
 
-    _restorePortalToOriginalParent() {
+    _restorePortalToOriginalParent(): void {
         if (this.open || this.closing) {
             return;
         }
@@ -1040,12 +1063,12 @@ export class GlassModal extends PlatformElement {
         this.removeAttribute('data-portal');
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         document.addEventListener('keydown', this._boundEscape);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         this._clearPortalCloseHooks();
         document.removeEventListener('keydown', this._boundEscape);
@@ -1056,19 +1079,19 @@ export class GlassModal extends PlatformElement {
         }
     }
 
-    renderHeader() {
+    renderHeader(): unknown {
         return this.heading || this.title || '';
     }
 
-    renderHeaderActions() {
+    renderHeaderActions(): unknown {
         return '';
     }
 
-    renderSaveHeaderButton() {
+    renderSaveHeaderButton(): TemplateResult | string {
         return html``;
     }
 
-    _renderHeaderSaveIcon(options) {
+    _renderHeaderSaveIcon(options: { onClick: () => void; disabled?: boolean; title: string }): TemplateResult {
         const { onClick, disabled = false, title } = options;
         if (!title) {
             throw new Error('GlassModal._renderHeaderSaveIcon: title is required');
@@ -1088,22 +1111,22 @@ export class GlassModal extends PlatformElement {
         `;
     }
 
-    renderBody() {
+    renderBody(): unknown {
         return html`<slot name="content"></slot>`;
     }
 
-    renderFooter() {
+    renderFooter(): unknown {
         return html`<slot name="actions"></slot>`;
     }
 
-    _getModalStyle() {
+    _getModalStyle(): string {
         if (this._position.x !== null && this._position.y !== null && !this._isFullscreen) {
             return `position: fixed; left: ${this._position.x}px; top: ${this._position.y}px; z-index: 2; transform: translate(-50%, -50%) ${this.open || this.closing ? 'scale(1)' : 'scale(0.95)'};`;
         }
         return '';
     }
 
-    render() {
+    override render(): TemplateResult {
         const modalClasses = [
             'modal',
             this.size,
@@ -1114,7 +1137,7 @@ export class GlassModal extends PlatformElement {
             this._fullscreenMotionActive && this._fullscreenMotionRun ? 'fullscreen-morph-run' : '',
         ].filter(Boolean).join(' ');
 
-        const tm = (key) => (this.t(key) || key);
+        const tm = (key: string): string => (this.t(key) || key);
         return html`
             <div class="modal-svg-hidden" aria-hidden="true">
                 <svg width="0" height="0">
@@ -1145,7 +1168,7 @@ export class GlassModal extends PlatformElement {
                     class="${modalClasses}"
                     style="${this._getModalStyle()}"
                     @animationend=${this._handlePanelEnterAnimationEnd}
-                    @click=${(e) => e.stopPropagation()}
+                    @click=${(e: Event) => e.stopPropagation()}
                 >
                     <div class="modal-header" @mousedown=${this._handleMouseDown}>
                         <h2 class="modal-title">${this.renderHeader()}</h2>

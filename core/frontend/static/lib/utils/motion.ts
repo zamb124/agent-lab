@@ -51,7 +51,7 @@ export function getCssMotionDurationMs(element: Element): number {
     );
 }
 
-export function waitForPlatformMotion(elements: Element | Element[] | null | undefined, options: { fallbackMs?: number } = {}): Promise<void> {
+export function waitForPlatformMotion(elements: Element | Array<Element | null | undefined> | null | undefined, options: { fallbackMs?: number } = {}): Promise<void> {
     const list = (Array.isArray(elements) ? elements : [elements]).filter((el): el is Element => el instanceof Element);
     if (list.length === 0 || prefersReducedMotion()) {
         return Promise.resolve();

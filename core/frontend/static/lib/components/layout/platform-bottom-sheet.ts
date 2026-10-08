@@ -20,6 +20,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
 import { waitForPlatformMotion } from '../../utils/motion.js';
@@ -30,7 +31,7 @@ const SNAP_FULL = 'full';
 const SWIPE_CLOSE_THRESHOLD_PX = 80;
 
 export class PlatformBottomSheet extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformElement.properties,
         open: { type: Boolean, reflect: true },
         closing: { type: Boolean, reflect: true },
@@ -43,7 +44,7 @@ export class PlatformBottomSheet extends PlatformElement {
         _dragging: { state: true },
     };
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             @keyframes platformBottomSheetIn {
@@ -210,6 +211,24 @@ export class PlatformBottomSheet extends PlatformElement {
         `,
     ];
 
+    declare open: boolean;
+    declare closing: boolean;
+    declare snap: string;
+    declare heading: string;
+    declare dismissible: boolean;
+    declare _sheetId: string | null;
+    declare _sheetKind: string | null;
+    declare _dragOffset: number;
+    declare _dragging: boolean;
+
+    _dragStartY: number;
+    _panelEl: HTMLElement | null;
+    _boundEscape: (e: KeyboardEvent) => void;
+    _portalAttached: boolean;
+    _origParent: ParentNode | null;
+    _origNextSibling: ChildNode | null;
+    _closeMotionPromise: Promise<void> | null;
+
     constructor() {
         super();
         this.open = false;
@@ -230,12 +249,12 @@ export class PlatformBottomSheet extends PlatformElement {
         this._closeMotionPromise = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         document.addEventListener('keydown', this._boundEscape);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         document.removeEventListener('keydown', this._boundEscape);
         // Лист удаляется из DOM (через el.remove() в PlatformBottomSheetStack либо
@@ -248,8 +267,8 @@ export class PlatformBottomSheet extends PlatformElement {
         this._origNextSibling = null;
     }
 
-    updated(changed) {
-        super.updated && super.updated(changed);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
         if ((changed.has('open') || changed.has('closing')) && (this.open || this.closing)) {
             this._attachPortalToBody();
         }
@@ -258,7 +277,7 @@ export class PlatformBottomSheet extends PlatformElement {
         }
     }
 
-    _attachPortalToBody() {
+    _attachPortalToBody(): void {
         if (this._portalAttached) return;
         if (this.parentNode === document.body) {
             this._portalAttached = true;
@@ -270,7 +289,7 @@ export class PlatformBottomSheet extends PlatformElement {
         this._portalAttached = true;
     }
 
-    _handleEscape(e) {
+    _handleEscape(e: KeyboardEvent): void {
         if (!this.open) return;
         if (e.key !== 'Escape') return;
         if (!this.dismissible) return;
@@ -278,23 +297,23 @@ export class PlatformBottomSheet extends PlatformElement {
         this._requestClose();
     }
 
-    _onScrimClick() {
+    _onScrimClick(): void {
         if (!this.dismissible) return;
         this._requestClose();
     }
 
-    _onCloseClick() {
+    _onCloseClick(): void {
         this._requestClose();
     }
 
-    _requestClose() {
-        const payload = {};
+    _requestClose(): void {
+        const payload: { id?: string; kind?: string } = {};
         if (this._sheetId) payload.id = this._sheetId;
         else if (this._sheetKind) payload.kind = this._sheetKind;
         this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, payload);
     }
 
-    async requestPlatformClose() {
+    async requestPlatformClose(): Promise<void> {
         if (this._closeMotionPromise) {
             return this._closeMotionPromise;
         }
@@ -320,17 +339,17 @@ export class PlatformBottomSheet extends PlatformElement {
         }
     }
 
-    _onHandlePointerDown(e) {
+    _onHandlePointerDown(e: PointerEvent): void {
         if (!this.dismissible) return;
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         this._dragging = true;
         this._dragStartY = e.clientY;
         this._dragOffset = 0;
-        const target = e.currentTarget;
+        const target = e.currentTarget as Element;
         try { target.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     }
 
-    _onHandlePointerMove(e) {
+    _onHandlePointerMove(e: PointerEvent): void {
         if (!this._dragging) return;
         const dy = e.clientY - this._dragStartY;
         this._dragOffset = Math.max(0, dy);
@@ -339,10 +358,10 @@ export class PlatformBottomSheet extends PlatformElement {
         }
     }
 
-    _onHandlePointerUp(e) {
+    _onHandlePointerUp(e: PointerEvent): void {
         if (!this._dragging) return;
         this._dragging = false;
-        const target = e.currentTarget;
+        const target = e.currentTarget as Element;
         try { target.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
         if (this._dragOffset >= SWIPE_CLOSE_THRESHOLD_PX) {
             this._requestClose();
@@ -360,14 +379,14 @@ export class PlatformBottomSheet extends PlatformElement {
      * Подклассы перекрывают: возвращают вёрстку тела листа.
      * По умолчанию — слот для отладки/композиции.
      */
-    renderBody() {
+    renderBody(): TemplateResult {
         return html`<slot></slot>`;
     }
 
     /**
      * Подклассы перекрывают: вёрстка кастомного заголовка. По умолчанию — heading + close.
      */
-    renderHeader() {
+    renderHeader(): TemplateResult {
         const ariaClose = this.t('bottom_sheet.close_aria', null, 'platform');
         return html`
             <div class="header">
@@ -388,7 +407,7 @@ export class PlatformBottomSheet extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const ariaDrag = this.t('bottom_sheet.drag_handle_aria', null, 'platform');
         return html`
             <div class="scrim" @click=${this._onScrimClick}></div>

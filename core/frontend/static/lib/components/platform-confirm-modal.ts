@@ -12,13 +12,14 @@
  * - Только OK (hideCancel): Promise<void> при подтверждении; при закрытии без OK — undefined
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
 import './fields/platform-field.js';
 
 export class PlatformConfirmModal extends PlatformModal {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformModal.styles,
         buttonStyles,
         css`
@@ -126,7 +127,7 @@ export class PlatformConfirmModal extends PlatformModal {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
         title: { type: String },
         subtitle: { type: String },
@@ -144,6 +145,21 @@ export class PlatformConfirmModal extends PlatformModal {
         inputPlaceholder: { type: String },
     };
 
+    declare subtitle: string;
+    declare message: string;
+    declare variant: string;
+    declare confirmText: string;
+    declare cancelText: string;
+    declare confirmVariant: string;
+    declare extraText: string;
+    declare extraVariant: string;
+    declare hideCancel: boolean;
+    declare inputLabel: string;
+    declare inputValue: string;
+    declare inputPlaceholder: string;
+
+    _resolvePromise: ((v: boolean | string | undefined) => void) | null;
+
     constructor() {
         super();
         this.size = 'sm';
@@ -160,11 +176,10 @@ export class PlatformConfirmModal extends PlatformModal {
         this.inputLabel = '';
         this.inputValue = '';
         this.inputPlaceholder = '';
-        /** @type {((v: boolean | string | undefined) => void) | null} */
         this._resolvePromise = null;
     }
 
-    _getIconName() {
+    _getIconName(): string {
         switch (this.variant) {
             case 'danger':
                 return 'notification-error';
@@ -180,7 +195,7 @@ export class PlatformConfirmModal extends PlatformModal {
      * @param {Record<string, unknown>} options
      * @returns {Promise<boolean|string|void>}
      */
-    async confirm(options = {}) {
+    async confirm(options: ConfirmModalOptions = {}): Promise<boolean | string | undefined> {
         // Сброс prompt-режима от предыдущего вызова — options без inputLabel
         // не должны оставлять поле и старое значение.
         this.inputLabel = '';
@@ -195,14 +210,14 @@ export class PlatformConfirmModal extends PlatformModal {
     }
 
     /** Модалка без стека (`getOrCreatePlatformConfirmModal`): только `open`, без `UI_MODAL_CLOSE`. */
-    _closeDetached() {
+    _closeDetached(): void {
         void this.requestPlatformClose().then(() => {
             this.closing = false;
             this.requestUpdate();
         });
     }
 
-    _settle(value) {
+    _settle(value: boolean | string | undefined): void {
         if (!this._resolvePromise) {
             return;
         }
@@ -211,7 +226,7 @@ export class PlatformConfirmModal extends PlatformModal {
         fn(value);
     }
 
-    close() {
+    override close(): void {
         if (this.open && this._resolvePromise) {
             this.emit('cancel');
             if (this.inputLabel || this.hideCancel) {
@@ -229,13 +244,13 @@ export class PlatformConfirmModal extends PlatformModal {
         }
     }
 
-    waitForConfirm() {
+    waitForConfirm(): Promise<boolean | string | undefined> {
         return new Promise((resolve) => {
             this._resolvePromise = resolve;
         });
     }
 
-    _onConfirm() {
+    _onConfirm(): void {
         if (!this._resolvePromise) {
             if (this._modalId) {
                 super.close();
@@ -261,7 +276,7 @@ export class PlatformConfirmModal extends PlatformModal {
         }
     }
 
-    _onCancel() {
+    _onCancel(): void {
         if (!this._resolvePromise) {
             if (this._modalId) {
                 super.close();
@@ -285,7 +300,7 @@ export class PlatformConfirmModal extends PlatformModal {
         }
     }
 
-    _onExtra() {
+    _onExtra(): void {
         if (!this._resolvePromise) {
             if (this._modalId) {
                 super.close();
@@ -303,7 +318,7 @@ export class PlatformConfirmModal extends PlatformModal {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const modalClasses = [
             'modal',
             'platform-confirm-panel',
@@ -349,7 +364,7 @@ export class PlatformConfirmModal extends PlatformModal {
                     class="${modalClasses}"
                     style="${this._getModalStyle()}"
                     @animationend=${this._handlePanelEnterAnimationEnd}
-                    @click=${(e) => e.stopPropagation()}
+                    @click=${(e: Event) => e.stopPropagation()}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="confirm-modal-title"
@@ -394,14 +409,14 @@ export class PlatformConfirmModal extends PlatformModal {
                                       .label=${this.inputLabel}
                                       .value=${this.inputValue}
                                       .placeholder=${this.inputPlaceholder}
-                                      @keydown=${(e) => {
+                                      @keydown=${(e: KeyboardEvent) => {
                                           if (e.key === 'Enter') {
                                               e.preventDefault();
                                               this._onConfirm();
                                           }
                                       }}
-                                      @input=${(e) => {
-                                          this.inputValue = e.target.value;
+                                      @input=${(e: InputEvent) => {
+                                          this.inputValue = (e.target as HTMLInputElement).value;
                                       }}
                                   ></platform-field>
                               `
@@ -445,10 +460,26 @@ export class PlatformConfirmModal extends PlatformModal {
 
 customElements.define('platform-confirm-modal', PlatformConfirmModal);
 
-function getOrCreatePlatformConfirmModal() {
-    let el = document.querySelector('platform-confirm-modal');
+export interface ConfirmModalOptions {
+    title?: string;
+    subtitle?: string;
+    variant?: string;
+    confirmText?: string;
+    cancelText?: string;
+    confirmVariant?: string;
+    extraText?: string;
+    extraVariant?: string;
+    hideCancel?: boolean;
+    inputLabel?: string;
+    inputValue?: string;
+    inputPlaceholder?: string;
+    [key: string]: unknown;
+}
+
+function getOrCreatePlatformConfirmModal(): PlatformConfirmModal {
+    let el = document.querySelector('platform-confirm-modal') as PlatformConfirmModal | null;
     if (!el) {
-        el = document.createElement('platform-confirm-modal');
+        el = document.createElement('platform-confirm-modal') as PlatformConfirmModal;
         document.body.appendChild(el);
     }
     return el;
@@ -456,12 +487,8 @@ function getOrCreatePlatformConfirmModal() {
 
 /**
  * Хелпер: две кнопки → Promise<boolean>; три (extraText) → Promise<'confirm'|'cancel'|'extra'>; только OK → Promise<void>.
- *
- * @param {string} message
- * @param {Record<string, unknown>} [options]
- * @returns {Promise<boolean|string|void>}
  */
-export async function platformConfirm(message, options = {}) {
+export async function platformConfirm(message: string, options: ConfirmModalOptions = {}): Promise<boolean | string | undefined> {
     if (typeof message !== 'string') {
         throw new TypeError(
             `platformConfirm: message must be a string, got ${typeof message}`,
@@ -480,12 +507,13 @@ export async function platformConfirm(message, options = {}) {
  * Хелпер ввода текста: Promise<string|undefined> — undefined при отмене.
  * options.inputLabel — метка поля (обязательна), inputValue, inputPlaceholder.
  */
-export async function platformPrompt(message, options = {}) {
+export async function platformPrompt(message: string, options: ConfirmModalOptions = {}): Promise<string | undefined> {
     if (!options || typeof options.inputLabel !== 'string' || !options.inputLabel) {
         throw new TypeError('platformPrompt: options.inputLabel required (non-empty string)');
     }
     const modal = getOrCreatePlatformConfirmModal();
-    return modal.confirm({ message, variant: 'info', ...options });
+    const result = await modal.confirm({ message, variant: 'info', ...options });
+    return typeof result === 'string' ? result : undefined;
 }
 
 export { platformConfirm as confirm };
