@@ -8,14 +8,22 @@
  * @param {MediaStreamConstraints} constraints
  * @returns {Promise<MediaStream>}
  */
-export function getUserMediaCompat(constraints) {
+declare global {
+    interface Navigator {
+        getUserMedia?: (c: MediaStreamConstraints, ok: (s: MediaStream) => void, err: (e: unknown) => void) => void;
+        webkitGetUserMedia?: (c: MediaStreamConstraints, ok: (s: MediaStream) => void, err: (e: unknown) => void) => void;
+        mozGetUserMedia?: (c: MediaStreamConstraints, ok: (s: MediaStream) => void, err: (e: unknown) => void) => void;
+    }
+}
+
+export function getUserMediaCompat(constraints: MediaStreamConstraints): Promise<MediaStream> {
     const nav = typeof navigator !== 'undefined' ? navigator : null;
     if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
         return nav.mediaDevices.getUserMedia(constraints);
     }
     const legacy = nav && (nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia);
     if (typeof legacy === 'function') {
-        return new Promise((resolve, reject) => {
+        return new Promise<MediaStream>((resolve, reject) => {
             legacy.call(nav, constraints, resolve, reject);
         });
     }
@@ -25,7 +33,7 @@ export function getUserMediaCompat(constraints) {
 /**
  * @returns {boolean}
  */
-export function hasGetUserMediaApi() {
+export function hasGetUserMediaApi(): boolean {
     const nav = typeof navigator !== 'undefined' ? navigator : null;
     if (nav?.mediaDevices && typeof nav.mediaDevices.getUserMedia === 'function') {
         return true;
@@ -37,7 +45,7 @@ export function hasGetUserMediaApi() {
  * Safari / iOS не декодирует WebM; приоритет MP4/AAC.
  * @returns {string}
  */
-export function pickVoiceMimeType() {
+export function pickVoiceMimeType(): string {
     if (typeof MediaRecorder === 'undefined') {
         return '';
     }

@@ -20,14 +20,14 @@ export const DEEPLINK_PATH_PREFIXES = [
 /**
  * Шаблоны path для apple-app-site-association (суффикс * по правилам Apple).
  */
-export function getAasaPathPatterns() {
+export function getAasaPathPatterns(): string[] {
     return DEEPLINK_PATH_PREFIXES.map((p) => (p === '/' ? '/' : `${p}/*`));
 }
 
 /**
  * Целевой href при открытии ссылки продукта из нативной оболочки (тот же origin — только path).
  */
-export function hrefForDeepLinkNavigation(openedUrl, currentOrigin) {
+export function hrefForDeepLinkNavigation(openedUrl: URL, currentOrigin: string): string {
     if (openedUrl.origin === currentOrigin) {
         return openedUrl.pathname + openedUrl.search + openedUrl.hash;
     }

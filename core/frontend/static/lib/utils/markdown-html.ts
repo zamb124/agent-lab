@@ -13,13 +13,13 @@ const ALLOWED_TAGS = new Set([
  * @param {string} rawHtml
  * @returns {string}
  */
-export function sanitizeMarkdownEditorHtml(rawHtml) {
+export function sanitizeMarkdownEditorHtml(rawHtml: string): string {
     if (typeof rawHtml !== 'string' || rawHtml.length === 0) {
         return '';
     }
     const template = document.createElement('template');
     template.innerHTML = rawHtml;
-    const walk = (node) => {
+    const walk = (node: ParentNode): void => {
         const children = Array.from(node.childNodes);
         for (const child of children) {
             if (child.nodeType === Node.TEXT_NODE) {
@@ -29,7 +29,7 @@ export function sanitizeMarkdownEditorHtml(rawHtml) {
                 child.remove();
                 continue;
             }
-            const el = /** @type {HTMLElement} */ (child);
+            const el = child as HTMLElement;
             if (!ALLOWED_TAGS.has(el.tagName)) {
                 const parent = el.parentNode;
                 if (!parent) {
@@ -69,14 +69,14 @@ export function sanitizeMarkdownEditorHtml(rawHtml) {
  * @param {Node} node
  * @returns {string}
  */
-function _nodeToMarkdown(node) {
+function _nodeToMarkdown(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) {
         return node.textContent || '';
     }
     if (node.nodeType !== Node.ELEMENT_NODE) {
         return '';
     }
-    const el = /** @type {HTMLElement} */ (node);
+    const el = node as HTMLElement;
     const tag = el.tagName;
     const inner = Array.from(el.childNodes).map((child) => _nodeToMarkdown(child)).join('');
     if (tag === 'BR') {
@@ -116,7 +116,7 @@ function _nodeToMarkdown(node) {
     if (tag === 'BLOCKQUOTE') {
         return inner
             .split('\n')
-            .map((line) => `> ${line}`)
+            .map((line: string) => `> ${line}`)
             .join('\n') + '\n\n';
     }
     if (tag === 'LI') {
@@ -139,7 +139,7 @@ function _nodeToMarkdown(node) {
  * @param {string} rawHtml
  * @returns {string}
  */
-export function htmlToMarkdown(rawHtml) {
+export function htmlToMarkdown(rawHtml: string): string {
     const sanitized = sanitizeMarkdownEditorHtml(typeof rawHtml === 'string' ? rawHtml : '');
     if (sanitized.length === 0) {
         return '';
@@ -155,7 +155,7 @@ export function htmlToMarkdown(rawHtml) {
  * @param {string} rawHtml
  * @returns {string}
  */
-export function htmlToPlainText(rawHtml) {
+export function htmlToPlainText(rawHtml: string): string {
     const sanitized = sanitizeMarkdownEditorHtml(typeof rawHtml === 'string' ? rawHtml : '');
     if (sanitized.length === 0) {
         return '';

@@ -5,3 +5,10 @@
 declare module '@capacitor/splash-screen' {
     export const SplashScreen: { hide(): Promise<void>; show(options?: { autoHide?: boolean }): Promise<void> };
 }
+
+declare module '@capacitor/app' {
+    export const App: {
+        getLaunchUrl(): Promise<{ url?: string }>;
+        addListener(event: string, cb: (event: { url?: string }) => void): void;
+    };
+}

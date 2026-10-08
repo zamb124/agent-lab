@@ -5,7 +5,7 @@
 
 import { platformStorageKey } from './storage-keys.js';
 import { storageGet, storageSetJson } from './platform-storage.js';
-function _segment(raw) {
+function _segment(raw: unknown): string {
     return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
 }
 
@@ -13,7 +13,7 @@ function _segment(raw) {
  * @param {string} scope
  * @returns {string}
  */
-function _storageKey(scope) {
+function _storageKey(scope: string): string {
     if (typeof scope !== 'string' || scope.trim().length === 0) {
         throw new Error('sidebar-nav-tree preference: scope must be non-empty string');
     }
@@ -24,13 +24,13 @@ function _storageKey(scope) {
  * @param {string} scope
  * @returns {Record<string, boolean>}
  */
-export function readSidebarNavTreeExpanded(scope) {
+export function readSidebarNavTreeExpanded(scope: string): Record<string, boolean> {
     const key = _storageKey(scope);
     const raw = storageGet(key);
     if (raw === null) {
         return Object.create(null);
     }
-    let parsed;
+    let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
     } catch (e) {
@@ -41,12 +41,12 @@ export function readSidebarNavTreeExpanded(scope) {
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error(`readSidebarNavTreeExpanded: expected object at ${JSON.stringify(key)}`);
     }
-    const out = Object.create(null);
+    const out: Record<string, boolean> = Object.create(null);
     for (const k of Object.keys(parsed)) {
         if (typeof k !== 'string') {
             throw new Error(`readSidebarNavTreeExpanded: key must be string at ${JSON.stringify(key)}`);
         }
-        const v = parsed[k];
+        const v = (parsed as Record<string, unknown>)[k];
         if (v === false) {
             out[k] = false;
             continue;
@@ -69,12 +69,12 @@ export function readSidebarNavTreeExpanded(scope) {
  * @param {string} scope
  * @param {Record<string, boolean>} expandedById
  */
-export function writeSidebarNavTreeExpanded(scope, expandedById) {
+export function writeSidebarNavTreeExpanded(scope: string, expandedById: Record<string, boolean | undefined>): void {
     const key = _storageKey(scope);
     if (expandedById === null || typeof expandedById !== 'object' || Array.isArray(expandedById)) {
         throw new Error('writeSidebarNavTreeExpanded: expandedById must be a plain object');
     }
-    const compact = Object.create(null);
+    const compact: Record<string, boolean> = Object.create(null);
     for (const id of Object.keys(expandedById)) {
         if (typeof id !== 'string') {
             throw new Error('writeSidebarNavTreeExpanded: keys must be strings');

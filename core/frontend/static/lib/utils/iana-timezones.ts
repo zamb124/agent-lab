@@ -31,8 +31,8 @@ const FALLBACK_IANA_TIME_ZONES = [
  * Все известные IANA time zones, отсортированные (Unicode order).
  * Предпочтительно из Intl.supportedValuesOf (современные браузеры); иначе жёсткий fallback.
  */
-export function getSortedIanaTimeZones() {
-    let list;
+export function getSortedIanaTimeZones(): string[] {
+    let list: string[] | null | undefined;
     if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
         try {
             list = Intl.supportedValuesOf('timeZone');
@@ -52,8 +52,8 @@ export function getSortedIanaTimeZones() {
     return unique;
 }
 
-let _cacheAll;
-export function getCachedSortedIanaTimeZones() {
+let _cacheAll: string[] | null = null;
+export function getCachedSortedIanaTimeZones(): string[] {
     if (!_cacheAll) {
         _cacheAll = getSortedIanaTimeZones();
     }

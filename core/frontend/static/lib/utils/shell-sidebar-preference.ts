@@ -11,7 +11,7 @@ export const SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY = platformStorageKey('core', 's
 /**
  * @returns {boolean}
  */
-export function readShellSidebarCollapsed() {
+export function readShellSidebarCollapsed(): boolean {
     const raw = storageGet(SHELL_SIDEBAR_COLLAPSED_STORAGE_KEY);
     if (raw === null) {
         return false;
@@ -28,7 +28,7 @@ export function readShellSidebarCollapsed() {
 /**
  * @param {boolean} collapsed
  */
-export function writeShellSidebarCollapsed(collapsed) {
+export function writeShellSidebarCollapsed(collapsed: boolean): void {
     if (typeof collapsed !== 'boolean') {
         throw new Error('writeShellSidebarCollapsed: expected boolean');
     }

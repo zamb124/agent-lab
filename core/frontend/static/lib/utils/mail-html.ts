@@ -3,6 +3,8 @@
  * Санитайзер (DOMPurify) — только в браузере.
  */
 import DOMPurify from '../../assets/js/dompurify/purify.es.mjs';
+
+interface MailAttachmentRecord { content_id?: unknown; file_id?: unknown }
 import { escapeHtml } from './escape-html.js';
 
 const CID_ATTR_RE = /(?:src|href|background)\s*=\s*['"]cid:([^'"]+)['"]/gi;
@@ -78,7 +80,7 @@ const DOCUMENT_HTML_LAYOUT_TABLE_RE = /<table\b[^>]*(?:\bwidth\s*=|\brole\s*=\s*
  * @param {string} html
  * @returns {boolean}
  */
-export function isMailDocumentHtml(html) {
+export function isMailDocumentHtml(html: string): boolean {
     if (typeof html !== 'string') {
         throw new Error('isMailDocumentHtml: html string required');
     }
@@ -99,7 +101,7 @@ export function isMailDocumentHtml(html) {
  * @param {string} raw
  * @returns {string}
  */
-export function normalizeContentId(raw) {
+export function normalizeContentId(raw: string): string {
     if (typeof raw !== 'string' || !raw.trim()) {
         throw new Error('normalizeContentId: non-empty string required');
     }
@@ -120,16 +122,16 @@ export function normalizeContentId(raw) {
  * @param {string} html
  * @returns {Set<string>}
  */
-export function findCidRefs(html) {
+export function findCidRefs(html: string): Set<string> {
     if (typeof html !== 'string') {
         throw new Error('findCidRefs: html string required');
     }
-    const ids = new Set();
+    const ids = new Set<string>();
     for (const re of [CID_ATTR_RE, CID_CSS_RE]) {
         re.lastIndex = 0;
         let match = re.exec(html);
         while (match) {
-            ids.add(normalizeContentId(`cid:${match[1]}`));
+            ids.add(normalizeContentId(`cid:${match[1] ?? ''}`));
             match = re.exec(html);
         }
     }
@@ -140,7 +142,7 @@ export function findCidRefs(html) {
  * @param {string} html
  * @returns {boolean}
  */
-export function hasRemoteImages(html) {
+export function hasRemoteImages(html: string): boolean {
     if (typeof html !== 'string') {
         throw new Error('hasRemoteImages: html string required');
     }
@@ -155,7 +157,7 @@ export function hasRemoteImages(html) {
  * @param {Record<string, string>} cidMap
  * @returns {string}
  */
-export function rewriteCidImages(html, cidMap) {
+export function rewriteCidImages(html: string, cidMap: Record<string, string>): string {
     if (typeof html !== 'string') {
         throw new Error('rewriteCidImages: html string required');
     }
@@ -163,7 +165,7 @@ export function rewriteCidImages(html, cidMap) {
         throw new Error('rewriteCidImages: cidMap object required');
     }
     CID_BARE_RE.lastIndex = 0;
-    return html.replace(CID_BARE_RE, (full, rawId) => {
+    return html.replace(CID_BARE_RE, (full: string, rawId: string) => {
         const id = normalizeContentId(`cid:${rawId}`);
         const dataUrl = Object.prototype.hasOwnProperty.call(cidMap, id)
             ? cidMap[id]
@@ -180,7 +182,7 @@ export function rewriteCidImages(html, cidMap) {
  * @param {string} html
  * @returns {Record<string, string>}
  */
-export function buildCidFileMap(attachments, html) {
+export function buildCidFileMap(attachments: unknown[], html: string): Record<string, string> {
     if (!Array.isArray(attachments)) {
         throw new Error('buildCidFileMap: attachments array required');
     }
@@ -189,7 +191,7 @@ export function buildCidFileMap(attachments, html) {
     }
     const refs = findCidRefs(html);
     /** @type {Record<string, string>} */
-    const out = {};
+    const out: Record<string, string> = {};
     if (refs.size === 0) {
         return out;
     }
@@ -197,7 +199,7 @@ export function buildCidFileMap(attachments, html) {
         if (!att || typeof att !== 'object') {
             throw new Error('buildCidFileMap: attachment object required');
         }
-        const record = /** @type {{ content_id?: unknown, file_id?: unknown }} */ (att);
+        const record = att as { content_id?: unknown; file_id?: unknown };
         if (typeof record.content_id !== 'string' || !record.content_id.trim()) {
             continue;
         }
@@ -218,7 +220,7 @@ export function buildCidFileMap(attachments, html) {
  * @param {string} html
  * @returns {unknown[]}
  */
-export function attachmentsWithoutInlineCid(attachments, html) {
+export function attachmentsWithoutInlineCid(attachments: unknown[], html: string): unknown[] {
     if (!Array.isArray(attachments)) {
         throw new Error('attachmentsWithoutInlineCid: attachments array required');
     }
@@ -229,11 +231,11 @@ export function attachmentsWithoutInlineCid(attachments, html) {
     if (refs.size === 0) {
         return attachments;
     }
-    return attachments.filter((att) => {
+    return attachments.filter((att: unknown) => {
         if (!att || typeof att !== 'object') {
             throw new Error('attachmentsWithoutInlineCid: attachment object required');
         }
-        const record = /** @type {{ content_id?: unknown }} */ (att);
+        const record = att as { content_id?: unknown };
         if (typeof record.content_id !== 'string' || !record.content_id.trim()) {
             return true;
         }
@@ -245,7 +247,7 @@ export function attachmentsWithoutInlineCid(attachments, html) {
  * @param {string} text
  * @returns {string}
  */
-export function autolinkPlaintext(text) {
+export function autolinkPlaintext(text: string): string {
     if (typeof text !== 'string') {
         throw new Error('autolinkPlaintext: text string required');
     }
@@ -260,7 +262,7 @@ export function autolinkPlaintext(text) {
  * @param {boolean} allowRemoteImages
  * @returns {string}
  */
-export function mailDocumentCsp(allowRemoteImages) {
+export function mailDocumentCsp(allowRemoteImages: boolean): string {
     if (typeof allowRemoteImages !== 'boolean') {
         throw new Error('mailDocumentCsp: allowRemoteImages boolean required');
     }
@@ -296,8 +298,8 @@ export function mailIframeSandbox() {
 /**
  * @param {Document} doc
  */
-function wrapQuotedRegions(doc) {
-    const seen = new Set();
+function wrapQuotedRegions(doc: Document): void {
+    const seen = new Set<Element>();
     for (const selector of QUOTE_SELECTORS) {
         const nodes = [...doc.querySelectorAll(selector)];
         for (const node of nodes) {
@@ -328,7 +330,7 @@ function wrapQuotedRegions(doc) {
  * @param {boolean} allowRemoteImages
  * @returns {string}
  */
-export function wrapMailDocument(cleanHtml, allowRemoteImages) {
+export function wrapMailDocument(cleanHtml: string, allowRemoteImages: boolean): string {
     if (typeof cleanHtml !== 'string') {
         throw new Error('wrapMailDocument: cleanHtml string required');
     }
@@ -371,7 +373,7 @@ export function wrapMailDocument(cleanHtml, allowRemoteImages) {
  * @param {{ allowRemoteImages: boolean, cidMap: Record<string, string> }} options
  * @returns {string}
  */
-export function sanitizeMailHtml(rawHtml, options) {
+export function sanitizeMailHtml(rawHtml: string, options: { allowRemoteImages: boolean; cidMap: Record<string, string> }): string {
     if (typeof rawHtml !== 'string') {
         throw new Error('sanitizeMailHtml: rawHtml string required');
     }
@@ -390,7 +392,7 @@ export function sanitizeMailHtml(rawHtml, options) {
         throw new Error('sanitizeMailHtml: DOMPurify.sanitize missing');
     }
     const rewritten = rewriteCidImages(rawHtml, cidMap);
-    const afterSanitize = (node) => {
+    const afterSanitize = (node: Node): void => {
         if (!(node instanceof Element)) {
             return;
         }
@@ -429,7 +431,7 @@ export function sanitizeMailHtml(rawHtml, options) {
             ALLOW_UNKNOWN_PROTOCOLS: false,
         });
     } finally {
-        DOMPurify.removeHook('afterSanitizeAttributes', afterSanitize);
+        DOMPurify.removeHook('afterSanitizeAttributes');
     }
     if (typeof clean !== 'string') {
         throw new Error('sanitizeMailHtml: DOMPurify returned non-string');

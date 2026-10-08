@@ -18,23 +18,23 @@ export const PLATFORM_FILES_UPLOAD_DEFAULTS = Object.freeze({
  * @param {Response} response
  * @param {string} context
  */
-async function _readJsonOrThrow(response, context) {
+async function _readJsonOrThrow(response: Response, context: string): Promise<Record<string, unknown>> {
     const text = await response.text();
-    let body = null;
+    let body: unknown = null;
     if (text.trim() !== '') {
         body = JSON.parse(text);
     }
     if (!response.ok) {
         const detail =
-            body && typeof body === 'object' && typeof body.detail === 'string'
-                ? body.detail
+            body && typeof body === 'object' && typeof (body as Record<string, unknown>).detail === 'string'
+                ? (body as Record<string, unknown>).detail
                 : `HTTP ${response.status}`;
         throw new Error(`${context}: ${detail}`);
     }
     if (body === null || typeof body !== 'object') {
         throw new Error(`${context}: JSON object required`);
     }
-    return body;
+    return body as Record<string, unknown>;
 }
 
 /**
@@ -46,7 +46,16 @@ async function _readJsonOrThrow(response, context) {
  *   routeSegment?: string,
  * }} [opts]
  */
-export async function fetchPlatformFilesUploadConfig(opts = {}) {
+export interface PlatformFileFetchOpts {
+    fetchImpl?: typeof fetch;
+    credentials?: RequestCredentials;
+    headers?: Record<string, string>;
+    filesApiBase?: string;
+    routeSegment?: string;
+    pathname?: string;
+}
+
+export async function fetchPlatformFilesUploadConfig(opts: PlatformFileFetchOpts = {}): Promise<Record<string, unknown>> {
     const fetchImpl = typeof opts.fetchImpl === 'function' ? opts.fetchImpl : fetch;
     const credentials = opts.credentials != null ? opts.credentials : 'include';
     const headers = opts.headers && typeof opts.headers === 'object' ? opts.headers : {};
@@ -75,7 +84,16 @@ export async function fetchPlatformFilesUploadConfig(opts = {}) {
  *   onProgress?: (p: { loaded: number, total: number }) => void,
  * }} opts
  */
-async function _uploadChunked(file, specJson, opts) {
+interface UploadChunkedOpts {
+    fetchImpl: typeof fetch;
+    credentials: RequestCredentials;
+    headers: Record<string, string>;
+    chunkSizeBytes: number;
+    filesApiBase: string;
+    onProgress?: (p: { loaded: number; total: number }) => void;
+}
+
+async function _uploadChunked(file: File, specJson: string, opts: UploadChunkedOpts): Promise<Record<string, unknown>> {
     const fetchImpl = opts.fetchImpl;
     const filesBase = opts.filesApiBase;
     const initResponse = await fetchImpl(`${filesBase}/uploads`, {
@@ -166,7 +184,15 @@ async function _uploadChunked(file, specJson, opts) {
  *   routeSegment?: string,
  * }} input
  */
-export async function uploadPlatformFile(input) {
+export interface UploadPlatformFileInput extends PlatformFileFetchOpts {
+    file: File;
+    spec: string;
+    onProgress?: (p: { loaded: number; total: number }) => void;
+    chunkSizeBytes?: number;
+    maxUploadBytes?: number;
+}
+
+export async function uploadPlatformFile(input: UploadPlatformFileInput): Promise<Record<string, unknown>> {
     if (!input || typeof input !== 'object') {
         throw new Error('uploadPlatformFile: input required');
     }
@@ -217,11 +243,11 @@ export async function uploadPlatformFile(input) {
  *   url?: string|null,
  * }}
  */
-export function isPlatformFileRef(value) {
+export function isPlatformFileRef(value: unknown): value is Record<string, unknown> & { file_id: string; original_name: string; content_type: string; file_size: number } {
     if (!value || typeof value !== 'object') {
         return false;
     }
-    const ref = /** @type {Record<string, unknown>} */ (value);
+    const ref = value as Record<string, unknown>;
     return (
         typeof ref.file_id === 'string'
         && ref.file_id.length > 0
@@ -247,19 +273,25 @@ export function isPlatformFileRef(value) {
  *   routeSegment?: string,
  * }} opts
  */
-export async function resolvePlatformFileRefs(files, opts) {
+export interface ResolvePlatformFileRefsOpts {
+    buildSpec: (file: File) => string;
+    credentials?: RequestCredentials;
+    headers?: Record<string, string>;
+    fetchImpl?: typeof fetch;
+    onProgress?: (p: { loaded: number; total: number; fileName: string }) => void;
+    chunkSizeBytes?: number;
+    maxUploadBytes?: number;
+    filesApiBase?: string;
+    routeSegment?: string;
+    pathname?: string;
+}
+
+export async function resolvePlatformFileRefs(files: unknown[], opts: ResolvePlatformFileRefsOpts): Promise<Array<Record<string, unknown>>> {
     if (!opts || typeof opts !== 'object' || typeof opts.buildSpec !== 'function') {
         throw new Error('resolvePlatformFileRefs: buildSpec required');
     }
     const list = Array.isArray(files) ? files : [];
-    /** @type {Array<{
-     *   file_id: string,
-     *   original_name: string,
-     *   content_type: string,
-     *   file_size: number,
-     *   url: string|null,
-     * }>} */
-    const refs = [];
+    const refs: Array<Record<string, unknown>> = [];
     for (const item of list) {
         if (isPlatformFileRef(item)) {
             refs.push({
@@ -286,7 +318,7 @@ export async function resolvePlatformFileRefs(files, opts) {
             routeSegment: opts.routeSegment,
             onProgress:
                 typeof opts.onProgress === 'function'
-                    ? (p) => opts.onProgress({ ...p, fileName: item.name })
+                    ? (p: { loaded: number; total: number }) => opts.onProgress!({ ...p, fileName: item.name })
                     : undefined,
         });
         if (typeof uploaded.file_id !== 'string' || uploaded.file_id.length === 0) {

@@ -3,15 +3,44 @@
  * Вход — узлы как в ответе API (после build_span_tree): объекты с children[].
  */
 
-/** @typedef {{ span_id: string, trace_id?: string, parent_span_id?: string|null, operation_name?: string, name?: string, kind?: string|null, start_time?: string|null, end_time?: string|null, duration_ms?: number|null, status?: string|null, status_message?: string|null, service_name?: string, event_type?: string|null, attributes?: Record<string, unknown>, children?: unknown[] }} TraceSpanRaw */
+export interface TraceSpanRaw {
+    span_id: string;
+    trace_id?: string;
+    parent_span_id?: string | null;
+    operation_name?: string;
+    name?: string;
+    kind?: string | null;
+    start_time?: string | null;
+    end_time?: string | null;
+    duration_ms?: number | null;
+    status?: string | null;
+    status_message?: string | null;
+    service_name?: string;
+    event_type?: string | null;
+    attributes?: Record<string, unknown>;
+    children?: unknown[];
+}
 
-/** @typedef {{ id: string, title: string, subtitle: string, uiKind: string, startMs: number|null, endMs: number|null, durationMs: number|null, hasError: boolean, serviceKey: string, childCount: number, children: TraceViewNode[], raw: TraceSpanRaw }} TraceViewNode */
+export interface TraceViewNode {
+    id: string;
+    title: string;
+    subtitle: string;
+    uiKind: string;
+    startMs: number | null;
+    endMs: number | null;
+    durationMs: number | null;
+    hasError: boolean;
+    serviceKey: string;
+    childCount: number;
+    children: TraceViewNode[];
+    raw: TraceSpanRaw;
+}
 
 /**
  * @param {unknown} v
  * @returns {v is Record<string, unknown>}
  */
-function isPlainObject(v) {
+function isPlainObject(v: unknown): v is Record<string, unknown> {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
@@ -19,7 +48,7 @@ function isPlainObject(v) {
  * @param {unknown} raw
  * @returns {TraceSpanRaw}
  */
-export function assertTraceSpanRaw(raw) {
+export function assertTraceSpanRaw(raw: unknown): TraceSpanRaw {
     if (!isPlainObject(raw)) {
         throw new Error('trace-view-model: span must be an object');
     }
@@ -27,14 +56,14 @@ export function assertTraceSpanRaw(raw) {
     if (typeof spanId !== 'string' || spanId.length === 0) {
         throw new Error('trace-view-model: span.span_id must be a non-empty string');
     }
-    return /** @type {TraceSpanRaw} */ (raw);
+    return raw as unknown as TraceSpanRaw;
 }
 
 /**
  * @param {string|null|undefined} iso
  * @returns {number|null}
  */
-export function parseIsoToMs(iso) {
+export function parseIsoToMs(iso: string | null | undefined): number | null {
     if (iso == null || typeof iso !== 'string' || iso.length === 0) {
         return null;
     }
@@ -49,7 +78,7 @@ export function parseIsoToMs(iso) {
  * @param {TraceSpanRaw} raw
  * @returns {string}
  */
-export function inferUiKind(raw) {
+export function inferUiKind(raw: TraceSpanRaw): string {
     const attrs = isPlainObject(raw.attributes) ? raw.attributes : null;
     const opNameAttr =
         attrs && typeof attrs['gen_ai.operation.name'] === 'string'
@@ -113,7 +142,7 @@ export function inferUiKind(raw) {
  * @param {string} serviceName
  * @returns {string}
  */
-export function serviceHueCssVar(serviceName) {
+export function serviceHueCssVar(serviceName: string | null | undefined): string {
     if (typeof serviceName !== 'string' || serviceName.length === 0) {
         return 'var(--accent)';
     }
@@ -128,7 +157,7 @@ export function serviceHueCssVar(serviceName) {
  * @param {TraceSpanRaw} raw
  * @returns {TraceViewNode}
  */
-export function normalizeSpanNode(raw) {
+export function normalizeSpanNode(raw: TraceSpanRaw | unknown): TraceViewNode {
     const s = assertTraceSpanRaw(raw);
     const titleFromOp = typeof s.operation_name === 'string' ? s.operation_name : '';
     const titleFromName = typeof s.name === 'string' ? s.name : '';
@@ -136,7 +165,7 @@ export function normalizeSpanNode(raw) {
 
     const svc = typeof s.service_name === 'string' ? s.service_name : '';
     const ev = typeof s.event_type === 'string' ? s.event_type : '';
-    const subtitleParts = [];
+    const subtitleParts: string[] = [];
     if (svc.length > 0) {
         subtitleParts.push(svc);
     }
@@ -181,7 +210,7 @@ export function normalizeSpanNode(raw) {
  * @param {unknown[]} rootsRaw
  * @returns {TraceViewNode[]}
  */
-export function normalizeTraceRoots(rootsRaw) {
+export function normalizeTraceRoots(rootsRaw: unknown[]): TraceViewNode[] {
     if (!Array.isArray(rootsRaw)) {
         throw new Error('trace-view-model: roots must be an array');
     }
@@ -193,7 +222,7 @@ export function normalizeTraceRoots(rootsRaw) {
  * @param {string} q
  * @returns {boolean}
  */
-export function spanMatchesQuery(raw, q) {
+export function spanMatchesQuery(raw: TraceSpanRaw, q: string): boolean {
     if (q.length === 0) {
         return true;
     }
@@ -216,11 +245,9 @@ export function spanMatchesQuery(raw, q) {
  * @param {(raw: TraceSpanRaw) => boolean} pred
  * @returns {Set<string>}
  */
-export function collectMatchingSpanIds(roots, pred) {
-    /** @type {Set<string>} */
-    const out = new Set();
-    /** @param {TraceSpanRaw} node */
-    function walk(node) {
+export function collectMatchingSpanIds(roots: TraceSpanRaw[], pred: (raw: TraceSpanRaw) => boolean): Set<string> {
+    const out = new Set<string>();
+    function walk(node: TraceSpanRaw): void {
         if (pred(node)) {
             out.add(node.span_id);
         }
@@ -240,11 +267,11 @@ export function collectMatchingSpanIds(roots, pred) {
 /**
  * @param {TraceSpanRaw[]} roots
  */
-export function buildParentMap(roots) {
+export function buildParentMap(roots: TraceSpanRaw[]): Map<string, string | null> {
     /** @type {Map<string, string|null>} */
-    const m = new Map();
+    const m = new Map<string, string | null>();
     /** @param {TraceSpanRaw} node @param {string|null} parentId */
-    function walk(node, parentId) {
+    function walk(node: TraceSpanRaw, parentId: string | null): void {
         m.set(node.span_id, parentId);
         const ch = node.children;
         if (Array.isArray(ch)) {
@@ -265,9 +292,9 @@ export function buildParentMap(roots) {
  * @param {Map<string, string|null>} parentMap
  * @returns {Set<string>}
  */
-export function ancestorIdsForMatches(matchedIds, parentMap) {
+export function ancestorIdsForMatches(matchedIds: Set<string>, parentMap: Map<string, string | null>): Set<string> {
     /** @type {Set<string>} */
-    const expand = new Set();
+    const expand = new Set<string>();
     for (const id of matchedIds) {
         let cur = parentMap.get(id);
         while (cur != null) {
@@ -282,16 +309,15 @@ export function ancestorIdsForMatches(matchedIds, parentMap) {
  * @param {unknown[]} rootsRaw
  * @returns {{ min: number, max: number }|null}
  */
-export function computeTraceTimeRangeMs(rootsRaw) {
+export function computeTraceTimeRangeMs(rootsRaw: unknown[]): { min: number; max: number } | null {
     if (!Array.isArray(rootsRaw)) {
         return null;
     }
     /** @type {number[]} */
-    const starts = [];
+    const starts: number[] = [];
     /** @type {number[]} */
-    const ends = [];
-    /** @param {TraceSpanRaw} node */
-    function walk(node) {
+    const ends: number[] = [];
+    function walk(node: TraceSpanRaw): void {
         const startMs = parseIsoToMs(node.start_time);
         let endMs = parseIsoToMs(node.end_time);
         const dur =
@@ -334,9 +360,9 @@ export function computeTraceTimeRangeMs(rootsRaw) {
  * @param {Set<string>} matchedIds
  * @returns {TraceViewNode[]}
  */
-export function pruneTraceViewNodes(nodes, matchedIds) {
+export function pruneTraceViewNodes(nodes: TraceViewNode[], matchedIds: Set<string>): TraceViewNode[] {
     /** @type {TraceViewNode[]} */
-    const out = [];
+    const out: TraceViewNode[] = [];
     for (const n of nodes) {
         const childPruned = pruneTraceViewNodes(n.children, matchedIds);
         if (matchedIds.has(n.id) || childPruned.length > 0) {
@@ -360,7 +386,7 @@ export function pruneTraceViewNodes(nodes, matchedIds) {
  * @param {number|null} traceSpanMs длительность всего trace (для корней)
  * @returns {number}
  */
-export function treeDurationBarPct(node, parent, traceSpanMs) {
+export function treeDurationBarPct(node: TraceViewNode, parent: TraceViewNode | null, traceSpanMs: number | null): number {
     const d = node.durationMs;
     if (d == null || d <= 0) {
         return 0;
@@ -381,13 +407,13 @@ export function treeDurationBarPct(node, parent, traceSpanMs) {
  * @param {number} depth
  * @returns {Array<{ node: TraceViewNode, depth: number, leftPct: number, widthPct: number }>}
  */
-export function flattenTimelineRows(node, traceMin, traceMax, depth) {
+export function flattenTimelineRows(node: TraceViewNode, traceMin: number, traceMax: number, depth: number): Array<{ node: TraceViewNode; depth: number; leftPct: number; widthPct: number }> {
     const span = traceMax - traceMin;
     if (span <= 0) {
         return [];
     }
     /** @type {Array<{ node: TraceViewNode, depth: number, leftPct: number, widthPct: number }>} */
-    const rows = [];
+    const rows: Array<{ node: TraceViewNode; depth: number; leftPct: number; widthPct: number }> = [];
     const startMs = node.startMs;
     const endMs = node.endMs;
     let leftPct = 0;

@@ -8,7 +8,7 @@
  * @param {unknown} value
  * @returns {value is Record<string, unknown>}
  */
-export function isTracePlainObject(value) {
+export function isTracePlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -16,7 +16,7 @@ export function isTracePlainObject(value) {
  * @param {unknown} value
  * @returns {{ ok: true, value: unknown, source: 'native'|'json' }|{ ok: false, value: null, error: string, raw: string }}
  */
-export function parseTraceJsonValue(value) {
+export function parseTraceJsonValue(value: unknown): { ok: true; value: unknown; source: 'native' | 'json' } | { ok: false; value: null; error: string; raw: string } {
     if (isTracePlainObject(value) || Array.isArray(value)) {
         return { ok: true, value, source: 'native' };
     }
@@ -27,7 +27,7 @@ export function parseTraceJsonValue(value) {
     if (raw.length === 0) {
         return { ok: false, value: null, error: 'empty', raw };
     }
-    const first = raw[0];
+    const first = raw[0] ?? '';
     if (first !== '{' && first !== '[') {
         return { ok: false, value: null, error: 'not_json', raw };
     }
@@ -43,7 +43,7 @@ export function parseTraceJsonValue(value) {
  * @param {string} ch
  * @returns {string}
  */
-function decodeJsonEscape(ch) {
+function decodeJsonEscape(ch: string): string {
     switch (ch) {
         case '"': return '"';
         case '\\': return '\\';
@@ -62,14 +62,14 @@ function decodeJsonEscape(ch) {
  * @param {number} quoteIndex
  * @returns {{ text: string, endIndex: number, closed: boolean }}
  */
-function readJsonStringLoose(raw, quoteIndex) {
+function readJsonStringLoose(raw: string, quoteIndex: number): { text: string; endIndex: number; closed: boolean } {
     if (raw[quoteIndex] !== '"') {
         throw new Error('readJsonStringLoose: quoteIndex must point to "');
     }
     let out = '';
     let i = quoteIndex + 1;
     while (i < raw.length) {
-        const ch = raw[i];
+        const ch = raw[i] ?? '';
         if (ch === '"') {
             return { text: out, endIndex: i, closed: true };
         }
@@ -101,7 +101,7 @@ function readJsonStringLoose(raw, quoteIndex) {
  * @param {string} propertyName
  * @returns {{ text: string, endIndex: number, closed: boolean }|null}
  */
-function readJsonStringPropertyLoose(raw, propertyName) {
+function readJsonStringPropertyLoose(raw: string, propertyName: string): { text: string; endIndex: number; closed: boolean } | null {
     const escapedName = propertyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`"${escapedName}"\\s*:\\s*"`);
     const match = re.exec(raw);
@@ -115,7 +115,7 @@ function readJsonStringPropertyLoose(raw, propertyName) {
  * @param {string} raw
  * @returns {string}
  */
-function decodeCommonJsonEscapes(raw) {
+function decodeCommonJsonEscapes(raw: string): string {
     let out = '';
     for (let i = 0; i < raw.length; i += 1) {
         const ch = raw[i];
@@ -146,7 +146,7 @@ function decodeCommonJsonEscapes(raw) {
  * @param {unknown} value
  * @returns {string}
  */
-export function prettyTraceJsonText(value) {
+export function prettyTraceJsonText(value: unknown): string {
     if (isTracePlainObject(value) || Array.isArray(value)) {
         return JSON.stringify(value, null, 2);
     }
@@ -169,7 +169,7 @@ export function prettyTraceJsonText(value) {
  * @param {unknown} value
  * @returns {string}
  */
-export function traceScalarText(value) {
+export function traceScalarText(value: unknown): string {
     if (typeof value === 'string') {
         return value;
     }
@@ -187,7 +187,7 @@ export function traceScalarText(value) {
  * @param {string} key
  * @returns {unknown}
  */
-function attr(attrs, key) {
+function attr(attrs: Record<string, unknown>, key: string): unknown {
     return Object.prototype.hasOwnProperty.call(attrs, key) ? attrs[key] : undefined;
 }
 
@@ -198,7 +198,7 @@ function attr(attrs, key) {
  * @param {string} attrKey
  * @returns {unknown}
  */
-function spanOrAttr(span, attrs, spanKey, attrKey) {
+function spanOrAttr(span: Record<string, unknown>, attrs: Record<string, unknown>, spanKey: string, attrKey: string): unknown {
     const direct = span[spanKey];
     if (direct !== null && direct !== undefined && direct !== '') {
         return direct;
@@ -211,7 +211,7 @@ function spanOrAttr(span, attrs, spanKey, attrKey) {
  * @param {string} key
  * @param {unknown} value
  */
-function pushField(out, key, value) {
+function pushField(out: Array<{ key: string; value: string }>, key: string, value: unknown): void {
     const text = traceScalarText(value);
     if (text.length > 0) {
         out.push({ key, value: text });
@@ -222,7 +222,7 @@ function pushField(out, key, value) {
  * @param {unknown} part
  * @returns {string}
  */
-function messagePartText(part) {
+function messagePartText(part: unknown): string {
     if (typeof part === 'string') {
         return part;
     }
@@ -244,7 +244,7 @@ function messagePartText(part) {
  * @param {unknown} message
  * @returns {string}
  */
-function messageText(message) {
+function messageText(message: unknown): string {
     if (!isTracePlainObject(message)) {
         return traceScalarText(message);
     }
@@ -253,11 +253,11 @@ function messageText(message) {
         return content;
     }
     if (Array.isArray(content)) {
-        return content.map((part) => messagePartText(part)).filter((text) => text.length > 0).join('\n');
+        return content.map((part: unknown) => messagePartText(part)).filter((text: string) => text.length > 0).join('\n');
     }
     const parts = message.parts;
     if (Array.isArray(parts)) {
-        return parts.map((part) => messagePartText(part)).filter((text) => text.length > 0).join('\n');
+        return parts.map((part: unknown) => messagePartText(part)).filter((text: string) => text.length > 0).join('\n');
     }
     return traceScalarText(message);
 }
@@ -267,7 +267,7 @@ function messageText(message) {
  * @param {number} index
  * @returns {{ index: number, role: string, id: string, text: string, system: boolean }}
  */
-function normalizeMessage(message, index) {
+function normalizeMessage(message: unknown, index: number): Record<string, unknown> {
     if (!isTracePlainObject(message)) {
         return {
             index,
@@ -293,7 +293,7 @@ function normalizeMessage(message, index) {
  * @param {unknown} value
  * @returns {Record<string, unknown>}
  */
-function objectOrEmpty(value) {
+function objectOrEmpty(value: unknown): Record<string, unknown> {
     return isTracePlainObject(value) ? value : {};
 }
 
@@ -301,7 +301,7 @@ function objectOrEmpty(value) {
  * @param {unknown} span
  * @returns {Record<string, unknown>}
  */
-function normalizeSpan(span) {
+function normalizeSpan(span: unknown): Record<string, unknown> {
     return isTracePlainObject(span) ? span : {};
 }
 
@@ -309,7 +309,7 @@ function normalizeSpan(span) {
  * @param {Record<string, unknown>} attrs
  * @returns {ReturnType<typeof parseTraceJsonValue>|null}
  */
-function parsedAttr(attrs, key) {
+function parsedAttr(attrs: Record<string, unknown>, key: string): ReturnType<typeof parseTraceJsonValue> | null {
     const value = attr(attrs, key);
     if (value === null || value === undefined || value === '') {
         return null;
@@ -321,14 +321,21 @@ function parsedAttr(attrs, key) {
  * @param {string} raw
  * @returns {{ envelope: Record<string, unknown>, content: unknown, toolCalls: unknown[], contentClosed: boolean }|null}
  */
-function recoverLlmResponseEnvelope(raw) {
+interface LlmRecoveredEnvelope {
+    envelope: { content: unknown; tool_calls: unknown[] };
+    content: unknown;
+    toolCalls: unknown[];
+    contentClosed: boolean;
+}
+
+function recoverLlmResponseEnvelope(raw: string): LlmRecoveredEnvelope | null {
     const content = readJsonStringPropertyLoose(raw, 'content');
     if (content === null) {
         return null;
     }
     const contentParsed = parseTraceJsonValue(content.text);
     const contentValue = contentParsed.ok ? contentParsed.value : content.text;
-    let toolCalls = [];
+    let toolCalls: unknown[] = [];
     const toolCallsIdx = raw.indexOf('"tool_calls"', content.endIndex);
     if (toolCallsIdx >= 0) {
         const arrayStart = raw.indexOf('[', toolCallsIdx);
@@ -354,7 +361,7 @@ function recoverLlmResponseEnvelope(raw) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-export function buildLlmRequestView(attrs) {
+export function buildLlmRequestView(attrs: Record<string, unknown>): Record<string, unknown> | null {
     const rawValue = attr(attrs, 'platform.llm.request');
     const parsed = parsedAttr(attrs, 'platform.llm.request');
     if (parsed === null) {
@@ -368,7 +375,7 @@ export function buildLlmRequestView(attrs) {
         parsed,
         raw: traceScalarText(rawValue),
         prettyRaw: prettyTraceJsonText(rawValue),
-        messages: rawMessages.map((message, index) => normalizeMessage(message, index)),
+        messages: rawMessages.map((message: unknown, index: number) => normalizeMessage(message, index)),
         tools: rawTools,
         responseFormat,
     };
@@ -377,7 +384,7 @@ export function buildLlmRequestView(attrs) {
 /**
  * @param {unknown} content
  */
-export function buildStructuredContentView(content) {
+export function buildStructuredContentView(content: unknown): Record<string, unknown> {
     const parsed = parseTraceJsonValue(content);
     if (!parsed.ok || !isTracePlainObject(parsed.value)) {
         return {
@@ -407,7 +414,7 @@ export function buildStructuredContentView(content) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-export function buildLlmResponseView(attrs) {
+export function buildLlmResponseView(attrs: Record<string, unknown>): Record<string, unknown> | null {
     const rawValue = attr(attrs, 'platform.llm.response');
     const parsed = parsedAttr(attrs, 'platform.llm.response');
     if (parsed === null) {
@@ -435,8 +442,8 @@ export function buildLlmResponseView(attrs) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-function buildToolView(attrs) {
-    const fields = [];
+function buildToolView(attrs: Record<string, unknown>): Record<string, unknown> | null {
+    const fields: Array<{ key: string; value: string }> = [];
     pushField(fields, 'tool_name', attr(attrs, 'platform.tool.name'));
     pushField(fields, 'tool_call_id', attr(attrs, 'platform.tool.call_id'));
     pushField(fields, 'tool_duration', attr(attrs, 'platform.tool.duration_ms'));
@@ -467,8 +474,8 @@ function buildToolView(attrs) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-function buildPromptView(attrs) {
-    const fields = [];
+function buildPromptView(attrs: Record<string, unknown>): Record<string, unknown> | null {
+    const fields: Array<{ key: string; value: string }> = [];
     pushField(fields, 'prompt_node', attr(attrs, 'platform.prompt.node_id'));
     pushField(fields, 'prompt_template_length', attr(attrs, 'platform.prompt.template_length'));
     pushField(fields, 'prompt_rendered_length', attr(attrs, 'platform.prompt.rendered_length'));
@@ -490,7 +497,7 @@ function buildPromptView(attrs) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-function buildStateView(attrs) {
+function buildStateView(attrs: Record<string, unknown>): Record<string, unknown> | null {
     const snapshot = attr(attrs, 'platform.state.snapshot');
     if (snapshot === undefined) {
         return null;
@@ -505,8 +512,8 @@ function buildStateView(attrs) {
  * @param {Record<string, unknown>} attrs
  * @param {Record<string, unknown>} span
  */
-function buildErrorView(attrs, span) {
-    const fields = [];
+function buildErrorView(attrs: Record<string, unknown>, span: Record<string, unknown>): Record<string, unknown> | null {
+    const fields: Array<{ key: string; value: string }> = [];
     const status = typeof span.status === 'string' ? span.status.toUpperCase() : '';
     if (status === 'ERROR') {
         pushField(fields, 'status', span.status);
@@ -522,8 +529,8 @@ function buildErrorView(attrs, span) {
 /**
  * @param {Record<string, unknown>} attrs
  */
-function buildInterruptView(attrs) {
-    const fields = [];
+function buildInterruptView(attrs: Record<string, unknown>): Record<string, unknown> | null {
+    const fields: Array<{ key: string; value: string }> = [];
     pushField(fields, 'interrupt_question', attr(attrs, 'platform.interrupt.question'));
     pushField(fields, 'interrupt_tool', attr(attrs, 'platform.interrupt.tool'));
     pushField(fields, 'interrupt_path_depth', attr(attrs, 'platform.interrupt.path_depth'));
@@ -534,8 +541,8 @@ function buildInterruptView(attrs) {
  * @param {Record<string, unknown>} span
  * @param {Record<string, unknown>} attrs
  */
-function buildQuickFacts(span, attrs) {
-    const facts = [];
+function buildQuickFacts(span: Record<string, unknown>, attrs: Record<string, unknown>): Array<{ key: string; value: string }> {
+    const facts: Array<{ key: string; value: string }> = [];
     pushField(facts, 'operation', span.operation_name);
     pushField(facts, 'span_id', span.span_id);
     pushField(facts, 'trace_id', span.trace_id);
@@ -559,8 +566,8 @@ function buildQuickFacts(span, attrs) {
  * @param {Record<string, unknown>} span
  * @param {Record<string, unknown>} attrs
  */
-function buildMetrics(span, attrs) {
-    const metrics = [];
+function buildMetrics(span: Record<string, unknown>, attrs: Record<string, unknown>): Array<{ key: string; value: string }> {
+    const metrics: Array<{ key: string; value: string }> = [];
     pushField(metrics, 'duration', span.duration_ms);
     pushField(metrics, 'messages', attr(attrs, 'llm.messages_count'));
     pushField(metrics, 'tools', attr(attrs, 'llm.tools_count'));
@@ -581,7 +588,7 @@ function buildMetrics(span, attrs) {
 /**
  * @param {unknown} span
  */
-export function buildSpanAttributeViewModel(span) {
+export function buildSpanAttributeViewModel(span: unknown): Record<string, unknown> {
     const normalizedSpan = normalizeSpan(span);
     const attrs = objectOrEmpty(normalizedSpan.attributes);
     return {

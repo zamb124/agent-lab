@@ -10,7 +10,7 @@ import {
 
 export { hrefForDeepLinkNavigation } from './platform-deeplink-paths.js';
 
-function _handleDeepLink(urlString) {
+function _handleDeepLink(urlString: string | null | undefined): void {
     if (!urlString) {
         return;
     }
@@ -27,7 +27,7 @@ function _handleDeepLink(urlString) {
     assignInNativeShell(target);
 }
 
-function installCapacitorAppUrlOpenListener() {
+function installCapacitorAppUrlOpenListener(): void {
     if (typeof window === 'undefined') {
         return;
     }
@@ -43,7 +43,7 @@ function installCapacitorAppUrlOpenListener() {
 
     void import('@capacitor/app').then(({ App }) => {
         // Холодный старт: URL, которым запустили приложение из закрытого состояния
-        App.getLaunchUrl().then((result) => {
+        App.getLaunchUrl().then((result: { url?: string }) => {
             if (result?.url) {
                 _handleDeepLink(result.url);
             }
@@ -52,7 +52,7 @@ function installCapacitorAppUrlOpenListener() {
         });
 
         // Тёплый старт: ссылки после того, как приложение уже открыто
-        App.addListener('appUrlOpen', (event) => {
+        App.addListener('appUrlOpen', (event: { url?: string }) => {
             if (!event?.url) {
                 return;
             }
