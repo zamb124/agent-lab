@@ -36,16 +36,20 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { bootstrapPlatformBus, completeBootstrap, getPlatformBus, hasPlatformBus } from '../events/index.js';
 import { CoreEvents } from '../events/contract.js';
+import type { PlatformEvent } from '../events/contract.js';
 import { isI18nBundleReady, translate } from '../events/effects/i18n.effect.js';
 import { mergePlatformI18nVars } from '../utils/platform-i18n-vars.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
 import { redirectToLogin } from '../utils/auth-redirect.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 import { registerFactory } from '../events/factory-registry.js';
+import type { PlatformFactory } from '../events/factory-registry.js';
 import { collectFactories } from '../events/factories/register.js';
+import type { CollectableFactory } from '../events/factories/register.js';
 import {
     worktrackerWorkItemFactories,
     createWorktrackerWorkItemCountsAuthEffect,
@@ -59,6 +63,14 @@ import { prefersReducedMotion } from '../utils/motion.js';
 import { resolveVoiceHttpOrigin } from '../voice/voice-http-origin.js';
 import { PLATFORM_LARA_TOGGLE_EVENT } from '../flow-ui/shell/preferences.js';
 import { setPlatformFilesRouteSegment } from '../utils/platform-files-url.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { OpController } from './use-resource.js';
+import type { SliceDef } from '../events/reducers/index.js';
+import type { EventEffect } from '../events/bus.js';
+import type { RouterRoute } from '../events/reducers/router.js';
+import type { AuthState, AuthStatus, AuthUser } from '../events/reducers/auth.js';
+import type { NotifyToast } from '../events/reducers/notify.js';
+import type { LauncherPosition } from '../flow-ui/shell/drawer-geometry.js';
 
 const AGENT_DEVICES_POLL_MS = 45000;
 import '../components/pwa-install-banner.js';
@@ -78,7 +90,51 @@ import '../components/platform-file-picker-modal.js';
 import './platform-services-page.js';
 import '../flow-ui/shell/drawer.js';
 
-export function renderPlatformAppShell(app) {
+export interface PlatformAssistantStaticConfig {
+    serviceId: string;
+    branchId: string;
+    showLauncher: boolean;
+    launcherPosition?: LauncherPosition;
+}
+
+interface PlatformAppCtor {
+    defaultI18nNamespace?: string;
+    factories?: CollectableFactory[];
+    bottomNavItems?: unknown[];
+    bottomNavHideOnRoutes?: string[];
+    topBarEnabled?: boolean;
+    topBarHideOnRoutes?: string[];
+    routeMotionEnabled?: boolean;
+    platformAssistant?: PlatformAssistantStaticConfig;
+}
+
+export interface BottomNavItem {
+    key: string;
+    routeKey?: string;
+    params?: Record<string, string>;
+    sheet?: string;
+    sheetProps?: Record<string, unknown>;
+    icon: string;
+    labelKey: string;
+    badge?: unknown;
+    [key: string]: unknown;
+}
+
+interface AuthSelection {
+    status: AuthStatus;
+    user: AuthUser | null;
+    activeCompanyId: string | null;
+    sessionEndCause: string | null;
+}
+
+interface RouteSelection {
+    routeKey: string | null;
+    params: Record<string, string>;
+    notFound: boolean;
+}
+
+
+export function renderPlatformAppShell(app: PlatformApp): TemplateResult | null {
     if (app._fatalShell === 'server-error') {
         return html`
             <platform-shell-page kind="server-error"></platform-shell-page>
@@ -98,7 +154,7 @@ export function renderPlatformAppShell(app) {
 }
 
 export class PlatformApp extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             .loading-container {
@@ -117,26 +173,43 @@ export class PlatformApp extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties = {
         _bootstrapped: { state: true },
         _fatalShell:   { state: true },
         _routeNotFound:{ state: true },
         _notFoundHomeHref: { state: true },
     };
 
+    declare _bootstrapped: boolean;
+    declare _fatalShell: string | null;
+    declare _routeNotFound: boolean;
+    declare _notFoundHomeHref: string;
+
+    _userLoadDispatched: boolean;
+    _renderedToastIds: Set<string>;
+    _routeMotionSubscribed: boolean;
+    _activeRouteTransition: ViewTransition | null;
+    _toastsSelect: SelectController<NotifyToast[]>;
+    _i18nReadySelect: SelectController<boolean>;
+    _authSelect: SelectController<AuthSelection>;
+    _routerSelect: SelectController<RouteSelection>;
+    _agentDevicesOp: OpController;
+    _agentDevicesPollTimer: number | null;
+    _platformAssistantContextProvider: () => Promise<Record<string, unknown>>;
+
     constructor() {
         super();
-        const ctor = this.constructor;
+        const ctor = this.constructor as PlatformAppCtor;
         if (typeof ctor.defaultI18nNamespace === 'string' && ctor.defaultI18nNamespace.length > 0) {
             setDefaultI18nNamespace(ctor.defaultI18nNamespace);
         }
-        const factories = [
-            ...worktrackerWorkItemFactories,
-            ...platformAgentDeviceFactories,
+        const factories: CollectableFactory[] = [
+            ...(worktrackerWorkItemFactories as CollectableFactory[]),
+            ...(platformAgentDeviceFactories as CollectableFactory[]),
             ...(Array.isArray(ctor.factories) ? ctor.factories : []),
         ];
-        const factorySlices = {};
-        const factoryEffects = [
+        const factorySlices: Record<string, SliceDef> = {};
+        const factoryEffects: EventEffect[] = [
             createWorktrackerWorkItemCountsAuthEffect(),
             createPlatformAgentDevicesAuthEffect(),
         ];
@@ -149,7 +222,7 @@ export class PlatformApp extends PlatformElement {
             factoryEffects.push(...collected.effects);
         }
         const serviceSlices = this.getServiceSlices();
-        const mergedSlices = { ...factorySlices };
+        const mergedSlices: Record<string, SliceDef> = { ...factorySlices };
         for (const [key, slice] of Object.entries(serviceSlices || {})) {
             if (mergedSlices[key]) {
                 throw new Error(`PlatformApp: sliceKey "${key}" collision between factory and getServiceSlices()`);
@@ -179,28 +252,34 @@ export class PlatformApp extends PlatformElement {
         this._routeMotionSubscribed = false;
         this._activeRouteTransition = null;
 
-        this._toastsSelect = this.select((s) => s.notify.toasts);
-        this._i18nReadySelect = this.select((s) => isI18nBundleReady(s.i18n));
-        this._authSelect = this.select((s) => ({
-            status: s.auth.status,
-            user: s.auth.user,
-            activeCompanyId: s.auth.activeCompanyId,
-            sessionEndCause: s.auth.sessionEndCause,
-        }));
-        this._routerSelect = this.select((s) => ({
-            routeKey: s.router.routeKey,
-            params: s.router.params,
-            notFound: s.router.notFound,
-        }));
+        this._toastsSelect = this.select((s) => (s.notify as { toasts: NotifyToast[] }).toasts);
+        this._i18nReadySelect = this.select((s) => isI18nBundleReady(s.i18n as Parameters<typeof isI18nBundleReady>[0]));
+        this._authSelect = this.select((s) => {
+            const auth = s.auth as AuthState;
+            return {
+                status: auth.status,
+                user: auth.user,
+                activeCompanyId: auth.activeCompanyId,
+                sessionEndCause: auth.sessionEndCause,
+            };
+        });
+        this._routerSelect = this.select((s) => {
+            const router = s.router as RouteSelection;
+            return {
+                routeKey: router.routeKey,
+                params: router.params,
+                notFound: router.notFound,
+            };
+        });
         this._agentDevicesOp = this.useOp('platform/agent_devices_load');
         this._agentDevicesPollTimer = null;
         this._platformAssistantContextProvider = async () => {
             const routeValue = this._routerSelect.value;
-            const routeKey = routeValue.routeKey;
+            const routeKey = routeValue ? routeValue.routeKey : null;
             if (typeof routeKey !== 'string' || routeKey.length === 0) {
                 throw new Error('PlatformApp Lara context requires routeKey');
             }
-            const params = routeValue.params;
+            const params = routeValue ? routeValue.params : null;
             if (!params || typeof params !== 'object' || Array.isArray(params)) {
                 throw new Error('PlatformApp Lara context requires route params object');
             }
@@ -218,12 +297,11 @@ export class PlatformApp extends PlatformElement {
         };
     }
 
-    getBaseUrl() { return ''; }
+    getBaseUrl(): string { return ''; }
     /**
      * Ingress segment для Files API (`/crm` → `crm`). Frontend: getBaseUrl `/frontend`.
-     * @returns {string}
      */
-    getFilesRouteSegment() {
+    getFilesRouteSegment(): string {
         const base = this.getBaseUrl();
         if (typeof base !== 'string') {
             throw new Error('PlatformApp.getFilesRouteSegment: getBaseUrl must return string');
@@ -236,21 +314,22 @@ export class PlatformApp extends PlatformElement {
         }
         return segment;
     }
-    getRoutes() { return []; }
-    getServiceSlices() { return {}; }
-    getServiceEffects() { return []; }
-    rendersUnauthenticated() { return false; }
-    shouldRenderPlatformAssistant() { return true; }
-    async getPlatformAssistantContextVariables() { return {}; }
+    getRoutes(): RouterRoute[] { return []; }
+    getServiceSlices(): Record<string, SliceDef> { return {}; }
+    getServiceEffects(): EventEffect[] { return []; }
+    rendersUnauthenticated(): boolean { return false; }
+    shouldRenderPlatformAssistant(_routeKey: string | null, _params: Record<string, string>): boolean { return true; }
+    async getPlatformAssistantContextVariables(_routeKey: string, _params: Record<string, string>): Promise<Record<string, unknown>> { return {}; }
 
     /** Подкласс: false — не дергать GET /api/auth/me при connect (публичные страницы). */
-    shouldRequestUserLoadOnConnect() { return true; }
+    shouldRequestUserLoadOnConnect(): boolean { return true; }
 
-    renderRoute(routeKey, params) {
+
+    renderRoute(_routeKey: string | null, _params: Record<string, string>): TemplateResult {
         return html`<slot></slot>`;
     }
 
-    async connectedCallback() {
+    override async connectedCallback(): Promise<void> {
         super.connectedCallback();
         this._ensureRouteMotionSubscription();
         this._ensureAgentDevicesPoll();
@@ -271,12 +350,14 @@ export class PlatformApp extends PlatformElement {
         completeBootstrap();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._clearAgentDevicesPoll();
+        this._routeMotionSubscribed = false;
+        this._activeRouteTransition = null;
         super.disconnectedCallback();
     }
 
-    _ensureAgentDevicesPoll() {
+    _ensureAgentDevicesPoll(): void {
         if (this._agentDevicesPollTimer !== null) {
             return;
         }
@@ -289,7 +370,7 @@ export class PlatformApp extends PlatformElement {
         }, AGENT_DEVICES_POLL_MS);
     }
 
-    _clearAgentDevicesPoll() {
+    _clearAgentDevicesPoll(): void {
         if (this._agentDevicesPollTimer === null) {
             return;
         }
@@ -297,15 +378,16 @@ export class PlatformApp extends PlatformElement {
         this._agentDevicesPollTimer = null;
     }
 
-    _activeAgentDeviceName() {
+    _activeAgentDeviceName(): string {
         const state = this._agentDevicesOp ? this._agentDevicesOp.state : null;
         if (!state || typeof state !== 'object') {
             return '';
         }
-        return typeof state.online_device_name === 'string' ? state.online_device_name : '';
+        const name = (state as Record<string, unknown>).online_device_name;
+        return typeof name === 'string' ? name : '';
     }
 
-    _ensureRouteMotionSubscription() {
+    _ensureRouteMotionSubscription(): void {
         if (this._routeMotionSubscribed) return;
         this._routeMotionSubscribed = true;
         this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, () => {
@@ -313,26 +395,30 @@ export class PlatformApp extends PlatformElement {
         });
     }
 
-    _startRouteMotion() {
-        if (this.constructor.routeMotionEnabled === false) return;
+    _startRouteMotion(): void {
+        if ((this.constructor as PlatformAppCtor).routeMotionEnabled === false) return;
         if (prefersReducedMotion()) return;
         if (typeof document === 'undefined') return;
         if (typeof document.startViewTransition !== 'function') return;
         if (this._activeRouteTransition) return;
 
-        let transition;
+        let transition: ViewTransition;
         try {
             transition = document.startViewTransition(async () => {
                 await this.updateComplete;
             });
         } catch (error) {
-            const name = error && typeof error.name === 'string' ? error.name : '';
+            const name = error && typeof error === 'object' && typeof (error as { name?: unknown }).name === 'string'
+                ? (error as { name: string }).name
+                : '';
             if (name === 'AbortError' || name === 'InvalidStateError') return;
             throw error;
         }
         this._activeRouteTransition = transition;
-        const swallowRouteTransitionAbort = (error) => {
-            const name = error && typeof error.name === 'string' ? error.name : '';
+        const swallowRouteTransitionAbort = (error: unknown) => {
+            const name = error && typeof error === 'object' && typeof (error as { name?: unknown }).name === 'string'
+                ? (error as { name: string }).name
+                : '';
             if (name !== 'AbortError' && name !== 'InvalidStateError') {
                 // Оставляем неожиданные ошибки transition видимыми, но не показываем штатные abort как uncaught promise.
                 console.warn('PlatformApp route transition failed', error);
@@ -349,19 +435,13 @@ export class PlatformApp extends PlatformElement {
             });
     }
 
-    disconnectedCallback() {
-        super.disconnectedCallback();
-        this._routeMotionSubscribed = false;
-        this._activeRouteTransition = null;
-    }
-
-    updated(changed) {
-        if (super.updated) super.updated(changed);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
         this._renderToasts();
         this._handleAuthSideEffects();
     }
 
-    _renderToasts() {
+    _renderToasts(): void {
         if (!this._i18nReadySelect || !this._i18nReadySelect.value) {
             return;
         }
@@ -369,7 +449,7 @@ export class PlatformApp extends PlatformElement {
         for (const t of toasts) {
             if (this._renderedToastIds.has(t.id)) continue;
             this._renderedToastIds.add(t.id);
-            const el = document.createElement('glass-toast');
+            const el = document.createElement('glass-toast') as HTMLElement & { type: string; message: string; duration: number };
             el.type = t.type;
             el.message = this._resolveToastMessage(t);
             el.duration = t.duration;
@@ -381,18 +461,18 @@ export class PlatformApp extends PlatformElement {
         }
     }
 
-    _resolveToastMessage(t) {
+    _resolveToastMessage(t: NotifyToast): string {
         if (!t.i18n_key) return t.message || '';
         const bus = hasPlatformBus() ? getPlatformBus() : null;
-        const i18nState = bus ? bus.getState().i18n : null;
+        const i18nState = bus ? (bus.getState().i18n as Parameters<typeof translate>[0] | undefined) : null;
         if (!i18nState) return t.message || t.i18n_key;
-        const [nsOrKey, ...rest] = t.i18n_key.split(':');
+        const [nsOrKey = '', ...rest] = t.i18n_key.split(':');
         const key = rest.length > 0 ? rest.join(':') : nsOrKey;
         const namespace = rest.length > 0 ? nsOrKey : undefined;
-        return translate(i18nState, key, mergePlatformI18nVars(t.i18n_vars || undefined), namespace);
+        return translate(i18nState, key, mergePlatformI18nVars(t.i18n_vars as Record<string, string | number> | null | undefined), namespace);
     }
 
-    _handleAuthSideEffects() {
+    _handleAuthSideEffects(): void {
         const auth = this._authSelect ? this._authSelect.value : null;
         if (!auth) return;
         if (
@@ -404,8 +484,8 @@ export class PlatformApp extends PlatformElement {
         }
     }
 
-    _platformAssistantConfig() {
-        const config = this.constructor.platformAssistant;
+    _platformAssistantConfig(): PlatformAssistantStaticConfig {
+        const config = (this.constructor as PlatformAppCtor).platformAssistant;
         if (!config || typeof config !== 'object' || Array.isArray(config)) {
             throw new Error('PlatformApp subclass must define static platformAssistant');
         }
@@ -430,7 +510,7 @@ export class PlatformApp extends PlatformElement {
         return config;
     }
 
-    _renderPlatformAssistant(auth, routeKey, params) {
+    _renderPlatformAssistant(auth: AuthSelection, routeKey: string | null, params: Record<string, string>): TemplateResult | typeof nothing {
         if (auth.status !== 'authenticated') {
             return nothing;
         }
@@ -471,7 +551,7 @@ export class PlatformApp extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const shell = renderPlatformAppShell(this);
         if (shell !== null) return shell;
 
@@ -498,9 +578,10 @@ export class PlatformApp extends PlatformElement {
 
         const routeKey = route ? route.routeKey : null;
         const params = route ? route.params || {} : {};
-        const ctor = this.constructor;
-        const bottomNavItems = typeof this.getBottomNavItems === 'function'
-            ? this.getBottomNavItems()
+        const ctor = this.constructor as PlatformAppCtor;
+        const self = this as { getBottomNavItems?: () => BottomNavItem[] };
+        const bottomNavItems = typeof self.getBottomNavItems === 'function'
+            ? self.getBottomNavItems()
             : (Array.isArray(ctor.bottomNavItems) ? ctor.bottomNavItems : []);
         const bottomNavHideOnRoutes = Array.isArray(ctor.bottomNavHideOnRoutes)
             ? ctor.bottomNavHideOnRoutes
@@ -509,7 +590,7 @@ export class PlatformApp extends PlatformElement {
         const topBarHideOnRoutes = Array.isArray(ctor.topBarHideOnRoutes)
             ? ctor.topBarHideOnRoutes
             : [];
-        const hideTopBar = topBarHideOnRoutes.includes(routeKey);
+        const hideTopBar = routeKey !== null && topBarHideOnRoutes.includes(routeKey);
         return html`
             ${topBarEnabled && !hideTopBar
                 ? html`<platform-top-bar></platform-top-bar>`

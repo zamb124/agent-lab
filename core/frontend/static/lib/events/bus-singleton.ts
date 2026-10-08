@@ -9,8 +9,14 @@
 import type { PlatformEvent, EventMetaInput } from './contract.js';
 
 export interface PlatformBusLike {
-    dispatch: (event: PlatformEvent | string, payload?: unknown, meta?: EventMetaInput) => unknown;
-    getState?: () => Record<string, unknown>;
+    dispatch: (event: PlatformEvent | string, payload?: unknown, meta?: EventMetaInput) => PlatformEvent | null;
+    getState: () => Record<string, unknown>;
+    subscribeType: (type: string, callback: (event: PlatformEvent) => void) => () => void;
+    subscribeSelector: <V>(
+        selector: (state: Record<string, unknown>) => V,
+        callback: (value: V, prevValue: V | undefined) => void,
+        opts?: { equality?: (a: V, b: V) => boolean },
+    ) => () => void;
 }
 
 const KEY = '__PLATFORM_BUS__' as const;

@@ -3,6 +3,31 @@
  * Launcher + panel are one unit. No DOM.
  */
 
+export interface DrawerViewport {
+    width: number;
+    height: number;
+    margin: number;
+}
+
+export interface StoredDrawerGeometry {
+    launcherLeft: number;
+    launcherTop: number;
+    panelWidth: number;
+    panelHeight: number;
+}
+
+export type PanelAlign = 'left' | 'right';
+export type PanelPlacement = 'above' | 'below';
+
+export interface PlacedDrawerGeometry extends StoredDrawerGeometry {
+    panelLeft: number;
+    panelTop: number;
+    panelAlign: PanelAlign;
+    panelPlacement: PanelPlacement;
+}
+
+export type LauncherPosition = 'bottom-left' | 'bottom-right';
+
 export const LAUNCHER_SIZE_PX = 58;
 export const PANEL_GAP_PX = 12;
 export const DEFAULT_PANEL_WIDTH_PX = 430;
@@ -21,14 +46,14 @@ const STORED_KEYS = Object.freeze([
     'panelHeight',
 ]);
 
-function requireFiniteNumber(value, label) {
+function requireFiniteNumber(value: unknown, label: string): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         throw new Error(`flow-ui-drawer geometry: ${label} must be a finite number`);
     }
     return value;
 }
 
-function clampNumber(value, min, max) {
+function clampNumber(value: number, min: number, max: number): number {
     requireFiniteNumber(value, 'clamp value');
     requireFiniteNumber(min, 'clamp min');
     requireFiniteNumber(max, 'clamp max');
@@ -40,37 +65,40 @@ function clampNumber(value, min, max) {
     return value;
 }
 
-export function assertViewport(viewport) {
+export function assertViewport(viewport: unknown): asserts viewport is DrawerViewport {
     if (viewport === null || typeof viewport !== 'object' || Array.isArray(viewport)) {
         throw new Error('flow-ui-drawer geometry: viewport is required');
     }
-    requireFiniteNumber(viewport.width, 'viewport.width');
-    requireFiniteNumber(viewport.height, 'viewport.height');
-    requireFiniteNumber(viewport.margin, 'viewport.margin');
-    if (viewport.width <= 0) {
+    const vp = viewport as Record<string, unknown>;
+    requireFiniteNumber(vp.width, 'viewport.width');
+    requireFiniteNumber(vp.height, 'viewport.height');
+    requireFiniteNumber(vp.margin, 'viewport.margin');
+    const v = viewport as DrawerViewport;
+    if (v.width <= 0) {
         throw new Error('flow-ui-drawer geometry: viewport.width must be > 0');
     }
-    if (viewport.height <= 0) {
+    if (v.height <= 0) {
         throw new Error('flow-ui-drawer geometry: viewport.height must be > 0');
     }
-    if (viewport.margin < 0) {
+    if (v.margin < 0) {
         throw new Error('flow-ui-drawer geometry: viewport.margin must be >= 0');
     }
 }
 
-export function gesturesAllowed(viewport) {
+export function gesturesAllowed(viewport: DrawerViewport): boolean {
     assertViewport(viewport);
     return viewport.width > MOBILE_MAX_WIDTH_PX;
 }
 
-export function parseStoredGeometry(raw) {
+export function parseStoredGeometry(raw: unknown): StoredDrawerGeometry | null {
     if (raw === null || raw === undefined) {
         return null;
     }
     if (typeof raw !== 'object' || Array.isArray(raw)) {
         throw new Error('flow-ui-drawer geometry: stored value must be an object');
     }
-    const present = STORED_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(raw, key));
+    const rec = raw as Record<string, unknown>;
+    const present = STORED_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(rec, key));
     if (present.length === 0) {
         return null;
     }
@@ -80,22 +108,23 @@ export function parseStoredGeometry(raw) {
         );
     }
     return Object.freeze({
-        launcherLeft: requireFiniteNumber(raw.launcherLeft, 'launcherLeft'),
-        launcherTop: requireFiniteNumber(raw.launcherTop, 'launcherTop'),
-        panelWidth: requireFiniteNumber(raw.panelWidth, 'panelWidth'),
-        panelHeight: requireFiniteNumber(raw.panelHeight, 'panelHeight'),
+        launcherLeft: requireFiniteNumber(rec.launcherLeft, 'launcherLeft'),
+        launcherTop: requireFiniteNumber(rec.launcherTop, 'launcherTop'),
+        panelWidth: requireFiniteNumber(rec.panelWidth, 'panelWidth'),
+        panelHeight: requireFiniteNumber(rec.panelHeight, 'panelHeight'),
     });
 }
 
-export function toStoredGeometry(cluster) {
+export function toStoredGeometry(cluster: unknown): StoredDrawerGeometry {
     if (cluster === null || typeof cluster !== 'object' || Array.isArray(cluster)) {
         throw new Error('flow-ui-drawer geometry: cluster is required');
     }
+    const rec = cluster as Record<string, unknown>;
     const stored = parseStoredGeometry({
-        launcherLeft: cluster.launcherLeft,
-        launcherTop: cluster.launcherTop,
-        panelWidth: cluster.panelWidth,
-        panelHeight: cluster.panelHeight,
+        launcherLeft: rec.launcherLeft,
+        launcherTop: rec.launcherTop,
+        panelWidth: rec.panelWidth,
+        panelHeight: rec.panelHeight,
     });
     if (stored === null) {
         throw new Error('flow-ui-drawer geometry: cluster is missing stored fields');
@@ -103,7 +132,7 @@ export function toStoredGeometry(cluster) {
     return stored;
 }
 
-function panelSizeLimits(viewport) {
+function panelSizeLimits(viewport: DrawerViewport): { minWidth: number; maxWidth: number; minHeight: number; maxHeight: number } {
     const maxWidth = Math.max(1, viewport.width - viewport.margin * 2);
     const maxHeight = Math.max(
         1,
@@ -117,7 +146,7 @@ function panelSizeLimits(viewport) {
     };
 }
 
-export function createDefaultGeometry(position, viewport) {
+export function createDefaultGeometry(position: LauncherPosition, viewport: DrawerViewport): StoredDrawerGeometry {
     if (position !== 'bottom-left' && position !== 'bottom-right') {
         throw new Error(
             `flow-ui-drawer geometry: invalid position ${JSON.stringify(position)}`,
@@ -139,19 +168,19 @@ export function createDefaultGeometry(position, viewport) {
     });
 }
 
-function panelAlignFor(geometry, viewport) {
+function panelAlignFor(geometry: StoredDrawerGeometry, viewport: DrawerViewport): PanelAlign {
     const launcherCenter = geometry.launcherLeft + LAUNCHER_SIZE_PX / 2;
     return launcherCenter >= viewport.width / 2 ? 'right' : 'left';
 }
 
-function panelLeftFor(geometry, align) {
+function panelLeftFor(geometry: StoredDrawerGeometry, align: PanelAlign): number {
     if (align === 'right') {
         return geometry.launcherLeft + LAUNCHER_SIZE_PX - geometry.panelWidth;
     }
     return geometry.launcherLeft;
 }
 
-export function placePanel(geometry, viewport) {
+export function placePanel(geometry: StoredDrawerGeometry, viewport: DrawerViewport): PlacedDrawerGeometry {
     assertViewport(viewport);
     const stored = toStoredGeometry(geometry);
     let panelAlign = panelAlignFor(stored, viewport);
@@ -174,7 +203,7 @@ export function placePanel(geometry, viewport) {
     }
 
     let panelTop = stored.launcherTop - PANEL_GAP_PX - stored.panelHeight;
-    let panelPlacement = 'above';
+    let panelPlacement: PanelPlacement = 'above';
     if (panelTop < viewport.margin) {
         const belowTop = stored.launcherTop + LAUNCHER_SIZE_PX + PANEL_GAP_PX;
         if (belowTop + stored.panelHeight <= viewport.height - viewport.margin) {
@@ -195,7 +224,7 @@ export function placePanel(geometry, viewport) {
     });
 }
 
-export function clampCluster(geometry, viewport) {
+export function clampCluster(geometry: StoredDrawerGeometry, viewport: DrawerViewport): PlacedDrawerGeometry {
     assertViewport(viewport);
     const stored = toStoredGeometry(geometry);
     const limits = panelSizeLimits(viewport);
@@ -258,7 +287,7 @@ export function clampCluster(geometry, viewport) {
     });
 }
 
-export function moveCluster(geometry, dx, dy, viewport) {
+export function moveCluster(geometry: StoredDrawerGeometry, dx: number, dy: number, viewport: DrawerViewport): PlacedDrawerGeometry {
     requireFiniteNumber(dx, 'dx');
     requireFiniteNumber(dy, 'dy');
     const stored = toStoredGeometry(geometry);
@@ -273,7 +302,7 @@ export function moveCluster(geometry, dx, dy, viewport) {
     );
 }
 
-function attachLauncherToPanel(panelLeft, panelTop, panelWidth, panelHeight, panelAlign) {
+function attachLauncherToPanel(panelLeft: number, panelTop: number, panelWidth: number, panelHeight: number, panelAlign: PanelAlign): { launcherLeft: number; launcherTop: number } {
     const launcherLeft = panelAlign === 'right'
         ? panelLeft + panelWidth - LAUNCHER_SIZE_PX
         : panelLeft;
@@ -281,7 +310,7 @@ function attachLauncherToPanel(panelLeft, panelTop, panelWidth, panelHeight, pan
     return { launcherLeft, launcherTop };
 }
 
-export function resizeFromSouthEast(geometry, seX, seY, viewport) {
+export function resizeFromSouthEast(geometry: StoredDrawerGeometry, seX: number, seY: number, viewport: DrawerViewport): PlacedDrawerGeometry {
     requireFiniteNumber(seX, 'seX');
     requireFiniteNumber(seY, 'seY');
     assertViewport(viewport);

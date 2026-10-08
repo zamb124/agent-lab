@@ -4,7 +4,7 @@
  * @param {string} flowsBaseUrl - например https://host/flows
  * @returns {string}
  */
-export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl) {
+export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl: string): string {
     if (typeof flowsBaseUrl !== 'string') {
         throw new TypeError('resolveVoiceHttpOriginFromFlowsBaseUrl: string required');
     }
@@ -15,7 +15,7 @@ export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl) {
     if (root.toLowerCase().endsWith('/flows')) {
         return `${root.slice(0, -'/flows'.length)}/voice`;
     }
-    let parsed;
+    let parsed: URL;
     try {
         parsed = new URL(root);
     } catch {
@@ -29,7 +29,7 @@ export function resolveVoiceHttpOriginFromFlowsBaseUrl(flowsBaseUrl) {
  * Переопределение: meta `platform-voice-origin`.
  * @returns {string}
  */
-export function resolveVoiceHttpOrigin() {
+export function resolveVoiceHttpOrigin(): string {
     if (typeof document !== 'undefined') {
         const el = document.querySelector('meta[name="platform-voice-origin"]');
         if (el) {

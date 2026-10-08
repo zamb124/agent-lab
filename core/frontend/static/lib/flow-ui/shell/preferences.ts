@@ -1,17 +1,18 @@
 import { platformStorageKey } from '../../utils/storage-keys.js';
 import { parseStoredGeometry, toStoredGeometry } from './drawer-geometry.js';
+import type { StoredDrawerGeometry } from './drawer-geometry.js';
 
-function _segment(raw) {
+function _segment(raw: string): string {
     return String(raw).trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_');
 }
 
-function _prefsKey(scope) {
+function _prefsKey(scope: string): string {
     return platformStorageKey('core', `flow_ui.preferences.${_segment(scope)}`);
 }
 const EMBED_GEOMETRY_FIELD = 'geometry';
 const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/;
 
-function store() {
+function store(): Storage | null {
     try {
         return localStorage;
     } catch {
@@ -19,14 +20,14 @@ function store() {
     }
 }
 
-function requireNonEmptyString(value, label) {
+function requireNonEmptyString(value: unknown, label: string): string {
     if (typeof value !== 'string' || value.trim() === '') {
         throw new Error(`flow-ui-drawer: ${label} must be a non-empty string`);
     }
     return value.trim();
 }
 
-export function drawerGeometryStorageKey(branchId) {
+export function drawerGeometryStorageKey(branchId: string): string {
     const id = requireNonEmptyString(branchId, 'branchId');
     if (!BRANCH_ID_RE.test(id)) {
         throw new Error('flow-ui-drawer: branchId must be lowercase snake_case');
@@ -34,7 +35,7 @@ export function drawerGeometryStorageKey(branchId) {
     return platformStorageKey('core', `assistant.drawer.${id}`);
 }
 
-export function readLaraDrawerGeometry(branchId) {
+export function readLaraDrawerGeometry(branchId: string): StoredDrawerGeometry | null {
     const storage = store();
     if (storage === null) {
         return null;
@@ -46,7 +47,7 @@ export function readLaraDrawerGeometry(branchId) {
     return parseStoredGeometry(JSON.parse(raw));
 }
 
-export function writeLaraDrawerGeometry(branchId, geometry) {
+export function writeLaraDrawerGeometry(branchId: string, geometry: StoredDrawerGeometry): void {
     const storage = store();
     if (storage === null) {
         throw new Error('flow-ui preferences: localStorage unavailable');
@@ -57,7 +58,7 @@ export function writeLaraDrawerGeometry(branchId, geometry) {
     );
 }
 
-export function readEmbedDrawerGeometry(embedId) {
+export function readEmbedDrawerGeometry(embedId: string): StoredDrawerGeometry | null {
     const id = requireNonEmptyString(embedId, 'embedId');
     const prefs = readFlowUIPreferences(`drawer:${id}`);
     if (!Object.prototype.hasOwnProperty.call(prefs, EMBED_GEOMETRY_FIELD)) {
@@ -66,26 +67,26 @@ export function readEmbedDrawerGeometry(embedId) {
     return parseStoredGeometry(prefs[EMBED_GEOMETRY_FIELD]);
 }
 
-export function writeEmbedDrawerGeometry(embedId, geometry) {
+export function writeEmbedDrawerGeometry(embedId: string, geometry: StoredDrawerGeometry): void {
     const id = requireNonEmptyString(embedId, 'embedId');
     writeFlowUIPreferences(`drawer:${id}`, {
         [EMBED_GEOMETRY_FIELD]: toStoredGeometry(geometry),
     });
 }
 
-export function readFlowUIPreferences(scope = 'global') {
+export function readFlowUIPreferences(scope: string = 'global'): Record<string, unknown> {
     const storage = store();
     if (!storage) return {};
     const raw = storage.getItem(_prefsKey(scope));
     if (!raw) return {};
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('flow-ui preferences: invalid stored JSON object');
     }
-    return parsed;
+    return parsed as Record<string, unknown>;
 }
 
-export function writeFlowUIPreferences(scope, patch) {
+export function writeFlowUIPreferences(scope: string, patch: Record<string, unknown>): void {
     const storage = store();
     if (!storage) {
         throw new Error('flow-ui preferences: localStorage unavailable');
@@ -103,7 +104,7 @@ export function writeFlowUIPreferences(scope, patch) {
 export const PLATFORM_LARA_TOGGLE_EVENT = 'platform-lara-open';
 export const FLOW_UI_TOGGLE_EVENT = PLATFORM_LARA_TOGGLE_EVENT;
 
-export function dispatchFlowUIWindowToggle(eventName, detail) {
+export function dispatchFlowUIWindowToggle(eventName: string, detail?: unknown): void {
     if (typeof eventName !== 'string' || eventName.length === 0) {
         throw new Error('dispatchFlowUIWindowToggle: eventName must be non-empty string');
     }
@@ -114,6 +115,6 @@ export function dispatchFlowUIWindowToggle(eventName, detail) {
     globalThis.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
 }
 
-export function openPlatformLaraAssistant() {
+export function openPlatformLaraAssistant(): void {
     dispatchFlowUIWindowToggle(PLATFORM_LARA_TOGGLE_EVENT, { open: true });
 }

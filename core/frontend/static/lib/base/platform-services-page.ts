@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, TemplateResult } from 'lit';
 import { PlatformPage } from './PlatformPage.js';
 import '../components/platform-breadcrumbs.js';
 import '../components/layout/page-header.js';
@@ -11,7 +12,7 @@ import '../components/platform-services-launcher.js';
 export class PlatformServicesPage extends PlatformPage {
     static i18nNamespace = 'platform';
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformPage.styles,
         css`
             :host {
@@ -27,7 +28,7 @@ export class PlatformServicesPage extends PlatformPage {
         `,
     ];
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <page-header
                 title=${this.t('services_page.title')}

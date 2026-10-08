@@ -29,7 +29,7 @@ import type { PlatformEvent, EffectCtx } from '../contract.js';
 import type { PlatformFactory, FactoryKind } from '../factory-registry.js';
 import type { SliceDef } from '../reducers/index.js';
 
-interface CollectableFactory extends PlatformFactory {
+export interface CollectableFactory extends PlatformFactory {
     sliceKey: string;
     slice: SliceDef;
     effect?: (event: PlatformEvent, ctx: EffectCtx) => void | Promise<void>;

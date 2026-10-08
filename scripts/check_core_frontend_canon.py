@@ -201,7 +201,7 @@ def check_base_zone() -> None:
         "switchCompany",
     )
     for helper in helpers:
-        pattern = rf"\b{re.escape(helper)}\s*\([^)]*\)\s*\{{"
+        pattern = rf"\b{re.escape(helper)}\s*\([^)]*\)[^{{]*\{{"
         if not re.search(pattern, text):
             fail(f"PlatformElement: helper '{helper}' missing")
     if "throw new Error" not in text:

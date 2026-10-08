@@ -37,6 +37,7 @@
  */
 
 import { LitElement } from '../../assets/js/lit/lit.min.js';
+import type { CSSResultGroup } from 'lit';
 import { StyleCache } from '../utils/style-cache.js';
 import { baseStyles } from './styles.js';
 import { glassStyles } from '../styles/shared/glass.styles.js';
@@ -63,17 +64,25 @@ import {
 } from '../base/use-resource.js';
 import { PLATFORM_MOBILE_VIEWPORT_CONTENT } from '../utils/platform-viewport-meta.js';
 import { isStandaloneOrNativeAppShell } from '../utils/native-app-shell.js';
+import type { EventMetaInput, PlatformEvent } from '../events/contract.js';
+import type { PlatformBusLike } from '../events/bus-singleton.js';
+import type { ResourceCollectionFactory } from '../events/factories/resource-collection.js';
+import type { AsyncOpFactory } from '../events/factories/async-op.js';
+import type { FormFactory } from '../events/factories/form.js';
+import type { CursorListFactory } from '../events/factories/cursor-list.js';
+import type { FacetsFactory } from '../events/factories/facets.js';
+import type { SliceFactory } from '../events/factories/slice.js';
 const ZOOM_BLOCKED_KEYBOARD_KEYS = new Set(['+', '-', '=', '_', '0']);
 const ZOOM_BLOCKED_KEYBOARD_CODES = new Set(['NumpadAdd', 'NumpadSubtract', 'Digit0', 'Equal', 'Minus']);
 
-function preventDefaultAction(event) { event.preventDefault(); }
-function preventPinchZoom(event) {
+function preventDefaultAction(event: Event): void { event.preventDefault(); }
+function preventPinchZoom(event: TouchEvent): void {
     if (event.touches && event.touches.length > 1) event.preventDefault();
 }
-function preventCtrlWheelZoom(event) {
+function preventCtrlWheelZoom(event: WheelEvent): void {
     if (event.ctrlKey || event.metaKey) event.preventDefault();
 }
-function preventKeyboardZoom(event) {
+function preventKeyboardZoom(event: KeyboardEvent): void {
     if (!(event.ctrlKey || event.metaKey)) return;
     if (ZOOM_BLOCKED_KEYBOARD_KEYS.has(event.key) || ZOOM_BLOCKED_KEYBOARD_CODES.has(event.code)) {
         event.preventDefault();
@@ -82,9 +91,23 @@ function preventKeyboardZoom(event) {
 
 const _ALLOWED_TOAST_TYPES = new Set(['success', 'error', 'warning', 'info']);
 
+export interface ToastOptions {
+    type?: string;
+    vars?: Record<string, string | number> | null;
+    duration?: number | null;
+    namespace?: string | null;
+}
+
+interface PlatformElementCtor {
+    i18nNamespace?: string;
+}
+
 export class PlatformElement extends LitElement {
-    static styles = [baseStyles, glassStyles, formStyles, buttonStyles, iconButtonStyles, motionStyles];
+    static override styles: CSSResultGroup = [baseStyles, glassStyles, formStyles, buttonStyles, iconButtonStyles, motionStyles];
     static _standaloneNoZoomGuardRegistered = false;
+
+    _busTypeUnsubs: Array<() => void>;
+    _i18nSelectController: SelectController<unknown> | null;
 
     constructor() {
         super();
@@ -92,9 +115,9 @@ export class PlatformElement extends LitElement {
         this._i18nSelectController = null;
     }
 
-    get bus() { return getPlatformBus(); }
+    get bus(): PlatformBusLike { return getPlatformBus(); }
 
-    dispatch(type, payload, meta) {
+    dispatch(type: string, payload: unknown, meta?: EventMetaInput): PlatformEvent | null {
         if (typeof type !== 'string' || type.length === 0) {
             throw new Error('PlatformElement.dispatch: type required (non-empty string)');
         }
@@ -104,11 +127,11 @@ export class PlatformElement extends LitElement {
         return this.bus.dispatch(type, payload, meta || { source: 'local' });
     }
 
-    select(selector, opts) {
+    select<V>(selector: (state: Record<string, unknown>) => V, opts?: { equality?: (a: V, b: V) => boolean }): SelectController<V> {
         return new SelectController(this, selector, opts);
     }
 
-    useEvent(type, handler) {
+    useEvent(type: string, handler: (event: PlatformEvent) => void): () => void {
         assertEventType(type);
         const unsub = this.bus.subscribeType(type, handler);
         this._busTypeUnsubs.push(unsub);
@@ -121,39 +144,40 @@ export class PlatformElement extends LitElement {
      * для этого используй `dispatch(...)` (bus). check_ui_canon разрешает emit/CustomEvent
      * только внутри core/frontend/static/lib (presentational compositions).
      */
-    emit(name, detail = null) {
+    emit(name: string, detail: unknown = null): void {
         this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
     }
 
-    t(key, vars, namespace) {
+    t(key: string, vars?: Record<string, string | number>, namespace?: string): string {
         if (typeof key !== 'string' || key.length === 0) {
             throw new Error('PlatformElement.t: key required (non-empty string)');
         }
-        const ns = namespace || this.constructor.i18nNamespace || getDefaultI18nNamespace();
+        const ns = namespace || (this.constructor as PlatformElementCtor).i18nNamespace || getDefaultI18nNamespace();
         if (!ns) {
             throw new Error(`PlatformElement.t: cannot resolve i18n namespace for key "${key}". Provide explicit namespace, declare static i18nNamespace, or set PlatformApp.defaultI18nNamespace.`);
         }
-        return translate(this.bus.getState().i18n, key, mergePlatformI18nVars(vars), ns);
+        const i18nState = this.bus.getState().i18n;
+        return translate(i18nState as Parameters<typeof translate>[0], key, mergePlatformI18nVars(vars), ns);
     }
 
-    useResource(name, opts) {
-        return new ResourceController(this, getFactory(name, 'resource-collection'), opts);
+    useResource(name: string, opts?: { autoload?: boolean; autoloadQuery?: Record<string, unknown> | null }): ResourceController {
+        return new ResourceController(this, getFactory<ResourceCollectionFactory>(name, 'resource-collection'), opts);
     }
 
-    useOp(name) {
-        return new OpController(this, getFactory(name, 'async-op'));
+    useOp(name: string): OpController {
+        return new OpController(this, getFactory<AsyncOpFactory>(name, 'async-op'));
     }
 
-    useForm(name) {
-        return new FormController(this, getFactory(name, 'form'));
+    useForm(name: string): FormController {
+        return new FormController(this, getFactory<FormFactory>(name, 'form'));
     }
 
-    useCursorList(name, opts) {
-        return new CursorListController(this, getFactory(name, 'cursor-list'), opts);
+    useCursorList(name: string, opts?: { autoload?: boolean; autoloadFilters?: Record<string, unknown> | null }): CursorListController {
+        return new CursorListController(this, getFactory<CursorListFactory>(name, 'cursor-list'), opts);
     }
 
-    useFacets(name) {
-        return new FacetsController(this, getFactory(name, 'facets'));
+    useFacets(name: string): FacetsController {
+        return new FacetsController(this, getFactory<FacetsFactory>(name, 'facets'));
     }
 
     /**
@@ -165,11 +189,11 @@ export class PlatformElement extends LitElement {
      *
      * Имя фабрики — `<svc>/<entity>` (ровно 2 сегмента, snake_case).
      */
-    useSlice(name) {
-        return new SliceController(this, getFactory(name, 'slice'));
+    useSlice(name: string): SliceController {
+        return new SliceController(this, getFactory<SliceFactory>(name, 'slice'));
     }
 
-    toast(i18n_key, options) {
+    toast(i18n_key: string, options?: ToastOptions): void {
         if (typeof i18n_key !== 'string' || i18n_key.length === 0) {
             throw new Error('PlatformElement.toast: i18n_key required (non-empty string)');
         }
@@ -184,7 +208,7 @@ export class PlatformElement extends LitElement {
             throw new Error('PlatformElement.toast: duration must be number or omitted');
         }
         const explicitNs = Object.prototype.hasOwnProperty.call(opts, 'namespace') ? opts.namespace : null;
-        const ns = explicitNs || this.constructor.i18nNamespace || getDefaultI18nNamespace();
+        const ns = explicitNs || (this.constructor as PlatformElementCtor).i18nNamespace || getDefaultI18nNamespace();
         const qualified_key = i18n_key.includes(':') || !ns ? i18n_key : `${ns}:${i18n_key}`;
         this.dispatch(CoreEvents.UI_TOAST_SHOW, {
             type,
@@ -194,12 +218,12 @@ export class PlatformElement extends LitElement {
         });
     }
 
-    openModal(kindOrClass, props, options) {
-        let kind;
+    openModal(kindOrClass: string | (abstract new (...args: never[]) => unknown), props?: Record<string, unknown> | null, options?: { replaceKinds?: string[]; skipEnterMotion?: boolean }): void {
+        let kind: string;
         if (typeof kindOrClass === 'string' && kindOrClass.length > 0) {
             kind = kindOrClass;
         } else if (kindOrClass && typeof kindOrClass === 'function') {
-            kind = kindOrClass.modalKind;
+            kind = (kindOrClass as unknown as { modalKind?: string }).modalKind as string;
             if (typeof kind !== 'string' || kind.length === 0) {
                 throw new Error('PlatformElement.openModal: modal class missing static modalKind');
             }
@@ -215,21 +239,21 @@ export class PlatformElement extends LitElement {
                 }
             }
         }
-        let modalProps = props === undefined ? null : props;
+        let modalProps: Record<string, unknown> | null = props === undefined ? null : props;
         if (opts.skipEnterMotion === true) {
             modalProps = {
                 ...(modalProps && typeof modalProps === 'object' ? modalProps : {}),
                 skipEnterMotion: true,
             };
         }
-        const payload = { kind, props: modalProps };
+        const payload: { kind: string; props: Record<string, unknown> | null; replaceKinds?: string[] } = { kind, props: modalProps };
         if (replaceKinds !== null) {
             payload.replaceKinds = replaceKinds;
         }
         this.dispatch(CoreEvents.UI_MODAL_OPEN, payload);
     }
 
-    openFile(fileOrId, options) {
+    openFile(fileOrId: string | Record<string, unknown>, options?: { source?: string }): void {
         let file;
         if (typeof fileOrId === 'string') {
             if (fileOrId.length === 0) {
@@ -252,9 +276,9 @@ export class PlatformElement extends LitElement {
         });
     }
 
-    closeModal(target) {
-        let kind = null;
-        let id = null;
+    closeModal(target?: string | { id: string } | null): void {
+        let kind: string | null = null;
+        let id: string | null = null;
         if (target === undefined || target === null) {
             // снять верхний элемент
         } else if (typeof target === 'string') {
@@ -270,16 +294,16 @@ export class PlatformElement extends LitElement {
         } else {
             throw new Error('PlatformElement.closeModal: target must be string kind, { id }, or omitted');
         }
-        const payload = { kind };
+        const payload: { kind: string | null; id?: string } = { kind };
         if (id !== null) payload.id = id;
         this.dispatch(CoreEvents.UI_MODAL_CLOSE, payload);
     }
 
-    openSidebar() {
+    openSidebar(): void {
         this.dispatch(CoreEvents.UI_SIDEBAR_OPEN_REQUESTED, null);
     }
 
-    closeSidebar() {
+    closeSidebar(): void {
         this.dispatch(CoreEvents.UI_SIDEBAR_CLOSE_REQUESTED, null);
     }
 
@@ -290,7 +314,7 @@ export class PlatformElement extends LitElement {
      * @param {string} kind — '<scope>.<name>' (snake_case), сheet должен быть зарегистрирован.
      * @param {object|null|undefined} [props] — props компонента листа.
      */
-    openBottomSheet(kind, props) {
+    openBottomSheet(kind: string, props?: Record<string, unknown> | null): void {
         if (typeof kind !== 'string' || kind.length === 0) {
             throw new Error('PlatformElement.openBottomSheet: kind required (non-empty string)');
         }
@@ -304,9 +328,9 @@ export class PlatformElement extends LitElement {
      *   - строка: закрыть верхний sheet указанного kind
      *   - { id }: закрыть sheet по id
      */
-    closeBottomSheet(target) {
-        let kind = null;
-        let id = null;
+    closeBottomSheet(target?: string | { id: string } | null): void {
+        let kind: string | null = null;
+        let id: string | null = null;
         if (target === undefined || target === null) {
             // снять верхний элемент
         } else if (typeof target === 'string') {
@@ -322,7 +346,7 @@ export class PlatformElement extends LitElement {
         } else {
             throw new Error('PlatformElement.closeBottomSheet: target must be string kind, { id }, or omitted');
         }
-        const payload = { kind };
+        const payload: { kind: string | null; id?: string } = { kind };
         if (id !== null) payload.id = id;
         this.dispatch(CoreEvents.UI_BOTTOM_SHEET_CLOSE_REQUESTED, payload);
     }
@@ -334,14 +358,14 @@ export class PlatformElement extends LitElement {
      *
      * @returns {string|null}
      */
-    getCurrentRouteKey() {
+    getCurrentRouteKey(): string | null {
         const state = this.bus.getState();
-        const router = state && state.router;
-        const key = router && router.routeKey;
+        const router = (state ? state.router : null) as { routeKey?: unknown } | null | undefined;
+        const key = router ? router.routeKey : null;
         return typeof key === 'string' && key.length > 0 ? key : null;
     }
 
-    navigate(routeKey, params, navigationOptions) {
+    navigate(routeKey: string, params?: Record<string, string>, navigationOptions?: { search?: string; replace?: boolean }): void {
         if (typeof routeKey !== 'string' || routeKey.length === 0) {
             throw new Error('PlatformElement.navigate: routeKey required (non-empty string)');
         }
@@ -351,7 +375,7 @@ export class PlatformElement extends LitElement {
         if (navigationOptions !== undefined && (navigationOptions === null || typeof navigationOptions !== 'object')) {
             throw new Error('PlatformElement.navigate: navigationOptions must be plain object or omitted');
         }
-        const payload = {
+        const payload: { routeKey: string; params: Record<string, string>; search?: string; replace?: boolean } = {
             routeKey,
             params: params === undefined ? {} : params,
         };
@@ -374,7 +398,7 @@ export class PlatformElement extends LitElement {
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, payload);
     }
 
-    copyToClipboard(text, options) {
+    copyToClipboard(text: string, options: { success_i18n_key: string; error_i18n_key: string }): void {
         if (typeof text !== 'string') {
             throw new Error('PlatformElement.copyToClipboard: text required (string)');
         }
@@ -394,21 +418,21 @@ export class PlatformElement extends LitElement {
         });
     }
 
-    setLocale(locale) {
+    setLocale(locale: string): void {
         if (typeof locale !== 'string' || locale.length === 0) {
             throw new Error('PlatformElement.setLocale: locale required (non-empty string)');
         }
         this.dispatch(CoreEvents.I18N_LOCALE_REQUESTED, { locale });
     }
 
-    setTheme(mode) {
+    setTheme(mode: string): void {
         if (mode !== 'dark' && mode !== 'light') {
             throw new Error(`PlatformElement.setTheme: mode must be 'dark' | 'light', got "${mode}"`);
         }
         this.dispatch(CoreEvents.THEME_SET_REQUESTED, { mode });
     }
 
-    switchCompany(company_id) {
+    switchCompany(company_id: string): void {
         if (typeof company_id !== 'string' || company_id.length === 0) {
             throw new Error('PlatformElement.switchCompany: company_id required (non-empty string)');
         }
@@ -420,7 +444,7 @@ export class PlatformElement extends LitElement {
      * @param {string} provider — yandex | google | github | apple
      * @param {{ returnPath?: string, plan?: string } | undefined} options
      */
-    startOAuth(provider, options) {
+    startOAuth(provider: string, options?: { returnPath?: string; plan?: string }): void {
         if (typeof provider !== 'string' || provider.length === 0) {
             throw new Error('PlatformElement.startOAuth: provider required (non-empty string)');
         }
@@ -443,15 +467,18 @@ export class PlatformElement extends LitElement {
         });
     }
 
-    async loadStyles(path) {
+    async loadStyles(path: string): Promise<void> {
         const sheet = await StyleCache.load(path);
+        if (!this.shadowRoot) {
+            throw new Error('PlatformElement.loadStyles: shadowRoot unavailable');
+        }
         this.shadowRoot.adoptedStyleSheets = [
             ...this.shadowRoot.adoptedStyleSheets,
             sheet,
         ];
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         // Реактивность переводов: подписка на сам бандл активной локали.
         // locale сразу проставлен initialState'ом, не меняется при первой загрузке.
@@ -460,12 +487,15 @@ export class PlatformElement extends LitElement {
         // Production Flow UI iframe не бутстрапит PlatformApp — catalog может
         // монтировать PlatformElement (DataTable host); без bus подписка запрещена.
         if (hasPlatformBus() && !this._i18nSelectController) {
-            this._i18nSelectController = this.select((s) => s.i18n.translations[s.i18n.locale]);
+            this._i18nSelectController = this.select((s) => {
+                const i18n = s.i18n as { translations: Record<string, unknown>; locale: string };
+                return i18n.translations[i18n.locale];
+            });
         }
         PlatformElement._registerStandaloneNoZoomGuard();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         for (const unsub of this._busTypeUnsubs) {
             unsub();
         }
@@ -473,7 +503,7 @@ export class PlatformElement extends LitElement {
         super.disconnectedCallback();
     }
 
-    static _registerStandaloneNoZoomGuard() {
+    static _registerStandaloneNoZoomGuard(): void {
         if (PlatformElement._standaloneNoZoomGuardRegistered) return;
         if (!isStandaloneOrNativeAppShell()) return;
 

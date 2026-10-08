@@ -18,6 +18,10 @@ RESET_PATH = ROOT / "core/frontend/static/assets/css/reset.css"
 PLATFORM_ELEMENT_STYLES_PATH = (
     ROOT / "core/frontend/static/lib/platform-element/styles.js"
 )
+if not PLATFORM_ELEMENT_STYLES_PATH.is_file():
+    _ts = PLATFORM_ELEMENT_STYLES_PATH.with_suffix(".ts")
+    if _ts.is_file():
+        PLATFORM_ELEMENT_STYLES_PATH = _ts
 
 SPA_SHELLS = (
     ROOT / "apps/frontend/ui/index.html",

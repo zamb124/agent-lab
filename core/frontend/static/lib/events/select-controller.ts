@@ -32,17 +32,11 @@ function _shallowEqual(a: unknown, b: unknown): boolean {
     return true;
 }
 
-import type { PlatformBusLike } from './bus-singleton.js';
-
 interface ReactiveHost {
     addController(c: { hostConnected(): void; hostDisconnected(): void }): void;
     requestUpdate(): void;
 }
 
-interface SelectorBus extends PlatformBusLike {
-    getState: () => Record<string, unknown>;
-    subscribeSelector: <V>(sel: (s: Record<string, unknown>) => V, cb: (v: V, prev: V | undefined) => void, opts?: { equality?: (a: V, b: V) => boolean }) => () => void;
-}
 
 export class SelectController<V = unknown> {
     host: ReactiveHost;
@@ -64,7 +58,7 @@ export class SelectController<V = unknown> {
     }
 
     hostConnected(): void {
-        const bus = getPlatformBus() as SelectorBus;
+        const bus = getPlatformBus();
         this.value = this.selector(bus.getState());
         this._unsubscribe = bus.subscribeSelector(
             this.selector,

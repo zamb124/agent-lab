@@ -38,6 +38,7 @@ FROM_SPEC_RE = re.compile(r"""\bfrom\s+(['"])([^'"]+)\1""")
 IMPORT_SIDE_RE = re.compile(r"""^\s*import\s+['"]([^'"]+)['"]\s*;?\s*$""", re.MULTILINE)
 
 BARE_LIT_RE = re.compile(r"""\bfrom\s+['"]lit(?:/[^'"]*)?['"]""")
+IMPORT_TYPE_RE = re.compile(r"""^\s*(?:import|export)\s+type\b""")
 BARE_PLATFORM_FROM_RE = re.compile(r"""\bfrom\s+['"]@platform/[^'"]+['"]""")
 BARE_PLATFORM_SIDE_RE = re.compile(r"""^\s*import\s+['"]@platform/[^'"]+['"]\s*;?\s*$""", re.MULTILINE)
 
@@ -111,16 +112,21 @@ def _scan_closure() -> None:
         cur = q.popleft()
         raw = cur.read_text(encoding="utf-8")
         clean = _strip_comments(raw)
-        if BARE_LIT_RE.search(clean):
-            for i, line in enumerate(clean.splitlines(), start=1):
+        # import type / export type стираются при сборке — модульных запросов не создают.
+        runtime_lines = [
+            line for line in clean.splitlines() if not IMPORT_TYPE_RE.match(line)
+        ]
+        runtime_text = "\n".join(runtime_lines)
+        if BARE_LIT_RE.search(runtime_text):
+            for i, line in enumerate(runtime_lines, start=1):
                 if BARE_LIT_RE.search(line):
                     fail(
                         f"{cur.relative_to(ROOT)}:{i}: bare import lit "
                         "(нужны относительные пути к assets/js/lit или общему lib/lit-shim)"
                     )
                     break
-        if BARE_PLATFORM_FROM_RE.search(clean) or BARE_PLATFORM_SIDE_RE.search(clean):
-            for i, line in enumerate(clean.splitlines(), start=1):
+        if BARE_PLATFORM_FROM_RE.search(runtime_text) or BARE_PLATFORM_SIDE_RE.search(runtime_text):
+            for i, line in enumerate(runtime_lines, start=1):
                 if BARE_PLATFORM_FROM_RE.search(line) or BARE_PLATFORM_SIDE_RE.search(line):
                     fail(
                         f"{cur.relative_to(ROOT)}:{i}: bare import @platform "
