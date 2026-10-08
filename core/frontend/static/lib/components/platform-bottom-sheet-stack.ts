@@ -11,26 +11,40 @@
  */
 
 import { html } from 'lit';
+import type { TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { getBottomSheetTag } from '../utils/bottom-sheet-registry.js';
 import { CoreEvents } from '../events/contract.js';
+import type { BottomSheetItem, BottomSheetsState } from '../events/reducers/bottom_sheets.js';
+import type { SelectController } from '../events/select-controller.js';
 import { waitForPlatformMotion } from '../utils/motion.js';
 
+interface StackSheetElement extends HTMLElement {
+    _sheetId?: string;
+    _sheetKind?: string;
+    open?: boolean;
+    closing?: boolean;
+    requestPlatformClose?: () => Promise<void>;
+    [key: string]: unknown;
+}
+
 export class PlatformBottomSheetStack extends PlatformElement {
+    _stackSel: SelectController<BottomSheetItem[]>;
+    _mounted: Map<string, StackSheetElement>;
+    _closing: Set<string>;
+
     constructor() {
         super();
-        this._stackSel = this.select((s) => s.bottomSheets.stack);
-        /** @type {Map<string, HTMLElement>} */
+        this._stackSel = this.select((s) => (s.bottomSheets as BottomSheetsState).stack);
         this._mounted = new Map();
-        /** @type {Set<string>} */
         this._closing = new Set();
     }
 
-    createRenderRoot() {
+    override createRenderRoot(): this {
         return this;
     }
 
-    updated() {
+    override updated(): void {
         const stack = this._stackSel ? this._stackSel.value || [] : [];
         const wantIds = new Set(stack.map((s) => s.id));
 
@@ -50,7 +64,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
                 continue;
             }
             const tag = getBottomSheetTag(item.kind);
-            const el = document.createElement(tag);
+            const el = document.createElement(tag) as StackSheetElement;
             this._applyProps(el, item);
             this.appendChild(el);
             this._mounted.set(item.id, el);
@@ -60,7 +74,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
         }
     }
 
-    _applyProps(el, item) {
+    _applyProps(el: StackSheetElement, item: BottomSheetItem): void {
         el._sheetId = item.id;
         el._sheetKind = item.kind;
         el.closing = item.closing === true;
@@ -70,7 +84,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
             }
             return;
         }
-        const props = item.props || {};
+        const props = item.props;
         for (const key of Object.keys(props)) {
             el[key] = props[key];
         }
@@ -79,7 +93,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
         }
     }
 
-    _scheduleClosed(id, el) {
+    _scheduleClosed(id: string, el: StackSheetElement): void {
         if (this._closing.has(id)) return;
         this._closing.add(id);
         const finish = async () => {
@@ -101,7 +115,7 @@ export class PlatformBottomSheetStack extends PlatformElement {
         void finish();
     }
 
-    render() {
+    override render(): TemplateResult {
         return html``;
     }
 }

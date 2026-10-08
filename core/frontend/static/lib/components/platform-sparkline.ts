@@ -3,21 +3,31 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 const SVG_WIDTH = 240;
 const SVG_HEIGHT = 64;
 const SVG_PADDING = 4;
 
+export interface SparklinePoint {
+    value: number;
+}
+
 export class PlatformSparkline extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         points: { type: Array },
         stroke: { type: String },
         fill: { type: String },
         emptyLabel: { type: String },
     };
 
-    static styles = [
+    declare points: SparklinePoint[];
+    declare stroke: string;
+    declare fill: string;
+    declare emptyLabel: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -43,7 +53,7 @@ export class PlatformSparkline extends PlatformElement {
         this.emptyLabel = '';
     }
 
-    _buildPath() {
+    _buildPath(): { linePath: string; areaPath: string } | null {
         if (!Array.isArray(this.points) || this.points.length === 0) {
             return null;
         }
@@ -65,11 +75,13 @@ export class PlatformSparkline extends PlatformElement {
             return { x, y };
         });
         const linePath = coords.map((coord, index) => `${index === 0 ? 'M' : 'L'} ${coord.x} ${coord.y}`).join(' ');
-        const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${SVG_HEIGHT - SVG_PADDING} L ${coords[0].x} ${SVG_HEIGHT - SVG_PADDING} Z`;
+        const last = coords[coords.length - 1]!;
+        const first = coords[0]!;
+        const areaPath = `${linePath} L ${last.x} ${SVG_HEIGHT - SVG_PADDING} L ${first.x} ${SVG_HEIGHT - SVG_PADDING} Z`;
         return { linePath, areaPath };
     }
 
-    render() {
+    override render(): TemplateResult {
         const paths = this._buildPath();
         if (!paths) {
             return html`<div class="empty">${this.emptyLabel}</div>`;

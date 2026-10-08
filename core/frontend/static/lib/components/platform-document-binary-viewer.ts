@@ -2,20 +2,30 @@
  * platform-document-binary-viewer — Lit viewer для binary handler (без iframe).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import type { I18nState } from '../events/reducers/i18n.js';
+import type { SelectController } from '../events/select-controller.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 
 export class PlatformDocumentBinaryViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         downloadUrl: { type: String, attribute: 'download-url' },
         originalName: { type: String, attribute: 'original-name' },
         contentType: { type: String, attribute: 'content-type' },
         fileSize: { type: Number, attribute: 'file-size' },
     };
 
-    static styles = [
+    declare downloadUrl: string;
+    declare originalName: string;
+    declare contentType: string;
+    declare fileSize: number;
+
+    _localeSel: SelectController<string>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -75,16 +85,16 @@ export class PlatformDocumentBinaryViewer extends PlatformElement {
         this.originalName = '';
         this.contentType = '';
         this.fileSize = 0;
-        this._localeSel = this.select((s) => (s.i18n && s.i18n.locale ? s.i18n.locale : 'ru'));
+        this._localeSel = this.select((s) => (s.i18n as I18nState | undefined)?.locale ?? 'ru');
     }
 
-    render() {
+    override render(): TemplateResult {
         const downloadUrl = this.downloadUrl;
         if (typeof downloadUrl !== 'string' || downloadUrl.length === 0) {
             return html`<div class="state">${this.t('document_viewer.missing_download_url')}</div>`;
         }
         const locale = this._localeSel.value;
-        const sizeLabel = formatFileSize(this.fileSize, locale);
+        const sizeLabel = formatFileSize(this.fileSize);
         const typeLabel = this.contentType || this.t('document_viewer.unknown_type');
         return html`
             <div class="panel">

@@ -2,7 +2,7 @@
  * Read-only catalog of system/context variables for autocomplete and help.
  */
 
-export const SYSTEM_VARIABLE_KEYS = [
+export const SYSTEM_VARIABLE_KEYS: readonly string[] = [
     'current_date',
     'current_time',
     'current_datetime',
@@ -22,10 +22,10 @@ export const SYSTEM_VARIABLE_KEYS = [
     'interface_language_name',
 ];
 
-export function listSystemVariableKeys() {
+export function listSystemVariableKeys(): string[] {
     return [...SYSTEM_VARIABLE_KEYS];
 }
 
-export function isSystemVariableKey(variableKey) {
+export function isSystemVariableKey(variableKey: unknown): boolean {
     return typeof variableKey === 'string' && SYSTEM_VARIABLE_KEYS.includes(variableKey);
 }

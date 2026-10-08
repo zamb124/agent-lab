@@ -2,18 +2,23 @@
  * platform-document-media-viewer — Lit viewer для media handler (без iframe).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class PlatformDocumentMediaViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         streamUrl: { type: String, attribute: 'stream-url' },
         kind: { type: String },
         originalName: { type: String, attribute: 'original-name' },
     };
 
-    static styles = [
+    declare streamUrl: string;
+    declare kind: string;
+    declare originalName: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -47,7 +52,7 @@ export class PlatformDocumentMediaViewer extends PlatformElement {
         this.originalName = '';
     }
 
-    render() {
+    override render(): TemplateResult {
         const streamUrl = this.streamUrl;
         if (typeof streamUrl !== 'string' || streamUrl.length === 0) {
             return html`<div class="state">${this.t('document_viewer.missing_stream_url')}</div>`;

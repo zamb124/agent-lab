@@ -3,13 +3,14 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../../platform-element/index.js';
 
 const POLICY_PLAIN = 'plain';
 const POLICY_PRIVATE = 'secret_private';
 const POLICY_SHARED = 'secret_shared';
 
-function _policyFromFlags(secret, sharedForExecution) {
+function _policyFromFlags(secret: boolean, sharedForExecution: boolean): string {
     if (!secret) {
         return POLICY_PLAIN;
     }
@@ -22,14 +23,19 @@ function _policyFromFlags(secret, sharedForExecution) {
 export class PlatformVariableSecretPolicy extends PlatformElement {
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         secret: { type: Boolean },
         sharedForExecution: { type: Boolean, attribute: 'shared-for-execution' },
         readonly: { type: Boolean, reflect: true },
         disabled: { type: Boolean, reflect: true },
     };
 
-    static styles = css`
+    declare secret: boolean;
+    declare sharedForExecution: boolean;
+    declare readonly: boolean;
+    declare disabled: boolean;
+
+    static override styles: CSSResultGroup = css`
         :host { display: block; }
         .cards {
             display: grid;
@@ -80,11 +86,11 @@ export class PlatformVariableSecretPolicy extends PlatformElement {
         this.disabled = false;
     }
 
-    _currentPolicy() {
+    _currentPolicy(): string {
         return _policyFromFlags(this.secret, this.sharedForExecution);
     }
 
-    _select(policy) {
+    _select(policy: string): void {
         if (this.readonly || this.disabled) {
             return;
         }
@@ -103,7 +109,7 @@ export class PlatformVariableSecretPolicy extends PlatformElement {
         }));
     }
 
-    _renderCard(policy, titleKey, hintKey) {
+    _renderCard(policy: string, titleKey: string, hintKey: string): TemplateResult {
         const active = this._currentPolicy() === policy;
         return html`
             <button
@@ -118,7 +124,7 @@ export class PlatformVariableSecretPolicy extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="cards">
                 ${this._renderCard(POLICY_PLAIN, 'secret_policy_plain', 'secret_policy_plain_hint')}

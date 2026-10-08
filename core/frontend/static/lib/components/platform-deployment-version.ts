@@ -3,15 +3,23 @@
  * Атрибут base-url принимается для совместимости с шаблонами; реально не используется.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
+import type { PwaState } from '../events/reducers/pwa.js';
+import type { SelectController } from '../events/select-controller.js';
 
 export class PlatformDeploymentVersion extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         baseUrl: { attribute: 'base-url' },
         footer: { type: Boolean, reflect: true },
     };
 
-    static styles = [
+    declare baseUrl: string;
+    declare footer: boolean;
+
+    _versionSel: SelectController<string | null>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host { display: block; }
@@ -31,10 +39,10 @@ export class PlatformDeploymentVersion extends PlatformElement {
         super();
         this.baseUrl = '';
         this.footer = false;
-        this._versionSel = this.select((s) => s.pwa.deploymentVersion);
+        this._versionSel = this.select((s) => (s.pwa as PwaState).deploymentVersion);
     }
 
-    render() {
+    override render(): TemplateResult {
         const raw = this._versionSel.value;
         if (!raw) return html``;
         const text = raw.length > 12 ? raw.slice(0, 7) : raw;

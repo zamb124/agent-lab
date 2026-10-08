@@ -3,10 +3,11 @@
  * Карточка с glass morphism-эффектом
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassCard extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -33,10 +34,13 @@ export class GlassCard extends PlatformElement {
         `
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         interactive: { type: Boolean },
         compact: { type: Boolean },
     };
+
+    declare interactive: boolean;
+    declare compact: boolean;
 
     constructor() {
         super();
@@ -44,7 +48,7 @@ export class GlassCard extends PlatformElement {
         this.compact = false;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`<slot></slot>`;
     }
 }

@@ -11,26 +11,40 @@
  */
 
 import { html } from 'lit';
+import type { TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { getModalTag } from '../utils/modal-registry.js';
 import { CoreEvents } from '../events/contract.js';
+import type { ModalStackItem, ModalsState } from '../events/reducers/modals.js';
+import type { SelectController } from '../events/select-controller.js';
 import { waitForPlatformMotion } from '../utils/motion.js';
 
+interface StackModalElement extends HTMLElement {
+    _modalId?: string;
+    _modalKind?: string;
+    open?: boolean;
+    closing?: boolean;
+    requestPlatformClose?: () => Promise<void>;
+    [key: string]: unknown;
+}
+
 export class PlatformModalStack extends PlatformElement {
+    _stackSel: SelectController<ModalStackItem[]>;
+    _mounted: Map<string, StackModalElement>;
+    _closing: Set<string>;
+
     constructor() {
         super();
-        this._stackSel = this.select((s) => s.modals.stack);
-        /** @type {Map<string, HTMLElement>} */
+        this._stackSel = this.select((s) => (s.modals as ModalsState).stack);
         this._mounted = new Map();
-        /** @type {Set<string>} */
         this._closing = new Set();
     }
 
-    createRenderRoot() {
+    override createRenderRoot(): this {
         return this;
     }
 
-    updated() {
+    override updated(): void {
         const stack = this._stackSel ? this._stackSel.value || [] : [];
         const wantIds = new Set(stack.map((m) => m.id));
 
@@ -50,7 +64,7 @@ export class PlatformModalStack extends PlatformElement {
                 continue;
             }
             const tag = getModalTag(item.kind);
-            const el = document.createElement(tag);
+            const el = document.createElement(tag) as StackModalElement;
             this._applyProps(el, item);
             this.appendChild(el);
             this._mounted.set(item.id, el);
@@ -60,7 +74,7 @@ export class PlatformModalStack extends PlatformElement {
         }
     }
 
-    _applyProps(el, item) {
+    _applyProps(el: StackModalElement, item: ModalStackItem): void {
         el._modalId = item.id;
         el._modalKind = item.kind;
         el.closing = item.closing === true;
@@ -70,7 +84,7 @@ export class PlatformModalStack extends PlatformElement {
             }
             return;
         }
-        const props = item.props || {};
+        const props = item.props;
         for (const key of Object.keys(props)) {
             el[key] = props[key];
         }
@@ -79,7 +93,7 @@ export class PlatformModalStack extends PlatformElement {
         }
     }
 
-    _scheduleClosed(id, el) {
+    _scheduleClosed(id: string, el: StackModalElement): void {
         if (this._closing.has(id)) return;
         this._closing.add(id);
         const finish = async () => {
@@ -101,7 +115,7 @@ export class PlatformModalStack extends PlatformElement {
         void finish();
     }
 
-    render() {
+    override render(): TemplateResult {
         return html``;
     }
 }

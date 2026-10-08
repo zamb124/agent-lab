@@ -2,17 +2,23 @@
  * platform-document-image-viewer — Lit viewer для image handler (без iframe).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class PlatformDocumentImageViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         streamUrl: { type: String, attribute: 'stream-url' },
         originalName: { type: String, attribute: 'original-name' },
     };
 
-    static styles = [
+    declare streamUrl: string;
+    declare originalName: string;
+
+    _failed: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -44,12 +50,12 @@ export class PlatformDocumentImageViewer extends PlatformElement {
         this._failed = false;
     }
 
-    _onError() {
+    _onError(): void {
         this._failed = true;
         this.requestUpdate();
     }
 
-    render() {
+    override render(): TemplateResult {
         const streamUrl = this.streamUrl;
         if (typeof streamUrl !== 'string' || streamUrl.length === 0) {
             return html`<div class="state">${this.t('document_viewer.missing_stream_url')}</div>`;

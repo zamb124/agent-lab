@@ -3,10 +3,11 @@
  * Всплывающее уведомление
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class GlassToast extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -115,12 +116,19 @@ export class GlassToast extends PlatformElement {
         `
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         message: { type: String },
         type: { type: String },
         duration: { type: Number },
         closing: { type: Boolean, reflect: true },
     };
+
+    declare message: string;
+    declare type: string;
+    declare duration: number;
+    declare closing: boolean;
+
+    _timeout: ReturnType<typeof setTimeout> | null;
 
     constructor() {
         super();
@@ -131,21 +139,21 @@ export class GlassToast extends PlatformElement {
         this._timeout = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         if (this.duration > 0) {
             this._timeout = setTimeout(() => this.close(), this.duration);
         }
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         if (this._timeout) {
             clearTimeout(this._timeout);
         }
     }
 
-    close() {
+    close(): void {
         this.closing = true;
         setTimeout(() => {
             this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
@@ -153,7 +161,7 @@ export class GlassToast extends PlatformElement {
         }, 200);
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="toast ${this.type}">
                 <span class="icon">${this._getIcon()}</span>
@@ -163,14 +171,14 @@ export class GlassToast extends PlatformElement {
         `;
     }
 
-    _getIcon() {
-        const icons = {
+    _getIcon(): string {
+        const icons: Record<string, string> = {
             success: '✓',
             error: '!',
             warning: '⚠',
             info: 'ℹ',
         };
-        return icons[this.type] || icons.info;
+        return icons[this.type] || icons.info || 'ℹ';
     }
 }
 

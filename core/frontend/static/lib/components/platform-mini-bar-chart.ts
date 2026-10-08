@@ -3,17 +3,28 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { formatPlatformNumber } from '@platform/lib/utils/format-platform-number.js';
 
+export interface BarChartSegment {
+    value: number;
+    color: string;
+    label: string;
+}
+
 export class PlatformMiniBarChart extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         segments: { type: Array },
         locale: { type: String },
         emptyLabel: { type: String },
     };
 
-    static styles = [
+    declare segments: BarChartSegment[];
+    declare locale: string;
+    declare emptyLabel: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -65,7 +76,7 @@ export class PlatformMiniBarChart extends PlatformElement {
         this.emptyLabel = '';
     }
 
-    _total() {
+    _total(): number {
         let sum = 0;
         for (const segment of this.segments) {
             if (typeof segment.value !== 'number' || !Number.isFinite(segment.value)) {
@@ -76,7 +87,7 @@ export class PlatformMiniBarChart extends PlatformElement {
         return sum;
     }
 
-    render() {
+    override render(): TemplateResult {
         const total = this._total();
         if (total <= 0) {
             return html`<div class="empty">${this.emptyLabel}</div>`;
