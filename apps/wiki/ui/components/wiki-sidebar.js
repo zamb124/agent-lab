@@ -342,20 +342,20 @@ export class WikiSidebar extends PlatformElement {
 
     async _createRootPage() {
         const created = await this._createPage.run({ title: '' });
-        if (!created || typeof created.wiki_page_id !== 'string' || created.wiki_page_id === '') {
+        if (created === null) {
             return;
         }
         await this._pages.load();
-        this.navigate('wiki_page', { pageId: created.wiki_page_id });
+        this.navigate('wiki_page', { pageId: created.page.wiki_page_id });
     }
 
     async _createChildPage(parentPageId) {
         const created = await this._createPage.run({ title: '', parent_page_id: parentPageId });
-        if (!created || typeof created.wiki_page_id !== 'string' || created.wiki_page_id === '') {
+        if (created === null) {
             return;
         }
         await this._pages.load();
-        this.navigate('wiki_page', { pageId: created.wiki_page_id });
+        this.navigate('wiki_page', { pageId: created.page.wiki_page_id });
     }
 
     _treeMenuItems() {

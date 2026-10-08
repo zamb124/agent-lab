@@ -323,6 +323,12 @@ export class WikiPageView extends PlatformPage {
     updated(changed) {
         super.updated?.(changed);
         if (changed.has('pageId') && this.pageId !== '') {
+            const previousPageId = changed.get('pageId');
+            if (typeof previousPageId === 'string' && previousPageId !== '') {
+                // Досохранение прежней страницы: this.pageId уже новый,
+                // а pending-правки принадлежат старому id.
+                this._flushPendingSave(previousPageId);
+            }
             this._accessModalOpened = false;
             void this._loadPage();
         }
@@ -358,11 +364,16 @@ export class WikiPageView extends PlatformPage {
         }
         this._page = null;
         this._outline = [];
-        const page = await this._read.run({ wiki_page_id: pageId });
+        this._pendingContent = null;
+        this._pendingTitle = null;
+        this._saveState = SAVE_IDLE;
+        const response = await this._read.run({ wiki_page_id: pageId });
         if (this.pageId !== pageId) {
             return;
         }
-        this._page = page;
+        // Ответ команды — WikiPageResponse { page, can_edit, can_admin }:
+        // на экране живёт сама WikiPage.
+        this._page = response === null ? null : response.page;
         await this.updateComplete;
         await this._refreshOutlineWhenEditorReady();
     }
@@ -457,16 +468,16 @@ export class WikiPageView extends PlatformPage {
     }
 
     /** Досохранить при уходе со страницы, иначе последние правки потеряются. */
-    _flushPendingSave() {
+    _flushPendingSave(pageId = this.pageId) {
         if (this._saveTimer === null) {
             return;
         }
         clearTimeout(this._saveTimer);
         this._saveTimer = null;
-        void this._commitSave();
+        void this._commitSave(pageId);
     }
 
-    async _commitSave() {
+    async _commitSave(pageId = this.pageId) {
         if (this._page === null) {
             this._saveState = SAVE_FAILED;
             return;
@@ -474,21 +485,47 @@ export class WikiPageView extends PlatformPage {
         const content = this._pendingContent === null ? this._page.content : this._pendingContent;
         const title = this._pendingTitle === null ? this._page.title : this._pendingTitle;
         const saved = await this._save.run({
-            wiki_page_id: this.pageId,
+            wiki_page_id: pageId,
             content,
             title,
             create_revision: true,
         });
-        // Неудача резолвится в null (контракт OpController): правки остаются
-        // в pending, страница на экране не подменяется пустотой.
+        // Неудача резолвится в null (контракт OpController).
         if (saved === null) {
+            if (pageId !== this.pageId) {
+                // Досохранение прежней страницы: индикатор относится к новому
+                // экрану, о несохранённых правках сообщаем тостом.
+                this.toast('page.save_failed', { type: 'error' });
+                return;
+            }
+            // Правки остаются в pending, страница не подменяется пустотой.
             this._saveState = SAVE_FAILED;
             return;
         }
-        this._page = saved;
-        this._pendingContent = null;
-        this._pendingTitle = null;
-        this._saveState = SAVE_DONE;
+        if (pageId !== this.pageId) {
+            // Досохранение прежней страницы при уходе: экран уже на другой,
+            // ответ трогать нельзя — только дерево обновляется.
+            void this._pages.load();
+            return;
+        }
+        // Pending сбрасывается только если в нём та самая правка: напечатанное
+        // за время полёта команды уже ждёт следующего таймера.
+        if (this._pendingContent === content) {
+            this._pendingContent = null;
+        }
+        if (this._pendingTitle === title) {
+            this._pendingTitle = null;
+        }
+        // Ответ команды — WikiPageResponse { page, can_edit, can_admin };
+        // свежие pending-правки поверх сохранённого снимка не затираются.
+        this._page = {
+            ...saved.page,
+            content: this._pendingContent === null ? saved.page.content : this._pendingContent,
+            title: this._pendingTitle === null ? saved.page.title : this._pendingTitle,
+        };
+        if (this._pendingContent === null && this._pendingTitle === null) {
+            this._saveState = SAVE_DONE;
+        }
         this._refreshOutline();
         void this._pages.load();
     }

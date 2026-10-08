@@ -198,9 +198,11 @@ export class WikiHistoryPage extends PlatformPage {
     async _selectRevision(revisionId) {
         this._selectedRevisionId = revisionId;
         const revision = await this._revisionRead.run({ wiki_revision_id: revisionId });
-        const current = this._markdown.state.text_markdown;
-        const currentText = typeof current === 'string' ? current : '';
-        const revisionText = typeof revision.text_markdown === 'string' ? revision.text_markdown : '';
+        const current = this._markdown.lastResult;
+        const currentText = current === null ? '' : current.markdown;
+        const revisionText = revision !== null && typeof revision.text_markdown === 'string'
+            ? revision.text_markdown
+            : '';
         this._diffRows = buildLineDiff(revisionText, currentText);
     }
 
