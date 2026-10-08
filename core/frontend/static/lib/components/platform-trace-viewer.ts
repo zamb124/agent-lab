@@ -4,6 +4,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-icon.js';
@@ -19,17 +20,23 @@ import {
     serviceHueCssVar,
     treeDurationBarPct,
 } from '../utils/trace-view-model.js';
+import type { TraceSpanRaw, TraceViewNode } from '../utils/trace-view-model.js';
 
 export class PlatformTraceViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         roots: { type: Array },
         displayMode: { type: String },
         _search: { state: true },
     };
+    declare roots: TraceSpanRaw[];
+    declare displayMode: string;
+    declare _search: string;
 
-    static styles = [
+    private _collapsed: Set<string>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -242,18 +249,16 @@ export class PlatformTraceViewer extends PlatformElement {
         this.roots = [];
         this.displayMode = 'tree';
         this._search = '';
-        /** @type {Set<string>} */
-        this._collapsed = new Set();
+        this._collapsed = new Set<string>();
     }
 
-    /**
-     * @param {import('../utils/trace-view-model.js').TraceViewNode} node
-     * @param {import('../utils/trace-view-model.js').TraceViewNode|null} parent
-     * @param {number} depth
-     * @param {number|null} traceSpanMs
-     * @param {Set<string>} matchedIds
-     */
-    _renderTreeNode(node, parent, depth, traceSpanMs, matchedIds) {
+    _renderTreeNode(
+        node: TraceViewNode,
+        parent: TraceViewNode | null,
+        depth: number,
+        traceSpanMs: number | null,
+        matchedIds: Set<string>,
+    ): unknown[] {
         const hasKids = node.childCount > 0;
         const collapsed = hasKids && this._collapsed.has(node.id);
         const q = this._search;
@@ -265,7 +270,7 @@ export class PlatformTraceViewer extends PlatformElement {
                 ? html`<span class="dur">${node.durationMs} ms</span>`
                 : html`<span class="dur"></span>`;
 
-        const rows = [
+        const rows: unknown[] = [
             html`
                 <div
                     class="row"
@@ -308,8 +313,7 @@ export class PlatformTraceViewer extends PlatformElement {
         return rows;
     }
 
-    /** @param {string} id */
-    _toggleCollapse(id) {
+    _toggleCollapse(id: string): void {
         if (this._collapsed.has(id)) {
             this._collapsed.delete(id);
         } else {
@@ -318,12 +322,11 @@ export class PlatformTraceViewer extends PlatformElement {
         this.requestUpdate();
     }
 
-    /** @param {import('../utils/trace-view-model.js').TraceSpanRaw} span */
-    _select(span) {
+    _select(span: TraceSpanRaw): void {
         this.emit('trace-span-select', { span });
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (changed.has('roots')) {
             const roots = Array.isArray(this.roots) ? this.roots : [];
@@ -333,9 +336,8 @@ export class PlatformTraceViewer extends PlatformElement {
         }
     }
 
-    /** @param {CustomEvent<{ value?: string }>} e */
-    _onSearchInput(e) {
-        const d = e.detail;
+    _onSearchInput(e: Event) {
+        const d = (e as CustomEvent<{ value?: string }>).detail;
         if (d == null || typeof d !== 'object' || typeof d.value !== 'string') {
             throw new Error('platform-trace-viewer: platform-field must emit detail.value');
         }
@@ -355,11 +357,11 @@ export class PlatformTraceViewer extends PlatformElement {
                 if (typeof r !== 'object' || r === null || typeof r.span_id !== 'string') {
                     throw new Error('platform-trace-viewer: invalid root span');
                 }
-                return /** @type {import('../utils/trace-view-model.js').TraceSpanRaw} */ (r);
+                return r;
             }),
         );
         const matched = collectMatchingSpanIds(
-            roots.map((r) => /** @type {import('../utils/trace-view-model.js').TraceSpanRaw} */ (r)),
+            roots,
             (r) => spanMatchesQuery(r, q),
         );
         const anc = ancestorIdsForMatches(matched, parentMap);
@@ -368,7 +370,7 @@ export class PlatformTraceViewer extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const roots = Array.isArray(this.roots) ? this.roots : [];
         if (roots.length === 0) {
             return html`<div class="empty">${this.t('trace_viewer.empty')}</div>`;
@@ -376,11 +378,11 @@ export class PlatformTraceViewer extends PlatformElement {
 
         const normalized = normalizeTraceRoots(roots);
         const q = this._search;
-        let matchedIds = new Set();
+        let matchedIds = new Set<string>();
         let visible = normalized;
         if (q.length > 0) {
             matchedIds = collectMatchingSpanIds(
-                roots.map((r) => /** @type {import('../utils/trace-view-model.js').TraceSpanRaw} */ (r)),
+                roots,
                 (r) => spanMatchesQuery(r, q),
             );
             visible = pruneTraceViewNodes(normalized, matchedIds);
@@ -472,19 +474,17 @@ export class PlatformTraceViewer extends PlatformElement {
         `;
     }
 
-    /**
-     * @param {import('../utils/trace-view-model.js').TraceViewNode[]} visibleRoots
-     * @param {{ min: number, max: number }|null} timeRange
-     * @param {Set<string>} matchedIds
-     */
-    _renderTimeline(visibleRoots, timeRange, matchedIds) {
+    _renderTimeline(
+        visibleRoots: TraceViewNode[],
+        timeRange: { min: number; max: number } | null,
+        matchedIds: Set<string>,
+    ) {
         if (timeRange == null) {
             return nothing;
         }
         const { min, max } = timeRange;
         const q = this._search;
-        /** @type {Array<{ node: import('../utils/trace-view-model.js').TraceViewNode, depth: number, leftPct: number, widthPct: number }>} */
-        const rows = [];
+        const rows: Array<{ node: TraceViewNode; depth: number; leftPct: number; widthPct: number }> = [];
         for (const root of visibleRoots) {
             rows.push(...flattenTimelineRows(root, min, max, 0));
         }

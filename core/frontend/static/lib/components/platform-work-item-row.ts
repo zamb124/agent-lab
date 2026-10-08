@@ -215,7 +215,7 @@ export class PlatformWorkItemRow extends PlatformElement {
             mobile: isMobileViewport(),
         });
         if (!this.hasAttribute('data-no-default-nav')) {
-            openWorkItemDetail(id, this.bus as { dispatch?: (...args: unknown[]) => unknown });
+            openWorkItemDetail(id, this.bus);
         }
     }
 

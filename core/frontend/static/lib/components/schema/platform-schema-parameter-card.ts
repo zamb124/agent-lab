@@ -4,6 +4,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-button.js';
@@ -11,6 +12,12 @@ import '../platform-icon.js';
 import '../platform-switch.js';
 import '../tag-input.js';
 import { SCHEMA_UI_TYPES, createEmptyParameterRow } from './schema-model.js';
+import type {
+    NestedParameterRow,
+    NestedSchemaUiType,
+    ParameterRow,
+    SchemaUiType,
+} from './schema-model.js';
 
 const NESTED_UI_TYPES = Object.freeze(['string', 'number', 'integer', 'boolean', 'enum']);
 const ITEMS_UI_TYPES = Object.freeze(['string', 'number', 'integer', 'boolean', 'enum']);
@@ -18,15 +25,20 @@ const ITEMS_UI_TYPES = Object.freeze(['string', 'number', 'integer', 'boolean', 
 export class PlatformSchemaParameterCard extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         row: { type: Object },
         index: { type: Number },
         readonly: { type: Boolean },
         canMoveUp: { type: Boolean },
         canMoveDown: { type: Boolean },
     };
+    declare row: ParameterRow;
+    declare index: number;
+    declare readonly: boolean;
+    declare canMoveUp: boolean;
+    declare canMoveDown: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -164,10 +176,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         this.canMoveDown = false;
     }
 
-    /**
-     * @param {Partial<ReturnType<typeof createEmptyParameterRow>>} patch
-     */
-    _emitPatch(patch) {
+    _emitPatch(patch: Partial<ParameterRow>): void {
         const current = this.row && typeof this.row === 'object' ? this.row : createEmptyParameterRow();
         this.emit('row-change', {
             index: this.index,
@@ -175,7 +184,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         });
     }
 
-    _uiTypeEnumConfig(types) {
+    _uiTypeEnumConfig(types: readonly string[]): { values: { value: string; label: string }[] } {
         return {
             values: types.map((value) => ({
                 value,
@@ -184,42 +193,42 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         };
     }
 
-    _onKeyChange(e) {
+    _onKeyChange(e: CustomEvent<{ value?: unknown }>): void {
         this._emitPatch({ key: typeof e.detail?.value === 'string' ? e.detail.value : '' });
     }
 
-    _onDescriptionChange(e) {
+    _onDescriptionChange(e: CustomEvent<{ value?: unknown }>): void {
         this._emitPatch({
             description: typeof e.detail?.value === 'string' ? e.detail.value : '',
         });
     }
 
-    _onTypeChange(e) {
+    _onTypeChange(e: CustomEvent<{ value?: unknown }>): void {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : 'string';
         if (!SCHEMA_UI_TYPES.includes(value)) {
             throw new Error(`platform-schema-parameter-card: unknown uiType ${value}`);
         }
-        this._emitPatch({ uiType: value });
+        this._emitPatch({ uiType: value as SchemaUiType });
     }
 
-    _onRequiredChange(e) {
+    _onRequiredChange(e: CustomEvent<{ value?: unknown }>): void {
         this._emitPatch({ required: Boolean(e.detail?.value) });
     }
 
-    _onEnumTagsChange(e) {
+    _onEnumTagsChange(e: CustomEvent<{ tags?: unknown }>): void {
         const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
         this._emitPatch({ enumValues: tags });
     }
 
-    _onItemsTypeChange(e) {
+    _onItemsTypeChange(e: CustomEvent<{ value?: unknown }>): void {
         const value = typeof e.detail?.value === 'string' ? e.detail.value : 'string';
         if (!ITEMS_UI_TYPES.includes(value)) {
             throw new Error(`platform-schema-parameter-card: unknown itemsUiType ${value}`);
         }
-        this._emitPatch({ itemsUiType: value });
+        this._emitPatch({ itemsUiType: value as NestedSchemaUiType });
     }
 
-    _onItemsEnumChange(e) {
+    _onItemsEnumChange(e: CustomEvent<{ tags?: unknown }>): void {
         const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
         this._emitPatch({ itemsEnumValues: tags });
     }
@@ -238,11 +247,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         this._emitPatch({ nestedRows });
     }
 
-    /**
-     * @param {number} nestedIndex
-     * @param {Record<string, unknown>} patch
-     */
-    _patchNested(nestedIndex, patch) {
+    _patchNested(nestedIndex: number, patch: Partial<NestedParameterRow>): void {
         const current = this.row && typeof this.row === 'object' ? this.row : createEmptyParameterRow();
         const nestedRows = (Array.isArray(current.nestedRows) ? current.nestedRows : []).map(
             (nested, i) => (i === nestedIndex ? { ...nested, ...patch } : nested),
@@ -250,7 +255,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         this._emitPatch({ nestedRows });
     }
 
-    _removeNested(nestedIndex) {
+    _removeNested(nestedIndex: number): void {
         const current = this.row && typeof this.row === 'object' ? this.row : createEmptyParameterRow();
         const nestedRows = (Array.isArray(current.nestedRows) ? current.nestedRows : []).filter(
             (_, i) => i !== nestedIndex,
@@ -258,7 +263,10 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         this._emitPatch({ nestedRows });
     }
 
-    _renderEnumEditor(tags, onChange) {
+    _renderEnumEditor(
+        tags: string[],
+        onChange: (e: CustomEvent<{ tags?: unknown }>) => void,
+    ): TemplateResult {
         return html`
             <div class="enum-wrap">
                 <span class="section-label">${this.t('schema_editor.enum_values')}</span>
@@ -273,7 +281,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         `;
     }
 
-    _renderItemsEditor(row) {
+    _renderItemsEditor(row: ParameterRow): TemplateResult {
         return html`
             <div class="items-wrap">
                 <platform-field
@@ -292,7 +300,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         `;
     }
 
-    _renderNestedEditor(row) {
+    _renderNestedEditor(row: ParameterRow): TemplateResult {
         const nestedRows = Array.isArray(row.nestedRows) ? row.nestedRows : [];
         return html`
             <div class="nested-wrap" data-nested>
@@ -311,7 +319,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                     .label=${this.t('schema_editor.field_key')}
                                     .value=${nested.key}
                                     ?disabled=${this.readonly}
-                                    @change=${(e) => {
+                                    @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                         this._patchNested(nestedIndex, {
                                             key: typeof e.detail?.value === 'string' ? e.detail.value : '',
                                         });
@@ -325,7 +333,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                     .value=${nested.uiType}
                                     .config=${this._uiTypeEnumConfig(NESTED_UI_TYPES)}
                                     ?disabled=${this.readonly}
-                                    @change=${(e) => {
+                                    @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                         const value =
                                             typeof e.detail?.value === 'string' ? e.detail.value : 'string';
                                         if (!NESTED_UI_TYPES.includes(value)) {
@@ -333,7 +341,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                                 `platform-schema-parameter-card: nested uiType ${value}`,
                                             );
                                         }
-                                        this._patchNested(nestedIndex, { uiType: value });
+                                        this._patchNested(nestedIndex, { uiType: value as NestedSchemaUiType });
                                     }}
                                 ></platform-field>
                                 <div class="nested-required-wrap">
@@ -342,7 +350,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                         .checked=${Boolean(nested.required)}
                                         .label=${this.t('schema_editor.field_required')}
                                         ?disabled=${this.readonly}
-                                        @change=${(e) => {
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                             this._patchNested(nestedIndex, {
                                                 required: Boolean(e.detail?.value),
                                             });
@@ -371,7 +379,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                                 .label=${this.t('schema_editor.field_description')}
                                 .value=${nested.description}
                                 ?disabled=${this.readonly}
-                                @change=${(e) => {
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                     this._patchNested(nestedIndex, {
                                         description:
                                             typeof e.detail?.value === 'string' ? e.detail.value : '',
@@ -381,7 +389,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
                             ${nested.uiType === 'enum'
                                 ? this._renderEnumEditor(
                                     Array.isArray(nested.enumValues) ? nested.enumValues : [],
-                                    (e) => {
+                                    (e: CustomEvent<{ tags?: unknown }>) => {
                                         const tags = Array.isArray(e.detail?.tags) ? e.detail.tags : [];
                                         this._patchNested(nestedIndex, { enumValues: tags });
                                     },
@@ -407,7 +415,7 @@ export class PlatformSchemaParameterCard extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const row = this.row && typeof this.row === 'object' ? this.row : createEmptyParameterRow();
         return html`
             <div class="card">

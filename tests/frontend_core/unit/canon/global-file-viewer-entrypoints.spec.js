@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
@@ -30,7 +30,14 @@ const FILE_ICON_SURFACE_FILES = [
 ];
 
 function readRepoFile(relPath) {
-    return readFileSync(path.join(ROOT, relPath), 'utf8');
+    const abs = path.join(ROOT, relPath);
+    if (existsSync(abs)) {
+        return readFileSync(abs, 'utf8');
+    }
+    if (relPath.endsWith('.js')) {
+        return readFileSync(abs.slice(0, -3) + '.ts', 'utf8');
+    }
+    return readFileSync(abs, 'utf8');
 }
 
 describe('global file viewer entrypoints', () => {

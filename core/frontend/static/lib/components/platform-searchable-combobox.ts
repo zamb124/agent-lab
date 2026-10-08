@@ -9,6 +9,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-popover.js';
 import './fields/platform-field-shell.js';
@@ -17,12 +18,18 @@ import './fields/platform-field-shell.js';
  * @param {unknown} o
  * @returns {{ value: string, label: string } | null}
  */
-function _asOption(o) {
+export interface ComboboxOption {
+    value: string;
+    label: string;
+}
+
+function _asOption(o: unknown): ComboboxOption | null {
     if (!o || typeof o !== 'object') {
         return null;
     }
-    const value = o.value;
-    const label = o.label;
+    const record = o as Record<string, unknown>;
+    const value = record.value;
+    const label = record.label;
     if (typeof value !== 'string') {
         return null;
     }
@@ -36,7 +43,7 @@ function _asOption(o) {
  * @param {string} template
  * @param {string} query
  */
-function _formatCreateQueryLabel(template, query) {
+function _formatCreateQueryLabel(template: string, query: string): string {
     if (template.indexOf('{{query}}') >= 0) {
         return template.split('{{query}}').join(query);
     }
@@ -44,7 +51,7 @@ function _formatCreateQueryLabel(template, query) {
 }
 
 export class PlatformSearchableCombobox extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         options: { type: Array },
         label: { type: String },
@@ -59,9 +66,24 @@ export class PlatformSearchableCombobox extends PlatformElement {
         _editing: { type: Boolean, state: true },
         _anchor: { state: true },
     };
+    declare value: string;
+    declare options: unknown[];
+    declare label: string;
+    declare placeholder: string;
+    declare emptyLabel: string;
+    declare createLabel: string;
+    declare createQueryLabel: string;
+    declare ariaLabel: string;
+    declare compact: boolean;
+    declare _open: boolean;
+    declare _input: string;
+    declare _editing: boolean;
+    declare _anchor: HTMLElement | null;
 
-    static styles = [
-        ...PlatformElement.styles,
+    private _blurHandle: number | null;
+
+    static override styles: CSSResultGroup = [
+        ...(Array.isArray(PlatformElement.styles) ? PlatformElement.styles : [PlatformElement.styles]),
         css`
             :host {
                 display: block;
@@ -157,7 +179,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
     constructor() {
         super();
         this.value = '';
-        this.options = Object.freeze([]);
+        this.options = [];
         this.label = '';
         this.placeholder = '';
         this.emptyLabel = '';
@@ -168,9 +190,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._open = false;
         this._input = '';
         this._editing = false;
-        /** @type {HTMLElement | null} */
         this._anchor = null;
-        /** @type {number | null} */
         this._blurHandle = null;
     }
 
@@ -178,12 +198,12 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._open = false;
     }
 
-    _opts() {
+    _opts(): ComboboxOption[] {
         const src = this.options;
         if (!Array.isArray(src)) {
             return [];
         }
-        const out = [];
+        const out: ComboboxOption[] = [];
         for (const raw of src) {
             const o = _asOption(raw);
             if (o) {
@@ -193,7 +213,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         return out;
     }
 
-    _displayForValue(v) {
+    _displayForValue(v: unknown): string {
         if (v === null || v === undefined || v === '') {
             return '';
         }
@@ -213,13 +233,13 @@ export class PlatformSearchableCombobox extends PlatformElement {
         return this._input.trim().toLowerCase();
     }
 
-    _filtered() {
+    _filtered(): ComboboxOption[] {
         const all = this._opts();
         const q = this._queryLower();
         if (q.length === 0) {
             return all;
         }
-        const out = [];
+        const out: ComboboxOption[] = [];
         for (const o of all) {
             if (o.value.toLowerCase().indexOf(q) >= 0) {
                 out.push(o);
@@ -230,17 +250,9 @@ export class PlatformSearchableCombobox extends PlatformElement {
         return out;
     }
 
-    updated(changed) {
-        super.updated(changed);
-        if (changed.has('value') && !this._editing) {
-            this._input = this._displayForValue(this.value);
-        }
-        if (changed.has('options') && !this._editing) {
-            this._input = this._displayForValue(this.value);
-        }
-    }
 
-    _emitIfChanged(next) {
+
+    _emitIfChanged(next: unknown): void {
         const s = next === null || next === undefined ? '' : String(next);
         if (s === this.value) {
             return;
@@ -269,10 +281,10 @@ export class PlatformSearchableCombobox extends PlatformElement {
             }
         }
         const f = this._filtered();
-        if (f.length === 1) {
-            const o = f[0];
-            this._emitIfChanged(o.value);
-            this._input = o.label.length > 0 ? o.label : o.value;
+        const single = f.length === 1 ? f[0] : undefined;
+        if (single) {
+            this._emitIfChanged(single.value);
+            this._input = single.label.length > 0 ? single.label : single.value;
             return;
         }
         this._emitIfChanged(t);
@@ -286,7 +298,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._commit();
     }
 
-    _selectOption(v, display) {
+    _selectOption(v: unknown, display: string): void {
         const s = v === null || v === undefined ? '' : String(v);
         this._emitIfChanged(s);
         this._input = display;
@@ -299,9 +311,9 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._open = true;
     }
 
-    _onInput(e) {
+    _onInput(e: Event) {
         const t = e.target;
-        this._input = t && 'value' in t ? t.value : '';
+        this._input = t && 'value' in t ? String(t.value) : '';
         this._open = true;
     }
 
@@ -322,14 +334,14 @@ export class PlatformSearchableCombobox extends PlatformElement {
         }
     }
 
-    _onEmptyMouseDown(e) {
+    _onEmptyMouseDown(e: Event) {
         e.preventDefault();
         this._clearBlurHandle();
         this._editing = false;
         this._selectOption('', '');
     }
 
-    _onOptionMouseDown(e, o) {
+    _onOptionMouseDown(e: Event, o: ComboboxOption): void {
         e.preventDefault();
         this._clearBlurHandle();
         this._editing = false;
@@ -337,10 +349,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this._selectOption(o.value, disp);
     }
 
-    /**
-     * @returns {{ query: string, label: string } | null}
-     */
-    _createRow() {
+    _createRow(): { query: string; label: string } | null {
         const baseCreate = typeof this.createLabel === 'string' ? this.createLabel.trim() : '';
         const queryTemplate = typeof this.createQueryLabel === 'string'
             ? this.createQueryLabel.trim()
@@ -369,7 +378,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         return { query, label: `${baseCreate}: ${query}` };
     }
 
-    _onCreateMouseDown(e) {
+    _onCreateMouseDown(e: Event) {
         e.preventDefault();
         this._clearBlurHandle();
         this._editing = false;
@@ -378,7 +387,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         this.emit('create', { query });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._clearBlurHandle();
         super.disconnectedCallback();
     }
@@ -402,11 +411,11 @@ export class PlatformSearchableCombobox extends PlatformElement {
                     `
                     : null}
                 ${rows.map(
-                    (o) => html`
+                    (o: ComboboxOption) => html`
                         <li
                             class="item"
                             role="option"
-                            @mousedown=${(e) => this._onOptionMouseDown(e, o)}
+                            @mousedown=${(e: Event) => this._onOptionMouseDown(e, o)}
                         >
                             <div>${o.label.length > 0 ? o.label : o.value}</div>
                             <div class="item-muted">${o.value}</div>
@@ -427,7 +436,7 @@ export class PlatformSearchableCombobox extends PlatformElement {
         `;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (this._anchor === null) {
             const field = this.renderRoot?.querySelector?.('platform-field-shell')
@@ -437,11 +446,15 @@ export class PlatformSearchableCombobox extends PlatformElement {
             }
         }
         if (this._open) {
-            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+            const popover = this.renderRoot?.querySelector?.('platform-popover');
+            (popover as { reposition?: () => void } | null | undefined)?.reposition?.();
+        }
+        if ((changed.has('value') || changed.has('options')) && !this._editing) {
+            this._input = this._displayForValue(this.value);
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const hasLabel = typeof this.label === 'string' && this.label.length > 0;
         const aria = typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
             ? this.ariaLabel

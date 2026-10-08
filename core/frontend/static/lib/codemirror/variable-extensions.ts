@@ -115,6 +115,11 @@ export interface CmModule {
     historyKeymap: unknown[];
     lineNumbers(): unknown;
     json(): unknown;
+    python?(): unknown;
+    javascript?(options?: { typescript?: boolean }): unknown;
+    go?(): unknown;
+    csharp?(): unknown;
+    html?(options?: { matchClosingTags?: boolean }): unknown;
     bracketMatching(): unknown;
     indentOnInput(): unknown;
     syntaxHighlighting(style: unknown, options?: { fallback?: boolean }): unknown;

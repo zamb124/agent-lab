@@ -5,7 +5,36 @@
 
 export const SCHEMA_KEY_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-/** @typedef {'string'|'number'|'integer'|'boolean'|'enum'|'object'|'array'} SchemaUiType */
+export type SchemaUiType = 'string' | 'number' | 'integer' | 'boolean' | 'enum' | 'object' | 'array';
+export type NestedSchemaUiType = 'string' | 'number' | 'integer' | 'boolean' | 'enum';
+
+export interface NestedParameterRow {
+    key: string;
+    required: boolean;
+    uiType: NestedSchemaUiType;
+    description: string;
+    enumValues: string[];
+    extra: Record<string, unknown>;
+}
+
+export interface ParameterRow {
+    key: string;
+    required: boolean;
+    uiType: SchemaUiType;
+    description: string;
+    enumValues: string[];
+    itemsUiType: NestedSchemaUiType;
+    itemsEnumValues: string[];
+    nestedRows: NestedParameterRow[];
+    extra: Record<string, unknown>;
+}
+
+export interface NormalizedParametersSchema {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required: string[];
+    rest: Record<string, unknown>;
+}
 
 export const SCHEMA_UI_TYPES = Object.freeze([
     'string',
@@ -19,27 +48,7 @@ export const SCHEMA_UI_TYPES = Object.freeze([
 
 const SCALAR_JSON_TYPES = new Set(['string', 'number', 'integer', 'boolean']);
 
-/**
- * @returns {{
- *   key: string,
- *   required: boolean,
- *   uiType: SchemaUiType,
- *   description: string,
- *   enumValues: string[],
- *   itemsUiType: 'string'|'number'|'integer'|'boolean'|'enum',
- *   itemsEnumValues: string[],
- *   nestedRows: Array<{
- *     key: string,
- *     required: boolean,
- *     uiType: 'string'|'number'|'integer'|'boolean'|'enum',
- *     description: string,
- *     enumValues: string[],
- *     extra: Record<string, unknown>,
- *   }>,
- *   extra: Record<string, unknown>,
- * }}
- */
-export function createEmptyParameterRow() {
+export function createEmptyParameterRow(): ParameterRow {
     return {
         key: '',
         required: false,
@@ -53,19 +62,11 @@ export function createEmptyParameterRow() {
     };
 }
 
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * @param {unknown} raw
- * @returns {string[]}
- */
-function normalizeStringList(raw) {
+function normalizeStringList(raw: unknown): string[] {
     if (!Array.isArray(raw)) {
         return [];
     }
@@ -74,11 +75,7 @@ function normalizeStringList(raw) {
         .filter((item) => item.length > 0);
 }
 
-/**
- * @param {unknown} raw
- * @returns {{ type: 'object', properties: Record<string, unknown>, required: string[], rest: Record<string, unknown> }}
- */
-export function normalizeParametersSchema(raw) {
+export function normalizeParametersSchema(raw: unknown): NormalizedParametersSchema {
     if (raw === null || raw === undefined) {
         return { type: 'object', properties: {}, required: [], rest: {} };
     }
@@ -106,7 +103,7 @@ export function normalizeParametersSchema(raw) {
           : (() => {
                 throw new Error('parameters schema.required must be an array');
             })();
-    const rest = {};
+    const rest: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(raw)) {
         if (key === 'type' || key === 'properties' || key === 'required') {
             continue;
@@ -116,11 +113,7 @@ export function normalizeParametersSchema(raw) {
     return { type: 'object', properties, required, rest };
 }
 
-/**
- * @param {unknown} prop
- * @returns {SchemaUiType}
- */
-function propertyUiType(prop) {
+function propertyUiType(prop: unknown): SchemaUiType {
     if (!isPlainObject(prop)) {
         return 'string';
     }
@@ -134,16 +127,12 @@ function propertyUiType(prop) {
     return 'string';
 }
 
-/**
- * @param {unknown} prop
- * @returns {Record<string, unknown>}
- */
-function propertyExtra(prop) {
+function propertyExtra(prop: unknown): Record<string, unknown> {
     if (!isPlainObject(prop)) {
         return {};
     }
     const reserved = new Set(['type', 'description', 'enum', 'items', 'properties', 'required']);
-    const extra = {};
+    const extra: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(prop)) {
         if (reserved.has(key)) {
             continue;
@@ -153,16 +142,12 @@ function propertyExtra(prop) {
     return extra;
 }
 
-/**
- * @param {string} key
- * @param {unknown} prop
- * @param {Set<string>} requiredSet
- */
-function nestedPropertyToRow(key, prop, requiredSet) {
+function nestedPropertyToRow(key: string, prop: unknown, requiredSet: Set<string>): NestedParameterRow {
     const uiType = propertyUiType(prop);
     if (uiType === 'object' || uiType === 'array') {
         throw new Error(`nested property "${key}" must be a scalar or enum`);
     }
+    const nestedUiType: NestedSchemaUiType = uiType;
     const description =
         isPlainObject(prop) && typeof prop.description === 'string' ? prop.description : '';
     const enumValues =
@@ -170,19 +155,14 @@ function nestedPropertyToRow(key, prop, requiredSet) {
     return {
         key,
         required: requiredSet.has(key),
-        uiType,
+        uiType: nestedUiType,
         description,
         enumValues,
         extra: propertyExtra(prop),
     };
 }
 
-/**
- * @param {string} key
- * @param {unknown} prop
- * @param {Set<string>} requiredSet
- */
-export function schemaPropertyToRow(key, prop, requiredSet) {
+export function schemaPropertyToRow(key: string, prop: unknown, requiredSet: Set<string>): ParameterRow {
     const row = createEmptyParameterRow();
     row.key = key;
     row.required = requiredSet.has(key);
@@ -219,7 +199,7 @@ export function schemaPropertyToRow(key, prop, requiredSet) {
     }
     if (uiType === 'object') {
         const nestedProps = isPlainObject(prop.properties) ? prop.properties : {};
-        const nestedRequired = new Set(
+        const nestedRequired = new Set<string>(
             Array.isArray(prop.required)
                 ? prop.required.filter((item) => typeof item === 'string')
                 : [],
@@ -232,29 +212,15 @@ export function schemaPropertyToRow(key, prop, requiredSet) {
     return row;
 }
 
-/**
- * @param {{ type: 'object', properties: Record<string, unknown>, required: string[], rest: Record<string, unknown> }} normalized
- */
-export function schemaToParameterRows(normalized) {
+export function schemaToParameterRows(normalized: NormalizedParametersSchema): ParameterRow[] {
     const requiredSet = new Set(normalized.required);
     return Object.entries(normalized.properties).map(([key, prop]) =>
         schemaPropertyToRow(key, prop, requiredSet),
     );
 }
 
-/**
- * @param {{
- *   key: string,
- *   required: boolean,
- *   uiType: string,
- *   description: string,
- *   enumValues: string[],
- *   extra?: Record<string, unknown>,
- * }} nested
- * @returns {Record<string, unknown>}
- */
-function nestedRowToProperty(nested) {
-    const descriptor = {
+function nestedRowToProperty(nested: NestedParameterRow): Record<string, unknown> {
+    const descriptor: Record<string, unknown> = {
         ...(nested.extra && typeof nested.extra === 'object' ? nested.extra : {}),
     };
     if (nested.uiType === 'enum') {
@@ -272,12 +238,8 @@ function nestedRowToProperty(nested) {
     return descriptor;
 }
 
-/**
- * @param {ReturnType<typeof createEmptyParameterRow>} row
- * @returns {Record<string, unknown>}
- */
-export function parameterRowToProperty(row) {
-    const descriptor = {
+export function parameterRowToProperty(row: ParameterRow): Record<string, unknown> {
+    const descriptor: Record<string, unknown> = {
         ...(row.extra && typeof row.extra === 'object' ? row.extra : {}),
     };
     const description = typeof row.description === 'string' ? row.description.trim() : '';
@@ -309,8 +271,8 @@ export function parameterRowToProperty(row) {
     }
     if (row.uiType === 'object') {
         descriptor.type = 'object';
-        const properties = {};
-        const required = [];
+        const properties: Record<string, unknown> = {};
+        const required: string[] = [];
         for (const nested of row.nestedRows) {
             const nestedKey = typeof nested.key === 'string' ? nested.key.trim() : '';
             if (nestedKey.length === 0) {
@@ -339,15 +301,11 @@ export function parameterRowToProperty(row) {
     return descriptor;
 }
 
-/**
- * @param {Array<ReturnType<typeof createEmptyParameterRow>>} rows
- * @returns {{ valid: true } | { valid: false, error: string }}
- */
-export function validateParameterRows(rows) {
+export function validateParameterRows(rows: ParameterRow[]): { valid: true } | { valid: false; error: string } {
     if (!Array.isArray(rows)) {
         return { valid: false, error: 'parameter rows must be an array' };
     }
-    const seen = new Set();
+    const seen = new Set<string>();
     for (const row of rows) {
         const key = typeof row.key === 'string' ? row.key.trim() : '';
         if (key.length === 0) {
@@ -371,7 +329,7 @@ export function validateParameterRows(rows) {
             return { valid: false, error: `array enum parameter "${key}" needs at least one item value` };
         }
         if (row.uiType === 'object' && Array.isArray(row.nestedRows)) {
-            const nestedSeen = new Set();
+            const nestedSeen = new Set<string>();
             for (const nested of row.nestedRows) {
                 const nestedKey = typeof nested.key === 'string' ? nested.key.trim() : '';
                 if (nestedKey.length === 0) {
@@ -396,18 +354,13 @@ export function validateParameterRows(rows) {
     return { valid: true };
 }
 
-/**
- * @param {Array<ReturnType<typeof createEmptyParameterRow>>} rows
- * @param {Record<string, unknown>} [rest]
- * @returns {Record<string, unknown>}
- */
-export function parameterRowsToSchema(rows, rest = {}) {
+export function parameterRowsToSchema(rows: ParameterRow[], rest: Record<string, unknown> = {}): Record<string, unknown> {
     const validation = validateParameterRows(rows);
     if (!validation.valid) {
         throw new Error(validation.error);
     }
-    const properties = {};
-    const required = [];
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
     for (const row of rows) {
         const key = typeof row.key === 'string' ? row.key.trim() : '';
         if (key.length === 0) {
@@ -418,7 +371,7 @@ export function parameterRowsToSchema(rows, rest = {}) {
             required.push(key);
         }
     }
-    const schema = {
+    const schema: Record<string, unknown> = {
         ...rest,
         type: 'object',
         properties,
@@ -431,13 +384,7 @@ export function parameterRowsToSchema(rows, rest = {}) {
     return schema;
 }
 
-/**
- * @param {unknown} node
- * @param {number} depth
- * @param {string[]} reasons
- * @param {string} path
- */
-function walkAdvanced(node, depth, reasons, path) {
+function walkAdvanced(node: unknown, depth: number, reasons: string[], path: string): void {
     if (!isPlainObject(node)) {
         return;
     }
@@ -469,12 +416,8 @@ function walkAdvanced(node, depth, reasons, path) {
     }
 }
 
-/**
- * @param {unknown} raw
- * @returns {{ advanced: boolean, reasons: string[] }}
- */
-export function detectAdvancedSchemaFeatures(raw) {
-    const reasons = [];
+export function detectAdvancedSchemaFeatures(raw: unknown): { advanced: boolean; reasons: string[] } {
+    const reasons: string[] = [];
     if (raw === null || raw === undefined) {
         return { advanced: false, reasons };
     }
@@ -520,11 +463,11 @@ export function detectAdvancedSchemaFeatures(raw) {
                 }
                 if (
                     prop.items.type !== undefined
-                    && !SCALAR_JSON_TYPES.has(prop.items.type)
+                    && !SCALAR_JSON_TYPES.has(String(prop.items.type))
                     && !(Array.isArray(prop.items.enum) && prop.items.enum.length > 0)
                     && prop.items.type !== 'string'
                 ) {
-                    if (!SCALAR_JSON_TYPES.has(prop.items.type)) {
+                    if (!SCALAR_JSON_TYPES.has(String(prop.items.type))) {
                         const itemsType = prop.items.type;
                         if (itemsType !== 'string' && itemsType !== 'number' && itemsType !== 'integer' && itemsType !== 'boolean') {
                             reasons.push(`properties.${key}.items.type`);
@@ -543,17 +486,13 @@ export function detectAdvancedSchemaFeatures(raw) {
     return { advanced: reasons.length > 0, reasons };
 }
 
-/**
- * @param {unknown} raw
- * @returns {{
- *   schema: Record<string, unknown>,
- *   rows: Array<ReturnType<typeof createEmptyParameterRow>>,
- *   rest: Record<string, unknown>,
- *   advanced: boolean,
- *   reasons: string[],
- * }}
- */
-export function parseSchemaForEditor(raw) {
+export function parseSchemaForEditor(raw: unknown): {
+    schema: Record<string, unknown>;
+    rows: ParameterRow[];
+    rest: Record<string, unknown>;
+    advanced: boolean;
+    reasons: string[];
+} {
     const normalized = normalizeParametersSchema(raw);
     const { advanced, reasons } = detectAdvancedSchemaFeatures({
         type: 'object',
@@ -562,7 +501,7 @@ export function parseSchemaForEditor(raw) {
         ...normalized.rest,
     });
     const rows = advanced ? [] : schemaToParameterRows(normalized);
-    const schema = {
+    const schema: Record<string, unknown> = {
         type: 'object',
         properties: normalized.properties,
         ...(normalized.required.length > 0 ? { required: normalized.required } : {}),

@@ -1,6 +1,7 @@
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
-function formatDuration(seconds) {
+function formatDuration(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) {
         return '00:00';
     }
@@ -13,7 +14,7 @@ function formatDuration(seconds) {
 export class PlatformAudioMessagePlayer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         src: { type: String },
         fileName: { type: String, attribute: 'file-name' },
         durationMs: { type: Number, attribute: 'duration-ms' },
@@ -27,8 +28,24 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         _resolvedDuration: { state: true },
         _playbackError: { state: true },
     };
+    declare src: string;
+    declare fileName: string;
+    declare durationMs: number;
+    declare waveform: number[];
+    declare transcriptionStatus: string;
+    declare transcriptionText: string;
+    declare transcriptionError: string;
+    declare hideTranscription: boolean;
+    declare _isPlaying: boolean;
+    declare _currentTime: number;
+    declare _resolvedDuration: number;
+    declare _playbackError: string;
 
-    static styles = [
+    private _onAudioTimeUpdate: () => void;
+    private _onAudioLoadedMetadata: () => void;
+    private _onAudioEnded: () => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -194,7 +211,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         this.src = '';
         this.fileName = '';
         this.durationMs = 0;
-        this.waveform = null;
+        this.waveform = [];
         this.transcriptionStatus = 'idle';
         this.transcriptionText = '';
         this.transcriptionError = '';
@@ -207,23 +224,23 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         this._onAudioEnded = this._handleAudioEnded.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._bindAudioListeners();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback?.();
         this._unbindAudioListeners();
     }
 
-    firstUpdated() {
+    override firstUpdated(changed: PropertyValues<this>): void {
         this._bindAudioListeners();
     }
 
-    updated(changedProperties) {
-        super.updated?.(changedProperties);
-        if (changedProperties.has('src')) {
+    override updated(changed: PropertyValues<this>): void {
+        super.updated?.(changed);
+        if (changed.has('src')) {
             this._isPlaying = false;
             this._currentTime = 0;
             this._resolvedDuration = 0;
@@ -232,8 +249,8 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         }
     }
 
-    _audioEl() {
-        return this.renderRoot?.querySelector('audio');
+    _audioEl(): HTMLAudioElement | null {
+        return this.renderRoot?.querySelector('audio') ?? null;
     }
 
     _bindAudioListeners() {
@@ -280,7 +297,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         this._currentTime = 0;
     }
 
-    _onAudioError(e) {
+    _onAudioError(e: Event) {
         const el = e.target;
         if (!(el instanceof HTMLAudioElement)) {
             return;
@@ -338,12 +355,12 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         }
     }
 
-    _seek(e) {
+    _seek(e: Event): void {
         const audio = this._audioEl();
         if (!audio) {
             throw new Error('Audio element not found.');
         }
-        const value = Number(e.target.value);
+        const value = Number((e.target as HTMLInputElement).value);
         if (!Number.isFinite(value) || value < 0) {
             return;
         }
@@ -401,7 +418,7 @@ export class PlatformAudioMessagePlayer extends PlatformElement {
         return [4, 7, 10, 12, 8, 6, 9, 11, 8, 5, 7, 10, 12, 9, 6, 8, 10, 6, 5, 8, 11, 9, 7, 5];
     }
 
-    render() {
+    override render(): TemplateResult {
         if (typeof this.src !== 'string' || this.src === '') {
             throw new Error('src обязателен для audio player.');
         }

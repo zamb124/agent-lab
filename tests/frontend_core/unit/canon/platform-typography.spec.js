@@ -16,7 +16,7 @@ const TOKENS_PATH = path.join(ROOT, 'core/frontend/static/assets/css/tokens.css'
 const RESET_PATH = path.join(ROOT, 'core/frontend/static/assets/css/reset.css');
 const PLATFORM_ELEMENT_STYLES_PATH = path.join(
     ROOT,
-    'core/frontend/static/lib/platform-element/styles.js',
+    'core/frontend/static/lib/platform-element/styles.ts',
 );
 const FONTS_CSS_PATH = path.join(
     ROOT,

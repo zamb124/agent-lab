@@ -3,6 +3,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import {
     buildSpanAttributeViewModel,
@@ -11,14 +12,95 @@ import {
     traceScalarText,
 } from '../utils/trace-attribute-view-model.js';
 
+interface SpanFieldItem {
+    key?: unknown;
+    value?: unknown;
+}
+
+interface SpanParsedBlock {
+    ok: boolean;
+    value?: unknown;
+    error?: string;
+}
+
+interface SpanMessageItem {
+    role: string;
+    system?: unknown;
+    id: string;
+    text: string;
+}
+
+interface SpanFieldView {
+    fields: SpanFieldItem[];
+}
+
+interface SpanRawParsed {
+    parsed: SpanParsedBlock;
+    raw: string;
+}
+
+interface SpanLlmRequestView {
+    parsed: SpanParsedBlock;
+    messages: SpanMessageItem[];
+    tools?: unknown[];
+    responseFormat?: unknown;
+    prettyRaw: string;
+    raw: string;
+}
+
+interface SpanStructuredContent {
+    summary: string;
+    entities: string[];
+    highlights: string[];
+    keyEvents: string[];
+    statistics: Record<string, unknown>;
+    parsed: SpanParsedBlock;
+}
+
+interface SpanLlmResponseView {
+    parsed: SpanParsedBlock;
+    recovered?: unknown;
+    toolCalls?: unknown[];
+    prettyRaw: string;
+    raw: string;
+    contentText: string;
+    structuredContent: SpanStructuredContent;
+}
+
+interface SpanToolView {
+    fields: SpanFieldItem[];
+    args: SpanRawParsed;
+    result: SpanRawParsed;
+    mcpPreview: string;
+}
+
+interface SpanPromptView {
+    fields: SpanFieldItem[];
+    variables: SpanRawParsed;
+}
+
+interface SpanViewModel {
+    quickFacts: SpanFieldItem[];
+    metrics: SpanFieldItem[];
+    error: SpanFieldView | null;
+    interrupt: SpanFieldView | null;
+    llmRequest: SpanLlmRequestView | null;
+    llmResponse: SpanLlmResponseView | null;
+    tool: SpanToolView | null;
+    prompt: SpanPromptView | null;
+    state: SpanRawParsed | null;
+    attrs: unknown;
+}
+
 export class PlatformSpanAttributesViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         span: { type: Object },
     };
+    declare span: Record<string, unknown> | null;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -217,19 +299,19 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         this.span = null;
     }
 
-    _label(key) {
+    _label(key: string): string {
         return this.t(`span_attributes.fields.${key}`);
     }
 
-    _sectionTitle(key) {
+    _sectionTitle(key: string): string {
         return this.t(`span_attributes.sections.${key}`);
     }
 
-    _isMonoKey(key) {
+    _isMonoKey(key: string): boolean {
         return key.endsWith('_id') || key === 'span_id' || key === 'trace_id' || key === 'task' || key === 'context';
     }
 
-    _formatValue(key, value) {
+    _formatValue(key: string, value: string): string {
         const durationKeys = new Set(['duration', 'llm_duration', 'tool_duration']);
         if (durationKeys.has(key)) {
             const num = Number(value);
@@ -247,7 +329,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         return value;
     }
 
-    _renderField(item, compact = false) {
+    _renderField(item: SpanFieldItem, compact = false) {
         const key = typeof item.key === 'string' ? item.key : '';
         const value = this._formatValue(key, traceScalarText(item.value));
         return html`
@@ -258,14 +340,14 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `;
     }
 
-    _renderFieldGrid(fields) {
+    _renderFieldGrid(fields: SpanFieldItem[] | unknown) {
         if (!Array.isArray(fields) || fields.length === 0) {
             return nothing;
         }
-        return html`<div class="field-grid">${fields.map((item) => this._renderField(item))}</div>`;
+        return html`<div class="field-grid">${fields.map((item: SpanFieldItem) => this._renderField(item))}</div>`;
     }
 
-    _renderJsonBlock(value) {
+    _renderJsonBlock(value: unknown) {
         const text = isTracePlainObject(value) || Array.isArray(value)
             ? JSON.stringify(value, null, 2)
             : traceScalarText(value);
@@ -275,7 +357,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         return html`<pre class="json-block">${text}</pre>`;
     }
 
-    _renderParsedBlock(parsed, raw) {
+    _renderParsedBlock(parsed: SpanParsedBlock | null, raw: unknown) {
         if (parsed && parsed.ok) {
             return this._renderJsonBlock(parsed.value);
         }
@@ -288,7 +370,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `;
     }
 
-    _renderSection(titleKey, body) {
+    _renderSection(titleKey: string, body: unknown) {
         return html`
             <section class="section">
                 <div class="section-header">
@@ -299,7 +381,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `;
     }
 
-    _renderMessages(messages) {
+    _renderMessages(messages: SpanMessageItem[] | unknown) {
         if (!Array.isArray(messages) || messages.length === 0) {
             return nothing;
         }
@@ -307,7 +389,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
             <div>
                 <div class="subheading">${this.t('span_attributes.messages')}</div>
                 <div class="message-list">
-                    ${messages.map((message) => html`
+                    ${(messages as SpanMessageItem[]).map((message) => html`
                         <article class="message">
                             <div class="message-head">
                                 <span class="badge">${message.role.length > 0 ? message.role : this.t('span_attributes.message')}</span>
@@ -322,7 +404,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `;
     }
 
-    _renderPills(titleKey, items) {
+    _renderPills(titleKey: string, items: unknown) {
         if (!Array.isArray(items) || items.length === 0) {
             return nothing;
         }
@@ -330,13 +412,13 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
             <div>
                 <div class="subheading">${this.t(titleKey)}</div>
                 <div class="chips">
-                    ${items.map((item) => html`<span class="badge">${item}</span>`)}
+                    ${(items as unknown[]).map((item) => html`<span class="badge">${item}</span>`)}
                 </div>
             </div>
         `;
     }
 
-    _renderList(titleKey, items) {
+    _renderList(titleKey: string, items: unknown) {
         if (!Array.isArray(items) || items.length === 0) {
             return nothing;
         }
@@ -344,13 +426,13 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
             <div>
                 <div class="subheading">${this.t(titleKey)}</div>
                 <ul class="list">
-                    ${items.map((item) => html`<li>${item}</li>`)}
+                    ${(items as unknown[]).map((item) => html`<li>${item}</li>`)}
                 </ul>
             </div>
         `;
     }
 
-    _renderStatistics(statistics) {
+    _renderStatistics(statistics: unknown) {
         if (!isTracePlainObject(statistics) || Object.keys(statistics).length === 0) {
             return nothing;
         }
@@ -367,7 +449,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `;
     }
 
-    _renderStructuredContent(response) {
+    _renderStructuredContent(response: SpanLlmResponseView) {
         const structured = response.structuredContent;
         const hasSummary = structured.summary.length > 0;
         const hasParsedBlocks = hasSummary
@@ -398,7 +480,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         return nothing;
     }
 
-    _renderLlmRequest(request) {
+    _renderLlmRequest(request: SpanLlmRequestView | null) {
         if (request === null) {
             return nothing;
         }
@@ -430,7 +512,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         return this._renderSection('llm_request', body);
     }
 
-    _renderLlmResponse(response) {
+    _renderLlmResponse(response: SpanLlmResponseView | null) {
         if (response === null) {
             return nothing;
         }
@@ -454,7 +536,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         return this._renderSection('llm_response', body);
     }
 
-    _renderTool(tool) {
+    _renderTool(tool: SpanToolView | null) {
         if (tool === null) {
             return nothing;
         }
@@ -481,7 +563,7 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `);
     }
 
-    _renderPrompt(prompt) {
+    _renderPrompt(prompt: SpanPromptView | null) {
         if (prompt === null) {
             return nothing;
         }
@@ -496,21 +578,21 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `);
     }
 
-    _renderState(state) {
+    _renderState(state: SpanRawParsed | null) {
         if (state === null) {
             return nothing;
         }
         return this._renderSection('state', html`${this._renderParsedBlock(state.parsed, state.raw)}`);
     }
 
-    _renderSimpleFieldSection(key, view) {
+    _renderSimpleFieldSection(key: string, view: SpanFieldView | null) {
         if (view === null) {
             return nothing;
         }
         return this._renderSection(key, this._renderFieldGrid(view.fields));
     }
 
-    _renderRaw(attrs) {
+    _renderRaw(attrs: unknown) {
         return this._renderSection('raw', html`
             <details class="raw-details" open>
                 <summary>${this.t('span_attributes.raw_attributes')}</summary>
@@ -519,15 +601,15 @@ export class PlatformSpanAttributesViewer extends PlatformElement {
         `);
     }
 
-    render() {
-        const vm = buildSpanAttributeViewModel(this.span);
+    override render(): TemplateResult {
+        const vm = buildSpanAttributeViewModel(this.span) as unknown as SpanViewModel;
         return html`
             <div class="trace-attrs">
                 ${vm.quickFacts.length > 0
-                    ? html`<div class="summary-grid">${vm.quickFacts.map((item) => this._renderField(item))}</div>`
+                    ? html`<div class="summary-grid">${vm.quickFacts.map((item: SpanFieldItem) => this._renderField(item))}</div>`
                     : nothing}
                 ${vm.metrics.length > 0
-                    ? html`<div class="metrics">${vm.metrics.map((item) => this._renderField(item, true))}</div>`
+                    ? html`<div class="metrics">${vm.metrics.map((item: SpanFieldItem) => this._renderField(item, true))}</div>`
                     : nothing}
                 ${this._renderSimpleFieldSection('error', vm.error)}
                 ${this._renderSimpleFieldSection('interrupt', vm.interrupt)}

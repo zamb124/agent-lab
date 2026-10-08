@@ -6,7 +6,10 @@
  */
 
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { OpController } from '../base/use-resource.js';
+import type { SelectController } from '../events/select-controller.js';
 import { openWorkItemDetail } from '../utils/work-item-deeplink.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
 import './platform-icon.js';
@@ -16,7 +19,21 @@ import './platform-work-item-preview.js';
 const ALLOWED_SIZES = new Set(['sm', 'md']);
 const ALLOWED_VARIANTS = new Set(['chip', 'row', 'card']);
 
-function _assigneeUserId(item) {
+export interface WorkItemLike {
+    work_item_id?: string;
+    title?: string;
+    state?: string;
+    priority?: string;
+    kind?: string;
+    due_date?: string;
+    assignment?: {
+        assignee_kind?: string;
+        user_ids?: unknown[];
+        claimed_by_user_id?: unknown;
+    };
+}
+
+function _assigneeUserId(item: WorkItemLike | null | undefined): string {
     const assignment = item && item.assignment;
     if (!assignment || typeof assignment !== 'object') {
         return '';
@@ -35,14 +52,14 @@ function _assigneeUserId(item) {
     return '';
 }
 
-function _isIsoDateLike(value) {
+function _isIsoDateLike(value: unknown): value is string {
     return typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value);
 }
 
 export class PlatformWorkItemBadge extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         workItemId: { type: String, attribute: 'work-item-id' },
         item: { attribute: false },
         size: { type: String },
@@ -54,8 +71,22 @@ export class PlatformWorkItemBadge extends PlatformElement {
         _previewAnchorRect: { state: true },
         _previewPinned: { state: true },
     };
+    declare workItemId: string;
+    declare item: WorkItemLike | null;
+    declare size: string;
+    declare variant: string;
+    declare interactive: boolean;
+    declare showPreview: boolean;
+    declare embedded: boolean;
+    declare _previewOpen: boolean;
+    declare _previewAnchorRect: DOMRect | { top: number; left: number; right: number; bottom: number; width: number; height: number } | null;
+    declare _previewPinned: boolean;
 
-    static styles = [
+    private _previewCloseTimer: number | null;
+    private _getOp: OpController;
+    private _locale: SelectController<string>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -275,12 +306,13 @@ export class PlatformWorkItemBadge extends PlatformElement {
         this._previewPinned = false;
         this._previewCloseTimer = null;
         this._getOp = this.useOp('worktracker/work_item_get');
-        this._locale = this.select((s) => (
-            typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en'
-        ));
+        this._locale = this.select((s) => {
+            const i18n = s.i18n as { locale?: string } | undefined;
+            return typeof i18n?.locale === 'string' && i18n.locale.length > 0 ? i18n.locale : 'en';
+        });
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (this.size && !ALLOWED_SIZES.has(this.size)) {
             throw new Error(`platform-work-item-badge: invalid size "${this.size}"`);
@@ -293,13 +325,13 @@ export class PlatformWorkItemBadge extends PlatformElement {
         }
     }
 
-    _resolvedItem() {
+    _resolvedItem(): WorkItemLike | null {
         if (this.item && typeof this.item === 'object') {
             return this.item;
         }
         const result = this._getOp.lastResult;
-        if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
-            return result;
+        if (result && typeof result === 'object' && typeof (result as WorkItemLike).work_item_id === 'string') {
+            return result as WorkItemLike;
         }
         return null;
     }
@@ -313,7 +345,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
             return;
         }
         const cached = this._getOp.lastResult;
-        if (cached && typeof cached === 'object' && cached.work_item_id === id) {
+        if (cached && typeof cached === 'object' && (cached as WorkItemLike).work_item_id === id) {
             return;
         }
         this._getOp.run({ work_item_id: id });
@@ -326,7 +358,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         return typeof this.workItemId === 'string' ? this.workItemId : '';
     }
 
-    _formatDue(value) {
+    _formatDue(value: unknown): string {
         if (!_isIsoDateLike(value)) {
             return '';
         }
@@ -334,7 +366,8 @@ export class PlatformWorkItemBadge extends PlatformElement {
         if (Number.isNaN(parsed.getTime())) {
             return '';
         }
-        return formatPlatformDate(parsed, this._locale.value, { day: '2-digit', month: 'short' });
+        const locale = this._locale.value;
+        return formatPlatformDate(parsed, typeof locale === 'string' ? locale : 'en', { day: '2-digit', month: 'short' });
     }
 
     _onClick() {
@@ -408,7 +441,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         openWorkItemDetail(id, this.bus, { mode: 'page' });
     }
 
-    _renderMeta(item) {
+    _renderMeta(item: WorkItemLike) {
         const priority = typeof item.priority === 'string' ? item.priority : 'normal';
         const state = typeof item.state === 'string' ? item.state : 'open';
         const kind = typeof item.kind === 'string' ? item.kind : 'generic';
@@ -434,7 +467,7 @@ export class PlatformWorkItemBadge extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const id = this._effectiveWorkItemId();
         if (!id) {
             throw new Error('platform-work-item-badge: work-item-id or .item required');

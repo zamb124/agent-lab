@@ -3,6 +3,7 @@
  */
 
 import { CoreEvents } from '../events/contract.js';
+import type { PlatformBusLike } from '../events/bus-singleton.js';
 
 const WORKTRACKER_BASE_PATH = '/worktracker';
 const WORK_ITEM_TASK_PATH_PREFIX = `${WORKTRACKER_BASE_PATH}/tasks/`;
@@ -131,7 +132,7 @@ function _resolveOpenMode(options: WorkItemDeeplinkOptions): 'page' | 'panel' {
     return 'panel';
 }
 
-export function navigateToWorkItemPage(workItemId: string, bus: { dispatch?: (...args: unknown[]) => unknown } | null | undefined, options: WorkItemDeeplinkOptions = {}): void {
+export function navigateToWorkItemPage(workItemId: string, bus: Pick<PlatformBusLike, 'dispatch'> | null | undefined, options: WorkItemDeeplinkOptions = {}): void {
     if (typeof workItemId !== 'string' || workItemId.length === 0) {
         throw new Error('navigateToWorkItemPage: workItemId required');
     }
@@ -158,7 +159,7 @@ export function navigateToWorkItemPage(workItemId: string, bus: { dispatch?: (..
     window.location.href = buildWorkItemUrl(workItemId, options);
 }
 
-export function openWorkItemDetail(workItemId: string, bus: { dispatch?: (...args: unknown[]) => unknown } | null | undefined, options: WorkItemDeeplinkOptions = {}): void {
+export function openWorkItemDetail(workItemId: string, bus: Pick<PlatformBusLike, 'dispatch'> | null | undefined, options: WorkItemDeeplinkOptions = {}): void {
     if (typeof workItemId !== 'string' || workItemId.length === 0) {
         throw new Error('openWorkItemDetail: workItemId required');
     }

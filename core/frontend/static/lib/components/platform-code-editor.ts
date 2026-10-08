@@ -2,13 +2,16 @@
  * platform-code-editor — CodeMirror viewer/editor для text/code в платформенных UI.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { CmCompartmentLike, CmEditorViewLike, CmModule } from '../codemirror/variable-extensions.js';
 import './platform-icon.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
-let _cmPromise = null;
-function loadCodeMirror() {
+let _cmPromise: Promise<CmModule> | null = null;
+function loadCodeMirror(): Promise<CmModule> {
     if (!_cmPromise) {
         _cmPromise = import(CODEMIRROR_URL);
     }
@@ -18,7 +21,7 @@ function loadCodeMirror() {
 export class PlatformCodeEditor extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         language: { type: String },
         readonly: { type: Boolean, reflect: true },
@@ -29,8 +32,27 @@ export class PlatformCodeEditor extends PlatformElement {
         /** ``(cm) => Extension[]`` — расширения потребителя (автодополнение, подсветка переменных). */
         extensionsFactory: { attribute: false },
     };
+    declare value: string;
+    declare language: string;
+    declare readonly: boolean;
+    declare showToolbar: boolean;
+    declare fillParent: boolean;
+    declare lineWrapping: boolean;
+    declare minHeight: number;
+    declare extensionsFactory: ((cm: CmModule) => unknown[]) | null;
 
-    static styles = [
+    private _cm: CmModule | null;
+    private _editorView: CmEditorViewLike | null;
+    private _readonlyCompartment: CmCompartmentLike | null;
+    private _languageCompartment: CmCompartmentLike | null;
+    private _themeCompartment: CmCompartmentLike | null;
+    private _wrappingCompartment: CmCompartmentLike | null;
+    private _initInFlight: Promise<void> | null;
+    private _themeSel: SelectController<string>;
+    private _lastTheme: string | undefined;
+    private _themeObserver: MutationObserver | null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -125,12 +147,15 @@ export class PlatformCodeEditor extends PlatformElement {
         this._themeCompartment = null;
         this._wrappingCompartment = null;
         this._initInFlight = null;
-        this._themeSel = this.select((s) => (s.theme && s.theme.mode ? s.theme.mode : 'dark'));
+        this._themeSel = this.select((s) => {
+            const theme = s.theme as { mode?: string } | undefined;
+            return theme && theme.mode ? theme.mode : 'dark';
+        });
         this._lastTheme = undefined;
         this._themeObserver = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         if (typeof MutationObserver !== 'undefined') {
             this._themeObserver = new MutationObserver(() => this._syncEditorTheme());
@@ -146,7 +171,7 @@ export class PlatformCodeEditor extends PlatformElement {
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         if (this._themeObserver) {
             this._themeObserver.disconnect();
             this._themeObserver = null;
@@ -159,7 +184,7 @@ export class PlatformCodeEditor extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('minHeight')) {
             const value = Number.isFinite(this.minHeight) ? this.minHeight : 220;
@@ -194,7 +219,7 @@ export class PlatformCodeEditor extends PlatformElement {
         this._syncEditorTheme();
     }
 
-    async _ensureEditorMounted() {
+    async _ensureEditorMounted(): Promise<void> {
         if (this._editorView) return;
         if (this._initInFlight) return this._initInFlight;
         const host = this.renderRoot.querySelector('#cm-host');
@@ -205,7 +230,7 @@ export class PlatformCodeEditor extends PlatformElement {
         return this._initInFlight;
     }
 
-    _buildLanguageExtension() {
+    _buildLanguageExtension(): unknown {
         if (!this._cm) return [];
         const lang = typeof this.language === 'string' && this.language.length > 0 ? this.language : 'text';
         if (lang === 'python' && this._cm.python) {
@@ -229,7 +254,7 @@ export class PlatformCodeEditor extends PlatformElement {
         return [];
     }
 
-    _buildWrappingExtension() {
+    _buildWrappingExtension(): unknown {
         if (!this._cm) return [];
         if (this.lineWrapping || this.language === 'json') {
             return this._cm.EditorView.lineWrapping;
@@ -237,7 +262,7 @@ export class PlatformCodeEditor extends PlatformElement {
         return [];
     }
 
-    async _init(host) {
+    async _init(host: Element): Promise<void> {
         const cm = await loadCodeMirror();
         if (!this.isConnected || this._editorView) return;
         this._cm = cm;
@@ -249,9 +274,9 @@ export class PlatformCodeEditor extends PlatformElement {
         const keymap = [
             {
                 key: 'Tab',
-                run: (view) => {
+                run: (view: CmEditorViewLike) => {
                     if (view.state.readOnly) return false;
-                    view.dispatch(view.state.replaceSelection('    '));
+                    view.dispatch(view.state.replaceSelection('    ') as object);
                     return true;
                 },
             },
@@ -260,7 +285,7 @@ export class PlatformCodeEditor extends PlatformElement {
             {
                 key: 'Mod-s',
                 run: () => {
-                    this.emit('save', { value: this._editorView.state.doc.toString() });
+                    this.emit('save', { value: this._editorView?.state.doc.toString() ?? '' });
                     return true;
                 },
             },
@@ -280,7 +305,7 @@ export class PlatformCodeEditor extends PlatformElement {
                     this._themeCompartment.of(this._buildThemeExtension()),
                     ...(typeof this.extensionsFactory === 'function' ? this.extensionsFactory(cm) : []),
                     cm.keymap.of(keymap),
-                    cm.EditorView.updateListener.of((update) => {
+                    cm.EditorView.updateListener.of((update: { docChanged: boolean; state: { doc: { toString(): string } } }) => {
                         if (!update.docChanged) return;
                         const next = update.state.doc.toString();
                         if (next !== this.value) {
@@ -294,7 +319,7 @@ export class PlatformCodeEditor extends PlatformElement {
         });
     }
 
-    _buildThemeExtension() {
+    _buildThemeExtension(): unknown[] {
         if (!this._cm) return [];
         const isLight = this._resolvedThemeMode() === 'light';
         const platformTheme = this._cm.EditorView.theme({
@@ -352,7 +377,7 @@ export class PlatformCodeEditor extends PlatformElement {
         ];
     }
 
-    _resolvedThemeMode() {
+    _resolvedThemeMode(): 'light' | 'dark' {
         const domTheme = document.documentElement.getAttribute('data-theme');
         if (domTheme === 'light' || domTheme === 'dark') {
             return domTheme;
@@ -361,7 +386,7 @@ export class PlatformCodeEditor extends PlatformElement {
         return selected === 'light' ? 'light' : 'dark';
     }
 
-    _themeSignature() {
+    _themeSignature(): string {
         return this._resolvedThemeMode();
     }
 
@@ -379,10 +404,10 @@ export class PlatformCodeEditor extends PlatformElement {
         });
     }
 
-    insertAtCursor(text) {
+    insertAtCursor(text: string): void {
         const insert = typeof text === 'string' ? text : '';
         if (this._editorView && this._cm) {
-            this._editorView.dispatch(this._editorView.state.replaceSelection(insert));
+            this._editorView.dispatch(this._editorView.state.replaceSelection(insert) as object);
             const next = this._editorView.state.doc.toString();
             this.value = next;
             this.emit('change', { value: next });
@@ -392,7 +417,7 @@ export class PlatformCodeEditor extends PlatformElement {
         this.emit('change', { value: this.value });
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="editor-root">
                 ${this.showToolbar ? html`

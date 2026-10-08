@@ -25,7 +25,7 @@ function _walk(dir) {
         const full = path.join(dir, name);
         if (statSync(full).isDirectory()) {
             out.push(..._walk(full));
-        } else if (name.endsWith('.js')) {
+        } else if (name.endsWith('.js') || name.endsWith('.ts')) {
             out.push(full);
         }
     }
@@ -33,7 +33,7 @@ function _walk(dir) {
 }
 
 const EVENTS_FILES = _walk(path.join(LIB, 'events'));
-const REDUCER_AND_FACTORY_FILES = EVENTS_FILES.filter((f) => /\/(reducers|factories)\//.test(f) && !/(_internal|_transport|register)\.js$/.test(f));
+const REDUCER_AND_FACTORY_FILES = EVENTS_FILES.filter((f) => /\/(reducers|factories)\//.test(f) && !/(_internal|_transport|register)\.(js|ts)$/.test(f));
 
 const FALLBACK_RE = /\)\s*\|\|\s*(\[\]|\{\}|null)|\?\?\s*(\[\]|\{\}|null|['"][^'"]*['"])/;
 const LEGACY_NAMES = /\b(ServiceRegistry|BaseStore|BaseService|AppEvents|Zustand)\b/;
