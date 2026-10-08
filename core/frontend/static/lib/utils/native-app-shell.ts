@@ -9,7 +9,7 @@
 
 declare global {
     interface Window {
-        Capacitor?: { isNativePlatform?: () => boolean };
+        Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
         androidBridge?: unknown;
         webkit?: { messageHandlers?: { bridge?: unknown } };
     }

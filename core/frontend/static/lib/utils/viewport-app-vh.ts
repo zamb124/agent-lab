@@ -106,7 +106,7 @@ function scheduleVisualViewportCssVars() {
 declare global {
     interface Window {
         __PLATFORM_VIEWPORT_VH_INIT__?: boolean;
-        Capacitor?: { isNativePlatform?: () => boolean };
+        Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
     }
 }
 

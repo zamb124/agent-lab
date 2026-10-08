@@ -25,7 +25,7 @@ export interface PlatformBrandBootstrap extends PlatformBrandProductLabels {
     protocol: string;
 }
 
-interface PlatformBrandApiPayload {
+export interface PlatformBrandApiPayload {
     base_domain: string;
     platform_name: string;
     support_email: string;

@@ -12,3 +12,14 @@ declare module '@capacitor/app' {
         addListener(event: string, cb: (event: { url?: string }) => void): void;
     };
 }
+
+declare module '@capacitor/push-notifications' {
+    export interface PluginListenerHandle { remove(): Promise<void> }
+    export const PushNotifications: {
+        requestPermissions(): Promise<{ receive: 'granted' | 'denied' | 'prompt' | string }>;
+        register(): Promise<void>;
+        addListener(event: 'registration', cb: (token: { value: string }) => void): Promise<PluginListenerHandle>;
+        addListener(event: 'registrationError', cb: (err: { error?: unknown }) => void): Promise<PluginListenerHandle>;
+        addListener(event: string, cb: (data: unknown) => void): Promise<PluginListenerHandle>;
+    };
+}
