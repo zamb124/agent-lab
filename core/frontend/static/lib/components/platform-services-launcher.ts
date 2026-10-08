@@ -4,8 +4,11 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { PLATFORM_SERVICES } from '../utils/platform-services-catalog.js';
+import type { PlatformServiceEntry } from '../utils/platform-services-catalog.js';
+import type { SelectController } from '../events/select-controller.js';
 import { buildServiceEntryUrl, isStandalonePwaMode } from '../utils/build-service-entry-url.js';
 
 const HEALTH_DOT = {
@@ -18,7 +21,7 @@ const SYSTEM_ONLY_SERVICE_IDS = new Set(['grafana', 'litserve']);
 export class PlatformServicesLauncher extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         /** menu | page | compact */
         layout: { type: String },
         /** default: сам переход; event-only: только service-launch (модалка). */
@@ -28,8 +31,15 @@ export class PlatformServicesLauncher extends PlatformElement {
         /** Непустой массив id из каталога — только эти плитки, в заданном порядке. */
         includeServiceIds: { type: Array, attribute: false },
     };
+    declare layout: string;
+    declare navigateMode: string;
+    declare healthByServiceId: Record<string, string> | null;
+    declare disabledById: Record<string, boolean> | null;
+    declare includeServiceIds: string[] | null;
 
-    static styles = [
+    private _activeCompanyId: SelectController<string | undefined>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -198,15 +208,15 @@ export class PlatformServicesLauncher extends PlatformElement {
         this.healthByServiceId = null;
         this.disabledById = null;
         this.includeServiceIds = null;
-        this._activeCompanyId = this.select((s) => s.auth.activeCompanyId);
+        this._activeCompanyId = this.select((s) => (s.auth as { activeCompanyId?: string } | undefined)?.activeCompanyId);
     }
 
-    _servicesToRender() {
+    _servicesToRender(): readonly PlatformServiceEntry[] {
         const activeCompanyId = this._activeCompanyId.value;
         const isSystemCompany = activeCompanyId === 'system';
         const ids = this.includeServiceIds;
         if (Array.isArray(ids) && ids.length > 0) {
-            return ids.map((id) => {
+            return ids.map((id: string) => {
                 const s = PLATFORM_SERVICES.find((x) => x.id === id);
                 if (!s) {
                     throw new Error(`platform-services-launcher: unknown service id "${id}"`);
@@ -217,7 +227,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         return PLATFORM_SERVICES.filter((s) => isSystemCompany || !SYSTEM_ONLY_SERVICE_IDS.has(s.id));
     }
 
-    _healthForItem(id) {
+    _healthForItem(id: string): string {
         const m = this.healthByServiceId;
         if (m && typeof m === 'object' && typeof m[id] === 'string') {
             return m[id];
@@ -228,7 +238,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         return 'healthy';
     }
 
-    _disabledForItem(id) {
+    _disabledForItem(id: string): boolean {
         const m = this.disabledById;
         if (m && typeof m === 'object' && typeof m[id] === 'boolean') {
             return m[id];
@@ -236,7 +246,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         return id === 'litserve' && this._activeCompanyId.value !== 'system';
     }
 
-    _navigate(serviceId) {
+    _navigate(serviceId: string): void {
         if (this.navigateMode === 'event-only') {
             this.emit('service-launch', { serviceId });
             return;
@@ -249,7 +259,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         }
     }
 
-    _onTileClick(e, serviceId) {
+    _onTileClick(e: Event, serviceId: string): void {
         e.preventDefault();
         e.stopPropagation();
         if (this._disabledForItem(serviceId)) {
@@ -258,11 +268,11 @@ export class PlatformServicesLauncher extends PlatformElement {
         this._navigate(serviceId);
     }
 
-    _renderTile(svc) {
+    _renderTile(svc: PlatformServiceEntry): TemplateResult {
         const id = svc.id;
         const disabled = this._disabledForItem(id);
         const healthState = this._healthForItem(id);
-        const dotColor = HEALTH_DOT[healthState];
+        const dotColor = (HEALTH_DOT as Record<string, string | undefined>)[healthState] || 'var(--text-tertiary)';
         const brandStyle = `--brand-from: ${svc.brandFrom}; --brand-to: ${svc.brandTo}; --health-dot-color: ${dotColor};`;
         const title = this.t(svc.nameKey, null, 'platform');
         const iconBlock = html`
@@ -288,7 +298,7 @@ export class PlatformServicesLauncher extends PlatformElement {
                     data-service-id=${id}
                     style=${brandStyle}
                     aria-label=${title}
-                    @click=${(e) => this._onTileClick(e, id)}
+                    @click=${(e: Event) => this._onTileClick(e, id)}
                 >
                     ${iconBlock}
                     ${label}
@@ -303,7 +313,7 @@ export class PlatformServicesLauncher extends PlatformElement {
                 href=${href}
                 aria-label=${title}
                 style=${brandStyle}
-                @click=${(e) => {
+                @click=${(e: Event) => {
                     e.stopPropagation();
                     if (isStandalonePwaMode()) {
                         e.preventDefault();
@@ -317,7 +327,7 @@ export class PlatformServicesLauncher extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const rows = this._servicesToRender();
         return html`
             <div class="grid" part="grid">

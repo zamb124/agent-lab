@@ -14,9 +14,15 @@
  */
 
 import { html, css, unsafeCSS } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
 import { NOTIFICATIONS_EVENTS } from '../events/reducers/notifications.js';
+import type { NotificationItem } from '../events/reducers/notifications.js';
+import type { PwaState } from '../events/reducers/pwa.js';
+import type { I18nStateLike } from '../events/effects/i18n.effect.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { PlatformPopover } from './platform-popover.js';
 import { MAIL_EVENTS } from '../events/reducers/mail.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
 import { translate } from '../events/effects/i18n.effect.js';
@@ -28,6 +34,16 @@ import './platform-work-item-badge.js';
 const PANEL_WIDTH = 360;
 const PANEL_GAP = 8;
 const PANEL_VIEWPORT_PADDING = 8;
+
+interface NotificationAction {
+    href: string;
+    label: string;
+    url?: string;
+    action_url?: string | null;
+    label_i18n_key?: string | null;
+    label_i18n_vars?: Record<string, unknown> | null;
+    data?: Record<string, unknown>;
+}
 
 const NOTIF_PANEL_CSS = `
         .platform-notif-portal {
@@ -113,12 +129,18 @@ const NOTIF_PANEL_CSS = `
 export class PlatformNotificationManager extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         _panelOpen: { state: true },
         _anchor: { state: true },
     };
+    declare _panelOpen: boolean;
+    declare _anchor: HTMLElement | null;
 
-    static styles = [
+    private _notifSelect: SelectController<{ list: NotificationItem[]; unread: number }>;
+    private _pushSelect: SelectController<{ permission: PwaState['pushPermission']; registered: boolean }>;
+    private _i18nSelect: SelectController<I18nStateLike>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         unsafeCSS(NOTIF_PANEL_CSS),
         css`
@@ -151,20 +173,22 @@ export class PlatformNotificationManager extends PlatformElement {
     constructor() {
         super();
         this._panelOpen = false;
-        this._notifSelect = this.select((s) => ({
-            list: s.notifications.list,
-            unread: s.notifications.unread,
-        }));
-        this._pushSelect = this.select((s) => ({
-            permission: s.pwa.pushPermission,
-            registered: s.pwa.pushRegistered,
-        }));
-        this._i18nSelect = this.select((s) => s.i18n);
-        /** @type {HTMLElement | null} */
+        this._notifSelect = this.select((s) => {
+            const notif = s.notifications as { list?: NotificationItem[]; unread?: number } | undefined;
+            return { list: notif?.list || [], unread: notif?.unread || 0 };
+        });
+        this._pushSelect = this.select((s) => {
+            const pwa = s.pwa as PwaState | undefined;
+            return {
+                permission: pwa?.pushPermission || 'default',
+                registered: pwa?.pushRegistered === true,
+            };
+        });
+        this._i18nSelect = this.select((s) => s.i18n as I18nStateLike);
         this._anchor = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         const push = this._pushSelect.value;
         if (push && push.permission === 'default') {
@@ -172,7 +196,7 @@ export class PlatformNotificationManager extends PlatformElement {
         }
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated && super.updated(changed);
         if (this._anchor === null) {
             const bell = this.renderRoot?.querySelector?.('.bell');
@@ -181,20 +205,21 @@ export class PlatformNotificationManager extends PlatformElement {
             }
         }
         if (this._panelOpen) {
-            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+            const popover = this.renderRoot?.querySelector?.('platform-popover') as PlatformPopover | null;
+            popover?.reposition();
         }
     }
 
-    _togglePanel(e) {
+    _togglePanel(e: Event) {
         if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         this._panelOpen = !this._panelOpen;
     }
 
-    _onPopoverDismiss() {
+    _onPopoverDismiss(): void {
         this._panelOpen = false;
     }
 
-    _onItemClick(item) {
+    _onItemClick(item: NotificationItem): void {
         this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
         if (item.scope === 'mail' && item.kind === 'mail_new_message') {
             this._openMailFromNotification(item);
@@ -207,8 +232,8 @@ export class PlatformNotificationManager extends PlatformElement {
         }
     }
 
-    _openMailFromNotification(item) {
-        const data = item && item.data && typeof item.data === 'object' ? item.data : {};
+    _openMailFromNotification(item: NotificationItem): void {
+        const data: Record<string, unknown> = item && item.data && typeof item.data === 'object' ? item.data : {};
         const bindingId = typeof data.mailbox_binding_id === 'string' ? data.mailbox_binding_id : '';
         const uid = typeof data.uid === 'string' ? data.uid : '';
         if (bindingId.length === 0 || uid.length === 0) {
@@ -221,7 +246,7 @@ export class PlatformNotificationManager extends PlatformElement {
         });
     }
 
-    _onActionClick(event, item) {
+    _onActionClick(event: Event, item: NotificationItem): void {
         event.preventDefault();
         event.stopPropagation();
         this.dispatch(NOTIFICATIONS_EVENTS.READ, { id: item.id });
@@ -233,33 +258,36 @@ export class PlatformNotificationManager extends PlatformElement {
         this._panelOpen = false;
     }
 
-    _dismissAll() {
+    _dismissAll(): void {
         this.dispatch(NOTIFICATIONS_EVENTS.DISMISS_ALL, null);
     }
 
-    _splitQualifiedKey(raw) {
+    _splitQualifiedKey(raw: string | null | undefined): { key: string; namespace?: string } | null {
         if (typeof raw !== 'string' || raw.length === 0) return null;
         const [nsOrKey, ...rest] = raw.split(':');
         if (rest.length === 0) return { key: raw, namespace: undefined };
         return { key: rest.join(':'), namespace: nsOrKey };
     }
 
-    _translateKey(raw, vars) {
+    _translateKey(raw: string | null | undefined, vars?: Record<string, string | number>): string {
         const parsed = this._splitQualifiedKey(raw);
         if (!parsed) return '';
         const state = this._i18nSelect.value;
+        if (!state) return '';
         return translate(state, parsed.key, mergePlatformI18nVars(vars || undefined), parsed.namespace);
     }
 
-    _looksLikeI18nKey(value) {
+    _looksLikeI18nKey(value: unknown): boolean {
         return typeof value === 'string'
             && /^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+|\.[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)$/i.test(value);
     }
 
-    _resolveNotifText(item, field) {
+    _resolveNotifText(item: NotificationItem, field: 'title' | 'message'): string {
+        const i18nVars = (item[`${field}_i18n_vars`] || item.data || undefined) as Record<string, string | number> | undefined;
         const text = typeof item[field] === 'string' ? item[field] : '';
-        const key = typeof item[`${field}_i18n_key`] === 'string' ? item[`${field}_i18n_key`] : '';
-        const vars = item[`${field}_i18n_vars`] || item.data || undefined;
+        const keyRaw = item[`${field}_i18n_key`];
+        const key = typeof keyRaw === 'string' ? keyRaw : '';
+        const vars = i18nVars;
         if (key.length > 0) {
             const resolved = this._translateKey(key, vars);
             if (resolved.length > 0 && resolved !== key) return resolved;
@@ -272,7 +300,7 @@ export class PlatformNotificationManager extends PlatformElement {
         return text;
     }
 
-    _safeHref(raw) {
+    _safeHref(raw: unknown): string {
         if (typeof raw !== 'string') return '';
         const href = raw.trim();
         if (href.length === 0) return '';
@@ -281,7 +309,7 @@ export class PlatformNotificationManager extends PlatformElement {
         return '';
     }
 
-    _workItemIdFromNotification(item) {
+    _workItemIdFromNotification(item: NotificationItem): string {
         if (!item || item.service !== 'worktracker') {
             return '';
         }
@@ -298,9 +326,9 @@ export class PlatformNotificationManager extends PlatformElement {
         return typeof workItemId === 'string' ? workItemId : '';
     }
 
-    _resolveActionLabel(action) {
+    _resolveActionLabel(action: NotificationAction): string {
         const key = typeof action.label_i18n_key === 'string' ? action.label_i18n_key : '';
-        const vars = action.label_i18n_vars || action.data || undefined;
+        const vars = (action.label_i18n_vars || action.data || undefined) as Record<string, string | number> | undefined;
         if (key.length > 0) {
             const resolved = this._translateKey(key, vars);
             if (resolved.length > 0 && resolved !== key) return resolved;
@@ -311,15 +339,15 @@ export class PlatformNotificationManager extends PlatformElement {
         return this.t('notifications.open');
     }
 
-    _notificationActions(item) {
-        const out = [];
-        const seen = new Set();
-        const add = (raw) => {
+    _notificationActions(item: NotificationItem): NotificationAction[] {
+        const out: NotificationAction[] = [];
+        const seen = new Set<string>();
+        const add = (raw: Partial<NotificationAction> | null | undefined) => {
             if (!raw || typeof raw !== 'object') return;
             const href = this._safeHref(raw.url || raw.href || raw.action_url);
             if (!href || seen.has(href)) return;
             seen.add(href);
-            out.push({ ...raw, href, label: this._resolveActionLabel(raw) });
+            out.push({ ...raw, href, label: this._resolveActionLabel(raw as NotificationAction) } as NotificationAction);
         };
         if (item.scope === 'mail' && item.kind === 'mail_new_message') {
             add({
@@ -330,17 +358,17 @@ export class PlatformNotificationManager extends PlatformElement {
             return out;
         }
         if (Array.isArray(item.actions)) {
-            for (const action of item.actions) add(action);
+            for (const action of item.actions) add(action as Partial<NotificationAction>);
         }
         add({
-            url: item.action_url,
+            url: item.action_url || undefined,
             label: item.action_label,
-            label_i18n_key: item.action_label_i18n_key,
+            label_i18n_key: item.action_label_i18n_key || undefined,
         });
         return out;
     }
 
-    _renderPanel() {
+    _renderPanel(): TemplateResult {
         const { list = [], unread: _unread = 0 } = this._notifSelect.value || {};
         const title = this.t('notifications.title');
         const dismissAll = this.t('notifications.dismiss_all');
@@ -358,7 +386,7 @@ export class PlatformNotificationManager extends PlatformElement {
             </div>
             ${list.length === 0
                 ? html`<div class="platform-notif-portal__empty">${empty}</div>`
-                : list.map((n) => {
+                : list.map((n: NotificationItem) => {
                     const titleText = this._resolveNotifText(n, 'title');
                     const messageText = this._resolveNotifText(n, 'message');
                     const actions = this._notificationActions(n);
@@ -383,7 +411,7 @@ export class PlatformNotificationManager extends PlatformElement {
                                     ${actions.map((action) => html`
                                         <a class="platform-notif-portal__item-link"
                                            href=${action.href}
-                                           @click=${(event) => this._onActionClick(event, n)}>
+                                           @click=${(event: Event) => this._onActionClick(event, n)}>
                                             ${action.label}
                                         </a>
                                     `)}
@@ -397,7 +425,7 @@ export class PlatformNotificationManager extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const { unread = 0 } = this._notifSelect.value || {};
         return html`
             <button class="bell"

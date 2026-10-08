@@ -3,27 +3,37 @@
  */
 
 import { html, css, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './fields/platform-field.js';
 
-function _normalizeEntry(raw) {
+export interface VariableMapEntry {
+    value: unknown;
+    secret: boolean;
+    public?: boolean;
+    title?: string;
+    description?: string;
+}
+
+function _normalizeEntry(raw: unknown): VariableMapEntry {
     if (raw === null || raw === undefined) {
         return { value: '', secret: false };
     }
     if (typeof raw === 'object' && !Array.isArray(raw) && 'value' in raw) {
+        const record = raw as Record<string, unknown>;
         return {
-            value: raw.value,
-            secret: Boolean(raw.secret),
-            public: Boolean(raw.public),
-            title: typeof raw.title === 'string' ? raw.title : undefined,
-            description: typeof raw.description === 'string' ? raw.description : undefined,
+            value: record.value,
+            secret: Boolean(record.secret),
+            public: Boolean(record.public),
+            title: typeof record.title === 'string' ? record.title : undefined,
+            description: typeof record.description === 'string' ? record.description : undefined,
         };
     }
     return { value: raw, secret: false };
 }
 
-function _stringifyValue(entry) {
+function _stringifyValue(entry: VariableMapEntry | null | undefined): string {
     if (!entry || typeof entry !== 'object') {
         return '';
     }
@@ -33,7 +43,7 @@ function _stringifyValue(entry) {
     return _editValue(entry);
 }
 
-function _editValue(entry) {
+function _editValue(entry: VariableMapEntry | null | undefined): string {
     if (!entry || typeof entry !== 'object') {
         return '';
     }
@@ -47,11 +57,11 @@ function _editValue(entry) {
     return JSON.stringify(value);
 }
 
-export function variableMapToPromptValues(variables) {
+export function variableMapToPromptValues(variables: unknown): Record<string, unknown> {
     if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
         return {};
     }
-    const promptValues = {};
+    const promptValues: Record<string, unknown> = {};
     for (const [key, raw] of Object.entries(variables)) {
         const entry = _normalizeEntry(raw);
         promptValues[key] = entry.value;
@@ -62,14 +72,21 @@ export function variableMapToPromptValues(variables) {
 export class PlatformVariablesPanel extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         variables: { type: Object, attribute: false },
         readonly: { type: Boolean, reflect: true },
         compact: { type: Boolean, reflect: true },
         sectionTitle: { type: String, attribute: 'section-title' },
     };
+    declare variables: Record<string, unknown>;
+    declare readonly: boolean;
+    declare compact: boolean;
+    declare sectionTitle: string;
 
-    static styles = css`
+    private _valueDrafts: Record<string, string>;
+    private _keyDrafts: Record<string, string>;
+
+    static override styles: CSSResultGroup = css`
         :host {
             display: block;
         }
@@ -183,16 +200,18 @@ export class PlatformVariablesPanel extends PlatformElement {
         this._keyDrafts = {};
     }
 
-    _displayKey(key) {
-        if (Object.prototype.hasOwnProperty.call(this._keyDrafts, key)) {
-            return this._keyDrafts[key];
+    _displayKey(key: string): string {
+        const draft = this._keyDrafts[key];
+        if (Object.prototype.hasOwnProperty.call(this._keyDrafts, key) && typeof draft === 'string') {
+            return draft;
         }
         return key;
     }
 
-    _displayValue(key, entry) {
-        if (Object.prototype.hasOwnProperty.call(this._valueDrafts, key)) {
-            return this._valueDrafts[key];
+    _displayValue(key: string, entry: VariableMapEntry): string {
+        const draft = this._valueDrafts[key];
+        if (Object.prototype.hasOwnProperty.call(this._valueDrafts, key) && typeof draft === 'string') {
+            return draft;
         }
         if (entry.secret && this.readonly) {
             return _stringifyValue(entry);
@@ -200,7 +219,7 @@ export class PlatformVariablesPanel extends PlatformElement {
         return _editValue(entry);
     }
 
-    _setValueDraft(key, value) {
+    _setValueDraft(key: string, value: unknown): void {
         if (typeof key !== 'string' || typeof value !== 'string') {
             return;
         }
@@ -208,7 +227,7 @@ export class PlatformVariablesPanel extends PlatformElement {
         this.requestUpdate();
     }
 
-    _setKeyDraft(key, value) {
+    _setKeyDraft(key: string, value: unknown): void {
         if (typeof key !== 'string' || typeof value !== 'string') {
             return;
         }
@@ -216,11 +235,12 @@ export class PlatformVariablesPanel extends PlatformElement {
         this.requestUpdate();
     }
 
-    _commitValueDraft(key) {
+    _commitValueDraft(key: string): void {
         if (!Object.prototype.hasOwnProperty.call(this._valueDrafts, key)) {
             return;
         }
         const value = this._valueDrafts[key];
+        if (typeof value !== 'string') return;
         const nextDrafts = { ...this._valueDrafts };
         delete nextDrafts[key];
         this._valueDrafts = nextDrafts;
@@ -230,46 +250,46 @@ export class PlatformVariablesPanel extends PlatformElement {
         }
     }
 
-    _commitKeyDraft(key) {
+    _commitKeyDraft(key: string): void {
         if (!Object.prototype.hasOwnProperty.call(this._keyDrafts, key)) {
             return;
         }
         const value = this._keyDrafts[key];
+        if (typeof value !== 'string') return;
         const nextDrafts = { ...this._keyDrafts };
         delete nextDrafts[key];
         this._keyDrafts = nextDrafts;
         this._updateKey(key, value);
     }
 
-    _commitRowDrafts(key) {
+    _commitRowDrafts(key: string): void {
         this._commitValueDraft(key);
         this._commitKeyDraft(key);
     }
 
-    /** @param {FocusEvent} e */
-    _onFieldFocusOut(key, container, commitFn, e) {
+    _onFieldFocusOut(key: string, container: EventTarget | null, commitFn: (key: string) => void, e: FocusEvent) {
         const relatedTarget = e.relatedTarget;
-        if (relatedTarget instanceof Node && container.contains(relatedTarget)) {
+        if (container instanceof Node && relatedTarget instanceof Node && container.contains(relatedTarget)) {
             return;
         }
         commitFn.call(this, key);
     }
 
-    _emitChange(nextVariables) {
+    _emitChange(nextVariables: Record<string, unknown>): void {
         this.emit('variables-change', { variables: nextVariables });
     }
 
-    _entries() {
+    _entries(): Array<{ key: string; entry: VariableMapEntry }> {
         if (!this.variables || typeof this.variables !== 'object' || Array.isArray(this.variables)) {
             return [];
         }
         return Object.entries(this.variables).map(([key, raw]) => ({
             key,
             entry: _normalizeEntry(raw),
-        }));
+        })) as Array<{ key: string; entry: VariableMapEntry }>;
     }
 
-    _updateKey(oldKey, newKey) {
+    _updateKey(oldKey: string, newKey: string): void {
         if (typeof oldKey !== 'string' || typeof newKey !== 'string') {
             return;
         }
@@ -285,14 +305,15 @@ export class PlatformVariablesPanel extends PlatformElement {
         delete next[oldKey];
         if (Object.prototype.hasOwnProperty.call(this._valueDrafts, oldKey)) {
             const nextValueDrafts = { ...this._valueDrafts };
-            nextValueDrafts[trimmed] = nextValueDrafts[oldKey];
+            const draft = nextValueDrafts[oldKey];
+            if (typeof draft === 'string') nextValueDrafts[trimmed] = draft;
             delete nextValueDrafts[oldKey];
             this._valueDrafts = nextValueDrafts;
         }
         this._emitChange(next);
     }
 
-    _updateValue(key, value) {
+    _updateValue(key: string, value: string): void {
         const next = { ...this.variables };
         const entry = _normalizeEntry(next[key]);
         entry.value = value;
@@ -300,7 +321,7 @@ export class PlatformVariablesPanel extends PlatformElement {
         this._emitChange(next);
     }
 
-    _toggleSecret(key) {
+    _toggleSecret(key: string): void {
         this._commitRowDrafts(key);
         const next = { ...this.variables };
         const entry = _normalizeEntry(next[key]);
@@ -309,7 +330,7 @@ export class PlatformVariablesPanel extends PlatformElement {
         this._emitChange(next);
     }
 
-    _remove(key) {
+    _remove(key: string): void {
         this._commitRowDrafts(key);
         const next = { ...this.variables };
         delete next[key];
@@ -334,7 +355,7 @@ export class PlatformVariablesPanel extends PlatformElement {
         this._emitChange(next);
     }
 
-    render() {
+    override render(): TemplateResult {
         const entries = this._entries();
         const sectionTitle = typeof this.sectionTitle === 'string' ? this.sectionTitle.trim() : '';
         return html`
@@ -367,7 +388,7 @@ export class PlatformVariablesPanel extends PlatformElement {
                         <div class="row">
                             <div
                                 class="field-key"
-                                @focusout=${(e) => this._onFieldFocusOut(key, e.currentTarget, this._commitKeyDraft, e)}
+                                @focusout=${(e: FocusEvent) => this._onFieldFocusOut(key, e.currentTarget, this._commitKeyDraft, e)}
                             >
                                 <platform-field
                                     type="string"
@@ -378,15 +399,16 @@ export class PlatformVariablesPanel extends PlatformElement {
                                     .value=${this._displayKey(key)}
                                     .placeholder=${this.t('variables_panel.key_placeholder')}
                                     ?disabled=${this.readonly}
-                                    @change=${(e) => {
-                                        const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+                                    @change=${(e: CustomEvent) => {
+                                        const detail = e.detail as { value?: unknown } | undefined;
+                                        const value = detail && typeof detail.value === 'string' ? detail.value : '';
                                         this._setKeyDraft(key, value);
                                     }}
                                 ></platform-field>
                             </div>
                             <div
                                 class="field-value"
-                                @focusout=${(e) => this._onFieldFocusOut(key, e.currentTarget, this._commitValueDraft, e)}
+                                @focusout=${(e: FocusEvent) => this._onFieldFocusOut(key, e.currentTarget, this._commitValueDraft, e)}
                             >
                                 <platform-field
                                     type="string"
@@ -397,8 +419,9 @@ export class PlatformVariablesPanel extends PlatformElement {
                                     .placeholder=${this.t('variables_panel.value_placeholder')}
                                     input-type=${entry.secret ? 'password' : 'text'}
                                     ?disabled=${this.readonly}
-                                    @change=${(e) => {
-                                        const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+                                    @change=${(e: CustomEvent) => {
+                                        const detail = e.detail as { value?: unknown } | undefined;
+                                        const value = detail && typeof detail.value === 'string' ? detail.value : '';
                                         this._setValueDraft(key, value);
                                     }}
                                 ></platform-field>

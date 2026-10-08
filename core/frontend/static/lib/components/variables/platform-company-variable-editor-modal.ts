@@ -3,43 +3,69 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformFormModal } from '../glass-form-modal.js';
 import { registerModalKind } from '../../utils/modal-registry.js';
+import type { ResourceItem } from '../../events/factories/resource-collection.js';
+import type { ResourceController } from '../../base/use-resource.js';
 import '../fields/platform-field.js';
 import './platform-variable-value-editor.js';
 import './platform-variable-scopes-editor.js';
 import './platform-variable-secret-policy.js';
 import './platform-variable-resolve-preview.js';
 
-function _defaultPayload() {
+interface VariableMatchEntry {
+    field?: string;
+    op?: string;
+    ref_key?: string | null;
+    value?: unknown;
+}
+
+interface VariableScope {
+    value_kind: 'static' | 'expression';
+    value: string;
+    expression: string;
+    priority: number;
+    match: VariableMatchEntry[];
+}
+
+interface VariablePayload {
+    base: { value_kind: 'static' | 'expression'; value: string; expression: string };
+    scopes: VariableScope[];
+}
+
+function _defaultPayload(): VariablePayload {
     return {
         base: { value_kind: 'static', value: '', expression: '' },
         scopes: [],
     };
 }
 
-function _payloadFromItem(item) {
-    if (!item || !item.payload) {
+function _payloadFromItem(item: ResourceItem | null | undefined): VariablePayload {
+    const rawPayload = item?.payload as { base?: Record<string, unknown>; scopes?: unknown } | undefined;
+    if (!rawPayload) {
         return _defaultPayload();
     }
-    const base = item.payload.base || {};
-    const scopes = Array.isArray(item.payload.scopes) ? item.payload.scopes.map((scope) => ({
-        value_kind: scope.value_kind === 'expression' ? 'expression' : 'static',
-        value: scope.value ?? '',
-        expression: scope.expression ?? '',
-        priority: typeof scope.priority === 'number' ? scope.priority : 0,
-        match: Array.isArray(scope.match) ? scope.match.map((entry) => ({
-            field: entry.field,
-            op: entry.op ?? 'eq',
-            ref_key: entry.ref_key ?? null,
-            value: entry.value ?? '',
-        })) : [],
-    })) : [];
+    const base = rawPayload.base || {};
+    const scopes: VariableScope[] = Array.isArray(rawPayload.scopes)
+        ? (rawPayload.scopes as Array<Record<string, unknown>>).map((scope) => ({
+            value_kind: scope.value_kind === 'expression' ? 'expression' : 'static',
+            value: typeof scope.value === 'string' ? scope.value : String(scope.value ?? ''),
+            expression: typeof scope.expression === 'string' ? scope.expression : '',
+            priority: typeof scope.priority === 'number' ? scope.priority : 0,
+            match: Array.isArray(scope.match) ? (scope.match as VariableMatchEntry[]).map((entry) => ({
+                field: entry.field,
+                op: entry.op ?? 'eq',
+                ref_key: entry.ref_key ?? null,
+                value: entry.value ?? '',
+            })) : [],
+        }))
+        : [];
     return {
         base: {
             value_kind: base.value_kind === 'expression' ? 'expression' : 'static',
             value: base.value === null || base.value === undefined ? '' : String(base.value),
-            expression: base.expression ?? '',
+            expression: typeof base.expression === 'string' ? base.expression : '',
         },
         scopes,
     };
@@ -49,7 +75,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
     static modalKind = 'platform.company_variable_editor';
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformFormModal.properties,
         variableKey: { type: String, attribute: 'variable-key' },
         _key: { state: true },
@@ -62,8 +88,21 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         _sharedForExecution: { state: true },
         _payload: { state: true },
     };
+    declare variableKey: string;
+    declare _key: string;
+    declare _title: string;
+    declare _description: string;
+    declare _order: string;
+    declare _groups: string;
+    declare _public: boolean;
+    declare _secret: boolean;
+    declare _sharedForExecution: boolean;
+    declare _payload: VariablePayload;
 
-    static styles = [
+    private _loadSeq: number;
+    private _variables: ResourceController;
+
+    static override styles: CSSResultGroup = [
         ...(PlatformFormModal.styles ? [PlatformFormModal.styles] : []),
         css`
             .section {
@@ -98,7 +137,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._variables = this.useResource('secrets/variables');
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('variableKey')) {
             if (this.variableKey) {
@@ -122,19 +161,19 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._payload = _defaultPayload();
     }
 
-    _applyItem(item) {
-        this._key = item.variable_key;
-        this._title = item.title ?? '';
-        this._description = item.description ?? '';
+    _applyItem(item: ResourceItem): void {
+        this._key = typeof item.variable_key === 'string' ? item.variable_key : '';
+        this._title = typeof item.title === 'string' ? item.title : '';
+        this._description = typeof item.description === 'string' ? item.description : '';
         this._order = item.order === null || item.order === undefined ? '' : String(item.order);
-        this._groups = Array.isArray(item.groups) ? item.groups.join(', ') : '';
+        this._groups = Array.isArray(item.groups) ? (item.groups as unknown[]).join(', ') : '';
         this._public = Boolean(item.public);
         this._secret = Boolean(item.secret);
         this._sharedForExecution = Boolean(item.shared_for_execution);
         this._payload = _payloadFromItem(item);
     }
 
-    async _loadExisting(variableKey) {
+    async _loadExisting(variableKey: string): Promise<void> {
         const seq = ++this._loadSeq;
         const cached = this._variables.byId[variableKey];
         if (cached) {
@@ -147,17 +186,17 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         this._applyItem(item);
     }
 
-    renderHeader() {
+    override renderHeader() {
         return html`<h3>${this.t(this.variableKey ? 'editor.title_edit' : 'editor.title_create')}</h3>`;
     }
 
-    _buildWritePayload() {
+    _buildWritePayload(): Record<string, unknown> {
         const key = this.variableKey || this._key.trim();
         if (!key) {
             throw new Error('platform-company-variable-editor-modal: variable_key required');
         }
         const orderRaw = this._order.trim();
-        let order = null;
+        let order: number | null = null;
         if (orderRaw !== '') {
             order = Number(orderRaw);
             if (Number.isNaN(order)) {
@@ -175,7 +214,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                 value: base.value_kind === 'static' ? base.value : null,
                 expression: base.value_kind === 'expression' ? base.expression : null,
             },
-            scopes: this._payload.scopes.map((scope) => ({
+            scopes: this._payload.scopes.map((scope: VariableScope) => ({
                 value_kind: scope.value_kind,
                 value: scope.value_kind === 'static' ? scope.value : null,
                 expression: scope.value_kind === 'expression' ? scope.expression : null,
@@ -196,13 +235,13 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
         };
     }
 
-    async handleSubmit() {
+    override async handleSubmit(): Promise<void> {
         const body = this._buildWritePayload();
         await this._variables.create(body);
         this.closeAfterSave();
     }
 
-    renderBody() {
+    override renderBody() {
         const editing = Boolean(this.variableKey);
         return html`
             <section class="section">
@@ -214,7 +253,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         .label=${this.t('editor.field_key')}
                         .value=${this._key}
                         ?disabled=${editing}
-                        @change=${(e) => {
+                        @change=${(e: CustomEvent) => {
                             if (!editing) {
                                 this._key = typeof e.detail.value === 'string' ? e.detail.value : '';
                                 this.isDirty = true;
@@ -228,7 +267,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('editor.field_title')}
                         .value=${this._title}
-                        @change=${(e) => { this._title = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._title = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
                     ></platform-field>
                 </div>
                 <div class="field">
@@ -237,7 +276,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('editor.field_description')}
                         .value=${this._description}
-                        @change=${(e) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._description = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
                     ></platform-field>
                 </div>
                 <div class="field">
@@ -246,7 +285,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('editor.field_order')}
                         .value=${this._order}
-                        @change=${(e) => { this._order = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._order = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
                     ></platform-field>
                 </div>
                 <div class="field">
@@ -255,7 +294,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('editor.field_groups')}
                         .value=${this._groups}
-                        @change=${(e) => { this._groups = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._groups = typeof e.detail.value === 'string' ? e.detail.value : ''; this.isDirty = true; }}
                     ></platform-field>
                 </div>
             </section>
@@ -266,8 +305,8 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                     .valueKind=${this._payload.base.value_kind}
                     .value=${this._payload.base.value}
                     .expression=${this._payload.base.expression}
-                    @change=${(e) => {
-                        this._payload = { ...this._payload, base: { ...this._payload.base, ...e.detail } };
+                    @change=${(e: CustomEvent) => {
+                        this._payload = { ...this._payload, base: { ...this._payload.base, ...(e.detail as Record<string, unknown>) } } as VariablePayload;
                         this.isDirty = true;
                     }}
                 ></platform-variable-value-editor>
@@ -277,8 +316,8 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                 <h4 class="section-title">${this.t('editor.section_scopes')}</h4>
                 <platform-variable-scopes-editor
                     .scopes=${this._payload.scopes}
-                    @change=${(e) => {
-                        this._payload = { ...this._payload, scopes: e.detail.scopes };
+                    @change=${(e: CustomEvent) => {
+                        this._payload = { ...this._payload, scopes: e.detail.scopes as VariableScope[] };
                         this.isDirty = true;
                     }}
                 ></platform-variable-scopes-editor>
@@ -289,7 +328,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                 <platform-variable-secret-policy
                     .secret=${this._secret}
                     .sharedForExecution=${this._sharedForExecution}
-                    @change=${(e) => {
+                    @change=${(e: CustomEvent) => {
                         this._secret = Boolean(e.detail.secret);
                         this._sharedForExecution = Boolean(e.detail.shared_for_execution);
                         this.isDirty = true;
@@ -301,7 +340,7 @@ export class PlatformCompanyVariableEditorModal extends PlatformFormModal {
                         mode="edit"
                         .label=${this.t('editor.field_public')}
                         .value=${this._public}
-                        @change=${(e) => { this._public = Boolean(e.detail.value); this.isDirty = true; }}
+                        @change=${(e: CustomEvent) => { this._public = Boolean(e.detail.value); this.isDirty = true; }}
                     ></platform-field>
                 </div>
             </section>

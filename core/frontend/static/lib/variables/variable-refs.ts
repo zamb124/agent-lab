@@ -3,32 +3,29 @@
  * No DOM / HTTP — preview values come from parent props only.
  */
 
-/** @typedef {'var' | 'state' | 'brace'} VariableRefKind */
-/** @typedef {'resolved' | 'undefined' | 'runtime_only'} VariablePreviewStatus */
+export type VariableRefKind = 'var' | 'state' | 'brace';
+export type VariablePreviewStatus = 'resolved' | 'undefined' | 'runtime_only';
 
-/**
- * @typedef {object} VariableCatalogEntry
- * @property {string} name
- * @property {string} [type]
- * @property {string} [source]
- * @property {boolean} [hasValue]
- * @property {'var' | 'state'} [kind]
- */
+export interface VariableCatalogEntry {
+    name: string;
+    type?: string;
+    source?: string;
+    hasValue?: boolean;
+    kind?: 'var' | 'state';
+}
 
-/**
- * @typedef {object} VariablePreviewLookup
- * @property {VariablePreviewStatus} status
- * @property {unknown} [value]
- */
+export interface VariablePreviewLookup {
+    status: VariablePreviewStatus;
+    value?: unknown;
+}
 
-/**
- * @typedef {object} ScannedRef
- * @property {VariableRefKind} kind
- * @property {string} path
- * @property {number} from
- * @property {number} to
- * @property {string} raw
- */
+export interface ScannedRef {
+    kind: VariableRefKind;
+    path: string;
+    from: number;
+    to: number;
+    raw: string;
+}
 
 export const AT_VAR_PATTERN = /@var:([\w.]+)/g;
 export const AT_STATE_PATTERN = /@state:([\w.]+)/g;
@@ -43,32 +40,18 @@ const STATE_PREVIEW_KEYS = Object.freeze([
     'store',
 ]);
 
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Unwrap flow variable nodes shaped as `{ value: ... }`.
- * @param {unknown} value
- * @returns {unknown}
- */
-export function unwrapVariableNode(value) {
+export function unwrapVariableNode(value: unknown): unknown {
     if (isPlainObject(value) && Object.hasOwn(value, 'value')) {
         return value.value;
     }
     return value;
 }
 
-/**
- * @param {unknown} root
- * @param {string} path
- * @returns {{ found: boolean, value: unknown }}
- */
-export function lookupPath(root, path) {
+export function lookupPath(root: unknown, path: string): { found: boolean; value: unknown } {
     if (typeof path !== 'string' || path.length === 0) {
         return { found: false, value: undefined };
     }
@@ -77,7 +60,7 @@ export function lookupPath(root, path) {
     }
 
     const parts = path.split('.');
-    let current = /** @type {unknown} */ (root);
+    let current: unknown = root;
 
     for (const part of parts) {
         if (current === null || current === undefined) {
@@ -87,9 +70,9 @@ export function lookupPath(root, path) {
             return { found: false, value: undefined };
         }
 
-        const record = /** @type {Record<string, unknown>} */ (current);
-        if (isPlainObject(record[part]) && Object.hasOwn(/** @type {Record<string, unknown>} */ (record[part]), 'value')) {
-            current = /** @type {Record<string, unknown>} */ (record[part]).value;
+        const record = current as Record<string, unknown>;
+        if (isPlainObject(record[part]) && Object.hasOwn(record[part], 'value')) {
+            current = (record[part] as Record<string, unknown>).value;
             continue;
         }
         if (Object.hasOwn(record, part) || part in record) {
@@ -102,42 +85,31 @@ export function lookupPath(root, path) {
     return { found: true, value: current };
 }
 
-/**
- * @param {string} path
- * @param {unknown} values
- * @returns {boolean}
- */
-export function pathExistsInValues(path, values) {
+export function pathExistsInValues(path: string, values: unknown): boolean {
     return lookupPath(values, path).found;
 }
 
-/**
- * @param {string} path
- * @param {unknown} catalog
- * @returns {VariableCatalogEntry | null}
- */
-export function findCatalogEntry(path, catalog) {
+export function findCatalogEntry(path: string, catalog: unknown): VariableCatalogEntry | null {
     if (!Array.isArray(catalog) || typeof path !== 'string' || path.length === 0) {
         return null;
     }
     const root = path.split('.', 1)[0];
-    /** @type {VariableCatalogEntry | null} */
-    let rootMatch = null;
-    /** @type {VariableCatalogEntry | null} */
-    let childOfRootMatch = null;
-    for (const entry of catalog) {
-        if (!entry || typeof entry !== 'object') continue;
-        const name = /** @type {Record<string, unknown>} */ (entry).name;
+    let rootMatch: VariableCatalogEntry | null = null;
+    let childOfRootMatch: VariableCatalogEntry | null = null;
+    for (const rawEntry of catalog) {
+        if (!rawEntry || typeof rawEntry !== 'object') continue;
+        const entry = rawEntry as VariableCatalogEntry;
+        const name = entry.name;
         if (typeof name !== 'string' || name.length === 0) continue;
         if (name === path) {
-            return /** @type {VariableCatalogEntry} */ (entry);
+            return entry;
         }
         if (name === root) {
-            rootMatch = /** @type {VariableCatalogEntry} */ (entry);
+            rootMatch = entry;
             continue;
         }
         if (path === root && name.startsWith(`${root}.`)) {
-            childOfRootMatch = /** @type {VariableCatalogEntry} */ (entry);
+            childOfRootMatch = entry;
         }
     }
     if (rootMatch) {
@@ -149,17 +121,12 @@ export function findCatalogEntry(path, catalog) {
     return null;
 }
 
-/**
- * @param {string} path
- * @param {{
- *   kind: VariableRefKind,
- *   values?: unknown,
- *   statePreview?: unknown,
- *   catalog?: unknown,
- * }} options
- * @returns {VariablePreviewLookup}
- */
-export function lookupPreviewValue(path, options) {
+export function lookupPreviewValue(path: string, options: {
+    kind: VariableRefKind;
+    values?: unknown;
+    statePreview?: unknown;
+    catalog?: unknown;
+}): VariablePreviewLookup {
     if (typeof path !== 'string' || path.length === 0) {
         throw new TypeError('lookupPreviewValue: path string required');
     }
@@ -195,19 +162,15 @@ export function lookupPreviewValue(path, options) {
     return { status: 'undefined' };
 }
 
-/**
- * @param {string} text
- * @returns {ScannedRef[]}
- */
-export function scanAtRefs(text) {
+export function scanAtRefs(text: string): ScannedRef[] {
     if (typeof text !== 'string') {
         throw new TypeError('scanAtRefs: text string required');
     }
-    /** @type {ScannedRef[]} */
-    const refs = [];
+    const refs: ScannedRef[] = [];
     for (const match of text.matchAll(AT_VAR_PATTERN)) {
         const raw = match[0];
         const path = match[1];
+        if (typeof path !== 'string') continue;
         const from = match.index;
         if (typeof from !== 'number') continue;
         refs.push({ kind: 'var', path, from, to: from + raw.length, raw });
@@ -215,6 +178,7 @@ export function scanAtRefs(text) {
     for (const match of text.matchAll(AT_STATE_PATTERN)) {
         const raw = match[0];
         const path = match[1];
+        if (typeof path !== 'string') continue;
         const from = match.index;
         if (typeof from !== 'number') continue;
         refs.push({ kind: 'state', path, from, to: from + raw.length, raw });
@@ -223,24 +187,20 @@ export function scanAtRefs(text) {
     return refs;
 }
 
-/**
- * Brace refs for LLM prompts: `{name}`, `{?name}`, `{name|default}`, `{for x in list}`, `{endfor}`.
- * @param {string} text
- * @returns {ScannedRef[]}
- */
-export function scanBraceRefs(text) {
+export function scanBraceRefs(text: string): ScannedRef[] {
     if (typeof text !== 'string') {
         throw new TypeError('scanBraceRefs: text string required');
     }
-    /** @type {ScannedRef[]} */
-    const refs = [];
+    const refs: ScannedRef[] = [];
 
     const forRegex = /\{for\s+(\w+)\s+in\s+([\w.]+)\}/g;
     for (const match of text.matchAll(forRegex)) {
         const raw = match[0];
         const from = match.index;
         if (typeof from !== 'number') continue;
-        refs.push({ kind: 'brace', path: match[2], from, to: from + raw.length, raw });
+        const path = match[2];
+        if (typeof path !== 'string') continue;
+        refs.push({ kind: 'brace', path, from, to: from + raw.length, raw });
     }
 
     const endforRegex = /\{endfor\}/g;
@@ -256,7 +216,9 @@ export function scanBraceRefs(text) {
         const raw = match[0];
         const from = match.index;
         if (typeof from !== 'number') continue;
-        refs.push({ kind: 'brace', path: match[1], from, to: from + raw.length, raw });
+        const path = match[1];
+        if (typeof path !== 'string') continue;
+        refs.push({ kind: 'brace', path, from, to: from + raw.length, raw });
     }
 
     const optional = /\{\?([\w.]+)\}/g;
@@ -264,7 +226,9 @@ export function scanBraceRefs(text) {
         const raw = match[0];
         const from = match.index;
         if (typeof from !== 'number') continue;
-        refs.push({ kind: 'brace', path: match[1], from, to: from + raw.length, raw });
+        const path = match[1];
+        if (typeof path !== 'string') continue;
+        refs.push({ kind: 'brace', path, from, to: from + raw.length, raw });
     }
 
     const withDefault = /\{([\w.]+)\|([^}]+)\}/g;
@@ -272,13 +236,15 @@ export function scanBraceRefs(text) {
         const raw = match[0];
         const from = match.index;
         if (typeof from !== 'number') continue;
-        refs.push({ kind: 'brace', path: match[1], from, to: from + raw.length, raw });
+        const path = match[1];
+        if (typeof path !== 'string') continue;
+        refs.push({ kind: 'brace', path, from, to: from + raw.length, raw });
     }
 
     const required = /\{([\w.]+)\}/g;
     for (const match of text.matchAll(required)) {
         const path = match[1];
-        if (path === 'endfor' || path.startsWith('for ') || path.startsWith('?')) continue;
+        if (typeof path !== 'string' || path === 'endfor' || path.startsWith('for ') || path.startsWith('?')) continue;
         const raw = match[0];
         const from = match.index;
         if (typeof from !== 'number') continue;
@@ -289,17 +255,11 @@ export function scanBraceRefs(text) {
     return refs;
 }
 
-/**
- * Top-level ExecutionState fields used for `@state:` hover preview.
- * @param {unknown} executionState
- * @returns {Record<string, unknown>}
- */
-export function buildExecutionStatePreview(executionState) {
+export function buildExecutionStatePreview(executionState: unknown): Record<string, unknown> {
     if (!isPlainObject(executionState)) {
         return {};
     }
-    /** @type {Record<string, unknown>} */
-    const preview = {};
+    const preview: Record<string, unknown> = {};
     for (const key of STATE_PREVIEW_KEYS) {
         if (Object.hasOwn(executionState, key)) {
             preview[key] = executionState[key];
@@ -308,13 +268,8 @@ export function buildExecutionStatePreview(executionState) {
     return preview;
 }
 
-/**
- * @param {unknown} dataflowNode
- * @returns {string[]}
- */
-export function collectStatePathsFromDataflow(dataflowNode) {
-    /** @type {Set<string>} */
-    const paths = new Set(['content', 'response']);
+export function collectStatePathsFromDataflow(dataflowNode: unknown): string[] {
+    const paths = new Set<string>(['content', 'response']);
     if (!isPlainObject(dataflowNode)) {
         return [...paths];
     }
@@ -332,19 +287,11 @@ export function collectStatePathsFromDataflow(dataflowNode) {
     return [...paths].sort((a, b) => a.localeCompare(b));
 }
 
-/**
- * Flatten object keys into dotted paths for autocomplete (one level of nesting max for objects).
- * @param {unknown} root
- * @param {string} [prefix]
- * @param {number} [depth]
- * @returns {string[]}
- */
-export function flattenPreviewPaths(root, prefix = '', depth = 0) {
+export function flattenPreviewPaths(root: unknown, prefix = '', depth = 0): string[] {
     if (!isPlainObject(root) || depth > 2) {
         return prefix ? [prefix] : [];
     }
-    /** @type {string[]} */
-    const paths = [];
+    const paths: string[] = [];
     for (const [key, value] of Object.entries(root)) {
         const full = prefix ? `${prefix}.${key}` : key;
         paths.push(full);

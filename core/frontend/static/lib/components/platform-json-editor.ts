@@ -2,13 +2,16 @@
  * platform-json-editor — компактный CodeMirror viewer/editor для JSON в платформенных UI.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { CmCompartmentLike, CmEditorViewLike, CmModule } from '../codemirror/variable-extensions.js';
 import './platform-icon.js';
 
 const CODEMIRROR_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
-let _cmPromise = null;
-function loadCodeMirror() {
+let _cmPromise: Promise<CmModule> | null = null;
+function loadCodeMirror(): Promise<CmModule> {
     if (!_cmPromise) {
         _cmPromise = import(CODEMIRROR_URL);
     }
@@ -18,7 +21,7 @@ function loadCodeMirror() {
 export class PlatformJsonEditor extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         readonly: { type: Boolean, reflect: true },
         showToolbar: { type: Boolean, attribute: 'show-toolbar' },
@@ -29,8 +32,27 @@ export class PlatformJsonEditor extends PlatformElement {
         _invalid: { state: true },
         _error: { state: true },
     };
+    declare value: string;
+    declare readonly: boolean;
+    declare showToolbar: boolean;
+    declare fillParent: boolean;
+    declare fullscreen: boolean;
+    declare minHeight: number;
+    declare validateJson: boolean;
+    declare _invalid: boolean;
+    declare _error: string;
 
-    static styles = [
+    private _cm: CmModule | null;
+    private _editorView: CmEditorViewLike | null;
+    private _readonlyCompartment: CmCompartmentLike | null;
+    private _themeCompartment: CmCompartmentLike | null;
+    private _initInFlight: Promise<void> | null;
+    private _themeSel: SelectController<string>;
+    private _lastTheme: string | undefined;
+    private _themeObserver: MutationObserver | null;
+    private _onWindowKeydown: (e: KeyboardEvent) => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -167,17 +189,20 @@ export class PlatformJsonEditor extends PlatformElement {
         this._readonlyCompartment = null;
         this._themeCompartment = null;
         this._initInFlight = null;
-        this._themeSel = this.select((s) => (s.theme && s.theme.mode ? s.theme.mode : 'dark'));
+        this._themeSel = this.select((s) => {
+            const theme = s.theme as { mode?: string } | undefined;
+            return theme && theme.mode ? theme.mode : 'dark';
+        });
         this._lastTheme = undefined;
         this._themeObserver = null;
-        this._onWindowKeydown = (e) => {
+        this._onWindowKeydown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && this.fullscreen) {
                 this.fullscreen = false;
             }
         };
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         window.addEventListener('keydown', this._onWindowKeydown, true);
         if (typeof MutationObserver !== 'undefined') {
@@ -194,7 +219,7 @@ export class PlatformJsonEditor extends PlatformElement {
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         window.removeEventListener('keydown', this._onWindowKeydown, true);
         if (this._themeObserver) {
             this._themeObserver.disconnect();
@@ -208,7 +233,7 @@ export class PlatformJsonEditor extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('minHeight')) {
             const value = Number.isFinite(this.minHeight) ? this.minHeight : 220;
@@ -233,7 +258,7 @@ export class PlatformJsonEditor extends PlatformElement {
         this._syncEditorTheme();
     }
 
-    _emitEditorChange(next) {
+    _emitEditorChange(next: string): void {
         this.value = next;
         if (!this.validateJson) {
             this._invalid = false;
@@ -256,7 +281,7 @@ export class PlatformJsonEditor extends PlatformElement {
         }
     }
 
-    async _ensureEditorMounted() {
+    async _ensureEditorMounted(): Promise<void> {
         if (this._editorView) return;
         if (this._initInFlight) return this._initInFlight;
         const host = this.renderRoot.querySelector('#cm-host');
@@ -267,7 +292,7 @@ export class PlatformJsonEditor extends PlatformElement {
         return this._initInFlight;
     }
 
-    async _init(host) {
+    async _init(host: Element): Promise<void> {
         const cm = await loadCodeMirror();
         if (!this.isConnected || this._editorView) return;
         this._cm = cm;
@@ -277,9 +302,9 @@ export class PlatformJsonEditor extends PlatformElement {
         const keymap = [
             {
                 key: 'Tab',
-                run: (view) => {
+                run: (view: CmEditorViewLike) => {
                     if (view.state.readOnly) return false;
-                    view.dispatch(view.state.replaceSelection('    '));
+                    view.dispatch(view.state.replaceSelection('    ') as object);
                     return true;
                 },
             },
@@ -288,7 +313,7 @@ export class PlatformJsonEditor extends PlatformElement {
             {
                 key: 'Mod-s',
                 run: () => {
-                    this.emit('save', { value: this._editorView.state.doc.toString() });
+                    this.emit('save', { value: this._editorView?.state.doc.toString() ?? '' });
                     return true;
                 },
             },
@@ -320,7 +345,7 @@ export class PlatformJsonEditor extends PlatformElement {
         });
     }
 
-    _buildThemeExtension() {
+    _buildThemeExtension(): unknown[] {
         if (!this._cm) return [];
         const isLight = this._resolvedThemeMode() === 'light';
         const platformTheme = this._cm.EditorView.theme({
@@ -382,7 +407,7 @@ export class PlatformJsonEditor extends PlatformElement {
         ];
     }
 
-    _resolvedThemeMode() {
+    _resolvedThemeMode(): 'light' | 'dark' {
         const domTheme = document.documentElement.getAttribute('data-theme');
         if (domTheme === 'light' || domTheme === 'dark') {
             return domTheme;
@@ -391,7 +416,7 @@ export class PlatformJsonEditor extends PlatformElement {
         return selected === 'light' ? 'light' : 'dark';
     }
 
-    _themeSignature() {
+    _themeSignature(): string {
         return this._resolvedThemeMode();
     }
 
@@ -416,7 +441,7 @@ export class PlatformJsonEditor extends PlatformElement {
         });
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="editor-root">
                 ${this.showToolbar ? html`

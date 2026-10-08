@@ -24,13 +24,14 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
 export class PlatformAssistantMessageActions extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         text: { type: String },
         voiceBaseUrl: { type: String, attribute: 'voice-base-url' },
         credentials: { type: String },
@@ -40,8 +41,21 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         _busyPlay: { state: true },
         _busyCopy: { state: true },
     };
+    declare text: string;
+    declare voiceBaseUrl: string;
+    declare credentials: string;
+    declare getHeaders: (() => Promise<Record<string, string>>) | null;
+    declare showEdit: boolean;
+    declare tone: string;
+    declare _busyPlay: boolean;
+    declare _busyCopy: boolean;
 
-    static styles = [
+    private _audio: HTMLAudioElement | null = null;
+    private _playAbort: AbortController | null = null;
+    private _objectUrl: string | null = null;
+    private _playSessionReject: ((err: unknown) => void) | null = null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -131,25 +145,21 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         this.tone = '';
         this._busyPlay = false;
         this._busyCopy = false;
-        this._audio = null;
-        this._playAbort = null;
-        this._objectUrl = null;
-        this._playSessionReject = null;
     }
 
-    _playButtonTitle() {
+    _playButtonTitle(): string {
         return this._busyPlay
             ? this.t('assistant_message_actions.stop')
             : this.t('assistant_message_actions.play');
     }
 
-    _playButtonAria() {
+    _playButtonAria(): string {
         return this._busyPlay
             ? this.t('assistant_message_actions.stop_aria')
             : this.t('assistant_message_actions.play_aria');
     }
 
-    _editCompose() {
+    _editCompose(): void {
         const raw = typeof this.text === 'string' ? this.text : '';
         if (raw.trim() === '') return;
         this.dispatchEvent(
@@ -161,7 +171,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         );
     }
 
-    async _copy() {
+    async _copy(): Promise<void> {
         if (this._busyCopy) return;
         const text = typeof this.text === 'string' ? this.text : '';
         if (text === '') return;
@@ -177,7 +187,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         }
     }
 
-    _finishPlaySession() {
+    _finishPlaySession(): void {
         this._playAbort = null;
         this._playSessionReject = null;
         const audio = this._audio;
@@ -197,7 +207,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         }
     }
 
-    _cancelPlay() {
+    _cancelPlay(): void {
         if (this._playAbort) {
             this._playAbort.abort();
         }
@@ -211,7 +221,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         }
     }
 
-    _onPlayButtonClick() {
+    _onPlayButtonClick(): void {
         if (this._busyPlay) {
             this._cancelPlay();
             return;
@@ -219,7 +229,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         void this._runPlay();
     }
 
-    async _runPlay() {
+    async _runPlay(): Promise<void> {
         const text = typeof this.text === 'string' ? this.text : '';
         if (text === '') return;
         if (typeof this.voiceBaseUrl !== 'string' || this.voiceBaseUrl === '') {
@@ -233,7 +243,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         this.dispatchEvent(new CustomEvent('play-started', { bubbles: true, composed: true }));
 
         try {
-            const headers = { 'Content-Type': 'application/json' };
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (typeof this.getHeaders === 'function') {
                 Object.assign(headers, await this.getHeaders());
             }
@@ -259,8 +269,8 @@ export class PlatformAssistantMessageActions extends PlatformElement {
             const audioEl = new Audio(objectUrl);
             this._audio = audioEl;
 
-            await new Promise((resolve, reject) => {
-                const sessionReject = (err) => {
+            await new Promise<void>((resolve, reject) => {
+                const sessionReject = (err: unknown) => {
                     this._playSessionReject = null;
                     reject(err);
                 };
@@ -273,11 +283,11 @@ export class PlatformAssistantMessageActions extends PlatformElement {
                 void audioEl.play().catch(sessionReject);
             });
         } catch (err) {
-            const aborted = err && typeof err === 'object' && err.name === 'AbortError';
+            const aborted = err instanceof Error && err.name === 'AbortError';
             if (!aborted) {
                 this.toast('platform:assistant_message_actions.toast_play_failed', {
                     type: 'error',
-                    vars: { detail: err && err.message ? err.message : String(err) },
+                    vars: { detail: err instanceof Error ? err.message : String(err) },
                 });
             }
         } finally {
@@ -285,7 +295,7 @@ export class PlatformAssistantMessageActions extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const canPlay = typeof this.voiceBaseUrl === 'string' && this.voiceBaseUrl !== '';
         const textOk = typeof this.text === 'string' && this.text.trim() !== '';
         const btnCls = 'action-btn';

@@ -5,7 +5,18 @@
 
 export const SERVICE_LOGO_BASE = '/static/core/assets/service_logos';
 
-export const PLATFORM_SERVICES = Object.freeze([
+export interface PlatformServiceEntry {
+    id: string;
+    nameKey: string;
+    logoSrc: string;
+    brandFrom: string;
+    brandTo: string;
+    healthName: string;
+    metricField: string | null;
+    metricKey: string | null;
+}
+
+export const PLATFORM_SERVICES: readonly PlatformServiceEntry[] = Object.freeze([
     Object.freeze({
         id: 'flows',
         nameKey: 'apps.flows.name',

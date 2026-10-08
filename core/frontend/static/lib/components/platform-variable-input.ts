@@ -4,17 +4,21 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
 import './fields/platform-field-shell.js';
 import { listSystemVariableKeys } from './variables/platform-system-variables-catalog.js';
 import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
+import type {
+    CmEditorViewLike,
+    CmModule,
+    CmTransactionLike,
+    VariableSyntaxMode,
+} from '../codemirror/variable-extensions.js';
+import type { ResourceController } from '../base/use-resource.js';
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-function _asString(value) {
+function _asString(value: unknown): string {
     if (typeof value === 'string') {
         return value;
     }
@@ -24,11 +28,7 @@ function _asString(value) {
     return String(value);
 }
 
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function _asArray(value) {
+function _asArray(value: unknown): unknown[] {
     if (!Array.isArray(value)) {
         throw new TypeError('platform-variable-input: expected array');
     }
@@ -38,7 +38,7 @@ function _asArray(value) {
 export class PlatformVariableInput extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         label: { type: String },
         placeholder: { type: String },
@@ -54,8 +54,26 @@ export class PlatformVariableInput extends PlatformElement {
         syntax: { type: String },
         _focused: { type: Boolean, state: true },
     };
+    declare value: string;
+    declare label: string;
+    declare placeholder: string;
+    declare previewValues: Record<string, unknown>;
+    declare statePreview: Record<string, unknown>;
+    declare variableCatalog: Array<{ name?: unknown; type?: string; source?: string; hasValue?: boolean }>;
+    declare statePaths: string[];
+    declare syntax: VariableSyntaxMode;
+    declare _focused: boolean;
 
-    static styles = [
+    private _focusOutTimer: ReturnType<typeof setTimeout> | null;
+    private _onFocusIn: () => void;
+    private _onFocusOut: () => void;
+    private _cmBundle: CmModule | null;
+    private _editorView: CmEditorViewLike | null;
+    private _variablesRefreshInProgress: boolean;
+    private _previewFingerprint: string;
+    private _variables: ResourceController;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         variableRefsStyles,
         css`
@@ -141,30 +159,28 @@ export class PlatformVariableInput extends PlatformElement {
             this._focused = true;
         };
         this._onFocusOut = () => {
-            clearTimeout(this._focusOutTimer);
+            if (this._focusOutTimer !== null) clearTimeout(this._focusOutTimer);
             this._focusOutTimer = setTimeout(() => {
                 this._focused = this.matches(':focus-within');
             }, 0);
         };
-        /** @type {object | null} */
         this._cmBundle = null;
-        /** @type {object | null} */
         this._editorView = null;
         this._variablesRefreshInProgress = false;
         this._previewFingerprint = '';
         this._variables = this.useResource('secrets/variables', { autoload: true });
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.addEventListener('focusin', this._onFocusIn);
         this.addEventListener('focusout', this._onFocusOut);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this.removeEventListener('focusin', this._onFocusIn);
         this.removeEventListener('focusout', this._onFocusOut);
-        clearTimeout(this._focusOutTimer);
+        if (this._focusOutTimer !== null) clearTimeout(this._focusOutTimer);
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
@@ -172,12 +188,12 @@ export class PlatformVariableInput extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    firstUpdated() {
+    override firstUpdated(changed: PropertyValues<this>): void {
         void this._initCodeMirror();
     }
 
-    updated(changedProperties) {
-        if (this._editorView && changedProperties.has('value')) {
+    override updated(changed: PropertyValues<this>): void {
+        if (this._editorView && changed.has('value')) {
             const current = this._editorView.state.doc.toString();
             if (this.value !== current) {
                 this._editorView.dispatch({
@@ -210,16 +226,19 @@ export class PlatformVariableInput extends PlatformElement {
         ].join('|');
     }
 
-    /**
-     * @returns {Array<{ name: string, type: string, source: string, hasValue: boolean }>}
-     */
-    _companyCatalogEntries() {
-        const companyItems = _asArray(this._variables.items).map((item) => {
+    _companyCatalogEntries(): Array<{ name: string; type: string; source: string; hasValue: boolean }> {
+        const companyItems = _asArray(this._variables.items).map((rawItem) => {
+            const item = rawItem as { variable_key?: unknown; payload?: unknown };
             const payload = item.payload;
-            const base = payload && typeof payload === 'object' ? payload.base : null;
-            const expression = base && typeof base === 'object' && base.value_kind === 'expression';
+            const base = payload && typeof payload === 'object'
+                ? (payload as Record<string, unknown>).base
+                : null;
+            const expression = Boolean(
+                base && typeof base === 'object'
+                && (base as Record<string, unknown>).value_kind === 'expression',
+            );
             return {
-                name: item.variable_key,
+                name: String(item.variable_key),
                 type: expression ? 'expression' : 'string',
                 source: 'company',
                 hasValue: true,
@@ -234,33 +253,26 @@ export class PlatformVariableInput extends PlatformElement {
         return [...companyItems, ...systemItems];
     }
 
-    /**
-     * @returns {Array<{ name: string, type?: string, source?: string, hasValue?: boolean }>}
-     */
-    _mergedCatalog() {
-        /** @type {Map<string, { name: string, type?: string, source?: string, hasValue?: boolean }>} */
-        const byName = new Map();
+    _mergedCatalog(): Array<{ name: string; type?: string; source?: string; hasValue?: boolean; kind?: string }> {
+        const byName = new Map<string, { name: string; type?: string; source?: string; hasValue?: boolean; kind?: string }>();
         for (const entry of this._companyCatalogEntries()) {
             byName.set(entry.name, entry);
         }
         for (const entry of Array.isArray(this.variableCatalog) ? this.variableCatalog : []) {
             if (!entry || typeof entry.name !== 'string') continue;
-            byName.set(entry.name, entry);
+            byName.set(entry.name, { ...entry, name: entry.name });
         }
         return [...byName.values()];
     }
 
-    /**
-     * @returns {Record<string, unknown>}
-     */
-    _mergedValues() {
+    _mergedValues(): Record<string, unknown> {
         const values = this.previewValues && typeof this.previewValues === 'object' && !Array.isArray(this.previewValues)
             ? { ...this.previewValues }
             : {};
         return values;
     }
 
-    async _initCodeMirror() {
+    async _initCodeMirror(): Promise<void> {
         const cm = await import('/static/core/assets/codemirror/codemirror-bundle.js');
         this._cmBundle = cm;
         this._createEditor();
@@ -295,12 +307,12 @@ export class PlatformVariableInput extends PlatformElement {
             },
         });
 
-        const singleLineFilter = cm.EditorState.transactionFilter.of((tr) => {
+        const singleLineFilter = cm.EditorState.transactionFilter.of((tr: CmTransactionLike) => {
             if (!tr.docChanged) {
                 return tr;
             }
             let hasNewline = false;
-            tr.changes.iterChanges((_fromA, _toA, _fromB, _toB, inserted) => {
+            tr.changes.iterChanges((_fromA: number, _toA: number, _fromB: number, _toB: number, inserted: { toString(): string }) => {
                 if (inserted.toString().includes('\n')) {
                     hasNewline = true;
                 }
@@ -339,7 +351,7 @@ export class PlatformVariableInput extends PlatformElement {
                         '&.cm-focused': { outline: 'none' },
                         '.cm-content': { fontFamily: 'inherit' },
                     }),
-                    cm.EditorView.updateListener.of((update) => {
+                    cm.EditorView.updateListener.of((update: { docChanged: boolean; state: { doc: { toString(): string } } }) => {
                         if (update.docChanged && !self._variablesRefreshInProgress) {
                             const next = update.state.doc.toString();
                             self.value = next;
@@ -353,7 +365,7 @@ export class PlatformVariableInput extends PlatformElement {
         this._previewFingerprint = this._fingerprint();
     }
 
-    render() {
+    override render(): TemplateResult {
         const hasLabel = typeof this.label === 'string' && this.label.length > 0;
         const floated = (typeof this.value === 'string' && this.value.length > 0) || this._focused;
         const showPlaceholder = (typeof this.value !== 'string' || this.value.length === 0)

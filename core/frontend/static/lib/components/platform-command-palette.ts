@@ -13,27 +13,32 @@
  */
 
 import { css, html, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
-/**
- * @typedef {object} PaletteItem
- * @property {string} id
- * @property {string} label
- * @property {string} [hint] подпись справа
- * @property {string} [description] вторая строка
- * @property {string} [icon]
- * @property {string} [group] заголовок секции
- */
+export interface PaletteItem {
+    id: string;
+    label: string;
+    /** подпись справа */
+    hint?: string;
+    /** вторая строка */
+    description?: string;
+    icon?: string;
+    /** заголовок секции */
+    group?: string;
+}
+
+export type PaletteProvider = (query: string) => Promise<PaletteItem[]>;
 
 const SEARCH_DEBOUNCE_MS = 120;
 
 export class PlatformCommandPalette extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         open: { type: Boolean, reflect: true },
         placeholder: { type: String },
         /** `(query: string) => Promise<PaletteItem[]>`; пустой запрос — недавнее. */
@@ -43,8 +48,18 @@ export class PlatformCommandPalette extends PlatformElement {
         _activeIndex: { state: true },
         _loading: { state: true },
     };
+    declare open: boolean;
+    declare placeholder: string;
+    declare provider: PaletteProvider | null;
+    declare _query: string;
+    declare _items: PaletteItem[];
+    declare _activeIndex: number;
+    declare _loading: boolean;
 
-    static styles = [
+    private _searchTimer: number | null;
+    private _requestSeq: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -183,18 +198,18 @@ export class PlatformCommandPalette extends PlatformElement {
         this._onGlobalKeyDown = this._onGlobalKeyDown.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         document.addEventListener('keydown', this._onGlobalKeyDown);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         document.removeEventListener('keydown', this._onGlobalKeyDown);
         this._clearSearchTimer();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('open') && this.open) {
             this._query = '';
@@ -215,7 +230,7 @@ export class PlatformCommandPalette extends PlatformElement {
         this.emit('palette-close');
     }
 
-    _onGlobalKeyDown(event) {
+    _onGlobalKeyDown(event: KeyboardEvent) {
         const isPaletteShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
         if (isPaletteShortcut) {
             event.preventDefault();
@@ -239,7 +254,7 @@ export class PlatformCommandPalette extends PlatformElement {
         }
     }
 
-    async _runSearch(query) {
+    async _runSearch(query: string): Promise<void> {
         if (typeof this.provider !== 'function') {
             throw new Error('platform-command-palette: не задан provider');
         }
@@ -257,8 +272,8 @@ export class PlatformCommandPalette extends PlatformElement {
         this._loading = false;
     }
 
-    _onInput(event) {
-        this._query = event.target.value;
+    _onInput(event: Event) {
+        this._query = (event.target as HTMLInputElement).value;
         this._clearSearchTimer();
         this._searchTimer = window.setTimeout(() => {
             this._searchTimer = null;
@@ -266,7 +281,7 @@ export class PlatformCommandPalette extends PlatformElement {
         }, SEARCH_DEBOUNCE_MS);
     }
 
-    _onKeyDown(event) {
+    _onKeyDown(event: KeyboardEvent) {
         if (event.key === 'ArrowDown') {
             event.preventDefault();
             this._activeIndex = this._items.length === 0
@@ -294,11 +309,11 @@ export class PlatformCommandPalette extends PlatformElement {
 
     _scrollActiveIntoView() {
         void this.updateComplete.then(() => {
-            this.renderRoot?.querySelector('.item.is-active')?.scrollIntoView({ block: 'nearest' });
+            (this.renderRoot?.querySelector('.item.is-active') as HTMLElement | null)?.scrollIntoView({ block: 'nearest' });
         });
     }
 
-    _select(item) {
+    _select(item: PaletteItem): void {
         this.emit('palette-select', { id: item.id, item });
         this.hide();
     }
@@ -307,7 +322,7 @@ export class PlatformCommandPalette extends PlatformElement {
         this.hide();
     }
 
-    render() {
+    override render(): TemplateResult | typeof nothing {
         if (!this.open) {
             return nothing;
         }
@@ -346,11 +361,11 @@ export class PlatformCommandPalette extends PlatformElement {
             </div>`;
         }
 
-        let lastGroup = null;
+        let lastGroup: string | null = null;
         return repeat(
             this._items,
-            (item) => item.id,
-            (item, index) => {
+            (item: PaletteItem) => item.id,
+            (item: PaletteItem, index: number) => {
                 const group = typeof item.group === 'string' ? item.group : null;
                 const showGroup = group !== null && group !== lastGroup;
                 lastGroup = group;

@@ -9,6 +9,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
@@ -22,11 +23,21 @@ const SEGMENT_TONES = Object.freeze([
     'accent-tertiary',
 ]);
 
-/**
- * @param {unknown} item
- * @returns {{ value: string, label: string, icon: string, iconSrc: string, iconFallback: string, colored: boolean, title: string, tone: string, disabled: boolean, indicator: boolean, closable: boolean } | null}
- */
-function _normalizeItem(item) {
+export interface SegmentItem {
+    value: string;
+    label: string;
+    icon: string;
+    iconSrc: string;
+    iconFallback: string;
+    colored: boolean;
+    title: string;
+    tone: string;
+    disabled: boolean;
+    indicator: boolean;
+    closable: boolean;
+}
+
+function _normalizeItem(item: Partial<SegmentItem> | null | undefined): SegmentItem | null {
     if (!item || typeof item !== 'object') {
         return null;
     }
@@ -61,7 +72,7 @@ function _normalizeItem(item) {
 export class PlatformSegmentedControl extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         items: { type: Array },
         density: { type: String, reflect: true },
@@ -73,8 +84,17 @@ export class PlatformSegmentedControl extends PlatformElement {
         renderIcon: { attribute: false },
         _failedIconSrc: { state: true },
     };
+    declare value: string;
+    declare items: Array<Partial<SegmentItem> | null | undefined>;
+    declare density: string;
+    declare iconOnly: boolean;
+    declare fullWidth: boolean;
+    declare orientation: string;
+    declare ariaLabel: string;
+    declare renderIcon: ((item: SegmentItem) => unknown) | null;
+    declare _failedIconSrc: ReadonlySet<string>;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -304,7 +324,7 @@ export class PlatformSegmentedControl extends PlatformElement {
         this.ariaLabel = '';
         this.renderIcon = null;
         /** @type {ReadonlySet<string>} */
-        this._failedIconSrc = new Set();
+        this._failedIconSrc = new Set<string>();
     }
 
     _normalizedItems() {
@@ -318,7 +338,7 @@ export class PlatformSegmentedControl extends PlatformElement {
         return out;
     }
 
-    _select(item) {
+    _select(item: SegmentItem): void {
         if (item.disabled || item.value === this.value) {
             return;
         }
@@ -326,15 +346,12 @@ export class PlatformSegmentedControl extends PlatformElement {
         this.emit('change', { value: item.value });
     }
 
-    _close(e, item) {
+    _close(e: Event, item: SegmentItem): void {
         e.stopPropagation();
         this.emit('segment-close', { value: item.value });
     }
 
-    /**
-     * @param {string} iconSrc
-     */
-    _onIconSrcError(iconSrc) {
+    _onIconSrcError(iconSrc: string): void {
         if (typeof iconSrc !== 'string' || iconSrc.length === 0) {
             return;
         }
@@ -346,7 +363,7 @@ export class PlatformSegmentedControl extends PlatformElement {
         this._failedIconSrc = next;
     }
 
-    _renderSegmentIcon(item) {
+    _renderSegmentIcon(item: SegmentItem): unknown {
         if (typeof this.renderIcon === 'function') {
             return this.renderIcon(item);
         }
@@ -373,7 +390,7 @@ export class PlatformSegmentedControl extends PlatformElement {
         ></platform-icon>`;
     }
 
-    render() {
+    override render(): TemplateResult {
         const items = this._normalizedItems();
         const groupLabel = typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
             ? this.ariaLabel
@@ -408,7 +425,7 @@ export class PlatformSegmentedControl extends PlatformElement {
                                         class="segment-close"
                                         title=${this.t('platform.segmented_close')}
                                         aria-label=${this.t('platform.segmented_close')}
-                                        @click=${(e) => this._close(e, item)}
+                                        @click=${(e: Event) => this._close(e, item)}
                                     >×</button>
                                 `
                                 : nothing}

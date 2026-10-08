@@ -15,7 +15,7 @@ import './platform-user-chip.js';
 
 const STATES = Object.freeze(['open', 'in_progress', 'blocked', 'done', 'cancelled', 'failed']);
 
-interface WorkItemAssignment {
+export interface WorkItemAssignment {
     assignee_kind?: string;
     user_ids?: unknown[];
     claimed_by_user_id?: unknown;
@@ -26,7 +26,7 @@ interface WorkItemLink {
     entity_id?: string;
 }
 
-interface WorkItemLite {
+export interface WorkItemLite {
     work_item_id?: string;
     title?: string;
     state?: string;
@@ -36,7 +36,11 @@ interface WorkItemLite {
     [key: string]: unknown;
 }
 
-function _assigneeUserId(item: WorkItemLite): string {
+export function isIsoDateLike(value: unknown): value is string {
+    return typeof value === 'string' && value.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(value);
+}
+
+export function workItemAssigneeUserId(item: WorkItemLite): string {
     const assignment = item && item.assignment;
     if (!assignment || typeof assignment !== 'object') {
         return '';
@@ -225,7 +229,7 @@ export class PlatformWorkItemRow extends PlatformElement {
         const due = typeof item.due_date === 'string' && item.due_date.length >= 10
             ? formatPlatformDate(item.due_date, locale)
             : '';
-        const assignee = _assigneeUserId(item);
+        const assignee = workItemAssigneeUserId(item);
         return html`
             <div class="row" role="button" tabindex="0"
                 @click=${() => this._onOpen()}

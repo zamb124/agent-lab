@@ -7,6 +7,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { formatFileSize } from '../utils/format-file-size.js';
@@ -24,7 +25,7 @@ const ITEM_KIND_FILE = 'file';
 const ITEM_KIND_CATALOG = 'catalog';
 
 export class PlatformFileRow extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         fileName: { type: String, attribute: 'file-name' },
         mimeType: { type: String, attribute: 'mime-type' },
         fileSize: { type: Number, attribute: 'file-size' },
@@ -45,8 +46,27 @@ export class PlatformFileRow extends PlatformElement {
         hintIcon: { type: String, attribute: 'hint-icon' },
         hintIconLabel: { type: String, attribute: 'hint-icon-label' },
     };
+    declare fileName: string;
+    declare mimeType: string;
+    declare fileSize: number;
+    declare sizeLabel: string;
+    declare dateLabel: string;
+    declare retentionLabel: string;
+    declare typeLabel: string;
+    declare authorUserId: string;
+    declare authorName: string;
+    declare selected: boolean;
+    declare selectable: boolean;
+    declare draggable: boolean;
+    declare dropTarget: boolean;
+    declare itemKind: string;
+    declare itemKey: string;
+    declare indexStatus: string;
+    declare indexStatusLabel: string;
+    declare hintIcon: string;
+    declare hintIconLabel: string;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -208,38 +228,38 @@ export class PlatformFileRow extends PlatformElement {
         return resolveFileIconKey(this.fileName, this.mimeType);
     }
 
-    _isInteractiveTarget(target) {
+    _isInteractiveTarget(target: EventTarget | null): boolean {
         return target instanceof HTMLElement
             && Boolean(target.closest('.checkbox-wrap') || target.closest('.actions'));
     }
 
-    _onRowClick(e) {
+    _onRowClick(e: Event) {
         if (this._isInteractiveTarget(e.target)) {
             return;
         }
         this.emit('open', { itemKey: this.itemKey });
     }
 
-    _onRowDblClick(e) {
+    _onRowDblClick(e: Event) {
         if (this._isInteractiveTarget(e.target)) {
             return;
         }
         this.emit('activate', { itemKey: this.itemKey });
     }
 
-    _onCheckboxChange(e) {
-        const checked = e.target.checked;
+    _onCheckboxChange(e: Event) {
+        const checked = (e.target as HTMLInputElement).checked;
         this.emit('select-toggle', { itemKey: this.itemKey, selected: checked });
     }
 
-    _onDragStart(e) {
+    _onDragStart(e: DragEvent) {
         if (!this.draggable) {
             return;
         }
         this.emit('row-dragstart', { itemKey: this.itemKey, nativeEvent: e });
     }
 
-    _onDragOver(e) {
+    _onDragOver(e: DragEvent) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -254,7 +274,7 @@ export class PlatformFileRow extends PlatformElement {
         this.emit('row-dragover', { itemKey: this.itemKey, nativeEvent: e });
     }
 
-    _onDragLeave(e) {
+    _onDragLeave(e: Event) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -263,7 +283,7 @@ export class PlatformFileRow extends PlatformElement {
         this.emit('row-dragleave', { itemKey: this.itemKey, nativeEvent: e });
     }
 
-    _onDrop(e) {
+    _onDrop(e: Event) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -275,7 +295,7 @@ export class PlatformFileRow extends PlatformElement {
 
     _renderIndexStatus() {
         const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
-        const iconName = RAG_INDEX_ICON_BY_STATUS[status];
+        const iconName = (RAG_INDEX_ICON_BY_STATUS as Record<string, string | undefined>)[status];
         if (!iconName) {
             return nothing;
         }
@@ -286,7 +306,7 @@ export class PlatformFileRow extends PlatformElement {
                 role="img"
                 title=${label}
                 aria-label=${label}
-                @click=${(e) => e.stopPropagation()}
+                @click=${(e: Event) => e.stopPropagation()}
             >
                 <platform-icon name=${iconName} size="14"></platform-icon>
             </span>
@@ -308,14 +328,14 @@ export class PlatformFileRow extends PlatformElement {
                 role="img"
                 title=${label}
                 aria-label=${label}
-                @click=${(e) => e.stopPropagation()}
+                @click=${(e: Event) => e.stopPropagation()}
             >
                 <platform-icon name=${iconName} size="14"></platform-icon>
             </span>
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const iconKey = this._fileIconName();
         return html`
             <div
@@ -334,7 +354,7 @@ export class PlatformFileRow extends PlatformElement {
                         <input
                             type="checkbox"
                             .checked=${this.selected}
-                            @click=${(e) => e.stopPropagation()}
+                            @click=${(e: Event) => e.stopPropagation()}
                             @change=${this._onCheckboxChange}
                             aria-label=${this.fileName}
                         />
@@ -355,7 +375,7 @@ export class PlatformFileRow extends PlatformElement {
                         : html`<span>${this.authorName}</span>`}
                 </div>
                 <div class="cell cell-meta cell-hide-mobile" role="cell">${this.typeLabel}</div>
-                <div class="cell actions" role="cell" @click=${(e) => e.stopPropagation()}>
+                <div class="cell actions" role="cell" @click=${(e: Event) => e.stopPropagation()}>
                     <slot name="actions"></slot>
                 </div>
             </div>

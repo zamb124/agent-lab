@@ -1,10 +1,15 @@
 import { html, css, nothing, unsafeCSS } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './glass-spinner.js';
 import './platform-hover-card.js';
 import './platform-user-chip.js';
 import { formatPlatformDate } from '../utils/format-platform-date.js';
+import { isIsoDateLike, workItemAssigneeUserId } from './platform-work-item-row.js';
+import type { WorkItemLite } from './platform-work-item-row.js';
+import type { OpController } from '../base/use-resource.js';
+import type { SelectController } from '../events/select-controller.js';
 
 const PREVIEW_WIDTH = 360;
 
@@ -166,7 +171,7 @@ const WORK_ITEM_PREVIEW_CSS = `
 export class PlatformWorkItemPreview extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         previewOpen: { type: Boolean, reflect: true, attribute: 'preview-open' },
         workItemId: { type: String, attribute: 'work-item-id' },
         item: { attribute: false },
@@ -180,12 +185,13 @@ export class PlatformWorkItemPreview extends PlatformElement {
         this.item = null;
         this.anchorRect = null;
         this._getOp = this.useOp('worktracker/work_item_get');
-        this._locale = this.select((s) => (
-            typeof s.i18n.locale === 'string' && s.i18n.locale.length > 0 ? s.i18n.locale : 'en'
-        ));
+        this._locale = this.select((s) => {
+            const i18n = s.i18n as { locale?: string } | undefined;
+            return typeof i18n?.locale === 'string' && i18n.locale.length > 0 ? i18n.locale : 'en';
+        });
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (!this.previewOpen) {
             return;
@@ -196,43 +202,43 @@ export class PlatformWorkItemPreview extends PlatformElement {
         }
     }
 
-    _resolvedItem() {
+    _resolvedItem(): WorkItemLite | null {
         if (this.item && typeof this.item === 'object') {
             return this.item;
         }
-        const result = this._getOp.lastResult;
+        const result = this._getOp.lastResult as WorkItemLite | null | undefined;
         if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
             return result;
         }
         return null;
     }
 
-    _ensureLoaded() {
+    _ensureLoaded(): void {
         if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
             return;
         }
         if (this._getOp.busy) {
             return;
         }
-        const cached = this._getOp.lastResult;
+        const cached = this._getOp.lastResult as WorkItemLite | null | undefined;
         if (cached && typeof cached === 'object' && cached.work_item_id === this.workItemId) {
             return;
         }
         this._getOp.run({ work_item_id: this.workItemId });
     }
 
-    _formatDate(value) {
-        if (!_isIsoDateLike(value)) {
+    _formatDate(value: unknown): string {
+        if (!isIsoDateLike(value)) {
             return '';
         }
         const parsed = new Date(value);
         if (Number.isNaN(parsed.getTime())) {
             return '';
         }
-        return formatPlatformDate(parsed, this._locale.value, { day: '2-digit', month: 'short', year: 'numeric' });
+        return formatPlatformDate(parsed, this._locale.value || 'en', { day: '2-digit', month: 'short', year: 'numeric' });
     }
 
-    _description(item) {
+    _description(item: WorkItemLite | null): string {
         const text = item && typeof item.description === 'string' ? item.description.trim() : '';
         if (text.length <= 180) {
             return text;
@@ -240,14 +246,14 @@ export class PlatformWorkItemPreview extends PlatformElement {
         return `${text.slice(0, 180)}...`;
     }
 
-    _emitOpen() {
+    _emitOpen(): void {
         if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
             return;
         }
         this.emit('open', { workItemId: this.workItemId });
     }
 
-    _renderCardBody() {
+    _renderCardBody(): TemplateResult {
         const item = this._resolvedItem();
         const loading = item === null && this._getOp.busy;
         return item
@@ -268,12 +274,12 @@ export class PlatformWorkItemPreview extends PlatformElement {
                                     ${this.t(`work_item_badge.priority.${item.priority}`)}
                                 </span>`
                                 : null}
-                            ${_isIsoDateLike(item.due_date) ? html`<span>${this._formatDate(item.due_date)}</span>` : null}
+                            ${isIsoDateLike(item.due_date) ? html`<span>${this._formatDate(item.due_date)}</span>` : null}
                         </div>
                     </div>
                 </div>
-                ${_assigneeUserId(item)
-                    ? html`<platform-user-chip user-id=${_assigneeUserId(item)} size="sm" .interactive=${false}></platform-user-chip>`
+                ${workItemAssigneeUserId(item)
+                    ? html`<platform-user-chip user-id=${workItemAssigneeUserId(item)} size="sm" .interactive=${false}></platform-user-chip>`
                     : null}
                 ${this._description(item).length > 0
                     ? html`<p class="platform-work-item-preview-portal__description">${this._description(item)}</p>`
@@ -294,7 +300,7 @@ export class PlatformWorkItemPreview extends PlatformElement {
             `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const item = this._resolvedItem();
         return html`
             <platform-hover-card
@@ -313,8 +319,15 @@ export class PlatformWorkItemPreview extends PlatformElement {
             </platform-hover-card>
         `;
     }
+    declare previewOpen: boolean;
+    declare workItemId: string;
+    declare item: WorkItemLite | null;
+    declare anchorRect: { x: number; y: number; width: number; height: number } | null;
 
-    static styles = [
+    private _getOp: OpController;
+    private _locale: SelectController<string>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         unsafeCSS(WORK_ITEM_PREVIEW_CSS),
         css`

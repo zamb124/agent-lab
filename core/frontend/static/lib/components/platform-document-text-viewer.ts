@@ -2,13 +2,17 @@
  * platform-document-text-viewer — Lit viewer для text handler (CodeMirror / HTML preview / Markdown preview).
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-json-editor.js';
 import './platform-code-editor.js';
 import './platform-markdown-editor.js';
 
-function languageFromFileName(originalName, contentType) {
-    const normalizedType = typeof contentType === 'string' ? contentType.split(';', 1)[0].trim() : '';
+type PresentationMode = 'html' | 'markdown' | 'code';
+type ViewMode = 'preview' | 'source';
+
+function languageFromFileName(originalName: unknown, contentType: unknown): string {
+    const normalizedType = typeof contentType === 'string' ? (contentType.split(';', 1)[0] ?? '').trim() : '';
     const name = typeof originalName === 'string' ? originalName : '';
     if (normalizedType === 'application/json' || name.toLowerCase().endsWith('.json')) {
         return 'json';
@@ -18,7 +22,7 @@ function languageFromFileName(originalName, contentType) {
         return 'text';
     }
     const extension = name.slice(dotIndex + 1).toLowerCase();
-    const extensionMap = {
+    const extensionMap: Record<string, string> = {
         js: 'javascript',
         mjs: 'javascript',
         cjs: 'javascript',
@@ -42,14 +46,14 @@ function languageFromFileName(originalName, contentType) {
     return 'text';
 }
 
-function normalizePresentation(value) {
+function normalizePresentation(value: unknown): PresentationMode {
     if (value === 'html' || value === 'markdown' || value === 'code') {
         return value;
     }
     return 'code';
 }
 
-function normalizeViewMode(value, presentation) {
+function normalizeViewMode(value: unknown, presentation: PresentationMode): ViewMode {
     if (presentation === 'code') {
         return 'source';
     }
@@ -62,7 +66,7 @@ function normalizeViewMode(value, presentation) {
 export class PlatformDocumentTextViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         streamUrl: { type: String, attribute: 'stream-url' },
         saveUrl: { type: String, attribute: 'save-url' },
         originalName: { type: String, attribute: 'original-name' },
@@ -71,8 +75,21 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         presentation: { type: String },
         viewMode: { type: String, attribute: 'view-mode' },
     };
+    declare streamUrl: string;
+    declare saveUrl: string;
+    declare originalName: string;
+    declare contentType: string;
+    declare editMode: boolean;
+    declare presentation: string;
+    declare viewMode: string;
 
-    static styles = [
+    private _content: string;
+    private _loading: boolean;
+    private _error: string;
+    private _saveStatus: string;
+    private _loadGeneration: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -161,27 +178,27 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this._loadGeneration = 0;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         void this._loadContent();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated?.(changed);
         if (changed.has('streamUrl')) {
             void this._loadContent();
         }
     }
 
-    get _resolvedPresentation() {
+    get _resolvedPresentation(): PresentationMode {
         return normalizePresentation(this.presentation);
     }
 
-    get _resolvedViewMode() {
+    get _resolvedViewMode(): ViewMode {
         return normalizeViewMode(this.viewMode, this._resolvedPresentation);
     }
 
-    get _isPreviewMode() {
+    get _isPreviewMode(): boolean {
         const presentation = this._resolvedPresentation;
         return this._resolvedViewMode === 'preview'
             && (presentation === 'html' || presentation === 'markdown');
@@ -200,7 +217,7 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this._error = '';
         this._saveStatus = '';
         this.requestUpdate();
-        let response;
+        let response: Response;
         try {
             response = await fetch(streamUrl);
         } catch (loadError) {
@@ -224,7 +241,7 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this.requestUpdate();
     }
 
-    async _saveContent(value) {
+    async _saveContent(value: string): Promise<void> {
         if (this._isPreviewMode) {
             return;
         }
@@ -251,22 +268,22 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         this.emit('document-state', { dirty: false });
     }
 
-    _onSave(event) {
+    _onSave(event: Event) {
         if (this._isPreviewMode) {
             return;
         }
-        const detail = event.detail;
+        const detail = (event as CustomEvent).detail as { value?: unknown } | undefined;
         if (!detail || typeof detail.value !== 'string') {
             return;
         }
         void this._saveContent(detail.value);
     }
 
-    _onChange(event) {
+    _onChange(event: Event) {
         if (this._isPreviewMode) {
             return;
         }
-        const detail = event.detail;
+        const detail = (event as CustomEvent).detail as { value?: unknown } | undefined;
         if (!detail || typeof detail.value !== 'string') {
             return;
         }
@@ -338,7 +355,7 @@ export class PlatformDocumentTextViewer extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this._loading) {
             return html`<div class="state">${this.t('document_viewer.loading')}</div>`;
         }

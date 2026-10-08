@@ -12,26 +12,162 @@ import {
     pathExistsInValues,
 } from '../variables/variable-refs.js';
 
-/**
- * @typedef {'at-ref' | 'brace' | 'both'} VariableSyntaxMode
- */
+export type VariableSyntaxMode = 'at-ref' | 'brace' | 'both';
 
-/**
- * @typedef {object} VariableExtensionsOptions
- * @property {VariableSyntaxMode} syntax
- * @property {() => Record<string, unknown>} getValues
- * @property {() => Record<string, unknown>} [getStatePreview]
- * @property {() => Array<{ name: string, type?: string, source?: string, hasValue?: boolean, kind?: string }>} getCatalog
- * @property {() => string[]} [getStatePaths]
- * @property {(key: string) => string} t
- */
+export interface VariableExtensionsOptions {
+    syntax: VariableSyntaxMode;
+    getValues: () => Record<string, unknown>;
+    getStatePreview?: () => Record<string, unknown>;
+    getCatalog: () => Array<{ name: string; type?: string; source?: string; hasValue?: boolean; kind?: string }>;
+    getStatePaths?: () => string[];
+    t: (key: string) => string;
+}
 
-/**
- * @param {unknown} cm
- * @param {VariableExtensionsOptions} options
- * @returns {unknown[]}
- */
-export function createVariableExtensions(cm, options) {
+/** Minimal structural surface of the vendored codemirror-bundle.js used by this module. */
+export interface CmRange {
+    from: number;
+}
+
+export interface CmDecoration {
+    range(from: number, to: number): CmRange;
+}
+
+export interface CmViewLike {
+    state: { doc: { toString(): string; length: number } };
+}
+
+export interface CmUpdateLike {
+    docChanged: boolean;
+    viewportChanged: boolean;
+    view: CmViewLike;
+}
+
+export interface CmTooltip {
+    pos: number;
+    end: number;
+    above: boolean;
+    create(): { dom: HTMLElement };
+}
+
+export interface CmPluginInstance {
+    decorations: unknown;
+    update(update: CmUpdateLike): void;
+}
+
+export interface CmEditorViewLike extends CmViewLike {
+    state: {
+        doc: { toString(): string; length: number };
+        readOnly: boolean;
+        replaceSelection(text: string): unknown;
+    };
+    dispatch(spec: object): void;
+    destroy(): void;
+    requestMeasure(): void;
+}
+
+export interface CmCompartmentLike {
+    of(extension: unknown): unknown;
+    reconfigure(extension: unknown): unknown;
+}
+
+export interface CmTransactionLike {
+    docChanged: boolean;
+    newDoc: { lines: number; toString(): string };
+    newSelection: unknown;
+    startState: { doc: { length: number } };
+    state: { doc: { toString(): string } };
+    changes: {
+        iterChanges(
+            fn: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString(): string }) => void,
+        ): void;
+    };
+}
+
+export interface CmModule {
+    Decoration: {
+        mark(spec: { class: string }): CmDecoration;
+        set(ranges: CmRange[], sort?: boolean): unknown;
+    };
+    ViewPlugin: {
+        fromClass(
+            cls: new (view: CmViewLike) => CmPluginInstance,
+            spec?: { decorations: (v: CmPluginInstance) => unknown },
+        ): unknown;
+    };
+    hoverTooltip(fn: (view: CmViewLike, pos: number) => CmTooltip | null): unknown;
+    autocompletion(opts: { override: unknown[] }): unknown;
+    EditorState: {
+        create(config: { doc?: string; extensions?: unknown[] }): unknown;
+        transactionFilter: { of(fn: (tr: CmTransactionLike) => unknown): unknown };
+        readOnly: { of(value: boolean): unknown };
+        tabSize: { of(value: number): unknown };
+    };
+    EditorView: {
+        new (config: { state: unknown; parent: Element }): CmEditorViewLike;
+        theme(spec: Record<string, unknown>, options?: { dark?: boolean }): unknown;
+        updateListener: { of(fn: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void): unknown };
+        lineWrapping: unknown;
+    };
+    Compartment: new () => CmCompartmentLike;
+    history(): unknown;
+    keymap: { of(bindings: unknown[]): unknown };
+    defaultKeymap: unknown[];
+    historyKeymap: unknown[];
+    lineNumbers(): unknown;
+    json(): unknown;
+    bracketMatching(): unknown;
+    indentOnInput(): unknown;
+    syntaxHighlighting(style: unknown, options?: { fallback?: boolean }): unknown;
+    defaultHighlightStyle: unknown;
+    oneDark?: unknown;
+}
+
+interface HighlighterContext {
+    includeAtRef: boolean;
+    includeBrace: boolean;
+    getValues: () => Record<string, unknown>;
+    getCatalog: () => unknown[];
+}
+
+interface TooltipContext {
+    includeAtRef: boolean;
+    includeBrace: boolean;
+    getValues: () => Record<string, unknown>;
+    getStatePreview: () => Record<string, unknown>;
+    getCatalog: () => unknown[];
+    t: (key: string) => string;
+}
+
+interface CompletionContext {
+    includeAtRef: boolean;
+    includeBrace: boolean;
+    getValues: () => Record<string, unknown>;
+    getStatePreview: () => Record<string, unknown>;
+    getCatalog: () => Array<{ name: string; type?: string; source?: string; kind?: string }>;
+    getStatePaths: () => string[];
+}
+
+interface CompletionMatch {
+    text: string;
+    from: number;
+}
+
+interface CompletionContextObj {
+    matchBefore(regexp: RegExp): CompletionMatch | null;
+}
+
+interface CompletionOption {
+    label: string;
+    type: string;
+    detail: string;
+}
+
+interface CompletionResult {
+    from: number;
+    options: CompletionOption[];
+}
+
+export function createVariableExtensions(cm: CmModule, options: VariableExtensionsOptions): unknown[] {
     if (cm === null || typeof cm !== 'object') {
         throw new TypeError('createVariableExtensions: cm module required');
     }
@@ -92,11 +228,10 @@ export function createVariableExtensions(cm, options) {
     ];
 }
 
-/**
- * Force ViewPlugin decoration rebuild after values/catalog change.
- * @param {{ state: { doc: { length: number } }, dispatch: (spec: object) => void }} editorView
- */
-export function refreshVariableDecorations(editorView) {
+export function refreshVariableDecorations(editorView: {
+    state: { doc: { length: number } };
+    dispatch: (spec: object) => void;
+}): void {
     if (!editorView || typeof editorView.dispatch !== 'function') {
         throw new TypeError('refreshVariableDecorations: EditorView required');
     }
@@ -109,16 +244,7 @@ export function refreshVariableDecorations(editorView) {
     });
 }
 
-/**
- * @param {object} cm
- * @param {{
- *   includeAtRef: boolean,
- *   includeBrace: boolean,
- *   getValues: () => Record<string, unknown>,
- *   getCatalog: () => unknown[],
- * }} ctx
- */
-function _createHighlighter(cm, ctx) {
+function _createHighlighter(cm: CmModule, ctx: HighlighterContext) {
     const decoClasses = {
         required: cm.Decoration.mark({ class: 'cm-variable-required' }),
         optional: cm.Decoration.mark({ class: 'cm-variable-optional' }),
@@ -131,33 +257,25 @@ function _createHighlighter(cm, ctx) {
         refState: cm.Decoration.mark({ class: 'cm-ref-state' }),
     };
 
-    return cm.ViewPlugin.fromClass(class {
-        /**
-         * @param {object} view
-         */
-        constructor(view) {
+    class VariableHighlighter implements CmPluginInstance {
+        decorations: unknown;
+
+        constructor(view: CmViewLike) {
             this.decorations = this.buildDecorations(view);
         }
 
-        /**
-         * @param {object} update
-         */
-        update(update) {
+        update(update: CmUpdateLike) {
             if (update.docChanged || update.viewportChanged) {
                 this.decorations = this.buildDecorations(update.view);
             }
         }
 
-        /**
-         * @param {object} view
-         */
-        buildDecorations(view) {
-            /** @type {unknown[]} */
-            const builder = [];
+        buildDecorations(view: CmViewLike) {
+            const builder: CmRange[] = [];
             const doc = view.state.doc.toString();
             const values = ctx.getValues();
             const catalog = ctx.getCatalog();
-            const loopVars = ctx.includeBrace ? _extractLoopVariables(doc) : new Set();
+            const loopVars: Set<string> = ctx.includeBrace ? _extractLoopVariables(doc) : new Set<string>();
 
             if (ctx.includeBrace) {
                 const forRegex = /\{for\s+(\w+)\s+in\s+([\w.]+)\}/g;
@@ -165,6 +283,7 @@ function _createHighlighter(cm, ctx) {
                 while ((match = forRegex.exec(doc)) !== null) {
                     builder.push(decoClasses.forKeyword.range(match.index, match.index + match[0].length));
                     const listVar = match[2];
+                    if (typeof listVar !== 'string') continue;
                     if (!_variableKnown(listVar, values, catalog) && !loopVars.has(listVar)) {
                         builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
                     }
@@ -181,6 +300,7 @@ function _createHighlighter(cm, ctx) {
                 let match;
                 while ((match = refVarRegex.exec(doc)) !== null) {
                     const varName = match[1];
+                    if (typeof varName !== 'string') continue;
                     builder.push(decoClasses.refVar.range(match.index, match.index + match[0].length));
                     if (!_variableKnown(varName, values, catalog)) {
                         builder.push(decoClasses.undefined.range(match.index, match.index + match[0].length));
@@ -190,6 +310,7 @@ function _createHighlighter(cm, ctx) {
                 const refStateRegex = /@state:([\w.]+)/g;
                 while ((match = refStateRegex.exec(doc)) !== null) {
                     const statePath = match[1];
+                    if (typeof statePath !== 'string') continue;
                     const mark = _isInterfacePath(statePath, catalog) ? decoClasses.interfaceField : decoClasses.refState;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
@@ -200,6 +321,7 @@ function _createHighlighter(cm, ctx) {
                 let match;
                 while ((match = optionalWithDefaultRegex.exec(doc)) !== null) {
                     const varName = match[1];
+                    if (typeof varName !== 'string') continue;
                     const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.optional;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
@@ -207,6 +329,7 @@ function _createHighlighter(cm, ctx) {
                 const optionalRegex = /\{\?([\w.]+)\}/g;
                 while ((match = optionalRegex.exec(doc)) !== null) {
                     const varName = match[1];
+                    if (typeof varName !== 'string') continue;
                     const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.optional;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                 }
@@ -214,6 +337,7 @@ function _createHighlighter(cm, ctx) {
                 const defaultRegex = /\{([\w.]+)\|([^}]+)\}/g;
                 while ((match = defaultRegex.exec(doc)) !== null) {
                     const varName = match[1];
+                    if (typeof varName !== 'string') continue;
                     const mark = _isInterfacePath(varName, catalog) ? decoClasses.interfaceField : decoClasses.default;
                     builder.push(mark.range(match.index, match.index + match[0].length));
                     if (
@@ -228,6 +352,7 @@ function _createHighlighter(cm, ctx) {
                 const requiredRegex = /\{([\w.]+)\}/g;
                 while ((match = requiredRegex.exec(doc)) !== null) {
                     const varName = match[1];
+                    if (typeof varName !== 'string') continue;
                     if (varName === 'endfor' || varName.startsWith('for ') || varName.startsWith('?')) continue;
 
                     const isLoopVar = loopVars.has(varName) || _isLoopProperty(varName, loopVars);
@@ -243,30 +368,20 @@ function _createHighlighter(cm, ctx) {
                 }
             }
 
-            builder.sort((a, b) => /** @type {{from: number}} */ (a).from - /** @type {{from: number}} */ (b).from);
+            builder.sort((a, b) => a.from - b.from);
             return cm.Decoration.set(builder, true);
         }
-    }, {
+    }
+
+    return cm.ViewPlugin.fromClass(VariableHighlighter, {
         decorations: (v) => v.decorations,
     });
 }
 
-/**
- * @param {object} cm
- * @param {{
- *   includeAtRef: boolean,
- *   includeBrace: boolean,
- *   getValues: () => Record<string, unknown>,
- *   getStatePreview: () => Record<string, unknown>,
- *   getCatalog: () => unknown[],
- *   t: (key: string) => string,
- * }} ctx
- */
-function _createTooltip(cm, ctx) {
-    return cm.hoverTooltip((view, pos) => {
+function _createTooltip(cm: CmModule, ctx: TooltipContext) {
+    return cm.hoverTooltip((view: CmViewLike, pos: number): CmTooltip | null => {
         const doc = view.state.doc.toString();
-        /** @type {Array<{ regexp: RegExp, type: 'variable' | 'var_ref' | 'state_ref' }>} */
-        const patterns = [];
+        const patterns: Array<{ regexp: RegExp; type: 'variable' | 'var_ref' | 'state_ref' }> = [];
         if (ctx.includeBrace) {
             patterns.push({ regexp: /\{\??[\w.]+(?:\|[^}]*)?\}/g, type: 'variable' });
         }
@@ -284,8 +399,7 @@ function _createTooltip(cm, ctx) {
                 if (pos < start || pos > end) continue;
 
                 let varName = match[0];
-                /** @type {'var' | 'state' | 'brace'} */
-                let kind = 'brace';
+                let kind: 'var' | 'state' | 'brace' = 'brace';
                 if (type === 'variable') {
                     varName = varName.replace(/^\{\??/, '').replace(/(\|[^}]*)?\}$/, '');
                     kind = 'brace';
@@ -344,18 +458,8 @@ function _createTooltip(cm, ctx) {
     });
 }
 
-/**
- * @param {{
- *   includeAtRef: boolean,
- *   includeBrace: boolean,
- *   getValues: () => Record<string, unknown>,
- *   getStatePreview: () => Record<string, unknown>,
- *   getCatalog: () => Array<{ name: string, type?: string, source?: string }>,
- *   getStatePaths: () => string[],
- * }} ctx
- */
-function _createCompletionSource(ctx) {
-    return (context) => {
+function _createCompletionSource(ctx: CompletionContext) {
+    return (context: CompletionContextObj): CompletionResult | null => {
         if (ctx.includeBrace) {
             const beforeCursor = context.matchBefore(/\{[\w.]*$/);
             if (beforeCursor) {
@@ -396,23 +500,16 @@ function _createCompletionSource(ctx) {
     };
 }
 
-/**
- * @param {string} partial
- * @param {Record<string, unknown>} values
- * @param {Array<{ name: string, type?: string, source?: string }>} catalog
- */
-function _buildVariableCompletions(partial, values, catalog) {
-    /** @type {Array<{ label: string, type: string, detail: string }>} */
-    const options = [];
-    const seen = new Set();
+function _buildVariableCompletions(
+    partial: string,
+    values: Record<string, unknown>,
+    catalog: Array<{ name: string; type?: string; source?: string }>,
+): CompletionOption[] {
+    const options: CompletionOption[] = [];
+    const seen = new Set<string>();
     const lowerPartial = partial.toLowerCase();
 
-    /**
-     * @param {string} name
-     * @param {unknown} value
-     * @param {string} [path]
-     */
-    const addVariable = (name, value, path = '') => {
+    const addVariable = (name: string, value: unknown, path = '') => {
         const fullPath = path ? `${path}.${name}` : name;
 
         if (fullPath.toLowerCase().startsWith(lowerPartial)) {
@@ -421,12 +518,12 @@ function _buildVariableCompletions(partial, values, catalog) {
                 displayValue !== null
                 && typeof displayValue === 'object'
                 && !Array.isArray(displayValue)
-                && Object.hasOwn(/** @type {Record<string, unknown>} */ (displayValue), 'value')
+                && Object.hasOwn(displayValue, 'value')
             ) {
-                displayValue = /** @type {Record<string, unknown>} */ (displayValue).value;
+                displayValue = (displayValue as Record<string, unknown>).value;
             }
 
-            let detail = typeof displayValue;
+            let detail: string = typeof displayValue;
             if (typeof displayValue === 'string') {
                 detail = displayValue.length > 30 ? `${displayValue.substring(0, 30)}...` : displayValue;
             } else if (typeof displayValue === 'object' && displayValue !== null) {
@@ -463,20 +560,17 @@ function _buildVariableCompletions(partial, values, catalog) {
     return options;
 }
 
-/**
- * @param {string} partial
- * @param {Record<string, unknown>} statePreview
- * @param {string[]} statePaths
- * @param {Array<{ name: string, kind?: string, type?: string, source?: string }>} catalog
- */
-function _buildStateCompletions(partial, statePreview, statePaths, catalog) {
-    /** @type {Array<{ label: string, type: string, detail: string }>} */
-    const options = [];
-    const seen = new Set();
+function _buildStateCompletions(
+    partial: string,
+    statePreview: Record<string, unknown>,
+    statePaths: string[],
+    catalog: Array<{ name: string; kind?: string; type?: string; source?: string }>,
+): CompletionOption[] {
+    const options: CompletionOption[] = [];
+    const seen = new Set<string>();
     const lowerPartial = partial.toLowerCase();
 
-    /** @type {string[]} */
-    const candidates = [
+    const candidates: string[] = [
         ...flattenPreviewPaths(statePreview),
         ...(Array.isArray(statePaths) ? statePaths : []),
     ];
@@ -510,66 +604,43 @@ function _buildStateCompletions(partial, statePreview, statePaths, catalog) {
     return options;
 }
 
-/**
- * @param {unknown} value
- * @returns {unknown}
- */
-function unwrapForNesting(value) {
+function unwrapForNesting(value: unknown): unknown {
     if (
         value !== null
         && typeof value === 'object'
         && !Array.isArray(value)
-        && Object.hasOwn(/** @type {Record<string, unknown>} */ (value), 'value')
+        && Object.hasOwn(value, 'value')
     ) {
-        return /** @type {Record<string, unknown>} */ (value).value;
+        return (value as Record<string, unknown>).value;
     }
     return value;
 }
 
-/**
- * Поле интерфейса — обычный путь state, который каталог dataflow помечает `source: "interface"`.
- * @param {string} path
- * @param {unknown} catalog
- * @returns {boolean}
- */
-function _isInterfacePath(path, catalog) {
+function _isInterfacePath(path: string, catalog: unknown): boolean {
     const entry = findCatalogEntry(path, catalog);
     return entry !== null && entry.source === 'interface';
 }
 
-/**
- * @param {string} path
- * @param {unknown} values
- * @param {unknown} catalog
- * @returns {boolean}
- */
-function _variableKnown(path, values, catalog) {
+function _variableKnown(path: string, values: unknown, catalog: unknown): boolean {
     if (findCatalogEntry(path, catalog)) {
         return true;
     }
     return pathExistsInValues(path, values);
 }
 
-/**
- * @param {string} doc
- * @returns {Set<string>}
- */
-function _extractLoopVariables(doc) {
-    const loopVars = new Set();
+function _extractLoopVariables(doc: string): Set<string> {
+    const loopVars = new Set<string>();
     const forRegex = /\{for\s+(\w+)\s+in\s+[\w.]+\}/g;
     let match;
     while ((match = forRegex.exec(doc)) !== null) {
-        loopVars.add(match[1]);
+        const loopVar = match[1];
+        if (typeof loopVar === 'string') loopVars.add(loopVar);
     }
     return loopVars;
 }
 
-/**
- * @param {string} varName
- * @param {Set<string>} loopVars
- * @returns {boolean}
- */
-function _isLoopProperty(varName, loopVars) {
+function _isLoopProperty(varName: string, loopVars: Set<string>): boolean {
     const parts = varName.split('.');
-    return loopVars.has(parts[0]);
+    const first = parts[0];
+    return first !== undefined && loopVars.has(first);
 }
