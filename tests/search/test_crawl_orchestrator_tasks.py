@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
 
 import pytest
 
-from apps.search.config import get_search_settings
-from apps.search.services.crawl.orchestrator_service import CrawlOrchestratorService
+from apps.search.di import SearchDi
 from core.crawl.models import CrawlProfile, CrawlProfileWithIndex, CrawlUrl
 from core.search.index_models import SearchIndexDefinition
 from tests.fixtures.taskiq_capture import taskiq_task_name
 
 
 @pytest.mark.asyncio
-async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_enqueue_domain_fetch_respects_http_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+    search_di: SearchDi,
+) -> None:
     enqueued: list[tuple[object, ...]] = []
 
     async def _capture(task: object, *args: object, **kwargs: object) -> None:
@@ -66,18 +67,7 @@ async def test_enqueue_domain_fetch_respects_http_concurrency(monkeypatch: pytes
     monkeypatch.setattr(CrawlProfile, "get_with_index", _get_with_index)
     monkeypatch.setattr(CrawlUrl, "count_pending", _count_pending)
 
-    orchestrator = CrawlOrchestratorService(
-        fetch_service=AsyncMock(),
-        page_enrichment_service=AsyncMock(),
-        politeness_service=AsyncMock(
-            is_url_allowed=AsyncMock(return_value=True),
-            wait_for_fetch_slot=AsyncMock(return_value=0.0),
-        ),
-        rag_client=AsyncMock(),
-        crawl_config=get_search_settings().crawl,
-    )
-
-    await orchestrator._enqueue_domain_fetch(
+    await search_di.crawl_orchestrator_service._enqueue_domain_fetch(
         crawl_domain_id="dom-1",
         crawl_job_id="job-1",
         crawl_profile_id="cr_test",

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from apps.search.services.crawl.sitemap_parser import _parse_sitemap_xml
 from core.crawl.models import CrawlDomain, CrawlProfile
 from core.crawl.url_filter import CrawlUrlFilter, build_url_filter
 
@@ -103,3 +104,20 @@ def test_build_url_filter_merges_domain_over_profile() -> None:
     assert url_filter.allows("https://example.com/only-this/domain-deny") is False
     # расширения берутся из профиля
     assert url_filter.allows("https://example.com/only-this/file.pdf") is False
+
+
+def test_sitemap_parse_drops_domain_excluded_url() -> None:
+    profile = _profile()
+    domain = _domain(
+        domain="vkplay.ru",
+        exclude_url_patterns=[r"/play/game(/|$)"],
+    )
+    url_filter = build_url_filter(profile, domain)
+    sitemap = b"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://vkplay.ru/play/game/demo</loc></url>
+  <url><loc>https://vkplay.ru/docs/guide</loc></url>
+</urlset>
+"""
+    entries = _parse_sitemap_xml(sitemap, "vkplay.ru", url_filter)
+    assert [entry.url for entry in entries] == ["https://vkplay.ru/docs/guide"]

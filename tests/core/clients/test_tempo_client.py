@@ -1,11 +1,11 @@
 """
-Юнит-тесты для TempoClient: парсинг OTLP JSON и поведение при ошибках.
+Тесты TempoClient: парсинг OTLP JSON и HTTP API на локальном сервере.
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from aiohttp import web
 
 from core.clients.tempo_client import (
     TempoClient,
@@ -16,6 +16,7 @@ from core.clients.tempo_client import (
     _parse_otlp_attributes,
     parse_otlp_trace,
 )
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 # ---------------------------------------------------------------------------
 # _bytes_to_hex
@@ -218,24 +219,33 @@ class TestParseOtlpTrace:
         assert spans[0]["duration_ms"] is None
 
 
-# ---------------------------------------------------------------------------
-# TempoClient (с мок httpx)
-# ---------------------------------------------------------------------------
+def _tempo_trace_app(status: int, body: bytes = b"") -> web.Application:
+    async def get_trace(_request: web.Request) -> web.Response:
+        content_type = "application/json" if status == 200 else "text/plain"
+        return web.Response(status=status, body=body, content_type=content_type)
+
+    app = web.Application()
+    app.router.add_get("/api/traces/{trace_id}", get_trace)
+    return app
+
+
+def _tempo_search_app(body: bytes, *, seen: list[str] | None = None) -> web.Application:
+    async def search(request: web.Request) -> web.Response:
+        if seen is not None:
+            seen.append(request.query["tags"])
+        return web.Response(status=200, body=body, content_type="application/json")
+
+    app = web.Application()
+    app.router.add_get("/api/search", search)
+    return app
+
 
 class TestTempoClientGetTrace:
     @pytest.mark.asyncio
     async def test_get_trace_returns_spans(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.content = json.dumps(_SAMPLE_OTLP_BODY).encode()
-
-        with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = TempoClient(base_url="http://tempo:3200")
+        body = json.dumps(_SAMPLE_OTLP_BODY).encode()
+        async with ephemeral_web_server(_tempo_trace_app(200, body)) as base_url:
+            client = TempoClient(base_url=base_url)
             spans = await client.get_trace("abcdef1234567890abcdef1234567890")
 
         assert len(spans) == 2
@@ -243,34 +253,17 @@ class TestTempoClientGetTrace:
 
     @pytest.mark.asyncio
     async def test_get_trace_404_returns_empty(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-
-        with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = TempoClient(base_url="http://tempo:3200")
+        async with ephemeral_web_server(_tempo_trace_app(404)) as base_url:
+            client = TempoClient(base_url=base_url)
             spans = await client.get_trace("nonexistent")
 
         assert spans == []
 
     @pytest.mark.asyncio
     async def test_get_trace_503_raises(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 503
-        mock_resp.text = "service unavailable"
-
-        with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = TempoClient(base_url="http://tempo:3200")
-            with pytest.raises(TempoClientError):
+        async with ephemeral_web_server(_tempo_trace_app(503, b"service unavailable")) as base_url:
+            client = TempoClient(base_url=base_url)
+            with pytest.raises(TempoClientError, match="returned 503"):
                 await client.get_trace("some_trace_id")
 
     @pytest.mark.asyncio
@@ -287,26 +280,22 @@ class TestTempoClientGetTrace:
 class TestTempoClientSearch:
     @pytest.mark.asyncio
     async def test_search_returns_trace_ids(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.content = json.dumps({
-            "traces": [
-                {"traceID": "abc123"},
-                {"traceID": "def456"},
-            ]
-        }).encode()
-
-        with patch("core.clients.tempo_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = TempoClient(base_url="http://tempo:3200")
+        seen: list[str] = []
+        body = json.dumps(
+            {
+                "traces": [
+                    {"traceID": "abc123"},
+                    {"traceID": "def456"},
+                ]
+            }
+        ).encode()
+        async with ephemeral_web_server(_tempo_search_app(body, seen=seen)) as base_url:
+            client = TempoClient(base_url=base_url)
             ids = await client.search_trace_ids_by_attribute(
                 "platform.session.agent", "flow1:ctx1"
             )
 
+        assert seen == ["platform.session.agent=flow1:ctx1"]
         assert ids == ["abc123", "def456"]
 
     @pytest.mark.asyncio

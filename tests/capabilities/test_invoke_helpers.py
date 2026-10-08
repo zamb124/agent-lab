@@ -1,8 +1,6 @@
-"""Tests for capability gateway text invoke helpers."""
+"""Обёртки capability-gateway над TextTransformService."""
 
 from __future__ import annotations
-
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -10,32 +8,27 @@ from apps.capability_gateway.services.invoke_helpers import (
     invoke_text_format_markdown,
     invoke_text_summarize,
 )
+from core.text_transforms.service import TextTransformService
+
+_MOCK_LLM_TEXT = "Mock LLM ответ"
 
 
 @pytest.mark.asyncio
 async def test_invoke_text_summarize_returns_summary_object() -> None:
-    service = MagicMock()
-    service.summarize = AsyncMock(return_value="short")
     payload = await invoke_text_summarize(
-        service,
+        TextTransformService(),
         text="long text",
-        instruction="brief",
-        max_output_tokens=64,
+        instruction="shorten",
+        provider="mock",
+        model="mock-gpt-4",
+        max_output_tokens=40,
     )
-    assert payload == {"summary": "short"}
-    service.summarize.assert_awaited_once_with(
-        "long text",
-        instruction="brief",
-        provider=None,
-        model=None,
-        max_output_tokens=64,
-    )
+
+    assert payload == {"summary": _MOCK_LLM_TEXT}
 
 
 @pytest.mark.asyncio
 async def test_invoke_text_format_markdown_returns_markdown_object() -> None:
-    service = MagicMock()
-    service.format_markdown = AsyncMock(return_value="# Title")
-    payload = await invoke_text_format_markdown(service, text="Title")
-    assert payload == {"markdown": "# Title"}
-    service.format_markdown.assert_awaited_once_with("Title")
+    payload = await invoke_text_format_markdown(TextTransformService(), text="Title")
+
+    assert payload == {"markdown": _MOCK_LLM_TEXT}

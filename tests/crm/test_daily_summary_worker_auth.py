@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
-
 import pytest
-from pytest import MonkeyPatch
 
+from apps.crm_worker.di import CrmWorkerDi
+from apps.crm_worker.tasks.crm_context import build_auth_token_for_company
 from core.models.identity_models import Company, User
+from core.utils.tokens import TokenType, get_token_service
 
 pytestmark = pytest.mark.no_crm_http
 
 
 @pytest.mark.asyncio
 async def test_build_auth_token_ignores_crm_worker_placeholder(
-    app,
+    crm_worker_di: CrmWorkerDi,
     unique_id: str,
-    monkeypatch: MonkeyPatch,
 ) -> None:
-    _ = app
-    import apps.crm_worker.tasks.crm_context as crm_context
-
     company_id = f"comp_{unique_id}"
     owner_id = f"owner_{unique_id}"
     _ = await User.set(
@@ -39,18 +34,14 @@ async def test_build_auth_token_ignores_crm_worker_placeholder(
         )
     )
 
-    authz = AsyncMock()
-
-    captured: list[dict[str, object]] = []
-
-    def create_token(**kwargs: object) -> str:
-        captured.append(dict(kwargs))
-        return "jwt-test"
-
-    monkeypatch.setattr(crm_context, "get_token_service", lambda: SimpleNamespace(create_token=create_token))
-
-    out = await crm_context.build_auth_token_for_company(company_id, "crm-worker", authz=authz)
-    assert out == "jwt-test"
-    assert len(captured) == 1
-    assert captured[0]["user_id"] == owner_id
-    assert captured[0]["company_id"] == company_id
+    out = await build_auth_token_for_company(
+        company_id,
+        "crm-worker",
+        authz=crm_worker_di.authz_service,
+    )
+    token_data = get_token_service().validate_token(out)
+    assert token_data is not None
+    assert token_data.user_id == owner_id
+    assert token_data.company_id == company_id
+    assert token_data.token_type is TokenType.SESSION
+    assert token_data.roles == ["member"]

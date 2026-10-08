@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import ClassVar, Literal, TypeAlias, cast
+from typing import ClassVar, Literal, TypeAlias
 
 from pydantic import ConfigDict, Field
 
@@ -697,7 +697,10 @@ def parse_workflow_event_payload(
     payload: JsonObject,
 ) -> WorkflowEventPayload:
     payload_model = _PAYLOAD_BY_EVENT_TYPE[event_type]
-    return cast(WorkflowEventPayload, payload_model.model_validate(payload))
+    validated = payload_model.model_validate(payload)
+    if not isinstance(validated, WorkflowEventPayload):
+        raise TypeError(f"workflow event {event_type} payload is not a known payload model")
+    return validated
 
 
 def workflow_event_payload_json(payload: WorkflowEventPayload) -> JsonObject:

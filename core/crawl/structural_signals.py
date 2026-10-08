@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import cast
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
@@ -143,7 +142,7 @@ def _meta_content(soup: BeautifulSoup, *, prop: str | None = None, name: str | N
 def _json_ld_object(value: JsonValue) -> JsonObject | None:
     if not isinstance(value, dict):
         return None
-    return require_json_object(cast(object, value), "json-ld")
+    return require_json_object(value, "json-ld")
 
 
 def _append_json_ld_object(objects: list[JsonObject], value: JsonValue) -> None:

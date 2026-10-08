@@ -1,15 +1,15 @@
 """ASGI smoke: OnlyOffice editor JWT auth + model routing на LLM proxy.
 
 Строгий OpenRouter-контракт (seeded ``lara``, MockLLM-only) — ``tests/agent/contract/``.
-Не в ``tests/agent/e2e/``: ASGI pytest app stub'ит ``load_lara_branch_ids`` (e2e gate запрещает monkeypatch).
+Flow ``lara`` для компании токена материализуется ``ensure_company_public_flows``.
 """
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 from httpx import AsyncClient
+
+from apps.flows.di import FlowsDi
 
 from core.ai.providers import HUMANITEC_LLM_AUTO_MODEL
 from core.clients.onlyoffice import sign_onlyoffice_jwt_hs256
@@ -22,6 +22,7 @@ from tests.agent._helpers import (
     LLM_MODELS_PATH,
     LLM_ONLYOFFICE_PROXY_PATH,
     company_id_from_auth_token,
+    ensure_company_public_flows,
     user_id_from_auth_token,
 )
 
@@ -29,12 +30,8 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture(autouse=True)
-def _stub_lara_branches_for_asgi_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ASGI pytest app не гарантирует seeded flow ``lara``; contract HTTP suite — без stub."""
-    monkeypatch.setattr(
-        "apps.flows.src.agent.llm_proxy.load_lara_branch_ids",
-        AsyncMock(return_value=["documents", "linnex_agent"]),
-    )
+async def _seed_lara_for_office_proxy(auth_token: str, di: FlowsDi) -> None:
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
 
 
 def _office_editor_bearer(*, user_id: str, company_id: str) -> str:

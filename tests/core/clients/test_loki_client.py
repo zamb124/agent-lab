@@ -1,11 +1,12 @@
 """
-Юнит-тесты для LokiClient: парсинг ответов Loki и whitelist LogQL-шаблоны.
+Тесты LokiClient: парсинг ответов Loki, whitelist LogQL и query_range по локальному HTTP.
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+import socket
 
 import pytest
+from aiohttp import web
 
 from core.clients.loki_client import (
     LokiClient,
@@ -20,6 +21,7 @@ from core.clients.loki_client import (
 )
 from core.config.models import LoggingConfig
 from core.types import JsonObject, parse_json_object
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 # ---------------------------------------------------------------------------
 # Query builders
@@ -163,62 +165,54 @@ class TestParseLokiResponse:
             _parse_loki_response({})
 
 
+def _closed_port_base_url() -> str:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return f"http://127.0.0.1:{port}"
+
+
+def _loki_query_app(status: int, body: bytes, *, seen: list[str] | None = None) -> web.Application:
+    async def query_range(request: web.Request) -> web.Response:
+        if seen is not None:
+            seen.append(request.query["query"])
+        content_type = "application/json" if status == 200 else "text/plain"
+        return web.Response(status=status, body=body, content_type=content_type)
+
+    app = web.Application()
+    app.router.add_get("/loki/api/v1/query_range", query_range)
+    return app
+
+
 # ---------------------------------------------------------------------------
-# LokiClient (с мок httpx)
+# LokiClient.query_range
 # ---------------------------------------------------------------------------
 
 class TestLokiClientQueryByTraceId:
     @pytest.mark.asyncio
     async def test_returns_entries(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = _SAMPLE_LOKI_RESPONSE
-        mock_resp.text = json.dumps(_SAMPLE_LOKI_RESPONSE)
-
-        with patch("core.clients.loki_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = LokiClient(base_url="http://loki:3100")
+        seen: list[str] = []
+        body = json.dumps(_SAMPLE_LOKI_RESPONSE).encode()
+        async with ephemeral_web_server(_loki_query_app(200, body, seen=seen)) as base_url:
+            client = LokiClient(base_url=base_url)
             entries = await client.query_by_trace_id("t1")
 
+        assert seen == [_build_trace_query("t1")]
         assert len(entries) == 2
         assert entries[0].message == "first"
 
     @pytest.mark.asyncio
     async def test_loki_error_raises(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.text = "internal error"
-
-        with patch("core.clients.loki_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = LokiClient(base_url="http://loki:3100")
+        async with ephemeral_web_server(_loki_query_app(500, b"internal error")) as base_url:
+            client = LokiClient(base_url=base_url)
             with pytest.raises(LokiClientError, match="query_range returned 500"):
                 await client.query_by_trace_id("t1")
 
     @pytest.mark.asyncio
     async def test_request_error_raises(self):
-        import httpx
-
-        class FakeInner:
-            async def get(self, *args, **kwargs):
-                raise httpx.ConnectError("connection refused", request=MagicMock())
-
-        mock_cm = AsyncMock()
-        mock_cm.__aenter__.return_value = FakeInner()
-        mock_cm.__aexit__ = AsyncMock(return_value=False)
-
-        with patch("core.clients.loki_client.httpx.AsyncClient", return_value=mock_cm):
-            client = LokiClient(base_url="http://loki:3100")
-            with pytest.raises(LokiClientError, match="network or timeout"):
-                await client.query_by_trace_id("t1")
+        client = LokiClient(base_url=_closed_port_base_url())
+        with pytest.raises(LokiClientError, match="network or timeout"):
+            await client.query_by_trace_id("t1")
 
     @pytest.mark.asyncio
     async def test_empty_trace_id_raises(self):
@@ -237,20 +231,13 @@ class TestLokiClientQueryByTraceId:
 class TestLokiClientQueryBySessionId:
     @pytest.mark.asyncio
     async def test_returns_entries(self):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = _SAMPLE_LOKI_RESPONSE
-        mock_resp.text = json.dumps(_SAMPLE_LOKI_RESPONSE)
-
-        with patch("core.clients.loki_client.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client_cls.return_value.__aenter__.return_value = mock_client
-            mock_client_cls.return_value.__aexit__.return_value = AsyncMock(return_value=False)
-            mock_client.get.return_value = mock_resp
-
-            client = LokiClient(base_url="http://loki:3100")
+        seen: list[str] = []
+        body = json.dumps(_SAMPLE_LOKI_RESPONSE).encode()
+        async with ephemeral_web_server(_loki_query_app(200, body, seen=seen)) as base_url:
+            client = LokiClient(base_url=base_url)
             entries = await client.query_by_session_id("flow1:ctx1")
 
+        assert seen == [_build_session_query("flow1:ctx1")]
         assert len(entries) == 2
 
     @pytest.mark.asyncio

@@ -2,10 +2,11 @@
 Тесты для services (FlowFactory, flows_loader, FlowDiscoveryService).
 """
 
+import socket
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
+from aiohttp import web
 
 from apps.flows.config import ExternalFlowConfig
 from apps.flows.src.models import (
@@ -18,6 +19,7 @@ from apps.flows.src.models import (
 from apps.flows.src.runtime.flow import Flow
 from apps.flows.src.services.flow_discovery import FlowDiscoveryService
 from core.clients.a2a_client import A2AClient
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 from tests.fixtures.variables_helpers import (
     delete_variable_via_service,
     upsert_static_variable_via_service,
@@ -246,32 +248,62 @@ class TestFlowsLoader:
             assert "minimum" in props.get("limit", {})
 
 
-class TestFlowDiscoveryService:
-    """Тесты FlowDiscoveryService."""
+class _AgentCards:
+    def __init__(self) -> None:
+        self.authorizations: list[str] = []
+        self.url_a: str = ""
+        self.url_b: str = ""
 
-    @pytest.fixture
-    def mock_a2a_client(self):
-        """Мок A2A клиента."""
-        client = AsyncMock(spec=A2AClient)
-        client.get_agent_card = AsyncMock(
-            return_value={
+
+def _refused_base_url() -> str:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = int(sock.getsockname()[1])
+    sock.close()
+    return f"http://127.0.0.1:{port}"
+
+
+def _agent_card_app(cards: _AgentCards) -> web.Application:
+    async def handle_agent_card(request: web.Request) -> web.Response:
+        authorization = request.headers.get("Authorization")
+        if isinstance(authorization, str) and authorization:
+            cards.authorizations.append(authorization)
+        return web.json_response(
+            {
                 "name": "Test Agent",
                 "description": "Test Description",
                 "branches": [{"id": "default", "name": "Default Skill"}],
             }
         )
-        return client
+
+    app = web.Application()
+    app.router.add_get("/.well-known/agent-card.json", handle_agent_card)
+    return app
+
+
+class TestFlowDiscoveryService:
+    """Тесты FlowDiscoveryService."""
 
     @pytest.fixture
-    async def discovery_service(self, app, mock_a2a_client):
-        """FlowDiscoveryService с мок клиентом."""
+    async def agent_cards(self) -> _AgentCards:
+        cards = _AgentCards()
+        async with ephemeral_web_server(_agent_card_app(cards)) as url_a:
+            async with ephemeral_web_server(_agent_card_app(cards)) as url_b:
+                cards.url_a = url_a
+                cards.url_b = url_b
+                yield cards
+
+    @pytest.fixture
+    async def discovery_service(self, app):
+        """FlowDiscoveryService с живым A2A-клиентом."""
         _ = app
-        return FlowDiscoveryService(a2a_client=mock_a2a_client)
+        return FlowDiscoveryService(a2a_client=A2AClient())
 
     @pytest.mark.asyncio
-    async def test_register_agent(self, discovery_service, mock_a2a_client, unique_id):
+    async def test_register_agent(self, discovery_service, agent_cards: _AgentCards, unique_id):
         """Регистрация нового агента."""
-        url = f"http://new-agent-{unique_id}:8080"
+        _ = unique_id
+        url = agent_cards.url_a
         registered = await discovery_service.register_agent(
             url=url,
             headers={"Authorization": "Bearer token"},
@@ -284,14 +316,13 @@ class TestFlowDiscoveryService:
         assert registered.headers == {"Authorization": "Bearer token"}
         assert registered.status == ExternalAgentStatus.ACTIVE
         assert registered.agent_card["name"] == "Test Agent"
-
-        mock_a2a_client.get_agent_card.assert_called_once_with(url, {"Authorization": "Bearer token"})
+        assert "Bearer token" in agent_cards.authorizations
 
     @pytest.mark.asyncio
-    async def test_register_agent_already_exists(self, discovery_service, mock_a2a_client, app, unique_id, di):
+    async def test_register_agent_already_exists(self, discovery_service, app, unique_id, di):
         """Регистрация уже существующего агента возвращает его."""
         flow_id = f"existing_{unique_id}"
-        url = f"http://existing-{unique_id}:8080"
+        url = _refused_base_url()
         existing = FlowConfig(
             flow_id=flow_id,
             type=FlowType.EXTERNAL,
@@ -304,12 +335,12 @@ class TestFlowDiscoveryService:
         same = await discovery_service.register_agent(url=url)
 
         assert same.flow_id == flow_id
-        mock_a2a_client.get_agent_card.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_register_agent_uses_card_name(self, discovery_service, mock_a2a_client, unique_id):
+    async def test_register_agent_uses_card_name(self, discovery_service, agent_cards: _AgentCards, unique_id):
         """Регистрация без имени использует имя из agent-card."""
-        url = f"http://card-name-{unique_id}:8080"
+        _ = unique_id
+        url = agent_cards.url_b
         from_card = await discovery_service.register_agent(url=url)
 
         assert from_card.name == "Test Agent"
@@ -427,13 +458,15 @@ class TestFlowDiscoveryService:
         assert inactive_id in flow_ids
 
     @pytest.mark.asyncio
-    async def test_health_check_agent_success(self, discovery_service, mock_a2a_client, app, unique_id, di):
+    async def test_health_check_agent_success(
+        self, discovery_service, agent_cards: _AgentCards, app, unique_id, di
+    ):
         """Health check успешного агента."""
         flow_id = f"health_success_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
             type=FlowType.EXTERNAL,
-            url=f"http://health-success-{unique_id}:8080",
+            url=agent_cards.url_a,
             name="Health Success",
             status=ExternalAgentStatus.ACTIVE,
         )
@@ -450,19 +483,17 @@ class TestFlowDiscoveryService:
         assert updated.agent_card["name"] == "Test Agent"
 
     @pytest.mark.asyncio
-    async def test_health_check_agent_failure(self, discovery_service, mock_a2a_client, app, unique_id, di):
+    async def test_health_check_agent_failure(self, discovery_service, app, unique_id, di):
         """Health check неудачного агента."""
         flow_id = f"health_fail_{unique_id}"
         record = FlowConfig(
             flow_id=flow_id,
             type=FlowType.EXTERNAL,
-            url=f"http://health-fail-{unique_id}:8080",
+            url=_refused_base_url(),
             name="Health Fail",
             status=ExternalAgentStatus.ACTIVE,
         )
         await FlowConfig.create_version(record)
-
-        mock_a2a_client.get_agent_card.side_effect = Exception("Connection refused")
 
         result = await discovery_service.health_check_agent(flow_id)
 
@@ -480,7 +511,7 @@ class TestFlowDiscoveryService:
 
     @pytest.mark.asyncio
     async def test_health_check_all(
-        self, discovery_service, mock_a2a_client, app, unique_id, monkeypatch
+        self, discovery_service, agent_cards: _AgentCards, app, unique_id, monkeypatch
     ):
         """Health check всех агентов."""
         # Используем короткие ID чтобы попасть в limit=100 при сортировке по алфавиту
@@ -489,14 +520,14 @@ class TestFlowDiscoveryService:
         row_a = FlowConfig(
             flow_id=ext_id_a,
             type=FlowType.EXTERNAL,
-            url=f"http://check-all-1-{unique_id}:8080",
+            url=agent_cards.url_a,
             name="Check All 1",
             status=ExternalAgentStatus.ACTIVE,
         )
         row_b = FlowConfig(
             flow_id=ext_id_b,
             type=FlowType.EXTERNAL,
-            url=f"http://check-all-2-{unique_id}:8080",
+            url=agent_cards.url_b,
             name="Check All 2",
             status=ExternalAgentStatus.ACTIVE,
         )
@@ -521,10 +552,11 @@ class TestFlowDiscoveryService:
         assert results[ext_id_b] is True
 
     @pytest.mark.asyncio
-    async def test_init_from_config(self, discovery_service, mock_a2a_client, unique_id):
+    async def test_init_from_config(self, discovery_service, agent_cards: _AgentCards, unique_id):
         """Инициализация из конфига."""
-        url1 = f"http://config-agent-1-{unique_id}:8080"
-        url2 = f"http://config-agent-2-{unique_id}:8080"
+        _ = unique_id
+        url1 = agent_cards.url_a
+        url2 = agent_cards.url_b
         configs = [
             ExternalFlowConfig(
                 url=url1,
@@ -550,16 +582,14 @@ class TestFlowDiscoveryService:
         assert second_registered.name == "Test Agent"
 
     @pytest.mark.asyncio
-    async def test_init_from_config_partial_failure(self, discovery_service, mock_a2a_client, unique_id):
+    async def test_init_from_config_partial_failure(
+        self, discovery_service, agent_cards: _AgentCards, unique_id
+    ):
         """Инициализация из конфига с частичной ошибкой."""
-        mock_a2a_client.get_agent_card.side_effect = [
-            {"name": "OK Agent", "description": "OK"},
-            Exception("Connection refused"),
-        ]
-
+        _ = unique_id
         configs = [
-            ExternalFlowConfig(url=f"http://ok-agent-{unique_id}:8080"),
-            ExternalFlowConfig(url=f"http://fail-agent-{unique_id}:8080"),
+            ExternalFlowConfig(url=agent_cards.url_a),
+            ExternalFlowConfig(url=_refused_base_url()),
         ]
 
         count = await discovery_service.init_from_config(configs)

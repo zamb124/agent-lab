@@ -254,7 +254,7 @@ _GetDefault = TypeVar("_GetDefault", bound=ExecutionStateValue)
 def _trigger_field_dict[V](raw: dict[str, V]) -> dict[str, object]:
     copied: dict[str, object] = {}
     for key, value in raw.items():
-        copied[key] = cast(object, value)
+        copied[key] = value
     return copied
 
 

@@ -1,11 +1,13 @@
 """ServiceClientError: статус и detail peer-ответа для проброса 4xx."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import httpx
 import pytest
+from aiohttp import web
 
 from core.clients.service_client import ServiceClient, ServiceClientError
+from core.config import get_settings
+from tests.core.http_proxy_helpers import install_mock_httpx_client
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 pytestmark = pytest.mark.no_service_client_patch
 
@@ -39,47 +41,42 @@ def test_http_detail_falls_back_to_raw_text() -> None:
     assert error.http_detail() == "not-json"
 
 
-@pytest.mark.asyncio
-async def test_request_wraps_empty_exception_message_with_type_name() -> None:
-    client = ServiceClient()
-    mock_http = MagicMock()
-    mock_http.request = AsyncMock(side_effect=Exception())
-    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
-    mock_http.__aexit__ = AsyncMock(return_value=False)
+def _raise_blank_exception(_request: httpx.Request) -> httpx.Response:
+    raise Exception()
 
-    with (
-        patch.object(client, "_get_service_url", return_value="http://flows.test"),
-        patch("core.clients.service_client.get_httpx_client", return_value=mock_http),
-    ):
-        with pytest.raises(ServiceClientError) as raised:
-            await client.request("flows", "GET", "/flows/api/v1/flows/missing")
+
+@pytest.mark.asyncio
+async def test_request_wraps_empty_exception_message_with_type_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install_mock_httpx_client(monkeypatch, _raise_blank_exception)
+    client = ServiceClient()
+    with pytest.raises(ServiceClientError) as raised:
+        await client.request("flows", "GET", "/flows/api/v1/flows/missing")
 
     assert str(raised.value) == "Request error for flows: Exception"
-    assert raised.value.__cause__ is not None
+    cause = raised.value.__cause__
+    assert type(cause) is Exception
+    assert str(cause) == ""
 
 
 @pytest.mark.asyncio
-async def test_request_preserves_http_status_error_body() -> None:
-    client = ServiceClient()
-    response = MagicMock()
-    response.status_code = 404
-    response.text = '{"detail":"Flow not found"}'
-    response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "404",
-        request=MagicMock(),
-        response=response,
-    )
-    mock_http = MagicMock()
-    mock_http.request = AsyncMock(return_value=response)
-    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
-    mock_http.__aexit__ = AsyncMock(return_value=False)
+async def test_request_preserves_http_status_error_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def handle_not_found(_request: web.Request) -> web.Response:
+        return web.json_response({"detail": "Flow not found"}, status=404)
 
-    with (
-        patch.object(client, "_get_service_url", return_value="http://flows.test"),
-        patch("core.clients.service_client.get_httpx_client", return_value=mock_http),
-    ):
+    app = web.Application()
+    app.router.add_route("*", "/{tail:.*}", handle_not_found)
+    async with ephemeral_web_server(app) as base_url:
+        monkeypatch.setattr(get_settings().server, "flows_service_url", base_url)
+        client = ServiceClient()
         with pytest.raises(ServiceClientError) as raised:
             await client.request("flows", "GET", "/flows/api/v1/flows/missing")
 
     assert "HTTP 404 while requesting flows" in str(raised.value)
+    assert "Flow not found" in str(raised.value)
     assert raised.value.status_code == 404
+    assert raised.value.response_text is not None
+    assert "Flow not found" in raised.value.response_text

@@ -1,7 +1,7 @@
 {
-  "cast_calls": 57,
+  "cast_calls": 32,
   "type_ignore": 0,
-  "object_annotations": 18,
+  "object_annotations": 17,
   "os_environ": 0,
   "except_pass": 0,
   "force_global": 0,
@@ -10,7 +10,7 @@
   "logger_fstring": 0,
   "logger_percent": 0,
   "logger_sentence": 0,
-  "tests_monkeypatch_internal": 181,
-  "tests_asyncmock": 405,
-  "tests_skip_markers": 199
+  "tests_monkeypatch_internal": 129,
+  "tests_asyncmock": 10,
+  "tests_skip_markers": 101
 }

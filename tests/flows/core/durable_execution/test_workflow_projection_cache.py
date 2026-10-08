@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -131,7 +131,6 @@ async def test_get_state_returns_rehydrated_state_on_projection_mismatch(
 
     runtime = DurableWorkflowRuntime(redis_client=redis)  # type: ignore[arg-type]
     runtime._company_id = lambda: "company-1"  # type: ignore[method-assign]
-    runtime._get_cached_head = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     loaded = await runtime.get_state("flow:ctx-1")
     assert loaded is not None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
-from typing import ClassVar, Literal, Protocol, cast
+from typing import ClassVar, Literal, Protocol
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
@@ -16,6 +16,7 @@ from core.config.models import (
     ProviderLitserveTTSModelEntry,
     ProviderLitserveVADModelEntry,
 )
+from core.db.sqlite_rows import sqlite_cell, sqlite_fetchall, sqlite_fetchone
 from core.utils.time import utcnow_iso
 
 ModelKind = Literal["embedding", "rerank", "stt", "tts", "vad"]
@@ -40,38 +41,34 @@ class AudioModelEntry(Protocol):
     hf_model_id: str
 
 
-def _cell(row: sqlite3.Row, column: str) -> str | int | float | bytes | None:
-    return cast(str | int | float | bytes | None, row[column])
-
-
 def _fetch_row(
     conn: sqlite3.Connection,
     sql: str,
     parameters: tuple[str, ...] = (),
 ) -> sqlite3.Row | None:
-    return cast(sqlite3.Row | None, conn.execute(sql, parameters).fetchone())
+    return sqlite_fetchone(conn.execute(sql, parameters))
 
 
 def _fetch_rows(conn: sqlite3.Connection, sql: str) -> Sequence[sqlite3.Row]:
-    return cast(Sequence[sqlite3.Row], conn.execute(sql).fetchall())
+    return sqlite_fetchall(conn.execute(sql))
 
 
 def _row_required_str(row: sqlite3.Row, column: str) -> str:
-    value = _cell(row, column)
+    value = sqlite_cell(row, column)
     if isinstance(value, str):
         return value
     raise TypeError(f"models.{column} must be TEXT")
 
 
 def _row_optional_str(row: sqlite3.Row, column: str) -> str | None:
-    value = _cell(row, column)
+    value = sqlite_cell(row, column)
     if value is None or isinstance(value, str):
         return value
     raise TypeError(f"models.{column} must be TEXT or NULL")
 
 
 def _row_required_int(row: sqlite3.Row, column: str) -> int:
-    value = _cell(row, column)
+    value = sqlite_cell(row, column)
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"models.{column} must be INTEGER")
     return value

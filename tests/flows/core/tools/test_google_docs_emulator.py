@@ -4,10 +4,9 @@ gdocs_* tools via tool.run against Google API emulator.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.tools.google_docs.google_docs import (
     gdocs_append_text,
@@ -66,9 +65,13 @@ def test_all_gdocs_tools_registered() -> None:
 async def test_all_gdocs_tools_via_run(
     google_api_emulator: GoogleApiEmulatorHandle,
     unique_id: str,
+    di: FlowsDi,
 ) -> None:
     state = _make_state(unique_id, google_api_emulator)
-    client = GoogleWorkspaceClient(oauth_service=AsyncMock(), company_credentials=AsyncMock())
+    client = GoogleWorkspaceClient(
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
+    )
     gdocs_create_document_bound = gdocs_create_document.with_dependencies([client])
     gdocs_append_text_bound = gdocs_append_text.with_dependencies([client])
     gdocs_read_document_bound = gdocs_read_document.with_dependencies([client])

@@ -6,10 +6,9 @@ Real tools + resolve + client HTTP; credentials from state.variables.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.tools.google_sheets.google_sheets import (
     sheets_add_sheet,
@@ -89,9 +88,13 @@ def test_all_sheets_tools_registered() -> None:
 async def test_all_sheets_tools_via_run(
     google_api_emulator: GoogleApiEmulatorHandle,
     unique_id: str,
+    di: FlowsDi,
 ) -> None:
     state = _make_state(unique_id, google_api_emulator)
-    client = GoogleWorkspaceClient(oauth_service=AsyncMock(), company_credentials=AsyncMock())
+    client = GoogleWorkspaceClient(
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
+    )
 
     def _bound(tool: object) -> object:
         return tool.with_dependencies([client])  # type: ignore[attr-defined]

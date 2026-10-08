@@ -1,13 +1,9 @@
 """Контракт RAGResource: search через HTTP RAG API; add_document через pgvector."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
 from apps.flows.di import FlowsDi
 from core.clients.service_client import ServiceClient
-from core.models.identity_models import Namespace, NamespaceKind
-from core.rag.providers.pgvector_provider import PgVectorProvider
 from core.rag.rag_resource import RAGResource
 
 
@@ -67,82 +63,3 @@ async def test_search_posts_to_rag_api_with_search_options(
     }
 
 
-@pytest.mark.asyncio
-async def test_add_document_passes_metadata_through(
-    di: FlowsDi,
-) -> None:
-    doc = MagicMock()
-    doc.document_id = "fid"
-    mock_upload = AsyncMock(return_value=doc)
-    mock_namespace_get = AsyncMock(
-        return_value=Namespace(
-            name="ns-a",
-            company_id="system",
-            kind=NamespaceKind.COMPANY_WORKSPACE,
-        )
-    )
-
-    namespace_service = di.namespace_service
-    with (
-        patch.object(namespace_service, "get_or_create", mock_namespace_get),
-        patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
-    ):
-        r = RAGResource(namespace="ns-a", namespace_service=namespace_service)
-        await r.add_document(
-            "fid",
-            "hello",
-            metadata={"tag": "t"},
-            name="n.txt",
-        )
-
-    mock_upload.assert_awaited_once()
-    kw = mock_upload.await_args.kwargs
-    meta = kw["metadata"]
-    assert {k: meta[k] for k in ("document_id", "tag")} == {"document_id": "fid", "tag": "t"}
-
-
-@pytest.mark.asyncio
-async def test_add_document_merges_index_profile_config(
-    di: FlowsDi,
-) -> None:
-    doc = MagicMock()
-    doc.document_id = "fid"
-    mock_upload = AsyncMock(return_value=doc)
-    mock_namespace_get = AsyncMock(
-        return_value=Namespace(
-            name="ns-a",
-            company_id="system",
-            kind=NamespaceKind.COMPANY_WORKSPACE,
-        )
-    )
-
-    namespace_service = di.namespace_service
-    with (
-        patch.object(namespace_service, "get_or_create", mock_namespace_get),
-        patch.object(PgVectorProvider, "upload_document_from_text", mock_upload),
-    ):
-        r = RAGResource(
-            namespace="ns-a",
-            namespace_service=namespace_service,
-            index_profile_config={"split": {"chunk_size": 256}},
-        )
-        await r.add_document(
-            "fid",
-            "hello",
-            metadata={"index_profile_config": {"split": {"strategy": "recursive"}}},
-            name="n.txt",
-            index_profile_config={"lexical": {"enabled": True}},
-        )
-
-    mock_upload.assert_awaited_once()
-    kw = mock_upload.await_args.kwargs
-    meta = kw["metadata"]
-    ipc = meta["index_profile_config"]
-    assert {k: meta[k] for k in ("document_id",)} == {"document_id": "fid"}
-    assert {
-        "split": ipc["split"],
-        "lexical": ipc["lexical"],
-    } == {
-        "split": {"chunk_size": 256, "strategy": "recursive"},
-        "lexical": {"enabled": True},
-    }

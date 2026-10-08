@@ -1,15 +1,26 @@
-"""Unit tests for sitemap discovery limits."""
+"""Лимиты обнаружения sitemap через настоящий HTTP-клиент."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from collections.abc import Callable
 
+import httpx
 import pytest
 
 from apps.search.services.crawl.sitemap_parser import _append_entries, discover_sitemap_urls
 from core.crawl.url_filter import CrawlUrlFilter
+from tests.core.http_proxy_helpers import install_mock_httpx_client
 
 _PERMISSIVE_FILTER = CrawlUrlFilter(include_patterns=[], exclude_patterns=[], exclude_extensions=[])
+
+
+def _site(body: bytes) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/sitemap.xml":
+            return httpx.Response(200, content=body, request=request)
+        return httpx.Response(404, request=request)
+
+    return handler
 
 
 def test_append_entries_stops_at_max_urls() -> None:
@@ -21,7 +32,7 @@ def test_append_entries_stops_at_max_urls() -> None:
 
 
 @pytest.mark.asyncio
-async def test_discover_sitemap_urls_respects_max_urls() -> None:
+async def test_discover_sitemap_urls_respects_max_urls(monkeypatch: pytest.MonkeyPatch) -> None:
     url_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://example.com/a</loc></url>
@@ -29,91 +40,46 @@ async def test_discover_sitemap_urls_respects_max_urls() -> None:
   <url><loc>https://example.com/c</loc></url>
 </urlset>
 """
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = url_xml
-    mock_response.text = ""
-
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-
-    mock_cm = MagicMock()
-    mock_cm.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_cm.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "apps.search.services.crawl.sitemap_parser.get_httpx_client",
-        return_value=mock_cm,
-    ):
-        entries = await discover_sitemap_urls(
-            "example.com",
-            timeout_seconds=5.0,
-            max_urls=2,
-            max_sitemap_bytes=1_048_576,
-            url_filter=_PERMISSIVE_FILTER,
-        )
+    install_mock_httpx_client(monkeypatch, _site(url_xml))
+    entries = await discover_sitemap_urls(
+        "example.com",
+        timeout_seconds=5.0,
+        max_urls=2,
+        max_sitemap_bytes=1_048_576,
+        url_filter=_PERMISSIVE_FILTER,
+    )
 
     assert len(entries) == 2
-    urls = {entry.url for entry in entries}
-    assert urls == {"https://example.com/a", "https://example.com/b"}
+    assert {entry.url for entry in entries} == {"https://example.com/a", "https://example.com/b"}
 
 
 @pytest.mark.asyncio
-async def test_discover_sitemap_urls_skips_oversized_xml() -> None:
-    huge = b"x" * 2048
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = huge
-    mock_response.text = ""
-
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-
-    mock_cm = MagicMock()
-    mock_cm.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_cm.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "apps.search.services.crawl.sitemap_parser.get_httpx_client",
-        return_value=mock_cm,
-    ):
-        entries = await discover_sitemap_urls(
-            "example.com",
-            timeout_seconds=5.0,
-            max_urls=10,
-            max_sitemap_bytes=1024,
-            url_filter=_PERMISSIVE_FILTER,
-        )
+async def test_discover_sitemap_urls_skips_oversized_xml(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_mock_httpx_client(monkeypatch, _site(b"x" * 2048))
+    entries = await discover_sitemap_urls(
+        "example.com",
+        timeout_seconds=5.0,
+        max_urls=10,
+        max_sitemap_bytes=1024,
+        url_filter=_PERMISSIVE_FILTER,
+    )
 
     assert len(entries) == 1
     assert entries[0].url == "https://example.com/"
 
 
 @pytest.mark.asyncio
-async def test_discover_sitemap_urls_invalid_xml_falls_back_to_homepage() -> None:
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = b"<html><body>not xml</body></html>"
-    mock_response.text = ""
-
-    mock_client = AsyncMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-
-    mock_cm = MagicMock()
-    mock_cm.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_cm.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "apps.search.services.crawl.sitemap_parser.get_httpx_client",
-        return_value=mock_cm,
-    ):
-        entries = await discover_sitemap_urls(
-            "example.com",
-            timeout_seconds=5.0,
-            max_urls=10,
-            max_sitemap_bytes=1_048_576,
-            url_filter=_PERMISSIVE_FILTER,
-        )
+async def test_discover_sitemap_urls_invalid_xml_falls_back_to_homepage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install_mock_httpx_client(monkeypatch, _site(b"<html><body>not xml</body></html>"))
+    entries = await discover_sitemap_urls(
+        "example.com",
+        timeout_seconds=5.0,
+        max_urls=10,
+        max_sitemap_bytes=1_048_576,
+        url_filter=_PERMISSIVE_FILTER,
+    )
 
     assert len(entries) == 1
     assert entries[0].url == "https://example.com/"

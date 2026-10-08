@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Awaitable
-from typing import TypeVar
+from collections.abc import Awaitable, Callable
+from typing import Protocol, TypeVar
 
 from core.config import get_settings
 from core.logging import (
@@ -49,7 +49,13 @@ BackgroundResultT = TypeVar("BackgroundResultT")
 
 # asyncio loop keeps only weak refs to tasks; without a strong ref GC can destroy
 # long-running background loops (platform:events consumer, refresh loops, …).
-_BACKGROUND_TASKS: set[asyncio.Task[object]] = set()
+# asyncio loop keeps only weak refs to tasks; without a strong ref GC can destroy
+# long-running background loops (platform:events consumer, refresh loops, …).
+class _RetainedTask(Protocol):
+    def add_done_callback(self, fn: Callable[[_RetainedTask], None], /) -> None: ...
+
+
+_BACKGROUND_TASKS: set[_RetainedTask] = set()
 
 
 def run_with_log_context(

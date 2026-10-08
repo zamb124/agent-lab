@@ -10,7 +10,7 @@ import socket
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import assert_never, cast
+from typing import assert_never
 from urllib.parse import urlparse
 
 import httpx
@@ -18,6 +18,7 @@ import httpx
 from core.config.models import GuestRuntimeFarmConfig
 from core.guest_runtime.models import GuestExecutorKind, GuestLanguage, GuestLease
 from core.logging import get_logger
+from core.utils.tcp_port import listening_tcp_port
 
 logger = get_logger(__name__)
 
@@ -108,12 +109,7 @@ def docker_memory(guest_memory: str) -> str:
 def _bind_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
-        port_raw = cast(object, sock.getsockname()[1])
-        if isinstance(port_raw, bool) or not isinstance(port_raw, int):
-            raise RuntimeError("socket bind port must be int")
-        if port_raw < 1 or port_raw > 65535:
-            raise RuntimeError("socket bind port out of range")
-        return port_raw
+        return listening_tcp_port(sock, label="socket bind")
 
 
 async def _wait_health(url: str, *, attempts: int = 50) -> None:

@@ -147,9 +147,9 @@ class RuntimeChannel(Protocol):
 
     name: str
 
-_JSON_VALUE_ADAPTER: TypeAdapter[PydanticJsonValue] = TypeAdapter(PydanticJsonValue)
-_JSON_OBJECT_ADAPTER: TypeAdapter[dict[str, PydanticJsonValue]] = TypeAdapter(dict[str, PydanticJsonValue])
-_JSON_ARRAY_ADAPTER: TypeAdapter[list[PydanticJsonValue]] = TypeAdapter(list[PydanticJsonValue])
+_JSON_VALUE_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+_JSON_OBJECT_ADAPTER: TypeAdapter[JsonObject] = TypeAdapter(JsonObject)
+_JSON_ARRAY_ADAPTER: TypeAdapter[JsonArray] = TypeAdapter(JsonArray)
 _ASGI_RECEIVE_MESSAGE_ADAPTER: TypeAdapter[ASGIReceiveMessage] = TypeAdapter(ASGIReceiveMessage)
 _TASKIQ_LABEL_VALUE_ADAPTER: TypeAdapter[TaskiqLabelValue] = TypeAdapter(TaskiqLabelValue)
 
@@ -162,7 +162,7 @@ def parse_yaml_value(data: str, field_name: str = "value") -> JsonValue:
 def require_json_value(value: object, field_name: str = "value") -> JsonValue:
     """Проверить внешнее значение на совместимость с JSON."""
     try:
-        return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_python(value))
+        return _JSON_VALUE_ADAPTER.validate_python(value)
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be JSON-compatible") from exc
 
@@ -264,7 +264,7 @@ def parse_json_value(data: str | bytes, field_name: str = "value") -> JsonValue:
             parse_variants.append(repaired)
         for parse_candidate in parse_variants:
             try:
-                return cast(JsonValue, _JSON_VALUE_ADAPTER.validate_json(parse_candidate))
+                return _JSON_VALUE_ADAPTER.validate_json(parse_candidate)
             except ValidationError as exc:
                 last_exc = exc
     if last_exc is not None:
@@ -296,7 +296,7 @@ def model_json_object(
 def require_json_object(value: object, field_name: str = "value") -> JsonObject:
     """Проверить внешнее значение на JSON object."""
     try:
-        return cast(JsonObject, _JSON_OBJECT_ADAPTER.validate_python(value))
+        return _JSON_OBJECT_ADAPTER.validate_python(value)
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON object") from exc
 
@@ -313,7 +313,7 @@ def require_serializer_json_object(
 def parse_json_object(data: str | bytes, field_name: str = "value") -> JsonObject:
     """Распарсить JSON-строку в строгий JSON object."""
     try:
-        return cast(JsonObject, _JSON_OBJECT_ADAPTER.validate_json(data))
+        return _JSON_OBJECT_ADAPTER.validate_json(data)
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON object") from exc
 
@@ -321,7 +321,7 @@ def parse_json_object(data: str | bytes, field_name: str = "value") -> JsonObjec
 def require_json_array(value: object, field_name: str = "value") -> JsonArray:
     """Проверить внешнее значение на JSON array."""
     try:
-        return cast(JsonArray, _JSON_ARRAY_ADAPTER.validate_python(value))
+        return _JSON_ARRAY_ADAPTER.validate_python(value)
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON array") from exc
 
@@ -340,7 +340,7 @@ def require_taskiq_label_value(
 def parse_json_array(data: str | bytes, field_name: str = "value") -> JsonArray:
     """Распарсить JSON-строку в строгий JSON array."""
     try:
-        return cast(JsonArray, _JSON_ARRAY_ADAPTER.validate_json(data))
+        return _JSON_ARRAY_ADAPTER.validate_json(data)
     except ValidationError as exc:
         raise ValueError(f"{field_name} must be a JSON array") from exc
 
