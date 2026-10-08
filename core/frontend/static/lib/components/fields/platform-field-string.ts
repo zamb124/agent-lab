@@ -1,12 +1,13 @@
 import { html, css, nothing } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
-const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']);
+const ALLOWED_INPUT_TYPES = Object.freeze(['text', 'email', 'password', 'url', 'tel', 'search']) as readonly string[];
 
 export class PlatformFieldString extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         mode: { type: String },
         disabled: { type: Boolean },
@@ -15,7 +16,15 @@ export class PlatformFieldString extends PlatformElement {
         suggestions: { type: Array },
     };
 
-    static styles = [
+    declare value: string | null;
+    declare mode: string;
+    declare disabled: boolean;
+    declare placeholder: string;
+    declare inputType: string;
+    declare suggestions: string[];
+    _listId: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -45,15 +54,15 @@ export class PlatformFieldString extends PlatformElement {
         this._listId = `platform-field-string-${Math.random().toString(36).slice(2, 10)}`;
     }
 
-    _onInput(e) {
+    _onInput(e: InputEvent): void {
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: e.target.value },
+            detail: { value: (e.target as HTMLInputElement).value },
             bubbles: true,
             composed: true,
         }));
     }
 
-    _onManagedFocusIn() {
+    _onManagedFocusIn(): void {
         this.dispatchEvent(new CustomEvent('platform-field-managed-focus-in', {
             bubbles: true,
             composed: true,
@@ -61,7 +70,7 @@ export class PlatformFieldString extends PlatformElement {
     }
 
     /** @param {FocusEvent} e */
-    _onManagedFocusOut(e) {
+    _onManagedFocusOut(e: FocusEvent): void {
         this.dispatchEvent(new CustomEvent('platform-field-managed-focus-out', {
             bubbles: true,
             composed: true,
@@ -69,11 +78,11 @@ export class PlatformFieldString extends PlatformElement {
         }));
     }
 
-    _resolvedInputType() {
+    _resolvedInputType(): string {
         if (typeof this.inputType !== 'string' || this.inputType.length === 0) {
             return 'text';
         }
-        if (!ALLOWED_INPUT_TYPES.includes(this.inputType)) {
+        if (!ALLOWED_INPUT_TYPES.includes(this.inputType as typeof ALLOWED_INPUT_TYPES[number])) {
             throw new Error(
                 `platform-field-string: inputType "${this.inputType}" is not allowed. Allowed: ${ALLOWED_INPUT_TYPES.join(', ')}.`,
             );
@@ -81,13 +90,13 @@ export class PlatformFieldString extends PlatformElement {
         return this.inputType;
     }
 
-    _normalizedSuggestions() {
+    _normalizedSuggestions(): string[] {
         return Array.isArray(this.suggestions)
             ? this.suggestions.filter((item) => typeof item === 'string' && item.length > 0).slice(0, 120)
             : [];
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             const display = this.value != null && this.value !== '';
             if (!display) {

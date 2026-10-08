@@ -1,4 +1,5 @@
 import { html, css, nothing } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 /**
@@ -9,13 +10,17 @@ import { PlatformElement } from '../../platform-element/index.js';
 export class PlatformFieldExternalRefs extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: Object },
         mode: { type: String },
         disabled: { type: Boolean },
     };
 
-    static styles = [
+    declare value: Record<string, unknown> | null;
+    declare mode: string;
+    declare disabled: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -79,17 +84,18 @@ export class PlatformFieldExternalRefs extends PlatformElement {
         this.disabled = false;
     }
 
-    _entries() {
+    _entries(): [string, Record<string, unknown>][] {
         const v = this.value;
         if (v == null || typeof v !== 'object' || Array.isArray(v)) {
             return [];
         }
         return Object.entries(v).filter(
-            ([, payload]) => payload != null && typeof payload === 'object' && !Array.isArray(payload),
+            (e): e is [string, Record<string, unknown>] =>
+                e[1] != null && typeof e[1] === 'object' && !Array.isArray(e[1]),
         );
     }
 
-    _scalar(payload, key) {
+    _scalar(payload: Record<string, unknown>, key: string): string {
         const x = payload[key];
         if (x == null) {
             return '';
@@ -100,7 +106,7 @@ export class PlatformFieldExternalRefs extends PlatformElement {
         return String(x);
     }
 
-    _renderCard(providerId, payload) {
+    _renderCard(providerId: string, payload: Record<string, unknown>): TemplateResult {
         const recordId = this._scalar(payload, 'record_id');
         const lastSeen = this._scalar(payload, 'last_seen_at');
         const accountKey = this._scalar(payload, 'account_key');
@@ -136,7 +142,7 @@ export class PlatformFieldExternalRefs extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const entries = this._entries();
         if (entries.length === 0) {
             return html`<span class="field-pill-empty">${this.t('platform_field.external_refs_empty')}</span>`;

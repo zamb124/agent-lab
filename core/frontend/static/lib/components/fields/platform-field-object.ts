@@ -1,16 +1,22 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 export class PlatformFieldObject extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: Object },
         mode: { type: String },
         disabled: { type: Boolean },
     };
 
-    static styles = [
+    declare value: unknown;
+    declare mode: string;
+    declare disabled: boolean;
+    _jsonError: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -54,8 +60,8 @@ export class PlatformFieldObject extends PlatformElement {
         this._jsonError = '';
     }
 
-    _onInput(e) {
-        const raw = e.target.value.trim();
+    _onInput(e: InputEvent): void {
+        const raw = (e.target as HTMLTextAreaElement).value.trim();
         if (raw === '') {
             this._jsonError = '';
             this.requestUpdate();
@@ -82,12 +88,12 @@ export class PlatformFieldObject extends PlatformElement {
         }
     }
 
-    _serialize(val) {
+    _serialize(val: unknown): string {
         if (val == null) return '';
         return JSON.stringify(val, null, 2);
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             if (this.value == null || (typeof this.value === 'object' && Object.keys(this.value).length === 0)) {
                 return html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;

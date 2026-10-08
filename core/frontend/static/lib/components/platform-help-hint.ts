@@ -8,9 +8,13 @@
  * `size`: `md` — кнопка 32×32 (как `flows-node-run-control`).
  */
 import { html, css, nothing, unsafeCSS } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveDocumentationHref } from '../utils/documentation-url.js';
 import './platform-popover.js';
+import type { PlatformPopover } from './platform-popover.js';
+import type { I18nState } from '../events/reducers/i18n.js';
+import type { SelectController } from '../events/select-controller.js';
 
 const PORTAL_GAP_PX = 8;
 const VIEWPORT_SIDE_INSET_PX = 8;
@@ -66,7 +70,7 @@ const HINT_BUBBLE_CSS = `
     `;
 
 export class PlatformHelpHint extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         unsafeCSS(HINT_BUBBLE_CSS),
         css`
@@ -136,7 +140,7 @@ export class PlatformHelpHint extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         text: { type: String },
         summary: { type: String },
         details: { type: String },
@@ -152,6 +156,24 @@ export class PlatformHelpHint extends PlatformElement {
         fill: { type: Boolean, reflect: true },
         _open: { state: true },
     };
+
+    declare text: string;
+    declare summary: string;
+    declare details: string;
+    declare docHref: string;
+    declare docLabel: string;
+    declare label: string;
+    declare strategy: string;
+    declare placement: string;
+    declare size: string;
+    declare wide: boolean;
+    declare fill: boolean;
+    declare _open: boolean;
+
+    _bubbleId: string;
+    _closeTimer: number | null;
+    _anchor: HTMLElement | null;
+    _localeSelect: SelectController<string>;
 
     constructor() {
         super();
@@ -169,21 +191,20 @@ export class PlatformHelpHint extends PlatformElement {
         this._open = false;
         this._bubbleId = `platform-help-hint-${Math.random().toString(36).slice(2, 10)}`;
         this._closeTimer = null;
-        /** @type {HTMLElement | null} */
         this._anchor = null;
         this._cancelClose = this._cancelClose.bind(this);
         this._scheduleClose = this._scheduleClose.bind(this);
         this._closeNow = this._closeNow.bind(this);
         this._onPortalFocusOut = this._onPortalFocusOut.bind(this);
-        this._localeSelect = this.select((s) => s.i18n.locale);
+        this._localeSelect = this.select((s) => (s.i18n as I18nState).locale);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._clearCloseTimer();
         super.disconnectedCallback();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (this._anchor === null) {
             const root = this.renderRoot?.querySelector('.hint-root');
@@ -192,18 +213,18 @@ export class PlatformHelpHint extends PlatformElement {
             }
         }
         if (this._open) {
-            this.renderRoot?.querySelector('platform-popover')?.reposition();
+            this.renderRoot?.querySelector<PlatformPopover>('platform-popover')?.reposition();
         }
     }
 
-    _clearCloseTimer() {
+    _clearCloseTimer(): void {
         if (this._closeTimer !== null) {
             clearTimeout(this._closeTimer);
             this._closeTimer = null;
         }
     }
 
-    _scheduleClose() {
+    _scheduleClose(): void {
         this._clearCloseTimer();
         this._closeTimer = window.setTimeout(() => {
             this._closeTimer = null;
@@ -211,24 +232,24 @@ export class PlatformHelpHint extends PlatformElement {
         }, CLOSE_DELAY_MS);
     }
 
-    _cancelClose() {
+    _cancelClose(): void {
         this._clearCloseTimer();
     }
 
-    _closeNow() {
+    _closeNow(): void {
         this._clearCloseTimer();
         this._open = false;
     }
 
-    _hasDocLink() {
+    _hasDocLink(): boolean {
         return typeof this.docHref === 'string' && this.docHref.trim() !== '';
     }
 
-    _textValue(value) {
+    _textValue(value: unknown): string {
         return typeof value === 'string' ? value.trim() : '';
     }
 
-    _renderBubble() {
+    _renderBubble(): typeof nothing | TemplateResult {
         if (!this._open) {
             return nothing;
         }
@@ -277,39 +298,39 @@ export class PlatformHelpHint extends PlatformElement {
         `;
     }
 
-    _openBubble() {
+    _openBubble(): void {
         this._cancelClose();
         this._open = true;
     }
 
-    _onRootEnter() {
+    _onRootEnter(): void {
         this._cancelClose();
         this._openBubble();
     }
 
-    _onRootLeave() {
+    _onRootLeave(): void {
         this._scheduleClose();
     }
 
-    _onRootFocusIn() {
+    _onRootFocusIn(): void {
         this._cancelClose();
         this._openBubble();
     }
 
-    _bubbleNode() {
+    _bubbleNode(): Element | null | undefined {
         return this.renderRoot?.querySelector('.platform-help-hint-portal-bubble');
     }
 
-    _onRootFocusOut(e) {
-        const related = e.relatedTarget;
+    _onRootFocusOut(e: FocusEvent): void {
+        const related = e.relatedTarget as Node | null;
         if (related && this._bubbleNode()?.contains(related)) {
             return;
         }
         this._closeNow();
     }
 
-    _onPortalFocusOut(e) {
-        const related = e.relatedTarget;
+    _onPortalFocusOut(e: FocusEvent): void {
+        const related = e.relatedTarget as Node | null;
         const root = this.renderRoot?.querySelector('.hint-root');
         if ((related && this._bubbleNode()?.contains(related)) || (root && related && root.contains(related))) {
             return;
@@ -317,13 +338,13 @@ export class PlatformHelpHint extends PlatformElement {
         this._scheduleClose();
     }
 
-    _onRootClick(e) {
+    _onRootClick(e: MouseEvent): void {
         e.stopPropagation();
         this._cancelClose();
         this._openBubble();
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <span
                 class="hint-root"

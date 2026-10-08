@@ -1,6 +1,8 @@
 import { html, css, nothing } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-popover.js';
+import type { PlatformPopover } from '../platform-popover.js';
 
 /**
  * Перечисление — type `enum` у `platform-field`.
@@ -21,7 +23,12 @@ import '../platform-popover.js';
  * эквивалент прежнему префикс-`<option value="">`.
  */
 
-function normalizeOption(raw) {
+interface EnumOption {
+    value: string;
+    label: string;
+}
+
+function normalizeOption(raw: unknown): EnumOption {
     if (typeof raw === 'string') {
         if (raw === '') {
             throw new Error(
@@ -31,32 +38,33 @@ function normalizeOption(raw) {
         return { value: raw, label: raw };
     }
     if (raw && typeof raw === 'object') {
-        if (!('value' in raw) || typeof raw.value !== 'string') {
+        const rec = raw as Record<string, unknown>;
+        if (!('value' in rec) || typeof rec.value !== 'string') {
             throw new Error('platform-field-enum: option.value must be a string');
         }
-        const optValue = raw.value;
+        const optValue = rec.value;
         if (optValue === '') {
-            if (typeof raw.label !== 'string' || raw.label.length === 0) {
+            if (typeof rec.label !== 'string' || rec.label.length === 0) {
                 throw new Error(
                     'platform-field-enum: option with empty value requires non-empty option.label',
                 );
             }
-            return { value: '', label: raw.label };
+            return { value: '', label: rec.label };
         }
-        const label = typeof raw.label === 'string' && raw.label.length > 0 ? raw.label : optValue;
+        const label = typeof rec.label === 'string' && rec.label.length > 0 ? rec.label : optValue;
         return { value: optValue, label };
     }
     throw new Error(`platform-field-enum: option must be string or {value, label}; got ${typeof raw}`);
 }
 
-function normalizedQuery(raw) {
+function normalizedQuery(raw: unknown): string {
     return raw == null ? '' : String(raw).trim().toLowerCase();
 }
 
 export class PlatformFieldEnum extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         mode: { type: String },
         disabled: { type: Boolean },
@@ -67,7 +75,20 @@ export class PlatformFieldEnum extends PlatformElement {
         _anchor: { state: true },
     };
 
-    static styles = [
+    declare value: string | null;
+    declare mode: string;
+    declare disabled: boolean;
+    declare config: Record<string, unknown>;
+    declare placeholder: string;
+    declare _filterQuery: string;
+    declare _listOpen: boolean;
+    declare _anchor: HTMLElement | null;
+
+    _skipBlurSync: boolean;
+    _deferOptionFilter: boolean;
+    _listDomId: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -141,26 +162,25 @@ export class PlatformFieldEnum extends PlatformElement {
         this._skipBlurSync = false;
         this._deferOptionFilter = false;
         this._listDomId = `pf-enum-${Math.random().toString(36).slice(2, 11)}`;
-        /** @type {HTMLElement | null} */
         this._anchor = null;
     }
 
-    firstUpdated(changed) {
-        super.firstUpdated?.(changed);
+    override firstUpdated(changed: PropertyValues<this>): void {
+        super.firstUpdated(changed);
         this._ensureAnchor();
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
         this._ensureAnchor();
         if (this._listOpen && !this.disabled) {
             // Список меняет высоту при фильтрации, поэтому попап пересчитывается
             // после каждого обновления содержимого.
-            this.renderRoot?.querySelector?.('platform-popover')?.reposition();
+            this.renderRoot?.querySelector<PlatformPopover>('platform-popover')?.reposition();
         }
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         if (this.mode !== 'edit') {
             return;
@@ -178,9 +198,8 @@ export class PlatformFieldEnum extends PlatformElement {
     /**
      * Якорь нужен до showPopover: иначе слой открывается без позиции
      * (static top-left) и outside-dismiss с null-anchor гасит его жестом открытия.
-     * @returns {HTMLElement | null}
      */
-    _ensureAnchor() {
+    _ensureAnchor(): HTMLElement | null {
         if (this._anchor instanceof HTMLElement) {
             return this._anchor;
         }
@@ -192,19 +211,19 @@ export class PlatformFieldEnum extends PlatformElement {
         return null;
     }
 
-    get _enumOptions() {
+    get _enumOptions(): EnumOption[] {
         const c = this.config;
         if (!c || typeof c !== 'object') {
             return [];
         }
-        const v = c.values;
+        const v = (c as Record<string, unknown>).values;
         if (!Array.isArray(v)) {
             return [];
         }
         return v.map(normalizeOption);
     }
 
-    get _displayOptions() {
+    get _displayOptions(): EnumOption[] {
         const opts = this._enumOptions.slice();
         const hasEmpty = opts.some((o) => o.value === '');
         if (!hasEmpty) {
@@ -215,8 +234,7 @@ export class PlatformFieldEnum extends PlatformElement {
         return opts;
     }
 
-    /** @returns {{ value: string, label: string }[]} */
-    get _filteredDisplayOptions() {
+    get _filteredDisplayOptions(): EnumOption[] {
         const opts = this._displayOptions;
         if (this._deferOptionFilter) {
             return opts.slice();
@@ -232,11 +250,7 @@ export class PlatformFieldEnum extends PlatformElement {
         );
     }
 
-    /**
-     * @param {string} value
-     * @returns {string}
-     */
-    _labelForValue(value) {
+    _labelForValue(value: string | null | undefined): string {
         const normalized = value ?? '';
         for (const opt of this._displayOptions) {
             if (opt.value === normalized) {
@@ -249,15 +263,12 @@ export class PlatformFieldEnum extends PlatformElement {
         return typeof value === 'string' ? value : String(value ?? '');
     }
 
-    /**
-     * @returns {string}
-     */
-    _displayTextSyncedToValue() {
+    _displayTextSyncedToValue(): string {
         const v = this.value ?? '';
         return this._labelForValue(typeof v === 'string' ? v : String(v));
     }
 
-    _renderList() {
+    _renderList(): TemplateResult {
         const ariaList = this.t('platform_field.enum_list_aria') ?? 'platform_field.enum_list_aria';
         const list = this._filteredDisplayOptions;
         const listBody = list.length === 0
@@ -287,20 +298,18 @@ export class PlatformFieldEnum extends PlatformElement {
         `;
     }
 
-    _onPopoverDismiss() {
+    _onPopoverDismiss(): void {
         this._listOpen = false;
         this._deferOptionFilter = false;
         this._filterQuery = this._displayTextSyncedToValue();
         this.requestUpdate();
     }
 
-    /** @param {MouseEvent} e */
-    _onOptionMouseDown(e) {
+    _onOptionMouseDown(e: MouseEvent): void {
         e.preventDefault();
     }
 
-    /** @param {{ value: string, label: string }} opt */
-    _pickOption(opt) {
+    _pickOption(opt: EnumOption): void {
         if (this.disabled) return;
         this._skipBlurSync = true;
         this._listOpen = false;
@@ -315,36 +324,34 @@ export class PlatformFieldEnum extends PlatformElement {
         this.requestUpdate();
     }
 
-    _openList() {
+    _openList(): void {
         if (this.disabled) return;
         this._ensureAnchor();
         this._listOpen = true;
         this._deferOptionFilter = true;
     }
 
-    _onFocus() {
+    _onFocus(): void {
         if (this.disabled) return;
         this._openList();
     }
 
-    /** @param {MouseEvent} e */
-    _onChevronMouseDown(e) {
+    _onChevronMouseDown(e: MouseEvent): void {
         e.preventDefault();
     }
 
-    /** @param {MouseEvent} e */
-    _onChevronClick(e) {
+    _onChevronClick(e: MouseEvent): void {
         e.preventDefault();
         e.stopPropagation();
         if (this.disabled) return;
         this._openList();
-        const input = this.renderRoot.querySelector('input.field-pill-enum-input');
+        const input = this.renderRoot?.querySelector('input.field-pill-enum-input');
         if (input instanceof HTMLInputElement) {
             input.focus();
         }
     }
 
-    _onBlur() {
+    _onBlur(): void {
         window.setTimeout(() => {
             if (this._skipBlurSync) {
                 this._skipBlurSync = false;
@@ -352,7 +359,7 @@ export class PlatformFieldEnum extends PlatformElement {
                 this.requestUpdate();
                 return;
             }
-            const popover = this.renderRoot?.querySelector?.('platform-popover');
+            const popover = this.renderRoot?.querySelector('platform-popover');
             if (popover && document.activeElement && popover.contains(document.activeElement)) {
                 return;
             }
@@ -365,9 +372,9 @@ export class PlatformFieldEnum extends PlatformElement {
                         normalizedQuery(o.label) === q
                         || normalizedQuery(o.value) === q,
                 );
-                if (exact.length === 1 && exact[0].value !== (this.value ?? '')) {
+                if (exact.length === 1 && exact[0]!.value !== (this.value ?? '')) {
                     this.dispatchEvent(new CustomEvent('change', {
-                        detail: { value: exact[0].value },
+                        detail: { value: exact[0]!.value },
                         bubbles: true,
                         composed: true,
                     }));
@@ -378,8 +385,7 @@ export class PlatformFieldEnum extends PlatformElement {
         }, 160);
     }
 
-    /** @param {InputEvent} e */
-    _onFilterInput(e) {
+    _onFilterInput(e: InputEvent): void {
         const t = e.target;
         if (!(t instanceof HTMLInputElement)) return;
         if (this.disabled) return;
@@ -388,8 +394,7 @@ export class PlatformFieldEnum extends PlatformElement {
         this._listOpen = true;
     }
 
-    /** @param {KeyboardEvent} e */
-    _onFilterKeydown(e) {
+    _onFilterKeydown(e: KeyboardEvent): void {
         if (this.disabled) return;
         if (e.key === 'Escape') {
             e.stopPropagation();
@@ -408,7 +413,7 @@ export class PlatformFieldEnum extends PlatformElement {
             }
             const visible = this._filteredDisplayOptions;
             if (visible.length === 1) {
-                this._pickOption(visible[0]);
+                this._pickOption(visible[0]!);
             }
         }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -418,7 +423,7 @@ export class PlatformFieldEnum extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             if (this.value == null || this.value === '') {
                 return html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;

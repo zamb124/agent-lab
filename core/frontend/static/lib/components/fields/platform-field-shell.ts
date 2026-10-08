@@ -11,12 +11,13 @@
  * компонент; ручная разметка fieldset/legend в apps запрещена (ui_fields.mdc).
  */
 import { html, css, nothing } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-help-hint.js';
 
 const FOCUSABLE = 'input:not([type="hidden"]), textarea, select, button, [tabindex], [contenteditable="true"]';
 
-function deepFindFocusable(root) {
+function deepFindFocusable(root: ParentNode): HTMLElement | SVGElement | null {
     const direct = root.querySelector(FOCUSABLE);
     if (direct instanceof HTMLElement || direct instanceof SVGElement) {
         return direct;
@@ -31,7 +32,7 @@ function deepFindFocusable(root) {
 }
 
 export class PlatformFieldShell extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         label: { type: String },
         /** label прижат к бордеру (значение/view); фокус покрыт CSS :focus-within. */
         floated: { type: Boolean },
@@ -50,7 +51,22 @@ export class PlatformFieldShell extends PlatformElement {
         hintDocLabel: { type: String, attribute: 'hint-doc-label' },
     };
 
-    static styles = [
+    declare label: string;
+    declare floated: boolean;
+    declare density: string;
+    declare embed: boolean;
+    declare editable: boolean;
+    declare disabled: boolean;
+    declare multiline: boolean;
+    declare fill: boolean;
+    declare error: string;
+    declare hint: string;
+    declare hintSummary: string;
+    declare hintDetails: string;
+    declare hintDocHref: string;
+    declare hintDocLabel: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -108,7 +124,7 @@ export class PlatformFieldShell extends PlatformElement {
         this.hintDocLabel = '';
     }
 
-    willUpdate(changedProps) {
+    override willUpdate(changedProps: PropertyValues<this>): void {
         super.willUpdate(changedProps);
         if (changedProps.has('density')) {
             const v = this.density;
@@ -120,20 +136,20 @@ export class PlatformFieldShell extends PlatformElement {
         }
     }
 
-    _onPillClick(e) {
+    _onPillClick(e: MouseEvent): void {
         if (!this.editable || this.disabled) return;
         const path = e.composedPath();
         for (const node of path) {
-            if (node === this.renderRoot.querySelector('fieldset')) break;
+            if (node === this.renderRoot?.querySelector('fieldset')) break;
             if (node instanceof HTMLElement
                 && node.matches('input, textarea, select, button, a[href], [tabindex], [contenteditable="true"], platform-help-hint')) {
                 return;
             }
         }
-        const slot = this.renderRoot.querySelector('.field-pill-control-main slot:not([name])');
+        const slot = this.renderRoot?.querySelector('.field-pill-control-main slot:not([name])');
         if (!(slot instanceof HTMLSlotElement)) return;
         for (const el of slot.assignedElements({ flatten: true })) {
-            let target = null;
+            let target: Element | null = null;
             if (el.matches?.(FOCUSABLE)) {
                 target = el;
             } else if (el.shadowRoot) {
@@ -153,7 +169,7 @@ export class PlatformFieldShell extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const hasLabel = typeof this.label === 'string' && this.label !== '';
         const hasHint =
             (typeof this.hint === 'string' && this.hint !== '')

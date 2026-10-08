@@ -1,17 +1,23 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
 export class PlatformFieldText extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         mode: { type: String },
         disabled: { type: Boolean },
         placeholder: { type: String },
     };
 
-    static styles = [
+    declare value: string | null;
+    declare mode: string;
+    declare disabled: boolean;
+    declare placeholder: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -29,15 +35,15 @@ export class PlatformFieldText extends PlatformElement {
         this.placeholder = '';
     }
 
-    _onInput(e) {
+    _onInput(e: InputEvent): void {
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: e.target.value },
+            detail: { value: (e.target as HTMLTextAreaElement).value },
             bubbles: true,
             composed: true,
         }));
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             const display = this.value != null && this.value !== '';
             return display

@@ -1,4 +1,5 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import {
     formatPlatformDate,
@@ -7,6 +8,7 @@ import {
     normalizeIsoDateTimeForField,
 } from '../../utils/format-platform-date.js';
 import '../platform-date-picker.js';
+import type { I18nState } from '../../events/reducers/i18n.js';
 
 const ISO_DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATETIME_VALUE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -14,7 +16,7 @@ const ISO_DATETIME_VALUE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 export class PlatformFieldDate extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         mode: { type: String },
         disabled: { type: Boolean },
@@ -22,7 +24,13 @@ export class PlatformFieldDate extends PlatformElement {
         placeholder: { type: String },
     };
 
-    static styles = [
+    declare value: string | null;
+    declare mode: string;
+    declare disabled: boolean;
+    declare datetime: boolean;
+    declare placeholder: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -50,16 +58,16 @@ export class PlatformFieldDate extends PlatformElement {
         this.placeholder = '';
     }
 
-    _onChange(e) {
+    _onChange(e: Event): void {
         this.dispatchEvent(new CustomEvent('change', {
-            detail: { value: e.target.value },
+            detail: { value: (e.target as HTMLElement & { value: string }).value },
             bubbles: true,
             composed: true,
         }));
     }
 
-    _onFreeformDateInput(e) {
-        const t = e.target;
+    _onFreeformDateInput(e: InputEvent): void {
+        const t = e.target as HTMLInputElement | null;
         const v = t && typeof t.value === 'string' ? t.value : '';
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: v },
@@ -68,14 +76,14 @@ export class PlatformFieldDate extends PlatformElement {
         }));
     }
 
-    _storedStringMatchesIsoFormat(val) {
+    _storedStringMatchesIsoFormat(val: unknown): boolean {
         if (val === null || val === undefined) return true;
         if (typeof val !== 'string') return false;
         if (val.length === 0) return true;
         return this.datetime ? ISO_DATETIME_VALUE.test(val) : ISO_DATE_VALUE.test(val);
     }
 
-    _normalizeFieldValue(val) {
+    _normalizeFieldValue(val: unknown): string {
         if (val === null || val === undefined) {
             return '';
         }
@@ -88,19 +96,19 @@ export class PlatformFieldDate extends PlatformElement {
         return this.datetime ? normalizeIsoDateTimeForField(val) : normalizeIsoDateForField(val);
     }
 
-    _formatDisplay(val) {
+    _formatDisplay(val: unknown): string | null {
         if (val === null || val === undefined || typeof val !== 'string' || val.length === 0) {
             return null;
         }
-        const locale = this.select((state) => state.i18n.locale).value;
+        const locale = this.select((state) => (state.i18n as I18nState).locale).value;
         const normalized = this._normalizeFieldValue(val);
         if (this.datetime) {
-            return formatPlatformDateTime(normalized, locale);
+            return formatPlatformDateTime(normalized, locale ?? 'ru');
         }
-        return formatPlatformDate(normalized, locale);
+        return formatPlatformDate(normalized, locale ?? 'ru');
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             const formatted = this._formatDisplay(this.value);
             return formatted

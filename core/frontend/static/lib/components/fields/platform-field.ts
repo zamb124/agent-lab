@@ -8,6 +8,7 @@
  * фокус-ринг, error-сообщение.
  */
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import './platform-field-shell.js';
 
@@ -21,7 +22,7 @@ import './platform-field-array.js';
 import './platform-field-object.js';
 import './platform-field-external-refs.js';
 
-const FIELD_TYPE_MAP = {
+const FIELD_TYPE_MAP: Record<string, string> = {
     string:   'platform-field-string',
     text:     'platform-field-text',
     number:   'platform-field-number',
@@ -36,7 +37,7 @@ const FIELD_TYPE_MAP = {
 };
 
 export class PlatformField extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         type: { type: String },
         value: {},
         mode: { type: String },
@@ -57,7 +58,30 @@ export class PlatformField extends PlatformElement {
         _focused: { type: Boolean, state: true },
     };
 
-    static styles = [
+    declare type: string;
+    declare value: unknown;
+    declare mode: string;
+    declare label: string;
+    declare disabled: boolean;
+    declare config: Record<string, unknown>;
+    declare placeholder: string;
+    declare inputType: string;
+    declare suggestions: unknown[];
+    declare hint: string;
+    declare hintSummary: string;
+    declare hintDetails: string;
+    declare hintDocHref: string;
+    declare hintDocLabel: string;
+    declare pillDensity: string;
+    declare pillEmbed: boolean;
+    declare error: string;
+    declare _focused: boolean;
+
+    private _focusOutTimer: number | undefined;
+    private _onFocusIn: () => void;
+    private _onFocusOut: () => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -87,7 +111,7 @@ export class PlatformField extends PlatformElement {
         this.pillEmbed = false;
         this.error = '';
         this._focused = false;
-        this._focusOutTimer = null;
+        this._focusOutTimer = undefined;
         this._onFocusIn = () => {
             if (!this._focused) {
                 this._focused = true;
@@ -101,20 +125,20 @@ export class PlatformField extends PlatformElement {
         };
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.addEventListener('focusin', this._onFocusIn);
         this.addEventListener('focusout', this._onFocusOut);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         this.removeEventListener('focusin', this._onFocusIn);
         this.removeEventListener('focusout', this._onFocusOut);
         clearTimeout(this._focusOutTimer);
     }
 
-    willUpdate(changedProps) {
+    override willUpdate(changedProps: PropertyValues<this>): void {
         super.willUpdate(changedProps);
         if (changedProps.has('pillDensity')) {
             const v = this.pillDensity;
@@ -126,7 +150,7 @@ export class PlatformField extends PlatformElement {
         }
     }
 
-    _onChange(e) {
+    _onChange(e: CustomEvent<unknown>): void {
         e.stopPropagation();
         this.dispatchEvent(new CustomEvent('change', {
             detail: e.detail,
@@ -135,7 +159,7 @@ export class PlatformField extends PlatformElement {
         }));
     }
 
-    _hasValue() {
+    _hasValue(): boolean {
         const v = this.value;
         switch (this.type) {
             case 'number':
@@ -152,11 +176,11 @@ export class PlatformField extends PlatformElement {
     }
 
     /** label «улетел» на бордер: значение, view-режим или фокус внутри. */
-    get _floated() {
+    get _floated(): boolean {
         return this.mode === 'view' || this._hasValue() || this._focused;
     }
 
-    get _hasLabel() {
+    get _hasLabel(): boolean {
         return typeof this.label === 'string' && this.label !== '';
     }
 
@@ -164,14 +188,14 @@ export class PlatformField extends PlatformElement {
      * Placeholder виден, только когда label улетел (Material-поведение):
      * resting label сам занимает место placeholder. Полю без label — как есть.
      */
-    get _effectivePlaceholder() {
+    get _effectivePlaceholder(): string {
         if (this._hasLabel && !this._floated) {
             return '';
         }
         return this.placeholder;
     }
 
-    _renderField() {
+    _renderField(): TemplateResult {
         const ph = this._effectivePlaceholder;
         const tagName = FIELD_TYPE_MAP[this.type];
         if (!tagName) {
@@ -301,7 +325,7 @@ export class PlatformField extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const multiline = this.type === 'text' || this.type === 'object';
         return html`
             <platform-field-shell

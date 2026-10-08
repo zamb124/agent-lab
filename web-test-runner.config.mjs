@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { importMapsPlugin } from '@web/dev-server-import-maps';
 import { esbuildPlugin } from '@web/dev-server-esbuild';
+import { nodeResolvePlugin } from '@web/dev-server';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -13,6 +14,9 @@ const litDevModeMessage =
 
 // Период миграции: спецификатор `./foo.js`, когда на диске только `foo.ts`.
 // .js на диске выигрывает — свежий источник не подменяется.
+// Отдача .ts-контента под .js URL — единое URL-пространство: иначе resolveImport
+// esbuild-плагина внутри .ts переписывает specifier на .ts, и один модуль грузится
+// под двум URL (.js и .ts) — двойная регистрация customElements.
 const tsSiblingMiddleware = async (ctx, next) => {
     const urlPath = decodeURIComponent(ctx.path);
     if (urlPath.endsWith('.js')) {
@@ -23,6 +27,28 @@ const tsSiblingMiddleware = async (ctx, next) => {
         }
     }
     return next();
+};
+
+// Симметрично middleware: гасим resolveImport плагина, который в .ts-файлах
+// переписывает specifier `./x.js` → `./x.ts` — см. tsSiblingMiddleware.
+const tsEsbuildPlugin = esbuildPlugin({ ts: true });
+tsEsbuildPlugin.resolveImport = undefined;
+
+// node-resolve с .ts в extensions тоже переписывает specifier `./x.js` → `./x.ts`
+// для отсутствующего на диске .js — оборачиваем и возвращаем исходный specifier.
+const tsNodeResolvePlugin = nodeResolvePlugin(rootDir, false);
+const resolveImportOriginal = tsNodeResolvePlugin.resolveImport;
+tsNodeResolvePlugin.resolveImport = async (args) => {
+    const resolved = await resolveImportOriginal(args);
+    if (
+        typeof resolved === 'string'
+        && args.source.endsWith('.js')
+        && args.source.startsWith('.')
+        && resolved.endsWith('.ts')
+    ) {
+        return args.source;
+    }
+    return resolved;
 };
 
 export default {
@@ -41,12 +67,12 @@ export default {
     browserStartTimeout: 120_000,
     testsStartTimeout: 60_000,
     middleware: [tsSiblingMiddleware, browserTestDevMiddleware],
-    nodeResolve: true,
+    nodeResolve: false,
     filterBrowserLogs(log) {
         return !log.args.some((arg) => typeof arg === 'string' && arg.includes(litDevModeMessage));
     },
     plugins: [
-        esbuildPlugin({ ts: true }),
+        tsEsbuildPlugin,
         importMapsPlugin({
             inject: {
                 importMap: {
@@ -72,6 +98,7 @@ export default {
                 },
             },
         }),
+        tsNodeResolvePlugin,
     ],
     browsers: [
         playwrightLauncher({

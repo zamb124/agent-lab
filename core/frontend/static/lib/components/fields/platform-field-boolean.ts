@@ -1,17 +1,22 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-switch.js';
 
 export class PlatformFieldBoolean extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: Boolean },
         mode: { type: String },
         disabled: { type: Boolean },
     };
 
-    static styles = [
+    declare value: boolean | null;
+    declare mode: string;
+    declare disabled: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -40,7 +45,7 @@ export class PlatformFieldBoolean extends PlatformElement {
         this.disabled = false;
     }
 
-    _onChange(e) {
+    _onChange(e: CustomEvent<{ value: boolean }>): void {
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: e.detail.value },
             bubbles: true,
@@ -48,7 +53,7 @@ export class PlatformFieldBoolean extends PlatformElement {
         }));
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             if (this.value == null) {
                 return html`<span class="field-pill-empty">${(this.t('platform_field.empty_value') || 'platform_field.empty_value')}</span>`;

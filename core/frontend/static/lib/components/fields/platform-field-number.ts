@@ -1,11 +1,8 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 
-/**
- * @param {number} step
- * @returns {number}
- */
-function fractionDigitsFromPositiveStep(step) {
+function fractionDigitsFromPositiveStep(step: number): number {
     if (!Number.isFinite(step) || step <= 0) {
         throw new Error('platform-field-number: step must be a finite positive number');
     }
@@ -28,7 +25,7 @@ function fractionDigitsFromPositiveStep(step) {
 export class PlatformFieldNumber extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: {},
         mode: { type: String },
         disabled: { type: Boolean },
@@ -36,7 +33,13 @@ export class PlatformFieldNumber extends PlatformElement {
         integer: { type: Boolean },
     };
 
-    static styles = [
+    declare value: number | string | null;
+    declare mode: string;
+    declare disabled: boolean;
+    declare placeholder: string;
+    declare integer: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -61,8 +64,8 @@ export class PlatformFieldNumber extends PlatformElement {
         this.integer = false;
     }
 
-    _onInput(e) {
-        const raw = e.target.value;
+    _onInput(e: InputEvent): void {
+        const raw = (e.target as HTMLInputElement).value;
         if (raw === '') {
             this.dispatchEvent(new CustomEvent('change', {
                 detail: { value: null },
@@ -82,7 +85,7 @@ export class PlatformFieldNumber extends PlatformElement {
         }));
     }
 
-    _formatDisplay(val) {
+    _formatDisplay(val: number | string | null): string | null {
         if (val == null) return null;
         if (typeof val === 'number') {
             return this.integer ? String(Math.round(val)) : String(val);
@@ -90,14 +93,14 @@ export class PlatformFieldNumber extends PlatformElement {
         return String(val);
     }
 
-    _nudgeStep() {
+    _nudgeStep(): number {
         return this.integer ? 1 : 0.1;
     }
 
     /**
      * @param {number} direction
      */
-    _nudge(direction) {
+    _nudge(direction: number): void {
         if (this.mode !== 'edit' || this.disabled) return;
         if (direction !== 1 && direction !== -1) {
             throw new Error('platform-field-number: direction must be 1 or -1');
@@ -109,7 +112,7 @@ export class PlatformFieldNumber extends PlatformElement {
         }
         const step = this._nudgeStep();
         const raw = input.value.trim();
-        let current;
+        let current: number;
         if (raw === '') {
             current = 0;
         } else {
@@ -132,7 +135,7 @@ export class PlatformFieldNumber extends PlatformElement {
     /**
      * @param {'up' | 'down'} dir
      */
-    _spinChevron(dir) {
+    _spinChevron(dir: 'up' | 'down'): TemplateResult {
         const d = dir === 'up'
             ? 'M5 .5 L9.5 6.5 H.5z'
             : 'M5 6.5 L9.5 .5 H.5z';
@@ -143,7 +146,7 @@ export class PlatformFieldNumber extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.mode === 'view') {
             const formatted = this._formatDisplay(this.value);
             return formatted != null
@@ -172,7 +175,7 @@ export class PlatformFieldNumber extends PlatformElement {
                         aria-label=${incLabel}
                         title=${incLabel}
                         ?disabled=${this.disabled}
-                        @mousedown=${(e) => e.preventDefault()}
+                        @mousedown=${(e: MouseEvent) => e.preventDefault()}
                         @click=${() => this._nudge(1)}
                     >
                         ${this._spinChevron('up')}
@@ -183,7 +186,7 @@ export class PlatformFieldNumber extends PlatformElement {
                         aria-label=${decLabel}
                         title=${decLabel}
                         ?disabled=${this.disabled}
-                        @mousedown=${(e) => e.preventDefault()}
+                        @mousedown=${(e: MouseEvent) => e.preventDefault()}
                         @click=${() => this._nudge(-1)}
                     >
                         ${this._spinChevron('down')}

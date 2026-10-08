@@ -1,4 +1,5 @@
 import { html, css } from '../../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../tag-input.js';
 
@@ -9,7 +10,7 @@ import '../tag-input.js';
 export class PlatformFieldArray extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: Array },
         mode: { type: String },
         disabled: { type: Boolean },
@@ -17,7 +18,13 @@ export class PlatformFieldArray extends PlatformElement {
         placeholder: { type: String },
     };
 
-    static styles = [
+    declare value: string[];
+    declare mode: string;
+    declare disabled: boolean;
+    declare config: Record<string, unknown>;
+    declare placeholder: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -106,16 +113,16 @@ export class PlatformFieldArray extends PlatformElement {
         this.placeholder = '';
     }
 
-    _cfg() {
+    _cfg(): Record<string, unknown> {
         return this.config !== null && typeof this.config === 'object' ? this.config : {};
     }
 
-    _allowedValues() {
+    _allowedValues(): string[] {
         const raw = this._cfg().allowed_values;
         if (!Array.isArray(raw) || raw.length === 0) {
             return [];
         }
-        const out = [];
+        const out: string[] = [];
         for (let i = 0; i < raw.length; i += 1) {
             if (typeof raw[i] !== 'string' || raw[i] === '') {
                 throw new Error(`platform-field-array: config.allowed_values[${i}] must be non-empty string`);
@@ -125,11 +132,11 @@ export class PlatformFieldArray extends PlatformElement {
         return out;
     }
 
-    _preserveCase() {
+    _preserveCase(): boolean {
         return this._cfg().preserve_case === true;
     }
 
-    _resolvedPlaceholder() {
+    _resolvedPlaceholder(): string {
         if (typeof this.placeholder === 'string' && this.placeholder !== '') {
             return this.placeholder;
         }
@@ -140,7 +147,7 @@ export class PlatformFieldArray extends PlatformElement {
         return t;
     }
 
-    _emitValue(next) {
+    _emitValue(next: string[]): void {
         this.value = Array.isArray(next) ? [...next] : [];
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: next },
@@ -149,7 +156,7 @@ export class PlatformFieldArray extends PlatformElement {
         }));
     }
 
-    _onTagInputChange(e) {
+    _onTagInputChange(e: CustomEvent<{ tags?: unknown }>): void {
         e.stopPropagation();
         if (!e.detail || !Array.isArray(e.detail.tags)) {
             return;
@@ -158,7 +165,7 @@ export class PlatformFieldArray extends PlatformElement {
         this._emitValue(tags);
     }
 
-    _onSelectAdd(e) {
+    _onSelectAdd(e: Event): void {
         e.stopPropagation();
         const sel = e.target;
         if (!(sel instanceof HTMLSelectElement)) {
@@ -176,7 +183,7 @@ export class PlatformFieldArray extends PlatformElement {
         this._emitValue([...list, v]);
     }
 
-    _removeAllowedAt(index) {
+    _removeAllowedAt(index: number): void {
         const list = Array.isArray(this.value) ? [...this.value] : [];
         if (index < 0 || index >= list.length) {
             throw new Error('platform-field-array: remove index out of range');
@@ -185,7 +192,7 @@ export class PlatformFieldArray extends PlatformElement {
         this._emitValue(list);
     }
 
-    render() {
+    override render(): TemplateResult {
         const items = Array.isArray(this.value) ? this.value : [];
         const allowed = this._allowedValues();
         const enumMode = allowed.length > 0;
