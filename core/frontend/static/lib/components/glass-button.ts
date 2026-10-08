@@ -3,11 +3,12 @@
  * Кнопка с glass morphism-эффектом
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-spinner.js';
 
 export class GlassButton extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -121,7 +122,7 @@ export class GlassButton extends PlatformElement {
         `
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         variant: { type: String },
         size: { type: String },
         disabled: { type: Boolean },
@@ -129,6 +130,13 @@ export class GlassButton extends PlatformElement {
         iconOnly: { type: Boolean },
         type: { type: String },
     };
+
+    declare variant: string;
+    declare size: string;
+    declare disabled: boolean;
+    declare loading: boolean;
+    declare iconOnly: boolean;
+    declare type: string;
 
     constructor() {
         super();
@@ -140,7 +148,7 @@ export class GlassButton extends PlatformElement {
         this.type = 'button';
     }
 
-    render() {
+    override render(): TemplateResult {
         const parts = [this.variant, this.size];
         if (this.iconOnly) parts.push('icon-only');
         if (this.loading) parts.push('loading');

@@ -20,6 +20,7 @@
  */
 
 import { css, html } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import {
@@ -29,13 +30,16 @@ import {
     readViewportSize,
     resolveAnchorRect,
 } from '../utils/floating-position.js';
+import type { FloatingPlacement, RectLike } from '../utils/floating-position.js';
 import { nextModalLayerZIndex } from '../utils/modal-z-stack.js';
 
 const HOVER_OPEN_DELAY_MS = 120;
 const HOVER_CLOSE_DELAY_MS = 160;
 
+export type PopoverAnchor = Element | RectLike | { x: number; y: number } | null;
+
 export class PlatformPopover extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         /** Элемент, точка `{x, y}` или прямоугольник, к которому привязан слой. */
         anchor: { attribute: false },
         open: { type: Boolean, reflect: true },
@@ -53,7 +57,27 @@ export class PlatformPopover extends PlatformElement {
         _placement: { state: true },
     };
 
-    static styles = [
+    declare anchor: PopoverAnchor;
+    declare open: boolean;
+    declare placement: FloatingPlacement;
+    declare offset: number;
+    declare trigger: string;
+    declare role: string;
+    declare matchWidth: boolean;
+    declare flip: boolean;
+    declare shift: boolean;
+    declare closeOnScroll: boolean;
+    declare dismissOnOutside: boolean;
+    declare constrainHeight: boolean;
+    declare viewportPadding: number;
+    declare _placement: FloatingPlacement;
+
+    _resizeObserver: ResizeObserver | null;
+    _hoverTimer: number | null;
+    _outsideListenFrame: number | null;
+    _ignoreOutsideUntil: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             /* UA [popover]: inset:0 + margin:auto центрирует слой. top/left 0 —
@@ -148,9 +172,8 @@ export class PlatformPopover extends PlatformElement {
 
         this._resizeObserver = null;
         this._hoverTimer = null;
-        /** @type {number | null} */
         this._outsideListenFrame = null;
-        /** Игнорировать outside-dismiss до этого timestamp (жест открытия). */
+        // Игнорировать outside-dismiss до этого timestamp (жест открытия).
         this._ignoreOutsideUntil = 0;
 
         this._onReposition = this._onReposition.bind(this);
@@ -164,7 +187,7 @@ export class PlatformPopover extends PlatformElement {
         this._onSelfPointerLeave = this._onSelfPointerLeave.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         // Ручной режим: закрытие по клику мимо и Escape обрабатывается здесь,
         // чтобы сообщить причину и не гасить Escape, нужный вложенным слоям.
@@ -174,7 +197,7 @@ export class PlatformPopover extends PlatformElement {
         this._attachAnchorListeners(this.anchor);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         this.removeEventListener('pointerenter', this._onSelfPointerEnter);
         this.removeEventListener('pointerleave', this._onSelfPointerLeave);
@@ -183,14 +206,14 @@ export class PlatformPopover extends PlatformElement {
         this._clearHoverTimer();
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         if (changed.has('anchor')) {
-            this._detachAnchorListeners(changed.get('anchor'));
+            this._detachAnchorListeners(changed.get('anchor') as PopoverAnchor);
             this._attachAnchorListeners(this.anchor);
         }
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         if (changed.has('open')) {
             if (this.open) {
                 this._showInTopLayer();
@@ -208,7 +231,7 @@ export class PlatformPopover extends PlatformElement {
     }
 
     /** Пересчитать положение — вызывается при прокрутке, ресайзе и смене содержимого. */
-    reposition() {
+    reposition(): void {
         if (!this.open) {
             return;
         }
@@ -219,7 +242,7 @@ export class PlatformPopover extends PlatformElement {
         if (!anchorRect) {
             return;
         }
-        const surface = this.renderRoot?.querySelector('.surface');
+        const surface = this.renderRoot?.querySelector<HTMLElement>('.surface');
         if (!surface) {
             return;
         }
@@ -264,18 +287,18 @@ export class PlatformPopover extends PlatformElement {
     }
 
     /** Программное открытие; для `trigger="contextmenu"` якорем может быть точка. */
-    show(anchor) {
+    show(anchor?: PopoverAnchor): void {
         if (anchor !== undefined) {
             this.anchor = anchor;
         }
         this.open = true;
     }
 
-    hide() {
+    hide(): void {
         this.open = false;
     }
 
-    toggle(anchor) {
+    toggle(anchor?: PopoverAnchor): void {
         if (this.open) {
             this.hide();
         } else {
@@ -285,7 +308,7 @@ export class PlatformPopover extends PlatformElement {
 
     // --- top layer ---
 
-    _showInTopLayer() {
+    _showInTopLayer(): void {
         if (!this.isConnected || this.matches(':popover-open')) {
             return;
         }
@@ -295,7 +318,7 @@ export class PlatformPopover extends PlatformElement {
         this.style.zIndex = String(nextModalLayerZIndex());
     }
 
-    _hideFromTopLayer() {
+    _hideFromTopLayer(): void {
         if (!this.isConnected || !this.matches(':popover-open')) {
             return;
         }
@@ -307,7 +330,7 @@ export class PlatformPopover extends PlatformElement {
 
     // --- подписки ---
 
-    _startTracking() {
+    _startTracking(): void {
         window.addEventListener('scroll', this._onReposition, true);
         window.addEventListener('resize', this._onReposition);
         window.visualViewport?.addEventListener('resize', this._onReposition);
@@ -332,7 +355,7 @@ export class PlatformPopover extends PlatformElement {
 
         if (typeof ResizeObserver !== 'undefined') {
             this._resizeObserver = new ResizeObserver(() => this.reposition());
-            const surface = this.renderRoot?.querySelector('.surface');
+            const surface = this.renderRoot?.querySelector<HTMLElement>('.surface');
             if (surface) {
                 this._resizeObserver.observe(surface);
             }
@@ -342,7 +365,7 @@ export class PlatformPopover extends PlatformElement {
         }
     }
 
-    _stopTracking() {
+    _stopTracking(): void {
         window.removeEventListener('scroll', this._onReposition, true);
         window.removeEventListener('resize', this._onReposition);
         window.visualViewport?.removeEventListener('resize', this._onReposition);
@@ -357,7 +380,7 @@ export class PlatformPopover extends PlatformElement {
         this._resizeObserver = null;
     }
 
-    _onReposition() {
+    _onReposition(): void {
         if (this.closeOnScroll) {
             this._dismiss('scroll');
             return;
@@ -365,7 +388,7 @@ export class PlatformPopover extends PlatformElement {
         this.reposition();
     }
 
-    _onDocumentPointerDown(event) {
+    _onDocumentPointerDown(event: PointerEvent): void {
         if (performance.now() < this._ignoreOutsideUntil) {
             return;
         }
@@ -379,7 +402,7 @@ export class PlatformPopover extends PlatformElement {
         this._dismiss('outside');
     }
 
-    _onDocumentKeyDown(event) {
+    _onDocumentKeyDown(event: KeyboardEvent): void {
         if (event.key !== 'Escape' || !this.open) {
             return;
         }
@@ -387,14 +410,14 @@ export class PlatformPopover extends PlatformElement {
         this._dismiss('escape');
     }
 
-    _dismiss(reason) {
+    _dismiss(reason: string): void {
         this.open = false;
         this.emit('popover-dismiss', { reason });
     }
 
     // --- режимы открытия ---
 
-    _attachAnchorListeners(anchor) {
+    _attachAnchorListeners(anchor: PopoverAnchor): void {
         if (!(anchor instanceof Element)) {
             return;
         }
@@ -410,7 +433,7 @@ export class PlatformPopover extends PlatformElement {
         }
     }
 
-    _detachAnchorListeners(anchor) {
+    _detachAnchorListeners(anchor: PopoverAnchor): void {
         if (!(anchor instanceof Element)) {
             return;
         }
@@ -422,49 +445,50 @@ export class PlatformPopover extends PlatformElement {
         anchor.removeEventListener('focusout', this._onAnchorPointerLeave);
     }
 
-    _onAnchorClick() {
+    _onAnchorClick(): void {
         this.toggle();
     }
 
-    _onAnchorContextMenu(event) {
+    _onAnchorContextMenu(event: Event): void {
         event.preventDefault();
-        this.show({ x: event.clientX, y: event.clientY });
+        const mouse = event as MouseEvent;
+        this.show({ x: mouse.clientX, y: mouse.clientY });
     }
 
-    _onAnchorPointerEnter() {
+    _onAnchorPointerEnter(): void {
         this._clearHoverTimer();
         this._hoverTimer = window.setTimeout(() => {
             this.open = true;
         }, HOVER_OPEN_DELAY_MS);
     }
 
-    _onAnchorPointerLeave() {
+    _onAnchorPointerLeave(): void {
         this._clearHoverTimer();
         this._hoverTimer = window.setTimeout(() => {
             this.open = false;
         }, HOVER_CLOSE_DELAY_MS);
     }
 
-    _onSelfPointerEnter() {
+    _onSelfPointerEnter(): void {
         if (this.trigger === 'hover') {
             this._clearHoverTimer();
         }
     }
 
-    _onSelfPointerLeave() {
+    _onSelfPointerLeave(): void {
         if (this.trigger === 'hover') {
             this._onAnchorPointerLeave();
         }
     }
 
-    _clearHoverTimer() {
+    _clearHoverTimer(): void {
         if (this._hoverTimer !== null) {
             clearTimeout(this._hoverTimer);
             this._hoverTimer = null;
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="surface" part="surface">
                 <slot></slot>

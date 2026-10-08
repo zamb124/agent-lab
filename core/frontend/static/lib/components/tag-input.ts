@@ -3,10 +3,11 @@
  * Pill-режим единственный (атрибут `flat` удалён в PHASE 1.5).
  */
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class TagInput extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -85,13 +86,18 @@ export class TagInput extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         tags: { type: Array },
         placeholder: { type: String },
         readonly: { type: Boolean },
         /** Если true — только trim без toLowerCase (контракт platform-field-array `config.preserve_case`). По умолчанию lower-case как в CRM. */
         preserveCase: { type: Boolean, attribute: 'preserve-case' },
     };
+
+    declare tags: string[];
+    declare placeholder: string;
+    declare readonly: boolean;
+    declare preserveCase: boolean;
 
     constructor() {
         super();
@@ -101,19 +107,19 @@ export class TagInput extends PlatformElement {
         this.preserveCase = false;
     }
 
-    _getTags() {
+    _getTags(): string[] {
         return Array.isArray(this.tags) ? this.tags : [];
     }
 
-    getTags() {
+    getTags(): string[] {
         return [...this._getTags()];
     }
 
-    setTags(tags) {
+    setTags(tags: string[]): void {
         this.tags = Array.isArray(tags) ? [...tags] : [];
     }
 
-    _normalizeIncomingTag(tag) {
+    _normalizeIncomingTag(tag: unknown): string {
         const trimmed = typeof tag === 'string' ? tag.trim() : '';
         if (this.preserveCase) {
             return trimmed;
@@ -121,7 +127,7 @@ export class TagInput extends PlatformElement {
         return trimmed.toLowerCase();
     }
 
-    _addTag(tag) {
+    _addTag(tag: string): void {
         const trimmed = this._normalizeIncomingTag(tag);
         const currentTags = this._getTags();
         if (trimmed && !currentTags.includes(trimmed)) {
@@ -130,21 +136,21 @@ export class TagInput extends PlatformElement {
         }
     }
 
-    _removeTag(index) {
+    _removeTag(index: number): void {
         const currentTags = this._getTags();
         this.tags = currentTags.filter((_, i) => i !== index);
         this.emit('change', { tags: this.tags });
     }
 
-    _onKeyDown(e) {
+    _onKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Enter' || e.key === ',') {
             e.preventDefault();
-            const input = e.target;
+            const input = e.target as HTMLInputElement;
             if (input.value.trim()) {
                 this._addTag(input.value);
                 input.value = '';
             }
-        } else if (e.key === 'Backspace' && !e.target.value) {
+        } else if (e.key === 'Backspace' && !(e.target as HTMLInputElement).value) {
             const tags = this._getTags();
             if (tags.length > 0) {
                 this._removeTag(tags.length - 1);
@@ -152,19 +158,20 @@ export class TagInput extends PlatformElement {
         }
     }
 
-    _onBlur(e) {
-        if (e.target.value.trim()) {
-            this._addTag(e.target.value);
-            e.target.value = '';
+    _onBlur(e: FocusEvent): void {
+        const input = e.target as HTMLInputElement;
+        if (input.value.trim()) {
+            this._addTag(input.value);
+            input.value = '';
         }
     }
 
-    _onContainerClick() {
-        const input = this.shadowRoot.querySelector('.tag-input');
+    _onContainerClick(): void {
+        const input = this.shadowRoot?.querySelector<HTMLInputElement>('.tag-input');
         if (input) input.focus();
     }
 
-    render() {
+    override render(): TemplateResult {
         const tags = this._getTags();
         return html`
             <div class="tag-container" @click=${this._onContainerClick}>
@@ -175,7 +182,7 @@ export class TagInput extends PlatformElement {
                             <button
                                 type="button"
                                 class="tag-remove"
-                                @click=${(e) => { e.stopPropagation(); this._removeTag(i); }}
+                                @click=${(e: MouseEvent) => { e.stopPropagation(); this._removeTag(i); }}
                             >×</button>
                         ` : ''}
                     </span>

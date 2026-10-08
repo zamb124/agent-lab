@@ -3,11 +3,12 @@
  * Вращающийся логотип Linnex. Заменяет glass-spinner и app-loader.
  */
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 const SPINNER_LOGO_SRC = '/static/core/assets/service_logos/linnex_spinner_logo.png';
 
-const SIZE_PX = {
+const SIZE_PX: Record<string, number> = {
     xs: 32,
     sm: 40,
     md: 48,
@@ -16,7 +17,7 @@ const SIZE_PX = {
 };
 
 export class PlatformSpinner extends PlatformElement {
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -93,12 +94,17 @@ export class PlatformSpinner extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         size: { type: String },
         text: { type: String },
         fullscreen: { type: Boolean, reflect: true },
         overlay: { type: Boolean, reflect: true },
     };
+
+    declare size: string;
+    declare text: string;
+    declare fullscreen: boolean;
+    declare overlay: boolean;
 
     constructor() {
         super();
@@ -108,7 +114,7 @@ export class PlatformSpinner extends PlatformElement {
         this.overlay = false;
     }
 
-    updated() {
+    override updated(): void {
         const sizeKey = this.size;
         const namedPx = SIZE_PX[sizeKey];
         if (namedPx) {
@@ -121,7 +127,7 @@ export class PlatformSpinner extends PlatformElement {
         }
     }
 
-    _logoSrc() {
+    _logoSrc(): string {
         const hostWithOrigin = this.closest('[platform-ui-origin]');
         const rawOrigin =
             hostWithOrigin instanceof HTMLElement
@@ -132,7 +138,7 @@ export class PlatformSpinner extends PlatformElement {
         return origin !== '' ? `${origin}${SPINNER_LOGO_SRC}` : SPINNER_LOGO_SRC;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <img class="spinner-logo" src="${this._logoSrc()}" alt="" aria-hidden="true" draggable="false" />
             ${this.text ? html`<div class="spinner-text">${this.text}</div>` : ''}

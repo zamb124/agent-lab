@@ -3,11 +3,12 @@
  * Варианты: primary (violet), accent (orange), secondary, danger, ghost
  */
 import { html, css, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-spinner.js';
 
 export class PlatformButton extends PlatformElement {
-    static styles = css`
+    static override styles: CSSResultGroup = css`
         :host {
             display: inline-flex;
             max-width: 100%;
@@ -198,7 +199,7 @@ export class PlatformButton extends PlatformElement {
         }
     `;
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         variant: { type: String },
         disabled: { type: Boolean },
         loading: { type: Boolean },
@@ -213,6 +214,20 @@ export class PlatformButton extends PlatformElement {
         danger: { type: Boolean, reflect: true },
         ghost: { type: Boolean, reflect: true },
     };
+
+    declare variant: string;
+    declare disabled: boolean;
+    declare loading: boolean;
+    declare type: string;
+    declare density: string;
+    declare iconOnly: boolean;
+    declare block: boolean;
+    declare ariaLabel: string;
+    declare primary: boolean;
+    declare accent: boolean;
+    declare secondary: boolean;
+    declare danger: boolean;
+    declare ghost: boolean;
 
     constructor() {
         super();
@@ -231,11 +246,11 @@ export class PlatformButton extends PlatformElement {
         this.ghost = false;
     }
 
-    _isGhostVariant() {
+    _isGhostVariant(): boolean {
         return this.ghost || this.variant === 'ghost';
     }
 
-    _effectiveVariant() {
+    _effectiveVariant(): string {
         if (this.danger && this._isGhostVariant()) {
             return 'ghost-danger';
         }
@@ -253,7 +268,7 @@ export class PlatformButton extends PlatformElement {
         return this.variant;
     }
 
-    render() {
+    override render(): TemplateResult {
         const label =
             typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
                 ? this.ariaLabel

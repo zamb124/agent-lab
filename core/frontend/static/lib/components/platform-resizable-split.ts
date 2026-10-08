@@ -16,9 +16,11 @@
  */
 
 import { css, html } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import { platformStorageKey } from '../utils/storage-keys.js';
+import type { PlatformStorageScope } from '../utils/storage-keys.js';
 import { storageGet, storageSet } from '../utils/platform-storage.js';
 
 const KEYBOARD_STEP_PX = 16;
@@ -26,7 +28,7 @@ const KEYBOARD_STEP_PX = 16;
 export class PlatformResizableSplit extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         size: { type: Number },
         minSize: { type: Number, attribute: 'min-size' },
         maxSize: { type: Number, attribute: 'max-size' },
@@ -39,7 +41,21 @@ export class PlatformResizableSplit extends PlatformElement {
         collapsedSize: { type: Number, attribute: 'collapsed-size' },
     };
 
-    static styles = [
+    declare size: number;
+    declare minSize: number;
+    declare maxSize: number;
+    declare side: string;
+    declare storageKey: string;
+    declare storageScope: PlatformStorageScope;
+    declare disabled: boolean;
+    declare collapsed: boolean;
+    declare collapsedSize: number;
+
+    _dragging: boolean;
+    _dragOrigin!: number;
+    _dragStartSize!: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -120,24 +136,24 @@ export class PlatformResizableSplit extends PlatformElement {
         this._onPointerUp = this._onPointerUp.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._restoreSize();
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         this._detachDragListeners();
     }
 
-    _fullStorageKey() {
+    _fullStorageKey(): string | null {
         if (this.storageKey === '') {
             return null;
         }
         return platformStorageKey(this.storageScope, `split.${this.storageKey}`);
     }
 
-    _restoreSize() {
+    _restoreSize(): void {
         const key = this._fullStorageKey();
         if (key === null) {
             return;
@@ -152,7 +168,7 @@ export class PlatformResizableSplit extends PlatformElement {
         }
     }
 
-    _persistSize() {
+    _persistSize(): void {
         const key = this._fullStorageKey();
         if (key === null) {
             return;
@@ -160,11 +176,11 @@ export class PlatformResizableSplit extends PlatformElement {
         storageSet(key, String(this.size));
     }
 
-    _clamp(value) {
+    _clamp(value: number): number {
         return Math.min(Math.max(value, this.minSize), this.maxSize);
     }
 
-    _setSize(value) {
+    _setSize(value: number): void {
         const next = this._clamp(value);
         if (next === this.size) {
             return;
@@ -173,11 +189,11 @@ export class PlatformResizableSplit extends PlatformElement {
         this.emit('split-resize', { size: next });
     }
 
-    _sideWidth() {
+    _sideWidth(): number {
         return this.collapsed ? this.collapsedSize : this.size;
     }
 
-    _onPointerDown(event) {
+    _onPointerDown(event: PointerEvent): void {
         if (this.disabled || this.collapsed) {
             return;
         }
@@ -190,7 +206,7 @@ export class PlatformResizableSplit extends PlatformElement {
         this.requestUpdate();
     }
 
-    _onPointerMove(event) {
+    _onPointerMove(event: PointerEvent): void {
         if (!this._dragging) {
             return;
         }
@@ -198,7 +214,7 @@ export class PlatformResizableSplit extends PlatformElement {
         this._setSize(this.side === 'right' ? this._dragStartSize - delta : this._dragStartSize + delta);
     }
 
-    _onPointerUp() {
+    _onPointerUp(): void {
         if (!this._dragging) {
             return;
         }
@@ -208,12 +224,12 @@ export class PlatformResizableSplit extends PlatformElement {
         this.requestUpdate();
     }
 
-    _detachDragListeners() {
+    _detachDragListeners(): void {
         window.removeEventListener('pointermove', this._onPointerMove);
         window.removeEventListener('pointerup', this._onPointerUp);
     }
 
-    _onHandleKeyDown(event) {
+    _onHandleKeyDown(event: KeyboardEvent): void {
         if (this.collapsed) {
             return;
         }
@@ -232,7 +248,7 @@ export class PlatformResizableSplit extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="side" style=${`width:${this._sideWidth()}px`} part="side">
                 <slot name="side"></slot>

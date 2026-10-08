@@ -15,16 +15,18 @@
  */
 
 import { css, html } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-popover.js';
+import type { PlatformPopover, PopoverAnchor } from './platform-popover.js';
 
 export const HOVER_CARD_WIDTH = 320;
 export const HOVER_CARD_GAP = 10;
 export const HOVER_CARD_VIEWPORT_PADDING = 12;
 
 export class PlatformHoverCard extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         open: { type: Boolean, reflect: true },
         /** Элемент, прямоугольник или точка — см. `resolveAnchorRect`. */
         anchor: { attribute: false },
@@ -32,7 +34,12 @@ export class PlatformHoverCard extends PlatformElement {
         width: { type: Number },
     };
 
-    static styles = [
+    declare open: boolean;
+    declare anchor: PopoverAnchor;
+    declare placement: string;
+    declare width: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -59,22 +66,22 @@ export class PlatformHoverCard extends PlatformElement {
         this.width = HOVER_CARD_WIDTH;
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
         if (this.open) {
-            this.renderRoot?.querySelector('platform-popover')?.reposition();
+            this.renderRoot?.querySelector<PlatformPopover>('platform-popover')?.reposition();
         }
     }
 
-    _onEnter() {
+    _onEnter(): void {
         this.emit('hover-card-enter');
     }
 
-    _onLeave() {
+    _onLeave(): void {
         this.emit('hover-card-leave');
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <platform-popover
                 trigger="manual"

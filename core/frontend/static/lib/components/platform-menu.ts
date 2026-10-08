@@ -13,32 +13,45 @@
  */
 
 import { css, html, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { repeat } from 'lit/directives/repeat.js';
 
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
-/**
- * @typedef {object} PlatformMenuItem
- * @property {string} id
- * @property {string} [label] подпись; для `kind: 'separator'` не нужна
- * @property {string} [icon] имя иконки platform-icon
- * @property {string} [hint] подпись справа (горячая клавиша или пояснение)
- * @property {'action'|'separator'|'section'} [kind]
- * @property {boolean} [disabled]
- * @property {boolean} [danger] красный акцент для разрушающих действий
- * @property {boolean} [selected] отметка текущего значения
- */
+export interface PlatformMenuItem {
+    id: string;
+    /** подпись; для `kind: 'separator'` не нужна */
+    label?: string;
+    /** имя иконки platform-icon */
+    icon?: string;
+    /** подпись справа (горячая клавиша или пояснение) */
+    hint?: string;
+    kind?: 'action' | 'separator' | 'section';
+    disabled?: boolean;
+    /** красный акцент для разрушающих действий */
+    danger?: boolean;
+    /** отметка текущего значения */
+    selected?: boolean;
+}
 
 export class PlatformMenu extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         items: { type: Array },
         ariaLabel: { type: String, attribute: 'aria-label' },
         compact: { type: Boolean, reflect: true },
         _activeIndex: { state: true },
     };
 
-    static styles = [
+    declare items: PlatformMenuItem[];
+    declare ariaLabel: string;
+    declare compact: boolean;
+    declare _activeIndex: number;
+
+    _typeahead: string;
+    _typeaheadTimer: number | null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -146,10 +159,10 @@ export class PlatformMenu extends PlatformElement {
     }
 
     /** Индексы пунктов, на которые можно встать: без разделителей и отключённых. */
-    get _selectableIndexes() {
-        const indexes = [];
+    get _selectableIndexes(): number[] {
+        const indexes: number[] = [];
         for (let index = 0; index < this.items.length; index += 1) {
-            const item = this.items[index];
+            const item = this.items[index]!;
             const kind = item.kind ?? 'action';
             if (kind === 'action' && item.disabled !== true) {
                 indexes.push(index);
@@ -159,13 +172,13 @@ export class PlatformMenu extends PlatformElement {
     }
 
     /** Поставить фокус на первый доступный пункт — вызывается при открытии меню. */
-    focusFirstItem() {
+    focusFirstItem(): void {
         const selectable = this._selectableIndexes;
-        this._activeIndex = selectable.length > 0 ? selectable[0] : -1;
+        this._activeIndex = selectable.length > 0 ? selectable[0]! : -1;
         this._focusActive();
     }
 
-    _focusActive() {
+    _focusActive(): void {
         void this.updateComplete.then(() => {
             const node = this.renderRoot?.querySelector('.item.is-active');
             if (node instanceof HTMLElement) {
@@ -175,7 +188,7 @@ export class PlatformMenu extends PlatformElement {
         });
     }
 
-    _moveActive(step) {
+    _moveActive(step: number): void {
         const selectable = this._selectableIndexes;
         if (selectable.length === 0) {
             return;
@@ -184,11 +197,11 @@ export class PlatformMenu extends PlatformElement {
         const next = current === -1
             ? (step > 0 ? 0 : selectable.length - 1)
             : (current + step + selectable.length) % selectable.length;
-        this._activeIndex = selectable[next];
+        this._activeIndex = selectable[next]!;
         this._focusActive();
     }
 
-    _onKeyDown(event) {
+    _onKeyDown(event: KeyboardEvent): void {
         if (event.key === 'ArrowDown') {
             event.preventDefault();
             this._moveActive(1);
@@ -203,7 +216,7 @@ export class PlatformMenu extends PlatformElement {
             event.preventDefault();
             const selectable = this._selectableIndexes;
             if (selectable.length > 0) {
-                this._activeIndex = selectable[0];
+                this._activeIndex = selectable[0]!;
                 this._focusActive();
             }
             return;
@@ -212,7 +225,7 @@ export class PlatformMenu extends PlatformElement {
             event.preventDefault();
             const selectable = this._selectableIndexes;
             if (selectable.length > 0) {
-                this._activeIndex = selectable[selectable.length - 1];
+                this._activeIndex = selectable[selectable.length - 1]!;
                 this._focusActive();
             }
             return;
@@ -231,7 +244,7 @@ export class PlatformMenu extends PlatformElement {
     }
 
     /** Переход к пункту по первым набранным буквам — привычно для меню. */
-    _handleTypeahead(char) {
+    _handleTypeahead(char: string): void {
         this._typeahead += char.toLowerCase();
         if (this._typeaheadTimer !== null) {
             clearTimeout(this._typeaheadTimer);
@@ -242,7 +255,7 @@ export class PlatformMenu extends PlatformElement {
         }, 600);
 
         const match = this._selectableIndexes.find((index) => {
-            const label = String(this.items[index].label ?? '').toLowerCase();
+            const label = String(this.items[index]!.label ?? '').toLowerCase();
             return label.startsWith(this._typeahead);
         });
         if (match !== undefined) {
@@ -251,14 +264,14 @@ export class PlatformMenu extends PlatformElement {
         }
     }
 
-    _select(item) {
+    _select(item: PlatformMenuItem): void {
         if (item.disabled === true) {
             return;
         }
         this.emit('menu-select', { id: item.id, item });
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.items.length === 0) {
             return html`<div class="empty" role="presentation"><slot name="empty"></slot></div>`;
         }
@@ -271,14 +284,14 @@ export class PlatformMenu extends PlatformElement {
             >
                 ${repeat(
                     this.items,
-                    (item, index) => item.id ?? `idx-${index}`,
-                    (item, index) => this._renderItem(item, index),
+                    (item: PlatformMenuItem, index: number) => item.id ?? `idx-${index}`,
+                    (item: PlatformMenuItem, index: number) => this._renderItem(item, index),
                 )}
             </div>
         `;
     }
 
-    _renderItem(item, index) {
+    _renderItem(item: PlatformMenuItem, index: number): TemplateResult {
         const kind = item.kind ?? 'action';
         if (kind === 'separator') {
             return html`<div class="separator" role="separator"></div>`;

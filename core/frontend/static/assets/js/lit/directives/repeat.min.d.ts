@@ -1,0 +1,2 @@
+/** Vendored lit directive — реэкспорт типов пакета lit. */
+export * from 'lit/directives/repeat.js';

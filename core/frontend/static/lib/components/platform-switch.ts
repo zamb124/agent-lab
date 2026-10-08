@@ -1,15 +1,21 @@
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 export class PlatformSwitch extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         checked: { type: Boolean, reflect: true },
         disabled: { type: Boolean, reflect: true },
         label: { type: String },
         size: { type: String, reflect: true },
     };
 
-    static styles = [
+    declare checked: boolean;
+    declare disabled: boolean;
+    declare label: string;
+    declare size: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -99,7 +105,7 @@ export class PlatformSwitch extends PlatformElement {
         this.size = 'md';
     }
 
-    _toggle() {
+    _toggle(): void {
         if (this.disabled) {
             return;
         }
@@ -111,7 +117,7 @@ export class PlatformSwitch extends PlatformElement {
         }));
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <button
                 type="button"

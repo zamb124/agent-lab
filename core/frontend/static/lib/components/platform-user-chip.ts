@@ -19,16 +19,28 @@
  */
 
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
+import type { TeamState } from '../events/reducers/team.js';
+import type { AuthState } from '../events/reducers/auth.js';
+import type { SelectController } from '../events/select-controller.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
 
 const ALLOWED_SIZES = new Set(['sm', 'md']);
 
+interface ChipUser {
+    user_id: string;
+    name: string;
+    email: string | null;
+    avatar_url: string | null;
+    is_self: boolean;
+}
+
 export class PlatformUserChip extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         userId: { type: String, attribute: 'user-id' },
         size: { type: String },
         interactive: { type: Boolean },
@@ -36,7 +48,19 @@ export class PlatformUserChip extends PlatformElement {
         _chipAvatarFallback: { state: true },
     };
 
-    static styles = [
+    declare userId: string;
+    declare size: string;
+    declare interactive: boolean;
+    declare showWorkCount: boolean;
+    declare _chipAvatarFallback: number;
+
+    _chipAvatarSig: string;
+    _teamSel: SelectController<TeamState>;
+    _authSel: SelectController<AuthState>;
+    _workCountsSel: SelectController<{ total_open_count?: unknown } | undefined>;
+    _loadDispatched: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -164,19 +188,19 @@ export class PlatformUserChip extends PlatformElement {
         this.showWorkCount = false;
         this._chipAvatarFallback = 0;
         this._chipAvatarSig = '';
-        this._teamSel = this.select((s) => s.team);
-        this._authSel = this.select((s) => s.auth);
-        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts);
+        this._teamSel = this.select((s) => s.team as TeamState);
+        this._authSel = this.select((s) => s.auth as AuthState);
+        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts as { total_open_count?: unknown } | undefined);
         this._loadDispatched = false;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (!ALLOWED_SIZES.has(this.size)) {
             throw new Error(`platform-user-chip: invalid size "${this.size}" (allowed: sm | md)`);
         }
-        const auth = this._authSel.value;
-        const team = this._teamSel.value;
+        const auth = this._authSel.value!;
+        const team = this._teamSel.value!;
         if (
             !this._loadDispatched
             && auth.status === 'authenticated'
@@ -203,57 +227,57 @@ export class PlatformUserChip extends PlatformElement {
         }
     }
 
-    _resolveUser() {
+    _resolveUser(): ChipUser | null {
         const userId = this.userId;
         if (typeof userId !== 'string' || userId.length === 0) {
             throw new Error('platform-user-chip: user-id required (non-empty string)');
         }
-        const auth = this._authSel.value;
+        const auth = this._authSel.value!;
         const currentUser = auth.user;
         if (currentUser) {
-            const currentId = (currentUser.raw && currentUser.raw.user_id) || currentUser.id;
+            const raw = (currentUser.raw ?? {}) as Record<string, unknown>;
+            const currentId = raw.user_id || currentUser.id;
             if (currentId === userId) {
-                const raw = currentUser.raw || {};
                 return {
                     user_id: userId,
-                    name: currentUser.name || raw.name || this.t('user_chip.you'),
-                    email: Array.isArray(raw.emails) && raw.emails.length > 0 ? raw.emails[0] : null,
+                    name: String(currentUser.name || raw.name || this.t('user_chip.you')),
+                    email: Array.isArray(raw.emails) && raw.emails.length > 0 ? String(raw.emails[0]) : null,
                     avatar_url: typeof raw.avatar_url === 'string' && raw.avatar_url.length > 0 ? raw.avatar_url : null,
                     is_self: true,
                 };
             }
         }
-        const team = this._teamSel.value;
+        const team = this._teamSel.value!;
         const member = team.members.find((m) => m.user_id === userId);
         if (member) {
             return {
-                user_id: member.user_id,
-                name: member.name,
-                email: member.email,
-                avatar_url: member.avatar_url,
+                user_id: String(member.user_id),
+                name: typeof member.name === 'string' ? member.name : '',
+                email: typeof member.email === 'string' ? member.email : null,
+                avatar_url: typeof member.avatar_url === 'string' ? member.avatar_url : null,
                 is_self: false,
             };
         }
         return null;
     }
 
-    _onClick() {
+    _onClick(): void {
         if (!this.interactive) return;
         const user = this._resolveUser();
         if (!user) return;
         this.openModal('platform.user_info', { userId: user.user_id });
     }
 
-    _onWorkCountClick(event) {
+    _onWorkCountClick(event: MouseEvent): void {
         event.stopPropagation();
         window.location.href = '/worktracker/inbox';
     }
 
-    _renderWorkCountBadge(user) {
+    _renderWorkCountBadge(user: ChipUser): TemplateResult | null {
         if (!this.showWorkCount || !user.is_self) {
             return null;
         }
-        const counts = this._workCountsSel.value;
+        const counts = this._workCountsSel.value!;
         const total = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
         if (total <= 0) {
             return null;
@@ -269,7 +293,7 @@ export class PlatformUserChip extends PlatformElement {
         `;
     }
 
-    _onKeydown(event) {
+    _onKeydown(event: KeyboardEvent): void {
         if (!this.interactive) return;
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -277,7 +301,7 @@ export class PlatformUserChip extends PlatformElement {
         }
     }
 
-    _onChipAvatarError() {
+    _onChipAvatarError(): void {
         const user = this._resolveUser();
         if (!user) return;
         const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
@@ -288,7 +312,7 @@ export class PlatformUserChip extends PlatformElement {
         }
     }
 
-    _renderAvatar(user) {
+    _renderAvatar(user: ChipUser): TemplateResult {
         if (this._chipAvatarFallback >= 2) {
             const letter = user.name && user.name.length > 0 ? user.name.trim().charAt(0).toUpperCase() : '?';
             return html`<span class="avatar">${letter}</span>`;
@@ -301,7 +325,7 @@ export class PlatformUserChip extends PlatformElement {
         return html`<span class="avatar"><img src=${resolved.src} alt=${user.name} @error=${this._onChipAvatarError} /></span>`;
     }
 
-    render() {
+    override render(): TemplateResult {
         const user = this._resolveUser();
         if (!user) {
             const shortId = this.userId.length > 12 ? `${this.userId.slice(0, 12)}…` : this.userId;
