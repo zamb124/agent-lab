@@ -3,12 +3,27 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-button.js';
 import '../glass-spinner.js';
+import type { OpController } from '../../base/use-resource.js';
 
-function _stringifyResolvedItem(item) {
+interface ResolvedVariableBase {
+    value_kind?: string;
+    value?: unknown;
+    expression?: string;
+}
+
+interface ResolvedVariableItem {
+    variable_key?: string;
+    resolvable?: boolean;
+    secret?: boolean;
+    payload?: { base?: ResolvedVariableBase } | null;
+}
+
+function _stringifyResolvedItem(item: ResolvedVariableItem): string {
     if (!item.resolvable || !item.payload || !item.payload.base) {
         return '';
     }
@@ -29,7 +44,7 @@ function _stringifyResolvedItem(item) {
 export class PlatformVariableResolvePreview extends PlatformElement {
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         variableKey: { type: String, attribute: 'variable-key' },
         _userId: { state: true },
         _namespace: { state: true },
@@ -38,7 +53,16 @@ export class PlatformVariableResolvePreview extends PlatformElement {
         _loading: { state: true },
     };
 
-    static styles = css`
+    declare variableKey: string;
+    declare _userId: string;
+    declare _namespace: string;
+    declare _channel: string;
+    declare _items: ResolvedVariableItem[];
+    declare _loading: boolean;
+
+    private _resolve: OpController;
+
+    static override styles: CSSResultGroup = css`
         :host { display: block; }
         .grid {
             display: grid;
@@ -79,7 +103,7 @@ export class PlatformVariableResolvePreview extends PlatformElement {
         this._resolve = this.useOp('secrets/variables_resolve');
     }
 
-    async _runPreview() {
+    async _runPreview(): Promise<void> {
         this._loading = true;
         try {
             const response = await this._resolve.run({
@@ -87,9 +111,11 @@ export class PlatformVariableResolvePreview extends PlatformElement {
                 namespace: this._namespace.trim() === '' ? null : this._namespace.trim(),
                 channel: this._channel.trim() === '' ? null : this._channel.trim(),
             });
-            const items = response && Array.isArray(response.items) ? response.items : [];
+            const resp = (response ?? null) as { items?: unknown } | null;
+            const items: ResolvedVariableItem[] =
+                resp && Array.isArray(resp.items) ? (resp.items as ResolvedVariableItem[]) : [];
             if (this.variableKey) {
-                this._items = items.filter((item) => item.variable_key === this.variableKey);
+                this._items = items.filter((item: ResolvedVariableItem) => item.variable_key === this.variableKey);
             } else {
                 this._items = items;
             }
@@ -98,7 +124,7 @@ export class PlatformVariableResolvePreview extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="grid">
                 <platform-field
@@ -106,21 +132,21 @@ export class PlatformVariableResolvePreview extends PlatformElement {
                     mode="edit"
                     .label=${this.t('editor.preview_user_id')}
                     .value=${this._userId}
-                    @change=${(e) => { this._userId = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._userId = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
                 <platform-field
                     type="string"
                     mode="edit"
                     .label=${this.t('editor.preview_namespace')}
                     .value=${this._namespace}
-                    @change=${(e) => { this._namespace = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._namespace = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
                 <platform-field
                     type="string"
                     mode="edit"
                     .label=${this.t('editor.preview_channel')}
                     .value=${this._channel}
-                    @change=${(e) => { this._channel = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => { this._channel = typeof e.detail.value === 'string' ? e.detail.value : ''; }}
                 ></platform-field>
             </div>
             <platform-button @click=${() => this._runPreview()}>${this.t('editor.preview_run')}</platform-button>
@@ -136,7 +162,7 @@ export class PlatformVariableResolvePreview extends PlatformElement {
                             </tr>
                         </thead>
                         <tbody>
-                            ${this._items.map((item) => html`
+                            ${this._items.map((item: ResolvedVariableItem) => html`
                                 <tr>
                                     <td><code>${item.variable_key}</code></td>
                                     <td>${!item.resolvable || item.secret ? this.t('value_masked') : _stringifyResolvedItem(item)}</td>

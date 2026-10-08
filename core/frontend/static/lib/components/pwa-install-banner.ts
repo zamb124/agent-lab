@@ -4,8 +4,11 @@
  * установка инициируется через dispatch('pwa/install/prompt_requested').
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { PWA_EVENTS } from '../events/effects/pwa.effect.js';
+import type { PwaState } from '../events/reducers/pwa.js';
+import type { SelectController } from '../events/select-controller.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import { platformStorageKey } from '../utils/storage-keys.js';
 import { storageGet, storageSet } from '../utils/platform-storage.js';
@@ -13,29 +16,34 @@ import './platform-icon.js';
 
 const DISMISS_KEY = platformStorageKey('core', 'pwa_banner_dismissed');
 
-function _detectPlatform() {
+function _detectPlatform(): 'ios' | 'android' | 'desktop' {
     const ua = navigator.userAgent;
-    if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'ios';
+    if (/iPad|iPhone|iPod/.test(ua) && !(window as Window & { MSStream?: unknown }).MSStream) return 'ios';
     if (/android/i.test(ua)) return 'android';
     return 'desktop';
 }
 
-function _isIOSSafari() {
+function _isIOSSafari(): boolean {
     const ua = navigator.userAgent;
     return /Safari/.test(ua) && /iPad|iPhone|iPod/.test(ua) && !/CriOS|FxiOS/.test(ua);
 }
 
-function _isInstalled() {
+function _isInstalled(): boolean {
     return window.matchMedia('(display-mode: standalone)').matches
-        || window.navigator.standalone === true;
+        || (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
 export class PWAInstallBanner extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         _dismissed: { state: true },
     };
 
-    static styles = [
+    declare _dismissed: boolean;
+    declare platform: 'ios' | 'android' | 'desktop';
+
+    private _pwaSelect: SelectController<{ installAvailable: boolean; installed: boolean }>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         buttonStyles,
         css`
@@ -69,13 +77,13 @@ export class PWAInstallBanner extends PlatformElement {
         super();
         this.platform = _detectPlatform();
         this._dismissed = !!storageGet(DISMISS_KEY);
-        this._pwaSelect = this.select((s) => ({
-            installAvailable: s.pwa.installAvailable,
-            installed: s.pwa.installed,
-        }));
+        this._pwaSelect = this.select((s) => {
+            const pwa = s.pwa as PwaState;
+            return { installAvailable: pwa.installAvailable, installed: pwa.installed };
+        });
     }
 
-    _shouldShow() {
+    _shouldShow(): boolean {
         if (this._dismissed) return false;
         if (_isInstalled()) return false;
         const pwa = this._pwaSelect.value || { installAvailable: false, installed: false };
@@ -84,28 +92,28 @@ export class PWAInstallBanner extends PlatformElement {
         return pwa.installAvailable;
     }
 
-    updated(changed) {
-        super.updated && super.updated(changed);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
         if (this._shouldShow()) this.setAttribute('visible', '');
         else this.removeAttribute('visible');
     }
 
-    _install() {
+    _install(): void {
         this.dispatch(PWA_EVENTS.INSTALL_PROMPT_REQUESTED, null);
     }
 
-    _dismiss() {
+    _dismiss(): void {
         this._dismissed = true;
         storageSet(DISMISS_KEY, 'true');
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this.platform === 'ios') return this._renderIosBanner();
         return this._renderInstallBanner();
     }
 
-    _renderIosBanner() {
-        const t = (k, fallback) => this.t(k) || fallback;
+    _renderIosBanner(): TemplateResult {
+        const t = (k: string, fallback: string) => this.t(k) || fallback;
         return html`
             <div class="banner">
                 <div class="content">
@@ -127,8 +135,8 @@ export class PWAInstallBanner extends PlatformElement {
         `;
     }
 
-    _renderInstallBanner() {
-        const t = (k, fallback) => this.t(k) || fallback;
+    _renderInstallBanner(): TemplateResult {
+        const t = (k: string, fallback: string) => this.t(k) || fallback;
         return html`
             <div class="banner">
                 <div class="content">

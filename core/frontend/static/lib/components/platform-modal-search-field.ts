@@ -2,18 +2,23 @@
  * Компактный поиск для header/toolbar/sidebar модалок: dense pill, radius-full, glass-фон.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './fields/platform-field.js';
 
 export class PlatformModalSearchField extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         placeholder: { type: String },
         layout: { type: String, reflect: true },
     };
 
-    static styles = [
+    declare value: string;
+    declare placeholder: string;
+    declare layout: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -73,10 +78,7 @@ export class PlatformModalSearchField extends PlatformElement {
         this.layout = 'header';
     }
 
-    /**
-     * @param {CustomEvent<{ value?: unknown }>} e
-     */
-    _onChange(e) {
+    _onChange(e: CustomEvent<{ value?: unknown }>): void {
         const rawValue = e.detail?.value;
         if (typeof rawValue !== 'string') {
             throw new TypeError('platform-modal-search-field: change expects string detail.value');
@@ -84,7 +86,7 @@ export class PlatformModalSearchField extends PlatformElement {
         this.emit('change', { value: rawValue });
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <platform-field
                 type="string"

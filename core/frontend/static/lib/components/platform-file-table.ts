@@ -3,11 +3,19 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 
+export interface FileTableColumn {
+    key?: string;
+    label?: string;
+    sortable?: boolean;
+    hideMobile?: boolean;
+}
+
 export class PlatformFileTable extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         columns: { type: Array },
         sortKey: { type: String, attribute: 'sort-key' },
         sortDir: { type: String, attribute: 'sort-dir' },
@@ -16,7 +24,14 @@ export class PlatformFileTable extends PlatformElement {
         ariaLabel: { type: String, attribute: 'aria-label' },
     };
 
-    static styles = [
+    declare columns: FileTableColumn[];
+    declare sortKey: string;
+    declare sortDir: string;
+    declare selectable: boolean;
+    declare allSelected: boolean;
+    declare ariaLabel: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -98,7 +113,7 @@ export class PlatformFileTable extends PlatformElement {
         this.ariaLabel = '';
     }
 
-    _onSort(key) {
+    _onSort(key: unknown): void {
         if (typeof key !== 'string' || key.length === 0) {
             return;
         }
@@ -109,11 +124,11 @@ export class PlatformFileTable extends PlatformElement {
         this.emit('sort-change', { sortKey: key, sortDir: nextDir });
     }
 
-    _onSelectAll(e) {
-        this.emit('select-all-toggle', { selected: e.target.checked });
+    _onSelectAll(e: Event): void {
+        this.emit('select-all-toggle', { selected: (e.target as HTMLInputElement).checked });
     }
 
-    _renderHeaderCell(col) {
+    _renderHeaderCell(col: FileTableColumn): TemplateResult {
         const sortable = col.sortable === true && typeof col.key === 'string';
         const sorted = sortable && this.sortKey === col.key;
         const hideMobile = col.hideMobile === true ? 'cell-hide-mobile' : '';
@@ -137,7 +152,7 @@ export class PlatformFileTable extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const cols = Array.isArray(this.columns) ? this.columns : [];
         return html`
             <div class="table-wrap" role="grid" aria-label=${this.ariaLabel}>

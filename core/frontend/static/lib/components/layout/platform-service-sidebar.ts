@@ -10,6 +10,7 @@
  * Методы: toggleMobile(), closeMobile() — для вызова из родительского App (меню).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import {
     readShellSidebarCollapsed,
@@ -17,8 +18,13 @@ import {
 } from '../../utils/shell-sidebar-preference.js';
 import './platform-sidebar.js';
 
+interface PlatformSidebarLike extends HTMLElement {
+    toggleMobile(): void;
+    closeMobile(): void;
+}
+
 export class PlatformServiceSidebar extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
         logoSrc: { type: String, attribute: 'logo-src' },
@@ -29,7 +35,16 @@ export class PlatformServiceSidebar extends PlatformElement {
         logoOpensServices: { type: Boolean, attribute: 'logo-opens-services' },
     };
 
-    static styles = [
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+    declare logoSrc: string;
+    declare logoText: string;
+    declare width: string;
+    declare collapsedWidth: string;
+    declare mobileBreakpoint: number;
+    declare logoOpensServices: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -54,19 +69,19 @@ export class PlatformServiceSidebar extends PlatformElement {
         this.logoOpensServices = false;
     }
 
-    _innerSidebar() {
-        return this.renderRoot?.querySelector('platform-sidebar') ?? null;
+    _innerSidebar(): PlatformSidebarLike | null {
+        return (this.renderRoot?.querySelector('platform-sidebar') as PlatformSidebarLike | null) ?? null;
     }
 
-    toggleMobile() {
+    toggleMobile(): void {
         this._innerSidebar()?.toggleMobile();
     }
 
-    closeMobile() {
+    closeMobile(): void {
         this._innerSidebar()?.closeMobile();
     }
 
-    _onCollapseChange(e) {
+    _onCollapseChange(e: CustomEvent<{ collapsed?: unknown }>): void {
         e.stopPropagation();
         const next = e.detail?.collapsed;
         if (typeof next !== 'boolean') {
@@ -77,7 +92,7 @@ export class PlatformServiceSidebar extends PlatformElement {
         this.emit('collapse-change', { collapsed: next });
     }
 
-    _onMobileChange(e) {
+    _onMobileChange(e: CustomEvent<{ open?: unknown }>): void {
         e.stopPropagation();
         const open = e.detail?.open;
         if (typeof open !== 'boolean') {
@@ -87,11 +102,11 @@ export class PlatformServiceSidebar extends PlatformElement {
         this.emit('mobile-change', { open });
     }
 
-    _userLogoSlotPresent() {
-        return Array.from(this.children).some((n) => n.getAttribute?.('slot') === 'logo');
+    _userLogoSlotPresent(): boolean {
+        return Array.from(this.children).some((n) => n instanceof Element && n.getAttribute('slot') === 'logo');
     }
 
-    render() {
+    override render(): TemplateResult {
         const logoBridge = this._userLogoSlotPresent()
             ? html`<slot name="logo" slot="logo"></slot>`
             : null;

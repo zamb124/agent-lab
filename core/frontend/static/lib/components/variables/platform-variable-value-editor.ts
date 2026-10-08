@@ -3,20 +3,32 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
+
+interface VariableValueChangeDetail {
+    value_kind: 'static' | 'expression';
+    value: string;
+    expression: string;
+}
 
 export class PlatformVariableValueEditor extends PlatformElement {
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         valueKind: { type: String, attribute: 'value-kind' },
         value: { type: String },
         expression: { type: String },
         readonly: { type: Boolean, reflect: true },
     };
 
-    static styles = css`
+    declare valueKind: string;
+    declare value: string;
+    declare expression: string;
+    declare readonly: boolean;
+
+    static override styles: CSSResultGroup = css`
         :host { display: block; }
         .tabs {
             display: flex;
@@ -48,7 +60,7 @@ export class PlatformVariableValueEditor extends PlatformElement {
         this.readonly = false;
     }
 
-    _emitChange(next) {
+    _emitChange(next: VariableValueChangeDetail): void {
         this.dispatchEvent(new CustomEvent('change', {
             bubbles: true,
             composed: true,
@@ -56,7 +68,7 @@ export class PlatformVariableValueEditor extends PlatformElement {
         }));
     }
 
-    _setKind(kind) {
+    _setKind(kind: string): void {
         if (this.readonly) {
             return;
         }
@@ -70,7 +82,7 @@ export class PlatformVariableValueEditor extends PlatformElement {
         });
     }
 
-    render() {
+    override render(): TemplateResult {
         const kind = this.valueKind === 'expression' ? 'expression' : 'static';
         return html`
             <div class="tabs">
@@ -90,7 +102,7 @@ export class PlatformVariableValueEditor extends PlatformElement {
                             .label=${this.t('editor.field_static_value')}
                             .value=${this.value}
                             ?disabled=${this.readonly}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 this._emitChange({
                                     value_kind: 'static',
                                     value: typeof e.detail.value === 'string' ? e.detail.value : '',
@@ -108,7 +120,7 @@ export class PlatformVariableValueEditor extends PlatformElement {
                             .label=${this.t('editor.field_expression')}
                             .value=${this.expression}
                             ?disabled=${this.readonly}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 this._emitChange({
                                     value_kind: 'expression',
                                     value: this.value,

@@ -3,11 +3,12 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import './platform-animated-number.js';
 
 export class PlatformMetricCard extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         label: { type: String },
         value: { type: Number },
         locale: { type: String },
@@ -15,7 +16,13 @@ export class PlatformMetricCard extends PlatformElement {
         refreshing: { type: Boolean },
     };
 
-    static styles = [
+    declare label: string;
+    declare value: number;
+    declare locale: string;
+    declare tone: string;
+    declare refreshing: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -97,7 +104,7 @@ export class PlatformMetricCard extends PlatformElement {
         this.refreshing = false;
     }
 
-    render() {
+    override render(): TemplateResult {
         const toneClass = this.tone ? `tone-${this.tone}` : '';
         return html`
             <div class="card ${toneClass}">

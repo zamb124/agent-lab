@@ -2,16 +2,20 @@
  * Полноэкранные страницы: 404 и ошибка сервера (единый glass-стиль платформы).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-button.js';
 
 export class PlatformShellPage extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         kind: { type: String },
         homeHref: { type: String, attribute: 'home-href' },
     };
 
-    static styles = [
+    declare kind: string;
+    declare homeHref: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -83,7 +87,7 @@ export class PlatformShellPage extends PlatformElement {
         this.homeHref = '/';
     }
 
-    render() {
+    override render(): TemplateResult {
         const is500 = this.kind === 'server-error';
         const title = is500 ? 'Сервис временно недоступен' : 'Страница не найдена';
         const text = is500
@@ -116,7 +120,7 @@ export class PlatformShellPage extends PlatformElement {
         `;
     }
 
-    _goHome() {
+    _goHome(): void {
         window.location.href = this.homeHref || '/';
     }
 }

@@ -2,32 +2,41 @@
  * platform-mermaid-host — Mermaid SVG в Lit (lazy script, antiscript, platform theme).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 
 const MERMAID_URL = '/static/core/assets/js/mermaid/mermaid.min.js';
 
-let _mermaidPromise = null;
+interface MermaidApi {
+    initialize(config: Record<string, unknown>): void;
+    render(id: string, source: string): Promise<{ svg: string }>;
+}
+
+type MermaidWindow = Window & { mermaid?: MermaidApi };
+
+let _mermaidPromise: Promise<MermaidApi> | null = null;
 let _mermaidInitialized = false;
 let _renderSeq = 0;
 
-function loadMermaid() {
-    if (typeof window !== 'undefined' && window.mermaid) {
-        return Promise.resolve(window.mermaid);
+function loadMermaid(): Promise<MermaidApi> {
+    const w = window as MermaidWindow;
+    if (typeof window !== 'undefined' && w.mermaid) {
+        return Promise.resolve(w.mermaid);
     }
     if (_mermaidPromise) {
         return _mermaidPromise;
     }
-    _mermaidPromise = new Promise((resolve, reject) => {
+    _mermaidPromise = new Promise<MermaidApi>((resolve, reject) => {
         const script = document.createElement('script');
         script.src = MERMAID_URL;
         script.async = true;
         script.dataset.platformMermaid = '1';
         script.onload = () => {
-            if (!window.mermaid) {
+            if (!w.mermaid) {
                 reject(new Error('mermaid global missing after load'));
                 return;
             }
-            resolve(window.mermaid);
+            resolve(w.mermaid);
         };
         script.onerror = () => reject(new Error(`mermaid load failed: ${MERMAID_URL}`));
         document.head.appendChild(script);
@@ -35,12 +44,12 @@ function loadMermaid() {
     return _mermaidPromise;
 }
 
-function ensureMermaidInit(mermaid) {
+function ensureMermaidInit(mermaid: MermaidApi): void {
     if (_mermaidInitialized) {
         return;
     }
     const styles = getComputedStyle(document.documentElement);
-    const pick = (name, fallback) => {
+    const pick = (name: string, fallback: string): string => {
         const value = styles.getPropertyValue(name).trim();
         return value.length > 0 ? value : fallback;
     };
@@ -72,13 +81,21 @@ function ensureMermaidInit(mermaid) {
 }
 
 export class PlatformMermaidHost extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         source: { type: String },
         suspended: { type: Boolean, reflect: true },
         compact: { type: Boolean, reflect: true },
     };
 
-    static styles = [
+    declare source: string;
+    declare suspended: boolean;
+    declare compact: boolean;
+
+    private _svgHtml: string;
+    private _loadError: string;
+    private _bootToken: number;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -132,18 +149,18 @@ export class PlatformMermaidHost extends PlatformElement {
         this._bootToken = 0;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         if (changed.has('source') || changed.has('suspended')) {
             void this._renderDiagram();
         }
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         void this._renderDiagram();
     }
 
-    async _renderDiagram() {
+    async _renderDiagram(): Promise<void> {
         const token = ++this._bootToken;
         if (this.suspended) {
             return;
@@ -177,14 +194,14 @@ export class PlatformMermaidHost extends PlatformElement {
         }
     }
 
-    exportSvgMarkup() {
+    exportSvgMarkup(): string {
         if (typeof this._svgHtml !== 'string' || this._svgHtml.length === 0) {
             throw new Error('mermaid svg not ready');
         }
         return this._svgHtml;
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this._loadError) {
             return html`<div class="state state-error">${this._loadError}</div>`;
         }

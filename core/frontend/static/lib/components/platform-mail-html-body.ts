@@ -2,6 +2,7 @@
  * Тело письма: sanitized HTML в iframe или plaintext pre-wrap.
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { PlatformElement } from '../platform-element/index.js';
 import {
@@ -15,14 +16,21 @@ import './platform-button.js';
 export class PlatformMailHtmlBody extends PlatformElement {
     static i18nNamespace = 'mail';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         html: { type: String },
         text: { type: String },
         cidMap: { attribute: false },
         _remoteUnlocked: { state: true },
     };
 
-    static styles = [
+    declare html: string;
+    declare text: string;
+    declare cidMap: Record<string, string>;
+    declare _remoteUnlocked: boolean;
+
+    private _iframeResizeObserver: ResizeObserver | null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -78,19 +86,19 @@ export class PlatformMailHtmlBody extends PlatformElement {
         this._iframeResizeObserver = null;
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._disconnectIframeObserver();
         super.disconnectedCallback();
     }
 
-    _disconnectIframeObserver() {
+    _disconnectIframeObserver(): void {
         if (this._iframeResizeObserver !== null) {
             this._iframeResizeObserver.disconnect();
             this._iframeResizeObserver = null;
         }
     }
 
-    _requireBodyStrings() {
+    _requireBodyStrings(): void {
         if (typeof this.html !== 'string') {
             throw new Error('platform-mail-html-body: html string required');
         }
@@ -102,19 +110,19 @@ export class PlatformMailHtmlBody extends PlatformElement {
         }
     }
 
-    _onLoadImages() {
+    _onLoadImages(): void {
         this._remoteUnlocked = true;
     }
 
-    _onIframeLoad(event) {
-        const iframe = event.currentTarget;
+    _onIframeLoad(event: Event): void {
+        const iframe = event.currentTarget as unknown;
         if (!(iframe instanceof HTMLIFrameElement)) {
             throw new Error('platform-mail-html-body: iframe load target required');
         }
         this._syncIframeHeight(iframe);
     }
 
-    _syncIframeHeight(iframe) {
+    _syncIframeHeight(iframe: HTMLIFrameElement): void {
         const doc = iframe.contentDocument;
         if (doc === null || doc.documentElement === null) {
             return;
@@ -139,7 +147,7 @@ export class PlatformMailHtmlBody extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult | typeof nothing {
         this._requireBodyStrings();
         const bodyHtml = this.html;
         const bodyText = this.text;

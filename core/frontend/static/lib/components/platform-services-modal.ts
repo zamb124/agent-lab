@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, TemplateResult } from '../lit-shim.js';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import './platform-services-launcher.js';
@@ -12,7 +13,7 @@ export class PlatformServicesModal extends PlatformModal {
     static modalKind = 'platform.services';
     static i18nNamespace = 'platform';
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformModal.styles,
         css`
             :host {
@@ -34,7 +35,7 @@ export class PlatformServicesModal extends PlatformModal {
         this._onServiceLaunch = this._onServiceLaunch.bind(this);
     }
 
-    _onServiceLaunch(e) {
+    _onServiceLaunch(e: CustomEvent<{ serviceId?: unknown }>): void {
         e.stopPropagation();
         const d = e.detail;
         if (!d || typeof d.serviceId !== 'string' || d.serviceId.length === 0) {
@@ -49,11 +50,11 @@ export class PlatformServicesModal extends PlatformModal {
         }
     }
 
-    renderHeader() {
+    override renderHeader(): unknown {
         return this.t('services_modal.title');
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         return html`
             <div class="platform-services-modal-body">
                 <platform-services-launcher

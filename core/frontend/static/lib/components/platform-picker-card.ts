@@ -2,12 +2,13 @@
  * platform-picker-card — selectable glass card для picker modals (policy, preset, library).
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { glassStyles } from '../styles/shared/glass.styles.js';
 import './platform-icon.js';
 
 export class PlatformPickerCard extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         selected: { type: Boolean, reflect: true },
         icon: { type: String },
         title: { type: String },
@@ -16,7 +17,14 @@ export class PlatformPickerCard extends PlatformElement {
         disabled: { type: Boolean, reflect: true },
     };
 
-    static styles = [
+    declare selected: boolean;
+    declare icon: string;
+    declare title: string;
+    declare subtitle: string;
+    declare value: string;
+    declare disabled: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         glassStyles,
         css`
@@ -107,7 +115,7 @@ export class PlatformPickerCard extends PlatformElement {
         this.disabled = false;
     }
 
-    _onActivate(event) {
+    _onActivate(event: Event): void {
         if (this.disabled) {
             return;
         }
@@ -115,18 +123,18 @@ export class PlatformPickerCard extends PlatformElement {
         this.emit('select', { value: this.value });
     }
 
-    _onClick(event) {
+    _onClick(event: MouseEvent): void {
         this._onActivate(event);
     }
 
-    _onKeydown(event) {
+    _onKeydown(event: KeyboardEvent): void {
         if (event.key !== 'Enter' && event.key !== ' ') {
             return;
         }
         this._onActivate(event);
     }
 
-    render() {
+    override render(): TemplateResult {
         const iconSlot = html`
             <div class="picker-icon">
                 <slot name="icon">

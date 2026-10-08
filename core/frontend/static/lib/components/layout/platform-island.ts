@@ -8,12 +8,13 @@
  * во всех сервисах (раньше is-scrolling выключал blur и сам вызывал snap).
  */
 import { html } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { islandHostStyles, islandStyles } from '../../styles/shared/island.styles.js';
 import '../glass-spinner.js';
 
 export class PlatformIsland extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         variant: { type: String, reflect: true },
         padding: { type: String, reflect: true },
         headerGlow: { type: Boolean, attribute: 'header-glow' },
@@ -24,7 +25,14 @@ export class PlatformIsland extends PlatformElement {
         loading: { type: Boolean, reflect: true },
     };
 
-    static styles = [
+    declare variant: string;
+    declare padding: string;
+    declare headerGlow: boolean;
+    declare safeBottom: boolean;
+    declare contentNoScroll: boolean;
+    declare loading: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         islandHostStyles,
         islandStyles,
@@ -40,7 +48,7 @@ export class PlatformIsland extends PlatformElement {
         this.loading = false;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="island">
                 <div class="island-surface" aria-hidden="true">

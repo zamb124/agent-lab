@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-button.js';
@@ -10,7 +11,22 @@ import '../platform-button.js';
 const SCOPE_FIELDS = ['company_id', 'user_id', 'namespace', 'channel', 'var'];
 const SCOPE_OPS = ['eq', 'in', 'exists'];
 
-function _emptyScope() {
+interface ScopeMatch {
+    field?: string;
+    op?: string;
+    ref_key?: string | null;
+    value?: unknown;
+}
+
+interface VariableScope {
+    value_kind?: string;
+    value?: unknown;
+    expression?: string;
+    priority?: number;
+    match?: ScopeMatch[];
+}
+
+function _emptyScope(): VariableScope {
     return {
         value_kind: 'static',
         value: '',
@@ -23,12 +39,15 @@ function _emptyScope() {
 export class PlatformVariableScopesEditor extends PlatformElement {
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         scopes: { type: Array, attribute: false },
         readonly: { type: Boolean, reflect: true },
     };
 
-    static styles = css`
+    declare scopes: VariableScope[];
+    declare readonly: boolean;
+
+    static override styles: CSSResultGroup = css`
         :host { display: block; }
         .help {
             font-size: var(--text-sm);
@@ -62,7 +81,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
         this.readonly = false;
     }
 
-    _emit(scopes) {
+    _emit(scopes: VariableScope[]): void {
         this.dispatchEvent(new CustomEvent('change', {
             bubbles: true,
             composed: true,
@@ -70,34 +89,37 @@ export class PlatformVariableScopesEditor extends PlatformElement {
         }));
     }
 
-    _updateScope(index, patch) {
+    _updateScope(index: number, patch: Partial<VariableScope>): void {
         const next = this.scopes.map((scope, scopeIndex) => (
             scopeIndex === index ? { ...scope, ...patch } : scope
         ));
         this._emit(next);
     }
 
-    _removeScope(index) {
+    _removeScope(index: number): void {
         const next = this.scopes.filter((_, scopeIndex) => scopeIndex !== index);
         this._emit(next);
     }
 
-    _addScope() {
+    _addScope(): void {
         this._emit([...this.scopes, _emptyScope()]);
     }
 
-    _updateMatch(scopeIndex, matchIndex, patch) {
+    _updateMatch(scopeIndex: number, matchIndex: number, patch: Partial<ScopeMatch>): void {
         const scope = this.scopes[scopeIndex];
-        const match = scope.match.map((entry, entryIndex) => (
+        if (!scope) {
+            throw new Error('platform-variable-scopes-editor: scope index out of range');
+        }
+        const match = (scope.match || []).map((entry, entryIndex) => (
             entryIndex === matchIndex ? { ...entry, ...patch } : entry
         ));
         this._updateScope(scopeIndex, { match });
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <p class="help">${this.t('help.scopes.intro')}</p>
-            ${this.scopes.map((scope, scopeIndex) => html`
+            ${this.scopes.map((scope: VariableScope, scopeIndex: number) => html`
                 <div class="scope-card">
                     <div class="scope-head">
                         <strong>${this.t('editor.section_scopes')} #${scopeIndex + 1}</strong>
@@ -114,7 +136,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                             .label=${this.t('editor.scope_priority')}
                             .value=${scope.priority}
                             ?disabled=${this.readonly}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 const priority = Number(e.detail.value);
                                 if (Number.isNaN(priority)) {
                                     throw new Error('platform-variable-scopes-editor: priority must be number');
@@ -128,7 +150,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                             .label=${this.t('editor.scope_override_value')}
                             .value=${scope.value_kind === 'expression' ? scope.expression : String(scope.value ?? '')}
                             ?disabled=${this.readonly}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 const raw = typeof e.detail.value === 'string' ? e.detail.value : '';
                                 this._updateScope(scopeIndex, {
                                     value_kind: 'static',
@@ -138,7 +160,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                             }}
                         ></platform-field>
                     </div>
-                    ${(scope.match || []).map((entry, matchIndex) => html`
+                    ${(scope.match || []).map((entry: ScopeMatch, matchIndex: number) => html`
                         <div class="scope-grid">
                             <platform-field
                                 type="enum"
@@ -147,7 +169,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                                 .value=${entry.field}
                                 .options=${SCOPE_FIELDS.map((field) => ({ value: field, label: field }))}
                                 ?disabled=${this.readonly}
-                                @change=${(e) => this._updateMatch(scopeIndex, matchIndex, { field: e.detail.value })}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._updateMatch(scopeIndex, matchIndex, { field: typeof e.detail.value === 'string' ? e.detail.value : '' })}
                             ></platform-field>
                             <platform-field
                                 type="enum"
@@ -156,7 +178,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                                 .value=${entry.op}
                                 .options=${SCOPE_OPS.map((op) => ({ value: op, label: op }))}
                                 ?disabled=${this.readonly}
-                                @change=${(e) => this._updateMatch(scopeIndex, matchIndex, { op: e.detail.value })}
+                                @change=${(e: CustomEvent<{ value?: unknown }>) => this._updateMatch(scopeIndex, matchIndex, { op: typeof e.detail.value === 'string' ? e.detail.value : '' })}
                             ></platform-field>
                             ${entry.field === 'var'
                                 ? html`
@@ -166,7 +188,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                                         .label=${this.t('editor.scope_match_ref_key')}
                                         .value=${entry.ref_key ?? ''}
                                         ?disabled=${this.readonly}
-                                        @change=${(e) => this._updateMatch(scopeIndex, matchIndex, {
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._updateMatch(scopeIndex, matchIndex, {
                                             ref_key: typeof e.detail.value === 'string' ? e.detail.value : '',
                                         })}
                                     ></platform-field>
@@ -178,7 +200,7 @@ export class PlatformVariableScopesEditor extends PlatformElement {
                                         .label=${this.t('editor.scope_match_value')}
                                         .value=${entry.value === null || entry.value === undefined ? '' : String(entry.value)}
                                         ?disabled=${this.readonly}
-                                        @change=${(e) => this._updateMatch(scopeIndex, matchIndex, {
+                                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._updateMatch(scopeIndex, matchIndex, {
                                             value: typeof e.detail.value === 'string' ? e.detail.value : '',
                                         })}
                                     ></platform-field>

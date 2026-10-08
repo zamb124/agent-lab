@@ -1,4 +1,5 @@
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import './fields/platform-field-shell.js';
@@ -13,7 +14,7 @@ import {
 export class PlatformCronField extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         formStyles,
         css`
@@ -33,7 +34,7 @@ export class PlatformCronField extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: String },
         label: { type: String },
         name: { type: String },
@@ -43,6 +44,15 @@ export class PlatformCronField extends PlatformElement {
         _selectId: { type: String, state: true },
         _customText: { type: String, state: true },
     };
+
+    declare value: string;
+    declare label: string;
+    declare name: string;
+    declare error: string;
+    declare disabled: boolean;
+    declare placeholder: string;
+    declare _selectId: string;
+    declare _customText: string;
 
     constructor() {
         super();
@@ -56,27 +66,27 @@ export class PlatformCronField extends PlatformElement {
         this._customText = '';
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         if (changed.has('value')) {
             this._syncFromValue(this.value);
         }
     }
 
-    firstUpdated() {
-        super.firstUpdated();
+    override firstUpdated(changed: PropertyValues<this>): void {
+        super.firstUpdated(changed);
         this._syncFromValue(this.value);
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
-        const sel = this.renderRoot.querySelector('select.form-select');
+        const sel = this.renderRoot?.querySelector<HTMLSelectElement>('select.form-select');
         if (sel && sel.value !== this._selectId) {
             sel.value = this._selectId;
         }
     }
 
-    _syncFromValue(v) {
+    _syncFromValue(v: unknown): void {
         const s = typeof v === 'string' ? v : '';
         const id = findMatchingPresetId(s);
         if (id) {
@@ -87,19 +97,19 @@ export class PlatformCronField extends PlatformElement {
         this._customText = normalizeCronString(s);
     }
 
-    _emitBoth(val) {
+    _emitBoth(val: string): void {
         this.emit('input', { value: val });
         this.emit('change', { value: val });
     }
 
-    _onSelectChange(e) {
-        const id = e.target.value;
+    _onSelectChange(e: Event): void {
+        const id = (e.target as HTMLSelectElement).value;
         const wasId = this._selectId;
         this._selectId = id;
         if (id === CRON_FIELD_PRESET_CUSTOM) {
             if (wasId !== CRON_FIELD_PRESET_CUSTOM) {
                 const c = getCronForPresetId(wasId);
-                this._customText = c;
+                this._customText = c ?? '';
             }
             this._emitBoth(this._customText);
             return;
@@ -113,17 +123,17 @@ export class PlatformCronField extends PlatformElement {
         this._emitBoth(cron);
     }
 
-    _onCustomInput(e) {
-        this._customText = e.target.value;
+    _onCustomInput(e: Event): void {
+        this._customText = (e.target as HTMLInputElement).value;
         this.emit('input', { value: this._customText });
     }
 
-    _onCustomChange(e) {
-        this._customText = e.target.value;
+    _onCustomChange(e: Event): void {
+        this._customText = (e.target as HTMLInputElement).value;
         this.emit('change', { value: this._customText });
     }
 
-    render() {
+    override render(): TemplateResult {
         const showCustom = this._selectId === CRON_FIELD_PRESET_CUSTOM;
         return html`
             <platform-field-shell
@@ -142,7 +152,7 @@ export class PlatformCronField extends PlatformElement {
                         @change=${this._onSelectChange}
                     >
                         ${CRON_FIELD_PRESETS.map(
-                            (p) => html`
+                            (p: { id: string }) => html`
                                 <option value=${p.id}>${this.t(`cron_field.preset_${p.id}`)}</option>
                             `,
                         )}
