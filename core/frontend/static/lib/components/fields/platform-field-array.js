@@ -240,7 +240,7 @@ export class PlatformFieldArray extends PlatformElement {
         return html`
             <tag-input
                 .tags=${items}
-                placeholder=${placeholder}
+                placeholder=${typeof this.placeholder === 'string' ? this.placeholder : ''}
                 ?preserve-case=${this._preserveCase()}
                 ?readonly=${this.disabled}
                 @change=${this._onTagInputChange}

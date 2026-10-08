@@ -82,7 +82,6 @@ export class CRMEntityCard extends PlatformElement {
         /** Тулбар редактирования рендерит родитель (entity-detail-page) */
         hostToolbar: { type: Boolean, attribute: 'host-toolbar' },
         _step: { state: true },
-        _tagDraft: { state: true },
         _loadingCard: { state: true },
         _loadError: { state: true },
         _entityData: { state: true },
@@ -471,9 +470,6 @@ export class CRMEntityCard extends PlatformElement {
             .sheet-cell-body .attrs-grid.empty-section {
                 padding: var(--space-2) 0;
             }
-            .sheet-cell-body .description-field[readonly] {
-                min-height: 1.5em;
-            }
 
             .semantic-index-ribbon {
                 display: inline-flex;
@@ -760,40 +756,6 @@ export class CRMEntityCard extends PlatformElement {
                 font-size: var(--text-xs);
                 color: var(--text-primary);
             }
-            .tag-chip button {
-                background: transparent; border: none; color: var(--text-tertiary);
-                cursor: pointer; padding: 0; line-height: 1;
-            }
-            .tag-input {
-                flex: 1; min-width: 120px;
-                padding: var(--space-1) var(--space-2);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: transparent;
-                color: var(--text-primary);
-                font-size: var(--text-xs);
-            }
-
-            .description-field {
-                width: 100%;
-                min-height: 88px;
-                resize: vertical;
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface);
-                color: var(--text-primary);
-                font-family: inherit;
-                font-size: var(--text-sm);
-                line-height: 1.5;
-            }
-            .description-field[readonly] {
-                border-color: transparent;
-                background: transparent;
-                padding-left: 0;
-                padding-right: 0;
-            }
-
             .actions-bar {
                 display: flex;
                 gap: var(--space-2);
@@ -1064,7 +1026,6 @@ export class CRMEntityCard extends PlatformElement {
         this.hostToolbar = false;
 
         this._step = 'form';
-        this._tagDraft = '';
         this._loadingCard = false;
         this._loadError = null;
         this._entityData = null;
@@ -1633,28 +1594,12 @@ export class CRMEntityCard extends PlatformElement {
         form.setField('attributes', next);
     }
 
-    _onTagInput(event) { this._tagDraft = event.target.value; }
-    _onTagKey(event) {
-        if (event.key !== 'Enter' && event.key !== ',') return;
-        event.preventDefault();
-        const value = this._tagDraft.trim();
-        if (value.length === 0) return;
-        const form = this._activeForm();
-        const draft = form.draft;
-        if (Array.isArray(draft.tags) && draft.tags.includes(value)) {
-            this._tagDraft = '';
-            return;
+    _onTagsChange(event) {
+        const next = event.detail && Array.isArray(event.detail.value) ? event.detail.value : null;
+        if (next === null) {
+            throw new Error('entity-card._onTagsChange: expected array detail.value');
         }
-        const next = Array.isArray(draft.tags) ? [...draft.tags, value] : [value];
-        form.setField('tags', next);
-        this._tagDraft = '';
-    }
-    _onTagRemove(tag) {
-        const form = this._activeForm();
-        const draft = form.draft;
-        if (!Array.isArray(draft.tags)) return;
-        const next = draft.tags.filter((item) => item !== tag);
-        form.setField('tags', next);
+        this._activeForm().setField('tags', next);
     }
 
     _performSave() {
@@ -1703,10 +1648,15 @@ export class CRMEntityCard extends PlatformElement {
         this.requestUpdate();
     }
 
-    _renderFieldError(field) {
+    _fieldError(field) {
         const error_key = this._activeForm().errors[field];
-        if (!error_key) return null;
-        return html`<div class="form-error">${this.t(error_key)}</div>`;
+        return error_key ? this.t(error_key) : '';
+    }
+
+    _renderFieldError(field) {
+        const text = this._fieldError(field);
+        if (!text) return null;
+        return html`<div class="form-error">${text}</div>`;
     }
 
     _isTaskEntityType() {
@@ -1863,99 +1813,39 @@ export class CRMEntityCard extends PlatformElement {
             : (Array.isArray(draft.tags) ? draft.tags : []);
         const uiMode = this._fieldUiMode();
 
-        if (uiMode === 'view' && pill) {
-            const tagCount = tags.length;
-            const inner = tags.length > 0
-                ? html`
-                    <div class="tags-row">
-                        ${tags.map((tag) => html`<span class="tag-chip">${tag}</span>`)}
-                    </div>
-                `
-                : html`<span class="field-pill-readonly-muted">${this.t('entity_card.view_tags_empty')}</span>`;
-            return html`
-                <div class="field-pill field-pill--tags">
-                    <div class="field-pill-tags-head">
-                        <div class="field-pill-head">
-                            <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
-                        </div>
-                        <span class="tag-count-badge">${tagCount}</span>
-                    </div>
-                    ${inner}
-                </div>
-            `;
-        }
-        if (uiMode === 'view') {
+        if (uiMode === 'view' && !pill) {
             if (tags.length === 0) return nothing;
-            if (omitLabel) {
-                return html`
-                    <div class="tags-row">
-                        ${tags.map((tag) => html`<span class="tag-chip">${tag}</span>`)}
-                    </div>
-                `;
-            }
             return html`
-                <div class="form-row">
-                    <span class="section-title text-only">${this.t('entity_modal.label_tags')}</span>
-                    <div class="tags-row">
-                        ${tags.map((tag) => html`<span class="tag-chip">${tag}</span>`)}
-                    </div>
-                </div>
-            `;
-        }
-        const tagsRowEdit = html`
                 <div class="tags-row">
-                    ${tags.map((tag) => html`
-                        <span class="tag-chip">
-                            ${tag}
-                            <button type="button" @click=${() => this._onTagRemove(tag)}>
-                                <platform-icon name="close" size="12"></platform-icon>
-                            </button>
-                        </span>
-                    `)}
-                    <input
-                        type="text"
-                        class="tag-input"
-                        data-canon="inline-edit"
-                        .value=${this._tagDraft}
-                        placeholder=${this.t('entity_modal.tag_placeholder')}
-                        @input=${this._onTagInput}
-                        @keydown=${this._onTagKey}
-                    />
-                </div>
-        `;
-        const tagHintIcon =
-            this.panelMode === MODE_CREATE
-                ? html`<platform-help-hint .text=${this.t('entity_modal.tag_hint')}></platform-help-hint>`
-                : nothing;
-        if (pill) {
-            const tagCount = tags.length;
-            return html`
-                <div class="field-pill field-pill--tags">
-                    <div class="field-pill-tags-head">
-                        <div class="field-pill-head">
-                            <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
-                            ${tagHintIcon}
-                        </div>
-                        <span class="tag-count-badge">${tagCount}</span>
-                    </div>
-                    ${tagsRowEdit}
+                    ${tags.map((tag) => html`<span class="tag-chip">${tag}</span>`)}
                 </div>
             `;
         }
-        const tagBody = html`
-                ${tagsRowEdit}
-        `;
-        if (omitLabel) {
-            return tagBody;
+        if (pill) {
+            return html`
+                <platform-field
+                    type="array"
+                    mode=${uiMode}
+                    .label=${this.t('entity_modal.label_tags')}
+                    .hint=${this.panelMode === MODE_CREATE ? this.t('entity_modal.tag_hint') : ''}
+                    .placeholder=${this.t('entity_modal.tag_placeholder')}
+                    .config=${{ preserve_case: true }}
+                    .value=${tags}
+                    @change=${uiMode === 'edit' ? this._onTagsChange : undefined}
+                >
+                    <span slot="suffix" class="tag-count-badge">${tags.length}</span>
+                </platform-field>
+            `;
         }
         return html`
-            <div class="form-row">
-                <div class="field-pill-head">
-                    <span class="field-pill-label">${this.t('entity_modal.label_tags')}</span>
-                    ${tagHintIcon}
-                </div>
-                ${tagBody}
-            </div>
+            <platform-field
+                type="array"
+                mode=${uiMode}
+                .placeholder=${this.t('entity_modal.tag_placeholder')}
+                .config=${{ preserve_case: true }}
+                .value=${tags}
+                @change=${uiMode === 'edit' ? this._onTagsChange : undefined}
+            ></platform-field>
         `;
     }
 
@@ -2178,9 +2068,9 @@ export class CRMEntityCard extends PlatformElement {
                                 label=""
                                 placeholder=${this.t('entity_modal.description_placeholder')}
                                 .value=${descriptionValue}
+                                .error=${this._fieldError('description')}
                                 @change=${this._onDraftDescriptionPlatformChange}
                             ></platform-field>
-                            ${this._renderFieldError('description')}
                         `}
                 </div>
             </div>
@@ -3020,9 +2910,9 @@ export class CRMEntityCard extends PlatformElement {
                                     label=${this.t('entity_modal.label_name')}
                                     placeholder=${this.t('entity_modal.name_placeholder')}
                                     .value=${draft.name}
+                                    .error=${this._fieldError('name')}
                                     @change=${this._onDraftNamePlatformChange}
                                 ></platform-field>
-                                ${this._renderFieldError('name')}
                             </div>
                             <platform-field
                                 type="text"
@@ -3030,9 +2920,9 @@ export class CRMEntityCard extends PlatformElement {
                                 label=${this.t('entity_modal.label_description')}
                                 placeholder=${this.t('entity_modal.description_placeholder')}
                                 .value=${draft.description}
+                                .error=${this._fieldError('description')}
                                 @change=${this._onDraftDescriptionPlatformChange}
                             ></platform-field>
-                            ${this._renderFieldError('description')}
                             ${this._renderTagsSection({ pill: true })}
                             <div class="edit-attrs-block">
                                 <h3 class="edit-subheading">${this.t('entity_modal.label_attributes')}</h3>
@@ -3148,9 +3038,9 @@ export class CRMEntityCard extends PlatformElement {
                                         label=${this.t('entity_modal.label_name')}
                                         placeholder=${this.t('entity_modal.name_placeholder')}
                                         .value=${draft.name}
+                                        .error=${this._fieldError('name')}
                                         @change=${this._onDraftNamePlatformChange}
                                     ></platform-field>
-                                    ${this._renderFieldError('name')}
                                 </div>
                                 <platform-field
                                     type="enum"
@@ -3167,9 +3057,9 @@ export class CRMEntityCard extends PlatformElement {
                                 label=${this.t('entity_modal.label_description')}
                                 placeholder=${this.t('entity_modal.description_placeholder')}
                                 .value=${draft.description}
+                                .error=${this._fieldError('description')}
                                 @change=${this._onDraftDescriptionPlatformChange}
                             ></platform-field>
-                            ${this._renderFieldError('description')}
                             ${this._renderTagsSection({ pill: true })}
                             <div class="edit-attrs-block">
                                 <h3 class="edit-subheading">${this.t('entity_modal.label_attributes')}</h3>

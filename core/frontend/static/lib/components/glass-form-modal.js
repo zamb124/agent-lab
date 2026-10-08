@@ -135,6 +135,11 @@ export class PlatformFormModal extends PlatformModal {
         this.formErrors = {};
     }
 
+    fieldError(fieldName) {
+        const error = this.formErrors[fieldName];
+        return error ? String(error) : '';
+    }
+
     renderFieldError(fieldName) {
         const error = this.formErrors[fieldName];
         if (!error) return null;

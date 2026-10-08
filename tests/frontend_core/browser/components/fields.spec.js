@@ -1,8 +1,11 @@
 /**
  * platform-field-* — поля типизированного отображения/редактирования.
  *
- * После PHASE 1.5: платформа имеет один канон pill (<platform-field>),
- * подкомпоненты используют классы field-pill-input/-textarea/-select или enum-combobox (.field-pill-enum-*),
+ * Платформа имеет один канон pill: <platform-field> рендерит типизированный
+ * подкомпонент внутри <platform-field-shell> — floating label (Material
+ * outlined) с notch в бордере через <fieldset>/<legend>, фокус-ринг и
+ * error-сообщение. Подкомпоненты используют классы
+ * field-pill-input/-textarea/-select или enum-combobox (.field-pill-enum-*),
  * у platform-field-string есть property inputType (text|email|password|url|tel|search).
  */
 
@@ -11,6 +14,7 @@ import { resetPlatformState, bootstrapTestBus } from '../helpers/reset.js';
 import { getPlatformBus } from '@platform/lib/events/index.js';
 import { formatPlatformDate } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/fields/platform-field-shell.js';
 import '@platform/lib/components/fields/platform-field-string.js';
 import '@platform/lib/components/fields/platform-field-text.js';
 import '@platform/lib/components/fields/platform-field-number.js';
@@ -23,8 +27,10 @@ import '@platform/lib/components/fields/platform-field-external-refs.js';
 
 beforeEach(() => { resetPlatformState(); bootstrapTestBus(); });
 
+const shellRoot = (el) => el.shadowRoot.querySelector('platform-field-shell').shadowRoot;
+
 describe('platform-field dispatcher', () => {
-    it('edit + label: pill, label и field-pill-input в shadowRoot', async () => {
+    it('edit + label: shell, floating label и field-pill-input в shadowRoot', async () => {
         const el = await fixture(html`
             <platform-field
                 type="string"
@@ -33,13 +39,13 @@ describe('platform-field dispatcher', () => {
                 value="x"
             ></platform-field>
         `);
-        const pill = el.shadowRoot.querySelector('.field-pill');
+        const pill = shellRoot(el).querySelector('fieldset.field-pill');
         expect(pill).to.exist;
-        const lab = el.shadowRoot.querySelector('.field-pill-label');
+        const lab = shellRoot(el).querySelector('.field-pill-label');
         expect(lab).to.exist;
         expect(lab.textContent).to.equal('TestLabel');
-        expect(el.shadowRoot.querySelector('.field-pill-control')).to.exist;
-        expect(el.shadowRoot.querySelector('.field-pill-control-main')).to.exist;
+        expect(shellRoot(el).querySelector('.field-pill-control')).to.exist;
+        expect(shellRoot(el).querySelector('.field-pill-control-main')).to.exist;
         const inner = el.shadowRoot.querySelector('platform-field-string');
         expect(inner).to.exist;
         const inp = inner.shadowRoot.querySelector('input.field-pill-input');
@@ -51,7 +57,7 @@ describe('platform-field dispatcher', () => {
         const el = await fixture(html`
             <platform-field type="string" mode="edit" value="" pill-density="compact"></platform-field>
         `);
-        const pill = el.shadowRoot.querySelector('.field-pill');
+        const pill = shellRoot(el).querySelector('.field-pill');
         expect(pill.classList.contains('field-pill--compact')).to.equal(true);
     });
 
@@ -59,7 +65,7 @@ describe('platform-field dispatcher', () => {
         const el = await fixture(html`
             <platform-field type="string" mode="edit" value="" pill-density="dense"></platform-field>
         `);
-        const pill = el.shadowRoot.querySelector('.field-pill');
+        const pill = shellRoot(el).querySelector('.field-pill');
         expect(pill.classList.contains('field-pill--compact')).to.equal(true);
         expect(pill.classList.contains('field-pill--dense')).to.equal(true);
     });
@@ -68,14 +74,14 @@ describe('platform-field dispatcher', () => {
         const el = await fixture(html`
             <platform-field type="string" mode="edit" value="" pill-embed label="InCard"></platform-field>
         `);
-        const pill = el.shadowRoot.querySelector('.field-pill');
+        const pill = shellRoot(el).querySelector('.field-pill');
         expect(pill.classList.contains('field-pill--embed')).to.equal(true);
     });
 
     it('без label не рендерит field-pill-label, но рисует pill', async () => {
         const el = await fixture(html`<platform-field type="string" mode="edit" value=""></platform-field>`);
-        expect(el.shadowRoot.querySelector('.field-pill')).to.exist;
-        expect(el.shadowRoot.querySelector('.field-pill-label')).to.be.null;
+        expect(shellRoot(el).querySelector('.field-pill')).to.exist;
+        expect(shellRoot(el).querySelector('.field-pill-label')).to.be.null;
     });
 
     it('пробрасывает inputType="email" в подкомпонент', async () => {
@@ -106,13 +112,13 @@ describe('platform-field dispatcher', () => {
 
     it('view-режим рендерит pill + field-pill-readonly-text', async () => {
         const el = await fixture(html`<platform-field type="string" mode="view" label="L" value="visible"></platform-field>`);
-        expect(el.shadowRoot.querySelector('.field-pill')).to.exist;
-        expect(el.shadowRoot.querySelector('.field-pill-label').textContent).to.equal('L');
+        expect(shellRoot(el).querySelector('.field-pill')).to.exist;
+        expect(shellRoot(el).querySelector('.field-pill-label').textContent).to.equal('L');
         const inner = el.shadowRoot.querySelector('platform-field-string');
         expect(inner.shadowRoot.querySelector('.field-pill-readonly-text').textContent).to.equal('visible');
     });
 
-    it('hint property рисует <platform-help-hint> рядом с label', async () => {
+    it('hint property рисует <platform-help-hint> рядом с floating label', async () => {
         const el = await fixture(html`
             <platform-field
                 type="string"
@@ -122,16 +128,16 @@ describe('platform-field dispatcher', () => {
                 .hint=${'tooltip text'}
             ></platform-field>
         `);
-        const head = el.shadowRoot.querySelector('.field-pill-head');
-        expect(head).to.exist;
-        const hint = head.querySelector('platform-help-hint');
+        const float = shellRoot(el).querySelector('.field-pill-float');
+        expect(float).to.exist;
+        const hint = float.querySelector('platform-help-hint');
         expect(hint).to.exist;
         expect(hint.text).to.equal('tooltip text');
     });
 
     it('без hint — не рендерит <platform-help-hint>', async () => {
         const el = await fixture(html`<platform-field type="string" mode="edit" label="X" value=""></platform-field>`);
-        expect(el.shadowRoot.querySelector('platform-help-hint')).to.be.null;
+        expect(shellRoot(el).querySelector('platform-help-hint')).to.be.null;
     });
 
     it('slot prefix: элемент с slot=prefix попадает в named slot', async () => {
@@ -444,5 +450,171 @@ describe('platform-field-boolean / date / array / object: smoke', () => {
             <platform-field-external-refs mode="view" .value=${null}></platform-field-external-refs>
         `);
         expect(el.shadowRoot.querySelector('.field-pill-empty')).to.exist;
+    });
+});
+
+describe('platform-field-shell', () => {
+    it('label: <fieldset>+<legend> notch и resting label внутри контрола', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="Notch" editable>
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        const fs = el.shadowRoot.querySelector('fieldset.field-pill');
+        expect(fs).to.exist;
+        expect(fs.getAttribute('aria-label')).to.equal('Notch');
+        const legend = fs.querySelector('legend.field-pill-legend .field-pill-legend-text');
+        expect(legend).to.exist;
+        expect(legend.textContent).to.equal('Notch');
+        const float = fs.querySelector('.field-pill-float .field-pill-label');
+        expect(float).to.exist;
+        expect(float.textContent).to.equal('Notch');
+    });
+
+    it('floated: fieldset получает field-pill--float', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L" floated>
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        expect(el.shadowRoot.querySelector('fieldset').classList.contains('field-pill--float')).to.equal(true);
+    });
+
+    it('без floated: resting label без field-pill--float', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L">
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        expect(el.shadowRoot.querySelector('fieldset').classList.contains('field-pill--float')).to.equal(false);
+    });
+
+    it('error: field-pill--error + .field-pill-message[role=alert]', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L" error="boom">
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        expect(el.shadowRoot.querySelector('fieldset').classList.contains('field-pill--error')).to.equal(true);
+        const msg = el.shadowRoot.querySelector('.field-pill-message');
+        expect(msg).to.exist;
+        expect(msg.getAttribute('role')).to.equal('alert');
+        expect(msg.textContent).to.equal('boom');
+    });
+
+    it('disabled: field-pill--disabled', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L" disabled>
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        expect(el.shadowRoot.querySelector('fieldset').classList.contains('field-pill--disabled')).to.equal(true);
+    });
+
+    it('density вне списка — fails fast', async () => {
+        const el = document.createElement('platform-field-shell');
+        el.density = 'huge';
+        expect(() => el.willUpdate(new Map([['density', 'huge']]))).to.throw(/density/);
+    });
+
+    it('editable: клик по pill фокусирует slotted input', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L" editable>
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        el.shadowRoot.querySelector('fieldset').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const inp = el.querySelector('input');
+        expect(document.activeElement === inp || el.contains(document.activeElement)).to.equal(true);
+    });
+
+    it('не editable: клик по pill не забирает фокус', async () => {
+        const el = await fixture(html`
+            <platform-field-shell label="L">
+                <input type="text" class="field-pill-input" />
+            </platform-field-shell>
+        `);
+        el.shadowRoot.querySelector('fieldset').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(document.activeElement).to.not.equal(el.querySelector('input'));
+    });
+});
+
+describe('platform-field floating label', () => {
+    it('edit + пустое значение: resting label (без --float), placeholder подавлен', async () => {
+        const el = await fixture(html`
+            <platform-field
+                type="string"
+                mode="edit"
+                label="Name"
+                placeholder="type here"
+                value=""
+            ></platform-field>
+        `);
+        const fs = shellRoot(el).querySelector('fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(false);
+        const inp = el.shadowRoot.querySelector('platform-field-string').shadowRoot.querySelector('input');
+        expect(inp.placeholder).to.equal('');
+    });
+
+    it('edit + значение: label улетел (field-pill--float), placeholder виден', async () => {
+        const el = await fixture(html`
+            <platform-field
+                type="string"
+                mode="edit"
+                label="Name"
+                placeholder="type here"
+                value="v"
+            ></platform-field>
+        `);
+        const fs = shellRoot(el).querySelector('fieldset');
+        expect(fs.classList.contains('field-pill--float')).to.equal(true);
+        const inp = el.shadowRoot.querySelector('platform-field-string').shadowRoot.querySelector('input');
+        expect(inp.placeholder).to.equal('type here');
+    });
+
+    it('view-режим: label всегда floated', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="view" label="Name" value=""></platform-field>
+        `);
+        expect(shellRoot(el).querySelector('fieldset').classList.contains('field-pill--float')).to.equal(true);
+    });
+
+    it('focusin внутри поднимает placeholder и метит _focused', async () => {
+        const el = await fixture(html`
+            <platform-field
+                type="string"
+                mode="edit"
+                label="Name"
+                placeholder="type here"
+                value=""
+            ></platform-field>
+        `);
+        const inner = el.shadowRoot.querySelector('platform-field-string');
+        const inp = inner.shadowRoot.querySelector('input');
+        inp.dispatchEvent(new FocusEvent('focusin', { bubbles: true, composed: true }));
+        await elementUpdated(el);
+        expect(el._focused).to.equal(true);
+        await elementUpdated(inner);
+        expect(inp.placeholder).to.equal('type here');
+    });
+
+    it('error property: field-pill--error + сообщение под полем', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="edit" label="Name" value="" .error=${'required'}></platform-field>
+        `);
+        const fs = shellRoot(el).querySelector('fieldset');
+        expect(fs.classList.contains('field-pill--error')).to.equal(true);
+        const msg = shellRoot(el).querySelector('.field-pill-message');
+        expect(msg).to.exist;
+        expect(msg.textContent).to.equal('required');
+    });
+
+    it('editable: клик по pill прокидывает фокус во вложенный input', async () => {
+        const el = await fixture(html`
+            <platform-field type="string" mode="edit" label="Name" value=""></platform-field>
+        `);
+        shellRoot(el).querySelector('fieldset').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        const inp = el.shadowRoot.querySelector('platform-field-string').shadowRoot.querySelector('input');
+        expect(document.activeElement === inp || el.contains(document.activeElement)).to.equal(true);
     });
 });

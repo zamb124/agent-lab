@@ -81,6 +81,7 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
                     label=${this.t('api_key_modal.label_name')}
                     placeholder=${this.t('api_key_modal.placeholder_name')}
                     .value=${this._name}
+                    .error=${this.fieldError('name')}
                     @change=${(e) => {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('api-key-edit: name expects detail.value string');
@@ -89,7 +90,6 @@ export class FrontendEditApiKeyModal extends PlatformFormModal {
                         this.isDirty = true;
                     }}
                 ></platform-field>
-                ${this.renderFieldError('name')}
             </div>
         `;
     }

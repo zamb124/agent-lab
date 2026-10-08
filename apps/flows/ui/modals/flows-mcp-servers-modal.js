@@ -1532,10 +1532,10 @@ export class FlowsMcpServersModal extends PlatformModal {
             <div class="mcp-branding-layout">
                 <section class="mcp-branding-composer mcp-card-shell mcp-branding-form">
                     <div class="mcp-field">
-                        <label>${this.t('mcp_servers_modal.branding_slug')}</label>
                         <platform-field
                             type="string"
                             mode="edit"
+                            .label=${this.t('mcp_servers_modal.branding_slug')}
                             .value=${this._brandingForm.server_id}
                             placeholder=${this.t('mcp_servers_modal.placeholder_id')}
                             @change=${(e) => {
@@ -1663,11 +1663,11 @@ export class FlowsMcpServersModal extends PlatformModal {
         return html`
             <div class="mcp-form">
                 <div class="mcp-field">
-                    <label>${this.t('mcp_servers_modal.label_id')}</label>
-                    <span class="hint">${this.t('mcp_servers_modal.hint_id')}</span>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('mcp_servers_modal.label_id')}
+                        .hint=${this.t('mcp_servers_modal.hint_id')}
                         .value=${f.server_id}
                         placeholder=${phId}
                         ?disabled=${isEdit}
@@ -1681,10 +1681,10 @@ export class FlowsMcpServersModal extends PlatformModal {
                     ></platform-field>
                 </div>
                 <div class="mcp-field">
-                    <label>${this.t('mcp_servers_modal.label_name')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('mcp_servers_modal.label_name')}
                         .value=${f.name}
                         placeholder=${phName}
                         @change=${(e) => {
@@ -1697,11 +1697,11 @@ export class FlowsMcpServersModal extends PlatformModal {
                     ></platform-field>
                 </div>
                 <div class="mcp-field">
-                    <label>${this.t('mcp_servers_modal.label_url')}</label>
-                    <span class="hint">${this.t('mcp_servers_modal.hint_url')}</span>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('mcp_servers_modal.label_url')}
+                        .hint=${this.t('mcp_servers_modal.hint_url')}
                         input-type="url"
                         .value=${f.url}
                         placeholder=${phUrl}
@@ -1715,11 +1715,11 @@ export class FlowsMcpServersModal extends PlatformModal {
                     ></platform-field>
                 </div>
                 <div class="mcp-field">
-                    <label>${this.t('mcp_servers_modal.label_transport')}</label>
-                    <span class="hint">${this.t('mcp_servers_modal.hint_transport')}</span>
                     <platform-field
                         type="enum"
                         mode="edit"
+                        .label=${this.t('mcp_servers_modal.label_transport')}
+                        .hint=${this.t('mcp_servers_modal.hint_transport')}
                         .value=${f.transport_type}
                         .config=${transportEnumConfig}
                         @change=${(e) => {
@@ -1732,10 +1732,10 @@ export class FlowsMcpServersModal extends PlatformModal {
                     ></platform-field>
                 </div>
                 <div class="mcp-field">
-                    <label>${this.t('mcp_servers_modal.label_description')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('mcp_servers_modal.label_description')}
                         .value=${f.description}
                         placeholder=${phDesc}
                         @change=${(e) => {

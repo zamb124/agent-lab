@@ -18,6 +18,175 @@ export const fieldPillStyles = css`
         min-width: 0;
     }
 
+    /* fieldset — единственный элемент с настоящим разрывом бордера под legend
+       (floating label notch, как MUI OutlinedInput). Сам тег fieldset живёт
+       только внутри <platform-field-shell>; padding/layout — у .field-pill-body. */
+    fieldset.field-pill {
+        display: block;
+        margin: 0;
+        padding: 0;
+        min-inline-size: 0;
+        position: relative;
+        transition: var(--motion-transition-interactive);
+    }
+
+    fieldset.field-pill[data-mode='edit']:hover:not(:focus-within):not(.field-pill--error) {
+        border-color: var(--border-default);
+    }
+
+    fieldset.field-pill[data-mode='edit']:focus-within {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+    }
+
+    fieldset.field-pill.field-pill--error,
+    fieldset.field-pill.field-pill--error:focus-within {
+        border-color: var(--error);
+    }
+
+    fieldset.field-pill.field-pill--error:focus-within {
+        box-shadow: 0 0 0 3px var(--error-bg);
+    }
+
+    .field-pill-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--field-pill-gap);
+        padding: var(--field-pill-padding-y) var(--field-pill-padding-x);
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    /* Невидимый legend — резервирует ширину разрыва бордера; ширина анимируется
+       max-width 0 → auto (label «раздвигает» бордер при взлёте). */
+    .field-pill-legend {
+        display: block;
+        float: none;
+        width: auto;
+        max-width: 0.01px;
+        margin: 0 0 0 calc(var(--field-pill-padding-x) - var(--field-pill-notch-gap));
+        padding: 0;
+        border: 0;
+        height: var(--field-pill-legend-h);
+        font-size: var(--field-pill-float-size);
+        font-weight: var(--field-pill-float-weight);
+        line-height: 1;
+        text-transform: uppercase;
+        letter-spacing: var(--field-pill-label-letter);
+        visibility: hidden;
+        white-space: nowrap;
+        overflow: hidden;
+        box-sizing: border-box;
+        transition: max-width var(--motion-duration-enter) var(--motion-ease-standard);
+    }
+
+    .field-pill-legend .field-pill-legend-text {
+        display: inline-block;
+        padding: 0 var(--field-pill-notch-gap);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: top;
+    }
+
+    .field-pill-legend .field-pill-legend-hint {
+        display: inline-block;
+        width: var(--field-pill-float-hint-width, 20px);
+    }
+
+    fieldset.field-pill--float .field-pill-legend,
+    fieldset.field-pill:focus-within .field-pill-legend {
+        max-width: 100%;
+    }
+
+    /* Видимый label: resting — внутри control-main на месте текста (placeholder),
+       floated — на верхнем бордере. Позиционирование относительно control-main
+       (position: relative на нём) автоматически учитывает prefix-слот. */
+    .field-pill-float {
+        position: absolute;
+        z-index: 1;
+        left: 0;
+        top: 50%;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        max-width: 100%;
+        box-sizing: border-box;
+        font-size: var(--field-pill-input-size);
+        font-weight: var(--font-normal);
+        line-height: 1;
+        color: var(--field-pill-resting-color);
+        white-space: nowrap;
+        overflow: hidden;
+        pointer-events: none;
+        transform: translateY(-50%) scale(1);
+        transform-origin: left center;
+        transition:
+            top var(--motion-duration-enter) var(--motion-ease-standard),
+            transform var(--motion-duration-enter) var(--motion-ease-standard),
+            color var(--motion-duration-micro) var(--motion-ease-standard);
+    }
+
+    /* label внутри .field-pill-float наследует метрики контрола (placeholder-вид),
+       а не uppercase-микролейбл .field-pill-label — тот применяется во floated. */
+    .field-pill-float .field-pill-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: inherit;
+        font-weight: inherit;
+        line-height: inherit;
+        text-transform: inherit;
+        letter-spacing: inherit;
+        color: inherit;
+    }
+
+    .field-pill-float platform-help-hint {
+        pointer-events: auto;
+        flex-shrink: 0;
+    }
+
+    /* textarea/object: resting-метка на первой строке, а не по центру высоты */
+    .field-pill--textarea .field-pill-float,
+    .field-pill--tags .field-pill-float {
+        top: calc(var(--field-pill-input-size) * var(--field-pill-input-line) / 2);
+    }
+
+    fieldset.field-pill--float .field-pill-float,
+    fieldset.field-pill:focus-within .field-pill-float {
+        top: calc(-1 * (var(--field-pill-padding-y) + var(--field-pill-legend-h) / 2));
+        transform: translateY(-50%)
+            scale(calc(var(--field-pill-float-size) / var(--field-pill-input-size)));
+        font-weight: var(--field-pill-float-weight);
+        text-transform: uppercase;
+        letter-spacing: var(--field-pill-label-letter);
+        color: var(--field-pill-float-color);
+    }
+
+    fieldset.field-pill[data-mode='edit']:focus-within .field-pill-float {
+        color: var(--accent);
+    }
+
+    fieldset.field-pill--error .field-pill-float,
+    fieldset.field-pill--error:focus-within .field-pill-float {
+        color: var(--error);
+    }
+
+    fieldset.field-pill:disabled,
+    fieldset.field-pill.field-pill--disabled {
+        opacity: 0.6;
+    }
+
+    .field-pill-message {
+        margin-top: var(--space-1);
+        padding: 0 var(--field-pill-notch-gap);
+        padding-inline-start: var(--field-pill-padding-x);
+        font-size: var(--field-pill-float-size);
+        font-weight: var(--font-normal);
+        line-height: var(--leading-normal);
+        color: var(--error);
+    }
+
     .form-group {
         margin-bottom: var(--space-6);
     }
@@ -34,12 +203,16 @@ export const fieldPillStyles = css`
         box-shadow: none;
     }
 
+    .field-pill--embed > .field-pill-body {
+        padding: 0;
+    }
+
     .field-pill--textarea {
-        gap: var(--field-pill-gap-textarea);
+        --field-pill-gap: var(--field-pill-gap-textarea);
     }
 
     .field-pill--tags {
-        gap: var(--field-pill-gap-tags);
+        --field-pill-gap: var(--field-pill-gap-tags);
     }
 
     .field-pill--compact {
@@ -47,6 +220,7 @@ export const fieldPillStyles = css`
         --field-pill-padding-x: var(--field-pill-compact-padding-x);
         --field-pill-radius: var(--field-pill-compact-radius);
         --field-pill-gap: var(--field-pill-compact-gap);
+        --field-pill-float-size: 11px;
         --field-pill-input-size: var(--field-pill-compact-input-size);
         --field-pill-input-weight: var(--field-pill-compact-input-weight);
         --field-pill-number-spin-width: 26px;
@@ -149,7 +323,7 @@ export const fieldPillStyles = css`
     }
 
     /* Однострочные edit-контролы (enum, string, number+spin и т.д.) — одна высота; токен — --field-pill-number-spin-height. */
-    .field-pill[data-mode='edit'] > .field-pill-control {
+    .field-pill[data-mode='edit'] .field-pill-control {
         min-height: var(--field-pill-number-spin-height);
     }
 
@@ -157,6 +331,7 @@ export const fieldPillStyles = css`
         flex: 1;
         min-width: 0;
         display: block;
+        position: relative;
     }
 
     slot[name='prefix']::slotted(*),

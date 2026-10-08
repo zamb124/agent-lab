@@ -99,7 +99,7 @@ export class FlowsParametersSchemaForm extends PlatformElement {
             return html`<platform-field
                 type="boolean"
                 mode="edit"
-                label=""
+                .label=${it.key}
                 ?disabled=${this.readonly}
                 .value=${Boolean(value)}
                 @change=${(e) => this._emit(it.key, e.detail.value === true)}
@@ -112,7 +112,7 @@ export class FlowsParametersSchemaForm extends PlatformElement {
             return html`<platform-field
                 type=${it.type === 'integer' ? 'integer' : 'number'}
                 mode="edit"
-                label=""
+                .label=${it.key}
                 ?disabled=${this.readonly}
                 .value=${numVal}
                 @change=${(e) => this._emit(it.key, e.detail.value)}
@@ -133,7 +133,7 @@ export class FlowsParametersSchemaForm extends PlatformElement {
         return html`<platform-field
             type="string"
             mode="edit"
-            label=""
+            .label=${it.key}
             ?disabled=${this.readonly}
             .value=${value === undefined || value === null ? '' : String(value)}
             @change=${(e) => this._emit(it.key, typeof e.detail.value === 'string' ? e.detail.value : '')}
@@ -148,7 +148,9 @@ export class FlowsParametersSchemaForm extends PlatformElement {
         return html`
             ${items.map((it) => html`
                 <div class="field">
-                    <label>${it.key}${it.required ? html`<span class="req">*</span>` : ''}</label>
+                    ${it.type === 'object' || it.type === 'array'
+                        ? html`<label>${it.key}${it.required ? html`<span class="req">*</span>` : ''}</label>`
+                        : ''}
                     ${this._renderField(it)}
                     ${it.description ? html`<div class="desc">${it.description}</div>` : ''}
                 </div>

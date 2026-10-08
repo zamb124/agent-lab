@@ -185,19 +185,6 @@ export class CRMNamespaceModal extends PlatformFormModal {
             .meta-row strong { color: var(--text-primary); font-weight: 600; }
             .meta-loading { color: var(--text-tertiary); font-style: italic; }
 
-            .name-readonly {
-                display: inline-flex;
-                align-items: center;
-                gap: var(--space-2);
-                padding: var(--space-2) var(--space-3);
-                border: 1px solid var(--crm-stroke);
-                border-radius: var(--radius-md);
-                background: var(--crm-surface-muted);
-                color: var(--text-primary);
-                font-family: var(--font-mono);
-                font-size: var(--text-sm);
-            }
-
             .modal-actions {
                 display: none !important;
             }
@@ -945,10 +932,15 @@ export class CRMNamespaceModal extends PlatformFormModal {
         `;
     }
 
-    _renderFieldError(field) {
+    _fieldError(field) {
         const error_key = this._activeForm().errors[field];
-        if (!error_key) return null;
-        return html`<div class="form-error">${this.t(error_key)}</div>`;
+        return error_key ? this.t(error_key) : '';
+    }
+
+    _renderFieldError(field) {
+        const text = this._fieldError(field);
+        if (!text) return null;
+        return html`<div class="form-error">${text}</div>`;
     }
 
     _renderEditabilityBadge() {
@@ -1014,33 +1006,31 @@ export class CRMNamespaceModal extends PlatformFormModal {
                 </div>
 
                 <div class="crm-namespace-field-row">
-                    ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_hint')}
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('namespace_modal.label_name')}
                         .hint=${this.t('namespace_modal.name_hint')}
                         .placeholder=${this.t('namespace_modal.name_placeholder')}
                         .value=${draft.name}
+                        .error=${this._fieldError('name')}
                         ?disabled=${this._createForm.submitting}
                         @change=${this._onNameChange}
                     ></platform-field>
-                    ${this._renderFieldError('name')}
                 </div>
 
                 <div class="crm-namespace-field-row">
-                    ${this._formLabelWithHint(
-                        'namespace_modal.label_description',
-                        'namespace_modal.label_description_hint',
-                    )}
                     <platform-field
                         type="text"
                         mode="edit"
+                        .label=${this.t('namespace_modal.label_description')}
+                        .hint=${this.t('namespace_modal.label_description_hint')}
                         .placeholder=${this.t('namespace_modal.description_placeholder')}
                         .value=${draft.description}
+                        .error=${this._fieldError('description')}
                         ?disabled=${this._createForm.submitting}
                         @change=${this._onDescriptionChange}
                     ></platform-field>
-                    ${this._renderFieldError('description')}
                 </div>
             </form>
         `;
@@ -1070,21 +1060,22 @@ export class CRMNamespaceModal extends PlatformFormModal {
         return html`
             <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
                 <div class="crm-namespace-field-row">
-                    ${this._formLabelWithHint('namespace_modal.label_name', 'namespace_modal.label_name_readonly_hint')}
-                    <span class="name-readonly">
-                        <platform-icon name="folder" size="14"></platform-icon>
-                        ${draft.name}
-                    </span>
+                    <platform-field
+                        type="string"
+                        mode="view"
+                        .label=${this.t('namespace_modal.label_name')}
+                        .hint=${this.t('namespace_modal.label_name_readonly_hint')}
+                        .value=${draft.name}
+                    >
+                        <platform-icon slot="prefix" name="folder" size="14"></platform-icon>
+                    </platform-field>
                 </div>
 
                 <div class="crm-namespace-field-row">
-                    ${this._formLabelWithHint(
-                        'namespace_modal.label_description',
-                        'namespace_modal.label_description_hint',
-                    )}
                     <platform-field
                         type="text"
                         mode="edit"
+                        .label=${this.t('namespace_modal.label_description')}
                         .hint=${this.t('namespace_modal.label_description_hint')}
                         .placeholder=${this.t('namespace_modal.description_placeholder')}
                         .value=${draft.description}

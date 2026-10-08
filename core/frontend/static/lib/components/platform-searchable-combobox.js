@@ -11,6 +11,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-popover.js';
+import './fields/platform-field-shell.js';
 
 /**
  * @param {unknown} o
@@ -71,18 +72,6 @@ export class PlatformSearchableCombobox extends PlatformElement {
                 width: 100%;
                 min-width: 0;
             }
-            .field-pill {
-                width: 100%;
-                box-sizing: border-box;
-                min-width: 0;
-                display: flex;
-                flex-direction: column;
-                gap: var(--field-pill-gap, 4px);
-                padding: var(--field-pill-padding-y, 8px) var(--field-pill-padding-x, 12px);
-                border-radius: var(--field-pill-radius, var(--radius-lg));
-                border: 1px solid var(--field-pill-border, var(--border-default));
-                background: var(--field-pill-bg, var(--glass-solid-subtle));
-            }
             .field-pill.plain {
                 display: block;
                 padding: 0;
@@ -90,38 +79,15 @@ export class PlatformSearchableCombobox extends PlatformElement {
                 border-radius: 0;
                 background: transparent;
             }
-            :host([compact]) .field-pill:not(.plain) {
-                --field-pill-gap: var(--field-pill-compact-gap, 4px);
-                --field-pill-padding-y: var(--field-pill-compact-padding-y, 6px);
-                --field-pill-padding-x: var(--field-pill-compact-padding-x, 12px);
-                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md));
-                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
-                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
-                --field-pill-number-spin-height: 34px;
-                gap: var(--field-pill-gap);
-                padding: var(--field-pill-padding-y) var(--field-pill-padding-x);
-                border-radius: var(--field-pill-radius);
-            }
-            .field-pill:focus-within {
-                border-color: var(--accent);
-                box-shadow: var(--focus-ring);
-            }
             .field-pill.plain:focus-within {
                 border-color: transparent;
                 box-shadow: none;
             }
-            .field-pill-label {
-                display: block;
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                font-size: var(--field-pill-label-size, var(--text-xs));
-                line-height: var(--field-pill-label-line, 1.1);
-                font-weight: var(--field-pill-label-weight, var(--font-semibold));
-                text-transform: uppercase;
-                letter-spacing: var(--field-pill-label-letter, 0.04em);
-                color: var(--field-pill-label-color, var(--text-tertiary));
+            /* Компактные токены на :host — наследуются и в slotted input, и в shell. */
+            :host([compact]) {
+                --field-pill-number-spin-height: 34px;
+                --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
+                --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
             }
             input {
                 width: 100%;
@@ -464,7 +430,8 @@ export class PlatformSearchableCombobox extends PlatformElement {
     updated(changed) {
         super.updated?.(changed);
         if (this._anchor === null) {
-            const field = this.renderRoot?.querySelector?.('.field-pill');
+            const field = this.renderRoot?.querySelector?.('platform-field-shell')
+                ?? this.renderRoot?.querySelector?.('.field-pill');
             if (field instanceof HTMLElement) {
                 this._anchor = field;
             }
@@ -483,23 +450,35 @@ export class PlatformSearchableCombobox extends PlatformElement {
             typeof this.ariaLabel === 'string' && this.ariaLabel.length > 0
                 ? this.ariaLabel
                 : (typeof this.placeholder === 'string' && this.placeholder.length > 0 ? this.placeholder : '');
+        const floated = this._input.length > 0 || this._editing;
+        const input = html`
+            <input
+                class="field-pill-input"
+                data-canon="combobox"
+                type="text"
+                .value=${this._input}
+                placeholder=${floated || !hasLabel ? this.placeholder : ''}
+                aria-label=${aria}
+                title=${tip.length > 0 ? tip : nothing}
+                @focus=${this._onFocus}
+                @input=${this._onInput}
+                @blur=${this._onBlur}
+            />
+        `;
         return html`
             <div class="root">
-                <div class="field-pill ${hasLabel ? '' : 'plain'}">
-                    ${hasLabel ? html`<span class="field-pill-label">${this.label}</span>` : nothing}
-                    <input
-                        class="field-pill-input"
-                        data-canon="combobox"
-                        type="text"
-                        .value=${this._input}
-                        placeholder=${this.placeholder}
-                        aria-label=${aria}
-                        title=${tip.length > 0 ? tip : nothing}
-                        @focus=${this._onFocus}
-                        @input=${this._onInput}
-                        @blur=${this._onBlur}
-                    />
-                </div>
+                ${hasLabel
+                    ? html`
+                        <platform-field-shell
+                            .label=${this.label}
+                            ?floated=${floated}
+                            editable
+                            density=${this.compact ? 'compact' : 'default'}
+                        >
+                            ${input}
+                        </platform-field-shell>
+                    `
+                    : html`<div class="field-pill plain">${input}</div>`}
                 <platform-popover
                     trigger="manual"
                     role="listbox"

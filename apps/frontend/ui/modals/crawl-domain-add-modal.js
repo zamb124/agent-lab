@@ -92,9 +92,9 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
                         label=${this.t('crawl_report_page.field_domain')}
                         placeholder="example.com"
                         .value=${this._domain}
+                        .error=${this.fieldError('domain')}
                         @change=${(e) => { this._domain = String(e.detail.value ?? ''); }}
                     ></platform-field>
-                    ${this.renderFieldError('domain')}
                 </div>
                 <div class="form-group">
                     <platform-field
@@ -112,12 +112,12 @@ export class FrontendCrawlDomainAddModal extends PlatformFormModal {
                         label=${this.t('crawl_report_page.field_refresh_interval')}
                         placeholder="21600"
                         .value=${this._refreshInterval === '' ? null : Number(this._refreshInterval)}
+                        .error=${this.fieldError('refresh_interval_seconds')}
                         @change=${(e) => {
                             const value = e.detail ? e.detail.value : null;
                             this._refreshInterval = typeof value === 'number' ? String(value) : '';
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('refresh_interval_seconds')}
                     <div class="field-help">${this.t('crawl_report_page.help_refresh_interval')}</div>
                 </div>
                 <div class="form-group">

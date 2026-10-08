@@ -5,8 +5,8 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
-import { fieldPillStyles } from '../styles/shared/field-pill.styles.js';
 import { variableRefsStyles } from '../styles/shared/variable-refs.styles.js';
+import './fields/platform-field-shell.js';
 import { listSystemVariableKeys } from './variables/platform-system-variables-catalog.js';
 import { createVariableExtensions, refreshVariableDecorations } from '../codemirror/variable-extensions.js';
 
@@ -52,11 +52,11 @@ export class PlatformVariableInput extends PlatformElement {
         statePaths: { type: Array, attribute: false },
         /** `at-ref` (`@var:`/`@state:`), `brace` (`{path}` шаблонов Flow UI) или `both`. */
         syntax: { type: String },
+        _focused: { type: Boolean, state: true },
     };
 
     static styles = [
         PlatformElement.styles,
-        fieldPillStyles,
         variableRefsStyles,
         css`
             :host {
@@ -135,6 +135,17 @@ export class PlatformVariableInput extends PlatformElement {
         this.variableCatalog = [];
         this.statePaths = [];
         this.syntax = 'at-ref';
+        this._focused = false;
+        this._focusOutTimer = null;
+        this._onFocusIn = () => {
+            this._focused = true;
+        };
+        this._onFocusOut = () => {
+            clearTimeout(this._focusOutTimer);
+            this._focusOutTimer = setTimeout(() => {
+                this._focused = this.matches(':focus-within');
+            }, 0);
+        };
         /** @type {object | null} */
         this._cmBundle = null;
         /** @type {object | null} */
@@ -144,7 +155,16 @@ export class PlatformVariableInput extends PlatformElement {
         this._variables = this.useResource('secrets/variables', { autoload: true });
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+        this.addEventListener('focusin', this._onFocusIn);
+        this.addEventListener('focusout', this._onFocusOut);
+    }
+
     disconnectedCallback() {
+        this.removeEventListener('focusin', this._onFocusIn);
+        this.removeEventListener('focusout', this._onFocusOut);
+        clearTimeout(this._focusOutTimer);
         if (this._editorView) {
             this._editorView.destroy();
             this._editorView = null;
@@ -335,27 +355,20 @@ export class PlatformVariableInput extends PlatformElement {
 
     render() {
         const hasLabel = typeof this.label === 'string' && this.label.length > 0;
+        const floated = (typeof this.value === 'string' && this.value.length > 0) || this._focused;
         const showPlaceholder = (typeof this.value !== 'string' || this.value.length === 0)
             && typeof this.placeholder === 'string'
-            && this.placeholder.length > 0;
+            && this.placeholder.length > 0
+            && (!hasLabel || floated);
         return html`
-            <div class="field-pill" data-mode="edit">
-                ${hasLabel
-                    ? html`
-                        <div class="field-pill-head">
-                            <span class="field-pill-label">${this.label}</span>
-                        </div>
-                    `
-                    : nothing}
-                <div class="field-pill-control">
-                    <div class="field-pill-control-main cm-wrap">
-                        ${showPlaceholder
-                            ? html`<div class="cm-placeholder-overlay">${this.placeholder}</div>`
-                            : nothing}
-                        <div id="cm-host" data-canon="search-as-you-type"></div>
-                    </div>
+            <platform-field-shell .label=${this.label} ?floated=${floated} editable>
+                <div class="cm-wrap">
+                    ${showPlaceholder
+                        ? html`<div class="cm-placeholder-overlay">${this.placeholder}</div>`
+                        : nothing}
+                    <div id="cm-host" data-canon="search-as-you-type"></div>
                 </div>
-            </div>
+            </platform-field-shell>
         `;
     }
 }

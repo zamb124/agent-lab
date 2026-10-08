@@ -1114,8 +1114,8 @@ export class CRMNamespaceDetailPage extends PlatformPage {
                     ></platform-switch>
                 </div>
                 <div class="field">
-                    <label class="field-label">${this.t('namespace_detail_page.suggests_cron_label')}</label>
                     <platform-cron-field
+                        .label=${this.t('namespace_detail_page.suggests_cron_label')}
                         .value=${this._suggestsCron}
                         placeholder=${this.t('namespace_detail_page.suggests_cron_placeholder')}
                         ?disabled=${disabled}

@@ -7,6 +7,7 @@ import { frontendIslandPageBodyStyles } from '../../styles/frontend-island-page-
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/fields/platform-field-shell.js';
 import '@platform/lib/components/platform-help-hint.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-json-editor.js';
@@ -392,36 +393,6 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 margin-top: var(--space-2);
                 align-items: end;
             }
-            .match-combo {
-                display: flex;
-                flex-direction: column;
-                gap: var(--field-pill-gap);
-                padding: var(--field-pill-dense-padding-y) var(--field-pill-dense-padding-x);
-                border: 1px solid var(--field-pill-border);
-                border-radius: var(--field-pill-compact-radius);
-                background: var(--field-pill-bg);
-                min-width: 0;
-                box-sizing: border-box;
-            }
-            .match-combo:focus-within {
-                border-color: var(--accent);
-                box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
-            }
-            .match-combo-head {
-                display: flex;
-                align-items: center;
-                gap: var(--space-1);
-                min-width: 0;
-            }
-            .match-combo-label {
-                color: var(--field-pill-label-color);
-                font-size: var(--field-pill-label-size);
-                font-weight: var(--field-pill-label-weight);
-                line-height: var(--field-pill-label-line, 1.1);
-                letter-spacing: var(--field-pill-label-letter);
-                text-transform: uppercase;
-            }
-            .match-combo-head platform-help-hint,
             .rule-subtitle platform-help-hint {
                 flex-shrink: 0;
             }
@@ -430,14 +401,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 grid-template-columns: auto minmax(0, 1fr);
                 gap: var(--space-1);
                 align-items: center;
-                min-height: var(--field-pill-dense-spin-height);
                 box-sizing: border-box;
             }
             .match-mode-picker {
                 display: inline-flex;
                 align-items: center;
                 gap: 2px;
-                min-height: var(--field-pill-dense-spin-height);
+                align-self: stretch;
                 padding-right: var(--space-1);
                 border-right: 1px solid var(--glass-border-subtle);
                 box-sizing: border-box;
@@ -469,22 +439,10 @@ export class FrontendBillingAdminPage extends PlatformPage {
                 border-color: color-mix(in srgb, var(--accent) 38%, transparent);
             }
             .match-value-input {
-                width: 100%;
-                min-width: 0;
-                min-height: var(--field-pill-dense-spin-height);
-                border: 0;
-                border-radius: 0;
-                background: transparent;
-                color: var(--field-pill-input-color);
-                font-size: var(--field-pill-compact-input-size);
-                font-weight: var(--field-pill-compact-input-weight);
                 padding: 0 var(--space-2);
-                outline: none;
-                box-sizing: border-box;
             }
             .match-value-input:disabled {
                 color: var(--text-tertiary);
-                background: color-mix(in srgb, var(--glass-solid-medium) 48%, transparent);
                 cursor: not-allowed;
             }
             .rule-subsection {
@@ -1651,15 +1609,13 @@ export class FrontendBillingAdminPage extends PlatformPage {
             ];
         const disabled = mode === 'none';
         return html`
-            <div class="match-combo">
-                <div class="match-combo-head">
-                    <span class="match-combo-label">${this.t(labelKey)}</span>
-                    <platform-help-hint
-                        .text=${this._ruleHint(`match_${scope}`)}
-                        .label=${this.t(labelKey)}
-                        ?wide=${true}
-                    ></platform-help-hint>
-                </div>
+            <platform-field-shell
+                .label=${this.t(labelKey)}
+                .hint=${this._ruleHint(`match_${scope}`)}
+                density="dense"
+                floated
+                editable
+            >
                 <div class="match-combo-control">
                     <div class="match-mode-picker" role="group" aria-label=${this.t(labelKey)}>
                         ${values.map((item) => html`
@@ -1676,7 +1632,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         `)}
                     </div>
                     <input
-                        class="match-value-input"
+                        class="field-pill-input match-value-input"
                         type="text"
                         data-canon="input"
                         .value=${this._matchValue(rule.match, scope)}
@@ -1687,7 +1643,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
                         @input=${(e) => this._setMatchValueByMode(idx, scope, e.target.value, mode)}
                     />
                 </div>
-            </div>
+            </platform-field-shell>
         `;
     }
 

@@ -411,65 +411,54 @@ export class FlowsFlowCreateModal extends PlatformFormModal {
                     </platform-button>
                 </div>
                 <div class="identity-grid">
-                    <div class="form-group">
-                        <label>${this.t('flow_create_modal.field_flow_id')}</label>
-                        <platform-field
-                            type="string"
-                            mode="edit"
-                            pill-density="compact"
-                            pill-embed
-                            .value=${this._flowId}
-                            placeholder="my_flow"
-                            @change=${(e) => {
-                                const v = e.detail.value;
-                                if (typeof v !== 'string') {
-                                    throw new TypeError('flows-flow-create-modal: flow_id expects string detail.value');
-                                }
-                                this._flowId = v;
-                                this.isDirty = true;
-                            }}
-                        ></platform-field>
-                        ${this._flowId && !validId
-                            ? html`<div class="form-error">${this.t('flow_create_modal.err_flow_id_pattern')}</div>`
-                            : ''}
-                    </div>
-                    <div class="form-group">
-                        <label>${this.t('flow_create_modal.field_name')}</label>
-                        <platform-field
-                            type="string"
-                            mode="edit"
-                            pill-density="compact"
-                            pill-embed
-                            .value=${this._name}
-                            @change=${(e) => {
-                                const v = e.detail.value;
-                                if (typeof v !== 'string') {
-                                    throw new TypeError('flows-flow-create-modal: name expects string detail.value');
-                                }
-                                this._name = v;
-                                this.isDirty = true;
-                            }}
-                        ></platform-field>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>${this.t('flow_create_modal.field_description')}</label>
                     <platform-field
-                        type="text"
+                        type="string"
                         mode="edit"
                         pill-density="compact"
-                        pill-embed
-                        .value=${this._description}
+                        .label=${this.t('flow_create_modal.field_flow_id')}
+                        .value=${this._flowId}
+                        placeholder="my_flow"
+                        .error=${this._flowId && !validId ? this.t('flow_create_modal.err_flow_id_pattern') : ''}
                         @change=${(e) => {
                             const v = e.detail.value;
                             if (typeof v !== 'string') {
-                                throw new TypeError('flows-flow-create-modal: description expects string detail.value');
+                                throw new TypeError('flows-flow-create-modal: flow_id expects string detail.value');
                             }
-                            this._description = v;
+                            this._flowId = v;
+                            this.isDirty = true;
+                        }}
+                    ></platform-field>
+                    <platform-field
+                        type="string"
+                        mode="edit"
+                        pill-density="compact"
+                        .label=${this.t('flow_create_modal.field_name')}
+                        .value=${this._name}
+                        @change=${(e) => {
+                            const v = e.detail.value;
+                            if (typeof v !== 'string') {
+                                throw new TypeError('flows-flow-create-modal: name expects string detail.value');
+                            }
+                            this._name = v;
                             this.isDirty = true;
                         }}
                     ></platform-field>
                 </div>
+                <platform-field
+                    type="text"
+                    mode="edit"
+                    pill-density="compact"
+                    .label=${this.t('flow_create_modal.field_description')}
+                    .value=${this._description}
+                    @change=${(e) => {
+                        const v = e.detail.value;
+                        if (typeof v !== 'string') {
+                            throw new TypeError('flows-flow-create-modal: description expects string detail.value');
+                        }
+                        this._description = v;
+                        this.isDirty = true;
+                    }}
+                ></platform-field>
             </div>
         `;
     }

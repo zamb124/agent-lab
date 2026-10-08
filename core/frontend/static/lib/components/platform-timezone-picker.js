@@ -3,6 +3,7 @@ import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { getCachedSortedIanaTimeZones } from '../utils/iana-timezones.js';
 import './platform-popover.js';
+import './fields/platform-field-shell.js';
 
 const LIST_MAX = 200;
 
@@ -68,6 +69,8 @@ export class PlatformTimezonePicker extends PlatformElement {
 
     static properties = {
         value: { type: String },
+        label: { type: String },
+        error: { type: String },
         placeholder: { type: String },
         disabled: { type: Boolean, reflect: true },
         name: { type: String },
@@ -79,6 +82,8 @@ export class PlatformTimezonePicker extends PlatformElement {
     constructor() {
         super();
         this.value = '';
+        this.label = '';
+        this.error = '';
         this.placeholder = '';
         this.disabled = false;
         this.name = '';
@@ -164,25 +169,35 @@ export class PlatformTimezonePicker extends PlatformElement {
     render() {
         const opts = this._visibleOptions;
         const listId = 'tz-list';
+        const hasLabel = typeof this.label === 'string' && this.label.length > 0;
+        const floated = this._inputText.length > 0 || this._listOpen;
         return html`
             <div class="wrap">
-                <input
-                    class="form-input"
-                    type="text"
-                    name=${this.name || nothing}
-                    spellcheck="false"
-                    autocomplete="off"
-                    .value=${this._inputText}
-                    placeholder=${this.placeholder}
+                <platform-field-shell
+                    .label=${this.label}
+                    .error=${this.error}
+                    ?floated=${floated}
+                    ?editable=${!this.disabled}
                     ?disabled=${this.disabled}
-                    role="combobox"
-                    aria-expanded=${this._listOpen ? 'true' : 'false'}
-                    aria-autocomplete="list"
-                    aria-controls=${listId}
-                    @input=${this._onInput}
-                    @focus=${this._onFocus}
-                    @blur=${this._onBlur}
-                />
+                >
+                    <input
+                        class="form-input"
+                        type="text"
+                        name=${this.name || nothing}
+                        spellcheck="false"
+                        autocomplete="off"
+                        .value=${this._inputText}
+                        placeholder=${floated || !hasLabel ? this.placeholder : ''}
+                        ?disabled=${this.disabled}
+                        role="combobox"
+                        aria-expanded=${this._listOpen ? 'true' : 'false'}
+                        aria-autocomplete="list"
+                        aria-controls=${listId}
+                        @input=${this._onInput}
+                        @focus=${this._onFocus}
+                        @blur=${this._onBlur}
+                    />
+                </platform-field-shell>
                 <platform-popover
                     trigger="manual"
                     role="listbox"

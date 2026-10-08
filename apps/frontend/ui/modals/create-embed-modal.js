@@ -444,9 +444,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             .value=${this._name}
                             .placeholder=${this.t('embed_create_modal.placeholder_name')}
                             .hint=${this.t('embed_create_modal.name_hint')}
+                            .error=${this.fieldError('name')}
                             @change=${(e) => { this._name = e.detail.value; this.isDirty = true; }}
                         ></platform-field>
-                        ${this.renderFieldError('name')}
                     </div>
 
                     <div>
@@ -475,13 +475,13 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                       ],
                                   }}
                                   .hint=${this.t('embed_create_modal.flow_hint')}
+                                  .error=${this.fieldError('flow_id')}
                                   @change=${(e) => {
                                       this._flowId = e.detail.value;
                                       this._branchId = this._initialBranchIdForFlow(this._selectedFlow());
                                       this.isDirty = true;
                                   }}
                               ></platform-field>`}
-                        ${this.renderFieldError('flow_id')}
                     </div>
 
                     <div>
@@ -535,12 +535,12 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                                                 .value=${this._landingCardImageUrl}
                                                 .placeholder=${this.t('embed_create_modal.placeholder_landing_card_image_url')}
                                                 .hint=${this.t('embed_create_modal.landing_card_image_hint')}
+                                                .error=${this.fieldError('landing_image')}
                                                 @change=${(e) => {
                                                     this._landingCardImageUrl = e.detail.value;
                                                     this.isDirty = true;
                                                 }}
                                             ></platform-field>
-                                            ${this.renderFieldError('landing_image')}
                                         </div>
                                         <platform-field
                                             type="integer"
@@ -600,9 +600,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             .value=${this._placeholder}
                             .placeholder=${this.t('embed_create_modal.default_message_placeholder')}
                             .hint=${this.t('embed_create_modal.message_placeholder_hint')}
+                            .error=${this.fieldError('placeholder')}
                             @change=${(e) => { this._placeholder = e.detail.value; this.isDirty = true; }}
                         ></platform-field>
-                        ${this.renderFieldError('placeholder')}
                     </div>
 
                     <platform-field
@@ -684,9 +684,9 @@ export class FrontendCreateEmbedModal extends PlatformFormModal {
                             .value=${this._guestMaxUserMessages}
                             .placeholder=${this.t('embed_create_modal.placeholder_guest_max_user_messages')}
                             .hint=${this.t('embed_create_modal.guest_max_user_messages_hint')}
+                            .error=${this.fieldError('guest_max_user_messages')}
                             @change=${(e) => { this._guestMaxUserMessages = String(e.detail.value); this.isDirty = true; }}
                         ></platform-field>
-                        ${this.renderFieldError('guest_max_user_messages')}
                     </div>
 
                     <div class="form-group">

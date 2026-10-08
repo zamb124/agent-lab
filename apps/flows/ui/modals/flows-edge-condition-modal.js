@@ -647,9 +647,9 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                         .label=${this.t('edge_condition_modal.label_variable')}
                         .value=${this._variable}
                         .config=${variableEnumConfig}
+                        .error=${this.fieldError('variable')}
                         @change=${this._onVariableChange}
                     ></platform-field>
-                    ${this.renderFieldError('variable')}
                 </div>
                 <div class="builder-cell">
                     <platform-field
@@ -668,9 +668,9 @@ export class FlowsEdgeConditionModal extends PlatformFormModal {
                         .label=${this.t('edge_condition_modal.label_value')}
                         .value=${this._value}
                         placeholder=${this.t('edge_condition_modal.value_placeholder')}
+                        .error=${this.fieldError('value')}
                         @change=${this._onValueInput}
                     ></platform-field>
-                    ${this.renderFieldError('value')}
                 </div>
             </div>
             ${variables.length > 0 ? html`

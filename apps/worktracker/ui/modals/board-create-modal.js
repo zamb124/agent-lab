@@ -66,16 +66,9 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
         });
     }
 
-    _renderFieldError(field) {
-        const errorKey = this._form.errors[field];
-        if (!errorKey) {
-            return null;
-        }
-        return html`<div class="form-error">${this.t(errorKey)}</div>`;
-    }
-
     renderBody() {
         const draft = this._form.draft;
+        const nameErrorKey = this._form.errors.name;
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
                 <platform-field
@@ -84,13 +77,13 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
                     .label=${this.t('board_create_modal.label_name')}
                     .placeholder=${this.t('board_create_modal.name_placeholder')}
                     .value=${draft.name}
+                    .error=${nameErrorKey ? this.t(nameErrorKey) : ''}
                     ?disabled=${this._form.submitting}
                     @change=${(e) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this._form.setField('name', value);
                     }}
                 ></platform-field>
-                ${this._renderFieldError('name')}
             </form>
         `;
     }

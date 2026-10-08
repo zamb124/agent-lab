@@ -157,12 +157,12 @@ export class FrontendCrawlProfileSettingsModal extends PlatformFormModal {
                     mode="edit"
                     label=${this.t(labelKey)}
                     .value=${value === '' ? null : Number(value)}
+                    .error=${errorKey ? this.fieldError(errorKey) : ''}
                     @change=${(e) => {
                         const next = e.detail ? e.detail.value : null;
                         setter(typeof next === 'number' ? String(next) : '');
                     }}
                 ></platform-field>
-                ${errorKey ? this.renderFieldError(errorKey) : null}
                 ${helpKey ? html`<div class="field-help">${this.t(helpKey)}</div>` : null}
             </div>
         `;

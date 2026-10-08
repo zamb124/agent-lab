@@ -107,10 +107,9 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         });
     }
 
-    _renderFieldError(field) {
+    _fieldError(field) {
         const error_key = this._form.errors[field];
-        if (!error_key) return null;
-        return html`<div class="form-error">${this.t(error_key)}</div>`;
+        return error_key ? this.t(error_key) : '';
     }
 
     renderBody() {
@@ -124,10 +123,10 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
                     .hint=${this.t('namespace_create_modal.name_hint')}
                     .placeholder=${this.t('namespace_create_modal.name_placeholder')}
                     .value=${draft.name}
+                    .error=${this._fieldError('name')}
                     ?disabled=${this._form.submitting}
                     @change=${this._onNameChange}
                 ></platform-field>
-                ${this._renderFieldError('name')}
 
                 <platform-field
                     type="text"
@@ -135,10 +134,10 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
                     .label=${this.t('namespace_create_modal.label_description')}
                     .placeholder=${this.t('namespace_create_modal.description_placeholder')}
                     .value=${draft.description}
+                    .error=${this._fieldError('description')}
                     ?disabled=${this._form.submitting}
                     @change=${this._onDescriptionChange}
                 ></platform-field>
-                ${this._renderFieldError('description')}
             </form>
         `;
     }
