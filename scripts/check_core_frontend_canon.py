@@ -53,7 +53,7 @@ def _iter_js(*subdirs: str) -> list[Path]:
         root = LIB / sub
         if not root.exists():
             continue
-        for path in root.rglob("*.js"):
+        for path in sorted(p for g in ("*.js", "*.ts") for p in root.rglob(g)):
             parts = set(path.relative_to(LIB).parts)
             if parts & EXCLUDED_DIRS:
                 continue

@@ -165,8 +165,25 @@ test-frontend-core-browser: runtime-bootstrap
 	@npm ci --silent
 	@npm run test:core-browser
 
-# Единая локальная проверка UI: канон TS + core frontend (canon/unit/browser incl. UI Kit L1).
-ui: lint-ts test-frontend-core
+# Сборка UI-бандлов: esbuild per-app → apps/<svc>/ui-dist/ (index.js + hashed chunks + ассеты).
+ui-build: runtime-bootstrap
+	@echo "ui-build: esbuild bundles → ui-dist/"
+	@npm ci --silent
+	@npm run build:ui
+
+# Typecheck всех .ts (strict). Конверсия идёт инкрементально — см. ratchet ui_js_files.
+ui-typecheck: runtime-bootstrap
+	@echo "ui-typecheck: tsc --noEmit"
+	@npm ci --silent
+	@npx tsc -p tsconfig.json
+
+# Dev watch: пересборка бандлов на изменение (параллельно с make app).
+ui-watch: runtime-bootstrap
+	@npm ci --silent
+	@npm run watch:ui
+
+# Единая локальная проверка UI: сборка + typecheck + канон + core frontend (canon/unit/browser incl. UI Kit L1).
+ui: ui-build ui-typecheck lint-ts test-frontend-core
 	@echo "ui: OK"
 
 # UI + Playwright L2 doc scenarios (нужен test-up) + regenerate docs/scenarios/platform/ui-kit/**

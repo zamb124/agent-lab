@@ -279,3 +279,33 @@ export function create<Svc>PersistEffect() {
 3. i18n компонента — namespace `platform` (`core/i18n/translations/{ru,en}/platform.json`).
 4. Тест фабрики: reducer — `(state, event) => state` без bus; effect — фейковый `ctx = { dispatch, getState }`; контроллер — WTR, перед каждым тестом `clearFactoryRegistry()`, `_resetResourceRegistryForTests()`, `resetPlatformBusForTests()`, затем `registerFactory(factory)`.
 5. Прогон: `make ui`; сценарии и доки UIKDS — `make ui-doc`; компонентные тесты сервисов — `make test-ui-components`.
+
+## 16. Конверсия файла .js → .ts
+
+Порядок — рекурсивный цикл `references/migration-loop.md`; здесь — сама правка.
+
+1. `git mv x.js x.ts`. Спецификаторы импортёров не трогаем: `from './x.js'`
+   резолвится в `x.ts` и esbuild, и tsc.
+2. Реактивные поля Lit (паттерн `static properties`):
+   ```ts
+   static properties = { label: { type: String }, count: { type: Number } };
+   declare label: string;
+   declare count: number;
+   ```
+   `declare` обязателен: `useDefineForClassFields` включён — поле с
+   инициализатором стало бы own-property и заглушило accessor Lit.
+   Без декораторов — они не канон.
+3. `import type` для типов (`verbatimModuleSyntax`); смешанный импорт —
+   `import { foo, type Bar }`.
+4. JSDoc-типы → настоящие: `@param {string} x` → `x: string`; typedef'ы →
+   `interface`/`type` в том же файле или рядом с фабрикой.
+5. Payload'ы фабрик: `interface XxxItem { id: string; … }` в
+   `events/resources/<entity>.ts`, экспорт; страницы импортируют тип, не
+   переобъявляют.
+6. DOM: `querySelector` → generic или `this.shadowRoot?.querySelector<HTMLInputElement>(...)`;
+   события — `CustomEvent<T>`/`Event` с сужением; `event.target as HTMLElement`
+   — нормально (target не типизирован), `as any` — нет.
+7. Запрещено: `any`, `// @ts-ignore`, `// @ts-nocheck`, `!` без основания.
+   Не типизируется честно — конфликт в kit/API, чиним источник.
+8. Прогон: `npm run build:ui -- --apps=<svc>` + `npx tsc -p tsconfig.json` +
+   затронутые specs.

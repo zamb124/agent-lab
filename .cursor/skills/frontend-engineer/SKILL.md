@@ -7,6 +7,16 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 
 Нормы UI — в правилах `frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`; скил задаёт порядок работы и их не пересказывает. Закон строгости — `main.mdc` § Принципы и § Запреты: костыль хуже явной ошибки, «потом отрефакторим» не бывает, фолбек на пустое значение вместо `throw` — баг.
 
+## 0. Режим миграции (TS + канон-очистка)
+
+Если задача — «конвертировать в TS», «убрать отсебятину», «навести канон» в
+области UI — работаем в **рекурсивном цикле**:
+[`references/migration-loop.md`](.cursor/skills/frontend-engineer/references/migration-loop.md).
+Эталон архитектуры — [`references/target-architecture.md`](.cursor/skills/frontend-engineer/references/target-architecture.md);
+очередь — `uv run python scripts/report_ui_kostyli.py`; гейт монотонности —
+`uv run python scripts/check_ui_kit_canon.py`. Обратной совместимости нет —
+hard cutover. Остальные разделы скилла действуют и в миграции: канон тот же.
+
 ## 1. Прочитать перед правкой
 
 | Задача | Что открыть |
@@ -57,6 +67,11 @@ description: Frontend инженер Платформы. ZERO-FALLBACK, ZERO-IMP
 Порядок — от быстрых к медленным; любой красный — возврат к канону, не обход.
 
 ```bash
+make ui-build                    # esbuild → apps/<svc>/ui-dist/ (index.js + hashed chunks)
+make ui-typecheck                # tsc -p tsconfig.json (strict)
+make ui-watch                    # dev watch пересборки бандлов
+uv run python scripts/report_ui_kostyli.py         # инвентарь отсебятины (--json → очередь)
+uv run python scripts/check_ui_kit_canon.py        # ratchet hard-нарушений (baseline ui_canon_baseline.json)
 make check-ui-canon              # scripts/check_ui_canon.sh + check_flow_ui_hard_cut.py
 make check-ui-factories          # name, baseUrl, toast-ключи ru+en, static factories
 make check-command-rest-mirror   # restMirror ↔ FastAPI route, transport 'ws'
@@ -66,8 +81,8 @@ make check-i18n                  # JSON бандлов, пары файлов ru
 make check-i18n-keys             # каждый t('key') резолвится
 uv run python scripts/report_ui_i18n_gaps.py --app <svc>   # отчёт: цель — 0 кириллицы в литералах
 make check-events-canon          # сборная: все canon-гейты UI и событий
-make lint-ts                     # check-events-canon + check_ui_kit_docs + field + logging
-make ui                          # lint-ts + test-frontend-core (canon, Vitest, WTR incl. UI Kit L1)
+make lint-ts                     # check-events-canon + check_ui_kit_docs + field + kit-canon + logging
+make ui                          # ui-build + ui-typecheck + lint-ts + test-frontend-core
 ```
 
 - Правка core UI Kit или модалки — ещё `make test-ui-components`; UIKDS-сценарии и доки — `make ui-doc` (нужен `make test-up`).
@@ -107,6 +122,8 @@ make ui                          # lint-ts + test-frontend-core (canon, Vitest, 
 
 ## Файлы скила
 
+- [`references/target-architecture.md`](.cursor/skills/frontend-engineer/references/target-architecture.md) — целевая архитектура UI (north star), контракты слоёв.
+- [`references/migration-loop.md`](.cursor/skills/frontend-engineer/references/migration-loop.md) — рекурсивный цикл миграции TS/канона.
 - [`anti-patterns.md`](.cursor/skills/frontend-engineer/anti-patterns.md) — плохо → хорошо → детектор.
-- [`recipes.md`](.cursor/skills/frontend-engineer/recipes.md) — пошаговые рецепты.
+- [`recipes.md`](.cursor/skills/frontend-engineer/recipes.md) — пошаговые рецепты (вкл. TS-конверсию).
 - [`references/design-standard.md`](.cursor/skills/frontend-engineer/references/design-standard.md) — Figma → tokens.css.

@@ -1,0 +1,15 @@
+{
+  "ui_js_files": 1360,
+  "fetch_outside_events": 0,
+  "window_dialogs": 11,
+  "createelement_modal": 0,
+  "localstorage_raw": 50,
+  "vendored_lit_path": 31,
+  "vendored_dep_path": 2,
+  "extends_native": 0,
+  "custom_primitive": 100,
+  "raw_controls": 67,
+  "manual_pill": 18,
+  "raw_dispatch_events": 2,
+  "window_custom_event": 0
+}

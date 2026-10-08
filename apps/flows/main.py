@@ -67,6 +67,7 @@ from apps.flows.src.tools.authz_gate import bound_tool_authz_gate  # noqa: E402
 from apps.flows.src.triggers.dev_polling import start_dev_polling, stop_dev_polling  # noqa: E402
 from core.api.integrations import set_flow_resume_handler  # noqa: E402
 from core.app import create_service_app  # noqa: E402
+from core.app.spa import resolve_ui_static_dir  # noqa: E402
 from core.authz.service import AuthzService  # noqa: E402
 from core.clients.llm.mock import (  # noqa: E402
     configure_mock_llm_redis,
@@ -306,6 +307,9 @@ _flows_cors_origins = list(
     )
 )
 
+_UI_PATH = Path(__file__).parent / "ui"
+_UI_STATIC_PATH = resolve_ui_static_dir(_UI_PATH)
+
 app = create_service_app(
     "flows",
     FlowSettings,
@@ -313,7 +317,7 @@ app = create_service_app(
     database="flows_url",
     operations=FLOWS_OPERATIONS,
     lifecycle=(recipe(bound_tool_authz_gate), recipe(boot_flows)),
-    services_spa_index=Path(__file__).parent / "ui" / "index.html",
+    services_spa_index=_UI_STATIC_PATH / "index.html",
     routers=[
         api_v1_router,
         websocket_router,
@@ -369,13 +373,12 @@ if demo_cards_path.is_dir():
 if static_path.exists():
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-# UI - статические файлы
-ui_path = Path(__file__).parent / "ui"
-if ui_path.exists():
-    app.mount("/flows/static", StaticFiles(directory=ui_path), name="ui_static")
+# UI - статические файлы (ui-dist/ после `npm run build:ui`, иначе ui/)
+if _UI_STATIC_PATH.exists():
+    app.mount("/flows/static", StaticFiles(directory=_UI_STATIC_PATH), name="ui_static")
 
 
-_INDEX_HTML = (ui_path / "index.html").read_text(encoding="utf-8") if ui_path.exists() else ""
+_INDEX_HTML = (_UI_STATIC_PATH / "index.html").read_text(encoding="utf-8") if _UI_STATIC_PATH.exists() else ""
 
 
 @app.get("/")

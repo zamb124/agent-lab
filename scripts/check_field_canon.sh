@@ -34,21 +34,21 @@ if [ "${#FIELD_CANON_DIRS[@]}" -eq 0 ]; then
 fi
 
 BAD_INPUT='<input\b(?![^>]*\btype=["'\''](?:file|hidden|range|color|checkbox|radio|search)["'\''])(?![^>]*\bdata-canon=)[^>]*>'
-if rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >/dev/null 2>&1; then
+if rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "raw <input> в apps/<svc>/ui/{pages,modals,components}/**: только whitelist type=, либо data-canon, иначе <platform-field> (см. .cursor/rules/ui_fields.mdc)"
-    rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >&2 || true
+    rg -nUP --multiline-dotall "${BAD_INPUT}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >&2 || true
 fi
 
 BAD_TEXTAREA='<textarea\b(?![^>]*\bdata-canon=)[^>]*>'
-if rg -nUP --multiline-dotall "${BAD_TEXTAREA}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >/dev/null 2>&1; then
+if rg -nUP --multiline-dotall "${BAD_TEXTAREA}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "raw <textarea>: только data-canon или замените на <platform-field type='text'>"
-    rg -nUP --multiline-dotall "${BAD_TEXTAREA}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >&2 || true
+    rg -nUP --multiline-dotall "${BAD_TEXTAREA}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >&2 || true
 fi
 
 BAD_SELECT='<select\b(?![^>]*\bdata-canon=)[^>]*>'
-if rg -nUP --multiline-dotall "${BAD_SELECT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >/dev/null 2>&1; then
+if rg -nUP --multiline-dotall "${BAD_SELECT}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "raw <select>: только data-canon='combobox' или <platform-field type='enum'>"
-    rg -nUP --multiline-dotall "${BAD_SELECT}" "${FIELD_CANON_DIRS[@]}" -g '*.js' >&2 || true
+    rg -nUP --multiline-dotall "${BAD_SELECT}" "${FIELD_CANON_DIRS[@]}" -g '*.{js,ts}' >&2 || true
 fi
 
 if [ "$ERR" -ne 0 ]; then

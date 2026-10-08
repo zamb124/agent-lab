@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import { importMapsPlugin } from '@web/dev-server-import-maps';
+import { esbuildPlugin } from '@web/dev-server-esbuild';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -9,12 +11,26 @@ const pageNavigationTimeoutMs = 120_000;
 const litDevModeMessage =
     'Lit is in dev mode. Not recommended for production! See https://lit.dev/msg/dev-mode for more information.';
 
+// Период миграции: спецификатор `./foo.js`, когда на диске только `foo.ts`.
+// .js на диске выигрывает — свежий источник не подменяется.
+const tsSiblingMiddleware = async (ctx, next) => {
+    const urlPath = decodeURIComponent(ctx.path);
+    if (urlPath.endsWith('.js')) {
+        const fsPath = path.join(rootDir, urlPath);
+        const tsPath = fsPath.slice(0, -'.js'.length) + '.ts';
+        if (!existsSync(fsPath) && existsSync(tsPath)) {
+            ctx.path = urlPath.slice(0, -'.js'.length) + '.ts';
+        }
+    }
+    return next();
+};
+
 export default {
     rootDir,
     files: [
-        'tests/frontend_core/browser/**/*.spec.js',
-        'tests/ui/design-system/components/**/contract.spec.js',
-        'tests/ui/design-system/flows/**/*.spec.js',
+        'tests/frontend_core/browser/**/*.spec.{js,ts}',
+        'tests/ui/design-system/components/**/contract.spec.{js,ts}',
+        'tests/ui/design-system/flows/**/*.spec.{js,ts}',
     ],
     hostname: '127.0.0.1',
     concurrentBrowsers: 1,
@@ -24,12 +40,13 @@ export default {
     concurrency: 4,
     browserStartTimeout: 120_000,
     testsStartTimeout: 60_000,
-    middleware: [browserTestDevMiddleware],
+    middleware: [tsSiblingMiddleware, browserTestDevMiddleware],
     nodeResolve: true,
     filterBrowserLogs(log) {
         return !log.args.some((arg) => typeof arg === 'string' && arg.includes(litDevModeMessage));
     },
     plugins: [
+        esbuildPlugin({ ts: true }),
         importMapsPlugin({
             inject: {
                 importMap: {

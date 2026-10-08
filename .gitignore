@@ -99,3 +99,7 @@ tests/core/files/file_writer_output/
 /drafts/
 /backups/
 /test-results/
+
+# UI build artifacts (esbuild бандлы → apps/<svc>/ui-dist/, tsc incremental)
+**/ui-dist/
+*.tsbuildinfo

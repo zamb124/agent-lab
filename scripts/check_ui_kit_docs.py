@@ -48,7 +48,7 @@ def _validate_manifest_schema(manifest: dict[str, object], schema: dict[str, obj
 
 def _discover_registered_components() -> set[str]:
     names: set[str] = set()
-    for path in LIB_COMPONENTS.rglob("*.js"):
+    for path in sorted(p for g in ("*.js", "*.ts") for p in LIB_COMPONENTS.rglob(g)):
         text = path.read_text(encoding="utf-8")
         for match in _DEFINE_RE.finditer(text):
             names.add(match.group(1))

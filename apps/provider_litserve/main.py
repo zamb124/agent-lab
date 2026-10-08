@@ -49,6 +49,7 @@ from apps.provider_litserve.vad.api import VADLitAPI
 from apps.provider_litserve.worker_registry import resolved_enabled_workers
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
+from core.app.spa import resolve_ui_static_dir
 from core.app.server import serve
 from core.config.models import ProviderLitserveInfraConfig
 from core.di import recipe
@@ -57,7 +58,7 @@ from core.utils.background import finish_background_task
 
 UI_PREFIX = "/litserve"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-UI_ROOT_PATH = Path(__file__).parent / "ui"
+UI_ROOT_PATH = resolve_ui_static_dir(Path(__file__).parent / "ui")
 UI_INDEX_PATH = UI_ROOT_PATH / "index.html"
 CORE_STATIC_PATH = PROJECT_ROOT / "core" / "frontend" / "static"
 

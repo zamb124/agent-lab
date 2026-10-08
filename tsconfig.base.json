@@ -1,0 +1,32 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitOverride": true,
+        "noFallthroughCasesInSwitch": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "useDefineForClassFields": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "resolveJsonModule": true,
+        "allowJs": false,
+        "checkJs": false,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "paths": {
+            "@platform/lib/*": ["./core/frontend/static/lib/*"]
+        }
+    },
+    "exclude": [
+        "**/node_modules/**",
+        "**/ui-dist/**",
+        "**/vendor/**",
+        "apps/agent/**",
+        ".cache/**",
+        "ui-dist/**"
+    ]
+}

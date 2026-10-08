@@ -23,6 +23,20 @@ CORE_FRONTEND_MOUNT_PATH = "/static/core"
 _DEFAULT_EXCLUDED_PREFIXES: tuple[str, ...] = ("api/", "ui/static/", "ws", "assets/")
 
 
+def resolve_ui_static_dir(ui_dir: Path) -> Path:
+    """Директория, которую отдаёт mount статики сервиса.
+
+    `apps/<svc>/ui-dist/` (esbuild-бандл `npm run build:ui`) приоритетнее
+    `apps/<svc>/ui/`: после TS-миграции браузер получает только собранный
+    бандл и скопированные ассеты; исходники `.ts` в прод не попадают.
+    Без сборки (чистый dev-clone) mount остаётся на `ui/`.
+    """
+    dist_dir = ui_dir.parent / "ui-dist"
+    if (dist_dir / "index.js").is_file():
+        return dist_dir
+    return ui_dir
+
+
 def mount_service_spa(
     app: FastAPI,
     *,
@@ -36,7 +50,8 @@ def mount_service_spa(
     `excluded_prefixes` — под-пути, которые SPA не обслуживает (API, статика, WS):
     для них catch-all отвечает 404, а не index.html.
     """
-    index_file = ui_dir / "index.html"
+    ui_static_dir = resolve_ui_static_dir(ui_dir)
+    index_file = ui_static_dir / "index.html"
     if not index_file.is_file():
         raise FileNotFoundError(f"SPA index.html not found: {index_file}")
 
@@ -50,7 +65,7 @@ def mount_service_spa(
     )
     app.mount(
         f"/{public_segment}/ui/static",
-        StaticFiles(directory=str(ui_dir), html=True),
+        StaticFiles(directory=str(ui_static_dir), html=True),
         name=f"{public_segment}_ui",
     )
     for mount_path, directory, name in extra_static_mounts:

@@ -17,69 +17,69 @@ ERR=0
 fail() { echo "check_ui_canon: $1" >&2; ERR=1; }
 
 # 0. Motion canon: единый core motion layer вместо разрозненных transition: all.
-MOTION_GLOBS=( apps/*/ui core/frontend/static -g '*.js' -g '*.css' --glob '!**/*.min.js' )
+MOTION_GLOBS=( apps/*/ui core/frontend/static -g '*.{js,ts}' -g '*.css' --glob '!**/*.min.js' )
 if rg -q 'transition:\s*all\b' "${MOTION_GLOBS[@]}"; then
     fail "transition: all запрещён — используйте --motion-transition-interactive или явный список compositor-friendly свойств"
     rg -n 'transition:\s*all\b' "${MOTION_GLOBS[@]}" >&2 || true
 fi
 
 # 1. Только PlatformElement / PlatformApp / PlatformPage наследование.
-if rg -q 'extends LitElement' apps -g '*.js'; then
+if rg -q 'extends LitElement' apps -g '*.{js,ts}'; then
     fail "запрещено extends LitElement в apps/**/*.js"
-    rg 'extends LitElement' apps -g '*.js' >&2 || true
+    rg 'extends LitElement' apps -g '*.{js,ts}' >&2 || true
 fi
 while IFS= read -r platform_app_file; do
     if ! rg -q 'static platformAssistant\s*=' "$platform_app_file"; then
         fail "$platform_app_file: каждый PlatformApp обязан задать static platformAssistant"
     fi
-done < <(rg -l 'extends PlatformApp\b' apps -g '*-app.js')
+done < <(rg -l 'extends PlatformApp\b' apps -g '*-app.{js,ts}')
 
 # 2. Импорты core lib только через @platform/lib/...
-if rg -q "from ['\"]/static/core/lib" apps -g '*.js'; then
+if rg -q "from ['\"]/static/core/lib" apps -g '*.{js,ts}'; then
     fail "импорты из /static/core/lib обходят import map; используйте @platform/lib/..."
-    rg "from ['\"]/static/core/lib" apps -g '*.js' >&2 || true
+    rg "from ['\"]/static/core/lib" apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 3. Запрещённые импорты старого канона (модулей нет — но проверяем чтобы не вернулись).
-if rg -q "from ['\"]@platform/lib/services/(BaseService|ServiceRegistry|platform-services-bootstrap)" apps -g '*.js'; then
+if rg -q "from ['\"]@platform/lib/services/(BaseService|ServiceRegistry|platform-services-bootstrap)" apps -g '*.{js,ts}'; then
     fail "ServiceRegistry/BaseService запрещены в apps/**"
-    rg "from ['\"]@platform/lib/services/" apps -g '*.js' >&2 || true
+    rg "from ['\"]@platform/lib/services/" apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q "from ['\"]@platform/lib/store/" apps -g '*.js'; then
+if rg -q "from ['\"]@platform/lib/store/" apps -g '*.{js,ts}'; then
     fail "BaseStore запрещён в apps/**"
-    rg "from ['\"]@platform/lib/store/" apps -g '*.js' >&2 || true
+    rg "from ['\"]@platform/lib/store/" apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q "from ['\"]@platform/services/" apps -g '*.js'; then
+if rg -q "from ['\"]@platform/services/" apps -g '*.{js,ts}'; then
     fail "старые сервисы (auth/icon/theme/...) удалены — используйте dispatch/select"
-    rg "from ['\"]@platform/services/" apps -g '*.js' >&2 || true
+    rg "from ['\"]@platform/services/" apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q "from ['\"]@platform/lib/utils/(use-store|types)\.js" apps -g '*.js'; then
+if rg -q "from ['\"]@platform/lib/utils/(use-store|types)\.js" apps -g '*.{js,ts}'; then
     fail "use-store / AppEvents удалены"
-    rg "from ['\"]@platform/lib/utils/(use-store|types)\.js" apps -g '*.js' >&2 || true
+    rg "from ['\"]@platform/lib/utils/(use-store|types)\.js" apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q "from ['\"]@platform/lib/router/" apps -g '*.js'; then
+if rg -q "from ['\"]@platform/lib/router/" apps -g '*.{js,ts}'; then
     fail "Router.js удалён — маршрутизация через router.effect"
-    rg "from ['\"]@platform/lib/router/" apps -g '*.js' >&2 || true
+    rg "from ['\"]@platform/lib/router/" apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 4. Запрещённые имена в коде.
-if rg -q '\bServiceRegistry\b' apps -g '*.js'; then
+if rg -q '\bServiceRegistry\b' apps -g '*.{js,ts}'; then
     fail "ServiceRegistry не существует"
-    rg '\bServiceRegistry\b' apps -g '*.js' >&2 || true
+    rg '\bServiceRegistry\b' apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q '\bBaseStore\b' apps -g '*.js'; then
+if rg -q '\bBaseStore\b' apps -g '*.{js,ts}'; then
     fail "BaseStore не существует"
-    rg '\bBaseStore\b' apps -g '*.js' >&2 || true
+    rg '\bBaseStore\b' apps -g '*.{js,ts}' >&2 || true
 fi
-if rg -q '\bAppEvents\b' apps -g '*.js'; then
+if rg -q '\bAppEvents\b' apps -g '*.{js,ts}'; then
     fail "AppEvents удалены — CoreEvents / <svc>Events"
-    rg '\bAppEvents\b' apps -g '*.js' >&2 || true
+    rg '\bAppEvents\b' apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 5. new CustomEvent в apps — запрещено (в core разрешено для composition).
-if rg -q 'new CustomEvent\(' apps -g '*.js'; then
+if rg -q 'new CustomEvent\(' apps -g '*.{js,ts}'; then
     fail "new CustomEvent в apps/** запрещено; используйте this.dispatch(...)"
-    rg 'new CustomEvent\(' apps -g '*.js' >&2 || true
+    rg 'new CustomEvent\(' apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 6. Доступ к старым геттерам PlatformElement.
@@ -87,15 +87,15 @@ fi
 #    (`<dashboard-stat-tile icon="..."/>`, `<sidebar-nav-item icon="..."/>`),
 #    а не IconService-геттер (его в платформе нет). Для иконок в компонентах
 #    используется `<platform-icon name="...">` в рендере.
-if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js'; then
+if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.{js,ts}'; then
     fail "this.services / this.auth / this.theme / ... удалены — используйте dispatch/select"
-    rg 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.js' >&2 || true
+    rg 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 7. fetch / axios в компонентах — только в effects/.
-if rg -q '\bfetch\(' apps -g '*.js' --glob '!apps/*/ui/events/effects/**'; then
+if rg -q '\bfetch\(' apps -g '*.{js,ts}' --glob '!apps/*/ui/events/effects/**'; then
     fail "fetch вне events/effects/** запрещён"
-    rg '\bfetch\(' apps -g '*.js' --glob '!apps/*/ui/events/effects/**' >&2 || true
+    rg '\bfetch\(' apps -g '*.{js,ts}' --glob '!apps/*/ui/events/effects/**' >&2 || true
 fi
 
 # 8. Запрещены каталоги старого канона.
@@ -107,7 +107,7 @@ done
 
 # 9. Modal canon: открытие модалок только через dispatch UI_MODAL_OPEN.
 #    Запрещены createElement('*-modal') и appendChild на body для модалок.
-MOD_GLOBS=( apps -g '*.js' --glob '!apps/*/ui/assets/**' --glob '!**/*.min.js' )
+MOD_GLOBS=( apps -g '*.{js,ts}' --glob '!apps/*/ui/assets/**' --glob '!**/*.min.js' )
 if rg -q "createElement\(\s*['\"][a-z0-9_-]*-modal['\"]" "${MOD_GLOBS[@]}"; then
     fail "createElement('*-modal') запрещён — открывайте модалку через dispatch(CoreEvents.UI_MODAL_OPEN, { kind, props })"
     rg -n "createElement\(\s*['\"][a-z0-9_-]*-modal['\"]" "${MOD_GLOBS[@]}" >&2 || true
@@ -131,8 +131,8 @@ LEGACY_WINDOW_EVENTS=(
     'office-documents-list-reload'
 )
 LEGACY_GLOBS=(
-    apps -g '*.js' --glob '!apps/*/ui/assets/**' --glob '!**/*.min.js'
-    core/frontend/static -g '*.js' --glob '!**/*.min.js'
+    apps -g '*.{js,ts}' --glob '!apps/*/ui/assets/**' --glob '!**/*.min.js'
+    core/frontend/static -g '*.{js,ts}' --glob '!**/*.min.js'
 )
 for ev in "${LEGACY_WINDOW_EVENTS[@]}"; do
     if rg -q "window\.(addEventListener|dispatchEvent)\(\s*['\"]?${ev}\b|new CustomEvent\(\s*['\"]${ev}['\"]" "${LEGACY_GLOBS[@]}"; then
@@ -152,19 +152,19 @@ fi
 #     `icon` удалён из списка: reactive property Lit-компонентов
 #     (`<sidebar-nav-item icon="...">`, `<platform-panel icon="...">`), а не
 #     IconService (его нет).
-CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.js' --glob '!core/frontend/static/lib/flow-ui/**' )
+CORE_LIB_GLOBS=( core/frontend/static/lib -g '*.{js,ts}' --glob '!core/frontend/static/lib/flow-ui/**' )
 if rg -q 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}"; then
     fail "this.services/this.calendarApi/... в core/lib — используйте dispatch(<SLICE_EVENTS>) и select"
     rg -n 'this\.(services|auth|notify|theme|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' "${CORE_LIB_GLOBS[@]}" >&2 || true
 fi
 # Flow UI: запрет старых геттеров, но `this.theme` — допустимое Lit property.
-if rg -q 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.js'; then
+if rg -q 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.{js,ts}'; then
     fail "запрещённые геттеры в flow-ui — используйте dispatch/select"
-    rg -n 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.js' >&2 || true
+    rg -n 'this\.(services|auth|notify|companies|calendarApi|filesApi|fileTypes|team|a2a|syncWs|syncApi|crmApi|ragApi)\b' core/frontend/static/lib/flow-ui -g '*.{js,ts}' >&2 || true
 fi
 
 # 12. Имена событий: this.dispatch('<scope>/<entity>/<verb>') — snake_case, >= 3 сегмента.
-BAD_DISPATCH="$(rg -nU "this\.dispatch\(\s*['\"]([^'\"]+)['\"]" apps -g '*.js' \
+BAD_DISPATCH="$(rg -nU "this\.dispatch\(\s*['\"]([^'\"]+)['\"]" apps -g '*.{js,ts}' \
     | grep -vE "this\.dispatch\(\s*['\"][a-z][a-z0-9_]*(/[a-z][a-z0-9_]*){2,}['\"]" || true)"
 if [ -n "$BAD_DISPATCH" ]; then
     fail "dispatch с именем не по контракту scope/entity/verb (snake_case, >= 3)"
@@ -185,7 +185,7 @@ for svc in "${FACTORY_CANON_SERVICES[@]}"; do
     if [ "${#PG_DIRS[@]}" -eq 0 ]; then
         continue
     fi
-    PG_GLOBS=( "${PG_DIRS[@]}" -g '*.js' )
+    PG_GLOBS=( "${PG_DIRS[@]}" -g '*.{js,ts}' )
 
     if rg -q "from ['\"]@platform/lib/events/controllers/" "${PG_GLOBS[@]}"; then
         fail "${svc}: pages/modals не импортируют контроллеры напрямую — используйте this.useResource/useOp/..."
@@ -222,11 +222,11 @@ done
 #     - 'await (this.dispatch(...))' / fake await  — диспатч fire-and-forget, ответы — через useEvent
 #     - this.i18n.getCurrentLocale() / this.i18n.t — i18n только через this.t(...) и this.select(s => s.i18n.locale)
 RUNTIME_ANTI_GLOBS=(
-    apps -g '*.js'
+    apps -g '*.{js,ts}'
     --glob '!apps/*/ui/events/**'
     --glob '!apps/*/ui/assets/**'
     --glob '!**/*.min.js'
-    core/frontend/static/lib -g '*.js'
+    core/frontend/static/lib -g '*.{js,ts}'
     --glob '!core/frontend/static/lib/platform-element/**'
     --glob '!core/frontend/static/lib/events/**'
 )
@@ -270,16 +270,16 @@ fi
 #     стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js;
 #     кастомизация — токены --field-pill-* в core/frontend/static/assets/css/tokens.css.
 PILL_CSS_PATTERN='\.(form-(input|textarea|select|group|label)|field-pill(-(input|textarea|select|label|empty|readonly-text|readonly-muted|readonly-inline)|--(textarea|tags))?)\s*[\{,]'
-if rg -nP "${PILL_CSS_PATTERN}" apps -g '*.js' >/dev/null 2>&1; then
+if rg -nP "${PILL_CSS_PATTERN}" apps -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "локальные .form-*/.field-pill* CSS правила в apps/<svc>/ui/**.js запрещены — стили только в core/frontend/static/lib/styles/shared/field-pill.styles.js (токены --field-pill-* в tokens.css)"
-    rg -nP "${PILL_CSS_PATTERN}" apps -g '*.js' >&2 || true
+    rg -nP "${PILL_CSS_PATTERN}" apps -g '*.{js,ts}' >&2 || true
 fi
 
 # 18. Импорт удалённых glass-input / glass-textarea — запрещён.
 GLASS_INPUT_PATTERN="from\s+['\"]@platform/lib/components/glass-(input|textarea)\.js['\"]"
-if rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.js' >/dev/null 2>&1; then
+if rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "импорт @platform/lib/components/glass-(input|textarea).js запрещён — компоненты удалены в PHASE 1.5; используйте <platform-field type='string|text' input-type='...'>"
-    rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.js' >&2 || true
+    rg -nP "${GLASS_INPUT_PATTERN}" apps core -g '*.{js,ts}' >&2 || true
 fi
 
 # 19. Utility canon: локальные дубли core форматтеров / валидаторов / escape / hash в apps/<svc>/ui/**.
@@ -287,7 +287,7 @@ fi
 #     formatPlatformDate / escapeHtml / hashString31 / EMAIL_RE / digitsOnly /
 #     placeholder-storage-keys) живёт в core/frontend/static/lib/utils/.
 #     Локальная копия — нарушение DRY и канона.
-APPS_UI_GLOBS=( apps -g '*.js' --glob 'apps/*/ui/**' )
+APPS_UI_GLOBS=( apps -g '*.{js,ts}' --glob 'apps/*/ui/**' )
 
 # 19a. Hardcoded 'ru-RU' в Intl.* / toLocaleString / toLocaleDateString.
 RUHARDCODE_PATTERN="Intl\.(NumberFormat|DateTimeFormat)\(\s*['\"]ru-RU['\"]|toLocale(Date|Time)?String\(\s*['\"]ru-RU['\"]"
@@ -350,14 +350,14 @@ fi
 # this.openSidebar() в pages/modals/components — антипаттерн mobile shell 2026.
 # Допускается только в sidebar-компонентах core (там — desktop-канон).
 OPEN_SIDEBAR_PATTERN="this\.openSidebar\s*\("
-if rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.js' --glob '!apps/*/ui/components/*sidebar*.js' >/dev/null 2>&1; then
+if rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.{js,ts}' --glob '!apps/*/ui/components/*sidebar*.{js,ts}' >/dev/null 2>&1; then
     fail "this.openSidebar() в apps/<svc>/ui/{pages,modals,components}/** запрещён — на мобиле используйте <platform-bottom-nav> + bottom-sheet, на десктопе sidebar и так виден"
-    rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.js' --glob '!apps/*/ui/components/*sidebar*.js' >&2 || true
+    rg -nP "${OPEN_SIDEBAR_PATTERN}" apps -g '*.{js,ts}' --glob '!apps/*/ui/components/*sidebar*.{js,ts}' >&2 || true
 fi
 
 # 21. Bottom-sheet canon: kind строго '<scope>.<entity>', регистрация через registerBottomSheetKind.
 BOTTOM_SHEET_KIND_PATTERN="static\s+bottomSheetKind\s*=\s*['\"]([^'\"]+)['\"]"
-BOTTOM_SHEET_KIND_BAD="$(rg -noP "${BOTTOM_SHEET_KIND_PATTERN}" apps core -g '*.js' \
+BOTTOM_SHEET_KIND_BAD="$(rg -noP "${BOTTOM_SHEET_KIND_PATTERN}" apps core -g '*.{js,ts}' \
     | grep -vE "static\s+bottomSheetKind\s*=\s*['\"][a-z][a-z0-9_]*\.[a-z][a-z0-9_]*['\"]" || true)"
 if [ -n "$BOTTOM_SHEET_KIND_BAD" ]; then
     fail "bottomSheetKind должен быть '<scope>.<entity>' (snake_case)"
@@ -381,7 +381,7 @@ if rg -q 'zustand-bundle\.js' core/frontend/pwa/sw.js; then
 fi
 
 # 23. Flows UI: hardcoded hex/rgba в JS запрещены (Design System tokens only).
-FLOWS_HEX_HITS="$(rg -n '#[0-9a-fA-F]{3,8}|rgba?\(' apps/flows/ui -g '*.js' \
+FLOWS_HEX_HITS="$(rg -n '#[0-9a-fA-F]{3,8}|rgba?\(' apps/flows/ui -g '*.{js,ts}' \
     --glob '!apps/flows/ui/components/flow-canvas/**' \
     --glob '!apps/flows/ui/_helpers/flow-cover-gradients.js' || true)"
 if [ -n "$FLOWS_HEX_HITS" ]; then
@@ -392,7 +392,7 @@ fi
 # 24. Flows UI: raw <button в apps/flows/ui/**/*.js запрещён — action chrome только <platform-button>.
 #     Selectable cards / list rows — <article role="button" tabindex="0"> + keyboard (Enter/Space).
 #     Resize handles — role="separator" + pointer handlers, не <button>.
-FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.js' || true)"
+FLOWS_BUTTON_HITS="$(rg -n '<button' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_BUTTON_HITS" ]; then
     fail "apps/flows/ui/**/*.js: raw <button запрещён — используйте <platform-button> или <article role=\"button\">"
     echo "$FLOWS_BUTTON_HITS" >&2
@@ -400,20 +400,20 @@ fi
 
 # 25. Flows UI: legacy action-button CSS class definitions запрещены — удалять в том же PR, что и миграция на platform-button.
 FLOWS_LEGACY_BTN_CSS_PATTERN='\.(action-btn|icon-btn|ghost-btn|mini-btn|add-btn|mcp-preset)\s*[\{,]'
-if rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.js' >/dev/null 2>&1; then
+if rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.{js,ts}' >/dev/null 2>&1; then
     fail "apps/flows/ui/**/*.js: legacy .action-btn/.icon-btn/.ghost-btn/.mini-btn/.add-btn/.mcp-preset CSS запрещены — удаляйте вместе с миграцией на <platform-button>"
-    rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.js' >&2 || true
+    rg -nP "${FLOWS_LEGACY_BTN_CSS_PATTERN}" apps/flows/ui -g '*.{js,ts}' >&2 || true
 fi
 
 # 26. Flows UI: glass-button запрещён — используйте <platform-button>.
-FLOWS_GLASS_BUTTON_HITS="$(rg -n '<glass-button|glass-button\.js' apps/flows/ui -g '*.js' || true)"
+FLOWS_GLASS_BUTTON_HITS="$(rg -n '<glass-button|glass-button\.js' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_GLASS_BUTTON_HITS" ]; then
     fail "apps/flows/ui/**/*.js: <glass-button> запрещён — используйте <platform-button>"
     echo "$FLOWS_GLASS_BUTTON_HITS" >&2
 fi
 
 # 27. Flows UI: literal --platform-button-icon-size px overrides запрещены — density props или var(--flows-*).
-FLOWS_ICON_SIZE_HITS="$(rg -n 'platform-button-icon-size:\s*[0-9]' apps/flows/ui -g '*.js' \
+FLOWS_ICON_SIZE_HITS="$(rg -n 'platform-button-icon-size:\s*[0-9]' apps/flows/ui -g '*.{js,ts}' \
     --glob '!apps/flows/ui/components/flow-canvas/**' || true)"
 if [ -n "$FLOWS_ICON_SIZE_HITS" ]; then
     fail "apps/flows/ui/**/*.js: literal --platform-button-icon-size запрещён — используйте density=\"compact|dense\" или var(--flows-*)"
@@ -428,10 +428,10 @@ while IFS= read -r glass_file; do
     if rg -q 'glass-border-subtle' "$glass_file"; then
         FLOWS_GLASS_TRIPLET_COUNT=$((FLOWS_GLASS_TRIPLET_COUNT + 1))
     fi
-done < <(rg -l 'glass-solid-subtle' apps/flows/ui -g '*.js' --glob '!apps/flows/ui/components/flow-canvas/**' || true)
+done < <(rg -l 'glass-solid-subtle' apps/flows/ui -g '*.{js,ts}' --glob '!apps/flows/ui/components/flow-canvas/**' || true)
 if [ "$FLOWS_GLASS_TRIPLET_COUNT" -gt "$FLOWS_GLASS_TRIPLET_MAX" ]; then
     fail "apps/flows/ui: inline glass triplet в ${FLOWS_GLASS_TRIPLET_COUNT} файлах (max ${FLOWS_GLASS_TRIPLET_MAX}) — импортируйте glassStyles/panelShellStyles"
-    rg -l 'glass-solid-subtle' apps/flows/ui -g '*.js' --glob '!apps/flows/ui/components/flow-canvas/**' | while IFS= read -r glass_file; do
+    rg -l 'glass-solid-subtle' apps/flows/ui -g '*.{js,ts}' --glob '!apps/flows/ui/components/flow-canvas/**' | while IFS= read -r glass_file; do
         rg -q 'glass-border-subtle' "$glass_file" && echo "  $glass_file" >&2
     done
 fi
@@ -466,21 +466,21 @@ if [ -n "$FLOWS_I18N_DUP_ACTION_CANCEL" ]; then
 fi
 
 # 30. Flows UI: literal color: white запрещён — используйте semantic tokens (--text-inverse, --flows-avatar-text).
-FLOWS_COLOR_WHITE_HITS="$(rg -n 'color:\s*white\b' apps/flows/ui -g '*.js' || true)"
+FLOWS_COLOR_WHITE_HITS="$(rg -n 'color:\s*white\b' apps/flows/ui -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_COLOR_WHITE_HITS" ]; then
     fail "apps/flows/ui/**/*.js: color: white запрещён — используйте var(--text-inverse) или var(--flows-avatar-text)"
     echo "$FLOWS_COLOR_WHITE_HITS" >&2
 fi
 
 # 31. Flows UI: local .form-field CSS запрещён — используйте formStyles (.form-group) из core.
-FLOWS_FORM_FIELD_CSS_HITS="$(rg -n '\.form-field\s*\{' apps/flows/ui/{pages,modals,components} -g '*.js' || true)"
+FLOWS_FORM_FIELD_CSS_HITS="$(rg -n '\.form-field\s*\{' apps/flows/ui/{pages,modals,components} -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_FORM_FIELD_CSS_HITS" ]; then
     fail "apps/flows/ui: local .form-field CSS запрещён — импортируйте formStyles и используйте .form-group"
     echo "$FLOWS_FORM_FIELD_CSS_HITS" >&2
 fi
 
 # 32. Flows UI: raw checkbox/radio запрещены — platform-field boolean / platform-segmented-control.
-FLOWS_CHECKBOX_RADIO_HITS="$(rg -n 'type="checkbox"|type="radio"' apps/flows/ui/{pages,modals,components} -g '*.js' || true)"
+FLOWS_CHECKBOX_RADIO_HITS="$(rg -n 'type="checkbox"|type="radio"' apps/flows/ui/{pages,modals,components} -g '*.{js,ts}' || true)"
 if [ -n "$FLOWS_CHECKBOX_RADIO_HITS" ]; then
     fail "apps/flows/ui: raw checkbox/radio запрещены — используйте platform-field type=\"boolean\" или platform-segmented-control"
     echo "$FLOWS_CHECKBOX_RADIO_HITS" >&2
@@ -492,7 +492,7 @@ if ! uv run python scripts/check_platform_typography.py; then
 fi
 
 # 34. Единый спиннер: собственные CSS-спиннеры в apps/** запрещены — используйте <platform-spinner>.
-SPINNER_KEYFRAMES_HITS="$(rg -n '@keyframes\s+spin\b' apps/*/ui -g '*.js' || true)"
+SPINNER_KEYFRAMES_HITS="$(rg -n '@keyframes\s+spin\b' apps/*/ui -g '*.{js,ts}' || true)"
 if [ -n "$SPINNER_KEYFRAMES_HITS" ]; then
     fail "apps/**/ui: собственный @keyframes spin запрещён — используйте <platform-spinner>"
     echo "$SPINNER_KEYFRAMES_HITS" >&2
@@ -511,9 +511,9 @@ if [ -n "$MISSING_BOOT_CSS" ]; then
 fi
 
 # 36. Long-text editor canon: только platform-markdown-editor (prompt-editor удалён).
-if rg -q "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.js' -g '*.py' -g '*.html' 2>/dev/null; then
+if rg -q "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.{js,ts}' -g '*.py' -g '*.html' 2>/dev/null; then
     fail "prompt-editor запрещён — используйте <platform-markdown-editor> (ui_components.mdc)"
-    rg -n "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.js' -g '*.py' -g '*.html' >&2 || true
+    rg -n "prompt-editor|PromptEditor|prompt_editor\.js" apps core/frontend tests -g '*.{js,ts}' -g '*.py' -g '*.html' >&2 || true
 fi
 if [ -f core/frontend/static/lib/components/prompt-editor.js ]; then
     fail "core/.../prompt-editor.js должен быть удалён — логика в platform-markdown-editor.js"

@@ -67,6 +67,7 @@ from apps.frontend.services.flow_ui_shared_session_html import (
 from core.ai.runtime import invalidate_voice_platform_pronunciation_cache
 from core.app import create_service_app
 from core.app.health_payload import build_health_payload
+from core.app.spa import resolve_ui_static_dir
 from core.app_state import get_request_correlation_ids
 from core.authz.service import AuthzService
 from core.billing.service import BillingService
@@ -323,6 +324,9 @@ _frontend_cors_origins = list(_frontend_settings.cors_allow_origins)
 if _frontend_cors_regex is None and _frontend_settings.server.debug and not is_testing():
     _frontend_cors_regex = _FRONTEND_DEV_CORS_ORIGIN_REGEX
 
+_UI_PATH = Path(__file__).parent / "ui"
+_UI_STATIC_PATH = resolve_ui_static_dir(_UI_PATH)
+
 app = create_service_app(
     "frontend",
     FrontendSettings,
@@ -331,7 +335,7 @@ app = create_service_app(
     operations=FRONTEND_OPERATIONS,
     lifecycle=(recipe(frontend_startup),),
     routers=[],
-    services_spa_index=Path(__file__).parent / "ui" / "index.html",
+    services_spa_index=_UI_STATIC_PATH / "index.html",
     pages_routers=[
         auth_router,
         agent_router,
@@ -387,15 +391,14 @@ if core_frontend_path.exists():
     )
     logger.info("frontend.core_lib_mounted", path=str(core_frontend_path))
 
-# Монтирование apps/frontend/ui (само приложение)
-ui_path = Path(__file__).parent / "ui"
-if ui_path.exists():
+# Монтирование apps/frontend/ui (само приложение; ui-dist/ после `npm run build:ui`)
+if _UI_STATIC_PATH.exists():
     app.mount(
         "/static/frontend",
-        StaticFiles(directory=str(ui_path)),
+        StaticFiles(directory=str(_UI_STATIC_PATH)),
         name="frontend-ui"
     )
-    logger.info("frontend.ui_mounted", path=str(ui_path))
+    logger.info("frontend.ui_mounted", path=str(_UI_STATIC_PATH))
 
 # Удаляем дефолтный root endpoint от фабрики - ПОСЛЕ монтирования статики
 # (он возвращает {"service": "core", "version": "1.0.0", "status": "running"})
@@ -686,7 +689,7 @@ if _agent_static_path.exists():
 
 
 def _frontend_spa_index_response() -> FileResponse:
-    index_path = ui_path / "index.html"
+    index_path = _UI_STATIC_PATH / "index.html"
     if not index_path.exists():
         raise WsCommandError("not_found", "Frontend UI not built yet", error_code="not_found")
     return FileResponse(index_path)
@@ -722,7 +725,7 @@ async def serve_spa(di: Di, full_path: str = ""):
     if full_path.startswith(excluded) or full_path in ("manifest.json", "sw.js", "offline.html"):
         raise WsCommandError("not_found", "Not found", error_code="not_found")
 
-    index_path = ui_path / "index.html"
+    index_path = _UI_STATIC_PATH / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
 

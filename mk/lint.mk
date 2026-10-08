@@ -23,6 +23,8 @@ lint-ts:
 	@uv run python scripts/check_ui_kit_docs.py
 	@echo "=== lint-ts: field canon ==="
 	@$(MAKE) --no-print-directory check-field-canon
+	@echo "=== lint-ts: ui kit canon (ratchet) ==="
+	@uv run python scripts/check_ui_kit_canon.py
 	@echo "=== lint-ts: logging canon ==="
 	@$(MAKE) --no-print-directory check-logging
 

@@ -57,6 +57,20 @@ WORKDIR /vendor
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+# UI-бандлы: esbuild per-app → apps/<svc>/ui-dist/. Собирается из исходников
+# (.ts/.js), в образ уходит только скомпилированный вывод — браузер грузит
+# index.js + hashed chunks, mount отдаёт ui-dist (core/app/spa.py).
+FROM node:24-bookworm-slim AS ui-builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json tsconfig.base.json ./
+COPY scripts/build_ui.mjs ./scripts/
+COPY core/frontend/static ./core/frontend/static
+COPY apps/ ./apps/
+RUN npm run build:ui \
+    && for d in apps/*/ui-dist; do mkdir -p "/out/$d" && cp -a "$d/." "/out/$d/"; done
+
 # ============================================
 # Финальные стадии - отличаются только CMD/EXPOSE
 # ============================================
@@ -144,4 +158,5 @@ FROM base-final AS full
 COPY --from=docs-builder /app/documentation-dist ./documentation-dist
 COPY --from=js-vendor /vendor/node_modules/three/build /app/node_modules/three/build
 COPY --from=js-vendor /vendor/node_modules/3d-force-graph/dist /app/node_modules/3d-force-graph/dist
+COPY --from=ui-builder /out/apps/ ./apps/
 EXPOSE 8001 8002 8003 8004 8005 8006 8008 8009 8010 8015 8016 8017 8018 8019 8020

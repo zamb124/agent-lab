@@ -244,14 +244,14 @@ def list_js_files(only_app: str | None) -> list[Path]:
                     continue
                 ui = app_dir / "ui"
                 if ui.is_dir():
-                    files.extend(sorted(ui.rglob("*.js")))
+                    files.extend(sorted(p for g in ("*.js", "*.ts") for p in ui.rglob(g)))
         if CORE_LIB.is_dir():
-            files.extend(sorted(CORE_LIB.rglob("*.js")))
+            files.extend(sorted(p for g in ("*.js", "*.ts") for p in CORE_LIB.rglob(g)))
     else:
         ui = APPS / only_app / "ui"
         if not ui.is_dir():
             raise SystemExit(f"check_i18n_keys: нет {ui}")
-        files.extend(sorted(ui.rglob("*.js")))
+        files.extend(sorted(p for g in ("*.js", "*.ts") for p in ui.rglob(g)))
     # отсекаем мок-файлы и debug-*
     return [
         p for p in files if p.name != "build-mock-config.js" and not p.name.startswith("debug-")

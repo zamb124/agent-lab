@@ -2,6 +2,33 @@
 
 Каждая запись — типовой костыль, единственная замена и детектор. «п.N» — пункт `scripts/check_ui_canon.sh`. Детектора нет — сначала добавь его (скил `refactor-engineer`, режим `gate`), потом правь код. Нормы — в `.cursor/rules/frontend.mdc`, `ui_factories.mdc`, `ui_components.mdc`, `ui_fields.mdc`.
 
+## 0. Машинные сигнатуры (миграционный режим)
+
+Детекторы миграции — правила `scripts/ui_canon_rules.py` (`rule_id`); гейт —
+`check_ui_kit_canon.py` (hard-счётчики в `ui_canon_baseline.json`), очередь —
+`report_ui_kostyli.py`. Карта `rule_id` → раздел этого файла:
+
+| rule_id | severity | раздел/замена |
+|---|---|---|
+| `ui_js_files` | hard | миграция .js → .ts (recipes §16) |
+| `fetch_outside_events` | hard | § 2 HTTP мимо фабрики |
+| `window_dialogs` | hard | § 3 → `platformConfirm` |
+| `createelement_modal` | hard | § 3 → `this.openModal` |
+| `localstorage_raw` | hard | § 1 → `platformStorageKey` |
+| `vendored_lit_path` | hard | § 1 → `from 'lit'` |
+| `vendored_dep_path` | hard | § 1 → `from 'marked'/'centrifuge'` |
+| `extends_native` | hard | § 1 → `PlatformElement`/`PlatformPage`/`PlatformModal` |
+| `custom_primitive` | hard | kit-примитив или kit-gap (§ цикл migration-loop) |
+| `raw_controls` | hard | `<platform-field>` (`ui_fields.mdc`) |
+| `manual_pill` | hard | `<platform-field-shell>` / `<platform-field>` |
+| `raw_dispatch_events` | hard | § 3 → helpers базы |
+| `window_custom_event` | hard | EventBus/фабрики |
+| `hex_colors` | soft | tokens.css |
+| `innerhtml_raw` | soft | html``/unsafeHTML с явной причиной |
+| `setinterval_poll` | soft | push/фабрика |
+| `window_listeners` | soft | helpers/EventBus |
+| `manual_busy_state` | soft | useOp/createForm |
+
 ## 1. Базы, импорты, геттеры
 
 | Плохо | Хорошо | Детектор |

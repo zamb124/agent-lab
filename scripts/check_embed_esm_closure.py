@@ -82,11 +82,15 @@ def _resolve_import(importer: Path, spec: str) -> Path | None:
 
 
 def _visit_target(importer: Path, spec: str, tgt: Path) -> Path | None:
+    if not tgt.exists() and tgt.suffix.lower() == ".js":
+        ts_sibling = tgt.with_suffix(".ts")
+        if ts_sibling.exists():
+            tgt = ts_sibling
     if not tgt.exists():
         fail(f"{importer.relative_to(ROOT)}: нет файла по импорту {spec!r} -> {tgt.relative_to(ROOT)}")
         return None
-    if tgt.suffix.lower() != ".js":
-        fail(f"{tgt.relative_to(ROOT)}: замыкание embed ожидает только *.js (импорт из {importer.relative_to(ROOT)})")
+    if tgt.suffix.lower() not in (".js", ".ts"):
+        fail(f"{tgt.relative_to(ROOT)}: замыкание embed ожидает только *.js/*.ts (импорт из {importer.relative_to(ROOT)})")
         return None
     return tgt.resolve()
 

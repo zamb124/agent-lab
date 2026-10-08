@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig.base.json",
+    "include": [
+        "core/frontend/static/**/*.ts",
+        "apps/*/ui/**/*.ts",
+        "tests/frontend_core/**/*.ts",
+        "tests/ui/**/*.ts"
+    ]
+}

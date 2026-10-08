@@ -1,0 +1,217 @@
+"""UI canon rules — единый источник сигнатур «отсебятины» для гейта и отчёта.
+
+Каждое правило: regex по содержимому `.js`/`.ts` файлов в скоупе + метаданные
+замены. `severity`:
+  - `hard` — ratchet-счётчик (`ui_canon_baseline.json`), рост = FAIL; цель 0.
+  - `soft` — только отчёт `report_ui_kostyli.py` (очередь рекурсивного цикла),
+    сигнал шумный — перед hard-статусом нужен точный детектор.
+
+Scope-строки: `apps` = apps/*/ui/**; `lib` = core/frontend/static/lib/**;
+`tests` = tests/frontend_core/**, tests/ui/**.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+Severity = Literal["hard", "soft"]
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+UI_SCOPES: dict[str, tuple[str, ...]] = {
+    "apps": ("apps",),
+    "lib": ("core/frontend/static/lib",),
+    "tests": ("tests/frontend_core", "tests/ui"),
+}
+
+_SKIP_PARTS = frozenset({"vendor", "node_modules", "ui-dist", "desktop", "__pycache__", "dist"})
+
+
+@dataclass(frozen=True)
+class UiCanonRule:
+    rule_id: str
+    pattern: str
+    scopes: tuple[str, ...]
+    severity: Severity
+    fix: str
+    path_exclude: str | None = None
+    kind: Literal["content", "file"] = "content"
+
+
+RULES: tuple[UiCanonRule, ...] = (
+    UiCanonRule(
+        "ui_js_files",
+        r"\A",
+        ("apps", "lib", "tests"),
+        "hard",
+        "Конвертировать в .ts (strict) — см. frontend-engineer § Рекурсивный цикл",
+        kind="file",
+        path_exclude=r"\.(ts|mjs)$",
+    ),
+    UiCanonRule(
+        "fetch_outside_events",
+        r"\bfetch\(|\bhttpRequest\(",
+        ("apps",),
+        "hard",
+        "Фабрика (useOp/useResource/…) — HTTP/WS вне events/factories|effects|resources запрещён",
+        path_exclude=r"/events/(factories|effects|resources)/",
+    ),
+    UiCanonRule(
+        "window_dialogs",
+        r"\bwindow\.(confirm|alert|prompt)\(|\bconfirm\(|\balert\(",
+        ("apps", "lib"),
+        "hard",
+        "platformConfirm(...) из helpers; результат — toast()",
+    ),
+    UiCanonRule(
+        "createelement_modal",
+        r"document\.createElement\([^)]*-modal|appendChild\([^)]*modal",
+        ("apps",),
+        "hard",
+        "this.openModal(Kind, props) — модалку открывает только стек",
+    ),
+    UiCanonRule(
+        "localstorage_raw",
+        r"\blocalStorage\.(getItem|setItem|removeItem)\(",
+        ("apps", "lib"),
+        "hard",
+        "platformStorageKey(...) + обёртки utils — прямой ключ запрещён",
+        path_exclude=r"platform-storage|storage-keys|native-app-shell|pwa\.effect|platform-brand",
+    ),
+    UiCanonRule(
+        "vendored_lit_path",
+        r"from\s+['\"][^'\"]*assets/js/lit/",
+        ("apps", "lib", "tests"),
+        "hard",
+        "from 'lit' / 'lit/directives/*' — vendored-путь дублирует модули",
+    ),
+    UiCanonRule(
+        "vendored_dep_path",
+        r"from\s+['\"][^'\"]*assets/js/(marked|centrifuge)/",
+        ("apps", "lib", "tests"),
+        "hard",
+        "from 'marked' / 'centrifuge' — npm-пакет, не vendored-путь",
+    ),
+    UiCanonRule(
+        "extends_native",
+        r"extends\s+(LitElement|HTMLElement)\b",
+        ("apps",),
+        "hard",
+        "extends PlatformElement/PlatformPage/PlatformModal — LitElement/HTMLElement напрямую запрещены",
+    ),
+    UiCanonRule(
+        "custom_primitive",
+        r"customElements\.define\(\s*['\"][\w-]*(dropdown|tooltip|popover|dialog|tabs|select|checkbox|radio|switch|slider|table|button|input|modal|toast|spinner|skeleton|badge|avatar|chip|menu)[\w-]*['\"]",
+        ("apps",),
+        "hard",
+        "Примитив — только в core UI Kit (lib/components); в apps — композиция kit",
+    ),
+    UiCanonRule(
+        "raw_controls",
+        r"<(input|textarea|select)\b",
+        ("apps",),
+        "hard",
+        "<platform-field> — сырой тег только по whitelist ui_fields.mdc",
+        path_exclude=r"check_field_canon|/vendor/|native-app",
+    ),
+    UiCanonRule(
+        "manual_pill",
+        r"class=\"field-pill|classMap\([^)]*field-pill|'field-pill",
+        ("apps",),
+        "hard",
+        "platform-field-shell / platform-field — ручная pill-разметка запрещена",
+    ),
+    UiCanonRule(
+        "raw_dispatch_events",
+        r"\.dispatch\(CoreEvents\.",
+        ("apps",),
+        "hard",
+        "helpers базы (this.toast/navigate/openModal/…) — прямой dispatch запрещён в apps",
+        path_exclude=r"/events/|bridge",
+    ),
+    UiCanonRule(
+        "window_custom_event",
+        r"window\.dispatchEvent\(new CustomEvent",
+        ("apps", "lib"),
+        "hard",
+        "EventBus/фабрики — window.dispatchEvent запрещён",
+    ),
+    UiCanonRule(
+        "hex_colors",
+        r"#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d",
+        ("apps",),
+        "soft",
+        "tokens.css — литеральные цвета вне токенов запрещены (искл. data-URI/svg)",
+        path_exclude=r"\.svg|logo|gradient-map",
+    ),
+    UiCanonRule(
+        "innerhtml_raw",
+        r"\.innerHTML\s*=|insertAdjacentHTML\(",
+        ("apps", "lib"),
+        "soft",
+        "lit html``/unsafeHTML с явной причиной — innerHTML наружу уязвим",
+    ),
+    UiCanonRule(
+        "setinterval_poll",
+        r"setInterval\(",
+        ("apps",),
+        "soft",
+        "Push через фабрику/EventBus — поллинг только с явной причиной в коде",
+    ),
+    UiCanonRule(
+        "window_listeners",
+        r"(window|document)\.addEventListener\(",
+        ("apps",),
+        "soft",
+        "useEvent/handleEvent базы — глобальные listeners вне helpers — отсебятина",
+    ),
+    UiCanonRule(
+        "manual_busy_state",
+        r"this\._(busy|loading|saving)\s*=",
+        ("apps",),
+        "soft",
+        "useOp/createForm состояния — ручной _busy дублирует фабрику",
+    ),
+)
+
+
+def iter_scope_files(scope: str) -> list[Path]:
+    files: list[Path] = []
+    for root in UI_SCOPES[scope]:
+        base = REPO_ROOT / root
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if not path.is_file() or path.suffix not in (".js", ".ts", ".mjs"):
+                continue
+            if _SKIP_PARTS & set(path.parts):
+                continue
+            files.append(path)
+    return files
+
+
+def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
+    """(path, rel, line_no, line) по правилу."""
+    path_ex = re.compile(rule.path_exclude) if rule.path_exclude else None
+    content_re = re.compile(rule.pattern) if rule.kind == "content" else None
+    findings: list[tuple[Path, str, int, str]] = []
+    for scope in rule.scopes:
+        for path in iter_scope_files(scope):
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            if path_ex and path_ex.search(rel):
+                continue
+            if rule.kind == "file":
+                findings.append((path, rel, 0, rel))
+                continue
+            assert content_re is not None
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                continue
+            for i, line in enumerate(lines, 1):
+                if content_re.search(line):
+                    findings.append((path, rel, i, line.strip()[:160]))
+    return findings

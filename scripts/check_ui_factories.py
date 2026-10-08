@@ -257,7 +257,7 @@ def _collect_used_factory_names(svc_ui: Path) -> set[str]:
         root = svc_ui / folder
         if not root.exists():
             continue
-        for path in root.rglob("*.js"):
+        for path in sorted(p for g in ("*.js", "*.ts") for p in root.rglob(g)):
             names.update(USE_HELPER_RE.findall(path.read_text(encoding="utf-8")))
     return names
 
@@ -271,7 +271,7 @@ def _check_app_registration(
     app_dir = svc_dir / "ui" / "app"
     if not app_dir.exists():
         return
-    app_files = sorted(app_dir.glob("*-app.js"))
+    app_files = sorted(p for g in ("*-app.js", "*-app.ts") for p in app_dir.glob(g))
     if not app_files:
         return
     app_path = app_files[0]
@@ -316,13 +316,13 @@ def main() -> int:
         ui_root = svc_dir / "ui" / "events"
         if not ui_root.exists():
             continue
-        for path in ui_root.rglob("*.js"):
+        for path in sorted(p for g in ("*.js", "*.ts") for p in ui_root.rglob(g)):
             text = path.read_text(encoding="utf-8")
             if any(kind + "(" in text for kind in FACTORY_KINDS):
                 targets.append(path)
 
     if CORE_FACTORY_RESOURCES.exists():
-        for core_path in sorted(CORE_FACTORY_RESOURCES.glob("*.resource.js")):
+        for core_path in sorted(p for g in ("*.resource.js", "*.resource.ts") for p in CORE_FACTORY_RESOURCES.glob(g)):
             targets.append(core_path)
 
     i18n_index = _load_i18n_index()
