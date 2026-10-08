@@ -3,7 +3,9 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
+import type { OpController, ResourceController } from '../../base/use-resource.js';
 import { platformConfirm } from '../platform-confirm-modal.js';
 import '../platform-button.js';
 import '../platform-icon.js';
@@ -11,7 +13,28 @@ import '../glass-spinner.js';
 import './platform-company-variable-editor-modal.js';
 import './platform-system-variables-catalog.js';
 
-function _accessLabelKey(item) {
+interface CompanyVariableItem {
+    variable_key: string;
+    title?: string;
+    version?: number | string;
+    public?: boolean;
+    secret?: boolean;
+    shared_for_execution?: boolean;
+    payload?: {
+        base?: { value_kind?: string; value?: unknown };
+        scopes?: unknown[];
+    };
+}
+
+interface VariableHistoryItem {
+    version?: number | string;
+    updated_at?: string;
+    created_at?: string;
+}
+
+type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
+
+function _accessLabelKey(item: CompanyVariableItem): string {
     if (item.public) {
         return 'access_public_a2a';
     }
@@ -24,7 +47,7 @@ function _accessLabelKey(item) {
     return 'access_plain';
 }
 
-function _valueSummary(item, t) {
+function _valueSummary(item: CompanyVariableItem, t: TranslateFn): string {
     if (item.secret) {
         return t('value_masked');
     }
@@ -35,7 +58,7 @@ function _valueSummary(item, t) {
     if (base.value_kind === 'expression') {
         return t('value_expression');
     }
-    if (Array.isArray(item.payload.scopes) && item.payload.scopes.length > 0) {
+    if (item.payload && Array.isArray(item.payload.scopes) && item.payload.scopes.length > 0) {
         return t('value_scoped');
     }
     if (base.value === null || base.value === undefined) {
@@ -50,14 +73,21 @@ function _valueSummary(item, t) {
 export class PlatformCompanyVariablesPanel extends PlatformElement {
     static i18nNamespace = 'company_variables';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         compact: { type: Boolean, reflect: true },
         showHelp: { type: Boolean, attribute: 'show-help' },
         _historyKey: { state: true },
         _historyItems: { state: true },
     };
+    declare compact: boolean;
+    declare showHelp: boolean;
+    declare _historyKey: string;
+    declare _historyItems: VariableHistoryItem[];
 
-    static styles = css`
+    private _variables: ResourceController;
+    private _versionsLoad: OpController;
+
+    static override styles: CSSResultGroup = css`
         :host { display: block; }
         .layout {
             display: grid;
@@ -139,15 +169,15 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
         this._versionsLoad = this.useOp('secrets/variable_versions_load');
     }
 
-    _create() {
+    _create(): void {
         this.openModal('platform.company_variable_editor', {});
     }
 
-    _edit(item) {
+    _edit(item: CompanyVariableItem): void {
         this.openModal('platform.company_variable_editor', { variableKey: item.variable_key });
     }
 
-    async _delete(item) {
+    async _delete(item: CompanyVariableItem): Promise<void> {
         const ok = await platformConfirm(
             this.t('delete_message', { key: item.variable_key }),
             {
@@ -164,19 +194,19 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
         await this._variables.remove(item.variable_key);
     }
 
-    async _showHistory(variableKey) {
+    async _showHistory(variableKey: string): Promise<void> {
         const response = await this._versionsLoad.run({
             variable_key: variableKey,
             limit: 20,
             offset: 0,
         });
         // Нормализованные версии лежат в slice (extraReducer), сырой result — только маркер успеха.
-        const page = response === null ? null : this._versionsLoad.lastResult;
+        const page = response === null ? null : this._versionsLoad.lastResult as { items?: VariableHistoryItem[] } | null;
         this._historyKey = variableKey;
         this._historyItems = page && Array.isArray(page.items) ? page.items : [];
     }
 
-    _renderHelp() {
+    _renderHelp(): TemplateResult | string {
         if (!this.showHelp || this.compact) {
             return '';
         }
@@ -193,7 +223,7 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
         `;
     }
 
-    _renderHistory() {
+    _renderHistory(): TemplateResult | string {
         if (!this._historyKey) {
             return '';
         }
@@ -213,7 +243,7 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                             <tbody>
                                 ${this._historyItems.map((item) => html`
                                     <tr>
-                                        <td>${this.t('badge_version', { version: item.version })}</td>
+                                        <td>${this.t('badge_version', { version: item.version ?? '' })}</td>
                                         <td>${item.updated_at ?? item.created_at ?? ''}</td>
                                     </tr>
                                 `)}
@@ -224,8 +254,8 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
         `;
     }
 
-    render() {
-        const items = this._variables.items;
+    override render(): TemplateResult {
+        const items = this._variables.items as unknown as CompanyVariableItem[];
         return html`
             <div class="layout">
                 <div>
@@ -264,8 +294,8 @@ export class PlatformCompanyVariablesPanel extends PlatformElement {
                                                 <td><code>${item.variable_key}</code></td>
                                                 <td>${item.title ?? ''}</td>
                                                 <td><span class="badge">${this.t('source_company')}</span></td>
-                                                <td>${_valueSummary(item, (key, params) => this.t(key, params))}</td>
-                                                <td>${this.t('badge_version', { version: item.version })}</td>
+                                                <td>${_valueSummary(item, (key: string, params?: Record<string, string | number>) => this.t(key, params))}</td>
+                                                <td>${this.t('badge_version', { version: item.version ?? '' })}</td>
                                                 <td>${this.t(_accessLabelKey(item))}</td>
                                                 <td class="actions">
                                                     <div class="actions-group">

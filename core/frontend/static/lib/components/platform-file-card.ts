@@ -5,6 +5,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { formatFileSize } from '../utils/format-file-size.js';
@@ -21,7 +22,7 @@ const ITEM_KIND_FILE = 'file';
 const ITEM_KIND_CATALOG = 'catalog';
 
 export class PlatformFileCard extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         fileName: { type: String, attribute: 'file-name' },
         mimeType: { type: String, attribute: 'mime-type' },
         fileSize: { type: Number, attribute: 'file-size' },
@@ -38,8 +39,23 @@ export class PlatformFileCard extends PlatformElement {
         hintIcon: { type: String, attribute: 'hint-icon' },
         hintIconLabel: { type: String, attribute: 'hint-icon-label' },
     };
+    declare fileName: string;
+    declare mimeType: string;
+    declare fileSize: number;
+    declare sizeLabel: string;
+    declare dateLabel: string;
+    declare retentionLabel: string;
+    declare typeLabel: string;
+    declare selected: boolean;
+    declare dropTarget: boolean;
+    declare itemKind: string;
+    declare itemKey: string;
+    declare indexStatus: string;
+    declare indexStatusLabel: string;
+    declare hintIcon: string;
+    declare hintIconLabel: string;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -192,25 +208,25 @@ export class PlatformFileCard extends PlatformElement {
         return `${this._sizeLabel()} · ${this.dateLabel}`;
     }
 
-    _isInteractiveTarget(target) {
+    _isInteractiveTarget(target: EventTarget | null): boolean {
         return target instanceof HTMLElement && Boolean(target.closest('.actions'));
     }
 
-    _onClick(e) {
+    _onClick(e: Event) {
         if (this._isInteractiveTarget(e.target)) {
             return;
         }
         this.emit('open', { itemKey: this.itemKey });
     }
 
-    _onDblClick(e) {
+    _onDblClick(e: Event) {
         if (this._isInteractiveTarget(e.target)) {
             return;
         }
         this.emit('activate', { itemKey: this.itemKey });
     }
 
-    _onDragOver(e) {
+    _onDragOver(e: DragEvent) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -225,7 +241,7 @@ export class PlatformFileCard extends PlatformElement {
         this.emit('row-dragover', { itemKey: this.itemKey, nativeEvent: e });
     }
 
-    _onDragLeave(e) {
+    _onDragLeave(e: DragEvent) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -234,7 +250,7 @@ export class PlatformFileCard extends PlatformElement {
         this.emit('row-dragleave', { itemKey: this.itemKey, nativeEvent: e });
     }
 
-    _onDrop(e) {
+    _onDrop(e: DragEvent) {
         if (this._resolvedItemKind() !== ITEM_KIND_CATALOG) {
             return;
         }
@@ -246,7 +262,7 @@ export class PlatformFileCard extends PlatformElement {
 
     _renderIndexStatus() {
         const status = typeof this.indexStatus === 'string' ? this.indexStatus.trim() : '';
-        const iconName = RAG_INDEX_ICON_BY_STATUS[status];
+        const iconName = (RAG_INDEX_ICON_BY_STATUS as Record<string, string | undefined>)[status];
         if (!iconName) {
             return nothing;
         }
@@ -284,7 +300,7 @@ export class PlatformFileCard extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const iconKey = this._fileIconName();
         const kind = this._resolvedItemKind();
         return html`
@@ -296,7 +312,7 @@ export class PlatformFileCard extends PlatformElement {
                 @dragleave=${this._onDragLeave}
                 @drop=${this._onDrop}
             >
-                <div class="actions" @click=${(e) => e.stopPropagation()}>
+                <div class="actions" @click=${(e: Event) => e.stopPropagation()}>
                     <slot name="actions"></slot>
                 </div>
                 <div class="icon-wrap">

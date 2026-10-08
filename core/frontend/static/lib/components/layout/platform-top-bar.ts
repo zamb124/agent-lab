@@ -18,14 +18,17 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
+import type { RouterRoute, RouterState } from '../../events/reducers/router.js';
+import type { SelectController } from '../../events/select-controller.js';
 import '../platform-icon.js';
 
 const EDGE_SWIPE_START_X = 20;
 const EDGE_SWIPE_TRIGGER_DX = 60;
 
 export class PlatformTopBar extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         /** Кастомный titleKey. Если не задан — берётся из state.router.routes. */
         titleKey: { type: String, attribute: 'title-key' },
         /** Прямой текст заголовка (если не нужен i18n). */
@@ -39,8 +42,22 @@ export class PlatformTopBar extends PlatformElement {
         _routeKey: { state: true },
         _routes: { state: true },
     };
+    declare titleKey: string;
+    declare titleText: string;
+    declare titleNamespace: string;
+    declare hideBack: boolean;
+    declare compact: boolean;
+    declare _routeKey: string | null;
+    declare _routes: readonly RouterRoute[];
 
-    static styles = [
+    private _routerSelect: SelectController<{ routeKey: string | null; routes: readonly RouterRoute[] }>;
+    private _boundTouchStart: (e: TouchEvent) => void;
+    private _boundTouchMove: (e: TouchEvent) => void;
+    private _boundTouchEnd: (e: TouchEvent) => void;
+    private _edgeSwipeStartX: number | null = null;
+    private _edgeSwipeStartY: number | null = null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -137,32 +154,30 @@ export class PlatformTopBar extends PlatformElement {
         this.compact = false;
         this._routeKey = null;
         this._routes = [];
-        this._routerSelect = this.select((s) => ({
-            routeKey: s.router.routeKey,
-            routes: s.router.routes,
-        }));
-        this._boundTouchStart = (e) => this._onTouchStart(e);
-        this._boundTouchMove = (e) => this._onTouchMove(e);
-        this._boundTouchEnd = (e) => this._onTouchEnd(e);
-        this._edgeSwipeStartX = null;
-        this._edgeSwipeStartY = null;
+        this._routerSelect = this.select((s) => {
+            const router = s.router as RouterState;
+            return { routeKey: router.routeKey, routes: router.routes };
+        });
+        this._boundTouchStart = (e: TouchEvent) => this._onTouchStart(e);
+        this._boundTouchMove = (e: TouchEvent) => this._onTouchMove(e);
+        this._boundTouchEnd = () => this._onTouchEnd();
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         document.addEventListener('touchstart', this._boundTouchStart, { passive: true });
         document.addEventListener('touchmove', this._boundTouchMove, { passive: true });
         document.addEventListener('touchend', this._boundTouchEnd, { passive: true });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         document.removeEventListener('touchstart', this._boundTouchStart);
         document.removeEventListener('touchmove', this._boundTouchMove);
         document.removeEventListener('touchend', this._boundTouchEnd);
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated && super.updated(changed);
         const v = this._routerSelect ? this._routerSelect.value : null;
         if (v) {
@@ -171,7 +186,7 @@ export class PlatformTopBar extends PlatformElement {
         }
     }
 
-    _findRoute(key) {
+    _findRoute(key: string | null): RouterRoute | null {
         if (!key) return null;
         for (const r of this._routes || []) {
             if (r && r.key === key) return r;
@@ -179,12 +194,12 @@ export class PlatformTopBar extends PlatformElement {
         return null;
     }
 
-    _hasParent() {
+    _hasParent(): boolean {
         const r = this._findRoute(this._routeKey);
         return Boolean(r && typeof r.parent === 'string' && r.parent.length > 0);
     }
 
-    _resolveTitle() {
+    _resolveTitle(): string {
         if (typeof this.titleText === 'string' && this.titleText.length > 0) {
             return this.titleText;
         }
@@ -201,28 +216,30 @@ export class PlatformTopBar extends PlatformElement {
         }
     }
 
-    _onBackClick() {
+    _onBackClick(): void {
         if (typeof history !== 'undefined' && history.length > 1) {
             history.back();
         }
     }
 
-    _onTouchStart(e) {
+    _onTouchStart(e: TouchEvent) {
         if (window.innerWidth > 767) return;
         if (!e.touches || e.touches.length !== 1) return;
-        const t = e.touches[0];
+        const t = e.touches.item(0);
+        if (!t) return;
         if (t.clientX <= EDGE_SWIPE_START_X) {
             this._edgeSwipeStartX = t.clientX;
             this._edgeSwipeStartY = t.clientY;
         }
     }
 
-    _onTouchMove(e) {
+    _onTouchMove(e: TouchEvent) {
         if (this._edgeSwipeStartX === null) return;
         if (!e.touches || e.touches.length !== 1) return;
-        const t = e.touches[0];
+        const t = e.touches.item(0);
+        if (!t) return;
         const dx = t.clientX - this._edgeSwipeStartX;
-        const dy = Math.abs(t.clientY - this._edgeSwipeStartY);
+        const dy = Math.abs(t.clientY - (this._edgeSwipeStartY || 0));
         if (dy > 40) {
             this._edgeSwipeStartX = null;
             this._edgeSwipeStartY = null;
@@ -237,12 +254,12 @@ export class PlatformTopBar extends PlatformElement {
         }
     }
 
-    _onTouchEnd() {
+    _onTouchEnd(): void {
         this._edgeSwipeStartX = null;
         this._edgeSwipeStartY = null;
     }
 
-    _renderLeft() {
+    _renderLeft(): TemplateResult {
         const hasSlot = this.querySelector('[slot="left"]');
         if (hasSlot) {
             return html`<slot name="left"></slot>`;
@@ -262,7 +279,7 @@ export class PlatformTopBar extends PlatformElement {
         `;
     }
 
-    _renderCenter() {
+    _renderCenter(): TemplateResult {
         const hasSlot = this.querySelector('[slot="center"]');
         if (hasSlot) {
             return html`<slot name="center"></slot>`;
@@ -272,11 +289,11 @@ export class PlatformTopBar extends PlatformElement {
         return html`<h1 class="title">${title}</h1>`;
     }
 
-    _renderRight() {
+    _renderRight(): TemplateResult {
         return html`<slot name="right"></slot>`;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="bar">
                 <div class="slot-left">${this._renderLeft()}</div>

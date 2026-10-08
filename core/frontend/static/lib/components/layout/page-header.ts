@@ -17,12 +17,13 @@
  * сохранён как no-op для обратной совместимости и будет удалён позже.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { mobileStickyHeaderPageHeaderShellStyles } from '../../styles/shared/mobile-sticky-header.styles.js';
 import '../platform-icon.js';
 
 export class PageHeader extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         title: { type: String },
         subtitle: { type: String },
         /** Компактный отступ снизу и чуть меньший заголовок (строчка с actions). */
@@ -41,8 +42,17 @@ export class PageHeader extends PlatformElement {
         hideMobileMenu: { type: Boolean, attribute: 'hide-mobile-menu' },
         _isMobile: { state: true },
     };
+    declare title: string;
+    declare subtitle: string;
+    declare dense: boolean;
+    declare mobileToolbarMode: string;
+    declare actionsOverflow: string;
+    declare hideMobileMenu: boolean;
+    declare _isMobile: boolean;
 
-    static styles = [
+    private _resizeObserver: ResizeObserver | null = null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         mobileStickyHeaderPageHeaderShellStyles,
         css`
@@ -205,17 +215,16 @@ export class PageHeader extends PlatformElement {
         this.actionsOverflow = 'auto';
         this.hideMobileMenu = false;
         this._isMobile = false;
-        this._resizeObserver = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._checkMobile();
         this._resizeObserver = new ResizeObserver(() => this._checkMobile());
         this._resizeObserver.observe(document.body);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         if (this._resizeObserver) {
             this._resizeObserver.disconnect();
@@ -244,7 +253,7 @@ export class PageHeader extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="header-wrap">
             <div class="header">

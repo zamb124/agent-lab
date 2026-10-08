@@ -18,6 +18,7 @@ export interface RouterRoute {
     key: string;
     path: string;
     parent?: string;
+    titleKey?: string;
     title?: string | ((params: Record<string, string>) => string);
     itemTitle?: (params: Record<string, string>) => string;
 }

@@ -4,7 +4,9 @@
  */
 
 import { html, css, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { OpController } from '../base/use-resource.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
@@ -13,33 +15,52 @@ const LAYOUTS = Object.freeze({
     stack: 'stack',
     tiles: 'tiles',
 });
+type FileAttachmentLayout = 'stack' | 'tiles';
 
-function _fileRefFromUploadResult(result) {
-    if (!result || typeof result !== 'object') {
+interface FileAttachmentRef {
+    file_id: string;
+    original_name: string;
+    content_type: string;
+    file_size: number;
+    url?: string;
+    [key: string]: unknown;
+}
+
+interface FileUploadResult {
+    file_id: string;
+    original_name: string;
+    content_type: string;
+    file_size: number;
+    url?: string;
+}
+
+function _fileRefFromUploadResult(result: unknown): FileAttachmentRef {
+    const res = result as Partial<FileUploadResult> | null | undefined;
+    if (!res || typeof res !== 'object') {
         throw new Error('platform-file-attachments: upload result must be object');
     }
-    if (typeof result.file_id !== 'string' || result.file_id.length === 0) {
+    if (typeof res.file_id !== 'string' || res.file_id.length === 0) {
         throw new Error('platform-file-attachments: upload result.file_id required');
     }
-    if (typeof result.original_name !== 'string' || result.original_name.length === 0) {
+    if (typeof res.original_name !== 'string' || res.original_name.length === 0) {
         throw new Error('platform-file-attachments: upload result.original_name required');
     }
-    if (typeof result.content_type !== 'string' || result.content_type.length === 0) {
+    if (typeof res.content_type !== 'string' || res.content_type.length === 0) {
         throw new Error('platform-file-attachments: upload result.content_type required');
     }
-    if (typeof result.file_size !== 'number') {
+    if (typeof res.file_size !== 'number') {
         throw new Error('platform-file-attachments: upload result.file_size required');
     }
     return {
-        file_id: result.file_id,
-        original_name: result.original_name,
-        content_type: result.content_type,
-        file_size: result.file_size,
-        url: typeof result.url === 'string' ? result.url : undefined,
+        file_id: res.file_id,
+        original_name: res.original_name,
+        content_type: res.content_type,
+        file_size: res.file_size,
+        url: typeof res.url === 'string' ? res.url : undefined,
     };
 }
 
-function _normalizeLayout(value) {
+function _normalizeLayout(value: unknown): FileAttachmentLayout {
     if (value === LAYOUTS.tiles) {
         return LAYOUTS.tiles;
     }
@@ -52,7 +73,7 @@ function _normalizeLayout(value) {
 export class PlatformFileAttachments extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         files: { type: Array, attribute: false },
         readonly: { type: Boolean, reflect: true },
         uploadOpName: { type: String, attribute: 'upload-op-name' },
@@ -62,8 +83,18 @@ export class PlatformFileAttachments extends PlatformElement {
         compact: { type: Boolean, reflect: true },
         _uploading: { state: true },
     };
+    declare files: FileAttachmentRef[];
+    declare readonly: boolean;
+    declare uploadOpName: string;
+    declare uploadSpec: string;
+    declare openSource: string;
+    declare layout: string;
+    declare compact: boolean;
+    declare _uploading: boolean;
 
-    static styles = css`
+    private _uploadOp: OpController | null = null;
+
+    static override styles: CSSResultGroup = css`
         :host {
             display: block;
             --file-attachment-tile-width: var(--mail-attachment-tile, 200px);
@@ -177,11 +208,11 @@ export class PlatformFileAttachments extends PlatformElement {
         this._uploadOp = null;
     }
 
-    get _layout() {
+    get _layout(): FileAttachmentLayout {
         return _normalizeLayout(this.layout);
     }
 
-    _ensureUploadOp() {
+    _ensureUploadOp(): OpController {
         if (this._uploadOp) {
             return this._uploadOp;
         }
@@ -192,22 +223,22 @@ export class PlatformFileAttachments extends PlatformElement {
         return this._uploadOp;
     }
 
-    _emitFilesChange(nextFiles) {
+    _emitFilesChange(nextFiles: FileAttachmentRef[]): void {
         this.emit('files-change', { files: nextFiles });
     }
 
-    _open(fileRef) {
+    _open(fileRef: FileAttachmentRef): void {
         this.openFile(fileRef, { source: this.openSource });
     }
 
-    _remove(fileId) {
+    _remove(fileId: string): void {
         const rows = Array.isArray(this.files) ? this.files : [];
         const nextFiles = rows.filter((row) => row && row.file_id !== fileId);
         this._emitFilesChange(nextFiles);
     }
 
-    async _onFileSelected(event) {
-        const input = event.target;
+    async _onFileSelected(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement;
         const selected = input.files && input.files[0];
         input.value = '';
         if (!selected) {
@@ -231,13 +262,13 @@ export class PlatformFileAttachments extends PlatformElement {
 
     _pickFile() {
         const input = this.renderRoot.querySelector('input[type="file"]');
-        if (!input) {
+        if (!(input instanceof HTMLInputElement)) {
             return;
         }
         input.click();
     }
 
-    _renderRow(fileRef) {
+    _renderRow(fileRef: FileAttachmentRef): TemplateResult {
         const fileId = fileRef && typeof fileRef.file_id === 'string' ? fileRef.file_id : '';
         const originalName = fileRef && typeof fileRef.original_name === 'string' ? fileRef.original_name : fileId;
         const contentType = fileRef && typeof fileRef.content_type === 'string' ? fileRef.content_type : '';
@@ -272,7 +303,7 @@ export class PlatformFileAttachments extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const rows = Array.isArray(this.files) ? this.files : [];
         const layout = this._layout;
         return html`
@@ -281,7 +312,7 @@ export class PlatformFileAttachments extends PlatformElement {
                     ? html`<div class="empty">${this.t('file_attachments.empty')}</div>`
                     : rows.map((fileRef) => this._renderRow(fileRef))}
                 ${this.readonly ? nothing : html`
-                    <input type="file" @change=${(e) => this._onFileSelected(e)} />
+                    <input type="file" @change=${(e: Event) => this._onFileSelected(e)} />
                     <button
                         type="button"
                         class="attach-btn"

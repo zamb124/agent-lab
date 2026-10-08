@@ -5,8 +5,7 @@
  * который шлёт POST .../search с advanced retrieval overrides.
  */
 
-/** @type {readonly string[]} */
-export const SEARCH_REQUEST_OPTION_KEYS = Object.freeze([
+export const SEARCH_REQUEST_OPTION_KEYS: readonly string[] = Object.freeze([
     'channels',
     'rrf_k',
     'per_channel_top_k',
@@ -17,16 +16,11 @@ export const SEARCH_REQUEST_OPTION_KEYS = Object.freeze([
     'freshness_half_life_days',
 ]);
 
-/**
- * @param {Record<string, unknown> | null | undefined} payload
- * @returns {Record<string, unknown>}
- */
-export function packSearchRequestOptions(payload) {
+export function packSearchRequestOptions(payload: Record<string, unknown> | null | undefined): Record<string, unknown> {
     if (payload === null || payload === undefined) {
         return {};
     }
-    /** @type {Record<string, unknown>} */
-    const packed = {};
+    const packed: Record<string, unknown> = {};
     for (const key of SEARCH_REQUEST_OPTION_KEYS) {
         if (Object.prototype.hasOwnProperty.call(payload, key) && payload[key] !== undefined && payload[key] !== null) {
             packed[key] = payload[key];
@@ -35,11 +29,9 @@ export function packSearchRequestOptions(payload) {
     return packed;
 }
 
-/**
- * @param {'platform' | 'hybrid' | 'semantic' | 'lexical'} mode
- * @returns {{ semantic: boolean, lexical: boolean } | null}
- */
-export function channelsFromRetrievalMode(mode) {
+export type RetrievalMode = 'platform' | 'hybrid' | 'semantic' | 'lexical';
+
+export function channelsFromRetrievalMode(mode: RetrievalMode): { semantic: boolean; lexical: boolean } | null {
     if (mode === 'hybrid') {
         return { semantic: true, lexical: true };
     }
@@ -52,40 +44,24 @@ export function channelsFromRetrievalMode(mode) {
     return null;
 }
 
-/**
- * Собирает advanced retrieval overrides из UI payload.
- *
- * @param {Record<string, unknown>} payload
- * @returns {Record<string, unknown>}
- */
-export function packAdvancedRetrievalPayload(payload) {
+export function packAdvancedRetrievalPayload(payload: Record<string, unknown>): Record<string, unknown> {
     if (payload.usePlatformDefaults === true) {
         return {};
     }
     const mode = typeof payload.retrievalMode === 'string' ? payload.retrievalMode : 'platform';
-    const channels = channelsFromRetrievalMode(
-        /** @type {'platform' | 'hybrid' | 'semantic' | 'lexical'} */ (mode),
-    );
-    /** @type {Record<string, unknown>} */
-    const merged = { ...packSearchRequestOptions(payload) };
+    const channels = channelsFromRetrievalMode(mode as RetrievalMode);
+    const merged: Record<string, unknown> = { ...packSearchRequestOptions(payload) };
     if (channels !== null) {
         merged.channels = channels;
     }
     return merged;
 }
 
-/**
- * Сборка retrieval panel state → HTTP/API payload.
- *
- * @param {Record<string, unknown>} panelValue
- * @returns {Record<string, unknown>}
- */
-export function buildAdvancedRetrievalPayloadFromPanel(panelValue) {
+export function buildAdvancedRetrievalPayloadFromPanel(panelValue: Record<string, unknown>): Record<string, unknown> {
     if (!panelValue || typeof panelValue !== 'object') {
         return {};
     }
-    /** @type {Record<string, unknown>} */
-    const payload = {
+    const payload: Record<string, unknown> = {
         usePlatformDefaults: panelValue.usePlatformDefaults === true,
         retrievalMode: typeof panelValue.retrievalMode === 'string' ? panelValue.retrievalMode : 'platform',
     };
@@ -122,17 +98,11 @@ export function buildAdvancedRetrievalPayloadFromPanel(panelValue) {
     return packAdvancedRetrievalPayload(payload);
 }
 
-/**
- * Нормализует API search_options в panel state.
- *
- * @param {Record<string, unknown> | null | undefined} searchOptions
- * @returns {Record<string, unknown>}
- */
-export function panelValueFromSearchOptions(searchOptions) {
+export function panelValueFromSearchOptions(searchOptions: Record<string, unknown> | null | undefined): Record<string, unknown> {
     if (!searchOptions || typeof searchOptions !== 'object') {
         return defaultRetrievalPanelValue();
     }
-    const channels = searchOptions.channels;
+    const channels = searchOptions.channels as { semantic?: boolean; lexical?: boolean } | undefined;
     let retrievalMode = 'platform';
     if (channels && typeof channels === 'object') {
         const semantic = channels.semantic === true;
@@ -159,8 +129,7 @@ export function panelValueFromSearchOptions(searchOptions) {
     };
 }
 
-/** @returns {Record<string, unknown>} */
-export function defaultRetrievalPanelValue() {
+export function defaultRetrievalPanelValue(): Record<string, unknown> {
     return {
         usePlatformDefaults: true,
         retrievalMode: 'platform',
@@ -173,11 +142,7 @@ export function defaultRetrievalPanelValue() {
     };
 }
 
-/**
- * @param {unknown} raw
- * @returns {string}
- */
-function _stringOrEmpty(raw) {
+function _stringOrEmpty(raw: unknown): string {
     if (typeof raw === 'number' && Number.isFinite(raw)) {
         return String(raw);
     }
@@ -187,11 +152,7 @@ function _stringOrEmpty(raw) {
     return '';
 }
 
-/**
- * @param {unknown} raw
- * @returns {number | undefined}
- */
-function _optionalPositiveInt(raw) {
+function _optionalPositiveInt(raw: unknown): number | undefined {
     if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
         return Math.round(raw);
     }
@@ -205,11 +166,7 @@ function _optionalPositiveInt(raw) {
     return parsed;
 }
 
-/**
- * @param {unknown} raw
- * @returns {number | undefined}
- */
-function _optionalUnitFloat(raw) {
+function _optionalUnitFloat(raw: unknown): number | undefined {
     if (typeof raw === 'number' && Number.isFinite(raw)) {
         return raw;
     }

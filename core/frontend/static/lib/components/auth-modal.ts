@@ -10,9 +10,12 @@
  * (enabled, email) и список провайдеров — из state.auth (prefetch в PlatformApp).
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { CoreAuthEvents } from '../events/effects/auth.effect.js';
+import type { AuthProvidersState, AuthState } from '../events/reducers/auth.js';
+import type { SelectController } from '../events/select-controller.js';
 import './platform-icon.js';
 
 /** Провайдеры с цветным брендовым SVG (не monochrome currentColor). */
@@ -31,7 +34,7 @@ const PROVIDER_SKELETON_COUNT = 4;
 export class AuthModal extends PlatformModal {
     static modalKind = 'auth.login';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
         returnPath: { type: String, attribute: 'return-path' },
         plan: { type: String },
@@ -39,8 +42,16 @@ export class AuthModal extends PlatformModal {
         error: { state: true },
         _demoPassword: { state: true },
     };
+    declare returnPath: string;
+    declare plan: string;
+    declare loading: boolean;
+    declare error: string;
+    declare _demoPassword: string;
 
-    static styles = [
+    private _demoSel: SelectController<AuthState['demo']>;
+    private _providersSel: SelectController<AuthProvidersState>;
+
+    static override styles: CSSResultGroup = [
         PlatformModal.styles,
         css`
             .modal-subtitle { text-align: center; opacity: 0.7; margin-bottom: var(--space-6); }
@@ -113,14 +124,14 @@ export class AuthModal extends PlatformModal {
         this.error = '';
         this._demoPassword = '';
         this.size = 'sm';
-        this._demoSel = this.select((s) => s.auth.demo);
-        this._providersSel = this.select((s) => s.auth.providers);
+        this._demoSel = this.select((s) => (s.auth as AuthState).demo);
+        this._providersSel = this.select((s) => (s.auth as AuthState).providers);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
-        const demo = this._demoSel.value;
-        const providers = this._providersSel.value;
+        const demo: AuthState['demo'] = this._demoSel.value || { enabled: false, email: null, loaded: false };
+        const providers: AuthProvidersState = this._providersSel.value || { list: [], loading: false, error: null };
         if (!demo.loaded) {
             this.dispatch(CoreAuthEvents.DEMO_STATUS_REQUESTED, null);
         }
@@ -129,15 +140,15 @@ export class AuthModal extends PlatformModal {
         }
         this.useEvent(CoreAuthEvents.OAUTH_FAILED, (event) => {
             this.loading = false;
-            this.error = (event.payload && event.payload.message) || (this.t('auth.oauth_error') || 'OAuth error');
+            this.error = (event.payload as { message?: string } | null)?.message || (this.t('auth.oauth_error') || 'OAuth error');
         });
         this.useEvent(CoreAuthEvents.DEMO_LOGIN_FAILED, (event) => {
             this.loading = false;
-            this.error = (event.payload && event.payload.message) || (this.t('auth.demo_error') || 'Demo login error');
+            this.error = (event.payload as { message?: string } | null)?.message || (this.t('auth.demo_error') || 'Demo login error');
         });
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         this.title = this.t('auth.title') || 'auth.title';
         if (changed.has('open') && this.open) {
@@ -147,7 +158,7 @@ export class AuthModal extends PlatformModal {
         }
     }
 
-    _handleProvider(provider) {
+    _handleProvider(provider: string): void {
         if (this.loading) return;
         this.loading = true;
         this.error = '';
@@ -161,7 +172,7 @@ export class AuthModal extends PlatformModal {
         this.navigate('support');
     }
 
-    renderHeaderActions() {
+    override renderHeaderActions(): TemplateResult {
         const label = this.t('auth.support_link_aria');
         return html`
             <button
@@ -176,10 +187,10 @@ export class AuthModal extends PlatformModal {
         `;
     }
 
-    _handleDemoSubmit(e) {
+    _handleDemoSubmit(e: Event): void {
         e.preventDefault();
         if (this.loading) return;
-        const demo = this._demoSel.value;
+        const demo = this._demoSel.value || { enabled: false, email: null, loaded: false };
         const email = typeof demo.email === 'string' ? demo.email.trim() : '';
         if (!email || !this._demoPassword) {
             this.error = this.t('auth.demo_error') || 'Email and password required';
@@ -193,15 +204,15 @@ export class AuthModal extends PlatformModal {
         });
     }
 
-    _providerLabel(name) {
-        const key = PROVIDER_I18N_KEYS[name];
+    _providerLabel(name: string): string {
+        const key = (PROVIDER_I18N_KEYS as Record<string, string | undefined>)[name];
         if (typeof key === 'string') {
             return this.t(key) || key;
         }
         return name;
     }
 
-    _renderProviderButton(name) {
+    _renderProviderButton(name: string): TemplateResult {
         const colored = COLORED_PROVIDER_ICONS.has(name);
         return html`
             <button
@@ -220,11 +231,11 @@ export class AuthModal extends PlatformModal {
         `;
     }
 
-    _renderProviders() {
-        const providers = this._providersSel.value;
+    _renderProviders(): TemplateResult[] {
+        const providers = this._providersSel.value || { list: [], loading: false, error: null };
         const list = providers.list;
         if (list.length > 0) {
-            return list.map((item) => {
+            return list.map((item: { name?: string }) => {
                 if (!item || typeof item.name !== 'string' || item.name.length === 0) {
                     throw new Error('auth-modal: provider item.name is required');
                 }
@@ -241,8 +252,8 @@ export class AuthModal extends PlatformModal {
         `);
     }
 
-    _renderDemoSlot() {
-        const demo = this._demoSel.value;
+    _renderDemoSlot(): TemplateResult {
+        const demo = this._demoSel.value || { enabled: false, email: null, loaded: false };
         if (!demo.loaded) {
             return html`
                 <div class="demo-slot" aria-hidden="true">
@@ -266,14 +277,14 @@ export class AuthModal extends PlatformModal {
         return html`
             <div class="demo-slot">
                 <p class="demo-title">${this.t('auth.demo_title') || 'auth.demo_title'}</p>
-                <form class="demo-form" @submit=${(e) => this._handleDemoSubmit(e)}>
+                <form class="demo-form" @submit=${(e: Event) => this._handleDemoSubmit(e)}>
                     <label class="demo-label" for="demo-email">${this.t('auth.demo_email_label') || 'auth.demo_email_label'}</label>
                     <input id="demo-email" class="demo-input" type="email" name="username" autocomplete="username"
                         .value=${email} disabled />
                     <label class="demo-label" for="demo-password">${this.t('auth.demo_password_label') || 'auth.demo_password_label'}</label>
                     <input id="demo-password" class="demo-input" type="password" name="password" autocomplete="current-password"
                         .value=${this._demoPassword}
-                        @input=${(ev) => { this._demoPassword = ev.target.value; }} />
+                        @input=${(ev: InputEvent) => { this._demoPassword = (ev.target as HTMLInputElement).value; }} />
                     <button type="submit" class="provider-button" ?disabled=${this.loading}>
                         ${this.t('auth.demo_submit') || 'auth.demo_submit'}
                     </button>
@@ -282,7 +293,7 @@ export class AuthModal extends PlatformModal {
         `;
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         return html`
             <p class="modal-subtitle">${this.t('auth.subtitle') || 'auth.subtitle'}</p>
             <div class="providers">
@@ -293,7 +304,7 @@ export class AuthModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter(): TemplateResult {
         return html``;
     }
 }

@@ -6,12 +6,13 @@
  * Поведение выбора и модалки — у родителя; темизация через CSS-переменные на предке.
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../platform-icon.js';
 
 export class PlatformSidebarNamespaceSelect extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         label: { type: String },
         value: { type: String },
         disabled: { type: Boolean },
@@ -24,8 +25,19 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
         fieldClass: { type: String, attribute: 'field-class' },
         pillDensity: { type: String, attribute: 'pill-density' },
     };
+    declare label: string;
+    declare value: string;
+    declare disabled: boolean;
+    declare config: Record<string, unknown>;
+    declare showEdit: boolean;
+    declare showAdd: boolean;
+    declare editTitle: string;
+    declare addTitle: string;
+    declare editIcon: string;
+    declare fieldClass: string;
+    declare pillDensity: string;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -192,18 +204,18 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
         this.pillDensity = 'dense';
     }
 
-    _onFieldChange(e) {
+    _onFieldChange(e: Event) {
         e.stopPropagation();
         this.dispatchEvent(
             new CustomEvent('change', {
-                detail: e.detail,
+                detail: (e as CustomEvent).detail,
                 bubbles: true,
                 composed: true,
             }),
         );
     }
 
-    _onEditClick(e) {
+    _onEditClick(e: Event) {
         e.stopPropagation();
         this.dispatchEvent(
             new CustomEvent('edit-request', {
@@ -213,7 +225,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
         );
     }
 
-    _onAddClick(e) {
+    _onAddClick(e: Event) {
         e.stopPropagation();
         this.dispatchEvent(
             new CustomEvent('add-request', {
@@ -223,7 +235,7 @@ export class PlatformSidebarNamespaceSelect extends PlatformElement {
         );
     }
 
-    render() {
+    override render(): TemplateResult {
         const fc =
             typeof this.fieldClass === 'string' && this.fieldClass.trim().length > 0
                 ? this.fieldClass.trim()

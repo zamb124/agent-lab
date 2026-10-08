@@ -4,7 +4,9 @@
  */
 
 import { html, css } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type { OpController } from '../base/use-resource.js';
 import './platform-work-item-row.js';
 
 const COLUMNS = Object.freeze([
@@ -14,20 +16,35 @@ const COLUMNS = Object.freeze([
     Object.freeze({ state: 'done', labelKey: 'work_item_badge.state.done' }),
 ]);
 
+interface WorkItemBoardItem {
+    work_item_id: string;
+    state: string;
+    [key: string]: unknown;
+}
+
+type WorkItemState = 'open' | 'in_progress' | 'blocked' | 'done';
+
 const WORK_ITEM_MIME = 'application/x-platform-work-item-id';
 const COLUMN_STATES = Object.freeze(COLUMNS.map((col) => col.state));
 
 export class PlatformWorkItemBoard extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         items: { attribute: false },
         selectedWorkItemId: { type: String, attribute: 'selected-work-item-id' },
         _dragOverState: { state: true },
         _pendingById: { state: true },
     };
+    declare items: WorkItemBoardItem[];
+    declare selectedWorkItemId: string;
+    declare _dragOverState: string;
+    declare _pendingById: Readonly<Record<string, string>>;
 
-    static styles = [
+    private _draggingId = '';
+    private _moveOp: OpController | null = null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -107,16 +124,14 @@ export class PlatformWorkItemBoard extends PlatformElement {
         this.selectedWorkItemId = '';
         this._dragOverState = '';
         this._pendingById = Object.freeze({});
-        this._draggingId = '';
-        this._moveOp = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._moveOp = this.useOp('worktracker/work_item_move');
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (!changed.has('items') || !Array.isArray(this.items)) {
             return;
@@ -125,10 +140,10 @@ export class PlatformWorkItemBoard extends PlatformElement {
         if (pendingIds.length === 0) {
             return;
         }
-        const next = { ...this._pendingById };
+        const next: Record<string, string> = { ...this._pendingById };
         let dirty = false;
         for (const workItemId of pendingIds) {
-            const item = this.items.find((row) => row && row.work_item_id === workItemId);
+            const item = this.items.find((row: WorkItemBoardItem) => row && row.work_item_id === workItemId);
             if (!item || item.state === next[workItemId]) {
                 delete next[workItemId];
                 dirty = true;
@@ -139,7 +154,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
         }
     }
 
-    _effectiveState(item) {
+    _effectiveState(item: WorkItemBoardItem): string {
         if (!item || typeof item.work_item_id !== 'string') {
             throw new Error('platform-work-item-board: item.work_item_id required');
         }
@@ -153,14 +168,14 @@ export class PlatformWorkItemBoard extends PlatformElement {
         return item.state;
     }
 
-    _itemsForState(state) {
+    _itemsForState(state: string): WorkItemBoardItem[] {
         if (!Array.isArray(this.items)) {
             return [];
         }
-        return this.items.filter((item) => item && this._effectiveState(item) === state);
+        return this.items.filter((item: WorkItemBoardItem) => item && this._effectiveState(item) === state);
     }
 
-    _onDragStart(event, workItemId) {
+    _onDragStart(event: DragEvent, workItemId: string): void {
         if (!(event.dataTransfer instanceof DataTransfer)) {
             throw new Error('platform-work-item-board: DataTransfer required');
         }
@@ -172,12 +187,12 @@ export class PlatformWorkItemBoard extends PlatformElement {
         this._draggingId = workItemId;
     }
 
-    _onDragEnd() {
+    _onDragEnd(): void {
         this._draggingId = '';
         this._dragOverState = '';
     }
 
-    _onDragOver(event, state) {
+    _onDragOver(event: DragEvent, state: string): void {
         if (typeof this._draggingId !== 'string' || this._draggingId.length === 0) {
             return;
         }
@@ -190,7 +205,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
         }
     }
 
-    _onDragLeave(event, state) {
+    _onDragLeave(event: DragEvent, state: string): void {
         const current = event.currentTarget;
         const related = event.relatedTarget;
         if (current instanceof Node && related instanceof Node && current.contains(related)) {
@@ -201,7 +216,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
         }
     }
 
-    async _onDrop(event, state) {
+    async _onDrop(event: DragEvent, state: WorkItemState): Promise<void> {
         event.preventDefault();
         this._dragOverState = '';
         if (!(event.dataTransfer instanceof DataTransfer)) {
@@ -215,7 +230,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
             return;
         }
         const source = Array.isArray(this.items)
-            ? this.items.find((item) => item && item.work_item_id === workItemId)
+            ? this.items.find((item: WorkItemBoardItem) => item && item.work_item_id === workItemId)
             : null;
         if (!source) {
             return;
@@ -230,7 +245,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
         this._pendingById = Object.freeze({ ...this._pendingById, [workItemId]: state });
         const result = await this._moveOp.run({ work_item_id: workItemId, state });
         if (result === null) {
-            const next = { ...this._pendingById };
+            const next: Record<string, string> = { ...this._pendingById };
             delete next[workItemId];
             this._pendingById = Object.freeze(next);
             return;
@@ -238,7 +253,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
         this.emit('work-item-changed', { work_item_id: workItemId, state });
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="board">
                 ${COLUMNS.map((col) => {
@@ -248,9 +263,9 @@ export class PlatformWorkItemBoard extends PlatformElement {
                         <section
                             class="column ${isOver ? 'drag-over' : ''}"
                             data-state=${col.state}
-                            @dragover=${(e) => this._onDragOver(e, col.state)}
-                            @dragleave=${(e) => this._onDragLeave(e, col.state)}
-                            @drop=${(e) => this._onDrop(e, col.state)}
+                            @dragover=${(e: DragEvent) => this._onDragOver(e, col.state)}
+                            @dragleave=${(e: DragEvent) => this._onDragLeave(e, col.state)}
+                            @drop=${(e: DragEvent) => this._onDrop(e, col.state as WorkItemState)}
                         >
                             <div class="column-title">
                                 <span>${this.t(col.labelKey)}</span>
@@ -264,7 +279,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
                                             <div
                                                 class="card-wrap ${this._draggingId === item.work_item_id ? 'dragging' : ''}"
                                                 draggable="true"
-                                                @dragstart=${(e) => this._onDragStart(e, item.work_item_id)}
+                                                @dragstart=${(e: DragEvent) => this._onDragStart(e, item.work_item_id)}
                                                 @dragend=${() => this._onDragEnd()}
                                             >
                                                 <platform-work-item-row
@@ -272,7 +287,7 @@ export class PlatformWorkItemBoard extends PlatformElement {
                                                     .item=${item}
                                                     ?selected=${item.work_item_id === this.selectedWorkItemId}
                                                     ?show-preview=${false}
-                                                    @work-item-open=${(e) => this.emit('work-item-open', e.detail)}
+                                                    @work-item-open=${(e: CustomEvent) => this.emit('work-item-open', e.detail)}
                                                 ></platform-work-item-row>
                                             </div>
                                         `,

@@ -3,6 +3,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import { defaultRetrievalPanelValue } from '../../rag/pack_search_request_options.js';
@@ -12,15 +13,20 @@ const RETRIEVAL_MODE_VALUES = Object.freeze(['platform', 'hybrid', 'semantic', '
 export class PlatformRagRetrievalPanel extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         value: { type: Object },
         platformDefaults: { type: Object },
         disabled: { type: Boolean },
         showPlatformDefaultsToggle: { type: Boolean, attribute: 'show-platform-defaults-toggle' },
         compact: { type: Boolean },
     };
+    declare value: Record<string, unknown>;
+    declare platformDefaults: Record<string, unknown> | null;
+    declare disabled: boolean;
+    declare showPlatformDefaultsToggle: boolean;
+    declare compact: boolean;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -60,25 +66,21 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         this.compact = false;
     }
 
-    _panelValue() {
+    _panelValue(): Record<string, unknown> {
         if (this.value && typeof this.value === 'object' && !Array.isArray(this.value)) {
             return { ...defaultRetrievalPanelValue(), ...this.value };
         }
         return defaultRetrievalPanelValue();
     }
 
-    _defaults() {
+    _defaults(): Record<string, unknown> | null {
         if (this.platformDefaults && typeof this.platformDefaults === 'object' && !Array.isArray(this.platformDefaults)) {
             return this.platformDefaults;
         }
         return null;
     }
 
-    /**
-     * @param {string} key
-     * @returns {string}
-     */
-    _placeholderNumber(key) {
+    _placeholderNumber(key: string): string {
         const defaults = this._defaults();
         if (defaults) {
             const raw = defaults[key];
@@ -89,16 +91,14 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         return this.t('rag_retrieval_panel.placeholder_platform_default');
     }
 
-    /**
-     * @returns {'hybrid' | 'semantic' | 'lexical' | null}
-     */
-    _defaultRetrievalMode() {
+    _defaultRetrievalMode(): 'hybrid' | 'semantic' | 'lexical' | null {
         const defaults = this._defaults();
         if (!defaults || !defaults.channels || typeof defaults.channels !== 'object') {
             return null;
         }
-        const semantic = defaults.channels.semantic === true;
-        const lexical = defaults.channels.lexical === true;
+        const channels = defaults.channels as { semantic?: boolean; lexical?: boolean };
+        const semantic = channels.semantic === true;
+        const lexical = channels.lexical === true;
         if (semantic && lexical) {
             return 'hybrid';
         }
@@ -111,19 +111,14 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         return null;
     }
 
-    /**
-     * @param {string} baseLabel
-     * @param {string | null | undefined} display
-     * @returns {string}
-     */
-    _inheritLabel(baseLabel, display) {
+    _inheritLabel(baseLabel: string, display: string | null | undefined): string {
         if (typeof display !== 'string' || display.length === 0) {
             return baseLabel;
         }
         return this.t('rag_retrieval_panel.inherit_effective', { value: display });
     }
 
-    _emitValue(next) {
+    _emitValue(next: Record<string, unknown>): void {
         this.dispatchEvent(new CustomEvent('change', {
             detail: { value: next },
             bubbles: true,
@@ -131,18 +126,18 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         }));
     }
 
-    _onFieldChange(e, field, normalize) {
+    _onFieldChange(e: Event, field: string, normalize: (ev: CustomEvent<{ value?: unknown }>) => unknown): void {
         e.stopPropagation();
-        this._patch(field, normalize(e));
+        this._patch(field, normalize(e as CustomEvent<{ value?: unknown }>));
     }
 
-    _patch(field, rawValue) {
+    _patch(field: string, rawValue: unknown): void {
         const current = this._panelValue();
         const next = { ...current, [field]: rawValue };
         this._emitValue(next);
     }
 
-    _retrievalModeEnumConfig() {
+    _retrievalModeEnumConfig(): { values: { value: string; label: string }[] } {
         const defaultMode = this._defaultRetrievalMode();
         const platformLabel = this._inheritLabel(
             this.t('rag_retrieval_panel.retrieval_mode_platform'),
@@ -158,9 +153,9 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         };
     }
 
-    _rerankEnumConfig() {
+    _rerankEnumConfig(): { values: { value: string; label: string }[] } {
         const defaults = this._defaults();
-        let rerankDisplay = null;
+        let rerankDisplay: string | null = null;
         if (defaults && typeof defaults.rerank === 'boolean') {
             rerankDisplay = defaults.rerank
                 ? this.t('rag_retrieval_panel.rerank_enabled')
@@ -181,7 +176,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
         };
     }
 
-    render() {
+    override render(): TemplateResult {
         const panel = this._panelValue();
         const disabledByDefaults = this.showPlatformDefaultsToggle && panel.usePlatformDefaults === true;
         const fieldsDisabled = this.disabled || disabledByDefaults;
@@ -198,7 +193,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .label=${this.t('rag_retrieval_panel.platform_defaults')}
                         .value=${panel.usePlatformDefaults === true}
                         ?disabled=${this.disabled}
-                        @change=${(e) => this._onFieldChange(e, 'usePlatformDefaults', (ev) => ev.detail && ev.detail.value === true)}
+                        @change=${(e: Event) => this._onFieldChange(e, 'usePlatformDefaults', (ev: CustomEvent<{ value?: unknown }>) => ev.detail && ev.detail.value === true)}
                     ></platform-field>
                 ` : ''}
                 <div class=${gridClass}>
@@ -210,7 +205,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.retrievalMode === 'string' ? panel.retrievalMode : 'platform'}
                         .config=${this._retrievalModeEnumConfig()}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'retrievalMode', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'retrievalMode', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : 'platform'
                         ))}
                     ></platform-field>
@@ -222,7 +217,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.rrfK === 'string' ? panel.rrfK : ''}
                         .placeholder=${this._placeholderNumber('rrf_k')}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'rrfK', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'rrfK', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>
@@ -234,7 +229,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.perChannelTopK === 'string' ? panel.perChannelTopK : ''}
                         .placeholder=${this._placeholderNumber('per_channel_top_k')}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'perChannelTopK', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'perChannelTopK', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>
@@ -246,7 +241,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.rerank === 'string' ? panel.rerank : ''}
                         .config=${this._rerankEnumConfig()}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'rerank', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'rerank', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>
@@ -258,7 +253,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.rerankMaxCandidates === 'string' ? panel.rerankMaxCandidates : ''}
                         .placeholder=${this._placeholderNumber('rerank_max_candidates')}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'rerankMaxCandidates', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'rerankMaxCandidates', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>
@@ -270,7 +265,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.freshnessWeight === 'string' ? panel.freshnessWeight : ''}
                         .placeholder=${this._placeholderNumber('freshness_weight')}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'freshnessWeight', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'freshnessWeight', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>
@@ -282,7 +277,7 @@ export class PlatformRagRetrievalPanel extends PlatformElement {
                         .value=${typeof panel.freshnessHalfLifeDays === 'string' ? panel.freshnessHalfLifeDays : ''}
                         .placeholder=${this._placeholderNumber('freshness_half_life_days')}
                         ?disabled=${fieldsDisabled}
-                        @change=${(e) => this._onFieldChange(e, 'freshnessHalfLifeDays', (ev) => (
+                        @change=${(e: Event) => this._onFieldChange(e, 'freshnessHalfLifeDays', (ev: CustomEvent<{ value?: unknown }>) => (
                             ev.detail && typeof ev.detail.value === 'string' ? ev.detail.value : ''
                         ))}
                     ></platform-field>

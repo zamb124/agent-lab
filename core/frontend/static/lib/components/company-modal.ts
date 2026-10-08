@@ -11,19 +11,22 @@
  *     модалка закрывается и происходит навигация по redirect_url из payload.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformFormModal } from './glass-form-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { COMPANIES_EVENTS } from '../events/reducers/companies.js';
+import type { CompaniesState } from '../events/reducers/companies.js';
+import type { SelectController } from '../events/select-controller.js';
 import { formatCompanySubdomainLabel } from '../utils/company-url.js';
 
-const TRANSLIT = {
+const TRANSLIT: Record<string, string> = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
     'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
     'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
     'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
 };
 
-function _slugify(text) {
+function _slugify(text: string): string {
     if (!text) return '';
     let slug = text.toLowerCase();
     for (const [cyr, lat] of Object.entries(TRANSLIT)) {
@@ -40,7 +43,7 @@ export class CompanyModal extends PlatformFormModal {
 
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformFormModal.properties,
         companyName: { state: true },
         companySlug: { state: true },
@@ -48,8 +51,16 @@ export class CompanyModal extends PlatformFormModal {
         slugChecking: { state: true },
         error: { state: true },
     };
+    declare companyName: string;
+    declare companySlug: string;
+    declare slugTouched: boolean;
+    declare slugChecking: boolean;
+    declare error: string;
 
-    static styles = [
+    private _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    private _slugChecksSel: SelectController<CompaniesState['slugChecks']>;
+
+    static override styles: CSSResultGroup = [
         PlatformFormModal.styles,
         css`
             .input-wrapper { position: relative; }
@@ -80,30 +91,29 @@ export class CompanyModal extends PlatformFormModal {
         this.slugTouched = false;
         this.slugChecking = false;
         this.error = '';
-        this._debounceTimer = null;
-        this._slugChecksSel = this.select((s) => s.companies.slugChecks);
+        this._slugChecksSel = this.select((s) => (s.companies as CompaniesState).slugChecks);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(COMPANIES_EVENTS.SLUG_CHECKED, (e) => {
-            const slug = e.payload && e.payload.slug;
+            const slug = (e.payload as { slug?: string } | null)?.slug;
             if (slug === this.companySlug) {
                 this.slugChecking = false;
             }
         });
         this.useEvent(COMPANIES_EVENTS.SLUG_CHECK_FAILED, (e) => {
-            const slug = e.payload && e.payload.slug;
+            const slug = (e.payload as { slug?: string } | null)?.slug;
             if (slug === this.companySlug) {
                 this.slugChecking = false;
-                this.error = (e.payload && e.payload.message)
+                this.error = (e.payload as { message?: string } | null)?.message
                     || (this.t('company.slug_check_error') || 'company.slug_check_error');
             }
         });
         this.useEvent(COMPANIES_EVENTS.CREATED, (e) => {
             this.loading = false;
             this.closeAfterSave();
-            const url = e.payload && e.payload.redirect_url;
+            const url = (e.payload as { redirect_url?: string } | null)?.redirect_url;
             if (url) {
                 window.location.href = url;
             } else {
@@ -112,12 +122,12 @@ export class CompanyModal extends PlatformFormModal {
         });
         this.useEvent(COMPANIES_EVENTS.CREATE_FAILED, (e) => {
             this.loading = false;
-            this.error = (e.payload && e.payload.message)
+            this.error = (e.payload as { message?: string } | null)?.message
                 || (this.t('company.error_create') || 'company.error_create');
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         if (this._debounceTimer) {
             clearTimeout(this._debounceTimer);
@@ -125,19 +135,19 @@ export class CompanyModal extends PlatformFormModal {
         }
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         this.title = this.t('company.create_title') || 'company.create_title';
     }
 
-    _slugCheck() {
+    _slugCheck(): { available: boolean } | null {
         const slug = this.companySlug;
         if (!slug || slug.length < 3) return null;
         const checks = (this._slugChecksSel && this._slugChecksSel.value) || {};
         return checks[slug] || null;
     }
 
-    _slugError() {
+    _slugError(): string {
         if (!this.companySlug) return '';
         if (this.companySlug.length < 3) return this.t('company.slug_min') || 'company.slug_min';
         const r = this._slugCheck();
@@ -145,13 +155,13 @@ export class CompanyModal extends PlatformFormModal {
         return '';
     }
 
-    _isAvailable() {
+    _isAvailable(): boolean | null {
         const r = this._slugCheck();
         return r && r.available === true;
     }
 
-    _onName(e) {
-        this.companyName = e.target.value;
+    _onName(e: Event) {
+        this.companyName = (e.target as HTMLInputElement).value;
         this.isDirty = true;
         if (!this.slugTouched) {
             this.companySlug = _slugify(this.companyName);
@@ -159,14 +169,14 @@ export class CompanyModal extends PlatformFormModal {
         }
     }
 
-    _onSlug(e) {
-        this.companySlug = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    _onSlug(e: Event) {
+        this.companySlug = (e.target as HTMLInputElement).value.toLowerCase().replace(/[^a-z0-9-]/g, '');
         this.slugTouched = true;
         this.isDirty = true;
         this._scheduleSlugCheck();
     }
 
-    _scheduleSlugCheck() {
+    _scheduleSlugCheck(): void {
         if (this._debounceTimer) clearTimeout(this._debounceTimer);
         this._debounceTimer = setTimeout(() => {
             if (!this.companySlug || this.companySlug.length < 3) return;
@@ -177,8 +187,8 @@ export class CompanyModal extends PlatformFormModal {
         }, 400);
     }
 
-    validateForm() {
-        const errs = {};
+    override validateForm(): Record<string, string> {
+        const errs: Record<string, string> = {};
         if (!this.companyName.trim()) {
             errs.name = this.t('company.error_name_required') || 'company.error_name_required';
         }
@@ -191,7 +201,7 @@ export class CompanyModal extends PlatformFormModal {
         return errs;
     }
 
-    async handleSubmit() {
+    override async handleSubmit(): Promise<void> {
         this.error = '';
         this.dispatch(COMPANIES_EVENTS.CREATE_REQUESTED, {
             name: this.companyName,
@@ -199,8 +209,8 @@ export class CompanyModal extends PlatformFormModal {
         });
     }
 
-    renderBody() {
-        const t = (key) => this.t(key) || key;
+    override renderBody(): TemplateResult {
+        const t = (key: string) => this.t(key) || key;
         const slugErr = this._slugError();
         const isAvail = this._isAvailable();
         return html`
@@ -252,8 +262,8 @@ export class CompanyModal extends PlatformFormModal {
         `;
     }
 
-    renderFooter() {
-        const t = (key) => this.t(key) || key;
+    override renderFooter(): TemplateResult {
+        const t = (key: string) => this.t(key) || key;
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${this.close}>

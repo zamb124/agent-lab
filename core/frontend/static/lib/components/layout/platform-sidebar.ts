@@ -9,6 +9,7 @@
  * для совместимости (no-op на мобиле); код будет упразднён при следующем рефакторинге.
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
 import { sidebarHostStyles, sidebarStyles } from '../../styles/shared/sidebar.styles.js';
@@ -16,7 +17,7 @@ import '../platform-icon.js';
 import '../platform-deployment-version.js';
 
 export class PlatformSidebar extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
         logoSrc: { type: String, attribute: 'logo-src' },
@@ -28,8 +29,20 @@ export class PlatformSidebar extends PlatformElement {
         mobileBreakpoint: { type: Number, attribute: 'mobile-breakpoint' },
         _isMobile: { type: Boolean, state: true },
     };
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+    declare logoSrc: string;
+    declare logoText: string;
+    declare logoOpensServices: boolean;
+    declare width: string;
+    declare collapsedWidth: string;
+    declare mobileBreakpoint: number;
+    declare _isMobile: boolean;
 
-    static styles = [
+    private _resizeObserver: ResizeObserver | null = null;
+    private _boundKeyHandler: (e: KeyboardEvent) => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         sidebarHostStyles,
         sidebarStyles,
@@ -52,11 +65,10 @@ export class PlatformSidebar extends PlatformElement {
         this.collapsedWidth = '72px';
         this.mobileBreakpoint = 768;
         this._isMobile = false;
-        this._resizeObserver = null;
         this._boundKeyHandler = this._handleKeyDown.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._checkMobile();
         this._setupResizeObserver();
@@ -78,13 +90,13 @@ export class PlatformSidebar extends PlatformElement {
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         super.disconnectedCallback();
         this._resizeObserver?.disconnect();
         document.removeEventListener('keydown', this._boundKeyHandler);
     }
 
-    updated(changedProps) {
+    override updated(changedProps: PropertyValues<this>): void {
         super.updated(changedProps);
         
         if (changedProps.has('width')) {
@@ -111,7 +123,7 @@ export class PlatformSidebar extends PlatformElement {
         }
     }
 
-    _handleKeyDown(e) {
+    _handleKeyDown(e: KeyboardEvent) {
         if (e.key === 'Escape' && this.mobileOpen) {
             this.closeMobile();
         }
@@ -137,7 +149,7 @@ export class PlatformSidebar extends PlatformElement {
         }
     }
 
-    _notifyMobileChange(open) {
+    _notifyMobileChange(open: boolean): void {
         this.dispatch(CoreEvents.UI_SIDEBAR_MOBILE_CHANGED, { open });
         this.emit('mobile-change', { open });
     }
@@ -193,7 +205,7 @@ export class PlatformSidebar extends PlatformElement {
         `;
     }
 
-    _onLogoServicesClick(e) {
+    _onLogoServicesClick(e: Event) {
         e.stopPropagation();
         this.openModal('platform.services', {});
         if (this.mobileOpen) {
@@ -251,7 +263,7 @@ export class PlatformSidebar extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="mobile-backdrop" @click=${this._handleBackdropClick}></div>
             <div class="sidebar-content">

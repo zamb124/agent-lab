@@ -27,11 +27,30 @@
  * (полноэкранный редактор, OnlyOffice iframe и т.д.).
  */
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import { CoreEvents } from '../../events/contract.js';
+import type { RouterRoute, RouterState } from '../../events/reducers/router.js';
+import type { SelectController } from '../../events/select-controller.js';
 import '../platform-icon.js';
 
-function buildParentMap(routes) {
+interface BottomNavItem {
+    key?: string;
+    routeKey?: string;
+    params?: Record<string, unknown>;
+    sheet?: string;
+    sheetProps?: Record<string, unknown> | null;
+    icon?: string;
+    labelKey?: string;
+    badge?: string | number;
+}
+
+interface RouterSnapshot {
+    routeKey: string | null;
+    routes: readonly RouterRoute[];
+}
+
+function buildParentMap(routes: readonly RouterRoute[]): Map<string, RouterRoute> {
     const byKey = new Map();
     for (const r of routes) {
         if (r && typeof r.key === 'string') byKey.set(r.key, r);
@@ -39,7 +58,7 @@ function buildParentMap(routes) {
     return byKey;
 }
 
-function routeAncestorKeys(routes, currentKey) {
+function routeAncestorKeys(routes: readonly RouterRoute[], currentKey: string | null | undefined): string[] {
     if (!currentKey || typeof currentKey !== 'string') return [];
     const byKey = buildParentMap(routes);
     const keys = [];
@@ -57,14 +76,20 @@ function routeAncestorKeys(routes, currentKey) {
 }
 
 export class PlatformBottomNav extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         items: { type: Array },
         hideOnRoutes: { type: Array, attribute: 'hide-on-routes' },
         _routeKey: { state: true },
         _routes: { state: true },
     };
+    declare items: BottomNavItem[];
+    declare hideOnRoutes: string[];
+    declare _routeKey: string | null;
+    declare _routes: readonly RouterRoute[];
 
-    static styles = [
+    private _routerSelect: SelectController<RouterSnapshot>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -195,17 +220,20 @@ export class PlatformBottomNav extends PlatformElement {
         this.hideOnRoutes = [];
         this._routeKey = null;
         this._routes = [];
-        this._routerSelect = this.select((s) => ({
-            routeKey: s.router.routeKey,
-            routes: s.router.routes,
-        }));
+        this._routerSelect = this.select((s) => {
+            const router = s.router as RouterState;
+            return {
+                routeKey: router.routeKey,
+                routes: router.routes,
+            };
+        });
     }
 
     /**
      * Снимок роутера нужен до render(): updated() вызывается после render(),
      * иначе активная вкладка один цикл отстаёт от state.router (Dashboard подсвечен на Team).
      */
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate(changed);
         const v = this._routerSelect ? this._routerSelect.value : null;
         if (v) {
@@ -217,7 +245,7 @@ export class PlatformBottomNav extends PlatformElement {
         }
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const hide = this._shouldHide();
         if (hide && !this.hasAttribute('hidden')) {
@@ -227,7 +255,7 @@ export class PlatformBottomNav extends PlatformElement {
         }
     }
 
-    _shouldHide() {
+    _shouldHide(): boolean {
         if (!Array.isArray(this.items) || this.items.length === 0) return true;
         if (!Array.isArray(this.hideOnRoutes) || this.hideOnRoutes.length === 0) return false;
         const cur = this._routeKey;
@@ -235,7 +263,7 @@ export class PlatformBottomNav extends PlatformElement {
         return this.hideOnRoutes.includes(cur);
     }
 
-    _computeBottomNavActiveRouteKey() {
+    _computeBottomNavActiveRouteKey(): string | null {
         const cur = this._routeKey;
         if (!cur || typeof cur !== 'string' || !Array.isArray(this.items)) return null;
         const navRouteKeys = new Set();
@@ -257,14 +285,14 @@ export class PlatformBottomNav extends PlatformElement {
         return null;
     }
 
-    _isActive(item, activeRouteKey) {
+    _isActive(item: BottomNavItem, activeRouteKey: string | null): boolean {
         if (typeof item.sheet === 'string' && item.sheet.length > 0) return false;
         if (!item || typeof item.routeKey !== 'string' || item.routeKey.length === 0) return false;
         if (!activeRouteKey) return false;
         return item.routeKey === activeRouteKey;
     }
 
-    _onTap(item) {
+    _onTap(item: BottomNavItem): void {
         if (!item || typeof item !== 'object') {
             throw new Error('platform-bottom-nav: item must be a plain object');
         }
@@ -280,9 +308,9 @@ export class PlatformBottomNav extends PlatformElement {
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey: item.routeKey, params });
     }
 
-    _renderTab(item, activeRouteKey) {
+    _renderTab(item: BottomNavItem, activeRouteKey: string | null): TemplateResult {
         const active = this._isActive(item, activeRouteKey);
-        const label = this.t(item.labelKey);
+        const label = this.t(item.labelKey || ' ');
         const badge = item.badge;
         return html`
             <button
@@ -304,7 +332,7 @@ export class PlatformBottomNav extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         if (!Array.isArray(this.items) || this.items.length === 0) {
             return html``;
         }

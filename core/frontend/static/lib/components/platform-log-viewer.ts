@@ -5,6 +5,7 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -17,7 +18,16 @@ const LEVEL_COLORS = Object.freeze({
     debug: 'var(--text-tertiary)',
 });
 
-function _entryRowKey(entry, idx) {
+interface LogEntry {
+    timestamp?: string;
+    message?: string;
+    level?: string;
+    service?: string;
+    raw?: { message?: string } & Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+function _entryRowKey(entry: LogEntry, idx: number): string {
     const ts = typeof entry.timestamp === 'string' ? entry.timestamp : '';
     return `${idx}:${ts}`;
 }
@@ -25,14 +35,18 @@ function _entryRowKey(entry, idx) {
 export class PlatformLogViewer extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         entries: { type: Array },
         loading: { type: Boolean },
         emptyLabel: { type: String },
         _expandedKey: { type: String, state: true },
     };
+    declare entries: LogEntry[];
+    declare loading: boolean;
+    declare emptyLabel: string;
+    declare _expandedKey: string;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -160,16 +174,16 @@ export class PlatformLogViewer extends PlatformElement {
         this._expandedKey = '';
     }
 
-    _levelColor(level) {
+    _levelColor(level: unknown): string {
         const key = typeof level === 'string' ? level.toLowerCase() : '';
-        const c = LEVEL_COLORS[key];
+        const c = (LEVEL_COLORS as Record<string, string | undefined>)[key];
         if (typeof c === 'string' && c.length > 0) {
             return c;
         }
         return 'var(--text-primary)';
     }
 
-    _formatTs(ts) {
+    _formatTs(ts: unknown): string {
         if (typeof ts !== 'string' || ts.length === 0) {
             return '';
         }
@@ -181,7 +195,7 @@ export class PlatformLogViewer extends PlatformElement {
         }
     }
 
-    _messageLine(entry) {
+    _messageLine(entry: LogEntry): string {
         if (typeof entry.message === 'string' && entry.message.length > 0) {
             return entry.message;
         }
@@ -192,21 +206,21 @@ export class PlatformLogViewer extends PlatformElement {
         return '';
     }
 
-    _levelLine(entry) {
+    _levelLine(entry: LogEntry): string {
         if (typeof entry.level === 'string' && entry.level.length > 0) {
             return entry.level;
         }
         return '—';
     }
 
-    _serviceLine(entry) {
+    _serviceLine(entry: LogEntry): string {
         if (typeof entry.service === 'string' && entry.service.length > 0) {
             return entry.service;
         }
         return '';
     }
 
-    _toggleRow(key) {
+    _toggleRow(key: string): void {
         if (this._expandedKey === key) {
             this._expandedKey = '';
         } else {
@@ -214,11 +228,11 @@ export class PlatformLogViewer extends PlatformElement {
         }
     }
 
-    _stopRowClick(ev) {
+    _stopRowClick(ev: Event): void {
         ev.stopPropagation();
     }
 
-    _copyLine(entry) {
+    _copyLine(entry: LogEntry): void {
         const raw = entry.raw;
         let text;
         if (raw !== undefined && raw !== null && typeof raw === 'object') {
@@ -229,7 +243,7 @@ export class PlatformLogViewer extends PlatformElement {
         this.emit('copy-request', { text });
     }
 
-    _rawBlock(entry) {
+    _rawBlock(entry: LogEntry): string {
         const raw = entry.raw;
         if (raw !== undefined && raw !== null && typeof raw === 'object') {
             return JSON.stringify(raw, null, 2);
@@ -237,14 +251,14 @@ export class PlatformLogViewer extends PlatformElement {
         return JSON.stringify(entry, null, 2);
     }
 
-    _emptyText() {
+    _emptyText(): string {
         if (typeof this.emptyLabel === 'string' && this.emptyLabel.length > 0) {
             return this.emptyLabel;
         }
         return this.t('log_viewer.empty');
     }
 
-    render() {
+    override render(): TemplateResult {
         const list = Array.isArray(this.entries) ? this.entries : [];
         if (this.loading && list.length === 0) {
             return html`
