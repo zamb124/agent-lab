@@ -42,6 +42,9 @@ class UiCanonRule:
     # Файлы embed-замыкания (внешние сайты без import-map) освобождены от
     # правила — там относительные пути к assets/js/* каноничны.
     exempt_in_embed_closure: bool = False
+    # Сканировать код без // и /* */ комментариев (для правил про разметку,
+    # где упоминание класса в комментарии — ложное срабатывание).
+    strip_comments: bool = False
 
 
 RULES: tuple[UiCanonRule, ...] = (
@@ -129,10 +132,13 @@ RULES: tuple[UiCanonRule, ...] = (
     ),
     UiCanonRule(
         "manual_pill",
-        r"class=\"field-pill|classMap\([^)]*field-pill|'field-pill",
+        # Только контейнер pill: `field-pill`, `field-pill-float`, `field-pill--*`.
+        # Части внутри shell (field-pill-input, field-pill-file-ref-*, …) — легитимные shared-классы.
+        r"""field-pill(?:-float\b|--[\w-]+|(?=[\s"'`}]))""",
         ("apps",),
         "hard",
         "platform-field-shell / platform-field — ручная pill-разметка запрещена",
+        strip_comments=True,
     ),
     UiCanonRule(
         "raw_dispatch_events",
@@ -278,9 +284,16 @@ def iter_findings(rule: UiCanonRule) -> list[tuple[Path, str, int, str]]:
                 continue
             assert content_re is not None
             try:
-                lines = path.read_text(encoding="utf-8").splitlines()
+                raw_text = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 continue
+            # Файл-pragma: `// ui-canon: allow <rule_id>` — осознанное исключение
+            # (легитимный кейс, задокументированный в коде).
+            if re.search(rf"ui-canon:\s*allow\s+{re.escape(rule.rule_id)}\b", raw_text):
+                continue
+            if rule.strip_comments:
+                raw_text = re.sub(r"//[^\n]*|/\*.*?\*/", "", raw_text, flags=re.S)
+            lines = raw_text.splitlines()
             for i, line in enumerate(lines, 1):
                 if content_re.search(line):
                     findings.append((path, rel, i, line.strip()[:160]))

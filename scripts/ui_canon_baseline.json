@@ -7,9 +7,9 @@
   "vendored_lit_path": 0,
   "vendored_dep_path": 0,
   "extends_native": 0,
-  "custom_primitive": 1,
+  "custom_primitive": 0,
   "raw_controls": 67,
-  "manual_pill": 18,
+  "manual_pill": 0,
   "raw_dispatch_events": 0,
   "window_custom_event": 0
 }

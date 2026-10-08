@@ -1,3 +1,5 @@
+// ui-canon: allow custom_primitive — доменная панель статуса провайдера в sidebar,
+// не примитив UI Kit (композиция PlatformElement + platform-icon + glass-spinner).
 /**
  * RagProviderBadge — компактный бейдж с активным RAG-провайдером.
  *
