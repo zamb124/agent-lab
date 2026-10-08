@@ -109,7 +109,9 @@ RULES: tuple[UiCanonRule, ...] = (
     ),
     UiCanonRule(
         "custom_primitive",
-        r"customElements\.define\(\s*['\"][\w-]*(dropdown|tooltip|popover|dialog|tabs|select|checkbox|radio|switch|slider|table|button|input|modal|toast|spinner|skeleton|badge|avatar|chip|menu)[\w-]*['\"]",
+        # Только «чистые» UI-примитивы: modal/tabs/menu/table — канонические
+        # kind-регистрации или доменные имена (flows-x-modal — не нарушение).
+        r"customElements\.define\(\s*['\"][\w-]*(dropdown|tooltip|popover|dialog|checkbox|radio|switch|slider|toast|spinner|skeleton|badge|avatar|chip)[\w-]*['\"]",
         ("apps",),
         "hard",
         "Примитив — только в core UI Kit (lib/components); в apps — композиция kit",

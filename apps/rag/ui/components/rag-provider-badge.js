@@ -1,5 +1,5 @@
 /**
- * ProviderBadge — компактный бейдж с активным RAG-провайдером.
+ * RagProviderBadge — компактный бейдж с активным RAG-провайдером.
  *
  * Используется в sidebar-е. Источник правды — slice фабрики `rag/providers`
  * (`useOp`, поле `state.current` обновляется из `extraReducer` фабрики
@@ -11,7 +11,7 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
-export class ProviderBadge extends PlatformElement {
+export class RagProviderBadge extends PlatformElement {
     static i18nNamespace = 'rag';
 
     static styles = [
@@ -76,4 +76,4 @@ export class ProviderBadge extends PlatformElement {
     }
 }
 
-customElements.define('provider-badge', ProviderBadge);
+customElements.define('rag-provider-badge', RagProviderBadge);
