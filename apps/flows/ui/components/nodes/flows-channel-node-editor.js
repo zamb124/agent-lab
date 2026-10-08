@@ -42,6 +42,7 @@ import {
 } from '../../_helpers/flows-sms-presets.js';
 import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
 import { MAIL_EVENTS } from '@platform/lib/events/reducers/mail.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const CHANNELS = Object.freeze(['telegram', 'email', 'sms', 'webhook']);
 const PARSE_MODES = Object.freeze(['', 'HTML', 'MarkdownV2']);
@@ -437,7 +438,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
         this._onChannelConfig('body_template', JSON.stringify(parsed, null, 2));
     }
 
-    _onApplySmsPreset(presetId) {
+    async _onApplySmsPreset(presetId) {
         if (typeof presetId !== 'string' || presetId.length === 0) {
             throw new Error('flows-channel-node-editor: sms preset_id required');
         }
@@ -459,7 +460,7 @@ export class FlowsChannelNodeEditor extends PlatformElement {
                 }
             }
             if (!matchesCurrentSkeleton && currentPresetId !== presetId) {
-                const confirmed = window.confirm(this.t('channel_node_editor.sms_preset_confirm'));
+                const confirmed = await platformConfirm(this.t('channel_node_editor.sms_preset_confirm'));
                 if (!confirmed) {
                     return;
                 }

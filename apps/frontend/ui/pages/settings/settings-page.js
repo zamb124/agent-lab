@@ -33,6 +33,7 @@ import {
     llmProviderErrorClassIsBlocking,
     llmProviderErrorClassLabel,
 } from '../../components/llm-provider-status-strip.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const INTEGRATION_LIST = Object.freeze([
     { id: 'crm', route: '/crm' },
@@ -1947,7 +1948,7 @@ export class FrontendSettingsPage extends PlatformPage {
         if (typeof deviceId !== 'string' || !deviceId) {
             throw new Error('agent device revoke: device_id required');
         }
-        const confirmed = confirm(this.t('settings_page.agent.revoke_confirm'));
+        const confirmed = await platformConfirm(this.t('settings_page.agent.revoke_confirm'));
         if (!confirmed) {
             return;
         }

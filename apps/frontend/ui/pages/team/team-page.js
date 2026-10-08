@@ -21,6 +21,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-user-chip.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const INVITE_ROLES = Object.freeze(['developer', 'admin', 'viewer']);
 const ROLE_FILTER_KEYS = Object.freeze(['owner', 'admin', 'developer', 'viewer']);
@@ -217,10 +218,10 @@ export class FrontendTeamPage extends PlatformPage {
         });
     }
 
-    _removeMember(member) {
+    async _removeMember(member) {
         const name = member.name || member.email || this.t('team_page.member_fallback');
         const message = this.t('team_page.confirm_remove', { name });
-        if (!confirm(message)) return;
+        if (!(await platformConfirm(message))) return;
         this._members.remove(member.user_id);
     }
 

@@ -11,6 +11,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendCreateEmbedModal } from '../modals/create-embed-modal.js';
 import { FrontendEmbedCodeModal } from '../modals/embed-code-modal.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 export class FrontendEmbedConfigsPage extends PlatformPage {
     static styles = [
@@ -96,8 +97,8 @@ export class FrontendEmbedConfigsPage extends PlatformPage {
         this.openModal(FrontendEmbedCodeModal, { embedId: cfg.embed_id });
     }
 
-    _delete(cfg) {
-        if (!confirm(this.t('embed_page.confirm_delete'))) return;
+    async _delete(cfg) {
+        if (!(await platformConfirm(this.t('embed_page.confirm_delete')))) return;
         this._configs.remove(cfg.embed_id);
     }
 

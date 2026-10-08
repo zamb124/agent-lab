@@ -11,6 +11,7 @@ import { markdownToHtml } from '../utils/markdown.js';
 import './platform-help-hint.js';
 import './platform-icon.js';
 import './platform-button.js';
+import { platformPrompt } from './platform-confirm-modal.js';
 import './platform-voice-dictation.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import {
@@ -1432,12 +1433,15 @@ export class PlatformMarkdownEditor extends PlatformElement {
         this._onWysiwygInput();
     }
 
-    _insertLink() {
+    async _insertLink() {
         if (this.readonly) {
             throw new Error('platform-markdown-editor: link unavailable in readonly mode');
         }
-        const href = window.prompt(this.t('markdown_editor.link_prompt'));
-        if (href === null) return;
+        const href = await platformPrompt(this.t('markdown_editor.link_prompt'), {
+            inputLabel: this.t('markdown_editor.link_prompt'),
+            inputPlaceholder: 'https://',
+        });
+        if (href === undefined) return;
         const trimmed = href.trim();
         if (!trimmed) {
             throw new Error('platform-markdown-editor: link href required');

@@ -64,10 +64,13 @@ RULES: tuple[UiCanonRule, ...] = (
     ),
     UiCanonRule(
         "window_dialogs",
-        r"\bwindow\.(confirm|alert|prompt)\(|\bconfirm\(|\balert\(",
+        r"\bwindow\.(confirm|alert|prompt)\(|(?<![.\w])(confirm|prompt)\(|(?<![.\w'\"])\balert\(",
         ("apps", "lib"),
         "hard",
-        "platformConfirm(...) из helpers; результат — toast()",
+        "platformConfirm/platformPrompt из platform-confirm-modal; результат — toast()",
+        # platform-confirm-modal — сам примитив; flow-ui/blocks — методы
+        # грамматики блоков (alert(block, ctx)), не window.alert.
+        path_exclude=r"platform-confirm-modal|flow-ui/blocks/",
     ),
     UiCanonRule(
         "createelement_modal",
@@ -133,7 +136,9 @@ RULES: tuple[UiCanonRule, ...] = (
     ),
     UiCanonRule(
         "raw_dispatch_events",
-        r"\.dispatch\(CoreEvents\.",
+        # Только события, у которых есть helper базы (toast/openModal/navigate/…).
+        # Доменный dispatch(CoreEvents.X) без хелпера — канон контракта событий.
+        r"\.dispatch\(CoreEvents\.(UI_TOAST_SHOW|UI_MODAL_OPEN|UI_MODAL_CLOSE|UI_SIDEBAR_\w+|UI_BOTTOM_SHEET_\w+|UI_CLIPBOARD_\w+|ROUTER_NAVIGATE_REQUESTED|THEME_SET_REQUESTED|I18N_LOCALE_REQUESTED|AUTH_COMPANY_SWITCH_REQUESTED)\b",
         ("apps",),
         "hard",
         "helpers базы (this.toast/navigate/openModal/…) — прямой dispatch запрещён в apps",

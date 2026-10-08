@@ -465,29 +465,41 @@ describe('platform-markdown-editor fail-closed', () => {
 
     it('link insert rejects empty and non-allowlisted schemes', async () => {
         const editor = await mountDocument({ value: '' });
-        const originalPrompt = window.prompt;
 
-        try {
-            window.prompt = () => '   ';
-            expect(() => editor._insertLink()).to.throw(/link href required/);
+        const drivePrompt = async (value) => {
+            const p = editor._insertLink();
+            const modal = document.querySelector('platform-confirm-modal');
+            expect(modal, 'platformPrompt открывает модалку').to.exist;
+            await modal.updateComplete;
+            if (value === null) {
+                modal._onCancel();
+            } else {
+                modal.inputValue = value;
+                modal._onConfirm();
+            }
+            return p;
+        };
+        const rejects = async (p, re) => {
+            let err = null;
+            try {
+                await p;
+            } catch (e) {
+                err = e;
+            }
+            expect(err, 'ожидалась ошибка').to.exist;
+            expect(String(err.message)).to.match(re);
+        };
 
-            window.prompt = () => 'javascript:alert(1)';
-            expect(() => editor._insertLink()).to.throw(/http\(s\) or mailto/);
+        await rejects(drivePrompt('   '), /link href required/);
+        await rejects(drivePrompt('javascript:alert(1)'), /http\(s\) or mailto/);
+        await rejects(drivePrompt('/relative'), /http\(s\) or mailto/);
 
-            window.prompt = () => '/relative';
-            expect(() => editor._insertLink()).to.throw(/http\(s\) or mailto/);
+        await drivePrompt('https://safe.example/path');
+        expect(editor.getValue()).to.equal('[link](https://safe.example/path)');
 
-            window.prompt = () => 'https://safe.example/path';
-            editor._insertLink();
-            expect(editor.getValue()).to.equal('[link](https://safe.example/path)');
-
-            window.prompt = () => null;
-            const before = editor.getValue();
-            editor._insertLink();
-            expect(editor.getValue()).to.equal(before);
-        } finally {
-            window.prompt = originalPrompt;
-        }
+        const before = editor.getValue();
+        await drivePrompt(null);
+        expect(editor.getValue()).to.equal(before);
     });
 
     it('invalid attachment index throws', async () => {

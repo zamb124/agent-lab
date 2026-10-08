@@ -1,7 +1,7 @@
 {
   "ui_js_files": 1359,
   "fetch_outside_events": 0,
-  "window_dialogs": 11,
+  "window_dialogs": 0,
   "createelement_modal": 0,
   "localstorage_raw": 50,
   "vendored_lit_path": 0,
@@ -10,6 +10,6 @@
   "custom_primitive": 1,
   "raw_controls": 67,
   "manual_pill": 18,
-  "raw_dispatch_events": 2,
+  "raw_dispatch_events": 0,
   "window_custom_event": 0
 }

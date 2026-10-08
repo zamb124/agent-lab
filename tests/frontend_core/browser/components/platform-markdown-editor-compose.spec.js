@@ -172,7 +172,16 @@ describe('platform-markdown-editor compose / wysiwyg', () => {
         expect(() => editor._onPrimary()).to.throw(/readonly/);
         expect(() => editor._onDiscard()).to.throw(/readonly/);
         expect(() => editor._toggleFormat()).to.throw(/readonly/);
-        expect(() => editor._insertLink()).to.throw(/readonly/);
+        {
+            let err = null;
+            try {
+                await editor._insertLink();
+            } catch (e) {
+                err = e;
+            }
+            expect(err, '_insertLink в readonly').to.exist;
+            expect(String(err.message)).to.match(/readonly/);
+        }
     });
 
     it('format toggle opens toolbar; bold command updates html', async () => {
@@ -282,8 +291,6 @@ describe('platform-markdown-editor compose / wysiwyg', () => {
 
     it('compose link insert uses createLink with allowlisted href', async () => {
         const editor = await mountCompose();
-        const originalPrompt = window.prompt;
-        window.prompt = () => 'https://mail.example/x';
         body(editor).focus();
         editor.insertTextAtCursor('linkme');
         const selection = window.getSelection();
@@ -291,9 +298,14 @@ describe('platform-markdown-editor compose / wysiwyg', () => {
         const range = document.createRange();
         range.selectNodeContents(body(editor));
         selection.addRange(range);
-        editor._insertLink();
+        const p = editor._insertLink();
+        const modal = document.querySelector('platform-confirm-modal');
+        expect(modal, 'platformPrompt открывает модалку').to.exist;
+        await modal.updateComplete;
+        modal.inputValue = 'https://mail.example/x';
+        modal._onConfirm();
+        await p;
         expect(body(editor).innerHTML.toLowerCase()).to.include('href="https://mail.example/x"');
-        window.prompt = originalPrompt;
     });
 
     it('primaryDisabled disables primary button', async () => {

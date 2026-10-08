@@ -15,6 +15,7 @@ import { html, css } from 'lit';
 import { PlatformModal } from './glass-modal.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
 import './platform-icon.js';
+import './fields/platform-field.js';
 
 export class PlatformConfirmModal extends PlatformModal {
     static styles = [
@@ -137,6 +138,10 @@ export class PlatformConfirmModal extends PlatformModal {
         extraText: { type: String },
         extraVariant: { type: String },
         hideCancel: { type: Boolean, attribute: 'hide-cancel' },
+        /** Режим prompt: метка поля; непустая включает input, confirm → Promise<string>. */
+        inputLabel: { type: String },
+        inputValue: { type: String },
+        inputPlaceholder: { type: String },
     };
 
     constructor() {
@@ -152,6 +157,9 @@ export class PlatformConfirmModal extends PlatformModal {
         this.extraText = '';
         this.extraVariant = 'danger';
         this.hideCancel = false;
+        this.inputLabel = '';
+        this.inputValue = '';
+        this.inputPlaceholder = '';
         /** @type {((v: boolean | string | undefined) => void) | null} */
         this._resolvePromise = null;
     }
@@ -173,6 +181,11 @@ export class PlatformConfirmModal extends PlatformModal {
      * @returns {Promise<boolean|string|void>}
      */
     async confirm(options = {}) {
+        // Сброс prompt-режима от предыдущего вызова — options без inputLabel
+        // не должны оставлять поле и старое значение.
+        this.inputLabel = '';
+        this.inputValue = '';
+        this.inputPlaceholder = '';
         Object.assign(this, options);
         this.closing = false;
         this.open = true;
@@ -201,7 +214,7 @@ export class PlatformConfirmModal extends PlatformModal {
     close() {
         if (this.open && this._resolvePromise) {
             this.emit('cancel');
-            if (this.hideCancel) {
+            if (this.inputLabel || this.hideCancel) {
                 this._settle(undefined);
             } else if (this.extraText) {
                 this._settle('cancel');
@@ -232,7 +245,9 @@ export class PlatformConfirmModal extends PlatformModal {
             return;
         }
         this.emit('confirm');
-        if (this.extraText) {
+        if (this.inputLabel) {
+            this._settle(this.inputValue);
+        } else if (this.extraText) {
             this._settle('confirm');
         } else if (this.hideCancel) {
             this._settle(undefined);
@@ -256,7 +271,9 @@ export class PlatformConfirmModal extends PlatformModal {
             return;
         }
         this.emit('cancel');
-        if (this.extraText) {
+        if (this.inputLabel) {
+            this._settle(undefined);
+        } else if (this.extraText) {
             this._settle('cancel');
         } else {
             this._settle(false);
@@ -370,6 +387,25 @@ export class PlatformConfirmModal extends PlatformModal {
 
                     <div class="modal-content">
                         <div class="modal-message">${this.message}</div>
+                        ${this.inputLabel
+                            ? html`
+                                  <platform-field
+                                      type="string"
+                                      .label=${this.inputLabel}
+                                      .value=${this.inputValue}
+                                      .placeholder=${this.inputPlaceholder}
+                                      @keydown=${(e) => {
+                                          if (e.key === 'Enter') {
+                                              e.preventDefault();
+                                              this._onConfirm();
+                                          }
+                                      }}
+                                      @input=${(e) => {
+                                          this.inputValue = e.target.value;
+                                      }}
+                                  ></platform-field>
+                              `
+                            : ''}
                     </div>
 
                     <div class="modal-actions">
@@ -438,6 +474,18 @@ export async function platformConfirm(message, options = {}) {
     }
     const modal = getOrCreatePlatformConfirmModal();
     return modal.confirm({ message, ...options });
+}
+
+/**
+ * Хелпер ввода текста: Promise<string|undefined> — undefined при отмене.
+ * options.inputLabel — метка поля (обязательна), inputValue, inputPlaceholder.
+ */
+export async function platformPrompt(message, options = {}) {
+    if (!options || typeof options.inputLabel !== 'string' || !options.inputLabel) {
+        throw new TypeError('platformPrompt: options.inputLabel required (non-empty string)');
+    }
+    const modal = getOrCreatePlatformConfirmModal();
+    return modal.confirm({ message, variant: 'info', ...options });
 }
 
 export { platformConfirm as confirm };

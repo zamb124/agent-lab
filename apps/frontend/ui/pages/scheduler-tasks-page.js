@@ -16,6 +16,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/glass-spinner.js';
 import { FrontendCreateSchedulerTaskModal } from '../modals/create-scheduler-task-modal.js';
 import '@platform/lib/components/fields/platform-field.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const STATUSES = Object.freeze(['pending', 'paused', 'executed', 'cancelled', 'failed']);
 
@@ -157,9 +158,9 @@ export class FrontendSchedulerTasksPage extends PlatformPage {
         this._resume.run({ schedule_task_id: t.schedule_task_id });
     }
 
-    _cancelTask(t) {
+    async _cancelTask(t) {
         const message = this.t('scheduler_page.confirm_cancel', { name: t.task_name || t.schedule_task_id });
-        if (!confirm(message)) return;
+        if (!(await platformConfirm(message))) return;
         this._cancelOp.run({ schedule_task_id: t.schedule_task_id });
     }
 

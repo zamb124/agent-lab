@@ -16,6 +16,7 @@ import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/glass-spinner.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const ACCEPT_TYPES = '.pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.pptx';
 
@@ -116,11 +117,11 @@ export class NamespacePage extends PlatformPage {
         this._upload.run({ namespace_id: this.namespaceId, file, metadata: {} });
     }
 
-    _deleteDocument(documentId) {
+    async _deleteDocument(documentId) {
         if (!this.namespaceId) {
             throw new Error('NamespacePage: namespaceId is empty, cannot delete');
         }
-        if (!confirm(this.t('namespace_detail.delete_confirm'))) return;
+        if (!(await platformConfirm(this.t('namespace_detail.delete_confirm')))) return;
         this._remove.run({ namespace_id: this.namespaceId, document_id: documentId });
     }
 

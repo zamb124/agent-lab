@@ -8,6 +8,11 @@ variants:
   - id: default
     props: {}
     scenarios: [render]
+  - id: prompt
+    props:
+      inputLabel: "platform:common.value"
+      inputPlaceholder: "https://"
+    scenarios: [render]
 playwright:
   min_steps: 2
   min_screenshots: 1

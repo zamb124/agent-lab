@@ -13,6 +13,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-json-editor.js';
 import { FrontendSystemAccessModal } from '../../modals/system-access-modal.js';
 import { FrontendBalanceGrantModal } from '../../modals/balance-grant-modal.js';
+import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 
 const COMPANIES_PAGE_SIZE = 50;
 
@@ -1979,7 +1980,7 @@ export class FrontendBillingAdminPage extends PlatformPage {
     }
 
     async _loadRulesDefault() {
-        if (!confirm(this.t('platform_billing_page.confirm_replace_rules_default'))) return;
+        if (!(await platformConfirm(this.t('platform_billing_page.confirm_replace_rules_default')))) return;
         const result = await this._rulesDefault.run(null);
         if (result && result.document) {
             this._rulesDraft = JSON.stringify(result.document, null, 2);
