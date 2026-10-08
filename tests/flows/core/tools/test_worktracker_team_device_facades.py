@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.services.device_client import DeviceClient
 from apps.flows.tools.scheduling.scheduling import list_scheduled_tasks, schedule_cron_task
 from apps.flows.tools.wiki.wiki_tools import (
@@ -16,58 +17,89 @@ from apps.flows.tools.wiki.wiki_tools import (
 )
 from core.clients.team_client import TeamClient
 from core.clients.worktracker_client import WorktrackerClient
-from core.worktracker.models import UserActor, WorkItem, WorkItemPriority, WorkItemState
+from core.worktracker.models import UserActor, WorkItemState
 
 
 @pytest.mark.asyncio
-async def test_worktracker_client_delegates_get(monkeypatch: pytest.MonkeyPatch) -> None:
-    expected = MagicMock(work_item_id="wi_1")
-    require = AsyncMock(return_value=expected)
-    monkeypatch.setattr(WorkItem, "require_in_company", require)
-    client = WorktrackerClient(MagicMock())
-    item = await client.get("company_a", "wi_1")
-    require.assert_awaited_once_with("company_a", "wi_1")
-    assert item.work_item_id == "wi_1"
-
-
-@pytest.mark.asyncio
-async def test_worktracker_client_delegates_list_and_complete(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_worktracker_client_get_returns_created_item(
+    di: FlowsDi,
+    unique_id: str,
 ) -> None:
-    service = MagicMock()
-    listed = AsyncMock(return_value=[])
-    monkeypatch.setattr(WorkItem, "list_work_items", listed)
-    service.complete = AsyncMock(return_value=MagicMock(newly_terminal=True))
-    client = WorktrackerClient(service)
-    items = await client.list("c1", assignee_user_id="u1", exclude_terminal=True)
-    assert items == []
-    listed.assert_awaited_once()
+    client = WorktrackerClient(di.work_item_service)
+    created = await client.create_manual_task(
+        company_id="system",
+        title=f"get-{unique_id}",
+        created_by=UserActor(user_id=f"user_{unique_id}"),
+    )
+    item = await client.get("system", created.work_item_id)
+    assert item.work_item_id == created.work_item_id
+    assert item.title == f"get-{unique_id}"
+
+
+@pytest.mark.asyncio
+async def test_worktracker_client_list_excludes_completed_item(
+    di: FlowsDi,
+    unique_id: str,
+) -> None:
+    client = WorktrackerClient(di.work_item_service)
+    user_id = f"user_{unique_id}"
+    created = await client.create_manual_task(
+        company_id="system",
+        title=f"list-{unique_id}",
+        created_by=UserActor(user_id=user_id),
+    )
+    open_ids = {
+        item.work_item_id
+        for item in await client.list(
+            "system",
+            assignee_user_id=user_id,
+            exclude_terminal=True,
+        )
+    }
+    assert created.work_item_id in open_ids
     completion = await client.complete(
-        company_id="c1",
-        work_item_id="wi_2",
+        company_id="system",
+        work_item_id=created.work_item_id,
         terminal_state=WorkItemState.DONE,
     )
     assert completion.newly_terminal is True
-    service.complete.assert_awaited_once()
+    after_ids = {
+        item.work_item_id
+        for item in await client.list(
+            "system",
+            assignee_user_id=user_id,
+            exclude_terminal=True,
+        )
+    }
+    assert created.work_item_id not in after_ids
 
 
 @pytest.mark.asyncio
-async def test_worktracker_client_delegates_queue_and_board() -> None:
-    service = MagicMock()
-    service.list_queues = AsyncMock(return_value=[])
-    service.list_boards = AsyncMock(return_value=[])
-    service.create_manual_task = AsyncMock(return_value=MagicMock(work_item_id="wi_3"))
-    client = WorktrackerClient(service)
-    assert await client.list_queues("c1", user_id="u1") == []
-    service.list_queues.assert_awaited_once_with("c1", user_id="u1")
-    assert await client.list_boards("c1", namespace=None) == []
-    created = await client.create_manual_task(
-        company_id="c1",
-        title="t",
-        created_by=UserActor(user_id="u1"),
-        priority=WorkItemPriority.NORMAL,
+async def test_worktracker_client_lists_created_queue_and_board(
+    di: FlowsDi,
+    unique_id: str,
+) -> None:
+    client = WorktrackerClient(di.work_item_service)
+    user_id = f"user_{unique_id}"
+    namespace = f"ns-{unique_id}"
+    queue = await client.create_queue(
+        company_id="system",
+        name=f"Queue {unique_id}",
+        slug=f"q-{unique_id}",
+        creator=UserActor(user_id=user_id),
     )
-    assert created.work_item_id == "wi_3"
+    queue_ids = {item.work_queue_id for item in await client.list_queues("system", user_id=user_id)}
+    assert queue.work_queue_id in queue_ids
+    boards = await client.list_boards("system", namespace=namespace)
+    assert [board.board_id for board in boards]
+    assert all(board.company_id == "system" for board in boards)
+    created = await client.create_manual_task(
+        company_id="system",
+        title=f"board-{unique_id}",
+        created_by=UserActor(user_id=user_id),
+        namespace=namespace,
+    )
+    assert created.board_id == boards[0].board_id
 
 
 @pytest.mark.asyncio

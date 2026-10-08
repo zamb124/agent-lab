@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -223,7 +223,7 @@ class ReadFileArgs(BaseModel):
             return []
         items: JsonArray
         if isinstance(value, list):
-            items = require_json_array(cast(object, value), "ReadFileArgs.names")
+            items = require_json_array(value, "ReadFileArgs.names")
         elif isinstance(value, str):
             text = value.strip()
             if text == "":

@@ -74,6 +74,7 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 | `S3_SECRET_KEY` |
 | `LIVEKIT_API_KEY` |
 | `LIVEKIT_API_SECRET` |
+| `CENTRIFUGO_API_KEY` |
 | `TURN_SECRET` |
 | `ONLYOFFICE_JWT_SECRET` |
 | `GRAFANA_ADMIN_PASSWORD` |
@@ -81,6 +82,8 @@ Reg.ru API принимает запросы **только с whitelist IP**. �
 **Значения:** для OnlyOffice и Grafana задайте достаточно длинные случайные строки (например `openssl rand -hex 32`), один раз сохраните в GitHub Secrets; дальше они попадают в Kubernetes Secret `platform-secrets` как `onlyoffice-jwt-secret` и `grafana-admin-password`.
 
 `OPENFGA_API_TOKEN` → `platform-secrets.openfga-api-token` (`openssl rand -hex 32`).
+
+`CENTRIFUGO_API_KEY` → `platform-secrets.centrifugo-api-key` (`openssl rand -hex 32`). Пустой ключ даёт 401 на `http://centrifugo:8000/api/publish`, и Centrifugo отвечает клиенту RPC `code 100`.
 
 ### 2b. OpenFGA pin (автоматически, не GitHub Secrets)
 

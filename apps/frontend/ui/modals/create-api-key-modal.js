@@ -96,6 +96,7 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
                         label=${this.t('api_key_modal.label_name')}
                         placeholder=${this.t('api_key_modal.placeholder_name')}
                         .value=${this._name}
+                        .error=${this.fieldError('name')}
                         @change=${(e) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('api-key-create: name expects detail.value string');
@@ -104,7 +105,6 @@ export class FrontendCreateApiKeyModal extends PlatformFormModal {
                             this.isDirty = true;
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('name')}
                 </div>
                 <div class="form-group">
                     <label class="form-label">${this.t('api_key_modal.label_scopes')}</label>

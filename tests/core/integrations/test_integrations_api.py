@@ -6,18 +6,29 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from typing import Literal
+from urllib.parse import parse_qs, urlparse
 
 import pytest
+from aiohttp import web
 
+import core.integrations.oauth_service as oauth_service_module
 from apps.flows.di import FlowsDi
+from core.config import get_settings
+from core.config.models import AuthConfig, AuthProviderConfig
 from core.di import require_di
 from core.integrations.guided_integration_error import (
     GuidedIntegrationError,
     GuidedIntegrationLink,
 )
 from core.integrations.models import IntegrationCredential, IntegrationProvider
+from core.integrations.oauth_service import (
+    set_oauth_credential_saved_hook,
+)
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +64,78 @@ async def _insert_credential(
     )
     await IntegrationCredential.upsert_by_credential_id(cred)
     return cred
+
+
+def _token_app() -> web.Application:
+    async def token(_request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "access_token": "guided-access",
+                "refresh_token": "guided-refresh",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+            }
+        )
+
+    app = web.Application()
+    app.router.add_post("/token", token)
+    return app
+
+
+@asynccontextmanager
+async def _oauth_save_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    flows_app: object,
+    *,
+    service_name: str,
+    system_user_id: str,
+    exc: BaseException,
+    oauth_ui_locale: Literal["ru", "en"] | None = None,
+) -> AsyncIterator[str]:
+    async with ephemeral_web_server(_token_app()) as base_url:
+        settings = get_settings()
+        monkeypatch.setattr(
+            settings,
+            "auth",
+            AuthConfig(
+                providers={
+                    "google": AuthProviderConfig(
+                        client_id="test-client-id",
+                        client_secret="test-secret",
+                        auth_url="https://accounts.google.com/o/oauth2/v2/auth",
+                        token_url=f"{base_url}/token",
+                    ),
+                },
+            ),
+        )
+
+        async def fail(_credential: IntegrationCredential) -> None:
+            raise exc
+
+        previous = oauth_service_module._oauth_credential_saved_hook
+        set_oauth_credential_saved_hook(fail)
+        oauth = require_di(flows_app, FlowsDi).oauth_service
+        try:
+            auth_url = await oauth.build_auth_url(
+                provider=IntegrationProvider.GOOGLE,
+                service=service_name,
+                scopes=["openid"],
+                user_id=system_user_id,
+                company_id="system",
+                redirect_uri="http://127.0.0.1/callback",
+                return_path="/",
+                oauth_ui_locale=oauth_ui_locale,
+            )
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+            yield state
+        finally:
+            oauth_service_module._oauth_credential_saved_hook = previous
+            _ = await IntegrationCredential.delete_by_user_provider_service(
+                "system",
+                system_user_id,
+                IntegrationProvider.GOOGLE,
+                service_name,
+            )
 
 
 class TestListCredentials:
@@ -200,7 +283,14 @@ class TestOAuthCallback:
 
 class TestOAuthCallbackGuidedIntegrationError:
     @pytest.mark.asyncio
-    async def test_returns_json_without_sec_fetch_dest(self, flows_client, flows_app) -> None:
+    async def test_returns_json_without_sec_fetch_dest(
+        self,
+        flows_client,
+        flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided",
             title_ru="RU title",
@@ -215,11 +305,16 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-json-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+        ) as state:
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
+                params={"code": "x", "state": state},
                 headers={"Accept-Language": "en"},
             )
         assert resp.status_code == 400
@@ -232,7 +327,14 @@ class TestOAuthCallbackGuidedIntegrationError:
         assert "request_id" in payload
 
     @pytest.mark.asyncio
-    async def test_returns_html_for_sec_fetch_dest_document(self, flows_client, flows_app) -> None:
+    async def test_returns_html_for_sec_fetch_dest_document(
+        self,
+        flows_client,
+        flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
+    ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_html",
             title_ru="RU title",
@@ -247,11 +349,16 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-html-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+        ) as state:
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
+                params={"code": "x", "state": state},
                 headers={
                     "Sec-Fetch-Dest": "document",
                     "Accept-Language": "en",
@@ -267,6 +374,9 @@ class TestOAuthCallbackGuidedIntegrationError:
         self,
         flows_client,
         flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_cookie_ru",
@@ -282,11 +392,16 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-cookie-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+        ) as state:
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
+                params={"code": "x", "state": state},
                 headers={
                     "Sec-Fetch-Dest": "document",
                     "Accept-Language": "en-US,en;q=0.9",
@@ -302,6 +417,9 @@ class TestOAuthCallbackGuidedIntegrationError:
         self,
         flows_client,
         flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_state_locale_ru",
@@ -311,21 +429,22 @@ class TestOAuthCallbackGuidedIntegrationError:
             message_en="EN body",
             links=(),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
-            with patch.object(
-                oauth,
-                "peek_oauth_state_ui_locale",
-                new=AsyncMock(return_value="ru"),
-            ):
-                resp = await flows_client.get(
-                    "/flows/api/v1/integrations/oauth/callback",
-                    params={"code": "x", "state": "y"},
-                    headers={
-                        "Sec-Fetch-Dest": "document",
-                        "Accept-Language": "en-US,en;q=0.9",
-                    },
-                )
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-locale-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+            oauth_ui_locale="ru",
+        ) as state:
+            resp = await flows_client.get(
+                "/flows/api/v1/integrations/oauth/callback",
+                params={"code": "x", "state": state},
+                headers={
+                    "Sec-Fetch-Dest": "document",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
         assert resp.status_code == 400
         assert "text/html" in resp.headers.get("content-type", "")
         assert "Заголовок по-русски".encode("utf-8") in resp.content
@@ -335,6 +454,9 @@ class TestOAuthCallbackGuidedIntegrationError:
         self,
         flows_client,
         flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_html_accept",
@@ -350,11 +472,16 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-accept-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+        ) as state:
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
+                params={"code": "x", "state": state},
                 headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                     "Accept-Language": "en",
@@ -369,6 +496,9 @@ class TestOAuthCallbackGuidedIntegrationError:
         self,
         flows_client,
         flows_app,
+        monkeypatch: pytest.MonkeyPatch,
+        unique_id: str,
+        system_user_id: str,
     ) -> None:
         exc = GuidedIntegrationError(
             code="test_oauth_guided_json_accept",
@@ -384,11 +514,16 @@ class TestOAuthCallbackGuidedIntegrationError:
                 ),
             ),
         )
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(oauth, "complete_oauth", new=AsyncMock(side_effect=exc)):
+        async with _oauth_save_raises(
+            monkeypatch,
+            flows_app,
+            service_name=f"guided-json-accept-{unique_id}",
+            system_user_id=system_user_id,
+            exc=exc,
+        ) as state:
             resp = await flows_client.get(
                 "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
+                params={"code": "x", "state": state},
                 headers={
                     "Accept": "application/json",
                     "Accept-Language": "en",
@@ -402,23 +537,16 @@ class TestOAuthCallbackGuidedIntegrationError:
     async def test_value_error_returns_html_when_document_navigation(
         self,
         flows_client,
-        flows_app,
     ) -> None:
-        oauth = require_di(flows_app, FlowsDi).oauth_service
-        with patch.object(
-            oauth,
-            "complete_oauth",
-            new=AsyncMock(side_effect=ValueError("plain error")),
-        ):
-            resp = await flows_client.get(
-                "/flows/api/v1/integrations/oauth/callback",
-                params={"code": "x", "state": "y"},
-                headers={
-                    "Sec-Fetch-Dest": "document",
-                    "Accept-Language": "en",
-                },
-            )
+        resp = await flows_client.get(
+            "/flows/api/v1/integrations/oauth/callback",
+            params={"code": "x", "state": "missing-oauth-state"},
+            headers={
+                "Sec-Fetch-Dest": "document",
+                "Accept-Language": "en",
+            },
+        )
         assert resp.status_code == 400
         assert "text/html" in resp.headers.get("content-type", "")
-        assert b"plain error" in resp.content
+        assert b"OAuth state is invalid or expired" in resp.content
         assert b"Connection failed" in resp.content

@@ -157,6 +157,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                             label=""
                             placeholder=${this.t('cta.placeholder_name')}
                             .value=${this._contactName}
+                            .error=${this.fieldError('contact_name')}
                             @change=${(e) => {
                                 if (!e.detail || typeof e.detail.value !== 'string') {
                                     throw new Error('lead-form contact_name field expects detail.value string');
@@ -164,7 +165,6 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                                 this._contactName = e.detail.value;
                             }}
                         ></platform-field>
-                        ${this.renderFieldError('contact_name')}
                         <platform-field
                             type="string"
                             mode="edit"
@@ -172,6 +172,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                             label=""
                             placeholder=${this.t('cta.placeholder_email')}
                             .value=${this._email}
+                            .error=${this.fieldError('email')}
                             @change=${(e) => {
                                 if (!e.detail || typeof e.detail.value !== 'string') {
                                     throw new Error('lead-form email field expects detail.value string');
@@ -179,7 +180,6 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                                 this._email = e.detail.value;
                             }}
                         ></platform-field>
-                        ${this.renderFieldError('email')}
                     </div>
                     <div class="lead-row">
                         <platform-field
@@ -232,6 +232,7 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                                 placeholder=""
                                 .value=${this._headcountRange}
                                 .config=${this._headcountEnumConfig()}
+                                .error=${this.fieldError('headcount')}
                                 @change=${(e) => {
                                     if (!e.detail || typeof e.detail.value !== 'string') {
                                         throw new Error('lead-form headcount field expects detail.value string');
@@ -239,7 +240,6 @@ export class FrontendLeadFormModal extends PlatformFormModal {
                                     this._headcountRange = e.detail.value;
                                 }}
                             ></platform-field>
-                            ${this.renderFieldError('headcount')}
                         </div>
                     </div>
                     <div class="form-group">

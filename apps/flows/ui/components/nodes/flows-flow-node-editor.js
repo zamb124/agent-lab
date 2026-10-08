@@ -220,7 +220,6 @@ export class FlowsFlowNodeEditor extends PlatformElement {
             >
                 <div slot="settings">
                     <div class="field">
-                        <label>${this.t('flow_node_editor.flow_id')}</label>
                         <platform-segmented-control
                             class="source-mode"
                             full-width
@@ -237,6 +236,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                             <platform-field
                                 mode="edit"
                                 type="string"
+                                .label=${this.t('flow_node_editor.flow_id')}
                                 .placeholder=${this.t('flow_node_editor.custom_id_hint')}
                                 .value=${flowId}
                                 @change=${this._onFlowId}
@@ -245,6 +245,7 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                             <platform-field
                                 mode="edit"
                                 type="enum"
+                                .label=${this.t('flow_node_editor.flow_id')}
                                 .value=${flowId}
                                 .config=${{ values: flowIdEnumValues }}
                                 @change=${this._onFlowId}
@@ -253,10 +254,10 @@ export class FlowsFlowNodeEditor extends PlatformElement {
                     </div>
                     <div class="branch-mode-row">
                         <div class="field">
-                            <label>${this.t('flow_node_editor.branch_id')}</label>
                             <platform-field
                                 mode="edit"
                                 type="enum"
+                                .label=${this.t('flow_node_editor.branch_id')}
                                 .value=${branchId}
                                 .config=${{ values: branchEnumValues }}
                                 ?disabled=${flowId.length === 0}

@@ -19,6 +19,7 @@ export class PlatformFieldDate extends PlatformElement {
         mode: { type: String },
         disabled: { type: Boolean },
         datetime: { type: Boolean },
+        placeholder: { type: String },
     };
 
     static styles = [
@@ -46,6 +47,7 @@ export class PlatformFieldDate extends PlatformElement {
         this.mode = 'view';
         this.disabled = false;
         this.datetime = false;
+        this.placeholder = '';
     }
 
     _onChange(e) {
@@ -116,6 +118,7 @@ export class PlatformFieldDate extends PlatformElement {
                     type="text"
                     class="field-pill-input"
                     .value=${display}
+                    placeholder=${this.placeholder}
                     ?disabled=${this.disabled}
                     @input=${this._onFreeformDateInput}
                 />
@@ -127,6 +130,7 @@ export class PlatformFieldDate extends PlatformElement {
                 mode=${pickerMode}
                 value-format="iso"
                 .value=${raw || null}
+                .placeholder=${this.placeholder}
                 ?disabled=${this.disabled}
                 ?embedded=${true}
                 @change=${this._onChange}

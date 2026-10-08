@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from core.data_tables.identifiers import is_user_table_name, quote_sql_ident, validate_ident
 from core.data_tables.models import (
@@ -26,12 +26,12 @@ from core.data_tables.models import (
     DataTableScope,
     DataTableTableSnapshot,
 )
+from core.db.sqlite_rows import SqliteCell as SqliteValue
+from core.db.sqlite_rows import sqlite_cell, sqlite_fetchall, sqlite_fetchone
 from core.documents.viewer.models import DataTableColumnSnapshot
 from core.pagination import CursorPage, decode_cursor, encode_cursor
 from core.types import JsonObject, JsonValue, parse_json_value
 from core.utils.time import utcnow
-
-SqliteValue = str | int | float | bytes | None
 
 _SQLITE_TYPE: dict[DataTableColumnType, str] = {
     "text": "TEXT",
@@ -44,19 +44,15 @@ _SQLITE_TYPE: dict[DataTableColumnType, str] = {
 }
 
 
-def _row_get(row: sqlite3.Row, key: str) -> SqliteValue:
-    return cast(SqliteValue, row[key])
-
-
 def _row_str(row: sqlite3.Row, key: str) -> str:
-    value = _row_get(row, key)
+    value = sqlite_cell(row, key)
     if not isinstance(value, str):
         raise TypeError(f"{key} must be str, got {type(value).__name__}")
     return value
 
 
 def _row_int(row: sqlite3.Row, key: str) -> int:
-    value = _row_get(row, key)
+    value = sqlite_cell(row, key)
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{key} must be int, got {type(value).__name__}")
     return value
@@ -75,7 +71,7 @@ def _sql(*parts: str) -> str:
 
 
 def _cursor_rows(cursor: sqlite3.Cursor) -> list[sqlite3.Row]:
-    return list(cast(Sequence[sqlite3.Row], cursor.fetchall()))
+    return sqlite_fetchall(cursor)
 
 
 def _fetchall(
@@ -91,7 +87,7 @@ def _fetchone(
     sql: str,
     params: Sequence[SqliteValue] = (),
 ) -> sqlite3.Row | None:
-    return cast(sqlite3.Row | None, _execute(connection, sql, params).fetchone())
+    return sqlite_fetchone(_execute(connection, sql, params))
 
 
 def _parse_datetime(value: str) -> datetime:
@@ -738,7 +734,7 @@ def _data_table_row_from_sqlite(
 ) -> DataTableRow:
     values: JsonObject = {}
     for column_name, column in columns.items():
-        values[column_name] = decode_cell(column, _row_get(sqlite_row, column_name))
+        values[column_name] = decode_cell(column, sqlite_cell(sqlite_row, column_name))
     return DataTableRow(
         row_id=_row_int(sqlite_row, "row_id"),
         created_at=_row_str(sqlite_row, "created_at"),
@@ -789,7 +785,7 @@ def execute_user_sql(
     for fetched in _cursor_rows(cursor):
         cells: list[JsonValue] = []
         for column_name in columns:
-            value = _row_get(fetched, column_name)
+            value = sqlite_cell(fetched, column_name)
             if value is None or isinstance(value, (str, int, float, bool)):
                 cells.append(value)
             else:

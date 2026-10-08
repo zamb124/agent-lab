@@ -17,6 +17,7 @@ from a2a.types import (
 )
 from a2a.types.a2a_pb2 import ROLE_AGENT, TASK_STATE_COMPLETED
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.agent.llm_proxy import (
     AgentOpenAIChatCompletionsRequest,
     AgentOpenAIChatMessage,
@@ -39,6 +40,7 @@ from core.ai.providers import (
 )
 from core.config import get_settings
 from core.websocket import WsCommandError
+from tests.agent._helpers import company_id_from_auth_token, ensure_company_public_flows
 
 
 def test_agent_llm_option_value_reads_string_and_json_object() -> None:
@@ -64,9 +66,11 @@ def test_validate_requested_agent_model_accepts_auto() -> None:
 
 @pytest.mark.asyncio
 async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
-    monkeypatch: pytest.MonkeyPatch,
+    di: FlowsDi,
+    auth_token: str,
     unique_id: str,
 ) -> None:
+    await ensure_company_public_flows(company_id_from_auth_token(auth_token), di)
     model_id = f"qwen-{unique_id}:free"
     catalog_record = AIModelRecord(
         provider="openrouter",
@@ -76,21 +80,9 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
         output_modalities=("text",),
     )
     _ = await AIModelRecord.set(catalog_record)
-    llm_models_service = MagicMock()
-    llm_models_service.get_configured_providers_by_capability.return_value = [
-        HUMANITEC_LLM_PROVIDER,
-        "openrouter",
-    ]
-    llm_models_service.get_model_ids_by_provider_capability = AsyncMock(
-        return_value=[],
-    )
-    monkeypatch.setattr(
-        "apps.flows.src.agent.llm_proxy.load_lara_branch_ids",
-        AsyncMock(return_value=["documents"]),
-    )
 
     try:
-        model_ids = await read_agent_llm_model_ids(llm_models_service)
+        model_ids = await read_agent_llm_model_ids(di.llm_models_service)
     finally:
         stored = await AIModelRecord.get_provider_model("openrouter", model_id)
         if stored is not None:
@@ -100,7 +92,6 @@ async def test_read_agent_llm_model_ids_uses_catalog_and_llm_models_service(
     assert "image-auto" in model_ids
     assert "lara:documents" in model_ids
     assert f"openrouter:{model_id}" in model_ids
-    llm_models_service.get_model_ids_by_provider_capability.assert_not_called()
 
 
 @pytest.mark.asyncio

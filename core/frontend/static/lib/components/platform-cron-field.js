@@ -1,6 +1,7 @@
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '../platform-element/index.js';
 import { formStyles } from '../styles/shared/form.styles.js';
+import './fields/platform-field-shell.js';
 import {
     CRON_FIELD_PRESET_CUSTOM,
     CRON_FIELD_PRESETS,
@@ -34,7 +35,9 @@ export class PlatformCronField extends PlatformElement {
 
     static properties = {
         value: { type: String },
+        label: { type: String },
         name: { type: String },
+        error: { type: String },
         disabled: { type: Boolean, reflect: true },
         placeholder: { type: String },
         _selectId: { type: String, state: true },
@@ -44,7 +47,9 @@ export class PlatformCronField extends PlatformElement {
     constructor() {
         super();
         this.value = '';
+        this.label = '';
         this.name = '';
+        this.error = '';
         this.disabled = false;
         this.placeholder = '';
         this._selectId = CRON_FIELD_PRESET_CUSTOM;
@@ -121,41 +126,49 @@ export class PlatformCronField extends PlatformElement {
     render() {
         const showCustom = this._selectId === CRON_FIELD_PRESET_CUSTOM;
         return html`
-            <div class="stack">
-                <select
-                    class="form-select"
-                    .value=${this._selectId}
-                    name=${!showCustom && this.name ? this.name : nothing}
-                    ?disabled=${this.disabled}
-                    @change=${this._onSelectChange}
-                >
-                    ${CRON_FIELD_PRESETS.map(
-                        (p) => html`
-                            <option value=${p.id}>${this.t(`cron_field.preset_${p.id}`)}</option>
-                        `,
-                    )}
-                    <option value=${CRON_FIELD_PRESET_CUSTOM}>
-                        ${this.t('cron_field.preset_custom')}
-                    </option>
-                </select>
-                ${showCustom
-                    ? html`
-                          <input
-                              type="text"
-                              class="form-input custom"
-                              name=${this.name || nothing}
-                              spellcheck="false"
-                              autocomplete="off"
-                              .value=${this._customText}
-                              placeholder=${this.placeholder}
-                              ?disabled=${this.disabled}
-                              @input=${this._onCustomInput}
-                              @change=${this._onCustomChange}
-                          />
-                          <p class="form-hint">${this.t('cron_field.custom_help')}</p>
-                      `
-                    : nothing}
-            </div>
+            <platform-field-shell
+                .label=${this.label}
+                .error=${this.error}
+                floated
+                ?editable=${!this.disabled}
+                ?disabled=${this.disabled}
+            >
+                <div class="stack">
+                    <select
+                        class="form-select"
+                        .value=${this._selectId}
+                        name=${!showCustom && this.name ? this.name : nothing}
+                        ?disabled=${this.disabled}
+                        @change=${this._onSelectChange}
+                    >
+                        ${CRON_FIELD_PRESETS.map(
+                            (p) => html`
+                                <option value=${p.id}>${this.t(`cron_field.preset_${p.id}`)}</option>
+                            `,
+                        )}
+                        <option value=${CRON_FIELD_PRESET_CUSTOM}>
+                            ${this.t('cron_field.preset_custom')}
+                        </option>
+                    </select>
+                    ${showCustom
+                        ? html`
+                              <input
+                                  type="text"
+                                  class="form-input custom"
+                                  name=${this.name || nothing}
+                                  spellcheck="false"
+                                  autocomplete="off"
+                                  .value=${this._customText}
+                                  placeholder=${this.placeholder}
+                                  ?disabled=${this.disabled}
+                                  @input=${this._onCustomInput}
+                                  @change=${this._onCustomChange}
+                              />
+                              <p class="form-hint">${this.t('cron_field.custom_help')}</p>
+                          `
+                        : nothing}
+                </div>
+            </platform-field-shell>
         `;
     }
 }

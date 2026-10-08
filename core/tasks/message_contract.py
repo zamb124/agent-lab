@@ -56,6 +56,15 @@ def task_message_string_label(message: TaskiqMessage, key: str) -> str | None:
     return value
 
 
+def require_task_message_string_label(message: TaskiqMessage, key: str) -> str:
+    value = _task_message_label_value(message, key)
+    if value is None:
+        raise ValueError(f"TaskIQ label {key} is required")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"TaskIQ label {key} must be a non-empty string")
+    return value
+
+
 def task_message_int_label(message: TaskiqMessage, key: str) -> int | None:
     value = _task_message_label_value(message, key)
     if value is None:

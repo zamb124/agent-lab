@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import pytest
 
-from core.authz.service import AuthzService
+from apps.flows.di import FlowsDi
+from core.authz.company_sync import sync_company_member_roles
 from core.identity.system_bootstrap import (
     ensure_system_admin_membership,
     ensure_system_company_exists,
@@ -14,14 +13,12 @@ from core.models.identity_models import SYSTEM_COMPANY_ID, Company, User
 from tests.fixtures.auth import set_test_company_member_roles  # noqa: F401
 
 
-def _fake_authz() -> AuthzService:
-    authz = AsyncMock(spec=AuthzService)
-    authz.write_and_delete = AsyncMock()
-    return authz
-
-
 @pytest.mark.asyncio
-async def test_bootstrap_adds_admin_role_to_system_company_and_user(app, unique_id: str) -> None:
+async def test_bootstrap_adds_admin_role_to_system_company_and_user(
+    app,
+    di: FlowsDi,
+    unique_id: str,
+) -> None:
     _ = app
     user_id = f"bootstrap_admin_{unique_id}"
     email = f"{user_id}@example.com"
@@ -33,10 +30,9 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user(app, unique_
             companies={SYSTEM_COMPANY_ID: ["viewer"]},
         )
     )
-    authz = _fake_authz()
     try:
         await ensure_system_admin_membership(
-            authz=authz,
+            authz=di.authz_service,
             user_email=email,
         )
         stored_user = await User.get(user_id)
@@ -45,16 +41,29 @@ async def test_bootstrap_adds_admin_role_to_system_company_and_user(app, unique_
         assert stored_company is not None
         assert "admin" in stored_company.members[user_id]
         assert "admin" in stored_user.companies[SYSTEM_COMPANY_ID]
-        authz.write_and_delete.assert_awaited()
+        assert await di.authz_service.check_company_admin(
+            company_id=SYSTEM_COMPANY_ID,
+            user_id=user_id,
+        )
     finally:
         _ = await Company.discard_member(SYSTEM_COMPANY_ID, user_id)
+        await sync_company_member_roles(
+            di.authz_service,
+            company_id=SYSTEM_COMPANY_ID,
+            user_id=user_id,
+            roles=[],
+        )
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_skips_admin_when_target_email_user_missing(app, unique_id: str) -> None:
+async def test_bootstrap_skips_admin_when_target_email_user_missing(
+    app,
+    di: FlowsDi,
+    unique_id: str,
+) -> None:
     _ = app
     returned_company, returned_user = await ensure_system_admin_membership(
-        authz=_fake_authz(),
+        authz=di.authz_service,
         user_email=f"missing-{unique_id}@example.com",
     )
 
@@ -74,7 +83,11 @@ async def test_bootstrap_creates_system_company_when_missing(app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_skips_fga_write_when_already_admin(app, unique_id: str) -> None:
+async def test_bootstrap_skips_fga_write_when_already_admin(
+    app,
+    di: FlowsDi,
+    unique_id: str,
+) -> None:
     _ = app
     user_id = f"bootstrap_already_{unique_id}"
     email = f"{user_id}@example.com"
@@ -87,16 +100,21 @@ async def test_bootstrap_skips_fga_write_when_already_admin(app, unique_id: str)
         )
     )
     _ = await Company.put_member_roles(SYSTEM_COMPANY_ID, user_id, ["admin"])
-    authz = _fake_authz()
     try:
         returned_company, returned_user = await ensure_system_admin_membership(
-            authz=authz,
+            authz=di.authz_service,
             user_email=email,
         )
         assert returned_company.company_id == SYSTEM_COMPANY_ID
         assert returned_user is not None
         assert returned_user.user_id == user_id
-        authz.write_and_delete.assert_not_called()
+        assert (
+            await di.authz_service.check_company_admin(
+                company_id=SYSTEM_COMPANY_ID,
+                user_id=user_id,
+            )
+            is False
+        )
     finally:
         _ = await Company.discard_member(SYSTEM_COMPANY_ID, user_id)
 

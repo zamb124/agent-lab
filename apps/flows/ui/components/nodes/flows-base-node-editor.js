@@ -30,6 +30,7 @@ import '../editors/flows-state-mapping-editor.js';
 import '@platform/lib/components/platform-json-editor.js';
 import '../flows-node-run-control.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/fields/platform-field-shell.js';
 import { fieldPillStyles } from '@platform/lib/styles/shared/field-pill.styles.js';
 import { panelShellStyles } from '@platform/lib/styles/shared/panel-shell.styles.js';
 import {
@@ -181,9 +182,6 @@ export class FlowsBaseNodeEditor extends PlatformElement {
             }
             .exception-response-head platform-switch {
                 margin-left: auto;
-            }
-            .field-pill-file-refs-shell {
-                gap: var(--field-pill-gap);
             }
             .field-pill-file-ref-open {
                 min-width: 0;
@@ -1246,13 +1244,11 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                 </div>
                 ${this.nodeType === 'resource' ? nothing : html`
                 <div class="field">
-                    <div class="field-pill field-pill-file-refs-shell">
-                        <div class="field-pill-head">
-                            <span class="field-pill-label">${this.t('base_node_editor.files_section')}</span>
-                            <platform-help-hint
-                                .text=${this.t('base_node_editor.files_section_hint')}
-                            ></platform-help-hint>
-                        </div>
+                    <platform-field-shell
+                        .label=${this.t('base_node_editor.files_section')}
+                        .hint=${this.t('base_node_editor.files_section_hint')}
+                        floated
+                    >
                         <div class="field-pill-file-refs-body">
                             ${files.length === 0
                                 ? html`<p class="field-pill-empty">${this.t('base_node_editor.files_empty')}</p>`
@@ -1320,7 +1316,7 @@ export class FlowsBaseNodeEditor extends PlatformElement {
                                 </label>
                             </div>
                         </div>
-                    </div>
+                    </platform-field-shell>
                 </div>
                 `}
                 ${this.nodeType === 'resource' ? nothing : html`

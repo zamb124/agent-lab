@@ -18,9 +18,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from importlib import import_module
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast, override
+from typing import TYPE_CHECKING, Protocol, TypedDict, override
 
 from core.http import get_httpx_client
+from core.imports import module_sdk
 from core.logging import get_logger
 from core.models.voice_models import VADSegment
 from core.types import JsonObject, JsonValue, parse_json_object, require_json_array
@@ -83,9 +84,7 @@ class _SileroVadModule(Protocol):
 
 
 def _imported_sdk[T](module_type: type[T], module_name: str) -> T:
-    _ = module_type
-    module = cast(object, import_module(module_name))
-    return cast(T, module)
+    return module_sdk(import_module(module_name), module_type)
 
 
 def _load_torch_module() -> _TorchModule:

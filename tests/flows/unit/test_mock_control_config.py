@@ -5,13 +5,14 @@ Unit-тесты контракта Mock Control System.
 — список ответов. Скаляр и пустой список запрещены.
 """
 
-from unittest.mock import AsyncMock
-
 import pytest
 from pydantic import ValidationError
 
+from apps.flows.di import FlowsDi
+from core.authz.group_sync import remove_user_groups, sync_user_groups
 from core.clients.llm.mock_control import (
     MockControlConfig,
+    MockControlPermissionError,
     assert_mock_permission,
     mock_item_to_node_result,
     mock_item_to_text,
@@ -77,29 +78,46 @@ def test_parse_metadata_parses_mock_key() -> None:
 
 
 @pytest.mark.asyncio
-async def test_permission_requires_membership() -> None:
-    authz = AsyncMock()
-    authz.check = AsyncMock(side_effect=[True])
-    await assert_mock_permission(
-        authz,
-        user_id="u1",
-        permission_groups=["admin", "developers"],
+async def test_permission_requires_membership(di: FlowsDi, unique_id: str) -> None:
+    member_id = f"mock-member-{unique_id}"
+    outsider_id = f"mock-outsider-{unique_id}"
+    await sync_user_groups(
+        di.authz_service,
+        user_id=member_id,
+        groups=["admin"],
+        company_ids=["system"],
+        previous_groups=[],
     )
-    authz.check = AsyncMock(return_value=False)
-    with pytest.raises(Exception):
+    try:
         await assert_mock_permission(
-            authz,
-            user_id="u1",
-            permission_groups=["admin"],
+            di.authz_service,
+            user_id=member_id,
+            permission_groups=["admin", "developers"],
+        )
+        with pytest.raises(MockControlPermissionError):
+            await assert_mock_permission(
+                di.authz_service,
+                user_id=outsider_id,
+                permission_groups=["admin"],
+            )
+    finally:
+        await remove_user_groups(
+            di.authz_service,
+            user_id=member_id,
+            groups=["admin"],
+            company_ids=["system"],
         )
 
 
 @pytest.mark.asyncio
-async def test_permission_requires_explicit_groups() -> None:
+async def test_permission_requires_explicit_groups(di: FlowsDi) -> None:
     """Пустой permission_groups запрещает mock (привилегированная фича)."""
-    authz = AsyncMock()
-    with pytest.raises(Exception):
-        await assert_mock_permission(authz, user_id="u1", permission_groups=[])
+    with pytest.raises(MockControlPermissionError, match="permission_groups is required"):
+        await assert_mock_permission(
+            di.authz_service,
+            user_id="u1",
+            permission_groups=[],
+        )
 
 
 def test_mock_item_to_text_variants() -> None:

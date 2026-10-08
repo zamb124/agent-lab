@@ -20,7 +20,7 @@ from email.message import Message as EmailMessage
 from email.parser import BytesParser
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Literal, Protocol, TypedDict, TypeIs, cast, overload
+from typing import BinaryIO, ClassVar, Literal, Protocol, TypedDict, TypeIs, overload
 
 import ebooklib
 import extract_msg
@@ -73,7 +73,7 @@ from core.files.reader.vision import prepare_visual_payload
 from core.files.service import FilesService
 from core.files.types import FileCategory, extensions_for
 from core.http import get_httpx_client
-from core.imports import module_sdk
+from core.imports import module_sdk, typed_view
 from core.tracing.operation_span import traced_operation
 from core.types import JsonObject, JsonValue
 
@@ -1423,7 +1423,7 @@ def _read_unstructured_sync(
     kind: FileReadKind,
     opts: ReadOptions,
 ) -> FileReadResult:
-    partition = cast(_UnstructuredPartition, raw_partition)
+    partition = typed_view(raw_partition, type(raw_partition), _UnstructuredPartition)
 
     warnings: list[str] = []
     file_obj = BytesIO(raw)
@@ -1497,7 +1497,7 @@ def _read_pptx_sync(
     opts: ReadOptions,
 ) -> FileReadResult:
     """PowerPoint .pptx через python-pptx; одна страница на слайд."""
-    presentation = cast(_PptxPresentationFactory, raw_presentation)
+    presentation = typed_view(raw_presentation, type(raw_presentation), _PptxPresentationFactory)
     try:
         prs = presentation(BytesIO(raw))
     except Exception as exc:

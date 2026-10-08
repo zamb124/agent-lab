@@ -23,7 +23,7 @@ import json
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from typing import ClassVar, Literal, TypeAlias, cast, overload, override
+from typing import ClassVar, Literal, TypeAlias, overload, override
 
 from a2a.types import Artifact, Message, Part
 from a2a.types.a2a_pb2 import ROLE_AGENT, ROLE_USER
@@ -1142,7 +1142,7 @@ class LlmNode(BaseNode):
         if structured_result is not None:
             runner_state.clear_structured_output_result()
             structured_payload = require_json_value(
-                cast(JsonValue, structured_result),
+                structured_result,
                 "state.structured_output_result",
             )
             state.response = json.dumps(structured_payload, ensure_ascii=False)

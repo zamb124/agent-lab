@@ -427,10 +427,7 @@ export class PlatformFieldEnum extends PlatformElement {
             return html`<span class="enum-chip">${this._labelForValue(v)}</span>`;
         }
 
-        const ph = typeof this.placeholder === 'string' && this.placeholder !== ''
-            ? this.placeholder
-            : (this.t('platform_field.enum_search_placeholder')
-                ?? 'platform_field.enum_search_placeholder');
+        const ph = typeof this.placeholder === 'string' ? this.placeholder : '';
         const ariaList = this.t('platform_field.enum_list_aria') ?? 'platform_field.enum_list_aria';
 
         return html`

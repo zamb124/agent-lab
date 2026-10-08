@@ -5,10 +5,10 @@
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.realtime.registry_operations import (
     _custom_provider_models,
     _custom_provider_options,
@@ -16,6 +16,7 @@ from apps.flows.realtime.registry_operations import (
 )
 from core.ai.company_settings import CompanyAIProviders, CompanyCustomOpenAICompatibleProvider
 from core.ai.free_pool import (
+    PLATFORM_FREE_MODELS_CACHE_KEY,
     PlatformFreeModelRecord,
     serialize_platform_free_models,
 )
@@ -27,6 +28,7 @@ from core.ai.providers import (
     OPENAI_COMPATIBLE_LLM_PROVIDER_ORDER,
     AICapability,
 )
+from core.config import get_settings
 from core.config.models import (
     BothubProviderConfig,
     CailaProviderConfig,
@@ -83,9 +85,10 @@ def test_registry_platform_provider_options_labels_humanitec_llm():
 
 
 @pytest.mark.asyncio
-async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
-    redis = AsyncMock()
-    redis.get.return_value = serialize_platform_free_models(
+async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository(
+    di: FlowsDi,
+) -> None:
+    payload = serialize_platform_free_models(
         [
             PlatformFreeModelRecord(
                 provider="openrouter",
@@ -98,31 +101,45 @@ async def test_humanitec_llm_models_are_virtual_and_not_read_from_repository():
             )
         ]
     )
-    service = LLMModelsService(AsyncMock(), redis)
-    assert await service.get_model_ids_by_provider_capability(
-        HUMANITEC_LLM_PROVIDER,
-        AICapability.LLM_CHAT,
-    ) == [
-        {
-            "value": HUMANITEC_LLM_AUTO_MODEL,
-            "label": HUMANITEC_LLM_AUTO_MODEL,
-            "kind": "auto",
-        },
-        {
-            "value": "openrouter:qwen/qwen3-coder:free",
-            "label": "openrouter / qwen/qwen3-coder:free",
-            "kind": "free_model",
-            "provider": "openrouter",
-            "model_id": "qwen/qwen3-coder:free",
-            "score": 96,
-            "context_length": 262144,
-            "max_tokens": None,
-            "supported_parameters": ["tools", "response_format"],
-            "input_modalities": ["text"],
-            "output_modalities": ["text"],
-            "free_reason": "verified_zero_price",
-        },
-    ]
+    previous = await di.redis_client.get(PLATFORM_FREE_MODELS_CACHE_KEY)
+    ttl = get_settings().llm.platform_free_pool.cache_ttl_seconds
+    written = await di.redis_client.set(PLATFORM_FREE_MODELS_CACHE_KEY, payload, ttl=ttl)
+    assert written is True
+    try:
+        assert await di.llm_models_service.get_model_ids_by_provider_capability(
+            HUMANITEC_LLM_PROVIDER,
+            AICapability.LLM_CHAT,
+        ) == [
+            {
+                "value": HUMANITEC_LLM_AUTO_MODEL,
+                "label": HUMANITEC_LLM_AUTO_MODEL,
+                "kind": "auto",
+            },
+            {
+                "value": "openrouter:qwen/qwen3-coder:free",
+                "label": "openrouter / qwen/qwen3-coder:free",
+                "kind": "free_model",
+                "provider": "openrouter",
+                "model_id": "qwen/qwen3-coder:free",
+                "score": 96,
+                "context_length": 262144,
+                "max_tokens": None,
+                "supported_parameters": ["tools", "response_format"],
+                "input_modalities": ["text"],
+                "output_modalities": ["text"],
+                "free_reason": "verified_zero_price",
+            },
+        ]
+    finally:
+        if previous is None:
+            _ = await di.redis_client.delete(PLATFORM_FREE_MODELS_CACHE_KEY)
+        else:
+            restored = await di.redis_client.set(
+                PLATFORM_FREE_MODELS_CACHE_KEY,
+                previous,
+                ttl=ttl,
+            )
+            assert restored is True
 
 
 def test_configured_providers_follow_canonical_provider_order(monkeypatch):

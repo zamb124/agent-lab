@@ -1,20 +1,16 @@
 """
-Unit-тесты провайдера курса USD/RUB от ЦБ РФ.
+Тесты провайдера курса USD/RUB от ЦБ РФ.
 
-Покрывают:
-- парсинг XML (VunitRate и Value/Nominal, запятая как разделитель),
-- effective_date из атрибута Date,
-- fallback при пустом кэше и при ошибках сети/парсинга,
-- сохранение последнего успешного курса при неудачном refresh,
-- базовые граничные случаи (USD отсутствует, rate <= 0).
+Покрывают парсинг XML и refresh_rate_once против локального HTTP,
+который отдаёт тот же XML, что и scripts/XML_daily.asp.
 """
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import socket
 
-import httpx
 import pytest
+from aiohttp import web
 
 import core.billing.cbr_rate_provider as _provider
 from core.billing.cbr_rate_provider import (
@@ -22,6 +18,7 @@ from core.billing.cbr_rate_provider import (
     get_current_rate,
     refresh_rate_once,
 )
+from tests.fixtures.aiohttp_ephemeral import ephemeral_web_server
 
 # --- Хелпер сброса модульного кэша ---
 
@@ -150,88 +147,69 @@ def test_get_current_rate_returns_cached_value_ignoring_fallback():
     assert result == pytest.approx(90.5)
 
 
-# --- Хелпер для создания mock AsyncClient ---
-
-def _make_client_mock(text: str, status_code: int = 200) -> MagicMock:
-    response = MagicMock(spec=httpx.Response)
-    response.text = text
-    response.status_code = status_code
-    if status_code >= 400:
-        response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            message=f"HTTP {status_code}",
-            request=MagicMock(),
-            response=response,
-        )
-    else:
-        response.raise_for_status.return_value = None
-
-    client_mock = AsyncMock()
-    client_mock.get = AsyncMock(return_value=response)
-    client_mock.__aenter__ = AsyncMock(return_value=client_mock)
-    client_mock.__aexit__ = AsyncMock(return_value=False)
-    return client_mock
+def _closed_port_cbr_url() -> str:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return f"http://127.0.0.1:{port}/scripts/XML_daily.asp"
 
 
-# --- refresh_rate_once ---
+def _cbr_app(status: int, body: str) -> web.Application:
+    async def daily(_request: web.Request) -> web.Response:
+        content_type = "application/xml" if status == 200 else "text/plain"
+        return web.Response(status=status, text=body, content_type=content_type)
 
-@pytest.mark.asyncio
-async def test_refresh_rate_once_updates_cache_on_success():
-    """Успешный ответ ЦБ обновляет кэш реальным курсом."""
-    client_mock = _make_client_mock(_SAMPLE_XML)
+    app = web.Application()
+    app.router.add_get("/scripts/XML_daily.asp", daily)
+    return app
 
-    with patch("httpx.AsyncClient", return_value=client_mock):
+
+async def _refresh_from_local(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    status: int,
+    body: str,
+) -> None:
+    async with ephemeral_web_server(_cbr_app(status, body)) as base_url:
+        monkeypatch.setattr(_provider, "_CBR_URL", f"{base_url}/scripts/XML_daily.asp")
         await refresh_rate_once(fallback=85.0)
 
+
+@pytest.mark.asyncio
+async def test_refresh_rate_once_updates_cache_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    await _refresh_from_local(monkeypatch, status=200, body=_SAMPLE_XML)
     assert _provider._cached_rate == pytest.approx(74.8014)
 
 
 @pytest.mark.asyncio
-async def test_refresh_rate_once_keeps_old_cache_on_network_error():
-    """При сетевой ошибке предыдущий кэш сохраняется."""
+async def test_refresh_rate_once_keeps_old_cache_on_network_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _provider._cached_rate = 90.0
-
-    with patch("httpx.AsyncClient") as cls_mock:
-        instance = AsyncMock()
-        instance.__aenter__ = AsyncMock(return_value=instance)
-        instance.__aexit__ = AsyncMock(return_value=False)
-        instance.get = AsyncMock(side_effect=httpx.ConnectError("no route"))
-        cls_mock.return_value = instance
-
-        await refresh_rate_once(fallback=85.0)
-
+    monkeypatch.setattr(_provider, "_CBR_URL", _closed_port_cbr_url())
+    await refresh_rate_once(fallback=85.0)
     assert _provider._cached_rate == pytest.approx(90.0)
 
 
 @pytest.mark.asyncio
-async def test_refresh_rate_once_cache_stays_none_on_first_error():
-    """При ошибке и пустом кэше кэш остаётся None; get_current_rate возвращает fallback."""
-    client_mock = _make_client_mock("Internal error", status_code=503)
-
-    with patch("httpx.AsyncClient", return_value=client_mock):
-        await refresh_rate_once(fallback=85.0)
-
+async def test_refresh_rate_once_cache_stays_none_on_first_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _refresh_from_local(monkeypatch, status=503, body="Internal error")
     assert _provider._cached_rate is None
     assert get_current_rate(fallback=85.0) == pytest.approx(85.0)
 
 
 @pytest.mark.asyncio
-async def test_refresh_rate_once_keeps_old_cache_on_parse_error():
-    """При ошибке парсинга (USD отсутствует) старый кэш не сбрасывается."""
+async def test_refresh_rate_once_keeps_old_cache_on_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _provider._cached_rate = 92.3
-    client_mock = _make_client_mock(_SAMPLE_XML_NO_USD)
-
-    with patch("httpx.AsyncClient", return_value=client_mock):
-        await refresh_rate_once(fallback=85.0)
-
+    await _refresh_from_local(monkeypatch, status=200, body=_SAMPLE_XML_NO_USD)
     assert _provider._cached_rate == pytest.approx(92.3)
 
 
 @pytest.mark.asyncio
-async def test_refresh_rate_once_graceful_on_http_error():
-    """HTTP-ошибка не поднимает исключение — только warning в лог."""
-    client_mock = _make_client_mock("Service Unavailable", status_code=503)
-
-    with patch("httpx.AsyncClient", return_value=client_mock):
-        await refresh_rate_once(fallback=85.0)  # не должно поднять исключение
-
+async def test_refresh_rate_once_graceful_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    await _refresh_from_local(monkeypatch, status=503, body="Service Unavailable")
     assert _provider._cached_rate is None

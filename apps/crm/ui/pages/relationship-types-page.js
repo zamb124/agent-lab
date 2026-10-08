@@ -17,6 +17,7 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/fields/platform-field.js';
+import '@platform/lib/components/fields/platform-field-shell.js';
 
 const PALETTE = [
     '#007aff', '#5856d6', '#34c759', '#ff9500', '#ff3b30',
@@ -91,10 +92,6 @@ export class CRMRelationshipTypesPage extends PlatformPage {
 
             .form-grid platform-field {
                 min-width: 0;
-            }
-
-            .palette-card {
-                margin-bottom: 0;
             }
 
             .form-footer {
@@ -368,10 +365,11 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                             this._updateDraft('weight_default', next);
                         }}
                     ></platform-field>
-                    <div class="field-pill palette-card">
-                        <div class="field-pill-head">
-                            <span class="field-pill-label">${this.t('relationship_types_page.label_color')}</span>
-                        </div>
+                    <platform-field-shell
+                        .label=${this.t('relationship_types_page.label_color')}
+                        floated
+                        editable
+                    >
                         <div class="palette">
                             ${PALETTE.map((c) => html`
                                 <div
@@ -381,7 +379,7 @@ export class CRMRelationshipTypesPage extends PlatformPage {
                                 ></div>
                             `)}
                         </div>
-                    </div>
+                    </platform-field-shell>
                     <platform-field
                         type="boolean"
                         mode="edit"

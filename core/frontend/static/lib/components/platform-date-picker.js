@@ -2,6 +2,7 @@ import { html, css, unsafeCSS, nothing } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-popover.js';
+import './fields/platform-field-shell.js';
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATETIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -299,21 +300,27 @@ export class PlatformDatePicker extends PlatformElement {
                 cursor: pointer;
             }
 
-            .trigger.with-label {
-                min-height: var(
-                    --platform-date-picker-labeled-height,
-                    calc(
-                        2px + var(--field-pill-padding-y, 14px) +
-                        var(--field-pill-padding-y, 14px) +
-                        var(--platform-date-picker-label-line-height, 12px) +
-                        var(--field-pill-gap, 8px) +
-                        var(--field-pill-number-spin-height, 40px)
-                    )
-                );
-                border: 1px solid var(--platform-date-picker-labeled-border, var(--field-pill-border, var(--border-subtle)));
-                background: var(--platform-date-picker-labeled-bg, var(--field-pill-bg, var(--glass-solid-subtle)));
-                border-radius: var(--platform-date-picker-labeled-radius, var(--field-pill-radius, var(--radius-lg)));
-                padding: var(--platform-date-picker-labeled-padding, var(--field-pill-padding-y, var(--space-2)) var(--field-pill-padding-x, var(--space-4)));
+            /* Триггер внутри platform-field-shell (label у shell): голый, как embedded. */
+            .trigger.in-shell {
+                width: 100%;
+                min-height: var(--field-pill-number-spin-height);
+                border: none;
+                border-radius: 0;
+                background: transparent;
+                padding: 0;
+                box-shadow: none;
+                font-size: var(--field-pill-input-size, var(--text-sm));
+            }
+
+            .trigger.in-shell:focus-visible {
+                box-shadow: none;
+                border-color: transparent;
+            }
+
+            .trigger.in-shell .trigger-text {
+                font-size: var(--field-pill-input-size, var(--text-sm));
+                font-weight: var(--field-pill-input-weight, var(--font-medium));
+                line-height: var(--field-pill-input-line, 1.35);
             }
 
             :host([embedded]) .trigger {
@@ -326,15 +333,7 @@ export class PlatformDatePicker extends PlatformElement {
                 font-size: var(--field-pill-input-size, var(--text-sm));
             }
 
-            :host([embedded]) .trigger-value {
-                min-height: 0;
-                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
-                font-weight: var(--field-pill-input-weight, var(--font-medium));
-                line-height: var(--field-pill-input-line, 1.35);
-            }
-
-            :host([embedded]) .trigger-text.trigger-placeholder,
-            :host([embedded]) .trigger-value.placeholder {
+            :host([embedded]) .trigger-text.trigger-placeholder {
                 font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
                 font-weight: var(--font-normal);
                 color: var(--text-disabled, var(--text-tertiary));
@@ -351,29 +350,9 @@ export class PlatformDatePicker extends PlatformElement {
                 border-radius: var(--radius-md);
             }
 
-            :host([compact]) .trigger.with-label {
-                --field-pill-padding-y: var(--field-pill-compact-padding-y, 6px);
-                --field-pill-padding-x: var(--field-pill-compact-padding-x, 12px);
-                --field-pill-radius: var(--field-pill-compact-radius, var(--radius-md));
-                --field-pill-gap: var(--field-pill-compact-gap, 4px);
+            :host([compact]) .trigger.in-shell {
                 --field-pill-input-size: var(--field-pill-compact-input-size, var(--text-sm));
                 --field-pill-input-weight: var(--field-pill-compact-input-weight, var(--font-medium));
-                --field-pill-number-spin-height: 34px;
-                min-height: var(
-                    --platform-date-picker-labeled-height,
-                    calc(
-                        2px + var(--field-pill-padding-y, 6px) +
-                        var(--field-pill-padding-y, 6px) +
-                        var(--platform-date-picker-label-line-height, 12px) +
-                        var(--field-pill-gap, 4px) +
-                        var(--field-pill-number-spin-height, 34px)
-                    )
-                );
-                padding: var(
-                    --platform-date-picker-labeled-padding,
-                    var(--field-pill-padding-y, 6px) var(--field-pill-padding-x, 12px)
-                );
-                border-radius: var(--platform-date-picker-labeled-radius, var(--field-pill-radius, var(--radius-md)));
             }
 
             .trigger:focus-visible {
@@ -404,38 +383,6 @@ export class PlatformDatePicker extends PlatformElement {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-            }
-
-            .trigger-text.with-label {
-                flex-direction: column;
-                align-items: flex-start;
-                justify-content: center;
-                gap: var(--field-pill-gap, 8px);
-                overflow: visible;
-            }
-
-            .trigger-label {
-                font-size: var(--platform-date-picker-label-size, var(--field-pill-label-size, var(--text-xs)));
-                line-height: var(--field-pill-label-line, 1.1);
-                color: var(--field-pill-label-color, var(--text-tertiary));
-                font-weight: var(--field-pill-label-weight, var(--font-semibold));
-                text-transform: uppercase;
-                letter-spacing: var(--field-pill-label-letter, 0.04em);
-            }
-
-            .trigger-value {
-                min-height: var(--field-pill-number-spin-height, 40px);
-                display: inline-flex;
-                align-items: center;
-                font-size: var(--platform-date-picker-value-size, var(--field-pill-input-size, var(--text-sm)));
-                line-height: var(--field-pill-input-line, 1.35);
-                color: var(--field-pill-input-color, var(--text-primary));
-                font-weight: var(--field-pill-input-weight, var(--font-medium));
-            }
-
-            .trigger-value.placeholder {
-                color: var(--text-disabled, var(--text-tertiary));
-                font-weight: var(--font-normal, 400);
             }
 
             .trigger-placeholder {
@@ -551,7 +498,8 @@ export class PlatformDatePicker extends PlatformElement {
 
     updated(changedProperties) {
         if (this._anchor === null) {
-            const trigger = this.renderRoot?.querySelector('.trigger');
+            const trigger = this.renderRoot?.querySelector('platform-field-shell')
+                ?? this.renderRoot?.querySelector('.trigger');
             if (trigger instanceof HTMLElement) {
                 this._anchor = trigger;
             }
@@ -1138,6 +1086,9 @@ export class PlatformDatePicker extends PlatformElement {
         if (this.placeholder) {
             return this.placeholder;
         }
+        if (this.embedded || (typeof this.label === 'string' && this.label.trim().length > 0)) {
+            return '';
+        }
         if (this.selection === 'range') {
             if (this.mode === 'time') {
                 return 'Выберите диапазон времени';
@@ -1262,30 +1213,25 @@ export class PlatformDatePicker extends PlatformElement {
     render() {
         const displayValue = this._displayValue();
         const hasLabel = typeof this.label === 'string' && this.label.trim().length > 0;
+        const inShell = hasLabel && !this.embedded;
         const showTrailingIcon = !this.hideTriggerIcon && !hasLabel;
-        return html`
+        const trigger = html`
             <button
                 type="button"
-                class="trigger ${hasLabel ? 'with-label' : ''}"
+                class="trigger ${inShell ? 'in-shell' : ''}"
                 @click=${this._togglePopup}
                 aria-expanded=${this.open ? 'true' : 'false'}
                 ?disabled=${this.disabled}
             >
-                ${hasLabel ? html`
-                    <platform-icon class="leading-icon" name=${this.leadingIcon || 'calendar'} size=${this.compact ? '16' : '22'}></platform-icon>
-                ` : ''}
-                <span class="trigger-text ${hasLabel ? 'with-label' : ''} ${displayValue ? '' : 'trigger-placeholder'}">
-                    ${hasLabel ? html`
-                        <span class="trigger-label">${this.label}</span>
-                        <span class="trigger-value ${displayValue ? '' : 'placeholder'}">${displayValue || this._placeholderValue()}</span>
-                    ` : html`
-                        ${displayValue || this._placeholderValue()}
-                    `}
+                <span class="trigger-text ${displayValue ? '' : 'trigger-placeholder'}">
+                    ${displayValue || this._placeholderValue()}
                 </span>
                 ${showTrailingIcon ? html`
                     <platform-icon name=${this.open ? 'chevron-up' : 'calendar'} size=${this.compact ? '13' : '16'}></platform-icon>
                 ` : ''}
             </button>
+        `;
+        const popover = html`
             <platform-popover
                 trigger="manual"
                 role="dialog"
@@ -1297,6 +1243,30 @@ export class PlatformDatePicker extends PlatformElement {
             >
                 ${this._renderPopup()}
             </platform-popover>
+        `;
+        if (inShell) {
+            return html`
+                <platform-field-shell
+                    .label=${this.label}
+                    ?floated=${displayValue != null}
+                    ?editable=${!this.disabled}
+                    ?disabled=${this.disabled}
+                    density=${this.compact ? 'compact' : 'default'}
+                >
+                    <platform-icon
+                        slot="prefix"
+                        class="leading-icon"
+                        name=${this.leadingIcon || 'calendar'}
+                        size=${this.compact ? '16' : '22'}
+                    ></platform-icon>
+                    ${trigger}
+                </platform-field-shell>
+                ${popover}
+            `;
+        }
+        return html`
+            ${trigger}
+            ${popover}
         `;
     }
 }

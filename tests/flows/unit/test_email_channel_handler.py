@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import aiosmtplib
 import pytest
@@ -134,18 +136,78 @@ async def test_email_channel_handler_smtp_send(monkeypatch: pytest.MonkeyPatch) 
     assert captured["body_text"] == "body"
 
 
+class _SmtpCapture:
+    def __init__(self) -> None:
+        self.username: str = ""
+        self.password: str = ""
+        self.data: str = ""
+        self.port: int = 0
+
+
+async def _start_smtp_capture() -> tuple[asyncio.Server, _SmtpCapture]:
+    capture = _SmtpCapture()
+
+    async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        writer.write(b"220 localhost ready\r\n")
+        await writer.drain()
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            command = line.decode().strip()
+            upper = command.upper()
+            if upper.startswith("EHLO") or upper.startswith("HELO"):
+                writer.write(b"250-localhost\r\n250 AUTH PLAIN\r\n")
+            elif upper.startswith("AUTH PLAIN"):
+                payload = command.split(" ", 2)
+                blob = payload[2] if len(payload) == 3 else ""
+                if blob == "":
+                    writer.write(b"334\r\n")
+                    await writer.drain()
+                    blob = (await reader.readline()).decode().strip()
+                decoded = base64.b64decode(blob).decode()
+                _prefix, username, password = decoded.split("\0", 2)
+                capture.username = username
+                capture.password = password
+                writer.write(b"235 ok\r\n")
+            elif upper.startswith("MAIL FROM") or upper.startswith("RCPT TO") or upper.startswith("RSET"):
+                writer.write(b"250 ok\r\n")
+            elif upper == "DATA":
+                writer.write(b"354 end with dot\r\n")
+                await writer.drain()
+                chunks: list[bytes] = []
+                while True:
+                    data_line = await reader.readline()
+                    if data_line in {b".\r\n", b".\n", b""}:
+                        break
+                    chunks.append(data_line)
+                capture.data = b"".join(chunks).decode()
+                writer.write(b"250 queued\r\n")
+            elif upper.startswith("QUIT"):
+                writer.write(b"221 bye\r\n")
+                await writer.drain()
+                break
+            else:
+                writer.write(b"250 ok\r\n")
+            await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(handle, "127.0.0.1", 0)
+    sockets = server.sockets
+    if sockets is None or not sockets:
+        raise RuntimeError("SMTP capture server has no socket")
+    capture.port = int(sockets[0].getsockname()[1])
+    return server, capture
+
+
 @pytest.mark.asyncio
 async def test_send_smtp_message_uses_aiosmtplib() -> None:
-    smtp = MagicMock()
-    smtp.connect = AsyncMock()
-    smtp.login = AsyncMock()
-    smtp.send_message = AsyncMock(return_value=({}, "ok"))
-    smtp.quit = AsyncMock()
-
-    with patch("apps.flows.src.channels.email.aiosmtplib.SMTP", return_value=smtp) as smtp_cls:
+    server, capture = await _start_smtp_capture()
+    try:
         result = await send_smtp_message(
-            smtp_host="smtp.example.com",
-            smtp_port=587,
+            smtp_host="127.0.0.1",
+            smtp_port=capture.port,
             smtp_user="me@example.com",
             password="secret",
             from_email="me@example.com",
@@ -155,15 +217,20 @@ async def test_send_smtp_message_uses_aiosmtplib() -> None:
             body_html=None,
             in_reply_to=None,
             references=None,
-            use_tls=True,
+            use_tls=False,
         )
-    smtp_cls.assert_called_once()
-    smtp.connect.assert_awaited()
-    smtp.login.assert_awaited_with("me@example.com", "secret")
-    smtp.send_message.assert_awaited()
-    assert "accepted" in result
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert capture.username == "me@example.com"
+    assert capture.password == "secret"
+    assert "Subject: Hi" in capture.data
+    assert "Hello" in capture.data
     assert result["accepted"] == ["a@example.com"]
-    assert isinstance(result["message_id"], str)
+    message_id = result["message_id"]
+    assert isinstance(message_id, str)
+    assert "@" in message_id
 
 
 @pytest.mark.asyncio

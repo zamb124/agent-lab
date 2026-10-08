@@ -188,7 +188,7 @@ class CrawlDomain(PlatformModel):
             + "WHERE crawl_status = 'pending' GROUP BY crawl_domain_id) pending "
             + "ON crawl_domains.crawl_domain_id = pending.crawl_domain_id "
             + "WHERE crawl_profile_id = $1 AND status = 'active' "
-            + "ORDER BY pending.pending_count DESC, domain LIMIT $2",
+            + "ORDER BY pending.pending_count DESC, crawl_domains.domain LIMIT $2",
             [crawl_profile_id, limit],
             using="search",
         )

@@ -1,10 +1,10 @@
 """Google Sheets tools: OAuth interrupt when credentials are missing."""
 
 import uuid
-from unittest.mock import AsyncMock
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.base import ToolArguments
@@ -15,9 +15,8 @@ from apps.flows.tools.google_sheets.google_sheets import (
     sheets_get_values,
     sheets_share,
 )
-from core.context import reset_context, set_context
-from core.models.context_models import Context
-from core.models.identity_models import Company, User
+from core.config import get_settings
+from core.config.models import AuthConfig, AuthProviderConfig
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 
@@ -32,33 +31,43 @@ def _make_state() -> ExecutionState:
     )
 
 
-def _workspace_client_without_credentials() -> GoogleWorkspaceClient:
-    oauth = AsyncMock()
-    oauth.get_valid_token.return_value = None
-    oauth.build_auth_url.return_value = "https://accounts.google.com/o/oauth2/auth"
-    company_credentials = AsyncMock()
-    company_credentials.get_google_workspace_auth_material.return_value = None
+def _workspace_client(di: FlowsDi) -> GoogleWorkspaceClient:
     return GoogleWorkspaceClient(
-        oauth_service=oauth,
-        company_credentials=company_credentials,
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
     )
 
 
-async def _assert_requires_sheets_oauth(tool: FunctionTool, args: ToolArguments) -> None:
+def _enable_google_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(
+        settings,
+        "auth",
+        AuthConfig(
+            jwt_secret_key="test-secret-key-32-bytes-minimum-!",
+            providers={
+                "google": AuthProviderConfig(
+                    client_id="cid",
+                    client_secret="csec",
+                    auth_url="https://accounts.google.com/o/oauth2/v2/auth",
+                    token_url="https://oauth2.googleapis.com/token",
+                ),
+            },
+        ),
+    )
+
+
+async def _assert_requires_sheets_oauth(
+    di: FlowsDi,
+    tool: FunctionTool,
+    args: ToolArguments,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_google_oauth(monkeypatch)
     state = _make_state()
-    bound = tool.with_dependencies([_workspace_client_without_credentials()])
-    token = set_context(
-        Context(
-            user=User(user_id=state.user_id, name="Test"),
-            active_company=Company(company_id="system", name="System"),
-            channel="api",
-        )
-    )
-    try:
-        with pytest.raises(FlowInterrupt) as exc_info:
-            _ = await bound.run(args, state)
-    finally:
-        reset_context(token)
+    bound = tool.with_dependencies([_workspace_client(di)])
+    with pytest.raises(FlowInterrupt) as exc_info:
+        _ = await bound.run(args, state)
     interrupt = exc_info.value.body
     assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
     assert isinstance(interrupt, OAuthInterrupt)
@@ -68,38 +77,52 @@ async def _assert_requires_sheets_oauth(tool: FunctionTool, args: ToolArguments)
 
 class TestSheetsCreateSpreadsheet:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self) -> None:
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_sheets_oauth(
-            sheets_create_spreadsheet, {"title": "Leads"}
+            di, sheets_create_spreadsheet, {"title": "Leads"}, monkeypatch
         )
 
 
 class TestSheetsGetValues:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self) -> None:
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_sheets_oauth(
+            di,
             sheets_get_values,
             {"spreadsheet_id": "sheet123", "range": "Sheet1!A1:B2"},
+            monkeypatch,
         )
 
 
 class TestSheetsAppendRows:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self) -> None:
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_sheets_oauth(
+            di,
             sheets_append_rows,
             {
                 "spreadsheet_id": "sheet123",
                 "range": "Sheet1!A:Z",
                 "values": [["a", "b"]],
             },
+            monkeypatch,
         )
 
 
 class TestSheetsShare:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self) -> None:
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_sheets_oauth(
+            di,
             sheets_share,
             {"spreadsheet_id": "sheet123", "email": "u@example.com"},
+            monkeypatch,
         )

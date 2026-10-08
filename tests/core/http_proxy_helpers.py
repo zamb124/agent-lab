@@ -10,6 +10,21 @@ import pytest
 _ORIGINAL_ASYNC_CLIENT = httpx.AsyncClient
 
 
+class ClosedCallResponse(httpx.Response):
+    """Считает aclose: у Response с уже прочитанным телом is_closed сразу True."""
+
+    def __init__(self, status_code: int, *, text: str | None = None) -> None:
+        if text is None:
+            super().__init__(status_code)
+        else:
+            super().__init__(status_code, text=text)
+        self.aclose_calls = 0
+
+    async def aclose(self) -> None:
+        self.aclose_calls += 1
+        await super().aclose()
+
+
 def unread_json_response(
     request: httpx.Request,
     status_code: int,

@@ -438,6 +438,14 @@
     --field-pill-label-line: 1.1;
     --field-pill-label-letter: 0.04em;
 
+    /* Floating label: resting внутри поля как placeholder, floated — на бордере (fieldset/legend notch) */
+    --field-pill-legend-h: 11px;
+    --field-pill-notch-gap: 5px;
+    --field-pill-float-size: 12px;
+    --field-pill-float-weight: var(--font-medium);
+    --field-pill-float-color: var(--text-secondary);
+    --field-pill-resting-color: var(--text-disabled);
+
     --field-pill-input-color: var(--text-primary);
     --field-pill-input-size: 17px;
     --field-pill-input-weight: 600;

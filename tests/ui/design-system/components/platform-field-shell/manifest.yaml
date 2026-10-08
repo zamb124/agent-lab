@@ -1,0 +1,27 @@
+component: platform-field-shell
+doc_slug: platform-field-shell
+tier: T1
+title_ru: Field Shell
+title_en: Field Shell
+import: "@platform/lib/components/fields/platform-field-shell.js"
+variants:
+  - id: default
+    props:
+      label: Field label
+      editable: true
+    scenarios: [render]
+  - id: floated
+    props:
+      label: Field label
+      floated: true
+      editable: true
+    scenarios: [render]
+  - id: error
+    props:
+      label: Field label
+      error: Validation error
+      editable: true
+    scenarios: [render]
+playwright:
+  min_steps: 2
+  min_screenshots: 1

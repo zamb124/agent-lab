@@ -19,15 +19,26 @@ alwaysApply: false
 - Диспетчер по `type` выбирает подкомпонент `platform-field-<type>.js` из `core/frontend/static/lib/components/fields/`; набор типов — ключи `FIELD_TYPE_MAP` в `platform-field.js`. Импорт `@platform/lib/components/fields/platform-field.js` подключает все подкомпоненты.
 - Props, слоты (`prefix`, `suffix`) и события (`change`, `platform-field-managed-focus-in|out`) — файл компонента и UIKDS-карточки `tests/ui/design-system/components/platform-field*/`.
 - `@change` отдаёт типизированный `detail.value`: `number` для `number`/`integer`, `boolean`, `Array` для `array`.
-- `mode="edit"` — ввод, `mode="view"` — показ. Диспетчер рисует одну pill-оболочку (`.field-pill` + `.field-pill-label`), подкомпонент её не дублирует; `pill-embed` убирает вторую плашку внутри `.form-group` или карточки.
+- `mode="edit"` — ввод, `mode="view"` — показ. Диспетчер рендерит подкомпонент внутри `<platform-field-shell>`; `pill-embed` убирает вторую плашку внутри `.form-group` или карточки.
+
+### platform-field-shell
+
+`<platform-field-shell>` (`core/frontend/static/lib/components/fields/platform-field-shell.js`) — единственная pill-оболочка поля платформы: floating label (Material outlined), notch в бордере через `<fieldset>`+`<legend>`, фокус-ринг, hint и error-сообщение.
+
+- Пустое значение + без фокуса: label покоится внутри поля на месте текста; фокус (`:focus-within`) или `floated` (значение, view-режим) поднимают label на верхний бордер, бордер физически размыкается под ним.
+- Props: `label`, `floated`, `density` (`default|compact|dense`), `embed`, `editable`, `disabled`, `multiline`, `fill`, `error`, `hint`/`hintSummary`/`hintDetails`/`hintDocHref`/`hintDocLabel`; слоты — default (контрол), `prefix`, `suffix`.
+- Клик по pill фокусирует первый focusable потомок (поиск уходит в nested shadow roots).
+- Label поля — только prop `label` (внешний `<label>` + `<platform-field>` запрещён); ошибка поля — только prop `error` (рядом `.form-error` для того же поля запрещён; standalone `.form-error` остаётся для формовых и кросс-полевых ошибок и для не-field контролов). `[без гейта]`
+- Ручная разметка `fieldset`/`legend`, свой floating label, notch, фокус-ринг или `.field-pill*` разметка в `apps/**` запрещены: поле — `<platform-field>`, кастомный контрол-поле — `<platform-field-shell>`. `[без гейта]`
+- `<platform-field-shell>` в apps — только когда контрол не выражается типом `platform-field` (палитра, список файлов, составной поиск); композитный UI (radio-группы, switch-строки, сетки кнопок) shell не использует.
 
 ## Инварианты
 
 1. Поле формы в `apps/<svc>/ui/{pages,modals,components}/**` — только `<platform-field>`. Запрещены `<input type="text">` для строки, числа, даты и enum; `<input type="checkbox">` вместо `platform-field-boolean`; нативный `date`/`datetime-local` вместо `platform-field-date`; свой select или dropdown вместо `platform-field-enum`.
 2. Значение атрибута на экране — `<platform-field mode="view" .type .value>`; интерполяция `${value}` и `JSON.stringify(value)` в шаблоне запрещены. `[без гейта]`
 3. `enum` с техническими id (`flow_id`, provider) — `config.values` из `{ value, label }`; массив строк — только для читаемых значений. `enum` в edit — searchable combobox, не `<select>`. `[без гейта]`
-4. Описание поля — `.hint` (hover-tooltip `<platform-help-hint>` рядом с label); постоянный `<div class="hint">` под полем запрещён, класс `.hint` — только для описаний вне полей. `[без гейта]`
-5. Недопустимые `inputType` и `pillDensity` — `throw` в компоненте; подстановка значения по умолчанию запрещена.
+4. Описание поля — `.hint` (hover-tooltip `<platform-help-hint>` рядом с floating label); постоянный `<div class="hint">` под полем запрещён, класс `.hint` — только для описаний вне полей. `[без гейта]`
+5. Недопустимые `inputType`, `pillDensity` и `density` — `throw` в компоненте; подстановка значения по умолчанию запрещена.
 
 ### Сырые теги
 
@@ -54,6 +65,7 @@ alwaysApply: false
 ### Core-виджеты
 
 - Собственный UI вне поля — только `<platform-date-picker>`, `<platform-switch>`, `<platform-cron-field>`, `<platform-timezone-picker>`, `<platform-icon-picker>`, `<platform-palette-color-picker>`, `<tag-input>` (внутри `platform-field-array`), `<platform-help-hint>`, `<platform-modal-search-field>`. `[без гейта]`
+- Core-виджеты полей рендерятся через `<platform-field-shell>` и принимают `label`/`error` как у `platform-field`: `<platform-cron-field>`, `<platform-timezone-picker>`, `<platform-searchable-combobox>`, `<platform-variable-input>`, `<platform-date-picker>` (внутри shell — `in-shell`/bare-trigger режим).
 - Поиск в шапке, тулбаре или сайдбаре модалки — только `<platform-modal-search-field>` (`layout="header|toolbar|fill"`, `@change` → `detail.value`); локальные `.header-search` и pill-override запрещены. `[без гейта]`
 
 ### Новый тип данных

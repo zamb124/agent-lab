@@ -86,9 +86,9 @@ export class FrontendCrawlUrlAddModal extends PlatformFormModal {
                         label=${this.t('crawl_report_page.field_urls')}
                         placeholder="https://example.com/page"
                         .value=${this._urls}
+                        .error=${this.fieldError('urls')}
                         @change=${(e) => { this._urls = String(e.detail.value ?? ''); }}
                     ></platform-field>
-                    ${this.renderFieldError('urls')}
                     <div class="field-help">${this.t('crawl_report_page.help_urls')}</div>
                 </div>
             </form>

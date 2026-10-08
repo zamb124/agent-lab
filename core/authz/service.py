@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Final, Protocol, cast
+from typing import Final, Protocol
 
 from core.authz.client import OpenFgaAuthzClient
 from core.authz.errors import AuthzConfigError, AuthzDenied, AuthzUnavailable
@@ -17,6 +17,7 @@ from core.authz.models import (
 )
 from core.authz.types import AuthzConsistency, AuthzObjectType, AuthzRelation
 from core.context import get_context, require_active_company
+from core.imports import typed_view
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -340,17 +341,12 @@ class AuthzService:
         consistency: AuthzConsistency | None = None,
     ) -> AuthzExpandTree:
         self._assert_enabled()
-        response = cast(
-            _ExpandResponseView,
-            cast(
-                object,
-                await self._client.expand(
-                    obj,
-                    relation,
-                    consistency=self._resolve_consistency(consistency),
-                ),
-            ),
+        raw = await self._client.expand(
+            obj,
+            relation,
+            consistency=self._resolve_consistency(consistency),
         )
+        response = typed_view(raw, type(raw), _ExpandResponseView)
         tree = response.tree
         if tree is None or tree.root is None:
             raise AuthzUnavailable("OpenFGA expand response missing tree.root")

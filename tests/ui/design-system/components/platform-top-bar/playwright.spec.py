@@ -1,8 +1,4 @@
-"""pytest placeholder — backlog component; enable when status=production."""
+"""Playwright L2 для этого компонента ещё не написан.
 
-import pytest
-
-
-@pytest.mark.skip(reason="platform-top-bar: backlog — Playwright L2 pending")
-def test_backlog_placeholder() -> None:
-    raise AssertionError("backlog")
+Файл нужен каталогу UI kit. Пропущенный тест не заменяет сценарий.
+"""

@@ -118,18 +118,11 @@ export class CRMNamespaceNoteDefaultsFields extends PlatformElement {
                 <p class="nf-hint">${this.t('namespace_note_defaults.section_hint')}</p>
             </div>
             <div class="nf-field">
-                <div class="nf-label-row">
-                    <label class="nf-label" for="nf-voice-mode">${this.t('namespace_note_defaults.voice_mode_label')}</label>
-                    <platform-help-hint
-                        .text=${this.t('namespace_note_defaults.voice_mode_label_hint')}
-                        label=${this.t('templates_page.field_hint_button_aria')}
-                    ></platform-help-hint>
-                </div>
                 <platform-field
-                    id="nf-voice-mode"
                     type="enum"
                     mode="edit"
-                    label=""
+                    .label=${this.t('namespace_note_defaults.voice_mode_label')}
+                    .hint=${this.t('namespace_note_defaults.voice_mode_label_hint')}
                     .value=${mode}
                     .config=${this._voiceModeEnumConfig()}
                     ?disabled=${dis}

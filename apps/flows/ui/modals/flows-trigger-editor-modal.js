@@ -789,10 +789,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
         const branchEnumConfig = { values: this._branchSelectRows() };
         return html`
             <div class="field">
-                <label>${this.t('trigger_editor_modal.field_branch')}</label>
                 <platform-field
                     type="enum"
                     mode="edit"
+                    .label=${this.t('trigger_editor_modal.field_branch')}
                     .value=${this._branchId}
                     .config=${branchEnumConfig}
                     @change=${(e) => {
@@ -808,10 +808,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             </div>
 
             <div class="field">
-                <label>${this.t('trigger_editor_modal.field_id')}</label>
                 <platform-field
                     type="string"
                     mode="edit"
+                    .label=${this.t('trigger_editor_modal.field_id')}
                     .value=${this._triggerId}
                     ?disabled=${editing}
                     placeholder=${this.t('trigger_editor_modal.field_id_placeholder')}
@@ -826,10 +826,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 ></platform-field>
             </div>
             <div class="field">
-                <label>${this.t('trigger_editor_modal.field_name')}</label>
                 <platform-field
                     type="string"
                     mode="edit"
+                    .label=${this.t('trigger_editor_modal.field_name')}
                     .value=${this._name}
                     placeholder=${this.t('trigger_editor_modal.field_name_placeholder')}
                     @change=${(e) => {
@@ -905,10 +905,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_telegram')}</div>
                 <p class="config-intro">${this.t('trigger_editor_modal.telegram_intro')}</p>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_bot_token')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_bot_token')}
                         .value=${asString(c.bot_token)}
                         placeholder=${this.t('trigger_editor_modal.field_bot_token_placeholder')}
                         @change=${(e) => {
@@ -922,10 +922,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     <span class="hint">${this.t('trigger_editor_modal.hint_bot_token')}</span>
                 </div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_allowed_users')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_allowed_users')}
                         .value=${allowedUsers}
                         placeholder=${this.t('trigger_editor_modal.field_allowed_users_placeholder')}
                         @change=${(e) => {
@@ -968,8 +968,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_cron')}</div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_cron')}</label>
                     <platform-cron-field
+                        .label=${this.t('trigger_editor_modal.field_cron')}
                         .value=${asString(c.cron)}
                         placeholder=${this.t('trigger_editor_modal.field_cron_placeholder')}
                         @input=${(e) => this._setConfig('cron', e.detail.value)}
@@ -978,8 +978,8 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     <span class="hint">${this.t('trigger_editor_modal.hint_cron')}</span>
                 </div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_timezone')}</label>
                     <platform-timezone-picker
+                        .label=${this.t('trigger_editor_modal.field_timezone')}
                         .value=${asString(c.timezone)}
                         placeholder=${this.t('trigger_editor_modal.field_timezone_placeholder')}
                         @input=${(e) => this._setConfig('timezone', e.detail.value)}
@@ -987,10 +987,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     ></platform-timezone-picker>
                 </div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_initial_content')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_initial_content')}
                         .value=${asString(c.initial_content)}
                         placeholder=${this.t('trigger_editor_modal.field_initial_content_placeholder')}
                         @change=${(e) => {
@@ -1048,11 +1048,11 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_webhook')}</div>
                 <p class="config-intro">${this.t('trigger_editor_modal.webhook_intro')}</p>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_webhook_url')}</label>
                     <div class="webhook-endpoint-row">
                         <platform-field
                             type="string"
                             mode="view"
+                            .label=${this.t('trigger_editor_modal.field_webhook_url')}
                             .value=${endpointUrl}
                         ></platform-field>
                         <platform-button
@@ -1090,10 +1090,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     </div>
                 ` : nothing}
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_secret_token')}</label>
                     <platform-field
                         type="string"
                         mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_secret_token')}
                         .value=${asString(c.secret_token)}
                         placeholder=${this.t('trigger_editor_modal.field_secret_token_placeholder')}
                         @change=${(e) => {
@@ -1593,10 +1593,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
             <div class="config-section">
                 <div class="config-section-title">${this.t('trigger_editor_modal.section_platform_event')}</div>
                 <div class="field">
-                    <label>${this.t('trigger_editor_modal.field_event_type')}</label>
                     <platform-field
                         type="enum"
                         mode="edit"
+                        .label=${this.t('trigger_editor_modal.field_event_type')}
                         .value=${selectedType}
                         .config=${this._catalogEnumConfig}
                         .placeholder=${catalogBusy
@@ -2255,10 +2255,10 @@ export class FlowsTriggerEditorModal extends PlatformFormModal {
                     </div>
 
                     <div class="field">
-                        <label>${this.t('trigger_editor_modal.output_condition_label')}</label>
                         <platform-field
                             type="string"
                             mode="edit"
+                            .label=${this.t('trigger_editor_modal.output_condition_label')}
                             .value=${action.condition}
                             placeholder=${this.t('trigger_editor_modal.output_condition_placeholder')}
                             @change=${(e) => {

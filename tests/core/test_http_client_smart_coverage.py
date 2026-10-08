@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, PropertyMock
+from unittest.mock import MagicMock, PropertyMock
 
 import httpx
 import pytest
 
+from core.clients.redis_client import RedisClient
+from core.config import get_settings
 from core.http.client import (
     ProxyStrategy,
     SmartProxyClient,
@@ -17,7 +21,18 @@ from core.http.client import (
     get_httpx_client,
     request_public_oauth,
 )
-from tests.core.http_proxy_helpers import install_mock_httpx_client, unread_json_response
+from core.http.egress_route_preference import (
+    egress_prefer_proxy_delete,
+    egress_prefer_proxy_get,
+    egress_prefer_proxy_set,
+    normalized_http_origin,
+    redis_key_for_origin,
+)
+from tests.core.http_proxy_helpers import (
+    ClosedCallResponse,
+    install_mock_httpx_client,
+    unread_json_response,
+)
 
 
 def _proxy_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
@@ -27,6 +42,77 @@ def _proxy_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock_settings.proxy.mark_last_proxy_failed = MagicMock()
     monkeypatch.setattr("core.http.client.SmartProxyClient._get_settings", lambda self: mock_settings)
     return mock_settings
+
+
+@asynccontextmanager
+async def _prefer_proxy_origin(monkeypatch: pytest.MonkeyPatch, url: str) -> AsyncIterator[None]:
+    proxy = get_settings().proxy
+    monkeypatch.setattr(proxy, "enabled", True)
+    if not proxy.proxies:
+        monkeypatch.setattr(proxy, "proxies", ["http://127.0.0.1:9"])
+    origin = normalized_http_origin(url)
+    await egress_prefer_proxy_set(origin)
+    try:
+        yield
+    finally:
+        await egress_prefer_proxy_delete(origin)
+
+
+async def _stamp_prefer_marker(url: str, marker: str, *, ttl: int = 120) -> None:
+    redis = RedisClient(get_settings().database.redis_url)
+    await redis.set(redis_key_for_origin(normalized_http_origin(url)), marker, ttl=ttl)
+
+
+async def _prefer_ttl(url: str) -> int:
+    redis = RedisClient(get_settings().database.redis_url)
+    return await redis.ttl(redis_key_for_origin(normalized_http_origin(url)))
+
+
+def _enable_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    proxy = get_settings().proxy
+    monkeypatch.setattr(proxy, "enabled", True)
+    if not proxy.proxies:
+        monkeypatch.setattr(proxy, "proxies", ["http://127.0.0.1:9"])
+
+
+def _force_proxy(monkeypatch: pytest.MonkeyPatch, proxy_url: str) -> None:
+    proxy = get_settings().proxy
+    monkeypatch.setattr(proxy, "enabled", True)
+    monkeypatch.setattr(proxy, "proxies", [proxy_url])
+    monkeypatch.setattr(proxy, "connect_timeout", 0.2)
+
+
+@asynccontextmanager
+async def _serve_http(host: str, status_code: int, body: bytes) -> AsyncIterator[int]:
+    reason = "OK" if status_code == 200 else "Service Unavailable"
+
+    async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        while True:
+            line = await reader.readline()
+            if line in (b"\r\n", b""):
+                break
+        head = (
+            f"HTTP/1.1 {status_code} {reason}\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode()
+        writer.write(head + body)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(handle, host, 0)
+    sockets = server.sockets
+    if sockets is None or len(sockets) == 0:
+        server.close()
+        await server.wait_closed()
+        raise RuntimeError("http test listener has no socket")
+    port = int(sockets[0].getsockname()[1])
+    try:
+        yield port
+    finally:
+        server.close()
+        await server.wait_closed()
 
 
 def test_retry_http_statuses_includes_401_when_proxy_setting_enabled(
@@ -62,7 +148,6 @@ async def test_request_direct_burst_zero_attempts_raises() -> None:
 @pytest.mark.asyncio
 async def test_relative_path_resolves_with_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART, base_url="https://api.example") as client:
         r = await client.request("GET", "/v1/r")
     assert r.status_code == 200
@@ -77,7 +162,6 @@ async def test_smart_connect_failure_raises_when_proxy_disabled(monkeypatch: pyt
         monkeypatch,
         cast(Callable[[httpx.Request], httpx.Response], handler),
     )
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: False)
     with pytest.raises(httpx.ConnectError):
         async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
@@ -112,7 +196,6 @@ async def test_stream_smart_connect_failure_raises_when_proxy_disabled(
             return StreamFail()
 
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: False)
     with pytest.raises(httpx.ConnectError):
         async with get_httpx_client(strategy=ProxyStrategy.SMART) as client:
@@ -123,7 +206,6 @@ async def test_stream_smart_connect_failure_raises_when_proxy_disabled(
 @pytest.mark.asyncio
 async def test_stream_direct_first_local(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(201))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
         async with client.stream("GET", "http://127.0.0.1:8010/df") as resp:
             assert resp.status_code == 201
@@ -132,7 +214,6 @@ async def test_stream_direct_first_local(monkeypatch: pytest.MonkeyPatch) -> Non
 @pytest.mark.asyncio
 async def test_stream_direct_first_remote(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.DIRECT_FIRST) as client:
         async with client.stream("GET", "https://df-remote.example/s") as resp:
             assert resp.status_code == 200
@@ -150,7 +231,6 @@ async def test_http_method_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch,
         cast(Callable[[httpx.Request], httpx.Response], handler),
     )
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         await client.get("https://m.example/g")
         await client.post("https://m.example/p")
@@ -162,23 +242,23 @@ async def test_http_method_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_smart_proxy_client_aclose_inner_client() -> None:
-    inner = MagicMock()
-    inner.aclose = AsyncMock()
+    inner = httpx.AsyncClient()
     client = get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART)
     client._client = inner
     await client.aclose()
-    inner.aclose.assert_awaited_once()
+    assert inner.is_closed
+    assert client._client is None
 
 
 @pytest.mark.asyncio
 async def test_smart_proxy_client_aexit_closes_inner_client() -> None:
-    inner = MagicMock()
-    inner.aclose = AsyncMock()
+    inner = httpx.AsyncClient()
     client = get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART)
     client._client = inner
     async with client:
         pass
-    inner.aclose.assert_awaited_once()
+    assert inner.is_closed
+    assert client._client is None
 
 
 def test_get_settings_cached_on_smart_client() -> None:
@@ -213,28 +293,27 @@ async def test_stream_prefer_sticky_success_calls_set(monkeypatch: pytest.Monkey
         def stream(self, method: str, url: str, **kwargs: object) -> StreamOk:
             return StreamOk()
 
-    mock_set = AsyncMock()
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", mock_set)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        async with client.stream("GET", "https://sticky-ok.example/s") as resp:
-            assert resp.status_code == 200
-    mock_set.assert_awaited_once()
+    async with _prefer_proxy_origin(monkeypatch, "https://sticky-ok.example/s"):
+        await _stamp_prefer_marker("https://sticky-ok.example/s", "1", ttl=60)
+        async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+            async with client.stream("GET", "https://sticky-ok.example/s") as resp:
+                assert resp.status_code == 200
+        assert await _prefer_ttl("https://sticky-ok.example/s") > 60
 
 
 @pytest.mark.asyncio
 async def test_stream_prefer_zero_retries_raises_unexpected_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(SmartProxyClient, "MAX_PROXY_RETRIES", 0)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
     with pytest.raises(RuntimeError, match="unexpected state"):
-        async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-            async with client.stream("GET", "https://sticky-zero.example/s"):
-                pass
+        async with _prefer_proxy_origin(monkeypatch, "https://sticky-zero.example/s"):
+            async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+                async with client.stream("GET", "https://sticky-zero.example/s"):
+                    pass
 
 
 @pytest.mark.asyncio
@@ -276,7 +355,6 @@ async def test_stream_403_proxy_phase_all_connect_fail(monkeypatch: pytest.Monke
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     with pytest.raises(httpx.ConnectError):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -320,7 +398,6 @@ async def test_stream_proxy_only_all_fail(monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.mark.asyncio
 async def test_stream_context_aexit_closes(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         stream_cm = client.stream("GET", "https://aexit.example/s")
         async with stream_cm as resp:
@@ -330,40 +407,54 @@ async def test_stream_context_aexit_closes(monkeypatch: pytest.MonkeyPatch) -> N
 @pytest.mark.asyncio
 async def test_relative_url_requires_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         with pytest.raises(ValueError, match="base_url"):
             await client.request("GET", "/relative-only")
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(10)
 @pytest.mark.parametrize(
-    "host_url",
+    "host",
     [
-        "http://127.0.0.1:8010/r",
-        "http://localhost:8010/r",
-        "http://10.0.0.1:8010/r",
-        "http://192.168.1.1:8010/r",
-        "http://172.16.0.1:8010/r",
-        "http://app.localhost:8010/r",
+        "127.0.0.1",
+        "localhost",
+        "10.0.0.1",
+        "192.168.1.1",
+        "172.16.0.1",
+        "app.localhost",
     ],
 )
-async def test_smart_local_skip_proxy_no_rotation(host_url: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    via = AsyncMock()
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    monkeypatch.setattr("core.http.client.SmartProxyClient._request_via_proxy_rotation", via)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        r = await client.request("GET", host_url)
-    assert r.status_code == 200
-    via.assert_not_called()
+async def test_smart_local_skip_proxy_no_rotation(host: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Предпочтение прокси уже стоит, прокси мёртвый. Локальный хост не заходит в ротацию,
+    # поэтому ключ остаётся. Ротация при обрыве прокси ключ снимает.
+    async with _serve_http("127.0.0.1", 200, b"ok") as port:
+        url = f"http://{host}:{port}/r"
+        _force_proxy(monkeypatch, "http://127.0.0.1:9")
+        origin = normalized_http_origin(url)
+        await egress_prefer_proxy_set(origin)
+        try:
+            async with get_httpx_client(timeout=0.4, strategy=ProxyStrategy.SMART) as client:
+                if host in ("127.0.0.1", "localhost"):
+                    response = await client.request("GET", url)
+                    assert response.status_code == 200
+                    await response.aclose()
+                else:
+                    try:
+                        response = await client.request("GET", url)
+                    except (httpx.ConnectError, httpx.ConnectTimeout):
+                        response = None
+                    else:
+                        assert response.status_code == 200
+                        await response.aclose()
+            assert await egress_prefer_proxy_get(origin) is True
+        finally:
+            await egress_prefer_proxy_delete(origin)
 
 
 @pytest.mark.asyncio
 async def test_smart_429_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
-    first = MagicMock()
-    first.status_code = 429
-    first.aclose = AsyncMock()
+    first = ClosedCallResponse(429)
 
     class FakeAsyncClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -382,20 +473,19 @@ async def test_smart_429_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> N
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", AsyncMock())
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         r = await client.request("GET", "https://retry-429.example/x")
     assert r.status_code == 200
-    first.aclose.assert_awaited_once()
+    assert first.aclose_calls == 1
+    assert await egress_prefer_proxy_get(normalized_http_origin("https://retry-429.example/x")) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://retry-429.example/x"))
 
 
 @pytest.mark.asyncio
 async def test_smart_451_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
-    first = MagicMock()
-    first.status_code = 451
-    first.aclose = AsyncMock()
+    first = ClosedCallResponse(451)
 
     class FakeAsyncClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -414,13 +504,14 @@ async def test_smart_451_retries_via_proxy(monkeypatch: pytest.MonkeyPatch) -> N
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", AsyncMock())
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         r = await client.request("GET", "https://retry-451.example/x")
     assert r.status_code == 200
-    first.aclose.assert_awaited_once()
+    assert first.aclose_calls == 1
+    assert await egress_prefer_proxy_get(normalized_http_origin("https://retry-451.example/x")) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://retry-451.example/x"))
 
 
 @pytest.mark.asyncio
@@ -431,9 +522,7 @@ async def test_smart_401_retries_when_setting_enabled(monkeypatch: pytest.Monkey
         lambda: frozenset({401, 403, 429, 451}),
     )
 
-    first = MagicMock()
-    first.status_code = 401
-    first.aclose = AsyncMock()
+    first = ClosedCallResponse(401)
 
     class FakeAsyncClient:
         def __init__(self, *args: object, **kwargs: object) -> None:
@@ -451,56 +540,55 @@ async def test_smart_401_retries_when_setting_enabled(monkeypatch: pytest.Monkey
             return httpx.Response(200)
 
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", AsyncMock())
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         r = await client.request("GET", "https://retry-401.example/x")
     assert r.status_code == 200
-    first.aclose.assert_awaited_once()
+    assert first.aclose_calls == 1
+    assert await egress_prefer_proxy_get(normalized_http_origin("https://retry-401.example/x")) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://retry-401.example/x"))
 
 
 @pytest.mark.asyncio
 async def test_prefer_proxy_rotation_connect_error_invalidates(monkeypatch: pytest.MonkeyPatch) -> None:
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    mock_del = AsyncMock()
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_delete", mock_del)
-    monkeypatch.setattr(
-        "core.http.client.SmartProxyClient._request_via_proxy_rotation",
-        AsyncMock(side_effect=httpx.ConnectError("rot", request=httpx.Request("GET", "https://x"))),
-    )
-    monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        r = await client.request("GET", "https://prefer-fail.example/x")
-    assert r.status_code == 200
-    mock_del.assert_awaited()
+    # 127.0.0.1.nip.io резолвится в loopback, но имя не входит в локальные хосты клиента.
+    async with _serve_http("127.0.0.1", 200, b"ok") as port:
+        url = f"http://127.0.0.1.nip.io:{port}/x"
+        _force_proxy(monkeypatch, "http://127.0.0.1:9")
+        origin = normalized_http_origin(url)
+        await egress_prefer_proxy_set(origin)
+        try:
+            async with get_httpx_client(timeout=0.4, strategy=ProxyStrategy.SMART) as client:
+                response = await client.request("GET", url)
+            assert response.status_code == 200
+            await response.aclose()
+            assert await egress_prefer_proxy_get(origin) is False
+        finally:
+            await egress_prefer_proxy_delete(origin)
 
 
 @pytest.mark.asyncio
 async def test_prefer_proxy_error_status_falls_back_direct(monkeypatch: pytest.MonkeyPatch) -> None:
-    bad = MagicMock()
-    bad.status_code = 503
-    type(bad).is_success = PropertyMock(return_value=False)
-    bad.aclose = AsyncMock()
-
-    install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200))
-    mock_del = AsyncMock()
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_delete", mock_del)
-    monkeypatch.setattr("core.http.client.SmartProxyClient._request_via_proxy_rotation", AsyncMock(return_value=bad))
-    monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        r = await client.request("GET", "https://prefer-503.example/x")
-    assert r.status_code == 200
-    bad.aclose.assert_awaited_once()
-    mock_del.assert_awaited()
+    async with _serve_http("127.0.0.1", 503, b"") as proxy_port:
+        async with _serve_http("127.0.0.1", 200, b"ok") as port:
+            url = f"http://127.0.0.1.nip.io:{port}/x"
+            _force_proxy(monkeypatch, f"http://127.0.0.1:{proxy_port}")
+            origin = normalized_http_origin(url)
+            await egress_prefer_proxy_set(origin)
+            try:
+                async with get_httpx_client(timeout=0.4, strategy=ProxyStrategy.SMART) as client:
+                    response = await client.request("GET", url)
+                assert response.status_code == 200
+                await response.aclose()
+                assert await egress_prefer_proxy_get(origin) is False
+            finally:
+                await egress_prefer_proxy_delete(origin)
 
 
 @pytest.mark.asyncio
 async def test_stream_smart_mock_transport_200(monkeypatch: pytest.MonkeyPatch) -> None:
     install_mock_httpx_client(monkeypatch, lambda r: httpx.Response(200, content=b"ok"))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         async with client.stream("GET", "https://stream.example/s") as resp:
@@ -543,12 +631,13 @@ async def test_stream_smart_connect_then_proxy_success(monkeypatch: pytest.Monke
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", AsyncMock())
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         async with client.stream("GET", "https://stream-smart.example/s") as resp:
             assert resp.status_code == 200
+    assert await egress_prefer_proxy_get(normalized_http_origin("https://stream-smart.example/s")) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://stream-smart.example/s"))
 
 
 @pytest.mark.asyncio
@@ -573,14 +662,15 @@ async def test_smart_request_connect_fail_then_proxy_rotation(monkeypatch: pytes
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    mock_set = AsyncMock()
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", mock_set)
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         r = await client.request("GET", "https://smart-req-fail-then-proxy.example/x")
     assert r.status_code == 200
-    mock_set.assert_awaited_once()
+    assert await egress_prefer_proxy_get(
+        normalized_http_origin("https://smart-req-fail-then-proxy.example/x")
+    ) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://smart-req-fail-then-proxy.example/x"))
 
 
 @pytest.mark.asyncio
@@ -610,7 +700,6 @@ async def test_stream_direct_connect_fail_all_proxy_streams_fail(monkeypatch: py
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     with pytest.raises(httpx.ConnectError):
         async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
@@ -654,12 +743,13 @@ async def test_stream_smart_403_retries_proxy(monkeypatch: pytest.MonkeyPatch) -
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_set", AsyncMock())
+    _enable_proxy(monkeypatch)
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
         async with client.stream("GET", "https://stream-403.example/s") as resp:
             assert resp.status_code == 200
+    assert await egress_prefer_proxy_get(normalized_http_origin("https://stream-403.example/s")) is True
+    await egress_prefer_proxy_delete(normalized_http_origin("https://stream-403.example/s"))
 
 
 @pytest.mark.asyncio
@@ -700,13 +790,15 @@ async def test_stream_prefer_proxy_non_success_falls_back_direct(monkeypatch: py
             return Ok()
 
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_delete", AsyncMock())
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        async with client.stream("GET", "https://stream-prefer-bad.example/s") as resp:
-            assert resp.status_code == 200
+    async with _prefer_proxy_origin(monkeypatch, "https://stream-prefer-bad.example/s"):
+        async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+            async with client.stream("GET", "https://stream-prefer-bad.example/s") as resp:
+                assert resp.status_code == 200
+        assert await egress_prefer_proxy_get(
+            normalized_http_origin("https://stream-prefer-bad.example/s")
+        ) is False
 
 
 @pytest.mark.asyncio
@@ -748,12 +840,14 @@ async def test_stream_prefer_all_proxies_fail_then_direct(monkeypatch: pytest.Mo
 
     _proxy_settings(monkeypatch)
     monkeypatch.setattr("core.http.client.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=True))
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_delete", AsyncMock())
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
-    async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
-        async with client.stream("GET", "https://stream-prefer-dead.example/s") as resp:
-            assert resp.status_code == 200
+    async with _prefer_proxy_origin(monkeypatch, "https://stream-prefer-dead.example/s"):
+        async with get_httpx_client(timeout=5.0, strategy=ProxyStrategy.SMART) as client:
+            async with client.stream("GET", "https://stream-prefer-dead.example/s") as resp:
+                assert resp.status_code == 200
+        assert await egress_prefer_proxy_get(
+            normalized_http_origin("https://stream-prefer-dead.example/s")
+        ) is False
 
 
 @pytest.mark.asyncio
@@ -883,7 +977,6 @@ async def test_stream_plain_400_does_not_raise_response_not_read(
         return unread_json_response(request, 400, error_body)
 
     install_mock_httpx_client(monkeypatch, handler)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
     _proxy_settings(monkeypatch)
 

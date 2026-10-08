@@ -98,14 +98,9 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
         });
     }
 
-    _renderFieldError(field) {
-        const error_key = this._form.errors[field];
-        if (!error_key) return null;
-        return html`<div class="form-error">${this.t(error_key)}</div>`;
-    }
-
     renderBody() {
         const draft = this._form.draft;
+        const titleErrorKey = this._form.errors.title;
         return html`
             <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
                 <platform-field
@@ -113,10 +108,10 @@ export class OfficeDocumentRenameModal extends PlatformFormModal {
                     mode="edit"
                     .label=${this.t('document_rename_modal.label_title')}
                     .value=${draft.title}
+                    .error=${titleErrorKey ? this.t(titleErrorKey) : ''}
                     ?disabled=${this._form.submitting}
                     @change=${this._onTitleChange}
                 ></platform-field>
-                ${this._renderFieldError('title')}
             </form>
         `;
     }

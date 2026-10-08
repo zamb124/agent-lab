@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import httpx
 import pytest
 from a2a.helpers.proto_helpers import new_text_message
@@ -28,7 +26,6 @@ async def test_stream_unread_http_400_raises_http_status_error_with_body(
         return unread_json_response(request, 400, error_body)
 
     install_mock_httpx_client(monkeypatch, handler)
-    monkeypatch.setattr("core.http.client.egress_prefer_proxy_get", AsyncMock(return_value=False))
     monkeypatch.setattr("core.http.client._platform_proxy_active", lambda: True)
 
     client = LLMClient(

@@ -631,8 +631,8 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                             ></platform-switch>
                         </div>
                         <div class="field">
-                            <label class="field-label">${this.t('integrations_page.auto_sync_cron_label')}</label>
                             <platform-cron-field
+                                .label=${this.t('integrations_page.auto_sync_cron_label')}
                                 .value=${this._autoSyncCron}
                                 placeholder=${this.t('integrations_page.auto_sync_cron_placeholder')}
                                 ?disabled=${this._integrationAutoSyncOp.busy}
@@ -642,8 +642,8 @@ export class CRMNamespaceIntegrationsPage extends PlatformPage {
                             <p class="hint">${this.t('integrations_page.auto_sync_cron_help')}</p>
                         </div>
                         <div class="field">
-                            <label class="field-label">${this.t('integrations_page.auto_sync_tz_label')}</label>
                             <platform-timezone-picker
+                                .label=${this.t('integrations_page.auto_sync_tz_label')}
                                 placeholder=${this.t('integrations_page.auto_sync_tz_placeholder')}
                                 .value=${this._autoSyncTimezone}
                                 ?disabled=${this._integrationAutoSyncOp.busy}

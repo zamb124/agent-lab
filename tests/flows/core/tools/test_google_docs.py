@@ -5,10 +5,10 @@ Google Docs tools требуют явную авторизацию через st
 """
 
 import uuid
-from unittest.mock import AsyncMock
 
 import pytest
 
+from apps.flows.di import FlowsDi
 from apps.flows.src.runtime.exceptions import FlowInterrupt
 from apps.flows.src.services.google_workspace_client import GoogleWorkspaceClient
 from apps.flows.src.tools.base import ToolArguments
@@ -22,9 +22,8 @@ from apps.flows.tools.google_docs.google_docs import (
     gdocs_read_document,
     gdocs_share_document,
 )
-from core.context import reset_context, set_context
-from core.models.context_models import Context
-from core.models.identity_models import Company, User
+from core.config import get_settings
+from core.config.models import AuthConfig, AuthProviderConfig
 from core.state import ExecutionState
 from core.state.interrupt import InterruptKind, OAuthInterrupt
 
@@ -39,33 +38,43 @@ def _make_state() -> ExecutionState:
     )
 
 
-def _workspace_client_without_credentials() -> GoogleWorkspaceClient:
-    oauth = AsyncMock()
-    oauth.get_valid_token.return_value = None
-    oauth.build_auth_url.return_value = "https://accounts.google.com/o/oauth2/auth"
-    company_credentials = AsyncMock()
-    company_credentials.get_google_workspace_auth_material.return_value = None
+def _workspace_client(di: FlowsDi) -> GoogleWorkspaceClient:
     return GoogleWorkspaceClient(
-        oauth_service=oauth,
-        company_credentials=company_credentials,
+        oauth_service=di.oauth_service,
+        company_credentials=di.company_integration_credential_service,
     )
 
 
-async def _assert_requires_google_docs_oauth(tool: FunctionTool, args: ToolArguments) -> None:
+def _enable_google_oauth(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(
+        settings,
+        "auth",
+        AuthConfig(
+            jwt_secret_key="test-secret-key-32-bytes-minimum-!",
+            providers={
+                "google": AuthProviderConfig(
+                    client_id="cid",
+                    client_secret="csec",
+                    auth_url="https://accounts.google.com/o/oauth2/v2/auth",
+                    token_url="https://oauth2.googleapis.com/token",
+                ),
+            },
+        ),
+    )
+
+
+async def _assert_requires_google_docs_oauth(
+    di: FlowsDi,
+    tool: FunctionTool,
+    args: ToolArguments,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _enable_google_oauth(monkeypatch)
     state = _make_state()
-    bound = tool.with_dependencies([_workspace_client_without_credentials()])
-    token = set_context(
-        Context(
-            user=User(user_id=state.user_id, name="Test"),
-            active_company=Company(company_id="system", name="System"),
-            channel="api",
-        )
-    )
-    try:
-        with pytest.raises(FlowInterrupt) as exc_info:
-            _ = await bound.run(args, state)
-    finally:
-        reset_context(token)
+    bound = tool.with_dependencies([_workspace_client(di)])
+    with pytest.raises(FlowInterrupt) as exc_info:
+        _ = await bound.run(args, state)
     interrupt = exc_info.value.body
     assert interrupt.kind == InterruptKind.OAUTH_REQUIRED
     assert isinstance(interrupt, OAuthInterrupt)
@@ -75,65 +84,97 @@ async def _assert_requires_google_docs_oauth(tool: FunctionTool, args: ToolArgum
 
 class TestGDocsCreateDocument:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
-        await _assert_requires_google_docs_oauth(gdocs_create_document, {"title": "Отчёт Q1"})
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        await _assert_requires_google_docs_oauth(
+            di, gdocs_create_document, {"title": "Отчёт Q1"}, monkeypatch
+        )
 
     @pytest.mark.asyncio
-    async def test_requires_oauth_with_file_id_without_credentials(self):
+    async def test_requires_oauth_with_file_id_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_create_document,
             {"title": "From template", "file_id": "file_abc"},
+            monkeypatch,
         )
 
 
 class TestGDocsReadDocument:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
-        await _assert_requires_google_docs_oauth(gdocs_read_document, {"document_id": "doc123"})
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        await _assert_requires_google_docs_oauth(
+            di, gdocs_read_document, {"document_id": "doc123"}, monkeypatch
+        )
 
 
 class TestGDocsAppendText:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_append_text,
             {"document_id": "doc123", "text": "Новый абзац"},
+            monkeypatch,
         )
 
 
 class TestGDocsInsertText:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_insert_text,
             {"document_id": "doc123", "text": "Вставка", "index": 5},
+            monkeypatch,
         )
 
 
 class TestGDocsFindReplace:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_find_replace,
             {"document_id": "doc123", "find": "старое", "replace": "новое"},
+            monkeypatch,
         )
 
 
 class TestGDocsDeleteRange:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_delete_range,
             {"document_id": "doc123", "start_index": 1, "end_index": 10},
+            monkeypatch,
         )
 
 
 class TestGDocsShareDocument:
     @pytest.mark.asyncio
-    async def test_requires_oauth_without_credentials(self):
+    async def test_requires_oauth_without_credentials(
+        self, di: FlowsDi, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         await _assert_requires_google_docs_oauth(
+            di,
             gdocs_share_document,
             {"document_id": "doc123", "email": "user@example.com"},
+            monkeypatch,
         )
 
 

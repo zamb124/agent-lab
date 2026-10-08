@@ -1,6 +1,6 @@
 """TaskIQ contracts for Evaluation Lab execution."""
 
-from typing import Annotated, cast
+from typing import Annotated
 
 from taskiq import Context as TaskiqContext
 from taskiq import TaskiqDepends
@@ -23,6 +23,7 @@ from apps.flows.src.tasks.task_names import (
 from core.context import set_context
 from core.models.context_models import Context
 from core.tasks import enqueue, platform_task
+from core.tasks.message_contract import require_task_message_string_label
 from core.tracing.context import set_current_trace_context
 from core.types import JsonObject, require_json_object
 
@@ -77,13 +78,10 @@ async def execute_evaluation_run(
     if trace_context:
         set_current_trace_context(trace_context)
     _ = set_context(Context.from_dict(context_data))
-    labels = taskiq_context.message.labels
-    if "evaluation_run_id" not in labels:
-        raise ValueError("TaskIQ label evaluation_run_id is required")
-    raw_evaluation_run_id = cast(object, labels["evaluation_run_id"])
-    if not isinstance(raw_evaluation_run_id, str) or not raw_evaluation_run_id.strip():
-        raise ValueError("TaskIQ label evaluation_run_id must be a non-empty string")
-    evaluation_run_id = raw_evaluation_run_id
+    evaluation_run_id = require_task_message_string_label(
+        taskiq_context.message,
+        "evaluation_run_id",
+    )
 
     result = await di.evaluation_lab_service.execute_run_from_taskiq(
         run_id,

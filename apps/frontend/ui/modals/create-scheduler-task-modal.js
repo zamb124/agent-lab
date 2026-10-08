@@ -157,15 +157,15 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
         if (this._scheduleType === 'cron') {
             return html`
                 <div class="form-group">
-                    <label class="form-label">${this.t('scheduler_modal.label_cron')}</label>
                     <platform-cron-field
                         name="cron"
+                        .label=${this.t('scheduler_modal.label_cron')}
                         .value=${this._cron}
+                        .error=${this.fieldError('cron')}
                         @input=${(e) => { this._cron = e.detail.value; }}
                         @change=${(e) => { this._cron = e.detail.value; }}
                         placeholder="0 */5 * * *"
                     ></platform-cron-field>
-                    ${this.renderFieldError('cron')}
                 </div>
             `;
         }
@@ -178,6 +178,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                         label=${this.t('scheduler_modal.label_interval')}
                         placeholder="60"
                         .value=${this._intervalSeconds === '' ? null : Number(this._intervalSeconds)}
+                        .error=${this.fieldError('interval_seconds')}
                         @change=${(e) => {
                             if (!e.detail || e.detail.value === null || typeof e.detail.value !== 'number') {
                                 throw new Error('scheduler modal: interval field expects numeric detail.value');
@@ -185,7 +186,6 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                             this._intervalSeconds = String(e.detail.value);
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('interval_seconds')}
                 </div>
             `;
         }
@@ -196,6 +196,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                     mode="edit"
                     label=${this.t('scheduler_modal.label_run_at')}
                     .value=${this._runAt || null}
+                    .error=${this.fieldError('run_at')}
                     @change=${(e) => {
                         if (!e.detail || typeof e.detail.value !== 'string') {
                             throw new Error('scheduler modal: run_at expects detail.value string');
@@ -203,7 +204,6 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                         this._runAt = e.detail.value;
                     }}
                 ></platform-field>
-                ${this.renderFieldError('run_at')}
             </div>
         `;
     }
@@ -218,6 +218,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                         label=${this.t('scheduler_modal.label_service')}
                         placeholder=${this.t('scheduler_page.prompt_target')}
                         .value=${this._targetService}
+                        .error=${this.fieldError('target_service')}
                         @change=${(e) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('scheduler modal: target_service expects detail.value string');
@@ -225,7 +226,6 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                             this._targetService = e.detail.value;
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('target_service')}
                 </div>
 
                 <div class="form-group">
@@ -235,6 +235,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                         label=${this.t('scheduler_modal.label_task')}
                         placeholder=${this.t('scheduler_page.prompt_task')}
                         .value=${this._taskName}
+                        .error=${this.fieldError('task_name')}
                         @change=${(e) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('scheduler modal: task_name expects detail.value string');
@@ -242,7 +243,6 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                             this._taskName = e.detail.value;
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('task_name')}
                 </div>
 
                 <div class="form-group">
@@ -264,9 +264,9 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                 ${this._renderTypeFields()}
 
                 <div class="form-group">
-                    <label class="form-label">timezone</label>
                     <platform-timezone-picker
                         name="timezone"
+                        label="timezone"
                         .value=${this._timezone}
                         @input=${(e) => { this._timezone = e.detail.value; }}
                         @change=${(e) => { this._timezone = e.detail.value; }}
@@ -281,6 +281,7 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                         mode="edit"
                         label=${this.t('scheduler_modal.label_payload')}
                         .value=${this._payloadJson}
+                        .error=${this.fieldError('payload')}
                         @change=${(e) => {
                             if (!e.detail || typeof e.detail.value !== 'string') {
                                 throw new Error('scheduler modal: payload expects detail.value string');
@@ -288,7 +289,6 @@ export class FrontendCreateSchedulerTaskModal extends PlatformFormModal {
                             this._payloadJson = e.detail.value;
                         }}
                     ></platform-field>
-                    ${this.renderFieldError('payload')}
                     <div class="field-help">${this.t('scheduler_page.prompt_payload')}</div>
                 </div>
             </form>

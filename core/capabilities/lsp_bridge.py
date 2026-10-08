@@ -6,7 +6,6 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import cast
 
 from websockets.asyncio.server import Server, ServerConnection, serve
 
@@ -21,6 +20,7 @@ from core.logging import get_logger
 from core.types import parse_json_value, require_json_array
 from core.utils.background import run_with_log_context
 from core.utils.process_env import child_process_env
+from core.utils.tcp_port import listening_tcp_port
 
 logger = get_logger(__name__)
 
@@ -116,7 +116,7 @@ async def _run_bridge(session_id: str, root: Path, command: list[str]) -> None:
             sockets = server.sockets
             if not sockets:
                 raise RuntimeError("language server bridge has no listening socket")
-            port_raw = _require_tcp_port(cast(int, sockets[0].getsockname()[1]))
+            port_raw = listening_tcp_port(sockets[0], label="language server bridge")
             _ = port_file.write_text(str(port_raw), encoding="utf-8")
             logger.info("code_lsp.bridge_listen", session_id=session_id, port=port_raw)
             _arm_idle()
@@ -130,14 +130,6 @@ async def _run_bridge(session_id: str, root: Path, command: list[str]) -> None:
             except TimeoutError:
                 process.kill()
                 _ = await process.wait()
-
-
-def _require_tcp_port(value: int) -> int:
-    if isinstance(value, bool):
-        raise RuntimeError("language server bridge port must be int")
-    if value <= 0 or value > 65535:
-        raise RuntimeError("language server bridge port out of range")
-    return value
 
 
 def main() -> None:
