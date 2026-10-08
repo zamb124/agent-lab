@@ -20,7 +20,7 @@ export const CRON_FIELD_PRESETS = PRESETS;
 /**
  * Сжатие пробелов, trim.
  */
-export function normalizeCronString(s) {
+export function normalizeCronString(s: string): string {
     if (typeof s !== 'string') {
         return '';
     }
@@ -30,7 +30,7 @@ export function normalizeCronString(s) {
 /**
  * @returns {string | null} id пресета или `null` если нет совпадения
  */
-export function findMatchingPresetId(cron) {
+export function findMatchingPresetId(cron: string): string | null {
     const n = normalizeCronString(cron);
     if (n.length === 0) {
         return null;
@@ -47,7 +47,7 @@ export function findMatchingPresetId(cron) {
  * @param {string} id
  * @returns {string | null} cron-строка или `null` для `custom`
  */
-export function getCronForPresetId(id) {
+export function getCronForPresetId(id: string): string | null {
     if (id === CRON_FIELD_PRESET_CUSTOM) {
         return null;
     }
@@ -60,7 +60,7 @@ const MAX_FIELD_LEN = 120;
 /**
  * Ровно пять полей, разделённых пробелами. Итоговая проверка — croniter на сервере.
  */
-export function validateCronFiveField(s) {
+export function validateCronFiveField(s: string): boolean {
     if (typeof s !== 'string') {
         return false;
     }

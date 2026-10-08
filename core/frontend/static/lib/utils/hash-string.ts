@@ -9,7 +9,7 @@
  * @param {string} seed
  * @returns {number} беззнаковый 32-битный хеш
  */
-export function hashString31(seed) {
+export function hashString31(seed: string): number {
     if (typeof seed !== 'string' || seed.length === 0) {
         return 0;
     }
@@ -25,7 +25,7 @@ export function hashString31(seed) {
  * @param {string} seed
  * @returns {number}
  */
-export function hueFromString(seed) {
+export function hueFromString(seed: string): number {
     return hashString31(seed) % 360;
 }
 
@@ -34,18 +34,20 @@ export function hueFromString(seed) {
  * @param {string} name
  * @returns {string}
  */
-export function initialsFromName(name) {
+export function initialsFromName(name: string): string {
     if (typeof name !== 'string' || name.length === 0) {
         return '?';
     }
     const parts = name.trim().split(/\s+/);
-    if (parts.length === 0 || parts[0].length === 0) {
+    const first = parts[0];
+    if (first === undefined || first.length === 0) {
         return '?';
     }
-    if (parts.length === 1) {
-        return parts[0].slice(0, 2).toUpperCase();
+    const second = parts[1];
+    if (second === undefined || second.length === 0) {
+        return first.slice(0, 2).toUpperCase();
     }
-    return (parts[0][0] + parts[1][0]).toUpperCase();
+    return (first.charAt(0) + second.charAt(0)).toUpperCase();
 }
 
 /**
@@ -54,7 +56,7 @@ export function initialsFromName(name) {
  * @param {number} modulo  положительное целое
  * @returns {number}
  */
-export function indexFromSeed(seed, modulo) {
+export function indexFromSeed(seed: string, modulo: number): number {
     if (!Number.isInteger(modulo) || modulo <= 0) {
         throw new Error('indexFromSeed: modulo must be positive integer');
     }

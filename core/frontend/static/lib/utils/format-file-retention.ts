@@ -6,7 +6,7 @@
  * @param {number} [nowMs] — для тестов.
  * @returns {'permanent' | 'expired' | string}
  */
-export function formatFileRetentionRemaining(expiresAtIso, locale, nowMs = Date.now()) {
+export function formatFileRetentionRemaining(expiresAtIso: string | null | undefined, locale: string, nowMs: number = Date.now()): 'permanent' | 'expired' | string {
     if (expiresAtIso === null || expiresAtIso === undefined || expiresAtIso === '') {
         return 'permanent';
     }

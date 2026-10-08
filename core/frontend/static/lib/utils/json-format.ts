@@ -7,6 +7,6 @@
  * @param {unknown} value
  * @returns {string}
  */
-export function formatJsonPretty(value) {
+export function formatJsonPretty(value: unknown): string {
     return JSON.stringify(value, null, 2);
 }

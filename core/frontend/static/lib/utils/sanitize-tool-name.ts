@@ -9,7 +9,7 @@ import { md5HexUtf8 } from './md5-hex.js';
  * @param {string} name
  * @returns {string}
  */
-export function sanitizeToolName(name) {
+export function sanitizeToolName(name: string): string {
     if (typeof name !== 'string') {
         throw new Error('sanitizeToolName: name must be string');
     }

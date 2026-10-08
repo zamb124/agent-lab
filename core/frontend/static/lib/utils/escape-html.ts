@@ -10,7 +10,7 @@
  * @param {unknown} value — приводится к строке.
  * @returns {string}
  */
-export function escapeHtml(value) {
+export function escapeHtml(value: unknown): string {
     if (value === null || value === undefined) {
         return '';
     }

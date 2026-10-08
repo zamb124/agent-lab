@@ -7,7 +7,7 @@
 
 const _SUPPORTED_LOCALES = Object.freeze(new Set(['ru', 'en']));
 
-function _resolveLocale(locale) {
+function _resolveLocale(locale: string): string {
     if (typeof locale !== 'string' || locale.length === 0) {
         throw new Error('format-platform-number: locale must be non-empty string');
     }
@@ -24,7 +24,7 @@ function _resolveLocale(locale) {
  * @param {Intl.NumberFormatOptions} [options]
  * @returns {string}
  */
-export function formatPlatformNumber(value, locale, options = {}) {
+export function formatPlatformNumber(value: number, locale: string, options: Intl.NumberFormatOptions = {}): string {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
         return '—';
     }
@@ -39,7 +39,7 @@ export function formatPlatformNumber(value, locale, options = {}) {
  * @param {{ minimumFractionDigits?: number, maximumFractionDigits?: number }} [options]
  * @returns {string}
  */
-export function formatPlatformCurrencyRub(amount, locale, options = {}) {
+export function formatPlatformCurrencyRub(amount: number, locale: string, options: { minimumFractionDigits?: number; maximumFractionDigits?: number } = {}): string {
     if (typeof amount !== 'number' || !Number.isFinite(amount)) {
         return '—';
     }

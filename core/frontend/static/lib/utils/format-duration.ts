@@ -3,7 +3,7 @@
  * Канон для всех сервисов (sync, calls, voice, и т.д.).
  */
 
-function _pad2(n) {
+function _pad2(n: number): string {
     return n < 10 ? `0${n}` : String(n);
 }
 
@@ -12,7 +12,7 @@ function _pad2(n) {
  * @param {{ withHours?: 'auto' | 'always' }} [options]
  * @returns {string}
  */
-export function formatDurationSeconds(seconds, options = {}) {
+export function formatDurationSeconds(seconds: number, options: { withHours?: 'auto' | 'always' } = {}): string {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
         return '00:00';
     }
@@ -21,7 +21,7 @@ export function formatDurationSeconds(seconds, options = {}) {
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
 
-    const withHours = options.withHours === 'always' || (options.withHours !== 'always' && h > 0);
+    const withHours = options.withHours === 'always' || h > 0;
     if (withHours) {
         return `${h}:${_pad2(m)}:${_pad2(s)}`;
     }
@@ -33,7 +33,7 @@ export function formatDurationSeconds(seconds, options = {}) {
  * @param {{ withHours?: 'auto' | 'always' }} [options]
  * @returns {string}
  */
-export function formatDurationMs(ms, options = {}) {
+export function formatDurationMs(ms: number, options: { withHours?: 'auto' | 'always' } = {}): string {
     if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) {
         return '00:00';
     }

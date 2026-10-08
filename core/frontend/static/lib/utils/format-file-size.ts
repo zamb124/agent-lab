@@ -12,7 +12,7 @@ const UNITS = Object.freeze(['B', 'KB', 'MB', 'GB', 'TB', 'PB']);
  * @param {{ precision?: number }} [options]
  * @returns {string}
  */
-export function formatFileSize(bytes, options = {}) {
+export function formatFileSize(bytes: number, options: { precision?: number } = {}): string {
     if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) {
         return '—';
     }

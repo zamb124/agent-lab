@@ -9,11 +9,11 @@ const _SUPPORTED_LOCALES = Object.freeze(new Set(['ru', 'en']));
 const _CANONICAL_ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const _CANONICAL_ISO_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
-function _pad2(value) {
+function _pad2(value: number): string {
     return String(value).padStart(2, '0');
 }
 
-function _resolveLocale(locale) {
+function _resolveLocale(locale: string): string {
     if (typeof locale !== 'string' || locale.length === 0) {
         throw new Error('format-platform-date: locale must be non-empty string');
     }
@@ -24,7 +24,7 @@ function _resolveLocale(locale) {
     return lc === 'ru' ? 'ru-RU' : 'en-US';
 }
 
-function _toDate(input) {
+function _toDate(input: Date | string | number): Date | null {
     if (input instanceof Date) {
         return Number.isNaN(input.getTime()) ? null : input;
     }
@@ -45,7 +45,7 @@ function _toDate(input) {
  * @param {Intl.DateTimeFormatOptions} [options]  по умолчанию — короткая дата
  * @returns {string}
  */
-export function formatPlatformDate(input, locale, options = { day: '2-digit', month: '2-digit', year: 'numeric' }) {
+export function formatPlatformDate(input: Date | string | number, locale: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' }): string {
     const d = _toDate(input);
     if (d === null) {
         return '—';
@@ -58,7 +58,7 @@ export function formatPlatformDate(input, locale, options = { day: '2-digit', mo
  * @param {string} locale  'ru' | 'en'
  * @returns {string}  "DD.MM.YYYY HH:MM" или "MM/DD/YYYY, HH:MM" в зависимости от локали
  */
-export function formatPlatformDateTime(input, locale) {
+export function formatPlatformDateTime(input: Date | string | number, locale: string): string {
     return formatPlatformDate(input, locale, {
         day: '2-digit',
         month: '2-digit',
@@ -73,7 +73,7 @@ export function formatPlatformDateTime(input, locale) {
  * @param {string} locale
  * @returns {string}  "HH:MM"
  */
-export function formatPlatformTime(input, locale) {
+export function formatPlatformTime(input: Date | string | number, locale: string): string {
     return formatPlatformDate(input, locale, { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -81,7 +81,7 @@ export function formatPlatformTime(input, locale) {
  * @param {string|null|undefined} value
  * @returns {string}
  */
-export function normalizeIsoDateTimeForField(value) {
+export function normalizeIsoDateTimeForField(value: string | null | undefined): string {
     if (value === null || value === undefined) {
         return '';
     }
@@ -105,7 +105,7 @@ export function normalizeIsoDateTimeForField(value) {
  * @param {string|null|undefined} value
  * @returns {string}
  */
-export function normalizeIsoDateForField(value) {
+export function normalizeIsoDateForField(value: string | null | undefined): string {
     if (value === null || value === undefined) {
         return '';
     }

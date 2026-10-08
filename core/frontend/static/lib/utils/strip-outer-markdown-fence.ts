@@ -2,7 +2,7 @@
  * Если вся строка — один ограждающий GFM-блок (язык markdown/md или без метки),
  * возвращает содержимое внутри. Иначе — исходную строку без изменений.
  */
-export function stripOuterMarkdownCodeFence(raw) {
+export function stripOuterMarkdownCodeFence(raw: string): string {
     if (typeof raw !== 'string') {
         return '';
     }

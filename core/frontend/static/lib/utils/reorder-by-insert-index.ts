@@ -4,7 +4,7 @@
  * insertIndex — позиция щели: 0 перед первым, length после последнего.
  */
 
-export function reorderByInsertIndex(items, fromIndex, insertIndex) {
+export function reorderByInsertIndex<T>(items: T[], fromIndex: number, insertIndex: number): T[] {
     if (!Array.isArray(items)) {
         throw new Error('reorderByInsertIndex: items must be an array');
     }
@@ -18,11 +18,11 @@ export function reorderByInsertIndex(items, fromIndex, insertIndex) {
         return items.slice();
     }
     const next = items.slice();
-    const [moved] = next.splice(fromIndex, 1);
+    const moved = next.splice(fromIndex, 1);
     let toIndex = insertIndex;
     if (fromIndex < insertIndex) {
         toIndex -= 1;
     }
-    next.splice(toIndex, 0, moved);
+    next.splice(toIndex, 0, ...moved);
     return next;
 }
