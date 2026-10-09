@@ -12,6 +12,24 @@ import '../components/worktracker-icon-action.js';
 import '../components/worktracker-board-picker.js';
 import '../components/worktracker-page-header.js';
 import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
+import type { PropertyValues } from 'lit';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface BoardColumn {
+    board_column_id?: string;
+    label?: string;
+    state?: string;
+    position?: number;
+    [key: string]: unknown;
+}
+
+interface BoardRecord {
+    board_id?: string;
+    name?: string;
+    columns?: BoardColumn[];
+    [key: string]: unknown;
+}
 
 const WORK_ITEM_MIME = 'application/x-worktracker-work-item-id';
 const BOARD_COLUMN_MIME = 'application/x-worktracker-board-column-id';
@@ -19,15 +37,23 @@ const BOARD_COLUMN_INDEX_MIME = 'application/x-worktracker-board-column-index';
 
 export class WorktrackerBoardPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
+    declare _activeBoardId: string;
+    declare _dragOverColumnId: string;
+    declare _draggingColumnId: string;
+    declare _columnInsertIndex: number;
+    private _boards: ResourceController;
+    private _workItems: ResourceController;
+    private _moveOp: OpController;
 
-    static properties = {
+
+    static override properties = {
         _activeBoardId: { state: true },
         _dragOverColumnId: { state: true },
         _draggingColumnId: { state: true },
         _columnInsertIndex: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         worktrackerKanbanStyles,
         css`
@@ -125,25 +151,25 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._boards = this.useResource('worktracker/boards');
         this._workItems = this.useResource('worktracker/work_items');
         this._moveOp = this.useOp('worktracker/work_item_move');
-        this.useEvent(this._boards.resource.events.CREATED, (event) => {
-            const payload = event.payload;
-            if (!payload || typeof payload !== 'object' || !('item' in payload)) {
+        this.useEvent(this._boards.resource.events.CREATED, (event: PlatformEvent) => {
+            const payload = event.payload as { item?: BoardRecord } | null;
+            if (!payload || typeof payload !== 'object' || !payload.item) {
                 return;
             }
             const item = payload.item;
-            if (!item || typeof item !== 'object' || typeof item.board_id !== 'string') {
+            if (typeof item.board_id !== 'string') {
                 return;
             }
             this._selectBoard(item.board_id);
         });
         // Созданная задача уже смержена коллекцией; страница лишь переключается на её доску.
-        this.useEvent(this._workItems.resource.events.CREATED, (event) => {
-            const payload = event.payload;
-            if (!payload || typeof payload !== 'object' || !('item' in payload)) {
+        this.useEvent(this._workItems.resource.events.CREATED, (event: PlatformEvent) => {
+            const payload = event.payload as { item?: BoardRecord } | null;
+            if (!payload || typeof payload !== 'object' || !payload.item) {
                 return;
             }
             const item = payload.item;
-            if (!item || typeof item !== 'object' || typeof item.board_id !== 'string') {
+            if (typeof item.board_id !== 'string') {
                 return;
             }
             if (this._activeBoardId !== item.board_id) {
@@ -152,7 +178,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         });
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         const urlBoardId = this._readBoardIdFromUrl();
         if (urlBoardId.length > 0) {
@@ -161,7 +187,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._boards.load({});
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         // Загрузка привязана к выбранной доске, а не к событиям: смена `_activeBoardId` —
         // единственная точка, где читаются доска и её задачи.
@@ -169,25 +195,26 @@ export class WorktrackerBoardPage extends PlatformPage {
             this._boards.get(this._activeBoardId);
             this._workItems.load({ board_id: this._activeBoardId });
         }
-        const boards = this._boards.items;
-        if (!Array.isArray(boards) || boards.length === 0) {
+        const boards = (this._boards.items || []) as BoardRecord[];
+        if (boards.length === 0) {
             return;
         }
         const urlBoardId = this._readBoardIdFromUrl();
+        const firstBoardId = String(boards[0]!.board_id ?? '');
         if (!this._activeBoardId) {
             const initialId = urlBoardId.length > 0 && boards.some((b) => b.board_id === urlBoardId)
                 ? urlBoardId
-                : boards[0].board_id;
+                : firstBoardId;
             this._selectBoard(initialId);
             return;
         }
         const stillExists = boards.some((b) => b.board_id === this._activeBoardId);
         if (!stillExists) {
-            this._selectBoard(boards[0].board_id);
+            this._selectBoard(firstBoardId);
         }
     }
 
-    _readBoardIdFromUrl() {
+    private _readBoardIdFromUrl() {
         if (typeof window === 'undefined' || typeof window.location === 'undefined') {
             return '';
         }
@@ -201,7 +228,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         return boardId;
     }
 
-    _persistBoardId(boardId) {
+    private _persistBoardId(boardId: string) {
         if (typeof window === 'undefined' || typeof window.location === 'undefined') {
             return;
         }
@@ -215,7 +242,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         window.history.replaceState(window.history.state, '', next);
     }
 
-    _selectBoard(boardId) {
+    private _selectBoard(boardId: string) {
         if (typeof boardId !== 'string' || boardId.length === 0) {
             throw new Error('WorktrackerBoardPage: boardId required');
         }
@@ -223,53 +250,53 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._persistBoardId(boardId);
     }
 
-    _openCreateTask() {
+    private _openCreateTask() {
         this.openModal('worktracker.work_item_create', { boardId: this._activeBoardId });
     }
 
-    _openCreateBoard() {
+    private _openCreateBoard() {
         this.openModal('worktracker.board_create', {});
     }
 
-    _openBoardSettings() {
+    private _openBoardSettings() {
         if (typeof this._activeBoardId !== 'string' || this._activeBoardId.length === 0) {
             return;
         }
         this.openModal('worktracker.board_settings', { boardId: this._activeBoardId });
     }
 
-    _activeBoard() {
-        const boards = this._boards.items || [];
+    private _activeBoard(): BoardRecord | null {
+        const boards = (this._boards.items || []) as BoardRecord[];
         const fromList = boards.find((b) => b.board_id === this._activeBoardId);
         if (fromList) {
             return fromList;
         }
-        const byId = this._boards.byId;
+        const byId = this._boards.byId as Record<string, BoardRecord>;
         if (byId && typeof byId === 'object' && byId[this._activeBoardId]) {
-            return byId[this._activeBoardId];
+            return byId[this._activeBoardId] ?? null;
         }
         return null;
     }
 
-    _sortedColumns(columns) {
+    private _sortedColumns(columns: unknown): BoardColumn[] {
         if (!Array.isArray(columns)) {
             throw new Error('WorktrackerBoardPage: columns must be an array');
         }
-        return columns.slice().sort((left, right) => left.position - right.position);
+        return (columns as BoardColumn[]).slice().sort((left, right) => (left.position ?? 0) - (right.position ?? 0));
     }
 
-    _itemsForColumn(columnId) {
+    private _itemsForColumn(columnId: string) {
         const items = this._workItems.items || [];
         return items.filter((i) => i.board_column_id === columnId);
     }
 
-    _onDragStart(e, workItemId) {
-        e.dataTransfer.setData(WORK_ITEM_MIME, workItemId);
-        e.dataTransfer.effectAllowed = 'move';
+    private _onDragStart(e: DragEvent, workItemId: string) {
+        e.dataTransfer?.setData(WORK_ITEM_MIME, workItemId);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
     }
 
-    _onDragOver(e, columnId) {
-        if (e.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
+    private _onDragOver(e: DragEvent, columnId: string) {
+        if (!e.dataTransfer || e.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
             return;
         }
         e.preventDefault();
@@ -279,20 +306,20 @@ export class WorktrackerBoardPage extends PlatformPage {
         }
     }
 
-    _onColumnHeadDragStart(e, columnId) {
+    private _onColumnHeadDragStart(e: DragEvent, columnId: string) {
         e.stopPropagation();
-        e.dataTransfer.setData(BOARD_COLUMN_MIME, columnId);
-        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer?.setData(BOARD_COLUMN_MIME, columnId);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
         this._draggingColumnId = columnId;
     }
 
-    _onColumnHeadDragEnd() {
+    private _onColumnHeadDragEnd() {
         this._draggingColumnId = '';
         this._columnInsertIndex = -1;
     }
 
-    _onColumnInsertDragOver(event, insertIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
+    private _onColumnInsertDragOver(event: DragEvent, insertIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
             return;
         }
         event.preventDefault();
@@ -303,7 +330,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         }
     }
 
-    _resolveColumnInsertIndexFromPointer(event, columnIndex) {
+    private _resolveColumnInsertIndexFromPointer(event: DragEvent, columnIndex: number) {
         const target = event.currentTarget;
         if (!(target instanceof HTMLElement)) {
             return columnIndex;
@@ -313,8 +340,8 @@ export class WorktrackerBoardPage extends PlatformPage {
         return insertBefore ? columnIndex : columnIndex + 1;
     }
 
-    _onColumnHeadDragOver(event, columnIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
+    private _onColumnHeadDragOver(event: DragEvent, columnIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
             return;
         }
         event.preventDefault();
@@ -326,8 +353,8 @@ export class WorktrackerBoardPage extends PlatformPage {
         }
     }
 
-    _onColumnHeadDrop(event, columnIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
+    private _onColumnHeadDrop(event: DragEvent, columnIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_MIME)) {
             return;
         }
         event.preventDefault();
@@ -342,19 +369,19 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._persistColumnOrderToInsert(sourceColumnId, insertIndex);
     }
 
-    _onColumnInsertDrop(event, insertIndex) {
+    private _onColumnInsertDrop(event: DragEvent, insertIndex: number) {
         event.preventDefault();
         event.stopPropagation();
         this._columnInsertIndex = -1;
         this._draggingColumnId = '';
-        const sourceColumnId = event.dataTransfer.getData(BOARD_COLUMN_MIME);
+        const sourceColumnId = event.dataTransfer?.getData(BOARD_COLUMN_MIME) ?? '';
         if (typeof sourceColumnId !== 'string' || sourceColumnId.length === 0) {
             return;
         }
         this._persistColumnOrderToInsert(sourceColumnId, insertIndex);
     }
 
-    _persistColumnOrderToInsert(sourceColumnId, insertIndex) {
+    private _persistColumnOrderToInsert(sourceColumnId: string, insertIndex: number) {
         const board = this._activeBoard();
         if (!board || !Array.isArray(board.columns)) {
             throw new Error('WorktrackerBoardPage: active board required for column reorder');
@@ -385,46 +412,47 @@ export class WorktrackerBoardPage extends PlatformPage {
         this._boards.update(this._activeBoardId, { columns: payload });
     }
 
-    _onDrop(e, columnId) {
+    private _onDrop(e: DragEvent, columnId: string) {
         e.preventDefault();
         this._dragOverColumnId = '';
-        const workItemId = e.dataTransfer.getData(WORK_ITEM_MIME);
+        const workItemId = e.dataTransfer?.getData(WORK_ITEM_MIME) ?? '';
         if (!workItemId) {
             return;
         }
         this._moveOp.run({ work_item_id: workItemId, board_column_id: columnId });
     }
 
-    _renderColumnInsertMarker(index) {
+    private _renderColumnInsertMarker(index: number) {
         const columnReorderActive = typeof this._draggingColumnId === 'string' && this._draggingColumnId.length > 0;
         const active = columnReorderActive && this._columnInsertIndex === index;
         return html`
             <div
                 class="column-insert ${active ? 'active' : ''}"
-                @dragover=${(event) => this._onColumnInsertDragOver(event, index)}
-                @drop=${(event) => this._onColumnInsertDrop(event, index)}
+                @dragover=${(event: DragEvent) => this._onColumnInsertDragOver(event, index)}
+                @drop=${(event: DragEvent) => this._onColumnInsertDrop(event, index)}
             ></div>
         `;
     }
 
-    _renderColumn(column, columnIndex) {
-        const items = this._itemsForColumn(column.board_column_id);
-        const isOver = this._dragOverColumnId === column.board_column_id;
-        const isDragging = this._draggingColumnId === column.board_column_id;
+    private _renderColumn(column: BoardColumn, columnIndex: number) {
+        const columnId = String(column.board_column_id ?? '');
+        const items = this._itemsForColumn(columnId);
+        const isOver = this._dragOverColumnId === columnId;
+        const isDragging = this._draggingColumnId === columnId;
         return html`
             <div
                 class="column ${isOver ? 'drag-over' : ''} ${isDragging ? 'column-dragging' : ''}"
-                @dragover=${(e) => this._onDragOver(e, column.board_column_id)}
-                @drop=${(e) => this._onDrop(e, column.board_column_id)}
+                @dragover=${(e: DragEvent) => this._onDragOver(e, columnId)}
+                @drop=${(e: DragEvent) => this._onDrop(e, columnId)}
             >
                 <div
                     class="column-head"
                     draggable="true"
                     title=${this.t('board_page.reorder_column')}
-                    @dragstart=${(e) => this._onColumnHeadDragStart(e, column.board_column_id)}
+                    @dragstart=${(e: DragEvent) => this._onColumnHeadDragStart(e, columnId)}
                     @dragend=${() => this._onColumnHeadDragEnd()}
-                    @dragover=${(e) => this._onColumnHeadDragOver(e, columnIndex)}
-                    @drop=${(e) => this._onColumnHeadDrop(e, columnIndex)}
+                    @dragover=${(e: DragEvent) => this._onColumnHeadDragOver(e, columnIndex)}
+                    @drop=${(e: DragEvent) => this._onColumnHeadDrop(e, columnIndex)}
                 >
                     <span class="column-head-left">
                         <platform-icon class="drag-handle" name="drag-handle" size="14"></platform-icon>
@@ -433,11 +461,11 @@ export class WorktrackerBoardPage extends PlatformPage {
                     <span class="count">${items.length}</span>
                 </div>
                 <div class="cards wt-kanban-column-body">
-                    ${items.map((item) => html`
+                    ${items.map((item: Record<string, unknown>) => html`
                         <div
                             class="card-wrap"
                             draggable="true"
-                            @dragstart=${(e) => this._onDragStart(e, item.work_item_id)}
+                            @dragstart=${(e: DragEvent) => this._onDragStart(e, String(item.work_item_id ?? ''))}
                         >
                             <worktracker-work-item-card
                                 .item=${item}
@@ -452,7 +480,7 @@ export class WorktrackerBoardPage extends PlatformPage {
         `;
     }
 
-    render() {
+    override render() {
         const board = this._activeBoard();
         const boards = this._boards.items || [];
         const hasBoard = board && Array.isArray(board.columns) && board.columns.length > 0;
@@ -464,7 +492,7 @@ export class WorktrackerBoardPage extends PlatformPage {
                     .boards=${boards}
                     active-board-id=${this._activeBoardId}
                     ?loading=${this._boards.loading}
-                    @board-select=${(e) => {
+                    @board-select=${(e: CustomEvent<{ board_id?: unknown }>) => {
                         const detail = e.detail;
                         if (!detail || typeof detail.board_id !== 'string') {
                             throw new Error('WorktrackerBoardPage: board-select requires board_id');

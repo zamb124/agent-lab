@@ -4,6 +4,7 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { navigateToWorkItemPage } from '@platform/lib/utils/work-item-deeplink.js';
 import { WorktrackerUiEvents } from '../events/types.js';
 import '@platform/lib/components/platform-icon.js';
@@ -11,14 +12,20 @@ import './work-item-detail-editor.js';
 
 export class WorkItemDetailPanel extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare workItemId: string;
+    declare panelOpen: boolean;
+    declare _isMobile: boolean;
+    private _routeSel: SelectController<unknown>;
+    private _mql: MediaQueryList | null = null;
 
-    static properties = {
+
+    static override properties = {
         workItemId: { type: String, attribute: 'work-item-id' },
         panelOpen: { type: Boolean, reflect: true, attribute: 'panel-open' },
         _isMobile: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -86,11 +93,11 @@ export class WorkItemDetailPanel extends PlatformElement {
         this.workItemId = '';
         this.panelOpen = false;
         this._isMobile = false;
-        this._routeSel = this.select((state) => state.router.routeKey);
+        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
         this._onMqlChange = this._onMqlChange.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
             this._mql = window.matchMedia('(max-width: 767px)');
@@ -99,22 +106,22 @@ export class WorkItemDetailPanel extends PlatformElement {
         }
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         if (this._mql) {
             this._mql.removeEventListener('change', this._onMqlChange);
         }
     }
 
-    _onMqlChange(event) {
+    private _onMqlChange(event: MediaQueryListEvent) {
         this._isMobile = event.matches;
     }
 
-    _close() {
+    private _close() {
         this.dispatch(WorktrackerUiEvents.DETAIL_CLOSE, null);
     }
 
-    _openFullPage() {
+    private _openFullPage() {
         if (!this.workItemId) {
             return;
         }
@@ -126,7 +133,7 @@ export class WorkItemDetailPanel extends PlatformElement {
         this._close();
     }
 
-    render() {
+    override render() {
         return html`
             <div class="head">
                 <span class="head-title">${this.t('detail_panel.title')}</span>

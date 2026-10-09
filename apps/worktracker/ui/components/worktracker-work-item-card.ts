@@ -9,30 +9,34 @@ import { html, css, render } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { openWorkItemDetail, isMobileViewport } from '@platform/lib/utils/work-item-deeplink.js';
 import { worktrackerListStyles } from '../styles/worktracker-list.styles.js';
-import { workItemAllowsSilentComplete } from '../_helpers/work-item-detail-shared.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-work-item-badge.js';
+import type { PropertyValues } from 'lit';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+import { queueUnclaimed as _queueUnclaimed, workItemAllowsSilentComplete } from '../_helpers/work-item-detail-shared.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
 
 const TERMINAL_STATES = new Set(['done', 'cancelled', 'failed']);
 const MENU_ESTIMATE_PX = 220;
 
-function _assigneeIsQueue(item) {
-    const assignment = item && item.assignment;
-    return assignment && typeof assignment === 'object' && assignment.assignee_kind === 'queue';
-}
-
-function _queueUnclaimed(item) {
-    if (!_assigneeIsQueue(item)) {
-        return false;
-    }
-    const claimed = item.assignment.claimed_by_user_id;
-    return typeof claimed !== 'string' || claimed.length === 0;
-}
 
 export class WorktrackerWorkItemCard extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare item: WorkItemLike | null;
+    declare variant: string;
+    declare selected: boolean;
+    declare showPreview: boolean;
+    declare _menuOpen: boolean;
+    private _menuPortal: HTMLDivElement | null;
+    private _menuContent: HTMLDivElement | null;
+    private _claimOp: OpController;
+    private _completeOp: OpController;
+    private _cancelOp: OpController;
+    private _routeSel: SelectController<unknown>;
 
-    static properties = {
+
+    static override properties = {
         item: { attribute: false },
         variant: { type: String },
         selected: { type: Boolean, reflect: true },
@@ -40,7 +44,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         _menuOpen: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerListStyles,
         css`
@@ -138,30 +142,28 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         this.selected = false;
         this.showPreview = true;
         this._menuOpen = false;
-        /** @type {HTMLDivElement|null} */
         this._menuPortal = null;
-        /** @type {HTMLDivElement|null} */
         this._menuContent = null;
         this._claimOp = this.useOp('worktracker/work_item_claim');
         this._completeOp = this.useOp('worktracker/work_item_complete');
         this._cancelOp = this.useOp('worktracker/work_item_cancel');
-        this._routeSel = this.select((state) => state.router.routeKey);
+        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
         this._onDocClick = this._onDocClick.bind(this);
         this._onWindowReposition = this._onWindowReposition.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         document.addEventListener('click', this._onDocClick, true);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         document.removeEventListener('click', this._onDocClick, true);
         this._closeMenuPortal();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         if (typeof this.variant !== 'string' || (this.variant !== 'row' && this.variant !== 'card')) {
             throw new Error(`WorktrackerWorkItemCard: invalid variant "${this.variant}"`);
@@ -175,7 +177,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         }
     }
 
-    _onDocClick(event) {
+    private _onDocClick(event: Event) {
         if (!this._menuOpen) {
             return;
         }
@@ -189,28 +191,28 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         this._menuOpen = false;
     }
 
-    _onWindowReposition() {
+    private _onWindowReposition() {
         if (this._menuOpen) {
             this._syncMenuPortalPosition();
         }
     }
 
-    _workItemId() {
-        if (!this.item || typeof this.item !== 'object' || typeof this.item.work_item_id !== 'string') {
+    private _workItemId(): string {
+        if (!this.item || typeof this.item.work_item_id !== 'string') {
             throw new Error('WorktrackerWorkItemCard: item.work_item_id required');
         }
         return this.item.work_item_id;
     }
 
-    _isTerminal() {
-        return Boolean(this.item && TERMINAL_STATES.has(this.item.state));
+    private _isTerminal(): boolean {
+        return Boolean(this.item && typeof this.item.state === 'string' && TERMINAL_STATES.has(this.item.state));
     }
 
-    _showClaim() {
+    private _showClaim() {
         return Boolean(this.item && _queueUnclaimed(this.item));
     }
 
-    _openDetail(event) {
+    private _openDetail(event?: Event) {
         if (event) {
             event.stopPropagation();
         }
@@ -225,12 +227,12 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         });
     }
 
-    _toggleMenu(event) {
+    private _toggleMenu(event: Event) {
         event.stopPropagation();
         this._menuOpen = !this._menuOpen;
     }
 
-    _ensureMenuPortal() {
+    private _ensureMenuPortal() {
         if (this._menuPortal !== null) {
             return;
         }
@@ -280,7 +282,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         window.addEventListener('scroll', this._onWindowReposition, true);
     }
 
-    _menuPositionStyle() {
+    private _menuPositionStyle() {
         const trigger = this.renderRoot.querySelector('.menu-trigger');
         if (!(trigger instanceof HTMLElement)) {
             return 'top: 0; right: 0;';
@@ -297,24 +299,24 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         return `right: ${right}px; top: ${top}px; bottom: auto;`;
     }
 
-    _openMenuPortal() {
+    private _openMenuPortal() {
         this._ensureMenuPortal();
         this._syncMenuPortalPosition();
     }
 
-    _syncMenuPortalPosition() {
+    private _syncMenuPortalPosition() {
         if (this._menuContent === null || !this._menuOpen) {
             return;
         }
         const pos = this._menuPositionStyle();
         render(html`
-            <div class="menu" role="menu" style=${pos} @click=${(e) => e.stopPropagation()}>
+            <div class="menu" role="menu" style=${pos} @click=${(e: Event) => e.stopPropagation()}>
                 ${this._renderMenuItems()}
             </div>
         `, this._menuContent);
     }
 
-    _closeMenuPortal() {
+    private _closeMenuPortal() {
         window.removeEventListener('resize', this._onWindowReposition);
         window.removeEventListener('scroll', this._onWindowReposition, true);
         if (this._menuContent !== null) {
@@ -327,7 +329,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         }
     }
 
-    async _runAction(action) {
+    private async _runAction(action: string): Promise<void> {
         this._menuOpen = false;
         const workItemId = this._workItemId();
         if (action === 'open') {
@@ -353,7 +355,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         this.emit('changed', { work_item_id: workItemId, action });
     }
 
-    _renderMenuItems() {
+    private _renderMenuItems() {
         const items = [];
         items.push(html`
             <button type="button" class="menu-item" role="menuitem" @click=${() => this._runAction('open')}>
@@ -388,12 +390,12 @@ export class WorktrackerWorkItemCard extends PlatformElement {
         return items;
     }
 
-    render() {
+    override render() {
         const workItemId = this._workItemId();
         const badgeVariant = this.variant === 'card' ? 'card' : 'row';
         return html`
             <div class="shell">
-                <div class="body" @click=${(e) => this._openDetail(e)}>
+                <div class="body" @click=${(e: Event) => this._openDetail(e)}>
                     <platform-work-item-badge
                         work-item-id=${workItemId}
                         variant=${badgeVariant}
@@ -409,7 +411,7 @@ export class WorktrackerWorkItemCard extends PlatformElement {
                         class="menu-trigger"
                         title=${this.t('work_item_card.actions')}
                         aria-expanded=${String(this._menuOpen)}
-                        @click=${(e) => this._toggleMenu(e)}
+                        @click=${(e: Event) => this._toggleMenu(e)}
                     >
                         <platform-icon name="more-vert" size="16"></platform-icon>
                     </button>

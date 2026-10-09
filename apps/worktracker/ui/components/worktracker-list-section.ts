@@ -8,12 +8,15 @@ import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles
 import { worktrackerListStyles } from '../styles/worktracker-list.styles.js';
 
 export class WorktrackerListSection extends PlatformElement {
-    static properties = {
+    declare title: string;
+    declare count: number;
+
+    static override properties = {
         title: { type: String },
         count: { type: Number },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerSurfacesStyles,
         worktrackerListStyles,
@@ -39,7 +42,7 @@ export class WorktrackerListSection extends PlatformElement {
         return base;
     }
 
-    render() {
+    override render() {
         return html`
             <section class="wt-section">
                 <h2 class="wt-section-title">${this._titleText()}</h2>

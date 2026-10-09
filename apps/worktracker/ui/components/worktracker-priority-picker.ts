@@ -9,8 +9,13 @@ import '@platform/lib/components/fields/platform-field.js';
 
 export class WorktrackerPriorityPicker extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare value: string;
+    declare config: Record<string, unknown>;
+    declare label: string;
+    declare disabled: boolean;
 
-    static properties = {
+
+    static override properties = {
         value: { type: String },
         config: { type: Object },
         label: { type: String },
@@ -25,12 +30,12 @@ export class WorktrackerPriorityPicker extends PlatformElement {
         this.disabled = false;
     }
 
-    _onChange(event) {
+    private _onChange(event: CustomEvent<{ value?: unknown }>) {
         const nextValue = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this.emit('wt-priority-change', { value: nextValue });
     }
 
-    render() {
+    override render() {
         const rowLabel = typeof this.label === 'string' && this.label.length > 0
             ? this.label
             : this.t('detail_page.label_priority');
@@ -45,7 +50,7 @@ export class WorktrackerPriorityPicker extends PlatformElement {
                     .value=${this.value}
                     .config=${this.config}
                     ?disabled=${this.disabled}
-                    @change=${(e) => this._onChange(e)}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => this._onChange(e)}
                 ></platform-field>
             </worktracker-inspector-row>
         `;

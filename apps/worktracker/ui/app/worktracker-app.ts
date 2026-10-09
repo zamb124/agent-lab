@@ -4,6 +4,9 @@
 
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
@@ -72,11 +75,19 @@ export class WorktrackerApp extends PlatformApp {
         workQueueMemberRemoveOp,
     ];
 
-    static properties = {
+    static override get properties() {
+
+        return {
         _detailWorkItemId: { state: true },
+    
+
+            ...PlatformApp.properties,
+
+        };
+
     };
 
-    static styles = [
+    static override styles = [
         PlatformApp.styles,
         css`
             :host {
@@ -133,23 +144,27 @@ export class WorktrackerApp extends PlatformApp {
         `,
     ];
 
+    declare _detailWorkItemId: string;
+    private _countsOp: OpController;
+    private _routeSel: SelectController<unknown>;
+
     constructor() {
         super();
         this._detailWorkItemId = '';
         this._countsOp = this.useOp('worktracker/work_item_counts');
-        this._routeSel = this.select((state) => state.router.routeKey);
-        this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event) => {
-            this._openWorkItemDetailPanel(event.payload);
+        this._routeSel = this.select((state) => (state.router as Record<string, unknown>).routeKey);
+        this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event: PlatformEvent) => {
+            this._openWorkItemDetailPanel(event.payload as { work_item_id?: unknown });
         });
-        this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event) => {
-            this._openWorkItemDetailPanel(event.payload);
+        this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event: PlatformEvent) => {
+            this._openWorkItemDetailPanel(event.payload as { work_item_id?: unknown });
         });
         this.useEvent(WorktrackerUiEvents.DETAIL_CLOSE, () => {
             this._detailWorkItemId = '';
             replaceWorkItemUrl('');
         });
-        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, (event) => {
-            const payload = event.payload;
+        this.useEvent(CoreEvents.ROUTER_ROUTE_CHANGED, (event: PlatformEvent) => {
+            const payload = event.payload as { routeKey?: string } | undefined;
             if (!payload || payload.routeKey !== 'work_item_detail') {
                 return;
             }
@@ -158,7 +173,7 @@ export class WorktrackerApp extends PlatformApp {
         });
     }
 
-    _openWorkItemDetailPanel(payload) {
+    private _openWorkItemDetailPanel(payload: { work_item_id?: unknown } | null | undefined) {
         if (!payload || typeof payload.work_item_id !== 'string' || payload.work_item_id.length === 0) {
             throw new Error('WorktrackerApp: work_item_detail_open requires work_item_id');
         }
@@ -170,8 +185,8 @@ export class WorktrackerApp extends PlatformApp {
         replaceWorkItemUrl(payload.work_item_id);
     }
 
-    connectedCallback() {
-        super.connectedCallback();
+    override async connectedCallback(): Promise<void> {
+        await super.connectedCallback();
         if (typeof window === 'undefined' || typeof window.location === 'undefined') {
             return;
         }
@@ -207,25 +222,25 @@ export class WorktrackerApp extends PlatformApp {
         ));
     }
 
-    getBaseUrl() { return '/worktracker'; }
+    override getBaseUrl() { return '/worktracker'; }
 
-    getRoutes() { return []; }
+    override getRoutes() { return []; }
 
-    getServiceEffects() {
+    override getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/worktracker', routes: WORKTRACKER_ROUTES }),
         ];
     }
 
-    shouldRenderPlatformAssistant(_routeKey) {
+    override shouldRenderPlatformAssistant(_routeKey: string | null) {
         return true;
     }
 
-    getPlatformAssistantContextVariables(routeKey, params) {
+    override async getPlatformAssistantContextVariables(routeKey: string, params: Record<string, string>) {
         return buildWorktrackerAssistantContext(routeKey, params, this._detailWorkItemId);
     }
 
-    _renderPage(routeKey, params) {
+    private _renderPage(routeKey: string | null, params: Record<string, string>) {
         switch (routeKey) {
             case 'my':
                 return html`<worktracker-my-tasks-page></worktracker-my-tasks-page>`;
@@ -243,7 +258,7 @@ export class WorktrackerApp extends PlatformApp {
         }
     }
 
-    renderRoute(routeKey, params) {
+    override renderRoute(routeKey: string | null, params: Record<string, string>) {
         const isTaskDetail = routeKey === 'work_item_detail';
         const detailOpen = !isTaskDetail
             && typeof this._detailWorkItemId === 'string'

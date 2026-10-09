@@ -4,6 +4,9 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { ResourceController, OpController } from '@platform/lib/base/use-resource.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
 import { readWorkItemFromParam } from '@platform/lib/utils/work-item-deeplink.js';
 import {
     truncateWorkItemId,
@@ -20,18 +23,22 @@ import '@platform/lib/components/glass-spinner.js';
 import '../components/work-item-detail-editor.js';
 import '../components/worktracker-detail-header.js';
 import '../components/sheets/worktracker-task-properties-sheet.js';
+import type { PropertyValues } from 'lit';
 
 const VALID_FROM_ROUTES = new Set(['inbox', 'my', 'board', 'queues']);
 
 export class WorktrackerWorkItemDetailPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
+    declare workItemId: string;
+    declare _isMobile: unknown;
 
-    static properties = {
+
+    static override properties = {
         workItemId: { type: String, attribute: 'work-item-id' },
         _isMobile: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -91,6 +98,12 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         `,
     ];
 
+    private _workItems: ResourceController;
+    private _claimOp: OpController;
+    private _completeOp: OpController;
+    private _cancelOp: OpController;
+    private _mql: MediaQueryList | null = null;
+
     constructor() {
         super();
         this.workItemId = '';
@@ -101,7 +114,7 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         this._cancelOp = this.useOp('worktracker/work_item_cancel');
         this._onMqlChange = this._onMqlChange.bind(this);
 
-        const syncItem = (event) => {
+        const syncItem = (event: PlatformEvent) => {
             const item = workItemFromEventPayload(event.payload);
             if (!item || item.work_item_id !== this.workItemId) {
                 return;
@@ -118,7 +131,7 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         }
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
             this._mql = window.matchMedia('(max-width: 767px)');
@@ -130,36 +143,36 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         }
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         if (this._mql) {
             this._mql.removeEventListener('change', this._onMqlChange);
         }
     }
 
-    _onMqlChange(event) {
+    private _onMqlChange(event: MediaQueryListEvent) {
         this._isMobile = event.matches;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         if (changed.has('workItemId') && typeof this.workItemId === 'string' && this.workItemId.length > 0) {
             this._workItems.get(this.workItemId);
         }
     }
 
-    _item() {
+    private _item(): WorkItemLike | null {
         if (!this.workItemId) {
             return null;
         }
         const cached = this._workItems.byId[this.workItemId];
         if (cached && typeof cached === 'object') {
-            return cached;
+            return cached as WorkItemLike;
         }
         return null;
     }
 
-    _fromRouteKey() {
+    private _fromRouteKey() {
         if (typeof window === 'undefined' || typeof window.location === 'undefined') {
             return 'inbox';
         }
@@ -170,7 +183,7 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         return 'inbox';
     }
 
-    _back() {
+    private _back() {
         if (typeof window !== 'undefined' && window.history.length > 1) {
             window.history.back();
             return;
@@ -178,11 +191,11 @@ export class WorktrackerWorkItemDetailPage extends PlatformPage {
         this.navigate(this._fromRouteKey());
     }
 
-    _openProperties() {
+    private _openProperties() {
         this.openBottomSheet('worktracker.task_properties', { workItemId: this.workItemId });
     }
 
-    render() {
+    override render() {
         if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
             return html`
                 <div class="center">

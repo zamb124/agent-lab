@@ -31,11 +31,61 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/flow-ui/components/platform-flow-ui.js';
 import '@platform/lib/components/glass-spinner.js';
+import type { CSSResultGroup, PropertyValues } from 'lit';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
+
+interface TeamMemberLike {
+    user_id?: unknown;
+    name?: unknown;
+    [key: string]: unknown;
+}
+
+interface TeamSlice {
+    members?: TeamMemberLike[];
+    loading?: boolean;
+}
+
+interface WorkItemRecord extends WorkItemLike {
+    work_item_id: string;
+}
 
 export class WorkItemDetailEditor extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare workItemId: string;
+    declare layout: string;
+    declare active: boolean;
+    declare _titleDraft: string;
+    declare _descriptionDraft: string;
+    declare _commentDraft: string;
+    declare _labelsDraft: unknown[];
+    declare _dueDateDraft: string;
+    declare _attachmentsDraft: Record<string, unknown>[];
+    declare _variablesDraft: Record<string, unknown>;
+    declare _commentFilesDraft: unknown[];
+    declare _savingTitle: boolean;
+    declare _savingDescription: boolean;
+    declare _propertiesExpanded: boolean;
+    declare _isMobile: boolean;
+    private _workItems: ResourceController;
+    private _boards: ResourceController;
+    private _queues: ResourceController;
+    private _commentsOp: OpController;
+    private _claimOp: OpController;
+    private _completeOp: OpController;
+    private _cancelOp: OpController;
+    private _commentOp: OpController;
+    private _moveOp: OpController;
+    private _assignOp: OpController;
+    private _localeSel: SelectController<unknown>;
+    private _teamSel: SelectController<TeamMemberLike[] | undefined>;
+    private _teamLoadingSel: SelectController<boolean | undefined>;
+    private _mql: MediaQueryList | null = null;
 
-    static properties = {
+
+    static override properties = {
         workItemId: { type: String, attribute: 'work-item-id' },
         layout: { type: String },
         active: { type: Boolean },
@@ -53,7 +103,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         _isMobile: { state: true },
     };
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         buttonStyles,
         worktrackerSurfacesStyles,
@@ -199,16 +249,16 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._commentOp = this.useOp('worktracker/work_item_comment');
         this._moveOp = this.useOp('worktracker/work_item_move');
         this._assignOp = this.useOp('worktracker/work_item_assign');
-        this._localeSel = this.select((s) => s.i18n.locale);
-        this._teamSel = this.select((s) => s.team.members);
-        this._teamLoadingSel = this.select((s) => s.team.loading);
+        this._localeSel = this.select((state) => (state.i18n as Record<string, unknown>).locale);
+        this._teamSel = this.select((s) => (s.team as TeamSlice).members);
+        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
 
-        const syncItem = (event) => {
+        const syncItem = (event: PlatformEvent) => {
             const item = workItemFromEventPayload(event.payload);
             if (!item || typeof item.work_item_id !== 'string' || item.work_item_id !== this.workItemId) {
                 return;
             }
-            this._applyItemDrafts(item);
+            this._applyItemDrafts(item as WorkItemRecord);
         };
 
         this.useEvent(this._workItems.resource.events.ITEM_LOADED, syncItem);
@@ -232,7 +282,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._onMqlChange = this._onMqlChange.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._ensureTeamMembers();
         if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -242,18 +292,18 @@ export class WorkItemDetailEditor extends PlatformElement {
         }
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         if (this._mql) {
             this._mql.removeEventListener('change', this._onMqlChange);
         }
     }
 
-    _onMqlChange(event) {
+    private _onMqlChange(event: MediaQueryListEvent) {
         this._isMobile = event.matches;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         const validLayouts = new Set(['panel', 'page', 'inspector-only']);
         if (!validLayouts.has(this.layout)) {
@@ -266,7 +316,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (changed.has('workItemId')) {
             const item = this._item();
             if (item) {
-                this._applyItemDrafts(item);
+                this._applyItemDrafts(item as WorkItemRecord);
             } else {
                 this._titleDraft = '';
                 this._descriptionDraft = '';
@@ -278,21 +328,21 @@ export class WorkItemDetailEditor extends PlatformElement {
         }
     }
 
-    _cloneVariables(raw) {
+    private _cloneVariables(raw: unknown): Record<string, unknown> {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
             return {};
         }
         return JSON.parse(JSON.stringify(raw));
     }
 
-    _cloneFileRefs(raw) {
+    private _cloneFileRefs(raw: unknown): Record<string, unknown>[] {
         if (!Array.isArray(raw)) {
             return [];
         }
-        return raw.filter((row) => row && typeof row === 'object').map((row) => ({ ...row }));
+        return raw.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === 'object')).map((row) => ({ ...row }));
     }
 
-    _applyItemDrafts(item) {
+    private _applyItemDrafts(item: WorkItemRecord) {
         if (!item || typeof item !== 'object') {
             return;
         }
@@ -314,7 +364,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         }
     }
 
-    _ensureTeamMembers() {
+    private _ensureTeamMembers() {
         const members = this._teamSel.value;
         const loading = this._teamLoadingSel.value;
         if ((!Array.isArray(members) || members.length === 0) && !loading) {
@@ -322,7 +372,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         }
     }
 
-    _load() {
+    private _load() {
         if (!this.workItemId) {
             return;
         }
@@ -331,19 +381,19 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._commentsOp.run({ work_item_id: this.workItemId });
     }
 
-    _item() {
+    private _item(): WorkItemRecord | null {
         if (!this.workItemId) {
             return null;
         }
         const cached = this._workItems.byId[this.workItemId];
         if (cached && typeof cached === 'object') {
-            return cached;
+            return cached as WorkItemRecord;
         }
         const fromList = (this._workItems.items || []).find((row) => row && row.work_item_id === this.workItemId);
-        return fromList || null;
+        return (fromList as WorkItemRecord | undefined) || null;
     }
 
-    _saveTitle() {
+    private _saveTitle() {
         const item = this._item();
         if (!item || this._savingTitle) {
             return;
@@ -357,7 +407,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._savingTitle = false;
     }
 
-    _saveDescription() {
+    private _saveDescription() {
         const item = this._item();
         if (!item || this._savingDescription) {
             return;
@@ -370,7 +420,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._savingDescription = false;
     }
 
-    _saveAttachments(files) {
+    private _saveAttachments(files: unknown) {
         const item = this._item();
         if (!item || !Array.isArray(files)) {
             return;
@@ -378,7 +428,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._workItems.update(item.work_item_id, { attachments: files });
     }
 
-    _saveVariables(variables) {
+    private _saveVariables(variables: unknown) {
         const item = this._item();
         if (!item || !variables || typeof variables !== 'object' || Array.isArray(variables)) {
             return;
@@ -388,10 +438,10 @@ export class WorkItemDetailEditor extends PlatformElement {
         if (currentFingerprint === nextFingerprint) {
             return;
         }
-        this._workItems.update(item.work_item_id, { variables });
+        this._workItems.update(item.work_item_id, { variables: variables as Record<string, unknown> });
     }
 
-    _savePriority(value) {
+    private _savePriority(value: unknown) {
         const item = this._item();
         if (!item || typeof value !== 'string' || value.length === 0 || value === item.priority) {
             return;
@@ -399,7 +449,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._workItems.update(item.work_item_id, { priority: value });
     }
 
-    _saveLabels(values) {
+    private _saveLabels(values: unknown) {
         const item = this._item();
         if (!item || !Array.isArray(values)) {
             return;
@@ -407,7 +457,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._workItems.update(item.work_item_id, { labels: values });
     }
 
-    _saveDueDate(value) {
+    private _saveDueDate(value: unknown) {
         const item = this._item();
         if (!item) {
             return;
@@ -424,7 +474,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._workItems.update(item.work_item_id, { due_date: normalized });
     }
 
-    _saveStatus(value) {
+    private _saveStatus(value: unknown) {
         const item = this._item();
         if (!item || typeof value !== 'string' || value.length === 0) {
             return;
@@ -451,7 +501,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         });
     }
 
-    _saveAssignee(userId) {
+    private _saveAssignee(userId: unknown) {
         const item = this._item();
         if (!item || typeof userId !== 'string' || userId.length === 0) {
             return;
@@ -462,28 +512,28 @@ export class WorkItemDetailEditor extends PlatformElement {
         });
     }
 
-    _claim() {
+    private _claim() {
         if (!this.workItemId) {
             return;
         }
         this._claimOp.run({ work_item_id: this.workItemId });
     }
 
-    async _complete() {
+    private async _complete(): Promise<void> {
         if (!this.workItemId) {
             return;
         }
         await this._completeOp.run({ work_item_id: this.workItemId, resolution_text: '' });
     }
 
-    _cancel() {
+    private _cancel() {
         if (!this.workItemId) {
             return;
         }
         this._cancelOp.run({ work_item_id: this.workItemId });
     }
 
-    _submitComment() {
+    private _submitComment() {
         const text = this._commentDraft.trim();
         const files = Array.isArray(this._commentFilesDraft) ? this._commentFilesDraft : [];
         if ((!text && files.length === 0) || !this.workItemId) {
@@ -494,7 +544,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         this._commentFilesDraft = [];
     }
 
-    _priorityEnumConfig() {
+    private _priorityEnumConfig() {
         return {
             values: WORK_ITEM_PRIORITIES.map((value) => ({
                 value,
@@ -503,12 +553,12 @@ export class WorkItemDetailEditor extends PlatformElement {
         };
     }
 
-    _statusEnumConfig(item) {
+    private _statusEnumConfig(item: WorkItemRecord) {
         if (typeof item.board_id === 'string' && item.board_id.length > 0) {
             const board = this._boards.byId[item.board_id];
             if (board && Array.isArray(board.columns) && board.columns.length > 0) {
                 return {
-                    values: board.columns.map((col) => ({
+                    values: (board.columns as { board_column_id?: unknown; label?: unknown }[]).map((col) => ({
                         value: col.board_column_id,
                         label: col.label,
                     })),
@@ -523,18 +573,18 @@ export class WorkItemDetailEditor extends PlatformElement {
         };
     }
 
-    _statusValue(item) {
+    private _statusValue(item: WorkItemRecord) {
         if (typeof item.board_id === 'string' && item.board_id.length > 0 && typeof item.board_column_id === 'string') {
             return item.board_column_id;
         }
         return typeof item.state === 'string' ? item.state : 'open';
     }
 
-    _stateLabel(item) {
+    private _stateLabel(item: WorkItemRecord) {
         if (typeof item.board_id === 'string' && item.board_id.length > 0 && typeof item.board_column_id === 'string') {
             const board = this._boards.byId[item.board_id];
             if (board && Array.isArray(board.columns)) {
-                const column = board.columns.find((col) => col && col.board_column_id === item.board_column_id);
+                const column = (board.columns as { board_column_id?: unknown; label?: unknown }[]).find((col) => col && col.board_column_id === item.board_column_id);
                 if (column && typeof column.label === 'string') {
                     return column.label;
                 }
@@ -543,26 +593,27 @@ export class WorkItemDetailEditor extends PlatformElement {
         return typeof item.state === 'string' ? this.t('state.' + item.state) : '';
     }
 
-    _teamMemberOptions() {
+    private _teamMemberOptions() {
         const members = this._teamSel.value;
         if (!Array.isArray(members)) {
             return [];
         }
         const flowBadge = this.t('detail_page.assignee_flow_badge');
         return members
-            .filter((member) => member && typeof member.user_id === 'string' && member.user_id.length > 0)
+            .filter((member): member is TeamMemberLike => Boolean(member && typeof member.user_id === 'string' && member.user_id.length > 0))
             .map((member) => {
+                const userId = member.user_id as string;
                 const name = typeof member.name === 'string' && member.name.length > 0
                     ? member.name
-                    : member.user_id;
+                    : userId;
                 const label = member.is_flow_employee === true
                     ? `${name} (${flowBadge})`
                     : name;
-                return { value: member.user_id, label };
+                return { value: userId, label };
             });
     }
 
-    _boardLabel(item) {
+    private _boardLabel(item: WorkItemRecord) {
         if (typeof item.board_id !== 'string' || item.board_id.length === 0) {
             return '';
         }
@@ -573,11 +624,11 @@ export class WorkItemDetailEditor extends PlatformElement {
         return board.name;
     }
 
-    _queueLabel(item) {
+    private _queueLabel(item: WorkItemRecord) {
         if (!assigneeIsQueue(item)) {
             return '';
         }
-        const queueId = item.assignment.work_queue_id;
+        const queueId = item.assignment?.work_queue_id;
         if (typeof queueId !== 'string' || queueId.length === 0) {
             return '';
         }
@@ -590,29 +641,31 @@ export class WorkItemDetailEditor extends PlatformElement {
         return queueId;
     }
 
-    _openBoard(item) {
+    private _openBoard(item: WorkItemRecord) {
         if (typeof item.board_id !== 'string' || item.board_id.length === 0) {
             return;
         }
         this.navigate('board', {}, { search: `?board_id=${encodeURIComponent(item.board_id)}` });
     }
 
-    _resolutionText(item) {
-        if (!item.resolution || typeof item.resolution !== 'object') {
+    private _resolutionText(item: WorkItemRecord) {
+        const resolution = item.resolution as { text?: unknown } | null | undefined;
+        if (!resolution || typeof resolution !== 'object') {
             return '';
         }
-        return typeof item.resolution.text === 'string' ? item.resolution.text : '';
+        return typeof resolution.text === 'string' ? resolution.text : '';
     }
 
-    _resolutionFiles(item) {
-        if (!item.resolution || typeof item.resolution !== 'object') {
+    private _resolutionFiles(item: WorkItemRecord) {
+        const resolution = item.resolution as { files?: unknown } | null | undefined;
+        if (!resolution || typeof resolution !== 'object') {
             return [];
         }
-        return this._cloneFileRefs(item.resolution.files);
+        return this._cloneFileRefs(resolution.files);
     }
 
-    _renderInspector(item, showTitle) {
-        const isTerminal = TERMINAL_STATES.has(item.state);
+    private _renderInspector(item: WorkItemRecord, showTitle: boolean) {
+        const isTerminal = typeof item.state === 'string' && TERMINAL_STATES.has(item.state);
         const showClaim = queueUnclaimed(item);
         return html`
             <div class="wt-inspector-sticky">
@@ -636,31 +689,31 @@ export class WorkItemDetailEditor extends PlatformElement {
                     @wt-complete=${() => this._complete()}
                     @wt-cancel=${() => this._cancel()}
                     @wt-claim=${() => this._claim()}
-                    @wt-status-change=${(e) => {
+                    @wt-status-change=${(e: CustomEvent<{ value?: unknown }>) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this._saveStatus(value);
                     }}
-                    @wt-priority-change=${(e) => {
+                    @wt-priority-change=${(e: CustomEvent<{ value?: unknown }>) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this._savePriority(value);
                     }}
-                    @wt-assignee-change=${(e) => {
+                    @wt-assignee-change=${(e: CustomEvent<{ user_id?: unknown }>) => {
                         const userId = e.detail && typeof e.detail.user_id === 'string' ? e.detail.user_id : '';
                         this._saveAssignee(userId);
                     }}
-                    @wt-due-date-change=${(e) => {
+                    @wt-due-date-change=${(e: CustomEvent<{ value?: unknown }>) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this._dueDateDraft = value;
                         this._saveDueDate(value);
                     }}
-                    @wt-labels-change=${(e) => {
+                    @wt-labels-change=${(e: CustomEvent<{ values?: unknown }>) => {
                         const values = e.detail && Array.isArray(e.detail.values) ? e.detail.values : [];
                         this._labelsDraft = values;
                         this._saveLabels(values);
                     }}
-                    @wt-variables-change=${(e) => {
-                        const variables = e.detail && e.detail.variables && typeof e.detail.variables === 'object'
-                            ? e.detail.variables
+                    @wt-variables-change=${(e: CustomEvent<{ variables?: unknown }>) => {
+                        const variables = e.detail && e.detail.variables && typeof e.detail.variables === 'object' && !Array.isArray(e.detail.variables)
+                            ? e.detail.variables as Record<string, unknown>
                             : {};
                         this._variablesDraft = variables;
                         this._saveVariables(variables);
@@ -672,7 +725,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
-    _renderContent(item, loading, state) {
+    private _renderContent(item: WorkItemRecord | null, loading: boolean, state: string) {
         return html`
             <worktracker-detail-content
                 layout=${this.layout}
@@ -686,15 +739,15 @@ export class WorkItemDetailEditor extends PlatformElement {
                 .attachments=${this._attachmentsDraft}
                 .descriptionVariables=${this._variablesDraft}
                 ?loading=${loading}
-                @wt-title-change=${(e) => {
+                @wt-title-change=${(e: CustomEvent<{ value?: unknown }>) => {
                     this._titleDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                 }}
                 @wt-title-blur=${() => this._saveTitle()}
-                @wt-description-change=${(e) => {
+                @wt-description-change=${(e: CustomEvent<{ value?: unknown }>) => {
                     this._descriptionDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                 }}
                 @wt-description-blur=${() => this._saveDescription()}
-                @wt-attachments-change=${(e) => {
+                @wt-attachments-change=${(e: CustomEvent<{ files?: unknown }>) => {
                     const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];
                     this._attachmentsDraft = files;
                     this._saveAttachments(files);
@@ -703,12 +756,12 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
-    _isHandoff(item) {
-        return Boolean(item) && item.kind === 'operator_handoff';
+    private _isHandoff(item: WorkItemRecord | null): item is WorkItemRecord {
+        return item !== null && item.kind === 'operator_handoff';
     }
 
-    _renderHitlChat(item) {
-        const policy = item && item.interaction_policy && typeof item.interaction_policy === 'object'
+    private _renderHitlChat(item: WorkItemRecord) {
+        const policy = item.interaction_policy && typeof item.interaction_policy === 'object'
             ? item.interaction_policy
             : null;
         if (!policy || policy.mode === 'none') {
@@ -728,7 +781,7 @@ export class WorkItemDetailEditor extends PlatformElement {
                 ${modeHint
                     ? html`<p class="wt-hitl-hint">${modeHint}</p>`
                     : nothing}
-                ${!canSend && item && !TERMINAL_STATES.has(item.state)
+                ${!canSend && !(typeof item.state === 'string' && TERMINAL_STATES.has(item.state))
                     ? html`<p class="wt-hitl-hint">${this.t('hitl_chat.hint_need_queue_access')}</p>`
                     : nothing}
                 <div class="wt-hitl-chat">
@@ -741,13 +794,13 @@ export class WorkItemDetailEditor extends PlatformElement {
                         .interactionPolicy=${policy}
                     ></platform-flow-ui>
                 </div>
-                ${isTakeover && canComplete && item && !TERMINAL_STATES.has(item.state)
+                ${isTakeover && canComplete && !(typeof item.state === 'string' && TERMINAL_STATES.has(item.state))
                     ? html`
                         <div class="wt-hitl-complete">
                             <button
                                 type="button"
                                 class="btn btn-primary"
-                                @click=${() => this._complete()}
+                                @click=${() => void this._complete()}
                             >${this.t('hitl_chat.complete_takeover')}</button>
                         </div>
                     `
@@ -756,7 +809,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
-    _renderActivity() {
+    private _renderActivity() {
         const item = this._item();
         const handoffSubtitle = this._isHandoff(item)
             ? this.t('hitl_chat.activity_internal_hint')
@@ -770,10 +823,10 @@ export class WorkItemDetailEditor extends PlatformElement {
                 .commentFiles=${this._commentFilesDraft}
                 locale=${this._localeSel.value}
                 subtitle=${handoffSubtitle}
-                @wt-comment-change=${(e) => {
+                @wt-comment-change=${(e: CustomEvent<{ value?: unknown }>) => {
                     this._commentDraft = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                 }}
-                @wt-comment-files-change=${(e) => {
+                @wt-comment-files-change=${(e: CustomEvent<{ files?: unknown }>) => {
                     this._commentFilesDraft = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];
                 }}
                 @wt-comment-submit=${() => this._submitComment()}
@@ -781,7 +834,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
-    _renderPropertiesToggle(expanded) {
+    private _renderPropertiesToggle(expanded: boolean) {
         return html`
             <button
                 type="button"
@@ -795,7 +848,7 @@ export class WorkItemDetailEditor extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         if (!this.active) {
             return nothing;
         }

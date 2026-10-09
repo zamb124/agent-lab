@@ -7,11 +7,13 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { worktrackerInspectorStyles } from '../styles/worktracker-inspector.styles.js';
 
 export class WorktrackerInspectorRow extends PlatformElement {
-    static properties = {
+    declare label: string;
+
+    static override properties = {
         label: { type: String },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerInspectorStyles,
         css`
@@ -42,7 +44,7 @@ export class WorktrackerInspectorRow extends PlatformElement {
         this.label = '';
     }
 
-    render() {
+    override render() {
         return html`
             <span class="label">${this.label}</span>
             <div class="control">

@@ -4,6 +4,7 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
@@ -13,14 +14,18 @@ import '../components/worktracker-icon-action.js';
 
 export class WorktrackerQueuesPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
+    declare _name: string;
+    declare _slug: string;
+    declare _showCreate: boolean;
 
-    static properties = {
+
+    static override properties = {
         _name: { state: true },
         _slug: { state: true },
         _showCreate: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         css`
@@ -120,6 +125,8 @@ export class WorktrackerQueuesPage extends PlatformPage {
         `,
     ];
 
+    private _queues: ResourceController;
+
     constructor() {
         super();
         this._name = '';
@@ -128,16 +135,16 @@ export class WorktrackerQueuesPage extends PlatformPage {
         this._queues = this.useResource('worktracker/work_queues');
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._queues.load({});
     }
 
-    _openQueue(workQueueId) {
+    private _openQueue(workQueueId: string) {
         this.navigate('queue_detail', { workQueueId });
     }
 
-    _toggleCreate() {
+    private _toggleCreate() {
         this._showCreate = !this._showCreate;
         if (!this._showCreate) {
             this._name = '';
@@ -145,7 +152,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
         }
     }
 
-    _create() {
+    private _create() {
         const name = this._name.trim();
         const slug = this._slug.trim();
         if (!name || !slug) {
@@ -157,7 +164,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
         this._showCreate = false;
     }
 
-    render() {
+    override render() {
         const queues = this._queues.items || [];
         return html`
             <platform-breadcrumbs></platform-breadcrumbs>
@@ -179,7 +186,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
                             mode="edit"
                             .label=${this.t('queues_page.label_name')}
                             .value=${this._name}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 this._name = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                             }}
                         ></platform-field>
@@ -188,7 +195,7 @@ export class WorktrackerQueuesPage extends PlatformPage {
                             mode="edit"
                             .label=${this.t('queues_page.label_slug')}
                             .value=${this._slug}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 this._slug = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                             }}
                         ></platform-field>
@@ -205,8 +212,8 @@ export class WorktrackerQueuesPage extends PlatformPage {
             ` : ''}
             ${queues.length > 0 ? html`
                 <div class="queue-list">
-                    ${queues.map((q) => html`
-                        <button type="button" class="queue-row" @click=${() => this._openQueue(q.work_queue_id)}>
+                    ${queues.map((q: Record<string, unknown>) => html`
+                        <button type="button" class="queue-row" @click=${() => this._openQueue(String(q.work_queue_id ?? ''))}>
                             <span class="queue-icon">
                                 <platform-icon name="layers" size="18"></platform-icon>
                             </span>

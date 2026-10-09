@@ -7,7 +7,13 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class WorktrackerIconAction extends PlatformElement {
-    static properties = {
+    declare icon: string;
+    declare title: string;
+    declare disabled: boolean;
+    declare active: boolean;
+    declare size: number;
+
+    static override properties = {
         icon: { type: String },
         title: { type: String },
         disabled: { type: Boolean, reflect: true },
@@ -15,7 +21,7 @@ export class WorktrackerIconAction extends PlatformElement {
         size: { type: Number },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -64,7 +70,7 @@ export class WorktrackerIconAction extends PlatformElement {
         this.size = 18;
     }
 
-    render() {
+    override render() {
         return html`
             <button
                 type="button"

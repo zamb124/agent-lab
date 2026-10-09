@@ -7,13 +7,17 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 
 export class WorktrackerPageHeader extends PlatformElement {
-    static properties = {
+    declare title: string;
+    declare showBreadcrumbs: boolean;
+    declare breadcrumbLabel: string;
+
+    static override properties = {
         title: { type: String },
         showBreadcrumbs: { type: Boolean, attribute: 'show-breadcrumbs' },
         breadcrumbLabel: { type: String, attribute: 'breadcrumb-label' },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -54,7 +58,7 @@ export class WorktrackerPageHeader extends PlatformElement {
         this.breadcrumbLabel = '';
     }
 
-    render() {
+    override render() {
         const breadcrumb = typeof this.breadcrumbLabel === 'string' && this.breadcrumbLabel.length > 0
             ? this.breadcrumbLabel
             : this.title;

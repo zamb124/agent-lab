@@ -7,14 +7,18 @@ import { PlatformElement } from '@platform/lib/platform-element/index.js';
 
 export class WorktrackerStatePill extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare state: string;
+    declare label: string;
+    declare interactive: boolean;
 
-    static properties = {
+
+    static override properties = {
         state: { type: String },
         label: { type: String },
         interactive: { type: Boolean },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -96,7 +100,7 @@ export class WorktrackerStatePill extends PlatformElement {
         return this.t('state.' + this.state);
     }
 
-    render() {
+    override render() {
         const state = typeof this.state === 'string' && this.state.length > 0 ? this.state : 'open';
         const text = this._displayLabel();
         if (this.interactive) {

@@ -12,7 +12,7 @@ import '@platform/lib/components/fields/platform-field.js';
 export class WorktrackerAssigneePicker extends PlatformElement {
     static i18nNamespace = 'worktracker';
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerInspectorStyles,
         css`
@@ -22,8 +22,14 @@ export class WorktrackerAssigneePicker extends PlatformElement {
             }
         `,
     ];
+    declare userId: string;
+    declare queueLabel: string;
+    declare teamOptions: unknown[];
+    declare label: string;
+    declare disabled: boolean;
 
-    static properties = {
+
+    static override properties = {
         userId: { type: String, attribute: 'user-id' },
         queueLabel: { type: String, attribute: 'queue-label' },
         teamOptions: { type: Array, attribute: false },
@@ -40,12 +46,12 @@ export class WorktrackerAssigneePicker extends PlatformElement {
         this.disabled = false;
     }
 
-    _onChange(event) {
+    private _onChange(event: CustomEvent<{ value?: unknown }>) {
         const nextValue = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this.emit('wt-assignee-change', { user_id: nextValue });
     }
 
-    render() {
+    override render() {
         const rowLabel = typeof this.label === 'string' && this.label.length > 0
             ? this.label
             : this.t('detail_page.label_assignee');
@@ -53,7 +59,7 @@ export class WorktrackerAssigneePicker extends PlatformElement {
         const queue = typeof this.queueLabel === 'string' ? this.queueLabel : '';
         const assigneeId = typeof this.userId === 'string' ? this.userId : '';
 
-        let control = nothing;
+        let control: unknown = nothing;
         if (queue.length > 0 && assigneeId.length === 0) {
             control = html`<span class="wt-inspector-readonly">${queue}</span>`;
         } else if (options.length > 0 && !this.disabled) {
@@ -66,7 +72,7 @@ export class WorktrackerAssigneePicker extends PlatformElement {
                     .label=${''}
                     .value=${assigneeId}
                     .config=${{ values: options }}
-                    @change=${(e) => this._onChange(e)}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => this._onChange(e)}
                 ></platform-field>
             `;
         } else if (assigneeId.length > 0) {

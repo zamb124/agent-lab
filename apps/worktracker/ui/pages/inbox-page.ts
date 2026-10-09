@@ -4,6 +4,10 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import { WorktrackerUiEvents } from '../events/types.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
@@ -16,8 +20,18 @@ import '@platform/lib/components/platform-icon.js';
 
 export class WorktrackerInboxPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
+    declare _assignedItems: WorkItemLike[];
+    declare _queueItems: WorkItemLike[];
+    declare _selectedWorkItemId: string;
+    declare _memberQueueIds: string[];
+    declare _queuesLoaded: boolean;
+    private _reloadGeneration: number;
+    private _workItems: ResourceController;
+    private _countsOp: OpController;
+    private _userSel: SelectController<unknown>;
 
-    static properties = {
+
+    static override properties = {
         _assignedItems: { state: true },
         _queueItems: { state: true },
         _selectedWorkItemId: { state: true },
@@ -25,7 +39,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         _queuesLoaded: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         worktrackerSurfacesStyles,
@@ -53,19 +67,19 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._reloadGeneration = 0;
         this._workItems = this.useResource('worktracker/work_items');
         this._countsOp = this.useOp('worktracker/work_item_counts');
-        this._userSel = this.select((s) => s.auth.user);
+        this._userSel = this.select((s) => (s.auth as Record<string, unknown>).user);
         this.useEvent(CoreEvents.AUTH_USER_LOADED, () => {
             this._reload();
         });
-        this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event) => {
-            const payload = event.payload;
+        this.useEvent(WorktrackerUiEvents.DETAIL_OPEN, (event: PlatformEvent) => {
+            const payload = event.payload as { work_item_id?: unknown } | null;
             if (!payload || typeof payload.work_item_id !== 'string') {
                 throw new Error('WorktrackerInboxPage: detail_open requires work_item_id');
             }
             this._selectedWorkItemId = payload.work_item_id;
         });
-        this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event) => {
-            const payload = event.payload;
+        this.useEvent(CoreEvents.PLATFORM_WORK_ITEM_DETAIL_OPEN_REQUESTED, (event: PlatformEvent) => {
+            const payload = event.payload as { work_item_id?: unknown } | null;
             if (!payload || typeof payload.work_item_id !== 'string') {
                 throw new Error('WorktrackerInboxPage: work_item_detail_open requires work_item_id');
             }
@@ -74,8 +88,9 @@ export class WorktrackerInboxPage extends PlatformPage {
         this.useEvent(WorktrackerUiEvents.DETAIL_CLOSE, () => {
             this._selectedWorkItemId = '';
         });
-        this.useEvent(this._workItems.resource.events.CREATED, (event) => {
-            const item = event.payload && event.payload.item;
+        this.useEvent(this._workItems.resource.events.CREATED, (event: PlatformEvent) => {
+            const payload = event.payload as { item?: WorkItemLike } | null;
+            const item = payload && payload.item;
             if (!item || typeof item.work_item_id !== 'string') {
                 throw new Error('WorktrackerInboxPage: CREATED payload.item.work_item_id required');
             }
@@ -83,60 +98,60 @@ export class WorktrackerInboxPage extends PlatformPage {
         });
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
-        const user = this._userSel.value;
+        const user = this._userSel.value as { user_id?: unknown } | null;
         if (user && typeof user.user_id === 'string' && user.user_id.length > 0) {
-            this._reload();
+            void this._reload();
         }
     }
 
-    _awaitListLoaded(requestedId) {
+    private _awaitListLoaded(requestedId: string): Promise<WorkItemLike[]> {
         const events = this._workItems.resource.events;
         return new Promise((resolve, reject) => {
-            let unsubLoaded = null;
-            let unsubFailed = null;
+            let unsubLoaded: (() => void) | null = null;
+            let unsubFailed: (() => void) | null = null;
             const cleanup = () => {
                 if (typeof unsubLoaded === 'function') unsubLoaded();
                 if (typeof unsubFailed === 'function') unsubFailed();
             };
-            unsubLoaded = this.bus.subscribeType(events.LIST_LOADED, (event) => {
+            unsubLoaded = this.bus.subscribeType(events.LIST_LOADED, (event: PlatformEvent) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) {
                     return;
                 }
                 cleanup();
-                const payload = event.payload;
+                const payload = event.payload as { items?: WorkItemLike[] } | null;
                 if (!payload || !Array.isArray(payload.items)) {
                     reject(new Error('WorktrackerInboxPage: list_loaded payload.items required'));
                     return;
                 }
                 resolve(payload.items);
             });
-            unsubFailed = this.bus.subscribeType(events.LIST_FAILED, (event) => {
+            unsubFailed = this.bus.subscribeType(events.LIST_FAILED, (event: PlatformEvent) => {
                 if (!event || !event.meta || event.meta.causation_id !== requestedId) {
                     return;
                 }
                 cleanup();
-                const payload = event.payload;
+                const payload = event.payload as { message?: unknown } | null;
                 const message = payload && typeof payload.message === 'string' ? payload.message : 'work items list failed';
                 reject(new Error(message));
             });
         });
     }
 
-    _memberQueueIdsFromSummary(summary) {
+    private _memberQueueIdsFromSummary(summary: unknown): string[] {
         if (!summary || typeof summary !== 'object') {
             throw new Error('WorktrackerInboxPage: mine summary result required');
         }
-        const ids = summary.work_queue_ids;
+        const ids = (summary as { work_queue_ids?: unknown }).work_queue_ids;
         if (!Array.isArray(ids)) {
             throw new Error('WorktrackerInboxPage: mine summary.work_queue_ids required');
         }
         return ids.filter((id) => typeof id === 'string' && id.length > 0);
     }
 
-    _mergeCreatedItem(item) {
-        const user = this._userSel.value;
+    private _mergeCreatedItem(item: WorkItemLike) {
+        const user = this._userSel.value as { user_id?: unknown } | null;
         if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
             return;
         }
@@ -170,8 +185,8 @@ export class WorktrackerInboxPage extends PlatformPage {
         }
     }
 
-    async _reload() {
-        const user = this._userSel.value;
+    private async _reload(): Promise<void> {
+        const user = this._userSel.value as { user_id?: unknown } | null;
         if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
             return;
         }
@@ -225,7 +240,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         this._queueItems = queueItems;
     }
 
-    _renderRow(item) {
+    private _renderRow(item: WorkItemLike) {
         const workItemId = item.work_item_id;
         const selected = this._selectedWorkItemId === workItemId;
         return html`
@@ -241,7 +256,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         `;
     }
 
-    _renderEmpty(messageKey) {
+    private _renderEmpty(messageKey: string) {
         return html`
             <div class="wt-empty">
                 <platform-icon class="wt-empty-icon" name="inbox" size="48"></platform-icon>
@@ -250,7 +265,7 @@ export class WorktrackerInboxPage extends PlatformPage {
         `;
     }
 
-    _renderQueueSection() {
+    private _renderQueueSection() {
         if (!this._queuesLoaded) {
             return nothing;
         }
@@ -280,11 +295,11 @@ export class WorktrackerInboxPage extends PlatformPage {
         return this._renderEmpty('inbox_page.empty_queue');
     }
 
-    _openCreateTask() {
+    private _openCreateTask() {
         this.openModal('worktracker.work_item_create', {});
     }
 
-    render() {
+    override render() {
         return html`
             <worktracker-page-header title=${this.t('inbox_page.title')}>
                 <worktracker-icon-action

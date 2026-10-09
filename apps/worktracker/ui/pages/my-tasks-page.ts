@@ -4,6 +4,8 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
 import '../components/worktracker-icon-action.js';
 import '../components/worktracker-list-section.js';
@@ -14,7 +16,7 @@ import '@platform/lib/components/platform-work-item-row.js';
 export class WorktrackerMyTasksPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         worktrackerSurfacesStyles,
         css`
@@ -28,15 +30,18 @@ export class WorktrackerMyTasksPage extends PlatformPage {
         `,
     ];
 
+    private _workItems: ResourceController;
+    private _userSel: SelectController<unknown>;
+
     constructor() {
         super();
         this._workItems = this.useResource('worktracker/work_items');
-        this._userSel = this.select((s) => s.auth.user);
+        this._userSel = this.select((s) => (s.auth as Record<string, unknown>).user);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
-        const user = this._userSel.value;
+        const user = this._userSel.value as { user_id?: unknown } | null;
         if (!user || typeof user.user_id !== 'string' || user.user_id.length === 0) {
             throw new Error('WorktrackerMyTasksPage: auth user required');
         }
@@ -47,7 +52,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
         this.openModal('worktracker.work_item_create', {});
     }
 
-    render() {
+    override render() {
         const items = this._workItems.items || [];
         return html`
             <worktracker-page-header
@@ -64,7 +69,7 @@ export class WorktrackerMyTasksPage extends PlatformPage {
             </worktracker-page-header>
             ${items.length > 0 ? html`
                 <worktracker-list-section title=${this.t('my_page.title')} .count=${items.length}>
-                    ${items.map((item) => html`
+                    ${items.map((item: Record<string, unknown>) => html`
                         <div class="wt-list-row">
                             <platform-work-item-row
                                 .item=${item}

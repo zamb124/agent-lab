@@ -4,19 +4,30 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+
+interface WorktrackerBoard {
+    board_id?: string;
+    name?: string;
+    [key: string]: unknown;
+}
 import '@platform/lib/components/platform-icon.js';
 
 export class WorktrackerBoardPicker extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare boards: WorktrackerBoard[];
+    declare activeBoardId: string;
+    declare menuOpen: boolean;
+    declare loading: boolean;
 
-    static properties = {
+
+    static override properties = {
         boards: { type: Array },
         activeBoardId: { type: String, attribute: 'active-board-id' },
         menuOpen: { type: Boolean, attribute: 'menu-open', reflect: true },
         loading: { type: Boolean, reflect: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -114,17 +125,17 @@ export class WorktrackerBoardPicker extends PlatformElement {
         this._onDocClick = this._onDocClick.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         document.addEventListener('click', this._onDocClick);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         document.removeEventListener('click', this._onDocClick);
         super.disconnectedCallback();
     }
 
-    _onDocClick(event) {
+    private _onDocClick(event: Event) {
         if (!this.menuOpen) {
             return;
         }
@@ -142,24 +153,24 @@ export class WorktrackerBoardPicker extends PlatformElement {
         return this.boards.find((board) => board.board_id === this.activeBoardId) || null;
     }
 
-    _toggleOpen(event) {
+    private _toggleOpen(event: Event) {
         event.stopPropagation();
         this.menuOpen = !this.menuOpen;
     }
 
-    _selectBoard(boardId, event) {
+    private _selectBoard(boardId: string, event: Event) {
         event.stopPropagation();
         this.menuOpen = false;
         this.emit('board-select', { board_id: boardId });
     }
 
-    _requestCreate(event) {
+    private _requestCreate(event: Event) {
         event.stopPropagation();
         this.menuOpen = false;
         this.emit('create-board');
     }
 
-    render() {
+    override render() {
         const activeBoard = this._activeBoard();
         const label = activeBoard && typeof activeBoard.name === 'string'
             ? activeBoard.name
@@ -167,26 +178,26 @@ export class WorktrackerBoardPicker extends PlatformElement {
         const boards = Array.isArray(this.boards) ? this.boards : [];
 
         return html`
-            <button type="button" class="trigger" @click=${this._toggleOpen} ?disabled=${this.loading}>
+            <button type="button" class="trigger" @click=${(e: Event) => this._toggleOpen(e)} ?disabled=${this.loading}>
                 <platform-icon name="list-check" size="18"></platform-icon>
                 <span class="trigger-name">${label}</span>
                 <platform-icon class="chevron" name="chevron-down" size="16"></platform-icon>
             </button>
             ${this.menuOpen ? html`
-                <div class="menu" @click=${(e) => e.stopPropagation()}>
+                <div class="menu" @click=${(e: Event) => e.stopPropagation()}>
                     ${boards.length === 0 ? html`
                         <div class="empty-label">${this.t('board_picker.empty')}</div>
-                    ` : boards.map((board) => html`
+                    ` : boards.map((board: WorktrackerBoard) => html`
                         <button
                             type="button"
                             class="item ${board.board_id === this.activeBoardId ? 'active' : ''}"
-                            @click=${(e) => this._selectBoard(board.board_id, e)}
+                            @click=${(e: Event) => this._selectBoard(String(board.board_id ?? ''), e)}
                         >
                             <platform-icon name="list-check" size="16"></platform-icon>
                             <span>${board.name}</span>
                         </button>
                     `)}
-                    <button type="button" class="item create" @click=${this._requestCreate}>
+                    <button type="button" class="item create" @click=${(e: Event) => this._requestCreate(e)}>
                         <platform-icon name="plus" size="16"></platform-icon>
                         <span>${this.t('board_picker.create')}</span>
                     </button>

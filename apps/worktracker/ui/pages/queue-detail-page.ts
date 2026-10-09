@@ -6,6 +6,25 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface TeamMemberLike {
+    user_id?: unknown;
+    name?: unknown;
+    email?: unknown;
+    [key: string]: unknown;
+}
+
+interface TeamSlice {
+    members?: TeamMemberLike[];
+    loading?: boolean;
+}
+
+interface QueueMemberRow {
+    member?: { actor_kind?: string; user_id?: unknown };
+    [key: string]: unknown;
+}
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { worktrackerSurfacesStyles } from '../styles/worktracker-surfaces.styles.js';
@@ -14,16 +33,20 @@ import '../components/worktracker-work-item-card.js';
 import '../components/worktracker-list-section.js';
 import '../components/worktracker-page-header.js';
 import '@platform/lib/components/fields/platform-field.js';
+import type { PropertyValues } from 'lit';
 
 export class WorktrackerQueueDetailPage extends PlatformPage {
     static i18nNamespace = 'worktracker';
+    declare workQueueId: string;
+    declare _membersFilter: string;
 
-    static properties = {
+
+    static override properties = {
         workQueueId: { type: String, attribute: 'work-queue-id' },
         _membersFilter: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         worktrackerSurfacesStyles,
@@ -75,6 +98,14 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         `,
     ];
 
+    private _workItems: ResourceController;
+    private _queues: ResourceController;
+    private _membersOp: OpController;
+    private _addMemberOp: OpController;
+    private _removeMemberOp: OpController;
+    private _teamMembersSel: SelectController<TeamMemberLike[] | undefined>;
+    private _teamLoadingSel: SelectController<boolean | undefined>;
+
     constructor() {
         super();
         this.workQueueId = '';
@@ -84,24 +115,24 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         this._membersOp = this.useOp('worktracker/work_queue_members_list');
         this._addMemberOp = this.useOp('worktracker/work_queue_member_add');
         this._removeMemberOp = this.useOp('worktracker/work_queue_member_remove');
-        this._teamMembersSel = this.select((s) => s.team.members);
-        this._teamLoadingSel = this.select((s) => s.team.loading);
+        this._teamMembersSel = this.select((s) => (s.team as TeamSlice).members);
+        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._ensureTeamMembers();
         this._reload();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         if (changed.has('workQueueId')) {
             this._reload();
         }
     }
 
-    _ensureTeamMembers() {
+    private _ensureTeamMembers() {
         const members = this._teamMembersSel.value;
         const loading = this._teamLoadingSel.value;
         if ((!Array.isArray(members) || members.length === 0) && !loading) {
@@ -109,7 +140,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         }
     }
 
-    _reload() {
+    private _reload() {
         if (!this.workQueueId) {
             return;
         }
@@ -122,18 +153,18 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         this._membersOp.run({ work_queue_id: this.workQueueId });
     }
 
-    _queue() {
+    private _queue(): Record<string, unknown> | null {
         const queues = this._queues.items || [];
-        return queues.find((row) => row && row.work_queue_id === this.workQueueId) || null;
+        return queues.find((row) => row && row.work_queue_id === this.workQueueId) ?? null;
     }
 
-    _memberUserIds() {
+    private _memberUserIds(): Set<string> {
         const members = this._membersOp.state.items || [];
-        const ids = new Set();
+        const ids = new Set<string>();
         if (!Array.isArray(members)) {
             return ids;
         }
-        for (const row of members) {
+        for (const row of members as QueueMemberRow[]) {
             const member = row && row.member;
             if (member && member.actor_kind === 'user' && typeof member.user_id === 'string' && member.user_id.length > 0) {
                 ids.add(member.user_id);
@@ -142,7 +173,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         return ids;
     }
 
-    _candidateMembers() {
+    private _candidateMembers(): TeamMemberLike[] {
         const team = this._teamMembersSel.value;
         if (!Array.isArray(team)) {
             return [];
@@ -150,18 +181,18 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         const already = this._memberUserIds();
         const q = this._membersFilter.trim().toLowerCase();
         return team
-            .filter((m) => m && typeof m.user_id === 'string' && m.user_id.length > 0 && !already.has(m.user_id))
+            .filter((m) => m && typeof m.user_id === 'string' && m.user_id.length > 0 && !already.has(m.user_id as string))
             .filter((m) => {
                 if (q.length === 0) {
                     return true;
                 }
                 const name = typeof m.name === 'string' ? m.name.toLowerCase() : '';
                 const email = typeof m.email === 'string' ? m.email.toLowerCase() : '';
-                return name.includes(q) || email.includes(q) || m.user_id.toLowerCase().includes(q);
+                return name.includes(q) || email.includes(q) || (m.user_id as string).toLowerCase().includes(q);
             });
     }
 
-    _addMember(userId) {
+    private _addMember(userId: string) {
         if (!userId || !this.workQueueId) {
             return;
         }
@@ -172,7 +203,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         });
     }
 
-    _removeMember(userId) {
+    private _removeMember(userId: string) {
         if (!this.workQueueId || !userId) {
             return;
         }
@@ -182,14 +213,14 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         });
     }
 
-    _renderMembers() {
+    private _renderMembers() {
         const members = this._membersOp.state.items || [];
         if (!Array.isArray(members) || members.length === 0) {
             return html`<div class="empty">${this.t('queue_detail_page.empty_members')}</div>`;
         }
         return html`
             <div class="members">
-                ${members.map((row) => {
+                ${(members as QueueMemberRow[]).map((row) => {
                     const member = row.member;
                     const userId = member && member.actor_kind === 'user' && typeof member.user_id === 'string'
                         ? member.user_id
@@ -210,7 +241,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         `;
     }
 
-    _renderCandidates() {
+    private _renderCandidates() {
         const candidates = this._candidateMembers();
         const teamLoading = this._teamLoadingSel.value;
         if (teamLoading && candidates.length === 0) {
@@ -221,13 +252,13 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         }
         return html`
             <div class="candidates">
-                ${candidates.map((m) => html`
+                ${candidates.map((m: TeamMemberLike) => html`
                     <button
                         type="button"
                         class="candidate-row"
-                        @click=${() => this._addMember(m.user_id)}
+                        @click=${() => this._addMember(String(m.user_id ?? ''))}
                     >
-                        <platform-user-chip user-id=${m.user_id} size="sm" .interactive=${false}></platform-user-chip>
+                        <platform-user-chip user-id=${String(m.user_id ?? '')} size="sm" .interactive=${false}></platform-user-chip>
                         <span>${this.t('queue_detail_page.add_member')}</span>
                     </button>
                 `)}
@@ -235,7 +266,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
         `;
     }
 
-    render() {
+    override render() {
         const queue = this._queue();
         const items = this._workItems.items || [];
         const queueLabel = queue && typeof queue.name === 'string' ? queue.name : this.workQueueId;
@@ -271,7 +302,7 @@ export class WorktrackerQueueDetailPage extends PlatformPage {
                             .label=${this.t('queue_detail_page.members_filter')}
                             .placeholder=${this.t('queue_detail_page.members_filter_placeholder')}
                             .value=${this._membersFilter}
-                            @change=${(e) => {
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => {
                                 if (!e.detail || typeof e.detail.value !== 'string') {
                                     throw new Error('queue-detail: members filter expects detail.value string');
                                 }

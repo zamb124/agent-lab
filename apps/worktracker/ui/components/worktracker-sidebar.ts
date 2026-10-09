@@ -4,6 +4,8 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
@@ -22,7 +24,7 @@ const NAV_ITEMS = [
 export class WorktrackerSidebar extends PlatformElement {
     static i18nNamespace = 'worktracker';
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         sidebarStyles,
         sidebarNavItemStyles,
@@ -53,8 +55,13 @@ export class WorktrackerSidebar extends PlatformElement {
             platform-service-sidebar[collapsed] .nav-badge { display: none; }
         `,
     ];
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+    private _routeKeySel: SelectController<unknown>;
+    private _countsOp: OpController;
 
-    static properties = {
+
+    static override properties = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
     };
@@ -63,27 +70,27 @@ export class WorktrackerSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._routeKeySel = this.select((s) => (s.router as Record<string, unknown>).routeKey);
         this._countsOp = this.useOp('worktracker/work_item_counts');
     }
 
-    _shell() {
+    private _shell(): Element | null {
         return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null;
     }
 
     closeMobile() {
-        const shell = this._shell();
+        const shell = this._shell() as { closeMobile?: () => void } | null;
         if (shell && typeof shell.closeMobile === 'function') {
             shell.closeMobile();
         }
     }
 
-    _navigate(routeKey, params) {
+    private _navigate(routeKey: string, params?: Record<string, string>) {
         this.navigate(routeKey, params || {});
         this.closeMobile();
     }
 
-    _isActive(route) {
+    private _isActive(route: string) {
         const current = this._routeKeySel.value;
         if (route === 'queues') {
             return current === 'queues' || current === 'queue_detail';
@@ -91,7 +98,7 @@ export class WorktrackerSidebar extends PlatformElement {
         return current === route;
     }
 
-    _renderNavItem(item) {
+    private _renderNavItem(item: { route: string; icon: string; label_key: string }) {
         let badge = null;
         if (item.route === 'inbox') {
             const total = this._countsOp.state.total_open_count;
@@ -111,7 +118,7 @@ export class WorktrackerSidebar extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/worktracker_logo.svg"
@@ -119,8 +126,8 @@ export class WorktrackerSidebar extends PlatformElement {
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
-                @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
+                @collapse-change=${(e: CustomEvent<{ collapsed?: boolean }>) => { this.collapsed = e.detail.collapsed === true; }}
+                @mobile-change=${(e: CustomEvent<{ open?: boolean }>) => { this.mobileOpen = e.detail.open === true; }}
             >
                 <nav>
                     ${NAV_ITEMS.map((item) => this._renderNavItem(item))}

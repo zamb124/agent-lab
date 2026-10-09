@@ -4,6 +4,14 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+
+interface WorkItemComment {
+    author?: { actor_kind?: string; user_id?: unknown };
+    created_at?: unknown;
+    text?: unknown;
+    files?: unknown[];
+    [key: string]: unknown;
+}
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import { buildWorkItemFileCreateSpecJson } from '@platform/lib/utils/file-create-spec.js';
 import { worktrackerDetailContentStyles } from '../styles/worktracker-detail.styles.js';
@@ -14,8 +22,16 @@ import '@platform/lib/components/platform-file-attachments.js';
 
 export class WorktrackerActivityThread extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare comments: WorkItemComment[];
+    declare commentDraft: string;
+    declare commentFiles: unknown[];
+    declare workItemId: string;
+    declare locale: string;
+    declare embedded: boolean;
+    declare subtitle: string;
 
-    static properties = {
+
+    static override properties = {
         comments: { type: Array, attribute: false },
         commentDraft: { type: String, attribute: 'comment-draft' },
         commentFiles: { type: Array, attribute: false },
@@ -26,7 +42,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         subtitle: { type: String },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerDetailContentStyles,
         css`
@@ -64,54 +80,54 @@ export class WorktrackerActivityThread extends PlatformElement {
         this.subtitle = '';
     }
 
-    _formatTimestamp(value) {
+    private _formatTimestamp(value: unknown) {
         if (typeof value !== 'string' || value.length === 0) {
             return '';
         }
         return formatPlatformDateTime(value, this.locale);
     }
 
-    _onCommentChange(event) {
+    private _onCommentChange(event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this.emit('wt-comment-change', { value });
     }
 
-    _onCommentKeydown(event) {
+    private _onCommentKeydown(event: KeyboardEvent) {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
             event.preventDefault();
             this.emit('wt-comment-submit', null);
         }
     }
 
-    _submit() {
+    private _submit() {
         this.emit('wt-comment-submit', null);
     }
 
-    _uploadSpecJson() {
+    private _uploadSpecJson() {
         return buildWorkItemFileCreateSpecJson({ workItemId: this.workItemId });
     }
 
-    _commentFiles(comment) {
+    private _commentFiles(comment: WorkItemComment) {
         if (Array.isArray(comment.files)) {
             return comment.files;
         }
         return [];
     }
 
-    _canSubmit() {
+    private _canSubmit() {
         const text = typeof this.commentDraft === 'string' ? this.commentDraft.trim() : '';
         const files = Array.isArray(this.commentFiles) ? this.commentFiles : [];
         return text.length > 0 || files.length > 0;
     }
 
-    _renderComments() {
+    private _renderComments() {
         const rows = Array.isArray(this.comments) ? this.comments : [];
         if (rows.length === 0) {
             return html`<div class="wt-activity-empty">${this.t('detail_page.no_comments')}</div>`;
         }
         return html`
             <div class="wt-comment-list">
-                ${rows.map((comment) => {
+                ${(rows as WorkItemComment[]).map((comment) => {
                     const author = comment.author;
                     const userId = author && author.actor_kind === 'user' && typeof author.user_id === 'string'
                         ? author.user_id
@@ -143,7 +159,7 @@ export class WorktrackerActivityThread extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         const canSubmit = this._canSubmit();
         return html`
             <section class="wt-activity">
@@ -163,8 +179,8 @@ export class WorktrackerActivityThread extends PlatformElement {
                         .label=${''}
                         .placeholder=${this.t('detail_page.comment_placeholder')}
                         .value=${this.commentDraft}
-                        @change=${(e) => this._onCommentChange(e)}
-                        @keydown=${(e) => this._onCommentKeydown(e)}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onCommentChange(e)}
+                        @keydown=${(e: KeyboardEvent) => this._onCommentKeydown(e)}
                     ></platform-field>
                     <button
                         type="button"
@@ -182,7 +198,7 @@ export class WorktrackerActivityThread extends PlatformElement {
                         .files=${Array.isArray(this.commentFiles) ? this.commentFiles : []}
                         .uploadSpec=${this._uploadSpecJson()}
                         open-source="worktracker_comment_composer"
-                        @files-change=${(e) => {
+                        @files-change=${(e: CustomEvent<{ files?: unknown }>) => {
                             const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];
                             this.emit('wt-comment-files-change', { files });
                         }}

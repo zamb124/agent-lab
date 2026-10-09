@@ -6,13 +6,20 @@ import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { TERMINAL_STATES, queueUnclaimed } from '../_helpers/work-item-detail-shared.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
 import './worktracker-icon-action.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class WorktrackerDetailHeader extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare item: WorkItemLike | null;
+    declare showBack: boolean;
+    declare showProperties: boolean;
+    declare showLifecycleActions: boolean;
+    declare showComplete: boolean;
 
-    static properties = {
+
+    static override properties = {
         item: { attribute: false },
         showBack: { type: Boolean, attribute: 'show-back' },
         showProperties: { type: Boolean, attribute: 'show-properties' },
@@ -20,7 +27,7 @@ export class WorktrackerDetailHeader extends PlatformElement {
         showComplete: { type: Boolean, attribute: 'show-complete' },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         buttonStyles,
         css`
@@ -71,10 +78,10 @@ export class WorktrackerDetailHeader extends PlatformElement {
         this.showComplete = true;
     }
 
-    render() {
+    override render() {
         const item = this.item;
-        const isTerminal = item && TERMINAL_STATES.has(item.state);
-        const showClaim = item && queueUnclaimed(item);
+        const isTerminal = item !== null && typeof item.state === 'string' && TERMINAL_STATES.has(item.state);
+        const showClaim = item !== null && queueUnclaimed(item);
 
         return html`
             ${this.showBack ? html`

@@ -10,6 +10,31 @@ import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/glass-spinner.js';
 import '../components/worktracker-icon-action.js';
 import { reorderByInsertIndex } from '@platform/lib/utils/reorder-by-insert-index.js';
+import type { CSSResultGroup, PropertyValues, TemplateResult } from 'lit';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface BoardColumnRecord {
+    board_column_id?: string;
+    label?: string;
+    state?: string;
+    position?: number;
+    [key: string]: unknown;
+}
+
+interface BoardRecord {
+    board_id?: string;
+    name?: string;
+    columns?: BoardColumnRecord[];
+    [key: string]: unknown;
+}
+
+interface BoardColumnDraft {
+    board_column_id: string;
+    label: string;
+    state: string;
+    position: number;
+}
 
 const BOARDS_NAME = 'worktracker/boards';
 const BOARD_COLUMN_INDEX_MIME = 'application/x-worktracker-board-column-index';
@@ -26,8 +51,19 @@ const BOARD_COLUMN_STATES = [
 export class WorktrackerBoardSettingsModal extends PlatformFormModal {
     static modalKind = 'worktracker.board_settings';
     static i18nNamespace = 'worktracker';
+    declare boardId: string;
+    declare _boardName: string;
+    declare _columns: BoardColumnDraft[];
+    declare _loading: boolean;
+    declare _saving: boolean;
+    declare _dragColumnIndex: number;
+    declare _columnInsertIndex: number;
+    private _boards: ResourceController;
+    private _snapshotName: string;
+    private _snapshotColumns: BoardColumnDraft[];
 
-    static properties = {
+
+    static override properties = {
         boardId: { type: String },
         _boardName: { state: true },
         _columns: { state: true },
@@ -37,8 +73,8 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         _columnInsertIndex: { state: true },
     };
 
-    static styles = [
-        ...PlatformFormModal.styles,
+    static override styles: CSSResultGroup = [
+        PlatformFormModal.styles,
         css`
             .form-grid { display: grid; gap: var(--space-4); }
             .columns-section {
@@ -146,14 +182,11 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._snapshotColumns = [];
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
-        this.useEvent(this._boards.resource.events.ITEM_LOADED, (event) => {
-            const payload = event.payload;
-            if (!payload || typeof payload !== 'object' || !('item' in payload)) {
-                return;
-            }
-            const item = payload.item;
+        this.useEvent(this._boards.resource.events.ITEM_LOADED, (event: PlatformEvent) => {
+            const payload = event.payload as { item?: BoardRecord } | null;
+            const item = payload && payload.item;
             if (!item || typeof item !== 'object' || item.board_id !== this.boardId) {
                 return;
             }
@@ -169,14 +202,14 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._resetAndLoad();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         if (changed.has('boardId') && typeof this.boardId === 'string' && this.boardId.length > 0) {
             this._resetAndLoad();
         }
     }
 
-    _resetAndLoad() {
+    private _resetAndLoad() {
         if (typeof this.boardId !== 'string' || this.boardId.length === 0) {
             throw new Error('WorktrackerBoardSettingsModal: boardId required');
         }
@@ -188,7 +221,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._boards.get(this.boardId);
     }
 
-    _applyBoard(board) {
+    private _applyBoard(board: BoardRecord) {
         if (typeof board.name !== 'string' || board.name.length === 0) {
             throw new Error('WorktrackerBoardSettingsModal: board.name required');
         }
@@ -199,25 +232,25 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._snapshotName = board.name;
         this._columns = board.columns
             .slice()
-            .sort((left, right) => left.position - right.position)
+            .sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
             .map((column) => ({
-                board_column_id: column.board_column_id,
-                label: column.label,
-                state: column.state,
-                position: column.position,
+                board_column_id: String(column.board_column_id ?? ''),
+                label: String(column.label ?? ''),
+                state: String(column.state ?? ''),
+                position: Number(column.position ?? 0),
             }));
         this._snapshotColumns = this._columns.map((column) => ({ ...column }));
         this._loading = false;
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>) {
         super.willUpdate(changed);
         const nameChanged = this._boardName !== this._snapshotName;
         const columnsChanged = JSON.stringify(this._columns) !== JSON.stringify(this._snapshotColumns);
         this.isDirty = nameChanged || columnsChanged;
     }
 
-    _stateConfig() {
+    private _stateConfig() {
         return {
             values: BOARD_COLUMN_STATES.map((state) => ({
                 value: state,
@@ -226,21 +259,21 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         };
     }
 
-    _onNameChange(event) {
+    private _onNameChange(event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._boardName = value;
     }
 
-    _onColumnLabelChange(index, event) {
+    private _onColumnLabelChange(index: number, event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._columns = this._columns.map((column, i) => (
             i === index ? { ...column, label: value } : column
         ));
     }
 
-    _onColumnStateChange(index, event) {
+    private _onColumnStateChange(index: number, event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
-        if (!BOARD_COLUMN_STATES.includes(value)) {
+        if (!(BOARD_COLUMN_STATES as readonly string[]).includes(value)) {
             throw new Error(`WorktrackerBoardSettingsModal: unsupported state ${value}`);
         }
         this._columns = this._columns.map((column, i) => (
@@ -248,7 +281,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         ));
     }
 
-    _nextColumnId() {
+    private _nextColumnId() {
         let index = this._columns.length;
         let boardColumnId = `col_${index}`;
         while (this._columns.some((column) => column.board_column_id === boardColumnId)) {
@@ -258,7 +291,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         return boardColumnId;
     }
 
-    _addColumn() {
+    private _addColumn() {
         const position = this._columns.length;
         this._columns = [
             ...this._columns,
@@ -271,7 +304,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         ];
     }
 
-    _removeColumn(index) {
+    private _removeColumn(index: number) {
         if (this._columns.length <= 1) {
             return;
         }
@@ -280,25 +313,25 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
             .map((column, position) => ({ ...column, position }));
     }
 
-    _moveColumnToInsert(fromIndex, insertIndex) {
+    private _moveColumnToInsert(fromIndex: number, insertIndex: number) {
         this._columns = reorderByInsertIndex(this._columns, fromIndex, insertIndex)
             .map((column, position) => ({ ...column, position }));
     }
 
-    _onColumnRowDragStart(event, index) {
+    private _onColumnRowDragStart(event: DragEvent, index: number) {
         event.stopPropagation();
-        event.dataTransfer.setData(BOARD_COLUMN_INDEX_MIME, String(index));
-        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer?.setData(BOARD_COLUMN_INDEX_MIME, String(index));
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
         this._dragColumnIndex = index;
     }
 
-    _onColumnRowDragEnd() {
+    private _onColumnRowDragEnd() {
         this._dragColumnIndex = -1;
         this._columnInsertIndex = -1;
     }
 
-    _onColumnInsertDragOver(event, insertIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
+    private _onColumnInsertDragOver(event: DragEvent, insertIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
             return;
         }
         event.preventDefault();
@@ -309,12 +342,12 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         }
     }
 
-    _onColumnInsertDrop(event, insertIndex) {
+    private _onColumnInsertDrop(event: DragEvent, insertIndex: number) {
         event.preventDefault();
         event.stopPropagation();
         this._columnInsertIndex = -1;
         this._dragColumnIndex = -1;
-        const rawIndex = event.dataTransfer.getData(BOARD_COLUMN_INDEX_MIME);
+        const rawIndex = event.dataTransfer?.getData(BOARD_COLUMN_INDEX_MIME) ?? '';
         if (typeof rawIndex !== 'string' || rawIndex.length === 0) {
             return;
         }
@@ -325,7 +358,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._moveColumnToInsert(sourceIndex, insertIndex);
     }
 
-    _resolveRowInsertIndexFromPointer(event, rowIndex) {
+    private _resolveRowInsertIndexFromPointer(event: DragEvent, rowIndex: number) {
         const target = event.currentTarget;
         if (!(target instanceof HTMLElement)) {
             return rowIndex;
@@ -335,8 +368,8 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         return insertBefore ? rowIndex : rowIndex + 1;
     }
 
-    _onColumnRowLeadDragOver(event, rowIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
+    private _onColumnRowLeadDragOver(event: DragEvent, rowIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
             return;
         }
         event.preventDefault();
@@ -348,8 +381,8 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         }
     }
 
-    _onColumnRowLeadDrop(event, rowIndex) {
-        if (!event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
+    private _onColumnRowLeadDrop(event: DragEvent, rowIndex: number) {
+        if (!event.dataTransfer || !event.dataTransfer.types.includes(BOARD_COLUMN_INDEX_MIME)) {
             return;
         }
         event.preventDefault();
@@ -368,19 +401,19 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._moveColumnToInsert(sourceIndex, insertIndex);
     }
 
-    _renderColumnInsertMarker(index) {
+    private _renderColumnInsertMarker(index: number) {
         const columnReorderActive = this._dragColumnIndex >= 0;
         const active = columnReorderActive && this._columnInsertIndex === index;
         return html`
             <div
                 class="row-insert ${active ? 'active' : ''}"
-                @dragover=${(event) => this._onColumnInsertDragOver(event, index)}
-                @drop=${(event) => this._onColumnInsertDrop(event, index)}
+                @dragover=${(event: DragEvent) => this._onColumnInsertDragOver(event, index)}
+                @drop=${(event: DragEvent) => this._onColumnInsertDrop(event, index)}
             ></div>
         `;
     }
 
-    _renderColumnRow(column, index) {
+    private _renderColumnRow(column: BoardColumnDraft, index: number) {
         return html`
             <div class="column-row ${this._dragColumnIndex === index ? 'row-dragging' : ''}">
                 <div class="column-row-head">
@@ -388,10 +421,10 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
                         class="column-row-lead"
                         draggable="true"
                         title=${this.t('board_settings_modal.reorder_column')}
-                        @dragstart=${(event) => this._onColumnRowDragStart(event, index)}
+                        @dragstart=${(event: DragEvent) => this._onColumnRowDragStart(event, index)}
                         @dragend=${() => this._onColumnRowDragEnd()}
-                        @dragover=${(event) => this._onColumnRowLeadDragOver(event, index)}
-                        @drop=${(event) => this._onColumnRowLeadDrop(event, index)}
+                        @dragover=${(event: DragEvent) => this._onColumnRowLeadDragOver(event, index)}
+                        @drop=${(event: DragEvent) => this._onColumnRowLeadDrop(event, index)}
                     >
                         <platform-icon class="drag-handle" name="drag-handle" size="14"></platform-icon>
                         <span class="column-index">${this.t('board_settings_modal.column_index', { index: index + 1 })}</span>
@@ -412,7 +445,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
                         .label=${this.t('board_settings_modal.column_label')}
                         .value=${column.label}
                         ?disabled=${this._saving}
-                        @change=${(e) => this._onColumnLabelChange(index, e)}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onColumnLabelChange(index, e)}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -421,14 +454,14 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
                         .value=${column.state}
                         .config=${this._stateConfig()}
                         ?disabled=${this._saving}
-                        @change=${(e) => this._onColumnStateChange(index, e)}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onColumnStateChange(index, e)}
                     ></platform-field>
                 </div>
             </div>
         `;
     }
 
-    async _performSave() {
+    override async _performSave(): Promise<void> {
         const name = this._boardName.trim();
         if (name.length === 0) {
             return;
@@ -440,7 +473,7 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
             if (typeof column.label !== 'string' || column.label.trim().length === 0) {
                 throw new Error('WorktrackerBoardSettingsModal: column label required');
             }
-            if (typeof column.state !== 'string' || !BOARD_COLUMN_STATES.includes(column.state)) {
+            if (typeof column.state !== 'string' || !(BOARD_COLUMN_STATES as readonly string[]).includes(column.state)) {
                 throw new Error('WorktrackerBoardSettingsModal: column state required');
             }
             return {
@@ -454,25 +487,25 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         this._boards.update(this.boardId, { name, columns });
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('board_settings_modal.header');
     }
 
-    renderSaveHeaderButton() {
+    override renderSaveHeaderButton() {
         const hasName = this._boardName.trim().length > 0;
         return this._renderHeaderSaveIcon({
-            onClick: () => this._performSave(),
+            onClick: () => void this._performSave(),
             disabled: this._saving || this._loading || !hasName,
             title: this.t('board_settings_modal.submit'),
         });
     }
 
-    renderBody() {
+    override renderBody() {
         if (this._loading) {
             return html`<div><glass-spinner></glass-spinner></div>`;
         }
         return html`
-            <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
+            <form class="form-grid" @submit=${(e: SubmitEvent) => { e.preventDefault(); void this._performSave(); }}>
                 <platform-field
                     type="string"
                     mode="edit"
@@ -501,15 +534,15 @@ export class WorktrackerBoardSettingsModal extends PlatformFormModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter(): TemplateResult {
         return html`
             <div class="form-actions">
-                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
+                <button type="button" class="btn btn-secondary" @click=${() => void this.close()}>
                     ${this.t('board_settings_modal.cancel')}
                 </button>
                 <button type="button" class="btn btn-primary"
                         ?disabled=${this._saving || this._loading}
-                        @click=${() => this._performSave()}>
+                        @click=${() => void this._performSave()}>
                     ${this._saving
                         ? this.t('board_settings_modal.saving')
                         : this.t('board_settings_modal.submit')}

@@ -15,8 +15,20 @@ import '@platform/lib/components/glass-spinner.js';
 
 export class WorktrackerDetailContent extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare layout: string;
+    declare state: string;
+    declare stateLabel: string;
+    declare titleDraft: string;
+    declare descriptionDraft: string;
+    declare resolutionText: string;
+    declare resolutionFiles: unknown[];
+    declare attachments: unknown[];
+    declare descriptionVariables: Record<string, unknown>;
+    declare workItemId: string;
+    declare loading: boolean;
 
-    static properties = {
+
+    static override properties = {
         layout: { type: String },
         state: { type: String },
         stateLabel: { type: String, attribute: 'state-label' },
@@ -30,7 +42,7 @@ export class WorktrackerDetailContent extends PlatformElement {
         loading: { type: Boolean },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerDetailContentStyles,
         css`
@@ -57,12 +69,12 @@ export class WorktrackerDetailContent extends PlatformElement {
         this.loading = false;
     }
 
-    _emitTitleChange(event) {
+    private _emitTitleChange(event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this.emit('wt-title-change', { value });
     }
 
-    _emitDescriptionChange(event) {
+    private _emitDescriptionChange(event: CustomEvent<{ value?: unknown }>) {
         const value = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this.emit('wt-description-change', { value });
     }
@@ -92,7 +104,7 @@ export class WorktrackerDetailContent extends PlatformElement {
         return buildWorkItemFileCreateSpecJson({ workItemId: this.workItemId });
     }
 
-    render() {
+    override render() {
         const titlePlaceholder = this.t('detail_panel.label_title');
         const descPlaceholder = this.layout === 'page'
             ? this.t('detail_page.description_placeholder')
@@ -125,7 +137,7 @@ export class WorktrackerDetailContent extends PlatformElement {
                         .label=${''}
                         .placeholder=${titlePlaceholder}
                         .value=${this.titleDraft}
-                        @change=${(e) => this._emitTitleChange(e)}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._emitTitleChange(e)}
                         @blur=${() => this.emit('wt-title-blur', null)}
                     ></platform-field>
                     ${this.layout === 'page' ? html`
@@ -151,7 +163,7 @@ export class WorktrackerDetailContent extends PlatformElement {
                     .showPreview=${false}
                     .showHint=${false}
                     .minHeight=${this._descriptionMinHeight()}
-                    @change=${(e) => this._emitDescriptionChange(e)}
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => this._emitDescriptionChange(e)}
                     @blur=${() => this.emit('wt-description-blur', null)}
                 ></platform-markdown-editor>
                 <section class="wt-attachments-section">
@@ -160,7 +172,7 @@ export class WorktrackerDetailContent extends PlatformElement {
                         .files=${Array.isArray(this.attachments) ? this.attachments : []}
                         .uploadSpec=${this._uploadSpecJson()}
                         open-source="worktracker_task_attachments"
-                        @files-change=${(e) => {
+                        @files-change=${(e: CustomEvent<{ files?: unknown }>) => {
                             const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];
                             this.emit('wt-attachments-change', { files });
                         }}

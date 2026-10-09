@@ -7,9 +7,30 @@ import { createAsyncOp } from '@platform/lib/events/index.js';
 export { workQueuesResource } from '@platform/lib/events/resources/work-queues.resource.js';
 
 const WORK_QUEUE_MEMBER_ADD_SUCCEEDED = 'worktracker/work_queue_member_add/succeeded';
+
+interface WorkQueueActor {
+    actor_kind?: string;
+    user_id?: unknown;
+    [key: string]: unknown;
+}
+
+interface WorkQueueMember {
+    member?: WorkQueueActor;
+    work_queue_id?: unknown;
+    [key: string]: unknown;
+}
+
+import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+
+interface MembersListPayload {
+    result?: unknown;
+    request?: { work_queue_id?: unknown; member?: WorkQueueActor };
+    [key: string]: unknown;
+}
 const WORK_QUEUE_MEMBER_REMOVE_SUCCEEDED = 'worktracker/work_queue_member_remove/succeeded';
 
-function _sameActor(left, right) {
+function _sameActor(left: WorkQueueActor | undefined, right: WorkQueueActor | undefined): boolean {
     if (!left || !right || left.actor_kind !== right.actor_kind) {
         return false;
     }
@@ -25,31 +46,34 @@ export const workQueueMembersListOp = createAsyncOp({
     restMirror: { method: 'GET', path: '/worktracker/api/v1/work-queues/:work_queue_id/members' },
     extraInitial: { items: [] },
     // Исходы add/remove мержатся в список участников открытой очереди.
-    extraReducer: (state, event, events) => {
+    extraReducer: (state: AsyncOpSlice, event: PlatformEvent, events) => {
+        const payload = (event.payload ?? {}) as MembersListPayload;
+        const items = Array.isArray(state.items) ? state.items as WorkQueueMember[] : [];
+        const lastRequest = state.lastRequest as { payload?: { work_queue_id?: unknown } } | undefined;
         if (event.type === events.SUCCEEDED) {
-            const result = event.payload.result;
+            const result = payload.result as { items?: unknown } | undefined;
             if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
                 throw new Error('workQueueMembersListOp: expected {items: member[]}');
             }
-            return { ...state, items: result.items };
+            return { ...state, items: result.items as WorkQueueMember[] };
         }
-        const listedQueueId = state.lastRequest && state.lastRequest.payload
-            ? state.lastRequest.payload.work_queue_id
+        const listedQueueId = lastRequest && lastRequest.payload
+            ? lastRequest.payload.work_queue_id
             : null;
         if (event.type === WORK_QUEUE_MEMBER_ADD_SUCCEEDED) {
-            const member = event.payload.result;
+            const member = payload.result as WorkQueueMember | undefined;
             if (!member || member.work_queue_id !== listedQueueId) {
                 return state;
             }
-            const items = state.items.filter((item) => !_sameActor(item.member, member.member));
-            return { ...state, items: [...items, member] };
+            const rest = items.filter((item) => !_sameActor(item.member, member.member));
+            return { ...state, items: [...rest, member] };
         }
         if (event.type === WORK_QUEUE_MEMBER_REMOVE_SUCCEEDED) {
-            const request = event.payload.request;
+            const request = payload.request;
             if (!request || request.work_queue_id !== listedQueueId || !request.member) {
                 return state;
             }
-            return { ...state, items: state.items.filter((item) => !_sameActor(item.member, request.member)) };
+            return { ...state, items: items.filter((item) => !_sameActor(item.member, request.member)) };
         }
         return state;
     },

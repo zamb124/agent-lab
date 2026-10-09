@@ -1,15 +1,28 @@
-function _nonEmptyString(value) {
+function _nonEmptyString(value: unknown): string | null {
     return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
-export function buildWorktrackerAssistantContext(routeKey, params, detailWorkItemId) {
+interface WorktrackerAssistantContext {
+    service: string;
+    route_key: string;
+    screen: string;
+    work_item_id?: string;
+    work_queue_id?: string;
+    [key: string]: unknown;
+}
+
+export function buildWorktrackerAssistantContext(
+    routeKey: string | null,
+    params: Record<string, string>,
+    detailWorkItemId: unknown,
+): WorktrackerAssistantContext {
     if (typeof routeKey !== 'string' || routeKey.length === 0) {
         throw new Error('buildWorktrackerAssistantContext: routeKey required');
     }
     if (!params || typeof params !== 'object') {
         throw new Error('buildWorktrackerAssistantContext: params required');
     }
-    const context = {
+    const context: WorktrackerAssistantContext = {
         service: 'worktracker',
         route_key: routeKey,
         screen: routeKey,

@@ -4,6 +4,20 @@
 
 export const TERMINAL_STATES = new Set(['done', 'cancelled', 'failed']);
 
+export interface WorkItemAssignment {
+    assignee_kind?: string;
+    claimed_by_user_id?: unknown;
+    user_ids?: unknown;
+    [key: string]: unknown;
+}
+
+export interface WorkItemLike {
+    assignment?: WorkItemAssignment;
+    kind?: string;
+    interaction_policy?: { mode?: string; can_complete?: boolean; [key: string]: unknown };
+    [key: string]: unknown;
+}
+
 export const WORK_ITEM_STATES = [
     'open',
     'in_progress',
@@ -15,20 +29,20 @@ export const WORK_ITEM_STATES = [
 
 export const WORK_ITEM_PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
-export function assigneeIsQueue(item) {
+export function assigneeIsQueue(item: WorkItemLike) {
     const assignment = item && item.assignment;
     return assignment && typeof assignment === 'object' && assignment.assignee_kind === 'queue';
 }
 
-export function queueUnclaimed(item) {
+export function queueUnclaimed(item: WorkItemLike) {
     if (!assigneeIsQueue(item)) {
         return false;
     }
-    const claimed = item.assignment.claimed_by_user_id;
+    const claimed = item.assignment?.claimed_by_user_id;
     return typeof claimed !== 'string' || claimed.length === 0;
 }
 
-export function assigneeUserId(item) {
+export function assigneeUserId(item: WorkItemLike): string {
     const assignment = item && item.assignment;
     if (!assignment || typeof assignment !== 'object') {
         return '';
@@ -47,23 +61,23 @@ export function assigneeUserId(item) {
     return '';
 }
 
-export function workItemFromEventPayload(payload) {
+export function workItemFromEventPayload(payload: unknown): WorkItemLike | null {
     if (!payload || typeof payload !== 'object') {
         return null;
     }
     if ('item' in payload && payload.item && typeof payload.item === 'object') {
-        return payload.item;
+        return payload.item as WorkItemLike;
     }
     if ('work_item' in payload && payload.work_item && typeof payload.work_item === 'object') {
-        return payload.work_item;
+        return payload.work_item as WorkItemLike;
     }
     if ('result' in payload && payload.result && typeof payload.result === 'object') {
-        return payload.result;
+        return payload.result as WorkItemLike;
     }
     return null;
 }
 
-export function truncateWorkItemId(workItemId) {
+export function truncateWorkItemId(workItemId: unknown): string {
     if (typeof workItemId !== 'string' || workItemId.length === 0) {
         return '';
     }
@@ -74,8 +88,8 @@ export function truncateWorkItemId(workItemId) {
 }
 
 /** Header/kebab Complete without reply: HITL only when takeover and can_complete. */
-export function workItemAllowsSilentComplete(item) {
-    if (!item || typeof item !== 'object') return true;
+export function workItemAllowsSilentComplete(item: WorkItemLike | null): boolean {
+    if (!item) return true;
     if (item.kind !== 'operator_handoff') return true;
     const policy = item.interaction_policy;
     if (!policy || typeof policy !== 'object') return false;

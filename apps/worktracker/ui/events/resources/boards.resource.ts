@@ -14,10 +14,11 @@ export const boardsResource = createResourceCollection({
     operations: ['list', 'get', 'create', 'update'],
     transport: 'ws',
     wsTimeoutMs: 5_000,
-    listQuery: (payload) => {
-        const query = {};
-        if (payload && typeof payload === 'object' && typeof payload.namespace === 'string' && payload.namespace.length > 0) {
-            query.namespace = payload.namespace;
+    listQuery: (payload: unknown) => {
+        const query: Record<string, string> = {};
+        const ns = payload && typeof payload === 'object' ? (payload as Record<string, unknown>).namespace : undefined;
+        if (typeof ns === 'string' && ns.length > 0) {
+            query.namespace = ns;
         }
         return query;
     },
@@ -36,7 +37,7 @@ export const boardCreateForm = createForm({
     },
     initial: { name: '' },
     submitEvent: boardsResource.events.CREATE_REQUESTED,
-    buildPayload: (draft) => ({
+    buildPayload: (draft: Record<string, unknown>) => ({
         name: typeof draft.name === 'string' ? draft.name.trim() : '',
         board_key: 'generic',
     }),

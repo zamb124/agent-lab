@@ -6,6 +6,8 @@ import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
+import type { PropertyValues } from 'lit';
+import type { ResourceController, FormController } from '@platform/lib/base/use-resource.js';
 
 const FORM_NAME = 'worktracker/board_create_form';
 const BOARDS_NAME = 'worktracker/boards';
@@ -14,8 +16,11 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
     static modalKind = 'worktracker.board_create';
     static i18nNamespace = 'worktracker';
 
-    static styles = [
-        ...PlatformFormModal.styles,
+    private _boards: ResourceController;
+    private _form: FormController;
+
+    static override styles = [
+        PlatformFormModal.styles,
         css`
             .form-grid { display: grid; gap: var(--space-4); }
         `,
@@ -29,7 +34,7 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
         this._form = this.useForm(FORM_NAME);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._form.openForm({ name: '' });
         this.useEvent(this._boards.resource.events.CREATED, () => {
@@ -37,26 +42,26 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         this._form.close();
         super.disconnectedCallback();
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>) {
         super.willUpdate(changed);
         const draft = this._form.draft;
         this.isDirty = typeof draft.name === 'string' && draft.name.trim().length > 0;
     }
 
-    async _performSave() {
+    override async _performSave(): Promise<void> {
         this._form.submit();
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('board_create_modal.header');
     }
 
-    renderSaveHeaderButton() {
+    override renderSaveHeaderButton() {
         const draft = this._form.draft;
         const hasName = typeof draft.name === 'string' && draft.name.trim().length > 0;
         return this._renderHeaderSaveIcon({
@@ -66,11 +71,11 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
         });
     }
 
-    renderBody() {
+    override renderBody() {
         const draft = this._form.draft;
         const nameErrorKey = this._form.errors.name;
         return html`
-            <form class="form-grid" @submit=${(e) => { e.preventDefault(); this._performSave(); }}>
+            <form class="form-grid" @submit=${(e: Event) => { e.preventDefault(); void this._performSave(); }}>
                 <platform-field
                     type="string"
                     mode="edit"
@@ -79,7 +84,7 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
                     .value=${draft.name}
                     .error=${nameErrorKey ? this.t(nameErrorKey) : ''}
                     ?disabled=${this._form.submitting}
-                    @change=${(e) => {
+                    @change=${(e: CustomEvent<{ value?: unknown }>) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this._form.setField('name', value);
                     }}
@@ -88,7 +93,7 @@ export class WorktrackerBoardCreateModal extends PlatformFormModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter() {
         return html`
             <div class="form-actions">
                 <button type="button" class="btn btn-secondary" @click=${() => this.close()}>

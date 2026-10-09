@@ -12,13 +12,15 @@ import '../work-item-detail-editor.js';
 export class WorktrackerTaskPropertiesSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'worktracker.task_properties';
     static i18nNamespace = 'worktracker';
+    declare workItemId: string;
 
-    static properties = {
+
+    static override properties = {
         ...PlatformBottomSheet.properties,
         workItemId: { type: String, attribute: 'work-item-id' },
     };
 
-    static styles = [
+    static override styles = [
         PlatformBottomSheet.styles,
         css`
             worktracker-detail-inspector {
@@ -34,12 +36,12 @@ export class WorktrackerTaskPropertiesSheet extends PlatformBottomSheet {
         this.snap = 'full';
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this.heading = this.t('detail_page.section_properties');
     }
 
-    renderBody() {
+    override renderBody() {
         if (typeof this.workItemId !== 'string' || this.workItemId.length === 0) {
             throw new Error('WorktrackerTaskPropertiesSheet: workItemId is required');
         }

@@ -9,6 +9,7 @@ import { worktrackerInspectorStyles } from '../styles/worktracker-inspector.styl
 import {
     assigneeUserId,
 } from '../_helpers/work-item-detail-shared.js';
+import type { WorkItemLike } from '../_helpers/work-item-detail-shared.js';
 import './worktracker-inspector-row.js';
 import './worktracker-priority-picker.js';
 import './worktracker-assignee-picker.js';
@@ -18,8 +19,24 @@ import '@platform/lib/components/platform-variables-panel.js';
 
 export class WorktrackerDetailInspector extends PlatformElement {
     static i18nNamespace = 'worktracker';
+    declare item: WorkItemLike | null;
+    declare dueDateDraft: string;
+    declare labelsDraft: unknown[];
+    declare variablesDraft: Record<string, unknown>;
+    declare statusValue: string;
+    declare statusConfig: Record<string, unknown>;
+    declare priorityConfig: Record<string, unknown>;
+    declare teamOptions: unknown[];
+    declare queueLabel: string;
+    declare boardLabel: string;
+    declare locale: string;
+    declare showTitle: boolean;
+    declare showLifecycleActions: boolean;
+    declare showComplete: boolean;
+    declare showClaim: boolean;
 
-    static properties = {
+
+    static override properties = {
         item: { attribute: false },
         dueDateDraft: { type: String, attribute: 'due-date-draft' },
         labelsDraft: { type: Array, attribute: false },
@@ -37,7 +54,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
         showClaim: { type: Boolean, attribute: 'show-claim' },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         worktrackerInspectorStyles,
         css`
@@ -67,14 +84,14 @@ export class WorktrackerDetailInspector extends PlatformElement {
         this.showClaim = false;
     }
 
-    _formatTimestamp(value) {
+    private _formatTimestamp(value: unknown) {
         if (typeof value !== 'string' || value.length === 0) {
             return '';
         }
         return formatPlatformDateTime(value, this.locale);
     }
 
-    _renderToolbar() {
+    private _renderToolbar() {
         if (!this.showLifecycleActions && !this.showClaim) {
             return nothing;
         }
@@ -105,9 +122,9 @@ export class WorktrackerDetailInspector extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         const item = this.item;
-        if (!item || typeof item !== 'object') {
+        if (!item) {
             return nothing;
         }
 
@@ -130,7 +147,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                         .label=${''}
                         .value=${this.statusValue}
                         .config=${this.statusConfig}
-                        @change=${(e) => {
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
                             const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                             this.emit('wt-status-change', { value });
                         }}
@@ -139,7 +156,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                 <worktracker-priority-picker
                     .value=${item.priority}
                     .config=${this.priorityConfig}
-                    @wt-priority-change=${(e) => {
+                    @wt-priority-change=${(e: CustomEvent<{ value?: unknown }>) => {
                         const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                         this.emit('wt-priority-change', { value });
                     }}
@@ -148,7 +165,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                     user-id=${assigneeId}
                     queue-label=${queue}
                     .teamOptions=${this.teamOptions}
-                    @wt-assignee-change=${(e) => {
+                    @wt-assignee-change=${(e: CustomEvent<{ user_id?: unknown }>) => {
                         const userId = e.detail && typeof e.detail.user_id === 'string' ? e.detail.user_id : '';
                         this.emit('wt-assignee-change', { user_id: userId });
                     }}
@@ -161,7 +178,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                         pill-embed
                         .label=${''}
                         .value=${this.dueDateDraft}
-                        @change=${(e) => {
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
                             const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                             this.emit('wt-due-date-change', { value });
                         }}
@@ -175,7 +192,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                         pill-embed
                         .label=${''}
                         .value=${this.labelsDraft}
-                        @change=${(e) => {
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
                             const values = e.detail && Array.isArray(e.detail.value) ? e.detail.value : [];
                             this.emit('wt-labels-change', { values });
                         }}
@@ -185,7 +202,7 @@ export class WorktrackerDetailInspector extends PlatformElement {
                     <platform-variables-panel
                         section-title=${this.t('detail_page.section_variables')}
                         .variables=${this.variablesDraft}
-                        @variables-change=${(e) => {
+                        @variables-change=${(e: CustomEvent<{ variables?: unknown }>) => {
                             const variables = e.detail && e.detail.variables && typeof e.detail.variables === 'object'
                                 ? e.detail.variables
                                 : {};
