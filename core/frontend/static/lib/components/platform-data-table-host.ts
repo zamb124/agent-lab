@@ -3,8 +3,10 @@
  * Rows come from office paging API; SQLite is never loaded in the browser.
  */
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { httpRequest } from '../events/http.js';
+import type { HttpRequestSpec } from '../events/http.js';
 import { hasPlatformBus } from '../events/bus-singleton.js';
 import './fields/platform-field.js';
 import './platform-button.js';
@@ -13,21 +15,52 @@ import './platform-icon.js';
 const COLUMN_TYPES = ['text', 'integer', 'real', 'boolean', 'datetime', 'json', 'file_ref'];
 const DEFAULT_PAGE_SIZE = 50;
 
-function handlerPayload(openConfig) {
+interface DataTableColumnSpec {
+    name: string;
+    column_type?: string;
+    not_null?: boolean;
+}
+
+interface DataTableSpec {
+    name: string;
+    columns: DataTableColumnSpec[];
+    row_count?: number;
+}
+
+interface DataTableSchemaSnapshot {
+    tables?: DataTableSpec[];
+}
+
+interface DataTableRow {
+    row_id?: string | number;
+    values?: Record<string, unknown>;
+}
+
+interface EditingCell {
+    rowId: string | number;
+    column: string;
+    draft: string;
+    selectAll: boolean;
+}
+
+type RowId = string | number;
+
+function handlerPayload(openConfig: unknown): Record<string, unknown> {
     if (!openConfig || typeof openConfig !== 'object') {
         throw new Error('platform-data-table-host: openConfig required');
     }
-    if (openConfig.handler !== 'data_table') {
+    const config = openConfig as Record<string, unknown>;
+    if (config.handler !== 'data_table') {
         throw new Error('platform-data-table-host: handler must be data_table');
     }
-    const payload = openConfig.data_table;
+    const payload = config.data_table;
     if (!payload || typeof payload !== 'object') {
         throw new Error('platform-data-table-host: data_table payload required');
     }
-    return payload;
+    return payload as Record<string, unknown>;
 }
 
-function requireUrl(value, label) {
+function requireUrl(value: unknown, label: string): string {
     if (typeof value !== 'string' || value.length === 0) {
         throw new Error(`platform-data-table-host: ${label} required`);
     }
@@ -37,7 +70,7 @@ function requireUrl(value, label) {
 export class PlatformDataTableHost extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         openConfig: { type: Object, attribute: false },
         fileId: { type: String, attribute: 'file-id' },
         tableName: { type: String, attribute: 'table-name' },
@@ -63,8 +96,39 @@ export class PlatformDataTableHost extends PlatformElement {
         _deletingRowId: { state: true },
         _exporting: { state: true },
     };
+    declare openConfig: Record<string, unknown> | null;
+    declare fileId: string;
+    declare tableName: string;
+    declare viewMode: string;
+    declare pageSize: number;
+    declare interaction: string;
+    declare chrome: Record<string, unknown> | null;
+    declare suspended: boolean;
+    declare _schema: DataTableSchemaSnapshot | null;
+    declare _rows: DataTableRow[];
+    declare _nextCursor: string | null;
+    declare _hasMore: boolean;
+    declare _loading: boolean;
+    declare _error: string;
+    declare _columnFilters: Record<string, string>;
+    declare _draftColumnName: string;
+    declare _draftColumnType: string;
+    declare _draftTableName: string;
+    declare _showAddColumn: boolean;
+    declare _showAddTable: boolean;
+    declare _editing: EditingCell | null;
+    declare _formError: string;
+    declare _deletingRowId: RowId | null;
+    declare _exporting: string;
 
-    static styles = [
+    private _rowsBaseUrl: string;
+    private _mutateBaseUrl: string;
+    private _bootstrappedFileId: string;
+    private _filterTimer: number | null;
+    private _ignoreBlurCommit: boolean;
+    private _editDraft: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -294,7 +358,7 @@ export class PlatformDataTableHost extends PlatformElement {
         this._editDraft = '';
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         if (this._filterTimer !== null) {
             window.clearTimeout(this._filterTimer);
             this._filterTimer = null;
@@ -302,11 +366,11 @@ export class PlatformDataTableHost extends PlatformElement {
         super.disconnectedCallback();
     }
 
-    _isView() {
+    _isView(): boolean {
         return this.interaction === 'view';
     }
 
-    _text(key, vars) {
+    _text(key: string, vars?: Record<string, string | number> | null): string {
         if (hasPlatformBus()) {
             return this.t(key === 'loading' ? 'file_viewer.loading' : `file_viewer.${key}`, vars);
         }
@@ -321,7 +385,7 @@ export class PlatformDataTableHost extends PlatformElement {
         if (!vars) {
             return template;
         }
-        return template.replace(/\{(\w+)\}/g, (match, name) => {
+        return template.replace(/\{(\w+)\}/g, (match: string, name: string) => {
             if (!Object.prototype.hasOwnProperty.call(vars, name)) {
                 throw new Error(`platform-data-table-host: chrome.${key} missing ${name}`);
             }
@@ -329,7 +393,7 @@ export class PlatformDataTableHost extends PlatformElement {
         });
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (this.suspended) {
             return;
@@ -357,17 +421,19 @@ export class PlatformDataTableHost extends PlatformElement {
             void this._reloadRows();
         }
         if (changed.has('_editing') && this._editing) {
+            const editing = this._editing;
             const previous = changed.get('_editing');
             const sameCell = Boolean(
-                previous
-                && previous.rowId === this._editing.rowId
-                && previous.column === this._editing.column,
+                editing
+                && previous
+                && previous.rowId === editing.rowId
+                && previous.column === editing.column,
             );
             if (!sameCell) {
                 const input = this.renderRoot.querySelector('td.cell-editing input');
                 if (input instanceof HTMLInputElement) {
                     input.focus();
-                    if (this._editing.selectAll) {
+                    if (editing.selectAll) {
                         input.select();
                     } else {
                         const end = input.value.length;
@@ -379,14 +445,15 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _applySchema(snapshot) {
+    _applySchema(snapshot: unknown): void {
         if (!snapshot || typeof snapshot !== 'object') {
             throw new Error('platform-data-table-host: schema_snapshot required');
         }
-        this._schema = snapshot;
+        const schemaSnapshot = snapshot as DataTableSchemaSnapshot;
+        this._schema = schemaSnapshot;
         this._error = '';
         if (this.tableName.length === 0) {
-            const first = Array.isArray(snapshot.tables) ? snapshot.tables[0] : null;
+            const first = Array.isArray(schemaSnapshot.tables) ? schemaSnapshot.tables[0] : null;
             if (first && typeof first.name === 'string' && first.name.length > 0) {
                 this.tableName = first.name;
             }
@@ -397,14 +464,14 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _bootstrapFromPayload() {
+    _bootstrapFromPayload(): void {
         const payload = handlerPayload(this.openConfig);
         this._rowsBaseUrl = requireUrl(payload.rows_url, 'rows_url');
         this._mutateBaseUrl = requireUrl(payload.mutate_url, 'mutate_url');
         this._applySchema(payload.schema_snapshot);
     }
 
-    async _bootstrapFromFileId() {
+    async _bootstrapFromFileId(): Promise<void> {
         const fileId = this.fileId.trim();
         this._bootstrappedFileId = fileId;
         this._loading = true;
@@ -413,12 +480,13 @@ export class PlatformDataTableHost extends PlatformElement {
             const snapshot = await this._fetchJson(
                 `/documents/api/v1/data-tables/${encodeURIComponent(fileId)}`,
             );
-            if (!snapshot || typeof snapshot !== 'object' || !snapshot.schema_snapshot) {
+            const snap = snapshot as { schema_snapshot?: unknown } | null;
+            if (!snap || typeof snap !== 'object' || !snap.schema_snapshot) {
                 throw new Error('platform-data-table-host: snapshot.schema_snapshot required');
             }
             this._rowsBaseUrl = `/documents/api/v1/data-tables/${fileId}/tables`;
             this._mutateBaseUrl = `/documents/api/v1/data-tables/${fileId}`;
-            this._applySchema(snapshot.schema_snapshot);
+            this._applySchema(snap.schema_snapshot);
         } catch (exc) {
             this._error = exc instanceof Error ? exc.message : String(exc);
             this.emit('editor-error', { message: this._error });
@@ -427,21 +495,21 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _mutateUrl() {
+    _mutateUrl(): string {
         if (this._mutateBaseUrl.length > 0) {
             return this._mutateBaseUrl;
         }
         return requireUrl(handlerPayload(this.openConfig).mutate_url, 'mutate_url');
     }
 
-    _rowsUrl() {
+    _rowsUrl(): string {
         if (this._rowsBaseUrl.length > 0) {
             return this._rowsBaseUrl;
         }
         return requireUrl(handlerPayload(this.openConfig).rows_url, 'rows_url');
     }
 
-    _pageQuery(extra) {
+    _pageQuery(extra?: string): string {
         const limit = Number.isInteger(this.pageSize) && this.pageSize > 0
             ? Math.min(this.pageSize, 200)
             : DEFAULT_PAGE_SIZE;
@@ -461,26 +529,27 @@ export class PlatformDataTableHost extends PlatformElement {
         return params.join('&');
     }
 
-    async _fetchJson(url, options) {
+    async _fetchJson(url: string, options?: { method?: string; body?: unknown }): Promise<unknown> {
         const method = options && typeof options.method === 'string' ? options.method : 'GET';
-        const request = { method, url };
+        const request: HttpRequestSpec = { method: method as HttpRequestSpec['method'], url };
         if (options && Object.prototype.hasOwnProperty.call(options, 'body')) {
             request.body = options.body;
         }
         return httpRequest(request);
     }
 
-    async refreshSchema() {
+    async refreshSchema(): Promise<void> {
         const snapshot = await this._fetchJson(this._mutateUrl());
-        if (!snapshot || typeof snapshot !== 'object' || !snapshot.schema_snapshot) {
+        const snap = snapshot as { schema_snapshot?: DataTableSchemaSnapshot } | null;
+        if (!snap || typeof snap !== 'object' || !snap.schema_snapshot) {
             throw new Error('platform-data-table-host: snapshot.schema_snapshot required');
         }
-        this._schema = snapshot.schema_snapshot;
+        this._schema = snap.schema_snapshot;
         this.emit('data-table-schema', { schema: this._schema, tableName: this.tableName });
         this.emit('document-state', { dirty: false });
     }
 
-    async _reloadRows() {
+    async _reloadRows(): Promise<void> {
         if (!this.tableName) {
             this._rows = [];
             this._hasMore = false;
@@ -491,11 +560,11 @@ export class PlatformDataTableHost extends PlatformElement {
         this._error = '';
         try {
             const url = `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/rows?${this._pageQuery()}`;
-            const page = await this._fetchJson(url);
+            const page = await this._fetchJson(url) as { items?: unknown; next_cursor?: unknown; has_more?: unknown } | null;
             if (!page || !Array.isArray(page.items)) {
                 throw new Error('platform-data-table-host: rows page.items required');
             }
-            this._rows = page.items;
+            this._rows = page.items as DataTableRow[];
             this._nextCursor = typeof page.next_cursor === 'string' ? page.next_cursor : null;
             this._hasMore = page.has_more === true;
         } catch (exc) {
@@ -506,7 +575,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    async loadMore() {
+    async loadMore(): Promise<void> {
         if (!this._hasMore || this._nextCursor === null || !this.tableName) {
             return;
         }
@@ -514,11 +583,11 @@ export class PlatformDataTableHost extends PlatformElement {
         try {
             const extra = `cursor=${encodeURIComponent(this._nextCursor)}`;
             const url = `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/rows?${this._pageQuery(extra)}`;
-            const page = await this._fetchJson(url);
+            const page = await this._fetchJson(url) as { items?: unknown; next_cursor?: unknown; has_more?: unknown } | null;
             if (!page || !Array.isArray(page.items)) {
                 throw new Error('platform-data-table-host: rows page.items required');
             }
-            this._rows = [...this._rows, ...page.items];
+            this._rows = [...this._rows, ...(page.items as DataTableRow[])];
             this._nextCursor = typeof page.next_cursor === 'string' ? page.next_cursor : null;
             this._hasMore = page.has_more === true;
         } catch (exc) {
@@ -529,7 +598,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    async addRow() {
+    async addRow(): Promise<void> {
         if (this._isView()) {
             return;
         }
@@ -552,7 +621,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    async deleteRow(rowId) {
+    async deleteRow(rowId: RowId): Promise<void> {
         if (this._isView()) {
             return;
         }
@@ -592,14 +661,14 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _exportUrl(sourceFormat) {
+    _exportUrl(sourceFormat: string): string {
         if (!this.tableName) {
             throw new Error('platform-data-table-host: table name required for export');
         }
         return `${this._rowsUrl()}/${encodeURIComponent(this.tableName)}/export?source_format=${sourceFormat}`;
     }
 
-    async _exportTable(sourceFormat) {
+    async _exportTable(sourceFormat: string): Promise<void> {
         if (sourceFormat !== 'csv' && sourceFormat !== 'xlsx') {
             throw new Error(`platform-data-table-host: invalid export format ${sourceFormat}`);
         }
@@ -609,7 +678,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
         this._exporting = sourceFormat;
         try {
-            const exported = await this._fetchJson(this._exportUrl(sourceFormat));
+            const exported = await this._fetchJson(this._exportUrl(sourceFormat)) as { download_url?: unknown } | null;
             if (!exported || typeof exported.download_url !== 'string' || exported.download_url.length === 0) {
                 throw new Error('platform-data-table-host: export must return FileRecord.download_url');
             }
@@ -627,7 +696,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _columnSpec(columnName) {
+    _columnSpec(columnName: string): DataTableColumnSpec | null {
         const table = this._activeTable();
         if (!table) {
             return null;
@@ -636,7 +705,7 @@ export class PlatformDataTableHost extends PlatformElement {
         return found || null;
     }
 
-    _sameCellValue(left, right) {
+    _sameCellValue(left: unknown, right: unknown): boolean {
         if (left === right) {
             return true;
         }
@@ -649,12 +718,12 @@ export class PlatformDataTableHost extends PlatformElement {
         return JSON.stringify(left) === JSON.stringify(right);
     }
 
-    _coercePatchValue(column, rawValue) {
+    _coercePatchValue(column: DataTableColumnSpec, rawValue: unknown): unknown {
         const columnType = column.column_type;
         const invalid = () => new Error(
             this._text('data_table_cell_invalid', {
                 column: column.name,
-                column_type: columnType,
+                column_type: columnType || '',
             }),
         );
         if (rawValue === null || rawValue === undefined) {
@@ -719,7 +788,7 @@ export class PlatformDataTableHost extends PlatformElement {
         throw invalid();
     }
 
-    async _patchCell(rowId, columnName, rawValue) {
+    async _patchCell(rowId: RowId, columnName: string, rawValue: unknown): Promise<void> {
         if (this._isView()) {
             return;
         }
@@ -748,7 +817,7 @@ export class PlatformDataTableHost extends PlatformElement {
             if (row.row_id !== rowId) {
                 return row;
             }
-            return { ...row, values: { ...row.values, [columnName]: typed } };
+            return { ...row, values: { ...(row.values || {}), [columnName]: typed } };
         });
         try {
             await this._fetchJson(
@@ -764,7 +833,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    showAddColumn() {
+    showAddColumn(): void {
         if (this._isView()) {
             return;
         }
@@ -773,7 +842,7 @@ export class PlatformDataTableHost extends PlatformElement {
         this._formError = '';
     }
 
-    showAddTable() {
+    showAddTable(): void {
         if (this._isView()) {
             return;
         }
@@ -782,7 +851,7 @@ export class PlatformDataTableHost extends PlatformElement {
         this._formError = '';
     }
 
-    async _submitAddColumn() {
+    async _submitAddColumn(): Promise<void> {
         const name = this._draftColumnName.trim();
         if (!name) {
             this._formError = this._text('data_table_column_name_required');
@@ -817,7 +886,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    async _submitAddTable() {
+    async _submitAddTable(): Promise<void> {
         const name = this._draftTableName.trim();
         if (!name) {
             this._formError = this._text('data_table_table_name_required');
@@ -845,7 +914,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _activeTable() {
+    _activeTable(): DataTableSpec | null {
         const schema = this._schema;
         if (!schema || !Array.isArray(schema.tables)) {
             return null;
@@ -857,7 +926,7 @@ export class PlatformDataTableHost extends PlatformElement {
         return found;
     }
 
-    _setTable(name) {
+    _setTable(name: string): void {
         if (typeof name !== 'string' || name.length === 0) {
             throw new Error('platform-data-table-host: table name required');
         }
@@ -870,7 +939,7 @@ export class PlatformDataTableHost extends PlatformElement {
         this.emit('data-table-schema', { schema: this._schema, tableName: name });
     }
 
-    _setViewMode(mode) {
+    _setViewMode(mode: string): void {
         if (mode !== 'data' && mode !== 'schema') {
             throw new Error(`platform-data-table-host: invalid viewMode ${mode}`);
         }
@@ -878,19 +947,19 @@ export class PlatformDataTableHost extends PlatformElement {
         this._editing = null;
     }
 
-    _setPageSize(size) {
+    _setPageSize(size: number): void {
         if (size !== 50 && size !== 100) {
             throw new Error(`platform-data-table-host: invalid pageSize ${size}`);
         }
         this.pageSize = size;
     }
 
-    _filterValue(columnName) {
+    _filterValue(columnName: string): string {
         const value = this._columnFilters[columnName];
         return typeof value === 'string' ? value : '';
     }
 
-    _onColumnFilterInput(columnName, value) {
+    _onColumnFilterInput(columnName: string, value: string): void {
         this._columnFilters = { ...this._columnFilters, [columnName]: value };
         if (this._filterTimer !== null) {
             window.clearTimeout(this._filterTimer);
@@ -901,7 +970,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }, 250);
     }
 
-    _beginEdit(rowId, columnName, options) {
+    _beginEdit(rowId: RowId, columnName: string, options?: { draft?: string; selectAll?: boolean }): void {
         if (this._isView()) {
             return;
         }
@@ -917,9 +986,10 @@ export class PlatformDataTableHost extends PlatformElement {
         }
         const row = this._rows.find((item) => item.row_id === rowId);
         const display = row ? String(this._cellValue(row, columnName)) : '';
-        const draft = options && Object.prototype.hasOwnProperty.call(options, 'draft')
+        const draftOption = options && Object.prototype.hasOwnProperty.call(options, 'draft')
             ? options.draft
             : display;
+        const draft = typeof draftOption === 'string' ? draftOption : '';
         this._editDraft = draft;
         this._editing = {
             rowId,
@@ -929,7 +999,7 @@ export class PlatformDataTableHost extends PlatformElement {
         };
     }
 
-    _commitEdit(rawValue) {
+    _commitEdit(rawValue: string): void {
         const editing = this._editing;
         if (!editing) {
             return;
@@ -940,20 +1010,20 @@ export class PlatformDataTableHost extends PlatformElement {
         void this._patchCell(editing.rowId, editing.column, rawValue);
     }
 
-    _cancelEdit() {
+    _cancelEdit(): void {
         this._ignoreBlurCommit = true;
         this._editing = null;
         this._editDraft = '';
     }
 
-    _onEditInput(event) {
+    _onEditInput(event: Event): void {
         if (!(event.target instanceof HTMLInputElement)) {
             return;
         }
         this._editDraft = event.target.value;
     }
 
-    _onEditKeydown(event) {
+    _onEditKeydown(event: KeyboardEvent): void {
         if (!(event.target instanceof HTMLInputElement)) {
             return;
         }
@@ -982,7 +1052,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _onEditBlur(event) {
+    _onEditBlur(event: Event): void {
         if (this._ignoreBlurCommit) {
             this._ignoreBlurCommit = false;
             return;
@@ -993,7 +1063,7 @@ export class PlatformDataTableHost extends PlatformElement {
         void this._commitEdit(event.target.value);
     }
 
-    _neighborColumn(columnName, delta) {
+    _neighborColumn(columnName: string, delta: number): string | null {
         const table = this._activeTable();
         if (!table) {
             return null;
@@ -1007,10 +1077,11 @@ export class PlatformDataTableHost extends PlatformElement {
         if (next < 0 || next >= names.length) {
             return null;
         }
-        return names[next];
+        const value = names[next];
+        return value === undefined ? null : value;
     }
 
-    _onCellKeydown(event, rowId, columnName) {
+    _onCellKeydown(event: KeyboardEvent, rowId: RowId, columnName: string): void {
         if (event.ctrlKey || event.metaKey || event.altKey) {
             return;
         }
@@ -1025,7 +1096,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _onGridScroll(event) {
+    _onGridScroll(event: Event): void {
         if (this._isView()) {
             return;
         }
@@ -1039,7 +1110,7 @@ export class PlatformDataTableHost extends PlatformElement {
         }
     }
 
-    _renderToolbar() {
+    _renderToolbar(): TemplateResult {
         const schema = this._schema;
         const tables = schema && Array.isArray(schema.tables) ? schema.tables : [];
         const editable = !this._isView();
@@ -1160,7 +1231,7 @@ export class PlatformDataTableHost extends PlatformElement {
         `;
     }
 
-    _renderAddForms() {
+    _renderAddForms(): unknown {
         if (this._isView() || (!this._showAddColumn && !this._showAddTable)) {
             return nothing;
         }
@@ -1173,7 +1244,7 @@ export class PlatformDataTableHost extends PlatformElement {
                         .label=${this._text('data_table_table_name')}
                         .placeholder=${this._text('data_table_table_name_placeholder')}
                         .value=${this._draftTableName}
-                        @change=${(e) => { this._draftTableName = e.detail.value; }}
+                        @change=${(e: CustomEvent<{ value: string }>) => { this._draftTableName = e.detail.value; }}
                     ></platform-field>
                     <platform-button
                         ?disabled=${this._loading || this._draftTableName.trim().length === 0}
@@ -1189,7 +1260,7 @@ export class PlatformDataTableHost extends PlatformElement {
                         .label=${this._text('data_table_column_name')}
                         .placeholder=${this._text('data_table_column_name_placeholder')}
                         .value=${this._draftColumnName}
-                        @change=${(e) => { this._draftColumnName = e.detail.value; }}
+                        @change=${(e: CustomEvent<{ value: string }>) => { this._draftColumnName = e.detail.value; }}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -1197,7 +1268,7 @@ export class PlatformDataTableHost extends PlatformElement {
                         .label=${this._text('data_table_column_type')}
                         .value=${this._draftColumnType}
                         .config=${{ values: COLUMN_TYPES }}
-                        @change=${(e) => { this._draftColumnType = e.detail.value; }}
+                        @change=${(e: CustomEvent<{ value: string }>) => { this._draftColumnType = e.detail.value; }}
                     ></platform-field>
                     <platform-button
                         ?disabled=${this._loading || this._draftColumnName.trim().length === 0}
@@ -1210,7 +1281,7 @@ export class PlatformDataTableHost extends PlatformElement {
         `;
     }
 
-    _renderSchema() {
+    _renderSchema(): TemplateResult {
         const table = this._activeTable();
         if (!table) {
             return html`<div class="status">${this._text('data_table_empty')}</div>`;
@@ -1219,7 +1290,7 @@ export class PlatformDataTableHost extends PlatformElement {
             <div class="schema-list">
                 <div class="schema-card">
                     <strong>${table.name}</strong>
-                    <span> · ${this._text('data_table_row_count', { count: table.row_count })}</span>
+                    <span> · ${this._text('data_table_row_count', { count: table.row_count || 0 })}</span>
                     ${table.columns.map((column) => html`
                         <div>${column.name}: ${column.column_type}${column.not_null ? ' NOT NULL' : ''}</div>
                     `)}
@@ -1228,7 +1299,7 @@ export class PlatformDataTableHost extends PlatformElement {
         `;
     }
 
-    _cellValue(row, columnName) {
+    _cellValue(row: DataTableRow, columnName: string): string | number | boolean {
         const values = row.values;
         if (!values || typeof values !== 'object') {
             return '';
@@ -1243,7 +1314,7 @@ export class PlatformDataTableHost extends PlatformElement {
         return JSON.stringify(value);
     }
 
-    _renderPager() {
+    _renderPager(): unknown {
         if (!this._hasMore) {
             return nothing;
         }
@@ -1257,7 +1328,7 @@ export class PlatformDataTableHost extends PlatformElement {
         `;
     }
 
-    _renderGrid() {
+    _renderGrid(): TemplateResult {
         const table = this._activeTable();
         if (!table) {
             return html`<div class="status">${this._text('data_table_empty')}</div>`;
@@ -1281,7 +1352,7 @@ export class PlatformDataTableHost extends PlatformElement {
                                             class="col-filter"
                                             placeholder=${this._text('data_table_column_filter_placeholder')}
                                             .value=${this._filterValue(column.name)}
-                                            @input=${(e) => this._onColumnFilterInput(column.name, e.target.value)}
+                                            @input=${(e: Event) => this._onColumnFilterInput(column.name, (e.target as HTMLInputElement).value)}
                                         />
                                     </div>
                                 </th>
@@ -1314,8 +1385,8 @@ export class PlatformDataTableHost extends PlatformElement {
                                     return html`<td
                                         class=${editable ? 'cell-editable' : ''}
                                         tabindex=${editable ? '0' : nothing}
-                                        @click=${editable ? () => this._beginEdit(row.row_id, column.name, { selectAll: true }) : undefined}
-                                        @keydown=${editable ? (e) => this._onCellKeydown(e, row.row_id, column.name) : undefined}
+                                        @click=${editable ? () => this._beginEdit(row.row_id || '', column.name, { selectAll: true }) : undefined}
+                                        @keydown=${editable ? (e: KeyboardEvent) => this._onCellKeydown(e, row.row_id || '', column.name) : undefined}
                                     >${empty
                                         ? (editable
                                             ? html`<span class="cell-placeholder">${this._text('data_table_cell_edit_hint')}</span>`
@@ -1332,9 +1403,9 @@ export class PlatformDataTableHost extends PlatformElement {
                                             aria-label=${this._text('data_table_delete_row')}
                                             title=${this._text('data_table_delete_row')}
                                             ?disabled=${this._deletingRowId === row.row_id || this._loading}
-                                            @click=${(event) => {
+                                            @click=${(event: Event) => {
                                                 event.stopPropagation();
-                                                void this.deleteRow(row.row_id);
+                                                void this.deleteRow(row.row_id || '');
                                             }}
                                         >
                                             <platform-icon name="trash" size="14"></platform-icon>
@@ -1351,7 +1422,7 @@ export class PlatformDataTableHost extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         if (this._error) {
             return html`<div class="error">${this._error}</div>`;
         }

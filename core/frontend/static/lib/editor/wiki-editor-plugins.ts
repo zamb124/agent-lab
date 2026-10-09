@@ -1,3 +1,24 @@
+import type {
+    PmCommand,
+    PmMarkTypeLike,
+    PmNodeTypeLike,
+    PmNodeLike,
+    PmPluginApiLike,
+    PmSchemaLike,
+    PmStateLike,
+    PmDispatch,
+} from './pm-types.js';
+
+type RxMatch = RegExpMatchArray & Record<number, string>;
+
+function nt(schema: PmSchemaLike, name: string): PmNodeTypeLike {
+    const nodeType = schema.nodes[name];
+    if (!nodeType) {
+        throw new Error(`wiki-editor-plugins: schema node ${name} missing`);
+    }
+    return nodeType;
+}
+
 /**
  * Поведение редактора wiki: горячие клавиши, markdown-правила ввода, команды блоков.
  *
@@ -11,41 +32,40 @@
  * @param {object} schema
  * @returns {object[]} плагины input rules
  */
-export function buildInputRules(pm, schema) {
-    const rules = [];
+export function buildInputRules(pm: PmPluginApiLike, schema: PmSchemaLike): unknown {
+    const rules: unknown[] = [];
 
     rules.push(
-        pm.textblockTypeInputRule(/^(#{1,6})\s$/, schema.nodes.heading, (match) => ({
-            level: match[1].length,
+        pm.textblockTypeInputRule(/^(#{1,6})\s$/, nt(schema, 'heading'), (match: RxMatch) => ({
+            level: String(match[1]).length,
         })),
     );
-    rules.push(pm.textblockTypeInputRule(/^```([a-zA-Z0-9+-]*)\s$/, schema.nodes.code_block, (match) => ({
+    rules.push(pm.textblockTypeInputRule(/^```([a-zA-Z0-9+-]*)\s$/, nt(schema, 'code_block'), (match: RxMatch) => ({
         language: match[1] || '',
     })));
-    rules.push(pm.wrappingInputRule(/^\s*>\s$/, schema.nodes.blockquote));
-    rules.push(pm.wrappingInputRule(/^\s*([-+*])\s$/, schema.nodes.bullet_list));
+    rules.push(pm.wrappingInputRule(/^\s*>\s$/, nt(schema, 'blockquote')));
+    rules.push(pm.wrappingInputRule(/^\s*([-+*])\s$/, nt(schema, 'bullet_list')));
     rules.push(
         pm.wrappingInputRule(
             /^(\d+)\.\s$/,
-            schema.nodes.ordered_list,
-            (match) => ({ start: Number(match[1]) }),
-            (match, node) => node.childCount + node.attrs.start === Number(match[1]),
+            nt(schema, 'ordered_list'),
+            (match: RxMatch) => ({ start: Number(match[1]) }),
+            (match: RxMatch, node: PmNodeLike) => node.childCount + Number(node.attrs.start) === Number(match[1]),
         ),
     );
 
     // `---` на пустой строке — разделитель. InputRule нужен вручную:
     // horizontal_rule не текстовый блок и не обёртка.
     rules.push(
-        new pm.InputRule(/^(?:---|___|\*\*\*)$/, (state, match, start, end) => {
-            const tr = state.tr.replaceRangeWith(start, end, schema.nodes.horizontal_rule.create());
-            return tr;
+        new pm.InputRule(/^(?:---|___|\*\*\*)$/, (state: PmStateLike, _match: RegExpMatchArray, start: number, end: number) => {
+            return state.tr.replaceRangeWith(start, end, nt(schema, 'horizontal_rule').create());
         }),
     );
 
     // `$$` — блок формулы: атомарный узел, поэтому тоже вручную.
     rules.push(
-        new pm.InputRule(/^\$\$\s$/, (state, match, start, end) => (
-            state.tr.replaceRangeWith(start, end, schema.nodes.math_block.create({ formula: '' }))
+        new pm.InputRule(/^\$\$\s$/, (state: PmStateLike, _match: RegExpMatchArray, start: number, end: number) => (
+            state.tr.replaceRangeWith(start, end, nt(schema, 'math_block').create({ formula: '' }))
         )),
     );
 
@@ -58,8 +78,14 @@ export function buildInputRules(pm, schema) {
  * @param {{onSlash?: () => void, onPasteMarkdown?: () => void}} handlers
  * @returns {object} плагин keymap
  */
-export function buildKeymap(pm, schema, handlers = {}) {
-    const keys = {
+export interface KeymapHandlers {
+    onLink?: () => void;
+    onSlash?: () => void;
+    onPasteMarkdown?: () => void;
+}
+
+export function buildKeymap(pm: PmPluginApiLike, schema: PmSchemaLike, handlers: KeymapHandlers = {}): unknown {
+    const keys: Record<string, PmCommand> = {
         'Mod-b': pm.toggleMark(schema.marks.strong),
         'Mod-i': pm.toggleMark(schema.marks.em),
         'Mod-e': pm.toggleMark(schema.marks.code),
@@ -75,34 +101,34 @@ export function buildKeymap(pm, schema, handlers = {}) {
         'Mod-z': pm.undo,
         'Mod-y': pm.redo,
         'Mod-Shift-z': pm.redo,
-        'Shift-Enter': pm.chainCommands(pm.exitCode, (state, dispatch) => {
+        'Shift-Enter': pm.chainCommands(pm.exitCode, (state: PmStateLike, dispatch?: PmDispatch) => {
             if (dispatch) {
-                dispatch(state.tr.replaceSelectionWith(schema.nodes.hard_break.create()).scrollIntoView());
+                dispatch(state.tr.replaceSelectionWith(nt(schema, 'hard_break').create()).scrollIntoView());
             }
             return true;
         }),
         Enter: pm.chainCommands(
-            pm.splitListItem(schema.nodes.task_item),
-            pm.splitListItem(schema.nodes.list_item),
+            pm.splitListItem(nt(schema, 'task_item')),
+            pm.splitListItem(nt(schema, 'list_item')),
         ),
         Tab: pm.chainCommands(
-            pm.sinkListItem(schema.nodes.task_item),
-            pm.sinkListItem(schema.nodes.list_item),
+            pm.sinkListItem(nt(schema, 'task_item')),
+            pm.sinkListItem(nt(schema, 'list_item')),
         ),
         'Shift-Tab': pm.chainCommands(
-            pm.liftListItem(schema.nodes.task_item),
-            pm.liftListItem(schema.nodes.list_item),
+            pm.liftListItem(nt(schema, 'task_item')),
+            pm.liftListItem(nt(schema, 'list_item')),
         ),
     };
 
     for (const level of [1, 2, 3, 4, 5, 6]) {
-        keys[`Mod-Alt-${level}`] = pm.setBlockType(schema.nodes.heading, { level });
+        keys[`Mod-Alt-${level}`] = pm.setBlockType(nt(schema, 'heading'), { level });
     }
 
     // Обычная вставка кладёт markdown как текст; эта — разбирает его в блоки.
     if (typeof handlers.onPasteMarkdown === 'function') {
         keys['Mod-Shift-v'] = () => {
-            handlers.onPasteMarkdown();
+            handlers.onPasteMarkdown?.();
             return true;
         };
     }
@@ -116,26 +142,28 @@ export function buildKeymap(pm, schema, handlers = {}) {
  * @param {object} schema
  * @returns {Record<string, (state: object, dispatch: Function) => boolean>}
  */
-export function buildBlockCommands(pm, schema) {
-    const setHeading = (level) => pm.setBlockType(schema.nodes.heading, { level });
+export function buildBlockCommands(pm: PmPluginApiLike, schema: PmSchemaLike): Record<string, PmCommand> {
+    const setHeading = (level: number): PmCommand => pm.setBlockType(nt(schema, 'heading'), { level });
 
     return {
-        paragraph: pm.setBlockType(schema.nodes.paragraph),
+        paragraph: pm.setBlockType(nt(schema, 'paragraph')),
         heading_1: setHeading(1),
         heading_2: setHeading(2),
         heading_3: setHeading(3),
-        bullet_list: pm.wrapInList(schema.nodes.bullet_list),
-        ordered_list: pm.wrapInList(schema.nodes.ordered_list),
-        task_list: pm.wrapInList(schema.nodes.task_list),
-        blockquote: pm.wrapIn(schema.nodes.blockquote),
-        code_block: pm.setBlockType(schema.nodes.code_block),
-        callout: pm.wrapIn(schema.nodes.callout, { tone: 'info', icon: '' }),
-        callout_info: pm.wrapIn(schema.nodes.callout, { tone: 'info', icon: '' }),
-        callout_success: pm.wrapIn(schema.nodes.callout, { tone: 'success', icon: '' }),
-        callout_warning: pm.wrapIn(schema.nodes.callout, { tone: 'warning', icon: '' }),
-        callout_danger: pm.wrapIn(schema.nodes.callout, { tone: 'danger', icon: '' }),
-        toggle: (state, dispatch) => {
-            const { toggle, toggle_summary: summary, paragraph } = schema.nodes;
+        bullet_list: pm.wrapInList(nt(schema, 'bullet_list')),
+        ordered_list: pm.wrapInList(nt(schema, 'ordered_list')),
+        task_list: pm.wrapInList(nt(schema, 'task_list')),
+        blockquote: pm.wrapIn(nt(schema, 'blockquote')),
+        code_block: pm.setBlockType(nt(schema, 'code_block')),
+        callout: pm.wrapIn(nt(schema, 'callout'), { tone: 'info', icon: '' }),
+        callout_info: pm.wrapIn(nt(schema, 'callout'), { tone: 'info', icon: '' }),
+        callout_success: pm.wrapIn(nt(schema, 'callout'), { tone: 'success', icon: '' }),
+        callout_warning: pm.wrapIn(nt(schema, 'callout'), { tone: 'warning', icon: '' }),
+        callout_danger: pm.wrapIn(nt(schema, 'callout'), { tone: 'danger', icon: '' }),
+        toggle: (state: PmStateLike, dispatch?: PmDispatch) => {
+            const toggle = nt(schema, 'toggle');
+            const summary = nt(schema, 'toggle_summary');
+            const paragraph = nt(schema, 'paragraph');
             const node = toggle.create(null, [
                 summary.create(null, schema.text('Заголовок блока')),
                 paragraph.create(),
@@ -143,28 +171,30 @@ export function buildBlockCommands(pm, schema) {
             if (dispatch) dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
             return true;
         },
-        horizontal_rule: (state, dispatch) => {
+        horizontal_rule: (state: PmStateLike, dispatch?: PmDispatch) => {
             if (dispatch) {
-                dispatch(state.tr.replaceSelectionWith(schema.nodes.horizontal_rule.create()).scrollIntoView());
+                dispatch(state.tr.replaceSelectionWith(nt(schema, 'horizontal_rule').create()).scrollIntoView());
             }
             return true;
         },
-        math_block: (state, dispatch) => {
+        math_block: (state: PmStateLike, dispatch?: PmDispatch) => {
             if (dispatch) {
                 dispatch(
                     state.tr
-                        .replaceSelectionWith(schema.nodes.math_block.create({ formula: '' }))
+                        .replaceSelectionWith(nt(schema, 'math_block').create({ formula: '' }))
                         .scrollIntoView(),
                 );
             }
             return true;
         },
-        footnote: (state, dispatch) => {
+        footnote: (state: PmStateLike, dispatch?: PmDispatch) => {
             // Сноска это пара: ссылка в тексте и определение в конце документа.
             // Метка выводится из числа уже существующих определений.
-            const { footnote_reference: reference, footnote_definition: definition, paragraph } = schema.nodes;
+            const reference = nt(schema, 'footnote_reference');
+            const definition = nt(schema, 'footnote_definition');
+            const paragraph = nt(schema, 'paragraph');
             let used = 0;
-            state.doc.descendants((node) => {
+            state.doc.descendants((node: PmNodeLike) => {
                 if (node.type === definition) used += 1;
                 return true;
             });
@@ -179,8 +209,12 @@ export function buildBlockCommands(pm, schema) {
             }
             return true;
         },
-        table: (state, dispatch) => {
-            const { table, table_row: row, table_header: header, table_cell: cell, paragraph } = schema.nodes;
+        table: (state: PmStateLike, dispatch?: PmDispatch) => {
+            const table = nt(schema, 'table');
+            const row = nt(schema, 'table_row');
+            const header = nt(schema, 'table_header');
+            const cell = nt(schema, 'table_cell');
+            const paragraph = nt(schema, 'paragraph');
             const headerRow = row.create(null, [
                 header.create(null, paragraph.create()),
                 header.create(null, paragraph.create()),
@@ -203,9 +237,15 @@ export function buildBlockCommands(pm, schema) {
  * @param {{mentionKind: string, targetId: string, label: string}} mention
  * @returns {(state: object, dispatch: Function) => boolean}
  */
-export function insertMentionCommand(schema, mention) {
-    return (state, dispatch) => {
-        const node = schema.nodes.platform_mention.create({
+export interface MentionPayload {
+    mentionKind: string;
+    targetId: string;
+    label?: string;
+}
+
+export function insertMentionCommand(schema: PmSchemaLike, mention: MentionPayload): PmCommand {
+    return (state: PmStateLike, dispatch?: PmDispatch) => {
+        const node = nt(schema, 'platform_mention').create({
             mention_kind: mention.mentionKind,
             target_id: mention.targetId,
             label: mention.label || '',
@@ -221,9 +261,15 @@ export function insertMentionCommand(schema, mention) {
  * @param {{fileId: string, originalName?: string, contentType?: string}} file
  * @returns {(state: object, dispatch: Function) => boolean}
  */
-export function insertPlatformFileCommand(schema, file) {
-    return (state, dispatch) => {
-        const node = schema.nodes.platform_file.create({
+export interface PlatformFilePayload {
+    fileId: string;
+    originalName?: string;
+    contentType?: string;
+}
+
+export function insertPlatformFileCommand(schema: PmSchemaLike, file: PlatformFilePayload): PmCommand {
+    return (state: PmStateLike, dispatch?: PmDispatch) => {
+        const node = nt(schema, 'platform_file').create({
             file_id: file.fileId,
             original_name: file.originalName || '',
             content_type: file.contentType || '',
@@ -239,15 +285,22 @@ export function insertPlatformFileCommand(schema, file) {
  * @param {{fileId: string, src: string, alt?: string, title?: string}} image
  * @returns {(state: object, dispatch: Function) => boolean}
  */
-export function insertImageCommand(schema, image) {
-    return (state, dispatch) => {
+export interface ImagePayload {
+    fileId: string;
+    src: string;
+    alt?: string;
+    title?: string;
+}
+
+export function insertImageCommand(schema: PmSchemaLike, image: ImagePayload): PmCommand {
+    return (state: PmStateLike, dispatch?: PmDispatch) => {
         if (typeof image.fileId !== 'string' || image.fileId.length === 0) {
             throw new Error('insertImageCommand: fileId required');
         }
         if (typeof image.src !== 'string' || image.src.length === 0) {
             throw new Error('insertImageCommand: src required');
         }
-        const node = schema.nodes.image.create({
+        const node = nt(schema, 'image').create({
             src: image.src,
             alt: image.alt || '',
             title: image.title || '',
@@ -264,8 +317,8 @@ export function insertImageCommand(schema, image) {
  * @param {string} href
  * @returns {(state: object, dispatch: Function) => boolean}
  */
-export function setLinkCommand(schema, href) {
-    return (state, dispatch) => {
+export function setLinkCommand(schema: PmSchemaLike, href: string): PmCommand {
+    return (state: PmStateLike, dispatch?: PmDispatch) => {
         const markType = schema.marks.link;
         if (!markType) {
             throw new Error('setLinkCommand: link mark missing from schema');
@@ -293,8 +346,8 @@ export function setLinkCommand(schema, href) {
  * @param {string} color
  * @returns {(state: object, dispatch: Function) => boolean}
  */
-export function setHighlightColorCommand(schema, color) {
-    return (state, dispatch) => {
+export function setHighlightColorCommand(schema: PmSchemaLike, color: string): PmCommand {
+    return (state: PmStateLike, dispatch?: PmDispatch) => {
         const markType = schema.marks.highlight;
         if (!markType) {
             throw new Error('setHighlightColorCommand: highlight mark missing from schema');

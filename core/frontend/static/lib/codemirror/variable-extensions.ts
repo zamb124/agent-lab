@@ -60,9 +60,11 @@ export interface CmEditorViewLike extends CmViewLike {
         readOnly: boolean;
         replaceSelection(text: string): unknown;
     };
+    root: Document | ShadowRoot;
     dispatch(spec: object): void;
     destroy(): void;
     requestMeasure(): void;
+    setRoot(root: Document | ShadowRoot): void;
 }
 
 export interface CmCompartmentLike {
@@ -103,7 +105,13 @@ export interface CmModule {
         tabSize: { of(value: number): unknown };
     };
     EditorView: {
-        new (config: { state: unknown; parent: Element }): CmEditorViewLike;
+        new (config: {
+            state?: unknown;
+            doc?: string;
+            extensions?: unknown[];
+            parent: Element;
+            root?: Document | ShadowRoot;
+        }): CmEditorViewLike;
         theme(spec: Record<string, unknown>, options?: { dark?: boolean }): unknown;
         updateListener: { of(fn: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void): unknown };
         lineWrapping: unknown;

@@ -8,11 +8,56 @@
  */
 
 export const PROSEMIRROR_BUNDLE_URL = '/static/core/assets/prosemirror/prosemirror-bundle.js';
+import type { PmAttrs, PmBundleLike, PmSchemaLike } from './pm-types.js';
+
+export type { PmBundleLike } from './pm-types.js';
+
 export const WIKI_SCHEMA_URL = '/static/core/assets/prosemirror/wiki-schema.json';
 
 const CALLOUT_TONE_FALLBACK = 'info';
 
-const DOM_SPECS = Object.freeze({
+interface WikiNodeSpec {
+    attrs?: Record<string, { required?: boolean; default?: unknown }>;
+    group?: string;
+    content?: string;
+    marks?: string | null;
+    inline?: boolean;
+    atom?: boolean;
+    defining?: boolean;
+    isolating?: boolean;
+    code?: boolean;
+    draggable?: boolean;
+    selectable?: boolean;
+}
+
+interface WikiMarkSpec {
+    attrs?: Record<string, { required?: boolean; default?: unknown }>;
+    inclusive?: boolean;
+    spanning?: boolean;
+    excludes?: string | null;
+}
+
+export interface WikiSchemaJson {
+    nodes: Record<string, WikiNodeSpec>;
+    marks: Record<string, WikiMarkSpec>;
+}
+
+export interface WikiEditorRuntime {
+    pm: PmBundleLike;
+    schema: PmSchemaLike;
+}
+
+interface NodeDomSpec {
+    parseDOM: unknown[];
+    toDOM: (node: PmAttrs) => unknown[];
+}
+
+interface MarkDomSpec {
+    parseDOM: unknown[];
+    toDOM: (mark: PmAttrs) => unknown[];
+}
+
+const DOM_SPECS: Record<string, NodeDomSpec | null> = Object.freeze({
     doc: null,
     text: null,
     paragraph: {
@@ -21,7 +66,7 @@ const DOM_SPECS = Object.freeze({
     },
     heading: {
         parseDOM: [1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { level } })),
-        toDOM: (node) => [`h${node.attrs.level}`, 0],
+        toDOM: (node: PmAttrs) => [`h${node.attrs.level}`, 0],
     },
     blockquote: {
         parseDOM: [{ tag: 'blockquote' }],
@@ -32,7 +77,7 @@ const DOM_SPECS = Object.freeze({
             {
                 tag: 'pre',
                 preserveWhitespace: 'full',
-                getAttrs: (dom) => {
+                getAttrs: (dom: HTMLElement) => {
                     const dataLanguage = dom.getAttribute('data-language');
                     if (typeof dataLanguage === 'string' && dataLanguage !== '') {
                         return { language: dataLanguage };
@@ -46,7 +91,7 @@ const DOM_SPECS = Object.freeze({
                 },
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'pre',
             { 'data-language': node.attrs.language || '' },
             ['code', node.attrs.language ? { class: `language-${node.attrs.language}` } : {}, 0],
@@ -60,10 +105,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'ol',
-                getAttrs: (dom) => ({ start: dom.hasAttribute('start') ? Number(dom.getAttribute('start')) : 1 }),
+                getAttrs: (dom: HTMLElement) => ({ start: dom.hasAttribute('start') ? Number(dom.getAttribute('start')) : 1 }),
             },
         ],
-        toDOM: (node) => (node.attrs.start === 1 ? ['ol', 0] : ['ol', { start: node.attrs.start }, 0]),
+        toDOM: (node: PmAttrs) => (node.attrs.start === 1 ? ['ol', 0] : ['ol', { start: node.attrs.start }, 0]),
     },
     list_item: {
         parseDOM: [{ tag: 'li' }],
@@ -77,10 +122,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'li[data-task-item]',
-                getAttrs: (dom) => ({ checked: dom.getAttribute('data-checked') === 'true' }),
+                getAttrs: (dom: HTMLElement) => ({ checked: dom.getAttribute('data-checked') === 'true' }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'li',
             {
                 'data-task-item': 'true',
@@ -102,13 +147,13 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'div[data-callout]',
-                getAttrs: (dom) => ({
+                getAttrs: (dom: HTMLElement) => ({
                     tone: dom.getAttribute('data-tone') || CALLOUT_TONE_FALLBACK,
                     icon: dom.getAttribute('data-icon') || '',
                 }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'div',
             {
                 'data-callout': 'true',
@@ -127,10 +172,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'div[data-footnote-definition]',
-                getAttrs: (dom) => ({ label: dom.getAttribute('data-label') || '' }),
+                getAttrs: (dom: HTMLElement) => ({ label: dom.getAttribute('data-label') || '' }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'div',
             {
                 'data-footnote-definition': 'true',
@@ -144,10 +189,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'sup[data-footnote-reference]',
-                getAttrs: (dom) => ({ label: dom.getAttribute('data-label') || '' }),
+                getAttrs: (dom: HTMLElement) => ({ label: dom.getAttribute('data-label') || '' }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'sup',
             {
                 'data-footnote-reference': 'true',
@@ -162,10 +207,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'div[data-math-block]',
-                getAttrs: (dom) => ({ formula: dom.textContent || '' }),
+                getAttrs: (dom: HTMLElement) => ({ formula: dom.textContent || '' }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'div',
             { 'data-math-block': 'true', class: 'pm-math-block' },
             node.attrs.formula,
@@ -175,10 +220,10 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'span[data-math-inline]',
-                getAttrs: (dom) => ({ formula: dom.textContent || '' }),
+                getAttrs: (dom: HTMLElement) => ({ formula: dom.textContent || '' }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'span',
             { 'data-math-inline': 'true', class: 'pm-math-inline' },
             node.attrs.formula,
@@ -188,7 +233,7 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'img[src]',
-                getAttrs: (dom) => ({
+                getAttrs: (dom: HTMLElement) => ({
                     src: dom.getAttribute('src'),
                     alt: dom.getAttribute('alt') || '',
                     title: dom.getAttribute('title') || '',
@@ -196,7 +241,7 @@ const DOM_SPECS = Object.freeze({
                 }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'img',
             {
                 src: node.attrs.src,
@@ -211,14 +256,14 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'div[data-platform-file]',
-                getAttrs: (dom) => ({
+                getAttrs: (dom: HTMLElement) => ({
                     file_id: dom.getAttribute('data-file-id'),
                     original_name: dom.getAttribute('data-name') || '',
                     content_type: dom.getAttribute('data-content-type') || '',
                 }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'div',
             {
                 'data-platform-file': 'true',
@@ -234,14 +279,14 @@ const DOM_SPECS = Object.freeze({
         parseDOM: [
             {
                 tag: 'span[data-mention]',
-                getAttrs: (dom) => ({
+                getAttrs: (dom: HTMLElement) => ({
                     mention_kind: dom.getAttribute('data-mention-kind'),
                     target_id: dom.getAttribute('data-target-id'),
                     label: dom.textContent || '',
                 }),
             },
         ],
-        toDOM: (node) => [
+        toDOM: (node: PmAttrs) => [
             'span',
             {
                 'data-mention': 'true',
@@ -258,7 +303,7 @@ const DOM_SPECS = Object.freeze({
     },
 });
 
-const MARK_DOM_SPECS = Object.freeze({
+const MARK_DOM_SPECS: Record<string, MarkDomSpec> = Object.freeze({
     strong: {
         parseDOM: [{ tag: 'strong' }, { tag: 'b' }],
         toDOM: () => ['strong', 0],
@@ -277,28 +322,28 @@ const MARK_DOM_SPECS = Object.freeze({
     },
     highlight: {
         parseDOM: [
-            { tag: 'mark', getAttrs: (dom) => ({ color: dom.getAttribute('data-color') || 'yellow' }) },
+            { tag: 'mark', getAttrs: (dom: HTMLElement) => ({ color: dom.getAttribute('data-color') || 'yellow' }) },
         ],
-        toDOM: (mark) => ['mark', { 'data-color': mark.attrs.color }, 0],
+        toDOM: (mark: PmAttrs) => ['mark', { 'data-color': mark.attrs.color }, 0],
     },
     link: {
         parseDOM: [
             {
                 tag: 'a[href]',
-                getAttrs: (dom) => ({
+                getAttrs: (dom: HTMLElement) => ({
                     href: dom.getAttribute('href'),
                     title: dom.getAttribute('title') || '',
                 }),
             },
         ],
-        toDOM: (mark) => ['a', { href: mark.attrs.href, title: mark.attrs.title || null }, 0],
+        toDOM: (mark: PmAttrs) => ['a', { href: mark.attrs.href, title: mark.attrs.title || null }, 0],
     },
 });
 
 const TABLE_NODE_NAMES = Object.freeze(['table', 'table_row', 'table_cell', 'table_header']);
 
-function attrsFromSpec(specAttrs) {
-    const attrs = {};
+function attrsFromSpec(specAttrs?: Record<string, { required?: boolean; default?: unknown }>): Record<string, { default?: unknown }> {
+    const attrs: Record<string, { default?: unknown }> = {};
     for (const [name, spec] of Object.entries(specAttrs || {})) {
         attrs[name] = spec.required ? {} : { default: spec.default };
     }
@@ -310,7 +355,7 @@ function attrsFromSpec(specAttrs) {
  * @param {object} pm — модуль prosemirror-bundle
  * @returns {object} Schema
  */
-export function buildWikiSchema(schemaJson, pm) {
+export function buildWikiSchema(schemaJson: WikiSchemaJson, pm: PmBundleLike): PmSchemaLike {
     if (!schemaJson || typeof schemaJson !== 'object') {
         throw new Error('buildWikiSchema: schemaJson required');
     }
@@ -328,15 +373,15 @@ export function buildWikiSchema(schemaJson, pm) {
         cellAttributes: {
             align: {
                 default: '',
-                getFromDOM: (dom) => dom.style.textAlign || dom.getAttribute('data-align') || '',
-                setDOMAttr: (value, attrs) => {
+                getFromDOM: (dom: HTMLElement) => dom.style.textAlign || dom.getAttribute('data-align') || '',
+                setDOMAttr: (value: string, attrs: Record<string, string>) => {
                     if (value) attrs.style = `text-align: ${value}`;
                 },
             },
         },
     });
 
-    const nodes = {};
+    const nodes: Record<string, unknown> = {};
     for (const [name, spec] of Object.entries(schemaJson.nodes)) {
         if (TABLE_NODE_NAMES.includes(name)) {
             const generated = tableSpecs[name];
@@ -351,7 +396,7 @@ export function buildWikiSchema(schemaJson, pm) {
         if (dom === undefined) {
             throw new Error(`buildWikiSchema: нет DOM-описания для узла ${name}`);
         }
-        const node = {
+        const node: Record<string, unknown> = {
             attrs: attrsFromSpec(spec.attrs),
         };
         if (spec.group) node.group = spec.group;
@@ -372,13 +417,13 @@ export function buildWikiSchema(schemaJson, pm) {
         nodes[name] = node;
     }
 
-    const marks = {};
+    const marks: Record<string, unknown> = {};
     for (const [name, spec] of Object.entries(schemaJson.marks)) {
         const dom = MARK_DOM_SPECS[name];
         if (!dom) {
             throw new Error(`buildWikiSchema: нет DOM-описания для марки ${name}`);
         }
-        const mark = {
+        const mark: Record<string, unknown> = {
             attrs: attrsFromSpec(spec.attrs),
             parseDOM: dom.parseDOM,
             toDOM: dom.toDOM,
@@ -392,7 +437,7 @@ export function buildWikiSchema(schemaJson, pm) {
     return new pm.Schema({ nodes, marks });
 }
 
-let cachedRuntime = null;
+let cachedRuntime: WikiEditorRuntime | null = null;
 
 /**
  * Модуль ProseMirror и схема грузятся один раз на страницу.
@@ -403,7 +448,7 @@ let cachedRuntime = null;
  *
  * @returns {Promise<{pm: object, schema: object}>}
  */
-export async function loadWikiEditorRuntime() {
+export async function loadWikiEditorRuntime(): Promise<WikiEditorRuntime> {
     if (cachedRuntime) return cachedRuntime;
     const [pm, response] = await Promise.all([
         import(PROSEMIRROR_BUNDLE_URL),
@@ -412,6 +457,8 @@ export async function loadWikiEditorRuntime() {
     if (!response.ok) {
         throw new Error(`loadWikiEditorRuntime: ${response.status} ${response.statusText}`);
     }
-    cachedRuntime = { pm, schema: buildWikiSchema(await response.json(), pm) };
+    const bundle = pm as PmBundleLike;
+    const schemaJson = await response.json() as WikiSchemaJson;
+    cachedRuntime = { pm: bundle, schema: buildWikiSchema(schemaJson, bundle) };
     return cachedRuntime;
 }

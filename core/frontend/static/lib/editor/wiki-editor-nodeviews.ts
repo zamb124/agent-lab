@@ -8,12 +8,14 @@
 
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import { resolvePlatformFilesApiBase } from '../utils/platform-files-url.js';
+import type { CmCompartmentLike, CmEditorViewLike, CmModule } from '../codemirror/variable-extensions.js';
+import type { PmNodeLike, PmViewLike } from './pm-types.js';
 import '../components/platform-icon.js';
 
 export const CODEMIRROR_BUNDLE_URL = '/static/core/assets/codemirror/codemirror-bundle.js';
 
 /** Base path `/{segment}/api/v1/files/download/` для текущего SPA. */
-export function resolveDefaultFileUrlBase() {
+export function resolveDefaultFileUrlBase(): string {
     return `${resolvePlatformFilesApiBase()}/download/`;
 }
 
@@ -26,25 +28,25 @@ export const CODE_BLOCK_LANGUAGES = Object.freeze([
     { id: 'csharp', label: 'csharp' },
 ]);
 
-let _cmBundlePromise = null;
+let _cmBundlePromise: Promise<CmModule> | null = null;
 
-export function loadCodeMirrorBundle() {
+export function loadCodeMirrorBundle(): Promise<CmModule> {
     if (_cmBundlePromise === null) {
-        _cmBundlePromise = import(CODEMIRROR_BUNDLE_URL);
+        _cmBundlePromise = import(CODEMIRROR_BUNDLE_URL) as Promise<CmModule>;
     }
     return _cmBundlePromise;
 }
 
-function languageExtension(cm, language) {
-    if (language === 'python') return cm.python();
-    if (language === 'javascript') return cm.javascript();
+function languageExtension(cm: CmModule, language: string): unknown {
+    if (language === 'python') return cm.python?.();
+    if (language === 'javascript') return cm.javascript?.();
     if (language === 'json') return cm.json();
-    if (language === 'go') return cm.go();
-    if (language === 'csharp') return cm.csharp();
+    if (language === 'go') return cm.go?.();
+    if (language === 'csharp') return cm.csharp?.();
     return [];
 }
 
-function fileHref(fileUrlBase, fileId) {
+function fileHref(fileUrlBase: string, fileId: string): string {
     if (typeof fileUrlBase !== 'string' || fileUrlBase.length === 0) {
         throw new Error('wiki-editor-nodeviews: fileUrlBase required');
     }
@@ -54,15 +56,18 @@ function fileHref(fileUrlBase, fileId) {
     return fileUrlBase.endsWith('/') ? `${fileUrlBase}${fileId}` : `${fileUrlBase}/${fileId}`;
 }
 
-/**
- * @param {{
- *   cm: object | null,
- *   getFileUrlBase: () => string,
- *   isEditable: () => boolean,
- *   onOpenFile?: (fileId: string) => void,
- * }} options
- */
-export function buildWikiNodeViews(options) {
+export interface WikiNodeViewsOptions {
+    cm: CmModule | null;
+    getFileUrlBase: () => string;
+    isEditable: () => boolean;
+    onOpenFile?: (fileId: string) => void;
+}
+
+type GetPos = () => number | undefined;
+
+type NodeViewFactory = (node: PmNodeLike, view: PmViewLike, getPos: GetPos) => object;
+
+export function buildWikiNodeViews(options: WikiNodeViewsOptions): Record<string, NodeViewFactory> {
     if (!options || typeof options !== 'object') {
         throw new Error('buildWikiNodeViews: options required');
     }
@@ -73,7 +78,7 @@ export function buildWikiNodeViews(options) {
         throw new Error('buildWikiNodeViews: isEditable required');
     }
     return {
-        toggle: (node, view, getPos) => new ToggleNodeView(node, view, getPos),
+        toggle: (node: PmNodeLike, view: PmViewLike, getPos: GetPos) => new ToggleNodeView(node, view, getPos),
         task_item: (node, view, getPos) => new TaskItemNodeView(node, view, getPos, options),
         code_block: (node, view, getPos) => new CodeBlockNodeView(node, view, getPos, options),
         platform_file: (node, view, getPos) => new PlatformFileNodeView(node, view, getPos, options),
@@ -81,7 +86,15 @@ export function buildWikiNodeViews(options) {
 }
 
 class ToggleNodeView {
-    constructor(node, view, getPos) {
+    node: PmNodeLike;
+    view: PmViewLike;
+    getPos: GetPos;
+    collapsed: boolean;
+    dom: HTMLElement;
+    chevron: HTMLButtonElement;
+    contentDOM: HTMLElement;
+
+    constructor(node: PmNodeLike, view: PmViewLike, getPos: GetPos) {
         this.node = node;
         this.view = view;
         this.getPos = getPos;
@@ -109,13 +122,13 @@ class ToggleNodeView {
         this._setCollapsed(false);
     }
 
-    _setCollapsed(collapsed) {
+    _setCollapsed(collapsed: boolean): void {
         this.collapsed = collapsed;
         this.dom.classList.toggle('is-collapsed', collapsed);
         this.chevron.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     }
 
-    update(node) {
+    update(node: PmNodeLike): boolean {
         if (node.type !== this.node.type) {
             return false;
         }
@@ -123,8 +136,8 @@ class ToggleNodeView {
         return true;
     }
 
-    stopEvent(event) {
-        return this.chevron.contains(event.target);
+    stopEvent(event: Event): boolean {
+        return event.target instanceof Node && this.chevron.contains(event.target);
     }
 
     ignoreMutation() {
@@ -133,7 +146,15 @@ class ToggleNodeView {
 }
 
 class TaskItemNodeView {
-    constructor(node, view, getPos, options) {
+    node: PmNodeLike;
+    view: PmViewLike;
+    getPos: GetPos;
+    options: WikiNodeViewsOptions;
+    dom: HTMLElement;
+    checkbox: HTMLInputElement;
+    contentDOM: HTMLElement;
+
+    constructor(node: PmNodeLike, view: PmViewLike, getPos: GetPos, options: WikiNodeViewsOptions) {
         this.node = node;
         this.view = view;
         this.getPos = getPos;
@@ -166,6 +187,7 @@ class TaskItemNodeView {
                     checked: !this.node.attrs.checked,
                 }),
             );
+
         });
 
         this.contentDOM = document.createElement('div');
@@ -175,14 +197,14 @@ class TaskItemNodeView {
         this._syncChecked();
     }
 
-    _syncChecked() {
+    _syncChecked(): void {
         const checked = Boolean(this.node.attrs.checked);
         this.checkbox.checked = checked;
         this.dom.dataset.checked = checked ? 'true' : 'false';
         this.checkbox.disabled = !this.options.isEditable();
     }
 
-    update(node) {
+    update(node: PmNodeLike): boolean {
         if (node.type !== this.node.type) {
             return false;
         }
@@ -191,17 +213,32 @@ class TaskItemNodeView {
         return true;
     }
 
-    stopEvent(event) {
-        return this.checkbox.contains(event.target);
+    stopEvent(event: Event): boolean {
+        return event.target instanceof Node && this.checkbox.contains(event.target);
     }
 
-    ignoreMutation(mutation) {
+    ignoreMutation(mutation: MutationRecord): boolean {
         return mutation.type === 'attributes' && mutation.target === this.checkbox;
     }
 }
 
 class CodeBlockNodeView {
-    constructor(node, view, getPos, options) {
+    node: PmNodeLike;
+    view: PmViewLike;
+    getPos: GetPos;
+    options: WikiNodeViewsOptions;
+    updating: boolean;
+    destroyed: boolean;
+    cm: CmEditorViewLike | null;
+    _cmModule: CmModule | null;
+    languageCompartment: CmCompartmentLike | null;
+    readonlyCompartment: CmCompartmentLike | null;
+    dom: HTMLElement;
+    toolbar: HTMLElement;
+    select: HTMLSelectElement;
+    cmHost: HTMLElement;
+
+    constructor(node: PmNodeLike, view: PmViewLike, getPos: GetPos, options: WikiNodeViewsOptions) {
         this.node = node;
         this.view = view;
         this.getPos = getPos;
@@ -215,7 +252,7 @@ class CodeBlockNodeView {
 
         this.dom = document.createElement('div');
         this.dom.className = 'pm-code-block';
-        this.dom.dataset.language = node.attrs.language || '';
+        this.dom.dataset.language = String(node.attrs.language || '');
 
         this.toolbar = document.createElement('div');
         this.toolbar.className = 'pm-code-block-toolbar';
@@ -229,7 +266,7 @@ class CodeBlockNodeView {
             option.textContent = language.label;
             this.select.appendChild(option);
         }
-        this.select.value = node.attrs.language || '';
+        this.select.value = String(node.attrs.language || '');
         this.select.disabled = !options.isEditable();
         this.select.addEventListener('mousedown', (event) => event.stopPropagation());
         this.select.addEventListener('change', (event) => {
@@ -260,13 +297,13 @@ class CodeBlockNodeView {
         void this._mountCodeMirror();
     }
 
-    async _mountCodeMirror() {
+    async _mountCodeMirror(): Promise<void> {
         // NodeView ещё не в дереве, пока конструктор не вернётся в ProseMirror.
         // Без паузы getRootNode() не ShadowRoot страницы — стили oneDark уезжают
         // в document и подсветка внутри wiki-page-view невидима.
         await Promise.resolve();
         if (!this.dom.isConnected) {
-            await new Promise((resolve) => {
+            await new Promise<void>((resolve) => {
                 requestAnimationFrame(() => resolve());
             });
         }
@@ -293,7 +330,7 @@ class CodeBlockNodeView {
                 cm.keymap.of([...cm.defaultKeymap, ...cm.historyKeymap]),
                 cm.history(),
                 cm.EditorView.lineWrapping,
-                this.languageCompartment.of(languageExtension(cm, this.node.attrs.language || '')),
+                this.languageCompartment.of(languageExtension(cm, String(this.node.attrs.language || ''))),
                 this.readonlyCompartment.of(cm.EditorState.readOnly.of(!this.options.isEditable())),
                 ...themeExtensions,
                 cm.EditorView.updateListener.of((update) => {
@@ -313,7 +350,7 @@ class CodeBlockNodeView {
         }
     }
 
-    _reconfigureLanguage(language) {
+    _reconfigureLanguage(language: string): void {
         if (this.cm === null || this.languageCompartment === null || this._cmModule === null) {
             return;
         }
@@ -325,31 +362,31 @@ class CodeBlockNodeView {
         this.dom.dataset.language = language || '';
     }
 
-    _forwardToProseMirror() {
+    _forwardToProseMirror(): void {
         const pos = this.getPos();
         if (typeof pos !== 'number') {
             throw new Error('CodeBlockNodeView: getPos returned no position');
         }
         const start = pos + 1;
         const end = start + this.node.nodeSize - 2;
-        const text = this.cm.state.doc.toString();
+        const text = this.cm ? this.cm.state.doc.toString() : '';
         if (this.view.state.doc.textBetween(start, end) === text) {
             return;
         }
-        const content = text === '' ? [] : this.view.state.schema.text(text);
+        const content: unknown = text === '' ? [] : this.view.state.schema.text(text);
         this.updating = true;
         this.view.dispatch(this.view.state.tr.replaceWith(start, end, content));
         this.updating = false;
     }
 
-    update(node) {
+    update(node: PmNodeLike): boolean {
         if (node.type !== this.node.type) {
             return false;
         }
         this.node = node;
-        this.select.value = node.attrs.language || '';
+        this.select.value = String(node.attrs.language || '');
         this.select.disabled = !this.options.isEditable();
-        this.dom.dataset.language = node.attrs.language || '';
+        this.dom.dataset.language = String(node.attrs.language || '');
 
         if (this.cm !== null && this.readonlyCompartment !== null && this._cmModule !== null) {
             this.cm.dispatch({
@@ -357,7 +394,7 @@ class CodeBlockNodeView {
                     this._cmModule.EditorState.readOnly.of(!this.options.isEditable()),
                 ),
             });
-            this._reconfigureLanguage(node.attrs.language || '');
+            this._reconfigureLanguage(String(node.attrs.language || ''));
             const text = node.textContent;
             if (this.cm.state.doc.toString() !== text) {
                 this.updating = true;
@@ -370,23 +407,23 @@ class CodeBlockNodeView {
         return true;
     }
 
-    selectNode() {
+    selectNode(): void {
         this.dom.classList.add('ProseMirror-selectednode');
     }
 
-    deselectNode() {
+    deselectNode(): void {
         this.dom.classList.remove('ProseMirror-selectednode');
     }
 
-    stopEvent() {
+    stopEvent(): boolean {
         return true;
     }
 
-    ignoreMutation() {
+    ignoreMutation(): boolean {
         return true;
     }
 
-    destroy() {
+    destroy(): void {
         this.destroyed = true;
         if (this.cm !== null) {
             this.cm.destroy();
@@ -396,7 +433,17 @@ class CodeBlockNodeView {
 }
 
 class PlatformFileNodeView {
-    constructor(node, view, getPos, options) {
+    node: PmNodeLike;
+    view: PmViewLike;
+    getPos: GetPos;
+    options: WikiNodeViewsOptions;
+    dom: HTMLElement;
+    _icon: HTMLElement;
+    _meta: HTMLElement;
+    _name: HTMLElement;
+    _onActivate: (event: Event) => void;
+
+    constructor(node: PmNodeLike, view: PmViewLike, getPos: GetPos, options: WikiNodeViewsOptions) {
         this.node = node;
         this.view = view;
         this.getPos = getPos;
@@ -422,12 +469,15 @@ class PlatformFileNodeView {
         this.dom.appendChild(this._icon);
         this.dom.appendChild(this._meta);
 
-        this._onActivate = (event) => {
+        this._onActivate = (event: Event) => {
             event.preventDefault();
             this._open();
         };
         this.dom.addEventListener('click', this._onActivate);
-        this.dom.addEventListener('keydown', (event) => {
+        this.dom.addEventListener('keydown', (event: Event) => {
+            if (!(event instanceof KeyboardEvent)) {
+                return;
+            }
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
                 this._open();
@@ -437,8 +487,8 @@ class PlatformFileNodeView {
         this._sync();
     }
 
-    _open() {
-        const fileId = this.node.attrs.file_id;
+    _open(): void {
+        const fileId = String(this.node.attrs.file_id || '');
         if (typeof this.options.onOpenFile === 'function') {
             this.options.onOpenFile(fileId);
             return;
@@ -446,19 +496,19 @@ class PlatformFileNodeView {
         window.location.assign(fileHref(this.options.getFileUrlBase(), fileId));
     }
 
-    _sync() {
-        const fileId = this.node.attrs.file_id;
-        const name = this.node.attrs.original_name || fileId;
-        const contentType = this.node.attrs.content_type || '';
+    _sync(): void {
+        const fileId = String(this.node.attrs.file_id || '');
+        const name = String(this.node.attrs.original_name || fileId);
+        const contentType = String(this.node.attrs.content_type || '');
         this.dom.dataset.fileId = fileId;
-        this.dom.dataset.name = this.node.attrs.original_name || '';
+        this.dom.dataset.name = String(this.node.attrs.original_name || '');
         this.dom.dataset.contentType = contentType;
         this.dom.setAttribute('aria-label', name);
         this._name.textContent = name;
         this._icon.setAttribute('name', resolveFileIconKey(name, contentType));
     }
 
-    update(node) {
+    update(node: PmNodeLike): boolean {
         if (node.type !== this.node.type) {
             return false;
         }
@@ -467,15 +517,15 @@ class PlatformFileNodeView {
         return true;
     }
 
-    stopEvent(event) {
+    stopEvent(event: Event): boolean {
         return event.type === 'mousedown' || event.type === 'click' || event.type === 'keydown';
     }
 
-    ignoreMutation() {
+    ignoreMutation(): boolean {
         return true;
     }
 
-    destroy() {
+    destroy(): void {
         this.dom.removeEventListener('click', this._onActivate);
     }
 }
