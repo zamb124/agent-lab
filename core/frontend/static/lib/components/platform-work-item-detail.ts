@@ -16,16 +16,55 @@ import './fields/platform-field.js';
 import './platform-markdown-editor.js';
 import './platform-file-attachments.js';
 import './glass-spinner.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type { OpController, ResourceController } from '../base/use-resource.js';
+import type { SelectController } from '../events/select-controller.js';
+
+interface WorkItemLink {
+    link_kind?: unknown;
+    entity_id?: unknown;
+}
+
+interface WorkItemAssignment {
+    assignee_kind?: string;
+    user_ids?: unknown;
+    claimed_by_user_id?: unknown;
+}
+
+interface WorkItemRecord {
+    work_item_id: string;
+    title?: unknown;
+    description?: unknown;
+    due_date?: unknown;
+    attachments?: unknown;
+    links?: unknown;
+    assignment?: WorkItemAssignment;
+    state?: string;
+    priority?: string;
+    kind?: string;
+    [key: string]: unknown;
+}
+
+interface TeamMemberRecord {
+    user_id?: unknown;
+    name?: unknown;
+    [key: string]: unknown;
+}
+
+interface FileRefRecord {
+    file_id: string;
+    [key: string]: unknown;
+}
 
 const STATES = Object.freeze(['open', 'in_progress', 'blocked', 'done', 'cancelled', 'failed']);
 const PRIORITIES = Object.freeze(['low', 'normal', 'high', 'urgent']);
 const TERMINAL = Object.freeze(new Set(['done', 'cancelled', 'failed']));
 
-function _crmEntityId(item) {
+function _crmEntityId(item: WorkItemRecord | null | undefined): string {
     if (!item || !Array.isArray(item.links)) {
         return '';
     }
-    for (const link of item.links) {
+    for (const link of item.links as WorkItemLink[]) {
         if (link && link.link_kind === 'crm_entity' && typeof link.entity_id === 'string') {
             return link.entity_id;
         }
@@ -33,7 +72,7 @@ function _crmEntityId(item) {
     return '';
 }
 
-function _assigneeUserId(item) {
+function _assigneeUserId(item: WorkItemRecord | null | undefined): string {
     const assignment = item && item.assignment;
     if (!assignment || typeof assignment !== 'object') {
         return '';
@@ -49,17 +88,20 @@ function _assigneeUserId(item) {
     return '';
 }
 
-function _cloneFileRefs(files) {
+function _cloneFileRefs(files: unknown): FileRefRecord[] {
     if (!Array.isArray(files)) {
         return [];
     }
-    return files.filter((file) => file && typeof file === 'object' && typeof file.file_id === 'string');
+    return files.filter(
+        (file): file is FileRefRecord =>
+            Boolean(file) && typeof file === 'object' && typeof (file as FileRefRecord).file_id === 'string',
+    );
 }
 
 export class PlatformWorkItemDetail extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         workItemId: { type: String, attribute: 'work-item-id' },
         item: { attribute: false },
         layout: { type: String },
@@ -69,9 +111,25 @@ export class PlatformWorkItemDetail extends PlatformElement {
         _dueDraft: { state: true },
         _attachmentsDraft: { state: true },
         _draftsReadyForId: { state: true },
-    };
+    }
+    declare workItemId: string;
+    declare item: WorkItemRecord | null;
+    declare layout: string;
+    declare showGraphLink: boolean;
+    declare _titleDraft: string;
+    declare _descriptionDraft: string;
+    declare _dueDraft: string;
+    declare _attachmentsDraft: FileRefRecord[];
+    declare _draftsReadyForId: string;
 
-    static styles = [
+    private _getOp: OpController | null;
+    private _items: ResourceController | null;
+    private _moveOp: OpController | null;
+    private _assignOp: OpController | null;
+    private _teamSel: SelectController<TeamMemberRecord[]>;
+    private _teamLoadingSel: SelectController<boolean>;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -276,11 +334,16 @@ export class PlatformWorkItemDetail extends PlatformElement {
         this._items = null;
         this._moveOp = null;
         this._assignOp = null;
-        this._teamSel = this.select((s) => (s.team && Array.isArray(s.team.members) ? s.team.members : []));
-        this._teamLoadingSel = this.select((s) => Boolean(s.team && s.team.loading));
+        this._teamSel = this.select((s) => {
+            const team = s.team as { members?: unknown } | undefined;
+            const members = team && team.members;
+            return Array.isArray(members) ? (members as TeamMemberRecord[]) : [];
+        });
+        this._teamLoadingSel = this.select((s) =>
+            Boolean((s.team as { loading?: unknown } | undefined)?.loading));
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._getOp = this.useOp('worktracker/work_item_get');
         this._items = this.useResource('worktracker/work_items', { autoload: false });
@@ -290,7 +353,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         this._ensureTeamMembers();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues): void {
         super.updated(changed);
         if (changed.has('layout')) {
             this.setAttribute('layout', this.layout);
@@ -301,7 +364,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
             && typeof this.workItemId === 'string'
             && this.workItemId.length > 0
         ) {
-            this._getOp.run({ work_item_id: this.workItemId });
+            void this._getOp!.run({ work_item_id: this.workItemId });
         }
         if (changed.has('workItemId') || changed.has('item')) {
             this._ensureTeamMembers();
@@ -312,65 +375,66 @@ export class PlatformWorkItemDetail extends PlatformElement {
         }
     }
 
-    _ensureTeamMembers() {
+    _ensureTeamMembers(): void {
         const members = this._teamSel.value;
         const loading = this._teamLoadingSel.value;
-        if ((!Array.isArray(members) || members.length === 0) && !loading) {
+        if ((members || []).length === 0 && !loading) {
             this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
         }
     }
 
-    _hasLiveItem() {
-        return this.item && typeof this.item === 'object' && typeof this.item.work_item_id === 'string';
+    _hasLiveItem(): boolean {
+        return Boolean(this.item) && typeof this.item!.work_item_id === 'string';
     }
 
-    _resolved() {
+    _resolved(): WorkItemRecord | null {
         if (this._hasLiveItem()) {
-            return this.item;
+            return this.item as WorkItemRecord;
         }
         const id = this.workItemId;
-        if (this._items && this._items.byId && typeof id === 'string' && this._items.byId[id]) {
-            return this._items.byId[id];
+        const cached = this._items ? this._items.byId[id] : undefined;
+        if (cached && typeof (cached as WorkItemRecord).work_item_id === 'string') {
+            return cached as WorkItemRecord;
         }
-        const result = this._getOp && this._getOp.lastResult;
-        if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
-            return result;
+        const result = this._getOp ? this._getOp.lastResult : null;
+        if (result && typeof result === 'object' && typeof (result as WorkItemRecord).work_item_id === 'string') {
+            return result as WorkItemRecord;
         }
         return null;
     }
 
-    _hydrateDrafts(item) {
+    _hydrateDrafts(item: WorkItemRecord): void {
         this._titleDraft = typeof item.title === 'string' ? item.title : '';
         this._descriptionDraft = typeof item.description === 'string' ? item.description : '';
         this._dueDraft = normalizeIsoDateTimeForField(
             typeof item.due_date === 'string' ? item.due_date : null,
         );
         this._attachmentsDraft = _cloneFileRefs(item.attachments);
-        this._draftsReadyForId = item.work_item_id;
+        this._draftsReadyForId = typeof item.work_item_id === 'string' ? item.work_item_id : '';
     }
 
-    async _patch(fields) {
+    async _patch(fields: Record<string, unknown>): Promise<void> {
         const item = this._resolved();
         if (!item) {
             throw new Error('platform-work-item-detail: no item');
         }
-        this._items.update(item.work_item_id, fields);
+        this._items!.update(item.work_item_id, fields);
         this.emit('work-item-changed', { work_item_id: item.work_item_id, fields });
     }
 
-    async _setState(state) {
+    async _setState(state: unknown): Promise<void> {
         const item = this._resolved();
         if (!item) {
             throw new Error('platform-work-item-detail: no item');
         }
-        if (TERMINAL.has(item.state)) {
+        if (item.state && TERMINAL.has(item.state)) {
             return;
         }
-        await this._moveOp.run({ work_item_id: item.work_item_id, state });
+        await this._moveOp!.run({ work_item_id: item.work_item_id, state });
         this.emit('work-item-changed', { work_item_id: item.work_item_id, state });
     }
 
-    async _saveTitle() {
+    async _saveTitle(): Promise<void> {
         const item = this._resolved();
         if (!item) {
             return;
@@ -382,7 +446,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         await this._patch({ title });
     }
 
-    async _saveDescription() {
+    async _saveDescription(): Promise<void> {
         const item = this._resolved();
         if (!item) {
             return;
@@ -395,7 +459,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         await this._patch({ description });
     }
 
-    async _saveDue(value) {
+    async _saveDue(value: unknown): Promise<void> {
         const item = this._resolved();
         if (!item) {
             return;
@@ -413,7 +477,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         await this._patch({ due_date: normalized });
     }
 
-    async _saveAssignee(userId) {
+    async _saveAssignee(userId: unknown): Promise<void> {
         const item = this._resolved();
         if (!item) {
             throw new Error('platform-work-item-detail: no item');
@@ -421,23 +485,23 @@ export class PlatformWorkItemDetail extends PlatformElement {
         const assignment = typeof userId !== 'string' || userId.length === 0
             ? { assignee_kind: 'unassigned' }
             : { assignee_kind: 'users', user_ids: [userId] };
-        const result = await this._assignOp.run({
+        const result = await this._assignOp!.run({
             work_item_id: item.work_item_id,
             assignment,
         });
-        if (result && typeof result === 'object' && typeof result.work_item_id === 'string') {
-            this.item = result;
-            this._hydrateDrafts(result);
+        if (result && typeof result === 'object' && typeof (result as WorkItemRecord).work_item_id === 'string') {
+            this.item = result as WorkItemRecord;
+            this._hydrateDrafts(this.item);
         }
         this.emit('work-item-changed', { work_item_id: item.work_item_id });
     }
 
-    async _saveAttachments(files) {
+    async _saveAttachments(files: unknown): Promise<void> {
         this._attachmentsDraft = _cloneFileRefs(files);
         await this._patch({ attachments: this._attachmentsDraft });
     }
 
-    _openFull() {
+    _openFull(): void {
         const item = this._resolved();
         if (!item) {
             throw new Error('platform-work-item-detail: no item');
@@ -446,10 +510,10 @@ export class PlatformWorkItemDetail extends PlatformElement {
             navigateToWorkItemPage(item.work_item_id, this.bus, { from: 'crm' });
             return;
         }
-        openWorkItemDetail(item.work_item_id);
+        openWorkItemDetail(item.work_item_id, this.bus);
     }
 
-    _openGraph() {
+    _openGraph(): void {
         const item = this._resolved();
         const entityId = item ? _crmEntityId(item) : '';
         if (!entityId) {
@@ -458,7 +522,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         this.emit('open-crm-entity', { entity_id: entityId });
     }
 
-    _teamOptions() {
+    _teamOptions(): { value: string; label: string }[] {
         const members = this._teamSel.value;
         if (!Array.isArray(members)) {
             return [];
@@ -476,7 +540,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         return values;
     }
 
-    _renderAssigneeControl(item) {
+    _renderAssigneeControl(item: WorkItemRecord): TemplateResult {
         const assignee = _assigneeUserId(item);
         const teamOptions = this._teamOptions();
         const loading = Boolean(this._teamLoadingSel.value);
@@ -499,14 +563,14 @@ export class PlatformWorkItemDetail extends PlatformElement {
                         ...teamOptions,
                     ],
                 }}
-                @change=${(e) => this._saveAssignee(e.detail.value)}
+                @change=${(e: CustomEvent<{ value?: unknown }>) => void this._saveAssignee(e.detail?.value)}
             ></platform-field>
         `;
     }
 
-    _renderInspector(item) {
-        const state = STATES.includes(item.state) ? item.state : 'open';
-        const priority = PRIORITIES.includes(item.priority) ? item.priority : 'normal';
+    _renderInspector(item: WorkItemRecord): TemplateResult {
+        const state = typeof item.state === 'string' && STATES.includes(item.state) ? item.state : 'open';
+        const priority = typeof item.priority === 'string' && PRIORITIES.includes(item.priority) ? item.priority : 'normal';
         const terminal = TERMINAL.has(state);
 
         return html`
@@ -529,7 +593,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                                     label: this.t(`work_item_badge.state.${s}`),
                                 })),
                             }}
-                            @change=${(e) => this._setState(e.detail.value)}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => void this._setState(e.detail?.value)}
                         ></platform-field>
                     </div>
                 </div>
@@ -549,7 +613,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                                     label: this.t(`work_item_badge.priority.${p}`),
                                 })),
                             }}
-                            @change=${(e) => this._patch({ priority: e.detail.value })}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => void this._patch({ priority: e.detail?.value })}
                         ></platform-field>
                     </div>
                 </div>
@@ -563,7 +627,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                             pill-embed
                             .label=${''}
                             .value=${this._dueDraft}
-                            @change=${(e) => this._saveDue(e.detail.value)}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => void this._saveDue(e.detail?.value)}
                         ></platform-field>
                     </div>
                 </div>
@@ -577,7 +641,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const item = this._resolved();
         if (!item) {
             const loading = Boolean(this._getOp && this._getOp.busy);
@@ -633,8 +697,8 @@ export class PlatformWorkItemDetail extends PlatformElement {
                         pill-density=${this.layout === 'page' ? 'default' : 'dense'}
                         .label=${''}
                         .value=${this._titleDraft}
-                        @change=${(e) => {
-                            this._titleDraft = e.detail.value;
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
+                            this._titleDraft = typeof e.detail?.value === 'string' ? e.detail.value : '';
                         }}
                         @focusout=${() => this._saveTitle()}
                     ></platform-field>
@@ -648,7 +712,7 @@ export class PlatformWorkItemDetail extends PlatformElement {
                         .showHeader=${true}
                         .showPreview=${false}
                         .showHint=${false}
-                        @change=${(e) => {
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => {
                             const value = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
                             this._descriptionDraft = value;
                         }}
@@ -662,9 +726,9 @@ export class PlatformWorkItemDetail extends PlatformElement {
                         .files=${this._attachmentsDraft}
                         .uploadSpec=${buildWorkItemFileCreateSpecJson({ workItemId: item.work_item_id })}
                         open-source="platform_work_item_attachments"
-                        @files-change=${(e) => {
+                        @files-change=${(e: CustomEvent<{ files?: unknown }>) => {
                             const files = e.detail && Array.isArray(e.detail.files) ? e.detail.files : [];
-                            this._saveAttachments(files);
+                            void this._saveAttachments(files);
                         }}
                     ></platform-file-attachments>
                 </section>

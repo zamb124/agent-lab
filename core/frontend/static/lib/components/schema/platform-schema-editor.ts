@@ -3,7 +3,7 @@
  * Presentational: value object in, schema-change { value, valid, error? } out.
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../platform-segmented-control.js';
 import '../platform-button.js';
@@ -11,6 +11,7 @@ import '../platform-icon.js';
 import '../platform-json-editor.js';
 import './platform-schema-parameter-card.js';
 import { formatJsonPretty } from '../../utils/json-format.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../../lit-shim.js';
 import {
     createEmptyParameterRow,
     detectAdvancedSchemaFeatures,
@@ -19,11 +20,12 @@ import {
     parseSchemaForEditor,
     validateParameterRows,
 } from './schema-model.js';
+import type { ParameterRow } from './schema-model.js';
 
 export class PlatformSchemaEditor extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         /** JSON Schema object | null */
         value: { type: Object },
         /** Controlled mode: 'form' | 'json'. Empty = internal defaultMode. */
@@ -43,9 +45,28 @@ export class PlatformSchemaEditor extends PlatformElement {
         _jsonError: { state: true },
         _formError: { state: true },
         _syncToken: { state: true },
-    };
+    }
+    declare value: Record<string, unknown> | null;
+    declare mode: string;
+    declare defaultMode: string;
+    declare readonly: boolean;
+    declare fillParent: boolean;
+    declare showPreview: boolean;
+    declare minHeight: number;
+    declare _internalMode: 'form' | 'json';
+    declare _rows: ParameterRow[];
+    declare _rest: Record<string, unknown>;
+    declare _advanced: boolean;
+    declare _advancedReasons: string[];
+    declare _jsonText: string;
+    declare _jsonInvalid: boolean;
+    declare _jsonError: string;
+    declare _formError: string;
+    declare _syncToken: number;
 
-    static styles = [
+    private _suppressValueSync: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -206,12 +227,12 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._suppressValueSync = false;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this._hydrateFromValue(this.value, { forceMode: true });
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues): void {
         super.updated?.(changed);
         if (changed.has('minHeight')) {
             const value = Number.isFinite(this.minHeight) ? this.minHeight : 220;
@@ -225,21 +246,14 @@ export class PlatformSchemaEditor extends PlatformElement {
         }
     }
 
-    /**
-     * @returns {'form'|'json'}
-     */
-    _effectiveMode() {
+    _effectiveMode(): 'form' | 'json' {
         if (typeof this.mode === 'string' && this.mode.length > 0) {
             return this.mode === 'json' ? 'json' : 'form';
         }
         return this._internalMode === 'json' ? 'json' : 'form';
     }
 
-    /**
-     * @param {unknown} raw
-     * @param {{ forceMode: boolean }} opts
-     */
-    _hydrateFromValue(raw, opts) {
+    _hydrateFromValue(raw: unknown, opts: { forceMode: boolean }): void {
         let parsed;
         try {
             parsed = parseSchemaForEditor(raw);
@@ -275,10 +289,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         }
     }
 
-    /**
-     * @param {'form'|'json'} next
-     */
-    _setMode(next) {
+    _setMode(next: 'form' | 'json'): void {
         if (typeof this.mode === 'string' && this.mode.length > 0) {
             this.emit('mode-change', { mode: next });
             return;
@@ -286,12 +297,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._internalMode = next;
     }
 
-    /**
-     * @param {Record<string, unknown> | null} schema
-     * @param {boolean} valid
-     * @param {string} [error]
-     */
-    _emitSchemaChange(schema, valid, error) {
+    _emitSchemaChange(schema: Record<string, unknown> | null, valid: boolean, error?: string): void {
         this._suppressValueSync = true;
         this.value = schema;
         this.emit('schema-change', {
@@ -304,14 +310,14 @@ export class PlatformSchemaEditor extends PlatformElement {
         });
     }
 
-    _emitFromRows() {
+    _emitFromRows(): void {
         if (this._advanced) {
             return;
         }
         const validation = validateParameterRows(this._rows);
         if (!validation.valid) {
             this._formError = validation.error;
-            this._emitSchemaChange(this.value, false, validation.error);
+            this._emitSchemaChange(this.value, false, validation.valid ? undefined : validation.error);
             return;
         }
         this._formError = '';
@@ -320,7 +326,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._emitSchemaChange(schema, true);
     }
 
-    _onModeChange(e) {
+    _onModeChange(e: CustomEvent<{ value?: unknown }>): void {
         e.stopPropagation();
         const next = e.detail?.value === 'json' ? 'json' : 'form';
         if (next === 'form' && this._advanced) {
@@ -359,7 +365,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._setMode(next);
     }
 
-    _onJsonChange(e) {
+    _onJsonChange(e: CustomEvent<{ value?: unknown; parsed?: unknown }>): void {
         e.stopPropagation();
         const detail = e.detail;
         if (!detail || typeof detail !== 'object') {
@@ -403,7 +409,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         }
     }
 
-    _addParameter() {
+    _addParameter(): void {
         if (this.readonly || this._advanced) {
             return;
         }
@@ -411,7 +417,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._emitFromRows();
     }
 
-    _onRowChange(e) {
+    _onRowChange(e: CustomEvent<{ index?: unknown; row?: unknown }>): void {
         e.stopPropagation();
         if (this.readonly || this._advanced) {
             return;
@@ -421,11 +427,12 @@ export class PlatformSchemaEditor extends PlatformElement {
         if (typeof index !== 'number' || !row || typeof row !== 'object') {
             throw new Error('platform-schema-editor: row-change detail');
         }
-        this._rows = this._rows.map((item, i) => (i === index ? row : item));
+        const nextRow = row as ParameterRow;
+        this._rows = this._rows.map((item, i) => (i === index ? nextRow : item));
         this._emitFromRows();
     }
 
-    _onRowRemove(e) {
+    _onRowRemove(e: CustomEvent<{ index?: unknown }>): void {
         e.stopPropagation();
         if (this.readonly || this._advanced) {
             return;
@@ -438,7 +445,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         this._emitFromRows();
     }
 
-    _onRowMove(e) {
+    _onRowMove(e: CustomEvent<{ index?: unknown; direction?: unknown }>): void {
         e.stopPropagation();
         if (this.readonly || this._advanced) {
             return;
@@ -454,12 +461,14 @@ export class PlatformSchemaEditor extends PlatformElement {
         }
         const next = [...this._rows];
         const [item] = next.splice(index, 1);
-        next.splice(target, 0, item);
+        if (item) {
+            next.splice(target, 0, item);
+        }
         this._rows = next;
         this._emitFromRows();
     }
 
-    _previewChips() {
+    _previewChips(): { key: string; uiType: string; required: boolean }[] {
         return this._rows
             .map((row) => {
                 const key = typeof row.key === 'string' ? row.key.trim() : '';
@@ -475,7 +484,7 @@ export class PlatformSchemaEditor extends PlatformElement {
             .filter((item) => item !== null);
     }
 
-    _renderPreview() {
+    _renderPreview(): TemplateResult | typeof nothing {
         if (!this.showPreview || this._effectiveMode() !== 'form' || this._advanced) {
             return nothing;
         }
@@ -501,7 +510,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         `;
     }
 
-    _renderAdvancedBanner() {
+    _renderAdvancedBanner(): TemplateResult | typeof nothing {
         if (!this._advanced) {
             return nothing;
         }
@@ -513,11 +522,11 @@ export class PlatformSchemaEditor extends PlatformElement {
         `;
     }
 
-    _renderForm() {
+    _renderForm(): TemplateResult | typeof nothing {
         if (this._advanced) {
             return nothing;
         }
-        const rows = Array.isArray(this._rows) ? this._rows : [];
+        const rows = this._rows;
         return html`
             <div class="form-body">
                 ${rows.length === 0
@@ -571,7 +580,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         `;
     }
 
-    _renderJson() {
+    _renderJson(): TemplateResult {
         return html`
             <div class="json-wrap">
                 <platform-json-editor
@@ -590,7 +599,7 @@ export class PlatformSchemaEditor extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const mode = this._effectiveMode();
         const formDisabled = this._advanced || this._jsonInvalid;
         const modeItems = [

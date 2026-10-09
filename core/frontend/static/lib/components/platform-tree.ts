@@ -27,17 +27,23 @@ import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-menu.js';
 import './platform-popover.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type { PopoverAnchor } from './platform-popover.js';
 
-/**
- * @typedef {object} PlatformTreeNode
- * @property {string} id
- * @property {string} label
- * @property {string | null} [parent_id]
- * @property {string} [icon] имя platform-icon
- * @property {string} [emoji] эмодзи вместо иконки
- * @property {boolean} [has_children] показать раскрывающий шеврон до загрузки детей
- * @property {number} [count] число справа (например, количество файлов)
- */
+export interface PlatformTreeNode {
+    id: string;
+    label: string;
+    parent_id?: string | null;
+    /** имя platform-icon */
+    icon?: string;
+    /** эмодзи вместо иконки */
+    emoji?: string;
+    /** показать раскрывающий шеврон до загрузки детей */
+    has_children?: boolean;
+    /** число справа (например, количество файлов) */
+    count?: number;
+    [key: string]: unknown;
+}
 
 /** Куда попадёт узел при отпускании. */
 const DROP_INSIDE = 'inside';
@@ -50,7 +56,7 @@ const EDGE_RATIO = 0.28;
 export class PlatformTree extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         nodes: { type: Array },
         selectedId: { type: String, attribute: 'selected-id' },
         draggableNodes: { type: Boolean, attribute: 'draggable-nodes' },
@@ -64,9 +70,23 @@ export class PlatformTree extends PlatformElement {
         _menuNode: { state: true },
         _menuAnchor: { state: true },
         _focusedId: { state: true },
-    };
+    }
+    declare nodes: PlatformTreeNode[];
+    declare selectedId: string;
+    declare draggableNodes: boolean;
+    declare emptyLabel: string;
+    declare ariaLabel: string;
+    declare menuItems: ((node: PlatformTreeNode) => unknown) | null;
+    declare _expanded: Set<string>;
+    declare _dragId: string;
+    declare _dropTarget: { id: string; position: string } | null;
+    declare _menuNode: PlatformTreeNode | null;
+    declare _menuAnchor: PopoverAnchor;
+    declare _focusedId: string;
 
-    static styles = [
+    private _revealedSelectedId: string;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -255,7 +275,7 @@ export class PlatformTree extends PlatformElement {
         this._revealedSelectedId = '';
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues): void {
         super.updated(changed);
         this._revealSelected();
     }
@@ -280,7 +300,7 @@ export class PlatformTree extends PlatformElement {
     }
 
     /** Раскрыть узел и всех его предков — используется при переходе по ссылке. */
-    revealNode(nodeId) {
+    revealNode(nodeId: string): void {
         const byId = this._byId();
         let current = byId.get(nodeId);
         const next = new Set(this._expanded);
@@ -291,11 +311,11 @@ export class PlatformTree extends PlatformElement {
         this._expanded = next;
     }
 
-    isExpanded(nodeId) {
+    isExpanded(nodeId: string): boolean {
         return this._expanded.has(nodeId);
     }
 
-    setExpanded(nodeId, expanded) {
+    setExpanded(nodeId: string, expanded: boolean): void {
         const next = new Set(this._expanded);
         if (expanded) {
             next.add(nodeId);
@@ -305,22 +325,22 @@ export class PlatformTree extends PlatformElement {
         this._expanded = next;
     }
 
-    _byId() {
-        const map = new Map();
+    _byId(): Map<string, PlatformTreeNode> {
+        const map = new Map<string, PlatformTreeNode>();
         for (const node of this.nodes) {
             map.set(node.id, node);
         }
         return map;
     }
 
-    _childrenOf(parentId) {
+    _childrenOf(parentId: string | null): PlatformTreeNode[] {
         return this.nodes.filter((node) => {
             const nodeParent = node.parent_id === undefined ? null : node.parent_id;
             return nodeParent === parentId;
         });
     }
 
-    _hasChildren(node) {
+    _hasChildren(node: PlatformTreeNode): boolean {
         if (node.has_children === true) {
             return true;
         }
@@ -328,7 +348,11 @@ export class PlatformTree extends PlatformElement {
     }
 
     /** Плоский список видимых узлов — по нему ходит клавиатура. */
-    _visibleNodes(parentId = null, depth = 0, acc = []) {
+    _visibleNodes(
+        parentId: string | null = null,
+        depth = 0,
+        acc: { node: PlatformTreeNode; depth: number }[] = [],
+    ): { node: PlatformTreeNode; depth: number }[] {
         for (const node of this._childrenOf(parentId)) {
             acc.push({ node, depth });
             if (this._expanded.has(node.id)) {
@@ -338,18 +362,18 @@ export class PlatformTree extends PlatformElement {
         return acc;
     }
 
-    _toggle(node, event) {
+    _toggle(node: PlatformTreeNode, event: Event): void {
         event.stopPropagation();
         this.setExpanded(node.id, !this._expanded.has(node.id));
         this.emit('tree-toggle', { id: node.id, expanded: this._expanded.has(node.id) });
     }
 
-    _select(node) {
+    _select(node: PlatformTreeNode): void {
         this._focusedId = node.id;
         this.emit('tree-select', { id: node.id, node });
     }
 
-    _onContextMenu(node, event) {
+    _onContextMenu(node: PlatformTreeNode, event: MouseEvent): void {
         if (typeof this.menuItems !== 'function') {
             return;
         }
@@ -360,7 +384,7 @@ export class PlatformTree extends PlatformElement {
     }
 
     /** Кнопка меню строки: якорь — сама кнопка, выбор узла не срабатывает. */
-    _openRowMenu(node, event) {
+    _openRowMenu(node: PlatformTreeNode, event: MouseEvent): void {
         event.preventDefault();
         event.stopPropagation();
         if (this._menuNode !== null && this._menuNode.id === node.id) {
@@ -368,10 +392,10 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         this._menuNode = node;
-        this._menuAnchor = event.currentTarget;
+        this._menuAnchor = event.currentTarget as Element | null;
     }
 
-    _onMenuSelect(event) {
+    _onMenuSelect(event: CustomEvent<{ id?: unknown }>): void {
         const node = this._menuNode;
         this._menuNode = null;
         if (node === null) {
@@ -382,22 +406,22 @@ export class PlatformTree extends PlatformElement {
 
     // --- перетаскивание ---
 
-    _onDragStart(node, event) {
+    _onDragStart(node: PlatformTreeNode, event: DragEvent): void {
         if (!this.draggableNodes) {
             return;
         }
         this._dragId = node.id;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', node.id);
+        event.dataTransfer!.effectAllowed = 'move';
+        event.dataTransfer!.setData('text/plain', node.id);
     }
 
-    _onDragEnd() {
+    _onDragEnd(): void {
         this._dragId = '';
         this._dropTarget = null;
     }
 
     /** Верх строки — «до», низ — «после», середина — «внутрь». */
-    _dropPositionFor(event, row) {
+    _dropPositionFor(event: DragEvent, row: Element): string {
         const rect = row.getBoundingClientRect();
         const offset = (event.clientY - rect.top) / rect.height;
         if (offset < EDGE_RATIO) {
@@ -409,7 +433,7 @@ export class PlatformTree extends PlatformElement {
         return DROP_INSIDE;
     }
 
-    _isOwnDescendant(candidateId, draggedId) {
+    _isOwnDescendant(candidateId: string, draggedId: string): boolean {
         const byId = this._byId();
         let current = byId.get(candidateId);
         while (current) {
@@ -422,7 +446,7 @@ export class PlatformTree extends PlatformElement {
         return false;
     }
 
-    _onDragOver(node, event) {
+    _onDragOver(node: PlatformTreeNode, event: DragEvent): void {
         if (!this.draggableNodes || this._dragId === '') {
             return;
         }
@@ -431,8 +455,8 @@ export class PlatformTree extends PlatformElement {
             return;
         }
         event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        const position = this._dropPositionFor(event, event.currentTarget);
+        event.dataTransfer!.dropEffect = 'move';
+        const position = this._dropPositionFor(event, event.currentTarget as Element);
         if (this._dropTarget === null
             || this._dropTarget.id !== node.id
             || this._dropTarget.position !== position) {
@@ -440,13 +464,13 @@ export class PlatformTree extends PlatformElement {
         }
     }
 
-    _onDragLeave(node) {
+    _onDragLeave(node: PlatformTreeNode): void {
         if (this._dropTarget !== null && this._dropTarget.id === node.id) {
             this._dropTarget = null;
         }
     }
 
-    _onDrop(node, event) {
+    _onDrop(node: PlatformTreeNode, event: DragEvent): void {
         if (!this.draggableNodes || this._dragId === '' || this._dropTarget === null) {
             return;
         }
@@ -474,24 +498,24 @@ export class PlatformTree extends PlatformElement {
 
     // --- клавиатура ---
 
-    _onKeyDown(event) {
+    _onKeyDown(event: KeyboardEvent): void {
         const visible = this._visibleNodes();
         if (visible.length === 0) {
             return;
         }
         const currentIndex = visible.findIndex((entry) => entry.node.id === this._focusedId);
-        const current = currentIndex === -1 ? null : visible[currentIndex].node;
+        const current = currentIndex === -1 ? null : visible[currentIndex]!.node;
 
         if (event.key === 'ArrowDown') {
             event.preventDefault();
-            const next = visible[Math.min(currentIndex + 1, visible.length - 1)];
-            this._focusedId = (currentIndex === -1 ? visible[0] : next).node.id;
+            const next = visible[Math.min(currentIndex + 1, visible.length - 1)]!;
+            this._focusedId = (currentIndex === -1 ? visible[0]! : next).node.id;
             return;
         }
         if (event.key === 'ArrowUp') {
             event.preventDefault();
-            const prev = visible[Math.max(currentIndex - 1, 0)];
-            this._focusedId = (currentIndex === -1 ? visible[0] : prev).node.id;
+            const prev = visible[Math.max(currentIndex - 1, 0)]!;
+            this._focusedId = (currentIndex === -1 ? visible[0]! : prev).node.id;
             return;
         }
         if (event.key === 'ArrowRight' && current) {
@@ -501,7 +525,7 @@ export class PlatformTree extends PlatformElement {
             } else {
                 const children = this._childrenOf(current.id);
                 if (children.length > 0) {
-                    this._focusedId = children[0].id;
+                    this._focusedId = children[0]!.id;
                 }
             }
             return;
@@ -521,7 +545,7 @@ export class PlatformTree extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         const roots = this._childrenOf(null);
         if (roots.length === 0) {
             return html`<div class="empty">${this.emptyLabel}<slot name="empty"></slot></div>`;
@@ -556,7 +580,7 @@ export class PlatformTree extends PlatformElement {
         `;
     }
 
-    _renderNode(node, depth) {
+    _renderNode(node: PlatformTreeNode, depth: number): TemplateResult {
         const expanded = this._expanded.has(node.id);
         const hasChildren = this._hasChildren(node);
         const drop = this._dropTarget !== null && this._dropTarget.id === node.id
@@ -585,12 +609,12 @@ export class PlatformTree extends PlatformElement {
                 style=${`padding-left:${depth * 14 + 4}px`}
                 draggable=${this.draggableNodes ? 'true' : 'false'}
                 @click=${() => this._select(node)}
-                @contextmenu=${(event) => this._onContextMenu(node, event)}
-                @dragstart=${(event) => this._onDragStart(node, event)}
+                @contextmenu=${(event: MouseEvent) => this._onContextMenu(node, event)}
+                @dragstart=${(event: DragEvent) => this._onDragStart(node, event)}
                 @dragend=${this._onDragEnd}
-                @dragover=${(event) => this._onDragOver(node, event)}
+                @dragover=${(event: DragEvent) => this._onDragOver(node, event)}
                 @dragleave=${() => this._onDragLeave(node)}
-                @drop=${(event) => this._onDrop(node, event)}
+                @drop=${(event: DragEvent) => this._onDrop(node, event)}
             >
                 <button
                     class=${expanded ? 'twisty is-open' : 'twisty'}
@@ -601,7 +625,7 @@ export class PlatformTree extends PlatformElement {
                     aria-label=${hasChildren ? this.t('tree.expand') : nothing}
                     title=${hasChildren ? this.t('tree.expand') : nothing}
                     data-twisty=${node.id}
-                    @click=${(event) => this._toggle(node, event)}
+                    @click=${(event: Event) => this._toggle(node, event)}
                 >
                     <platform-icon name="chevron-right" size="16"></platform-icon>
                 </button>
@@ -623,7 +647,7 @@ export class PlatformTree extends PlatformElement {
                           aria-haspopup="menu"
                           aria-label=${this.t('tree.row_menu')}
                           title=${this.t('tree.row_menu')}
-                          @click=${(event) => this._openRowMenu(node, event)}
+                          @click=${(event: MouseEvent) => this._openRowMenu(node, event)}
                       >
                           <platform-icon name="more-vert" size="14"></platform-icon>
                       </button>`

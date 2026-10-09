@@ -15,7 +15,7 @@
  * kind: 'platform.service_switcher'
  */
 
-import { html, css } from 'lit';
+import { html, css } from '../../lit-shim.js';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformBottomSheet } from '../layout/platform-bottom-sheet.js';
 import { registerBottomSheetKind } from '../../utils/bottom-sheet-registry.js';
@@ -28,17 +28,45 @@ import '../platform-services-launcher.js';
 import '../platform-notification-manager.js';
 import '../platform-calendar-modal.js';
 import '../platform-mail-modal.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../../lit-shim.js';
+import type { SelectController } from '../../events/select-controller.js';
+
+interface AuthUserRecord {
+    id?: string;
+    name?: string;
+    company_id?: string;
+    raw?: Record<string, unknown>;
+}
+
+interface AuthSliceView {
+    status?: string;
+    user?: AuthUserRecord;
+    activeCompanyId?: string | null;
+}
+
+interface CompanyRecord {
+    company_id?: string;
+    name?: string;
+    role?: unknown;
+}
 
 export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'platform.service_switcher';
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformBottomSheet.properties,
         _companyPickerOpen: { state: true },
     };
+    declare _companyPickerOpen: boolean;
 
-    static styles = [
+    private _companiesBootstrapDispatched: boolean;
+    private _authSelect: SelectController<AuthSliceView>;
+    private _companiesSelect: SelectController<CompanyRecord[] | undefined>;
+    private _themeSelect: SelectController<string | undefined>;
+    private _localeSelect: SelectController<string | undefined>;
+
+    static override styles: CSSResultGroup = [
         PlatformBottomSheet.styles,
         css`
             :host([open]) {
@@ -311,22 +339,25 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.snap = 'full';
         this._companyPickerOpen = false;
         this._companiesBootstrapDispatched = false;
-        this._authSelect = this.select((s) => ({
-            status: s.auth.status,
-            user: s.auth.user,
-            activeCompanyId: s.auth.activeCompanyId,
-        }));
-        this._companiesSelect = this.select((s) => s.companies.list);
-        this._themeSelect = this.select((s) => s.theme.mode);
-        this._localeSelect = this.select((s) => s.i18n.locale);
+        this._authSelect = this.select((s): AuthSliceView => {
+            const auth = s.auth as AuthSliceView;
+            return {
+                status: auth.status,
+                user: auth.user,
+                activeCompanyId: auth.activeCompanyId,
+            };
+        });
+        this._companiesSelect = this.select((s) => (s.companies as { list?: CompanyRecord[] }).list);
+        this._themeSelect = this.select((s) => (s.theme as { mode?: string }).mode);
+        this._localeSelect = this.select((s) => (s.i18n as { locale?: string }).locale);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.heading = this.t('service_switcher.heading');
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (!changed.has('open')) {
             return;
@@ -342,7 +373,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         }
     }
 
-    _onServiceLaunch(e) {
+    _onServiceLaunch(e: CustomEvent<{ serviceId?: unknown }>): void {
         e.stopPropagation();
         const d = e.detail;
         if (!d || typeof d.serviceId !== 'string' || d.serviceId.length === 0) {
@@ -357,7 +388,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         }
     }
 
-    _onConsoleLink(routeKey) {
+    _onConsoleLink(routeKey: string): void {
         this._requestClose();
         // Консольные маршруты живут в сервисе frontend. Если мы уже там — внутренняя
         // навигация. Иначе — переход на frontend сервис с deep-link path.
@@ -372,7 +403,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.dispatch(CoreEvents.ROUTER_NAVIGATE_REQUESTED, { routeKey, params: {} });
     }
 
-    _routePathFor(routeKey) {
+    _routePathFor(routeKey: string): string {
         // Стабильные публичные маршруты консоли (frontend-app.js FRONTEND_ROUTES).
         switch (routeKey) {
             case 'dashboard': return '/dashboard';
@@ -384,7 +415,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         }
     }
 
-    _onThemeSelect(mode) {
+    _onThemeSelect(mode: string): void {
         this.setTheme(mode);
     }
 
@@ -427,35 +458,35 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
     }
 
-    _currentCompanyId(auth) {
+    _currentCompanyId(auth: AuthSliceView): string | null {
         if (auth.activeCompanyId) return auth.activeCompanyId;
         const raw = auth.user && auth.user.raw;
         if (raw) {
-            if (raw.active_company_id) return raw.active_company_id;
-            if (raw.company_id) return raw.company_id;
+            if (typeof raw.active_company_id === 'string' && raw.active_company_id) return raw.active_company_id;
+            if (typeof raw.company_id === 'string' && raw.company_id) return raw.company_id;
         }
         return auth.user && auth.user.company_id ? auth.user.company_id : null;
     }
 
-    _companyRecordById(companyId) {
+    _companyRecordById(companyId: string | null | undefined): CompanyRecord | undefined {
         if (!companyId) return undefined;
         const companies = this._companiesSelect.value || [];
         return companies.find((c) => c && c.company_id === companyId);
     }
 
-    _companyNameForId(companyId) {
+    _companyNameForId(companyId: string | null | undefined): string {
         const company = this._companyRecordById(companyId);
         return company && typeof company.name === 'string' ? company.name : '';
     }
 
-    _isOwnerOfCompany(companyRecord) {
+    _isOwnerOfCompany(companyRecord: CompanyRecord | undefined): boolean {
         if (!companyRecord || !Array.isArray(companyRecord.role)) {
             return false;
         }
         return companyRecord.role.includes('owner');
     }
 
-    _resolveSwitchCardTitle(user) {
+    _resolveSwitchCardTitle(user: AuthUserRecord | null | undefined): string {
         if (!user) return '';
         if (typeof user.name === 'string' && user.name.trim() !== '') return user.name.trim();
         const raw = user.raw;
@@ -480,30 +511,30 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
         return typeof name === 'string' ? name : '';
     }
 
-    _toggleCompanyPicker(e) {
+    _toggleCompanyPicker(e: Event): void {
         e.stopPropagation();
         this._companyPickerOpen = !this._companyPickerOpen;
     }
 
-    _switchCompanyFromPicker(companyId, e) {
+    _switchCompanyFromPicker(companyId: string | undefined, e: Event): void {
         e.stopPropagation();
         const auth = this._authSelect.value || {};
         const currentId = this._currentCompanyId(auth);
-        if (companyId === currentId) {
+        if (companyId === currentId || typeof companyId !== 'string') {
             this._companyPickerOpen = false;
             return;
         }
         this.switchCompany(companyId);
     }
 
-    _openCreateCompany(e) {
+    _openCreateCompany(e: Event): void {
         e.stopPropagation();
         this._companyPickerOpen = false;
         this._requestClose();
         this.openModal('platform.company_create', null);
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         const auth = this._authSelect.value || {};
         const user = auth.user || null;
         const themeMode = this._themeSelect.value || 'dark';
@@ -563,7 +594,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                                             active: company.company_id === currentCompanyId,
                                         })}
                                         role="listitem"
-                                        @click=${(e) => this._switchCompanyFromPicker(company.company_id, e)}
+                                        @click=${(e: Event) => this._switchCompanyFromPicker(company.company_id, e)}
                                     >
                                         <span class="company-picker-item-label">
                                             <platform-icon name="building-one" size="14"></platform-icon>
@@ -598,7 +629,7 @@ export class PlatformServiceSwitcherSheet extends PlatformBottomSheet {
                     <platform-services-launcher
                         layout="menu"
                         navigate-mode="event-only"
-                        @service-launch=${(e) => this._onServiceLaunch(e)}
+                        @service-launch=${(e: CustomEvent<{ serviceId?: unknown }>) => this._onServiceLaunch(e)}
                     ></platform-services-launcher>
                 </section>
 

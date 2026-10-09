@@ -20,22 +20,38 @@
  *   4. `disconnectedCallback` корректно убивает редактор и observers.
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../lit-shim.js';
 import { guard } from 'lit/directives/guard.js';
 import { PlatformElement } from '../platform-element/index.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+
+interface OnlyOfficeDocEditor {
+    destroyEditor?: () => void;
+}
+
+interface OnlyOfficeDocsApi {
+    DocEditor?: new (placeholderId: string, init: Record<string, unknown>) => OnlyOfficeDocEditor;
+}
+
+declare global {
+    interface Window {
+        DocsAPI?: OnlyOfficeDocsApi;
+        __ooDocsApiOrigin?: string;
+    }
+}
 
 const BOOT_WATCH_TIMEOUT_MS = 120_000;
 const UI_FALLBACK_TIMEOUT_MS = 2_500;
 const ONLYOFFICE_IFRAME_ALLOW_FEATURES = ['clipboard-read', 'clipboard-write', 'fullscreen', 'unload'];
 
-function ooFrameIdKey(id) {
+function ooFrameIdKey(id: string): string {
     if (!id || !id.startsWith('oo-embed-')) {
         return id.toLowerCase();
     }
     return `oo-embed-${id.slice('oo-embed-'.length).replace(/-/g, '').toLowerCase()}`;
 }
 
-function parseJwtPayloadClaims(jwt) {
+function parseJwtPayloadClaims(jwt: unknown): Record<string, unknown> {
     if (typeof jwt !== 'string' || !jwt.includes('.')) {
         throw new Error('parseJwtPayloadClaims: jwt must be a non-empty string with payload segment');
     }
@@ -47,14 +63,14 @@ function parseJwtPayloadClaims(jwt) {
     const pad = b64.length % 4;
     const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
     const json = atob(padded);
-    const claims = JSON.parse(json);
+    const claims: unknown = JSON.parse(json);
     if (!claims || typeof claims !== 'object' || Array.isArray(claims)) {
         throw new Error('parseJwtPayloadClaims: payload is not a JSON object');
     }
-    return claims;
+    return claims as Record<string, unknown>;
 }
 
-function ensureOnlyOfficeIframePermissions(iframe) {
+function ensureOnlyOfficeIframePermissions(iframe: HTMLElement | null | undefined): void {
     if (!iframe) {
         return;
     }
@@ -71,12 +87,12 @@ function ensureOnlyOfficeIframePermissions(iframe) {
     iframe.setAttribute('allowfullscreen', '');
 }
 
-function isLocalDocumentServerHost(hostname) {
+function isLocalDocumentServerHost(hostname: unknown): boolean {
     const host = String(hostname || '').toLowerCase();
     return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 
-function browserSafeDocumentServerUrl(raw) {
+function browserSafeDocumentServerUrl(raw: unknown): string {
     const value = typeof raw === 'string' ? raw.trim().replace(/\/$/, '') : '';
     if (!value || typeof window === 'undefined') {
         return value;
@@ -99,14 +115,30 @@ function browserSafeDocumentServerUrl(raw) {
 let _ooEmbedCounter = 0;
 
 export class PlatformOnlyOfficeHost extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         config: { type: Object },
         fileId: { type: String, attribute: 'file-id' },
         suspended: { type: Boolean, reflect: true },
         _initializing: { state: true },
-    };
+    }
+    declare config: Record<string, unknown> | null;
+    declare fileId: string;
+    declare suspended: boolean;
+    declare _initializing: boolean;
 
-    static styles = [
+    private _docEditor: OnlyOfficeDocEditor | null;
+    private _configKey: string | null;
+    private _bootWatchTimer: ReturnType<typeof setTimeout> | null;
+    private _uiFallbackTimer: ReturnType<typeof setTimeout> | null;
+    private _ooPlaceholder: HTMLElement | null;
+    private _ooAnchor: Element | null;
+    private _ooResizeObserver: ResizeObserver | null;
+    private _ooIframeAttrObserver: MutationObserver | null;
+    private _ooBodyObserver: MutationObserver | null;
+    private _ooIframeMount: Element | null;
+    private _onDocScrollCapture: () => void;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -212,11 +244,11 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         };
     }
 
-    firstUpdated() {
+    override firstUpdated(): void {
         this._bootIfConfigChanged();
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (changed.has('config')) {
             this._bootIfConfigChanged();
@@ -241,13 +273,13 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         }
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._clearAllEditorTimers();
         super.disconnectedCallback();
         this._destroyEditor();
     }
 
-    _computeConfigKey(config) {
+    _computeConfigKey(config: Record<string, unknown> | null): string | null {
         if (!config || typeof config !== 'object') return null;
         const ds = browserSafeDocumentServerUrl(config.document_server_url);
         const token = typeof config.token === 'string' ? config.token : '';
@@ -255,14 +287,17 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         return ds;
     }
 
-    _emitError(code, detail) {
+    _emitError(code: string, detail: unknown): void {
         this.emit('editor-error', { code, detail });
     }
 
-    _emitDocumentState(dirty) {
+    _emitDocumentState(dirty: unknown): void {
+        const documentConfig = this.config && typeof this.config.document === 'object' && this.config.document !== null
+            ? this.config.document as Record<string, unknown>
+            : null;
         const fileId = typeof this.fileId === 'string' && this.fileId.length > 0
             ? this.fileId
-            : (typeof this.config?.document?.key === 'string' ? this.config.document.key : '');
+            : (documentConfig && typeof documentConfig.key === 'string' ? documentConfig.key : '');
         if (!fileId) {
             return;
         }
@@ -281,14 +316,14 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         );
     }
 
-    _clearBootWatch() {
+    _clearBootWatch(): void {
         if (this._bootWatchTimer != null) {
             clearTimeout(this._bootWatchTimer);
             this._bootWatchTimer = null;
         }
     }
 
-    _clearAllEditorTimers() {
+    _clearAllEditorTimers(): void {
         this._clearBootWatch();
         if (this._uiFallbackTimer != null) {
             clearTimeout(this._uiFallbackTimer);
@@ -296,20 +331,20 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         }
     }
 
-    _markEditorUiVisible() {
+    _markEditorUiVisible(): void {
         this._clearAllEditorTimers();
         this._initializing = false;
         this.requestUpdate();
     }
 
-    _detachOoBodyObserver() {
+    _detachOoBodyObserver(): void {
         if (this._ooBodyObserver) {
             this._ooBodyObserver.disconnect();
             this._ooBodyObserver = null;
         }
     }
 
-    _teardownOoDom() {
+    _teardownOoDom(): void {
         document.removeEventListener('scroll', this._onDocScrollCapture, true);
         this._detachOoBodyObserver();
         if (this._ooIframeAttrObserver) {
@@ -328,10 +363,10 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         this._ooIframeMount = null;
     }
 
-    _pickFrameEditorIframe() {
+    _pickFrameEditorIframe(): HTMLIFrameElement | null {
         const wantId = this._ooPlaceholder ? this._ooPlaceholder.id : null;
         if (!wantId) {
-            return document.querySelector('iframe[name="frameEditor"]');
+            return document.querySelector('iframe[name="frameEditor"]') as HTMLIFrameElement | null;
         }
         const key = ooFrameIdKey(wantId);
         const list = document.querySelectorAll('iframe[name="frameEditor"]');
@@ -342,16 +377,16 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 const u = new URL(src, document.baseURI);
                 const fid = u.searchParams.get('frameEditorId');
                 if (fid && ooFrameIdKey(fid) === key) {
-                    return f;
+                    return f as HTMLIFrameElement;
                 }
             } catch {
                 continue;
             }
         }
-        return list.length === 1 ? list[0] : null;
+        return list.length === 1 ? (list[0] as HTMLIFrameElement) : null;
     }
 
-    _pinIframeToHost(iframe) {
+    _pinIframeToHost(iframe: HTMLElement): void {
         const imp = 'important';
         ensureOnlyOfficeIframePermissions(iframe);
         iframe.removeAttribute('width');
@@ -375,7 +410,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         iframe.style.setProperty('pointer-events', 'auto', imp);
     }
 
-    _pinIframeToViewport(iframe, left, top, w, h) {
+    _pinIframeToViewport(iframe: HTMLElement, left: number, top: number, w: number, h: number): void {
         const imp = 'important';
         ensureOnlyOfficeIframePermissions(iframe);
         iframe.removeAttribute('width');
@@ -396,7 +431,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         iframe.style.setProperty('pointer-events', 'auto', imp);
     }
 
-    _parkIframeOffscreen(iframe) {
+    _parkIframeOffscreen(iframe: HTMLElement | null | undefined): void {
         if (!iframe) return;
         const imp = 'important';
         ensureOnlyOfficeIframePermissions(iframe);
@@ -413,7 +448,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         iframe.style.setProperty('border', '0', imp);
     }
 
-    _ensureIframeAttrObserver(iframe) {
+    _ensureIframeAttrObserver(iframe: Element | null | undefined): void {
         if (this._ooIframeAttrObserver || !(iframe && iframe.isConnected)) {
             return;
         }
@@ -426,7 +461,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         });
     }
 
-    _tryReparentOoIframe() {
+    _tryReparentOoIframe(): void {
         const mount = this._ooIframeMount;
         if (!(mount && mount.isConnected)) return;
         if (mount.querySelector('iframe[name="frameEditor"]')) {
@@ -434,7 +469,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
             return;
         }
         const iframe = this._pickFrameEditorIframe();
-        if (!(iframe && iframe.isConnected)) return;
+        if (!iframe || !iframe.isConnected) return;
         if (mount.contains(iframe)) {
             this._detachOoBodyObserver();
             return;
@@ -443,7 +478,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         this._detachOoBodyObserver();
     }
 
-    _minimalOoPlaceholderStyle() {
+    _minimalOoPlaceholderStyle(): string {
         return [
             'position:absolute', 'left:0', 'top:0', 'width:0', 'height:0',
             'overflow:hidden', 'opacity:0', 'pointer-events:none',
@@ -451,14 +486,14 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         ].join(';');
     }
 
-    _syncOoLayout() {
+    _syncOoLayout(): void {
         this._tryReparentOoIframe();
         const anchor = this._ooAnchor;
         const ph = this._ooPlaceholder;
         const mount = this._ooIframeMount;
         if (!(anchor && anchor.isConnected) || !(ph && ph.isConnected)) return;
         const iframeInMount = mount && mount.isConnected
-            ? mount.querySelector('iframe[name="frameEditor"]')
+            ? (mount.querySelector('iframe[name="frameEditor"]') as HTMLElement | null)
             : null;
         if (this.suspended) {
             ph.style.cssText = this._minimalOoPlaceholderStyle();
@@ -490,7 +525,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         }
     }
 
-    _startOoLayout(anchor, placeholder, iframeMountEl) {
+    _startOoLayout(anchor: Element, placeholder: HTMLElement, iframeMountEl: Element): void {
         this._teardownOoDom();
         this._ooAnchor = anchor;
         this._ooPlaceholder = placeholder;
@@ -511,7 +546,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         requestAnimationFrame(() => this._syncOoLayout());
     }
 
-    _destroyEditor() {
+    _destroyEditor(): void {
         if (this._docEditor && typeof this._docEditor.destroyEditor === 'function') {
             try { this._docEditor.destroyEditor(); } catch { /* ignore */ }
         }
@@ -521,7 +556,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         if (target) target.innerHTML = '';
     }
 
-    async _injectOoScript(scriptSrc, logicalDsOrigin) {
+    async _injectOoScript(scriptSrc: string, logicalDsOrigin: string): Promise<void> {
         const base = logicalDsOrigin.replace(/\/$/, '');
         if (typeof window.DocsAPI !== 'undefined' && window.__ooDocsApiOrigin === base) {
             return;
@@ -530,7 +565,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
             try { delete window.DocsAPI; } catch { /* ignore */ }
             delete window.__ooDocsApiOrigin;
         }
-        await new Promise((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
             const s = document.createElement('script');
             s.src = scriptSrc;
             s.async = true;
@@ -543,12 +578,12 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         });
     }
 
-    async _ensureDocsApi(dsOrigin) {
+    async _ensureDocsApi(dsOrigin: string): Promise<void> {
         const ds = dsOrigin.replace(/\/$/, '');
         await this._injectOoScript(`${ds}/web-apps/apps/api/documents/api.js`, ds);
     }
 
-    async _bootEditor() {
+    async _bootEditor(): Promise<void> {
         const config = this.config;
         if (!config) return;
         const dsUrl = browserSafeDocumentServerUrl(config.document_server_url);
@@ -566,7 +601,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                 throw new Error('DocsAPI.DocEditor is not available after api.js load');
             }
             await this.updateComplete;
-            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            await new Promise<unknown>((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             const host = this.renderRoot.querySelector('.editor-host');
             const target = this.renderRoot.querySelector('#oo-editor-target');
             if (!host || !target) {
@@ -575,7 +610,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
             for (let i = 0; i < 24; i++) {
                 const r = host.getBoundingClientRect();
                 if (r.width >= 200 && r.height >= 80) break;
-                await new Promise((resolve) => requestAnimationFrame(resolve));
+                await new Promise<unknown>((resolve) => requestAnimationFrame(resolve));
             }
             target.innerHTML = '';
             _ooEmbedCounter += 1;
@@ -584,7 +619,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
             this._startOoLayout(host, placeholder, target);
             this._syncOoLayout();
             const claims = parseJwtPayloadClaims(token);
-            const onFatal = (code, detail) => {
+            const onFatal = (code: string, detail: unknown) => {
                 this._clearAllEditorTimers();
                 this._destroyEditor();
                 this._initializing = false;
@@ -599,15 +634,16 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                     onAppReady: () => this._markEditorUiVisible(),
                     onDocumentReady: () => this._markEditorUiVisible(),
                     onInfo: () => this._markEditorUiVisible(),
-                    onDocumentStateChange: (event) => {
+                    onDocumentStateChange: (event: { data?: unknown } | null) => {
                         this._emitDocumentState(Boolean(event && event.data));
                     },
-                    onError: (event) => {
+                    onError: (event: { data?: unknown; message?: string } | null) => {
                         const d = event && event.data;
                         let detail = '';
                         if (d != null && typeof d === 'object') {
-                            const code = d.errorCode;
-                            const desc = d.errorDescription;
+                            const data = d as { errorCode?: unknown; errorDescription?: unknown };
+                            const code = data.errorCode;
+                            const desc = data.errorDescription;
                             if (code != null || desc != null) {
                                 detail = [
                                     code != null ? String(code) : '',
@@ -624,7 +660,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
                     },
                 },
             };
-            this._docEditor = new window.DocsAPI.DocEditor(placeholder.id, editorInit);
+            this._docEditor = new window.DocsAPI.DocEditor!(placeholder.id, editorInit);
             this._tryReparentOoIframe();
             requestAnimationFrame(() => {
                 this._tryReparentOoIframe();
@@ -654,7 +690,7 @@ export class PlatformOnlyOfficeHost extends PlatformElement {
         }
     }
 
-    render() {
+    override render(): TemplateResult {
         return html`
             <div class="editor-host">
                 ${guard(

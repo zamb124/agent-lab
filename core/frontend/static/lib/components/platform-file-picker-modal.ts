@@ -8,7 +8,7 @@
  *   onSelect(file) — { file_id, original_name, content_type, file_size, file_category?, is_public? }
  */
 
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../lit-shim.js';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { formatPlatformDateTime } from '../utils/format-platform-date.js';
@@ -16,17 +16,45 @@ import './platform-icon.js';
 import './platform-button.js';
 import './platform-file-card.js';
 import './fields/platform-field.js';
+import type {CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult} from '../lit-shim.js';
+import type { OpController } from '../base/use-resource.js';
+import type { SelectController } from '../events/select-controller.js';
+
+interface FilePickerItem {
+    file_id?: unknown;
+    title?: unknown;
+    content_type?: unknown;
+    file_size?: unknown;
+    file_category?: unknown;
+    is_public?: unknown;
+    updated_at?: unknown;
+}
+
+interface FilePickerCatalog {
+    catalog_id?: unknown;
+    title?: unknown;
+    file_count?: unknown;
+}
+
+interface PickedFile {
+    file_id: string;
+    original_name: string;
+    content_type: string;
+    file_size: number;
+    file_category: string;
+    is_public?: boolean;
+}
 
 const IMAGE_CATEGORY = 'image';
 const DATA_TABLE_CATEGORY = 'data_table';
 const DATA_TABLE_CONTENT_TYPE = 'application/vnd.sqlite3';
 const DATA_TABLE_CONTENT_TYPE_LEGACY = 'application/x-sqlite3';
 
-function _asNonEmptyString(value) {
+function _asNonEmptyString(value: unknown): string {
     return typeof value === 'string' && value.length > 0 ? value : '';
 }
 
-function _fileMatchesAccept(item, acceptMimePrefix) {
+function _fileMatchesAccept(item: FilePickerItem, acceptMimePrefix: unknown): boolean {
     if (typeof acceptMimePrefix !== 'string' || acceptMimePrefix.length === 0) {
         return true;
     }
@@ -45,7 +73,7 @@ function _fileMatchesAccept(item, acceptMimePrefix) {
     return false;
 }
 
-function _isSqliteLocalFile(file) {
+function _isSqliteLocalFile(file: File): boolean {
     const name = typeof file.name === 'string' ? file.name.toLowerCase() : '';
     return file.type === DATA_TABLE_CONTENT_TYPE
         || file.type === DATA_TABLE_CONTENT_TYPE_LEGACY
@@ -53,7 +81,7 @@ function _isSqliteLocalFile(file) {
         || name.endsWith('.db');
 }
 
-function _optionalIsPublic(source) {
+function _optionalIsPublic(source: FilePickerItem): boolean | undefined {
     if (!Object.prototype.hasOwnProperty.call(source, 'is_public')) {
         return undefined;
     }
@@ -63,7 +91,7 @@ function _optionalIsPublic(source) {
     return source.is_public;
 }
 
-function _pickedFromDocument(item) {
+function _pickedFromDocument(item: FilePickerItem): PickedFile {
     const fileId = _asNonEmptyString(item.file_id);
     if (fileId === '') {
         throw new Error('platform-file-picker: document.file_id required');
@@ -72,7 +100,7 @@ function _pickedFromDocument(item) {
     const contentType = typeof item.content_type === 'string' ? item.content_type : '';
     const fileCategory = typeof item.file_category === 'string' ? item.file_category : '';
     const fileSize = typeof item.file_size === 'number' ? item.file_size : 0;
-    const picked = {
+    const picked: PickedFile = {
         file_id: fileId,
         original_name: title !== '' ? title : fileId,
         content_type: contentType,
@@ -86,7 +114,7 @@ function _pickedFromDocument(item) {
     return picked;
 }
 
-function _pickedFromUpload(result) {
+function _pickedFromUpload(result: Record<string, unknown> | null | undefined): PickedFile {
     if (!result || typeof result !== 'object') {
         throw new Error('platform-file-picker: upload result required');
     }
@@ -126,7 +154,7 @@ export class PlatformFilePickerModal extends PlatformModal {
     static modalKind = 'platform.file_picker';
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
         acceptMimePrefix: { type: String, attribute: 'accept-mime-prefix' },
         uploadOpName: { type: String, attribute: 'upload-op-name' },
@@ -143,10 +171,31 @@ export class PlatformFilePickerModal extends PlatformModal {
         _uploading: { state: true },
         _dragOver: { state: true },
         _error: { state: true },
-    };
+    }
+    declare acceptMimePrefix: string;
+    declare uploadOpName: string;
+    declare uploadSpec: string;
+    declare catalogsOpName: string;
+    declare documentsOpName: string;
+    declare searchOpName: string;
+    declare onSelect: ((file: PickedFile) => void) | null;
+    declare _catalogId: string;
+    declare _catalogs: FilePickerCatalog[];
+    declare _documents: FilePickerItem[];
+    declare _searchQuery: string;
+    declare _searchResults: FilePickerItem[] | null;
+    declare _uploading: boolean;
+    declare _dragOver: boolean;
+    declare _error: string;
 
-    static styles = [
-        ...PlatformModal.styles,
+    private _catalogsOp: OpController | null;
+    private _documentsOp: OpController | null;
+    private _searchOp: OpController | null;
+    private _uploadOp: OpController | null;
+    private _localeSel: SelectController<string | undefined> | null;
+
+    static override styles: CSSResultGroup = [
+        PlatformModal.styles,
         css`
             .layout {
                 display: grid;
@@ -299,15 +348,15 @@ export class PlatformFilePickerModal extends PlatformModal {
         this._localeSel = null;
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.heading = this.t('file_picker.title');
-        this._localeSel = this.select((state) => state.i18n.locale);
+        this._localeSel = this.select((state) => (state.i18n as { locale?: string }).locale);
         this._ensureControllers();
         void this._loadCatalogs();
     }
 
-    _formatDate(iso) {
+    _formatDate(iso: unknown): string {
         if (typeof iso !== 'string' || iso.length === 0) {
             return '';
         }
@@ -318,7 +367,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         return formatPlatformDateTime(iso, locale);
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         if (changed.has('open') && this.open) {
             this._error = '';
@@ -330,7 +379,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         }
     }
 
-    _ensureControllers() {
+    _ensureControllers(): void {
         if (typeof this.catalogsOpName !== 'string' || this.catalogsOpName.length === 0) {
             throw new Error('platform-file-picker: catalogsOpName required');
         }
@@ -363,13 +412,13 @@ export class PlatformFilePickerModal extends PlatformModal {
         }
     }
 
-    async _loadCatalogs() {
+    async _loadCatalogs(): Promise<void> {
         this._ensureControllers();
-        const result = await this._catalogsOp.run({});
+        const result = (await this._catalogsOp!.run({})) as { items?: unknown } | null;
         if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('platform-file-picker: catalogs.items required');
         }
-        this._catalogs = result.items;
+        this._catalogs = result.items as FilePickerCatalog[];
         if (this._catalogId === '' && this._catalogs.length > 0) {
             const first = this._catalogs[0];
             if (first && typeof first.catalog_id === 'string') {
@@ -378,21 +427,21 @@ export class PlatformFilePickerModal extends PlatformModal {
         }
     }
 
-    async _selectCatalog(catalogId) {
+    async _selectCatalog(catalogId: unknown): Promise<void> {
         if (typeof catalogId !== 'string' || catalogId.length === 0) {
             throw new Error('platform-file-picker: catalogId required');
         }
         this._catalogId = catalogId;
         this._searchResults = null;
         this._error = '';
-        const result = await this._documentsOp.run({ catalog_ids: [catalogId] });
+        const result = (await this._documentsOp!.run({ catalog_ids: [catalogId] })) as { items?: unknown } | null;
         if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('platform-file-picker: documents.items required');
         }
-        this._documents = result.items;
+        this._documents = result.items as FilePickerItem[];
     }
 
-    async _onSearchChange(event) {
+    async _onSearchChange(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         const value = event.detail && typeof event.detail.value === 'string'
             ? event.detail.value
             : '';
@@ -401,19 +450,19 @@ export class PlatformFilePickerModal extends PlatformModal {
             this._searchResults = null;
             return;
         }
-        const result = await this._searchOp.run({ q: value.trim() });
+        const result = (await this._searchOp!.run({ q: value.trim() })) as { items?: unknown } | null;
         if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('platform-file-picker: search.items required');
         }
-        this._searchResults = result.items;
+        this._searchResults = result.items as FilePickerItem[];
     }
 
-    _visibleDocuments() {
-        const source = Array.isArray(this._searchResults) ? this._searchResults : this._documents;
+    _visibleDocuments(): FilePickerItem[] {
+        const source: FilePickerItem[] = this._searchResults || this._documents;
         return source.filter((item) => _fileMatchesAccept(item, this.acceptMimePrefix));
     }
 
-    _acceptAttr() {
+    _acceptAttr(): string {
         if (this.acceptMimePrefix === 'image/') {
             return 'image/*';
         }
@@ -423,7 +472,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         return '*/*';
     }
 
-    _pickLocalFile() {
+    _pickLocalFile(): void {
         const input = this.renderRoot.querySelector('input[type="file"]');
         if (!(input instanceof HTMLInputElement)) {
             throw new Error('platform-file-picker: file input missing');
@@ -431,7 +480,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         input.click();
     }
 
-    async _uploadFile(file) {
+    async _uploadFile(file: unknown): Promise<void> {
         if (!(file instanceof File)) {
             throw new Error('platform-file-picker: File required');
         }
@@ -446,20 +495,23 @@ export class PlatformFilePickerModal extends PlatformModal {
         this._uploading = true;
         this._error = '';
         try {
-            const result = await this._uploadOp.run({
+            const result = (await this._uploadOp!.run({
                 file,
                 spec: this.uploadSpec,
-            });
+            })) as Record<string, unknown> | null;
             const picked = _pickedFromUpload(result);
-            this.onSelect(picked);
+            this.onSelect!(picked);
             this.close();
         } finally {
             this._uploading = false;
         }
     }
 
-    async _onLocalFileSelected(event) {
-        const input = event.target;
+    async _onLocalFileSelected(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement | null;
+        if (!input) {
+            return;
+        }
         const file = input.files && input.files[0];
         input.value = '';
         if (!file) {
@@ -468,7 +520,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         await this._uploadFile(file);
     }
 
-    _onDrop(event) {
+    _onDrop(event: DragEvent): void {
         event.preventDefault();
         this._dragOver = false;
         const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
@@ -478,17 +530,17 @@ export class PlatformFilePickerModal extends PlatformModal {
         void this._uploadFile(file);
     }
 
-    _selectDocument(item) {
+    _selectDocument(item: FilePickerItem): void {
         if (!_fileMatchesAccept(item, this.acceptMimePrefix)) {
             this._error = this.t('file_picker.error_type_mismatch');
             return;
         }
         const picked = _pickedFromDocument(item);
-        this.onSelect(picked);
+        this.onSelect!(picked);
         this.close();
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         const catalogs = Array.isArray(this._catalogs) ? this._catalogs : [];
         const docs = this._visibleDocuments();
         const searching = typeof this._searchQuery === 'string' && this._searchQuery.trim() !== '';
@@ -518,7 +570,7 @@ export class PlatformFilePickerModal extends PlatformModal {
                             .label=${this.t('file_picker.search_label')}
                             .placeholder=${this.t('file_picker.search_placeholder')}
                             .value=${this._searchQuery}
-                            @change=${(event) => void this._onSearchChange(event)}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => void this._onSearchChange(event)}
                         ></platform-field>
                         <platform-button
                             class="upload-btn"
@@ -537,12 +589,12 @@ export class PlatformFilePickerModal extends PlatformModal {
                         class="drop-zone"
                         data-drag=${this._dragOver ? 'true' : 'false'}
                         @click=${this._pickLocalFile}
-                        @dragover=${(event) => {
+                        @dragover=${(event: DragEvent) => {
                             event.preventDefault();
                             this._dragOver = true;
                         }}
                         @dragleave=${() => { this._dragOver = false; }}
-                        @drop=${(event) => this._onDrop(event)}
+                        @drop=${(event: DragEvent) => this._onDrop(event)}
                     >
                         <platform-icon name="upload" size="28"></platform-icon>
                         <div class="drop-title">
@@ -586,7 +638,7 @@ export class PlatformFilePickerModal extends PlatformModal {
             <input
                 type="file"
                 accept=${this._acceptAttr()}
-                @change=${(event) => {
+                @change=${(event: Event) => {
                     event.stopPropagation();
                     void this._onLocalFileSelected(event);
                 }}
@@ -594,7 +646,7 @@ export class PlatformFilePickerModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter(): TemplateResult {
         return html`
             <platform-button variant="ghost" @click=${() => this.close()}>
                 ${this.t('file_picker.cancel')}

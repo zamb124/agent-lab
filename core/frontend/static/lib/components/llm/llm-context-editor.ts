@@ -1,7 +1,8 @@
-import { html, css, nothing } from 'lit';
+import { html, css, nothing } from '../../lit-shim.js';
 import { PlatformElement } from '../../platform-element/index.js';
 import '../fields/platform-field.js';
 import '../glass-button.js';
+import type {CSSResultGroup, PropertyDeclarations, TemplateResult} from '../../lit-shim.js';
 
 const PROFILE_VALUES = Object.freeze(['off', 'compact', 'standard', 'agent']);
 const MODE_VALUES = Object.freeze(['off', 'window', 'smart', 'agent']);
@@ -45,16 +46,20 @@ const BUDGET_TOKEN_FIELDS = Object.freeze([
     'safety_buffer_tokens',
 ]);
 
-function isObject(value) {
+function isObject(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function clonePatch(value) {
+function clonePatch(value: unknown): Record<string, unknown> {
     if (!isObject(value)) return {};
     return JSON.parse(JSON.stringify(value));
 }
 
-function enumConfig(values, inheritLabel, labelForValue = (value) => value) {
+function enumConfig(
+    values: readonly string[],
+    inheritLabel: string,
+    labelForValue: (value: string) => string = (value: string) => value,
+): { values: { value: string; label: string }[] } {
     const items = [{ value: '', label: inheritLabel }];
     for (const value of values) {
         items.push({ value, label: labelForValue(value) });
@@ -62,7 +67,13 @@ function enumConfig(values, inheritLabel, labelForValue = (value) => value) {
     return { values: items };
 }
 
-function budgetEnumConfig(values, inheritLabel, customLabel, includeCustom, labelForValue) {
+function budgetEnumConfig(
+    values: readonly string[],
+    inheritLabel: string,
+    customLabel: string,
+    includeCustom: boolean,
+    labelForValue: (value: string) => string,
+): { values: { value: string; label: string }[] } {
     const config = enumConfig(values, inheritLabel, labelForValue);
     if (includeCustom) {
         config.values.push({ value: BUDGET_CUSTOM_VALUE, label: customLabel });
@@ -70,7 +81,11 @@ function budgetEnumConfig(values, inheritLabel, customLabel, includeCustom, labe
     return config;
 }
 
-function booleanEnumConfig(inheritLabel, trueLabel, falseLabel) {
+function booleanEnumConfig(
+    inheritLabel: string,
+    trueLabel: string,
+    falseLabel: string,
+): { values: { value: string; label: string }[] } {
     return {
         values: [
             { value: '', label: inheritLabel },
@@ -80,8 +95,8 @@ function booleanEnumConfig(inheritLabel, trueLabel, falseLabel) {
     };
 }
 
-function cleanObject(value) {
-    const next = {};
+function cleanObject(value: Record<string, unknown>): Record<string, unknown> {
+    const next: Record<string, unknown> = {};
     for (const [key, raw] of Object.entries(value)) {
         if (raw === undefined || raw === null || raw === '') continue;
         if (isObject(raw)) {
@@ -94,29 +109,29 @@ function cleanObject(value) {
     return next;
 }
 
-function retrievalPatch(config) {
+function retrievalPatch(config: Record<string, unknown>): Record<string, unknown> {
     const raw = config.retrieval;
     if (typeof raw === 'string') return { mode: raw };
     return isObject(raw) ? { ...raw } : {};
 }
 
-function budgetPatch(config) {
+function budgetPatch(config: Record<string, unknown>): Record<string, unknown> {
     return isObject(config.budget) ? { ...config.budget } : {};
 }
 
-function resolvedBudget(config) {
+function resolvedBudget(config: Record<string, unknown>): Record<string, unknown> {
     return isObject(config.budget) ? config.budget : {};
 }
 
-function resolvedRetrieval(config) {
+function resolvedRetrieval(config: Record<string, unknown>): Record<string, unknown> {
     return isObject(config.retrieval) ? config.retrieval : {};
 }
 
-function clampNumber(value, min, max) {
+function clampNumber(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
 }
 
-function tokenLabel(value) {
+function tokenLabel(value: unknown): string {
     if (typeof value !== 'number' || !Number.isFinite(value)) return '';
     if (value >= 1000) {
         return `${Math.round(value / 1000)}k`;
@@ -127,7 +142,7 @@ function tokenLabel(value) {
 export class PlatformLlmContextEditor extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         config: { type: Object },
         resolved: { type: Object },
         profiles: { type: Array },
@@ -135,9 +150,17 @@ export class PlatformLlmContextEditor extends PlatformElement {
         compact: { type: Boolean, reflect: true },
         clearable: { type: Boolean },
         _advanced: { state: true },
-    };
+    }
+    declare config: Record<string, unknown>;
+    declare resolved: Record<string, unknown>;
+    declare profiles: string[];
+    declare budgets: string[];
+    declare compact: boolean;
+    declare clearable: boolean;
+    declare _advanced: unknown;
+;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host {
@@ -205,15 +228,15 @@ export class PlatformLlmContextEditor extends PlatformElement {
         this._advanced = false;
     }
 
-    _patch() {
+    _patch(): Record<string, unknown> {
         return clonePatch(this.config);
     }
 
-    _emitConfig(config) {
+    _emitConfig(config: Record<string, unknown>): void {
         this.emit('change', { config: cleanObject(config) });
     }
 
-    _setTopLevel(key, value) {
+    _setTopLevel(key: string, value: unknown): void {
         const next = this._patch();
         if (value === '') {
             delete next[key];
@@ -223,7 +246,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
         this._emitConfig(next);
     }
 
-    _setRetrieval(key, value) {
+    _setRetrieval(key: string, value: unknown): void {
         const next = this._patch();
         const retrieval = retrievalPatch(next);
         if (value === '' || value === null || value === undefined) {
@@ -245,7 +268,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
         this._emitConfig(next);
     }
 
-    _setBudget(key, value) {
+    _setBudget(key: string, value: unknown): void {
         const next = this._patch();
         const budget = budgetPatch(next);
         if (value === '' || value === null || value === undefined) {
@@ -262,15 +285,15 @@ export class PlatformLlmContextEditor extends PlatformElement {
         this._emitConfig(next);
     }
 
-    _onEnum(key) {
-        return (e) => {
+    _onEnum(key: string): (e: CustomEvent<{ value?: unknown }>) => void {
+        return (e: CustomEvent<{ value?: unknown }>) => {
             e.stopPropagation?.();
             const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
             this._setTopLevel(key, value);
         };
     }
 
-    _onBudgetPreset(e) {
+    _onBudgetPreset(e: CustomEvent<{ value?: unknown }>): void {
         e.stopPropagation?.();
         const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
         if (value === BUDGET_CUSTOM_VALUE) {
@@ -279,16 +302,16 @@ export class PlatformLlmContextEditor extends PlatformElement {
         this._setTopLevel('budget', value);
     }
 
-    _onRetrievalEnum(key) {
-        return (e) => {
+    _onRetrievalEnum(key: string): (e: CustomEvent<{ value?: unknown }>) => void {
+        return (e: CustomEvent<{ value?: unknown }>) => {
             e.stopPropagation?.();
             const value = typeof e.detail?.value === 'string' ? e.detail.value : '';
             this._setRetrieval(key, value);
         };
     }
 
-    _onRetrievalNumber(key) {
-        return (e) => {
+    _onRetrievalNumber(key: string): (e: CustomEvent<{ value?: unknown }>) => void {
+        return (e: CustomEvent<{ value?: unknown }>) => {
             e.stopPropagation?.();
             const raw = e.detail?.value;
             let value = typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
@@ -317,8 +340,8 @@ export class PlatformLlmContextEditor extends PlatformElement {
         };
     }
 
-    _onBudgetNumber(key) {
-        return (e) => {
+    _onBudgetNumber(key: string): (e: CustomEvent<{ value?: unknown }>) => void {
+        return (e: CustomEvent<{ value?: unknown }>) => {
             e.stopPropagation?.();
             const raw = e.detail?.value;
             let value = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : null;
@@ -331,8 +354,8 @@ export class PlatformLlmContextEditor extends PlatformElement {
         };
     }
 
-    _onRetrievalBoolEnum(key) {
-        return (e) => {
+    _onRetrievalBoolEnum(key: string): (e: CustomEvent<{ value?: unknown }>) => void {
+        return (e: CustomEvent<{ value?: unknown }>) => {
             e.stopPropagation?.();
             const raw = typeof e.detail?.value === 'string' ? e.detail.value : '';
             const value = raw === '' ? null : raw === 'true';
@@ -340,11 +363,11 @@ export class PlatformLlmContextEditor extends PlatformElement {
         };
     }
 
-    _effectiveLabel(inherit, value) {
+    _effectiveLabel(inherit: string, value: unknown): string {
         if (value === null || value === undefined || value === '') {
             return inherit;
         }
-        let display = value;
+        let display: string | number = typeof value === 'number' ? value : String(value ?? '');
         if (typeof value === 'boolean') {
             display = value
                 ? this.t('llm_context_editor.enabled')
@@ -355,22 +378,24 @@ export class PlatformLlmContextEditor extends PlatformElement {
         return this.t('llm_context_editor.inherit_effective', { value: display });
     }
 
-    _hint(key) {
+    _hint(key: string): string {
         return this.t(`llm_context_editor.${key}_hint`);
     }
 
-    _valueLabel(value) {
+    _valueLabel(value: string): string {
         const key = `llm_context_editor.value_${value}`;
         const translated = this.t(key);
-        return translated === key ? (VALUE_LABEL_FALLBACKS[value] || value) : translated;
+        return translated === key
+            ? ((VALUE_LABEL_FALLBACKS as Record<string, string>)[value] || value)
+            : translated;
     }
 
-    _clear() {
+    _clear(): void {
         this.emit('clear', {});
         this._emitConfig({});
     }
 
-    render() {
+    override render(): TemplateResult {
         const patch = this._patch();
         const retrieval = retrievalPatch(patch);
         const budgetPatchValue = budgetPatch(patch);
@@ -426,7 +451,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                         .label=${this.t('llm_context_editor.profile')}
                         .hint=${this._hint('profile')}
                         .value=${profile}
-                        .config=${enumConfig(profileValues, inheritProfile, (value) => this._valueLabel(value))}
+                        .config=${enumConfig(profileValues, inheritProfile, (value: string) => this._valueLabel(value))}
                         @change=${this._onEnum('profile')}
                     ></platform-field>
                     <platform-field
@@ -435,7 +460,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                         .label=${this.t('llm_context_editor.memory')}
                         .hint=${this._hint('memory')}
                         .value=${memory}
-                        .config=${enumConfig(MEMORY_VALUES, inheritMemory, (value) => this._valueLabel(value))}
+                        .config=${enumConfig(MEMORY_VALUES, inheritMemory, (value: string) => this._valueLabel(value))}
                         @change=${this._onEnum('memory')}
                     ></platform-field>
                     <platform-field
@@ -444,7 +469,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                         .label=${this.t('llm_context_editor.retrieval')}
                         .hint=${this._hint('retrieval')}
                         .value=${retrievalMode}
-                        .config=${enumConfig(RETRIEVAL_VALUES, inheritRetrieval, (value) => this._valueLabel(value))}
+                        .config=${enumConfig(RETRIEVAL_VALUES, inheritRetrieval, (value: string) => this._valueLabel(value))}
                         @change=${this._onRetrievalEnum('mode')}
                     ></platform-field>
                     <platform-field
@@ -458,7 +483,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                             inheritBudget,
                             this.t('llm_context_editor.custom_budget'),
                             hasCustomBudget,
-                            (value) => this._valueLabel(value),
+                            (value: string) => this._valueLabel(value),
                         )}
                         @change=${this._onBudgetPreset}
                     ></platform-field>
@@ -496,7 +521,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                         .label=${this.t('llm_context_editor.mode')}
                                         .hint=${this._hint('mode')}
                                         .value=${mode}
-                                        .config=${enumConfig(MODE_VALUES, inheritMode, (value) => this._valueLabel(value))}
+                                        .config=${enumConfig(MODE_VALUES, inheritMode, (value: string) => this._valueLabel(value))}
                                         @change=${this._onEnum('mode')}
                                     ></platform-field>
                                     <platform-field
@@ -581,7 +606,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                         .label=${this.t('llm_context_editor.compaction')}
                                         .hint=${this._hint('compaction')}
                                         .value=${compaction}
-                                        .config=${enumConfig(COMPACTION_VALUES, inheritCompaction, (value) => this._valueLabel(value))}
+                                        .config=${enumConfig(COMPACTION_VALUES, inheritCompaction, (value: string) => this._valueLabel(value))}
                                         @change=${this._onEnum('compaction')}
                                     ></platform-field>
                                     <platform-field
@@ -590,7 +615,7 @@ export class PlatformLlmContextEditor extends PlatformElement {
                                         .label=${this.t('llm_context_editor.cache')}
                                         .hint=${this._hint('cache')}
                                         .value=${cache}
-                                        .config=${enumConfig(CACHE_VALUES, inheritCache, (value) => this._valueLabel(value))}
+                                        .config=${enumConfig(CACHE_VALUES, inheritCache, (value: string) => this._valueLabel(value))}
                                         @change=${this._onEnum('cache')}
                                     ></platform-field>
                                 </div>
