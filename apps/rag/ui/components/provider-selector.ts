@@ -5,13 +5,22 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+interface RagProviderItem {
+    name?: unknown;
+    is_default?: unknown;
+    [key: string]: unknown;
+}
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
 export class ProviderSelector extends PlatformElement {
     static i18nNamespace = 'rag';
 
-    static styles = [
+    private _providers: OpController;
+
+    static override styles = [
         PlatformElement.styles,
         css`
             :host { display: block; }
@@ -62,16 +71,17 @@ export class ProviderSelector extends PlatformElement {
         this._providers = this.useOp('rag/providers');
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         if (!this._providers.lastResult && !this._providers.busy) {
             this._providers.run({});
         }
     }
 
-    render() {
-        const items = this._providers.state.items;
-        const current = this._providers.state.current;
+    override render() {
+        const state = this._providers.state as Record<string, unknown>;
+        const items = Array.isArray(state.items) ? state.items as RagProviderItem[] : [];
+        const current = state.current;
 
         if (this._providers.busy && items.length === 0) {
             return html`<div class="empty"><glass-spinner></glass-spinner></div>`;

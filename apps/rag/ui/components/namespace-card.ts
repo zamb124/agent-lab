@@ -9,14 +9,22 @@ import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import '@platform/lib/components/platform-icon.js';
 
+export interface RagNamespace {
+    name?: string;
+    description?: unknown;
+    [key: string]: unknown;
+}
+
 export class NamespaceCard extends PlatformElement {
     static i18nNamespace = 'rag';
 
-    static properties = {
+    declare namespace: RagNamespace | null;
+
+    static override properties = {
         namespace: { type: Object },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host { display: block; }
@@ -64,17 +72,17 @@ export class NamespaceCard extends PlatformElement {
         this.namespace = null;
     }
 
-    _onClick() {
-        if (!this.namespace) {
+    private _onClick() {
+        if (!this.namespace || typeof this.namespace.name !== 'string') {
             throw new Error('NamespaceCard: namespace prop is empty, cannot navigate');
         }
         this.navigate('namespace_detail', { namespaceId: this.namespace.name });
     }
 
-    render() {
+    override render() {
         if (!this.namespace) return html``;
         return html`
-            <div class="card" @click=${this._onClick}>
+            <div class="card" @click=${() => this._onClick()}>
                 <div class="card-header">
                     <div class="icon-wrapper"><platform-icon name="folder" size="24"></platform-icon></div>
                     <div class="title">${this.namespace.name}</div>

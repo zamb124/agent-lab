@@ -14,7 +14,7 @@ import '../components/provider-selector.js';
 export class SettingsPage extends PlatformPage {
     static i18nNamespace = 'rag';
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: flex; flex-direction: column; height: 100%; }
@@ -41,7 +41,7 @@ export class SettingsPage extends PlatformPage {
         `,
     ];
 
-    render() {
+    override render() {
         return html`
             <div class="breadcrumbs-wrap">
                 <platform-breadcrumbs></platform-breadcrumbs>

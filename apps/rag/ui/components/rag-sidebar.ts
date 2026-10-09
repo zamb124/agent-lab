@@ -9,6 +9,8 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 import '@platform/lib/components/layout/platform-service-sidebar.js';
@@ -29,7 +31,10 @@ const NAMESPACE_DETAIL_PARENT = 'namespaces';
 export class RagSidebar extends PlatformElement {
     static i18nNamespace = 'rag';
 
-    static styles = [
+    private _routeKeySel: SelectController<string | null>;
+    private _providers: OpController;
+
+    static override styles = [
         PlatformElement.styles,
         sidebarStyles,
         sidebarNavItemStyles,
@@ -74,7 +79,10 @@ export class RagSidebar extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+
+    static override properties = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
     };
@@ -83,18 +91,22 @@ export class RagSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._routeKeySel = this.select((s) => (s.router as { routeKey: string | null }).routeKey);
         this._providers = this.useOp('rag/providers');
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         if (!this._providers.lastResult && !this._providers.busy) {
             this._providers.run({});
         }
     }
 
-    _shell() { return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null; }
+    private _shell(): { closeMobile?: () => void } | null {
+        return this.renderRoot
+            ? this.renderRoot.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null
+            : null;
+    }
     closeMobile() {
         const shell = this._shell();
         if (shell && typeof shell.closeMobile === 'function') {
@@ -102,12 +114,12 @@ export class RagSidebar extends PlatformElement {
         }
     }
 
-    _navigate(routeKey) {
+    private _navigate(routeKey: string) {
         this.navigate(routeKey);
         this.closeMobile();
     }
 
-    _isActive(route) {
+    private _isActive(route: string) {
         const current = this._routeKeySel.value;
         if (route === NAMESPACE_DETAIL_PARENT) {
             return current === 'namespaces' || current === 'namespace_detail';
@@ -115,7 +127,7 @@ export class RagSidebar extends PlatformElement {
         return current === route;
     }
 
-    _renderNavItem(item) {
+    private _renderNavItem(item: { route: string; icon: string; label_key: string }) {
         return html`
             <button
                 class="nav-item ${this._isActive(item.route) ? 'active' : ''}"
@@ -127,7 +139,7 @@ export class RagSidebar extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/rag_logo.svg"
@@ -135,8 +147,8 @@ export class RagSidebar extends PlatformElement {
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(e) => { this.collapsed = e.detail.collapsed; }}
-                @mobile-change=${(e) => { this.mobileOpen = e.detail.open; }}
+                @collapse-change=${(e: CustomEvent<{ collapsed: boolean }>) => { this.collapsed = e.detail.collapsed; }}
+                @mobile-change=${(e: CustomEvent<{ open: boolean }>) => { this.mobileOpen = e.detail.open; }}
             >
                 <nav>
                     ${NAV_ITEMS.map((item) => this._renderNavItem(item))}

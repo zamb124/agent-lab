@@ -4,6 +4,20 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface RagSearchResultItem {
+    document_name?: unknown;
+    page?: unknown;
+    score?: number;
+    content?: unknown;
+    [key: string]: unknown;
+}
+
+interface RagSearchResult {
+    results?: RagSearchResultItem[];
+    [key: string]: unknown;
+}
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import {
     buildAdvancedRetrievalPayloadFromPanel,
@@ -19,7 +33,16 @@ const LIMIT_OPTIONS = [3, 5, 10, 20];
 export class SearchPage extends PlatformPage {
     static i18nNamespace = 'rag';
 
-    static properties = {
+    declare _query: string;
+    declare _selectedNamespace: string;
+    declare _limit: number;
+    declare _showAdvanced: boolean;
+    declare _retrievalPanel: Record<string, unknown>;
+    private _namespaces: ResourceController;
+    private _search: OpController;
+    private _searchDefaults: OpController;
+
+    static override properties = {
         _query: { state: true },
         _selectedNamespace: { state: true },
         _limit: { state: true },
@@ -27,7 +50,7 @@ export class SearchPage extends PlatformPage {
         _retrievalPanel: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         css`
@@ -89,20 +112,20 @@ export class SearchPage extends PlatformPage {
         this._searchDefaults = this.useOp('rag/search_defaults');
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._searchDefaults.run({});
     }
 
-    _platformDefaults() {
+    private _platformDefaults(): Record<string, unknown> | null {
         const result = this._searchDefaults.lastResult;
-        if (!result || typeof result !== 'object') {
+        if (!result || typeof result !== 'object' || Array.isArray(result)) {
             return null;
         }
-        return result;
+        return result as Record<string, unknown>;
     }
 
-    _runSearch(e) {
+    private _runSearch(e: Event) {
         e.preventDefault();
         const q = typeof this._query === 'string' ? this._query.trim() : '';
         const ns = typeof this._selectedNamespace === 'string' ? this._selectedNamespace.trim() : '';
@@ -118,24 +141,24 @@ export class SearchPage extends PlatformPage {
         });
     }
 
-    _toggleAdvanced() {
+    private _toggleAdvanced() {
         this._showAdvanced = !this._showAdvanced;
     }
 
-    _onRetrievalPanelChange(e) {
+    private _onRetrievalPanelChange(e: CustomEvent<{ value?: unknown }>) {
         const value = e.detail && e.detail.value;
         if (!value || typeof value !== 'object' || Array.isArray(value)) {
             throw new Error('SearchPage: invalid retrieval panel value');
         }
-        this._retrievalPanel = value;
+        this._retrievalPanel = value as Record<string, unknown>;
     }
 
-    _onNamespaceChange(e) {
+    private _onNamespaceChange(e: CustomEvent<{ value?: unknown }>) {
         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._selectedNamespace = v;
     }
 
-    _onLimitChange(e) {
+    private _onLimitChange(e: CustomEvent<{ value?: unknown }>) {
         const raw = e.detail && e.detail.value != null ? String(e.detail.value) : '';
         const n = parseInt(raw, 10);
         if (!Number.isFinite(n)) {
@@ -144,12 +167,12 @@ export class SearchPage extends PlatformPage {
         this._limit = n;
     }
 
-    _onQueryChange(e) {
+    private _onQueryChange(e: CustomEvent<{ value?: unknown }>) {
         const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
         this._query = v;
     }
 
-    _namespaceEnumConfig(namespaces) {
+    private _namespaceEnumConfig(namespaces: readonly Record<string, unknown>[]) {
         const opts = [{ value: '', label: this.t('search_view.select_namespace') }];
         if (!Array.isArray(namespaces)) {
             throw new Error('SearchPage._namespaceEnumConfig: namespaces must be array');
@@ -163,19 +186,19 @@ export class SearchPage extends PlatformPage {
         return { values: opts };
     }
 
-    _limitEnumConfig() {
+    private _limitEnumConfig() {
         return {
             values: LIMIT_OPTIONS.map((n) => ({ value: String(n), label: String(n) })),
         };
     }
 
-    _renderResults() {
-        const result = this._search.lastResult;
+    private _renderResults() {
+        const result = this._search.lastResult as RagSearchResult | null;
         const items = result && Array.isArray(result.results) ? result.results : [];
         if (items.length === 0) return null;
         return html`
             <div class="results">
-                ${items.map((r) => html`
+                ${items.map((r: RagSearchResultItem) => html`
                     <div class="result-card">
                         <div class="result-header">
                             <div>
@@ -190,7 +213,7 @@ export class SearchPage extends PlatformPage {
                                         : ''}
                                 </div>
                             </div>
-                            <div class="result-score">${(r.score * 100).toFixed(1)}%</div>
+                            <div class="result-score">${(Number(r.score ?? 0) * 100).toFixed(1)}%</div>
                         </div>
                         <div class="result-content">${r.content}</div>
                     </div>
@@ -199,10 +222,10 @@ export class SearchPage extends PlatformPage {
         `;
     }
 
-    render() {
+    override render() {
         const namespaces = this._namespaces.items;
         const loading = this._search.busy;
-        const result = this._search.lastResult;
+        const result = this._search.lastResult as RagSearchResult | null;
         const hasResults = result && Array.isArray(result.results) && result.results.length > 0;
 
         return html`
@@ -214,7 +237,7 @@ export class SearchPage extends PlatformPage {
                 subtitle=${this.t('search_view.header_subtitle')}
             ></page-header>
 
-            <form class="search-form" @submit=${this._runSearch.bind(this)}>
+            <form class="search-form" @submit=${(e: Event) => this._runSearch(e)}>
                 <div class="form-row">
                     <platform-field
                         type="enum"
@@ -223,7 +246,7 @@ export class SearchPage extends PlatformPage {
                         .value=${this._selectedNamespace}
                         .config=${this._namespaceEnumConfig(namespaces)}
                         ?disabled=${loading}
-                        @change=${this._onNamespaceChange}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onNamespaceChange(e)}
                     ></platform-field>
                     <platform-field
                         class="limit-field"
@@ -233,7 +256,7 @@ export class SearchPage extends PlatformPage {
                         .value=${String(this._limit)}
                         .config=${this._limitEnumConfig()}
                         ?disabled=${loading}
-                        @change=${this._onLimitChange}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onLimitChange(e)}
                     ></platform-field>
                 </div>
 
@@ -246,7 +269,7 @@ export class SearchPage extends PlatformPage {
                         .placeholder=${this.t('search_view.query_placeholder')}
                         .value=${this._query}
                         ?disabled=${loading}
-                        @change=${this._onQueryChange}
+                        @change=${(e: CustomEvent<{ value?: unknown }>) => this._onQueryChange(e)}
                     ></platform-field>
                     <button type="submit" class="btn btn-primary search-btn" ?disabled=${loading}>
                         ${loading
@@ -258,7 +281,7 @@ export class SearchPage extends PlatformPage {
                 <button
                     type="button"
                     class="btn btn-secondary advanced-toggle"
-                    @click=${this._toggleAdvanced}
+                    @click=${() => this._toggleAdvanced()}
                 >
                     ${this._showAdvanced
                         ? this.t('search_view.toggle_advanced_hide')
@@ -271,7 +294,7 @@ export class SearchPage extends PlatformPage {
                             .value=${this._retrievalPanel}
                             .platformDefaults=${this._platformDefaults()}
                             ?disabled=${loading}
-                            @change=${this._onRetrievalPanelChange}
+                            @change=${(e: CustomEvent<{ value?: unknown }>) => this._onRetrievalPanelChange(e)}
                         ></platform-rag-retrieval-panel>
                     </div>
                 ` : ''}

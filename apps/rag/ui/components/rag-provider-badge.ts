@@ -10,13 +10,16 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/glass-spinner.js';
 
 export class RagProviderBadge extends PlatformElement {
     static i18nNamespace = 'rag';
 
-    static styles = [
+    private _providers: OpController;
+
+    static override styles = [
         PlatformElement.styles,
         css`
             :host { display: block; margin-bottom: var(--space-3); }
@@ -59,8 +62,8 @@ export class RagProviderBadge extends PlatformElement {
         this._providers = this.useOp('rag/providers');
     }
 
-    render() {
-        const current = this._providers.state.current;
+    override render() {
+        const current = (this._providers.state as Record<string, unknown>).current;
         const loading = this._providers.busy && !current;
         return html`
             <div class="badge">

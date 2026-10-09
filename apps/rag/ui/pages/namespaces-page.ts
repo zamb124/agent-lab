@@ -8,6 +8,7 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import '@platform/lib/components/layout/page-header.js';
 import '@platform/lib/components/platform-icon.js';
@@ -17,7 +18,9 @@ import '../components/namespace-card.js';
 export class NamespacesPage extends PlatformPage {
     static i18nNamespace = 'rag';
 
-    static styles = [
+    private _namespaces: ResourceController;
+
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         css`
@@ -60,11 +63,11 @@ export class NamespacesPage extends PlatformPage {
         this._namespaces = this.useResource('rag/namespaces', { autoload: true });
     }
 
-    _openCreate() {
+    private _openCreate() {
         this.openModal('rag.namespace_create');
     }
 
-    render() {
+    override render() {
         if (this._namespaces.loading) {
             return html`
                 <div class="loading">
@@ -87,7 +90,7 @@ export class NamespacesPage extends PlatformPage {
             </page-header>
             ${items.length > 0 ? html`
                 <div class="grid">
-                    ${items.map((ns) => html`<namespace-card .namespace=${ns}></namespace-card>`)}
+                    ${items.map((ns: Record<string, unknown>) => html`<namespace-card .namespace=${ns}></namespace-card>`)}
                 </div>
             ` : html`
                 <div class="empty">

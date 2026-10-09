@@ -9,7 +9,17 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface RagDocument {
+    name?: string;
+    document_id?: string;
+    created_at?: string | number | Date;
+    pages?: unknown;
+    [key: string]: unknown;
+}
 import { buttonStyles, iconButtonStyles } from '@platform/lib/styles/shared/button.styles.js';
 import { resolveFileIconKey } from '@platform/lib/utils/file-icons.js';
 import '@platform/lib/components/layout/page-header.js';
@@ -23,12 +33,19 @@ const ACCEPT_TYPES = '.pdf,.docx,.doc,.txt,.md,.html,.csv,.xlsx,.pptx';
 export class NamespacePage extends PlatformPage {
     static i18nNamespace = 'rag';
 
-    static properties = {
+    declare namespaceId: string;
+    declare _dragOver: boolean;
+    private _docs: OpController;
+    private _upload: OpController;
+    private _remove: OpController;
+    private _namespaces: ResourceController;
+
+    static override properties = {
         namespaceId: { type: String },
         _dragOver: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         iconButtonStyles,
@@ -85,39 +102,39 @@ export class NamespacePage extends PlatformPage {
         this._namespaces = this.useResource('rag/namespaces', { autoload: true });
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
     }
 
-    updated(changed) {
-        super.updated && super.updated(changed);
+    override updated(changed: PropertyValues<this>) {
+        super.updated(changed);
         if (changed.has('namespaceId') && typeof this.namespaceId === 'string' && this.namespaceId.length > 0) {
-            if (this._docs.state.loadedNamespaceId !== this.namespaceId) {
+            if ((this._docs.state as Record<string, unknown>).loadedNamespaceId !== this.namespaceId) {
                 this._docs.run({ namespace_id: this.namespaceId });
             }
         }
     }
 
-    _goBack() { this.navigate('namespaces'); }
+    private _goBack() { this.navigate('namespaces'); }
 
-    _triggerFileInput() {
-        this.shadowRoot.querySelector('input[type="file"]')?.click();
+    private _triggerFileInput() {
+        (this.shadowRoot?.querySelector('input[type="file"]') as HTMLInputElement | null)?.click();
     }
 
-    _handleFileSelect(e) {
-        const file = e.target.files[0];
+    private _handleFileSelect(e: Event) {
+        const file = (e.target as HTMLInputElement | null)?.files?.[0];
         if (!file) return;
         this._uploadFile(file);
     }
 
-    _uploadFile(file) {
+    private _uploadFile(file: File) {
         if (!this.namespaceId) {
             throw new Error('NamespacePage: namespaceId is empty, cannot upload');
         }
         this._upload.run({ namespace_id: this.namespaceId, file, metadata: {} });
     }
 
-    async _deleteDocument(documentId) {
+    private async _deleteDocument(documentId: string): Promise<void> {
         if (!this.namespaceId) {
             throw new Error('NamespacePage: namespaceId is empty, cannot delete');
         }
@@ -125,29 +142,28 @@ export class NamespacePage extends PlatformPage {
         this._remove.run({ namespace_id: this.namespaceId, document_id: documentId });
     }
 
-    _handleDragOver(e) { e.preventDefault(); e.stopPropagation(); this._dragOver = true; }
-    _handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); this._dragOver = false; }
-    _handleDrop(e) {
+    private _handleDragOver(e: Event) { e.preventDefault(); e.stopPropagation(); this._dragOver = true; }
+    private _handleDragLeave(e: Event) { e.preventDefault(); e.stopPropagation(); this._dragOver = false; }
+    private _handleDrop(e: Event) {
         e.preventDefault();
         e.stopPropagation();
         this._dragOver = false;
-        const files = e.dataTransfer && e.dataTransfer.files
-            ? Array.from(e.dataTransfer.files)
-            : [];
-        if (files.length > 0) this._uploadFile(files[0]);
+        const dt = (e as DragEvent).dataTransfer;
+        const files = dt && dt.files ? Array.from(dt.files) : [];
+        if (files.length > 0 && files[0]) this._uploadFile(files[0]);
     }
 
-    _findNamespace() {
+    private _findNamespace(): Record<string, unknown> | null {
         for (const ns of this._namespaces.items) {
             if (ns.name === this.namespaceId) return ns;
         }
         return null;
     }
 
-    render() {
+    override render() {
         const namespace = this._findNamespace();
         const uploading = this._upload.busy;
-        const documents = this._docs.state.items;
+        const documents = (this._docs.state as { items?: RagDocument[] }).items ?? [];
         const loading = this._docs.busy;
 
         if (!namespace && !this._namespaces.loading) {
@@ -167,7 +183,7 @@ export class NamespacePage extends PlatformPage {
             </div>
             <div class="header">
                 <div class="header-left">
-                    <button class="btn-icon" @click=${this._goBack} title=${this.t('namespace_detail.back')}>
+                    <button class="btn-icon" @click=${() => this._goBack()} title=${this.t('namespace_detail.back')}>
                         <platform-icon name="chevron-left" size="20"></platform-icon>
                     </button>
                     <div>
@@ -176,7 +192,7 @@ export class NamespacePage extends PlatformPage {
                     </div>
                 </div>
                 <div class="actions">
-                    <button class="btn btn-primary" @click=${this._triggerFileInput} ?disabled=${uploading}>
+                    <button class="btn btn-primary" @click=${() => this._triggerFileInput()} ?disabled=${uploading}>
                         <platform-icon name="plus" size="18"></platform-icon>
                         <span>${uploading
                             ? this.t('namespace_detail.uploading_short')
@@ -185,7 +201,7 @@ export class NamespacePage extends PlatformPage {
                 </div>
             </div>
 
-            <input type="file" @change=${this._handleFileSelect} accept=${ACCEPT_TYPES} />
+            <input type="file" @change=${(e: Event) => this._handleFileSelect(e)} accept=${ACCEPT_TYPES} />
 
             ${loading ? html`
                 <div class="empty">
@@ -193,10 +209,10 @@ export class NamespacePage extends PlatformPage {
                 </div>
             ` : documents.length === 0 ? html`
                 <div class="drop-zone ${this._dragOver ? 'drag-over' : ''}"
-                     @click=${this._triggerFileInput}
-                     @dragover=${this._handleDragOver}
-                     @dragleave=${this._handleDragLeave}
-                     @drop=${this._handleDrop}>
+                     @click=${() => this._triggerFileInput()}
+                     @dragover=${(e: Event) => this._handleDragOver(e)}
+                     @dragleave=${(e: Event) => this._handleDragLeave(e)}
+                     @drop=${(e: Event) => this._handleDrop(e)}>
                     <div class="drop-zone-content">
                         <div class="drop-zone-icon">
                             <platform-icon name=${uploading ? 'refresh' : 'cloud'} size="32"></platform-icon>
@@ -214,17 +230,17 @@ export class NamespacePage extends PlatformPage {
                             <div class="document-header">
                                 <div>
                                     <div class="document-name">
-                                        <platform-icon file-icon name=${resolveFileIconKey(doc.name, '')} size="16"></platform-icon>
+                                        <platform-icon file-icon name=${resolveFileIconKey(String(doc.name ?? ''), '')} size="16"></platform-icon>
                                         ${doc.name}
                                     </div>
                                     <div class="document-meta">
-                                        <span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at).toLocaleDateString()}</span>
+                                        <span>${this.t('namespace_detail.created_at_label')} ${new Date(doc.created_at ?? '').toLocaleDateString()}</span>
                                         ${typeof doc.pages === 'number' ? html`<span>${this.t('namespace_detail.pages_count', { count: doc.pages })}</span>` : ''}
                                     </div>
                                 </div>
                                 <div class="document-actions">
                                     <button class="btn-icon danger"
-                                            @click=${() => this._deleteDocument(doc.document_id)}
+                                            @click=${() => this._deleteDocument(String(doc.document_id ?? ''))}
                                             title=${this.t('namespace_detail.delete_button_title')}>
                                         <platform-icon name="trash" size="16"></platform-icon>
                                     </button>

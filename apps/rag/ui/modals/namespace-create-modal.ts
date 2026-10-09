@@ -11,7 +11,9 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import type { ResourceController, FormController } from '@platform/lib/base/use-resource.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/fields/platform-field.js';
@@ -23,8 +25,11 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
     static modalKind = 'rag.namespace_create';
     static i18nNamespace = 'rag';
 
-    static styles = [
-        ...PlatformFormModal.styles,
+    private _namespaces: ResourceController;
+    private _form: FormController;
+
+    static override styles = [
+        PlatformFormModal.styles,
         css`
             .form-grid { display: grid; gap: var(--space-4); }
             .footer-actions {
@@ -44,7 +49,7 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         this._form = this.useForm(FORM_NAME);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._form.openForm({ name: '', description: '' });
         this.useEvent(this._namespaces.resource.events.CREATED, () => {
@@ -55,48 +60,48 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         this._form.close();
         super.disconnectedCallback();
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>) {
         super.willUpdate(changed);
         this.isDirty = this._isDraftDirty();
     }
 
-    _isDraftDirty() {
+    private _isDraftDirty(): boolean {
         const draft = this._form.draft;
         if (typeof draft.name === 'string' && draft.name.length > 0) return true;
         if (typeof draft.description === 'string' && draft.description.length > 0) return true;
         return false;
     }
 
-    _onNameChange(event) {
+    private _onNameChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._form.setField('name', v);
     }
 
-    _onDescriptionChange(event) {
+    private _onDescriptionChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._form.setField('description', v);
     }
 
-    async _performSave() {
+    override async _performSave(): Promise<void> {
         this._form.submit();
     }
 
-    _saveHeaderTitle() {
+    override _saveHeaderTitle() {
         return this._form.submitting
             ? this.t('namespace_create_modal.submitting')
             : this.t('namespace_create_modal.submit');
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('namespace_create_modal.header');
     }
 
-    renderSaveHeaderButton() {
+    override renderSaveHeaderButton() {
         const draft = this._form.draft;
         const has_name = typeof draft.name === 'string' && draft.name.trim().length > 0;
         const disabled = this._form.submitting || !has_name;
@@ -107,15 +112,15 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
         });
     }
 
-    _fieldError(field) {
+    private _fieldError(field: string) {
         const error_key = this._form.errors[field];
         return error_key ? this.t(error_key) : '';
     }
 
-    renderBody() {
+    override renderBody() {
         const draft = this._form.draft;
         return html`
-            <form class="form-grid" @submit=${(event) => { event.preventDefault(); this._performSave(); }}>
+            <form class="form-grid" @submit=${(event: Event) => { event.preventDefault(); this._performSave(); }}>
                 <platform-field
                     type="string"
                     mode="edit"
@@ -125,7 +130,7 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
                     .value=${draft.name}
                     .error=${this._fieldError('name')}
                     ?disabled=${this._form.submitting}
-                    @change=${this._onNameChange}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => this._onNameChange(event)}
                 ></platform-field>
 
                 <platform-field
@@ -136,13 +141,13 @@ export class RagNamespaceCreateModal extends PlatformFormModal {
                     .value=${draft.description}
                     .error=${this._fieldError('description')}
                     ?disabled=${this._form.submitting}
-                    @change=${this._onDescriptionChange}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => this._onDescriptionChange(event)}
                 ></platform-field>
             </form>
         `;
     }
 
-    renderFooter() {
+    override renderFooter() {
         return html`
             <div class="footer-actions">
                 <button

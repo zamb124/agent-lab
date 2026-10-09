@@ -14,7 +14,9 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
 
@@ -29,6 +31,8 @@ import { documentStatusResource } from '@platform/lib/events/resources/rag-docum
 import { searchOp, searchDefaultsOp } from '@platform/lib/events/resources/rag-search.resource.js';
 import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
 import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+import type { CompaniesState } from '@platform/lib/events/reducers/companies.js';
+import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
 import { buildRagAssistantContext } from '../_helpers/platform-assistant-context.js';
 
 import '@platform/lib/components/layout/platform-island.js';
@@ -67,10 +71,13 @@ export class RagApp extends PlatformApp {
         showLauncher: true,
     };
 
+    private _companiesListSel: SelectController<readonly CompanyListEntry[]>;
+    private _companiesLoadingSel: SelectController<boolean>;
+
     constructor() {
         super();
-        this._companiesListSel = this.select((s) => s.companies.list);
-        this._companiesLoadingSel = this.select((s) => s.companies.loading);
+        this._companiesListSel = this.select((s) => (s.companies as CompaniesState).list as unknown as readonly CompanyListEntry[]);
+        this._companiesLoadingSel = this.select((s) => Boolean((s.companies as CompaniesState).loading));
     }
 
     static factories = [
@@ -86,7 +93,7 @@ export class RagApp extends PlatformApp {
         platformFileCreateOp,
     ];
 
-    static styles = [
+    static override styles = [
         PlatformApp.styles,
         css`
             :host {
@@ -123,36 +130,36 @@ export class RagApp extends PlatformApp {
         `,
     ];
 
-    getBaseUrl() { return '/rag'; }
+    override getBaseUrl() { return '/rag'; }
 
-    getRoutes() { return []; }
+    override getRoutes() { return []; }
 
-    getServiceEffects() {
+    override getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/rag', routes: RAG_ROUTES }),
         ];
     }
 
-    shouldRenderPlatformAssistant(_routeKey) {
+    override shouldRenderPlatformAssistant(_routeKey: string | null) {
         return true;
     }
 
-    getPlatformAssistantContextVariables(routeKey, params) {
-        return buildRagAssistantContext(routeKey, params);
+    override async getPlatformAssistantContextVariables(routeKey: string | null, params: Record<string, string>) {
+        return buildRagAssistantContext(String(routeKey ?? ''), params);
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>) {
         super.updated(changed);
         const auth = this._authSelect.value;
         applyCompanyHostRedirectIfNeeded(
             auth,
-            this._companiesListSel.value,
-            this._companiesLoadingSel.value,
+            (this._companiesListSel.value ?? []),
+            Boolean(this._companiesLoadingSel.value),
             { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
         );
     }
 
-    renderRoute(routeKey, params) {
+    override renderRoute(routeKey: string | null, params: Record<string, string>) {
         let content;
         switch (routeKey) {
             case 'platform_services':
