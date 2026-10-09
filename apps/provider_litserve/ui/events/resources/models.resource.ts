@@ -8,9 +8,10 @@
  */
 
 import { createResourceCollection, createAsyncOp } from '@platform/lib/events/index.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { httpRequest } from '@platform/lib/events/http.js';
 
-function _normalizeModel(raw) {
+function _normalizeModel(raw: ResourceItem): ResourceItem {
     if (!raw || typeof raw !== 'object') {
         throw new Error('humanitec_models/models: model item must be object');
     }
@@ -49,12 +50,13 @@ export const humanitecModelRetryOp = createAsyncOp({
     errorToastKey: 'litserve:toast.model_retry_error',
     restMirror: { method: 'POST', path: '/litserve/api/models/:model_id/retry' },
     request: async ({ payload }) => {
-        if (!payload || typeof payload.model_id !== 'string' || payload.model_id.length === 0) {
+        const modelId = (payload as Record<string, unknown> | null)?.model_id;
+        if (typeof modelId !== 'string' || modelId.length === 0) {
             throw new Error('humanitec_models/model_retry: payload.model_id required');
         }
         return httpRequest({
             method: 'POST',
-            url: `/litserve/api/models/${encodeURIComponent(payload.model_id)}/retry`,
+            url: `/litserve/api/models/${encodeURIComponent(modelId)}/retry`,
         });
     },
     onSuccess: (ctx, _result, event) => {

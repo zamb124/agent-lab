@@ -9,7 +9,7 @@
  *   /litserve            -> models
  */
 
-import { html, css } from 'lit';
+import { html, css, type TemplateResult } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 
@@ -46,7 +46,7 @@ export class HumanitecModelsApp extends PlatformApp {
         humanitecModelRetryOp,
     ];
 
-    static styles = [
+    static override styles = [
         PlatformApp.styles,
         css`
             :host {
@@ -83,27 +83,27 @@ export class HumanitecModelsApp extends PlatformApp {
         `,
     ];
 
-    getBaseUrl() { return '/litserve'; }
+    override getBaseUrl() { return '/litserve'; }
 
-    getRoutes() { return []; }
+    override getRoutes() { return []; }
 
-    getServiceEffects() {
+    override getServiceEffects() {
         return [
             createRouterEffect({ baseUrl: '/litserve', routes: HUMANITEC_MODELS_ROUTES }),
         ];
     }
 
-    shouldRenderPlatformAssistant(_routeKey) {
+    override shouldRenderPlatformAssistant(_routeKey: string | null) {
         return true;
     }
 
-    getPlatformAssistantContextVariables(routeKey, _params) {
+    override async getPlatformAssistantContextVariables(routeKey: string, _params: Record<string, string>) {
         return buildLitserveAssistantContext(routeKey);
     }
 
-    renderRoute(routeKey) {
+    override renderRoute(routeKey: string | null) {
         const _key = routeKey === 'models' || !routeKey ? 'models' : routeKey;
-        let content;
+        let content: TemplateResult;
         switch (_key) {
             case 'platform_services':
                 content = html`<platform-services-page></platform-services-page>`;

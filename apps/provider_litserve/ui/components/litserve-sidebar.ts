@@ -5,7 +5,8 @@
  * `this.navigate(routeKey)`. У сервиса один экран — реестр моделей.
  */
 
-import { html, css } from 'lit';
+import { html, css, type PropertyValues } from 'lit';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
 import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
@@ -14,14 +15,20 @@ import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-user.js';
 import '@platform/lib/components/platform-deployment-version.js';
 
-const NAV_ITEMS = [
+interface LitserveNavItem {
+    route: string;
+    icon: string;
+    label_key: string;
+}
+
+const NAV_ITEMS: LitserveNavItem[] = [
     { route: 'models', icon: 'database', label_key: 'sidebar.models' },
 ];
 
 export class HumanitecModelsSidebar extends PlatformElement {
     static i18nNamespace = 'litserve';
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         sidebarStyles,
         sidebarNavItemStyles,
@@ -68,7 +75,11 @@ export class HumanitecModelsSidebar extends PlatformElement {
         `,
     ];
 
-    static properties = {
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+    private _routeKeySel: SelectController<string | null | undefined>;
+
+    static override properties = {
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
     };
@@ -77,11 +88,13 @@ export class HumanitecModelsSidebar extends PlatformElement {
         super();
         this.collapsed = readShellSidebarCollapsed();
         this.mobileOpen = false;
-        this._routeKeySel = this.select((s) => s.router.routeKey);
+        this._routeKeySel = this.select((s) => (s.router as { routeKey?: string | null }).routeKey);
     }
 
-    _shell() {
-        return this.renderRoot ? this.renderRoot.querySelector('platform-service-sidebar') : null;
+    private _shell(): { closeMobile?: () => void } | null {
+        return this.renderRoot
+            ? this.renderRoot.querySelector('platform-service-sidebar') as { closeMobile?: () => void } | null
+            : null;
     }
 
     closeMobile() {
@@ -91,12 +104,12 @@ export class HumanitecModelsSidebar extends PlatformElement {
         }
     }
 
-    _navigate(routeKey) {
+    private _navigate(routeKey: string) {
         this.navigate(routeKey);
         this.closeMobile();
     }
 
-    _isActive(route) {
+    private _isActive(route: string) {
         const current = this._routeKeySel.value;
         if (!current && route === 'models') {
             return true;
@@ -104,7 +117,7 @@ export class HumanitecModelsSidebar extends PlatformElement {
         return current === route;
     }
 
-    _renderNavItem(item) {
+    private _renderNavItem(item: LitserveNavItem) {
         return html`
             <button
                 class="nav-item ${this._isActive(item.route) ? 'active' : ''}"
@@ -116,7 +129,7 @@ export class HumanitecModelsSidebar extends PlatformElement {
         `;
     }
 
-    render() {
+    override render() {
         return html`
             <platform-service-sidebar
                 logo-src="/static/core/assets/service_logos/frontend_logo.svg"
@@ -124,8 +137,8 @@ export class HumanitecModelsSidebar extends PlatformElement {
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(event) => { this.collapsed = event.detail.collapsed; }}
-                @mobile-change=${(event) => { this.mobileOpen = event.detail.open; }}
+                @collapse-change=${(event: CustomEvent<{ collapsed: boolean }>) => { this.collapsed = event.detail.collapsed; }}
+                @mobile-change=${(event: CustomEvent<{ open: boolean }>) => { this.mobileOpen = event.detail.open; }}
             >
                 <nav>
                     ${NAV_ITEMS.map((item) => this._renderNavItem(item))}

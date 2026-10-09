@@ -9,6 +9,8 @@
 import { html, css } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
 
 import '@platform/lib/components/layout/page-header.js';
@@ -20,7 +22,7 @@ const KIND_ENUM_VALUES = ['embedding', 'rerank'];
 export class HumanitecModelsPage extends PlatformPage {
     static i18nNamespace = 'litserve';
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         buttonStyles,
         css`
@@ -145,7 +147,13 @@ export class HumanitecModelsPage extends PlatformPage {
         `,
     ];
 
-    static properties = {
+    declare _kind: string;
+    declare _hfModelId: string;
+    declare _apiModelId: string;
+    private _models: ResourceController;
+    private _retry: OpController;
+
+    static override properties = {
         _kind: { state: true },
         _hfModelId: { state: true },
         _apiModelId: { state: true },
@@ -160,7 +168,7 @@ export class HumanitecModelsPage extends PlatformPage {
         this._retry = this.useOp('humanitec_models/model_retry');
     }
 
-    _kindEnumConfig() {
+    private _kindEnumConfig(): { values: { value: string; label: string }[] } {
         return {
             values: KIND_ENUM_VALUES.map((k) => ({
                 value: k,
@@ -169,25 +177,25 @@ export class HumanitecModelsPage extends PlatformPage {
         };
     }
 
-    _onKindChange(event) {
+    private _onKindChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
-        if (!KIND_ENUM_VALUES.includes(v)) {
+        if (!(KIND_ENUM_VALUES as readonly string[]).includes(v)) {
             throw new Error(`HumanitecModelsPage._onKindChange: invalid kind "${v}"`);
         }
         this._kind = v;
     }
 
-    _onHfModelChange(event) {
+    private _onHfModelChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._hfModelId = v;
     }
 
-    _onApiModelChange(event) {
+    private _onApiModelChange(event: CustomEvent<{ value?: unknown }>) {
         const v = event.detail && typeof event.detail.value === 'string' ? event.detail.value : '';
         this._apiModelId = v;
     }
 
-    _addModel() {
+    private _addModel() {
         const hfModelId = this._hfModelId.trim();
         const apiModelId = this._apiModelId.trim();
         if (!hfModelId) {
@@ -205,19 +213,19 @@ export class HumanitecModelsPage extends PlatformPage {
         this._apiModelId = '';
     }
 
-    _retryModel(modelId) {
+    private _retryModel(modelId: string) {
         this._retry.run({ model_id: modelId });
     }
 
-    _deleteModel(modelId) {
+    private _deleteModel(modelId: string) {
         this._models.remove(modelId);
     }
 
-    _statusClass(status) {
+    private _statusClass(status: unknown) {
         return `status-${status}`;
     }
 
-    _renderModelCard(item) {
+    private _renderModelCard(item: ResourceItem) {
         return html`
             <article class="model-card">
                 <div class="model-header">
@@ -250,10 +258,10 @@ export class HumanitecModelsPage extends PlatformPage {
                     : ''}
 
                 <div class="actions">
-                    <button class="btn btn-secondary" @click=${() => this._retryModel(item.model_id)}>
+                    <button class="btn btn-secondary" @click=${() => this._retryModel(String(item.model_id ?? ''))}>
                         ${this.t('models.retry')}
                     </button>
-                    <button class="btn btn-danger" @click=${() => this._deleteModel(item.model_id)}>
+                    <button class="btn btn-danger" @click=${() => this._deleteModel(String(item.model_id ?? ''))}>
                         ${this.t('models.delete')}
                     </button>
                 </div>
@@ -261,7 +269,7 @@ export class HumanitecModelsPage extends PlatformPage {
         `;
     }
 
-    render() {
+    override render() {
         const items = this._models.items;
         const loading = this._models.loading;
         return html`
@@ -278,7 +286,7 @@ export class HumanitecModelsPage extends PlatformPage {
                             .label=${this.t('models.kind')}
                             .value=${this._kind}
                             .config=${this._kindEnumConfig()}
-                            @change=${this._onKindChange}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => this._onKindChange(event)}
                         ></platform-field>
                         <platform-field
                             type="string"
@@ -286,7 +294,7 @@ export class HumanitecModelsPage extends PlatformPage {
                             .label=${this.t('models.hf_model')}
                             .placeholder=${this.t('models.hf_placeholder')}
                             .value=${this._hfModelId}
-                            @change=${this._onHfModelChange}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => this._onHfModelChange(event)}
                         ></platform-field>
                         <platform-field
                             type="string"
@@ -294,9 +302,9 @@ export class HumanitecModelsPage extends PlatformPage {
                             .label=${this.t('models.api_model')}
                             .placeholder=${this.t('models.api_placeholder')}
                             .value=${this._apiModelId}
-                            @change=${this._onApiModelChange}
+                            @change=${(event: CustomEvent<{ value?: unknown }>) => this._onApiModelChange(event)}
                         ></platform-field>
-                        <button class="btn btn-primary" @click=${this._addModel}>
+                        <button class="btn btn-primary" @click=${() => this._addModel()}>
                             ${this.t('models.add')}
                         </button>
                     </div>
@@ -311,7 +319,7 @@ export class HumanitecModelsPage extends PlatformPage {
                     : ''}
 
                 <section class="models-grid">
-                    ${repeat(items, (item) => item.model_id, (item) => this._renderModelCard(item))}
+                    ${repeat(items, (item) => String(item.model_id), (item) => this._renderModelCard(item))}
                 </section>
             </div>
         `;
