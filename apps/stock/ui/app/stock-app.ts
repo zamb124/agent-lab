@@ -113,7 +113,7 @@ export class StockApp extends PlatformApp {
         stockUomsListOp,
     ];
 
-    static styles = [
+    static override styles = [
         PlatformApp.styles,
         css`
             :host {
@@ -142,22 +142,22 @@ export class StockApp extends PlatformApp {
         `,
     ];
 
-    getBaseUrl() { return '/stock'; }
+    override getBaseUrl() { return '/stock'; }
 
-    getRoutes() { return []; }
+    override getRoutes() { return []; }
 
-    getServiceEffects() {
+    override getServiceEffects() {
         return [createRouterEffect({ baseUrl: '/stock', routes: STOCK_ROUTES })];
     }
 
-    getPlatformAssistantContextVariables(routeKey, params) {
+    override async getPlatformAssistantContextVariables(routeKey: string, params: Record<string, string>) {
         return {
             stock_route: routeKey,
             stock_transfer_id: typeof params.transferId === 'string' ? params.transferId : '',
         };
     }
 
-    renderRoute(routeKey, params) {
+    override renderRoute(routeKey: string | null, params: Record<string, string>) {
         return html`
             <div class="main">
                 <platform-island padding="none" ?content-no-scroll=${true}>
@@ -167,7 +167,7 @@ export class StockApp extends PlatformApp {
         `;
     }
 
-    _renderPage(routeKey, params) {
+    private _renderPage(routeKey: string | null, params: Record<string, string>) {
         switch (routeKey) {
             case 'stock_transfers':
                 return html`<stock-transfers-page></stock-transfers-page>`;

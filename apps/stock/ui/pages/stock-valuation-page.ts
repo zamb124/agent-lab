@@ -4,11 +4,14 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 
 export class StockValuationPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    static styles = [
+    private _layers: ResourceController;
+
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
@@ -30,11 +33,11 @@ export class StockValuationPage extends PlatformPage {
         this._layers = this.useResource('stock/valuation');
     }
 
-    async onRouteActive() {
+    async onRouteActive(): Promise<void> {
         await this._layers.load();
     }
 
-    render() {
+    override render() {
         const items = this._layers.items;
         return html`
             <div class="wrap">
@@ -54,7 +57,7 @@ export class StockValuationPage extends PlatformPage {
                                 <th class="num">${this.t('fields.value_after')}</th>
                             </tr></thead>
                             <tbody>
-                                ${items.map((row) => html`
+                                ${items.map((row: Record<string, unknown>) => html`
                                     <tr>
                                         <td class="num">${row.entry_no}</td>
                                         <td>${row.entry_kind}</td>

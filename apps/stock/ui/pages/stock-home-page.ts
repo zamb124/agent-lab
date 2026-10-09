@@ -4,18 +4,44 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface PulseQuantRow {
+    product_id?: unknown;
+    location_id?: unknown;
+    quantity?: unknown;
+    reserved_quantity?: unknown;
+    available_quantity?: unknown;
+    avg_cost?: unknown;
+    value?: unknown;
+}
+
+interface PulseTransferRow {
+    name?: unknown;
+    operation_code?: unknown;
+    state?: unknown;
+}
+
+interface WarehousePulseResult {
+    quants?: PulseQuantRow[];
+    transfers?: PulseTransferRow[];
+}
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
 export class StockHomePage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    static properties = {
+    declare _warehouseId: string;
+    private _warehouses: ResourceController;
+    private _pulse: OpController;
+
+    static override properties = {
         _pulse: { state: true },
         _warehouseId: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
@@ -46,7 +72,7 @@ export class StockHomePage extends PlatformPage {
         this._warehouseId = '';
     }
 
-    async onRouteActive() {
+    async onRouteActive(): Promise<void> {
         await this._warehouses.load();
         const first = this._warehouses.items[0];
         if (first && typeof first.warehouse_id === 'string') {
@@ -55,8 +81,8 @@ export class StockHomePage extends PlatformPage {
         }
     }
 
-    render() {
-        const pulse = this._pulse.lastResult;
+    override render() {
+        const pulse = this._pulse.lastResult as WarehousePulseResult | null;
         return html`
             <div class="wrap">
                 <h1>${this.t('home.title')}</h1>
@@ -74,7 +100,7 @@ export class StockHomePage extends PlatformPage {
                                 <th class="num">${this.t('fields.value')}</th>
                             </tr></thead>
                             <tbody>
-                                ${(pulse.quants || []).map((row) => html`
+                                ${(pulse.quants || []).map((row: PulseQuantRow) => html`
                                     <tr>
                                         <td>${row.product_id}</td>
                                         <td>${row.location_id}</td>
@@ -97,7 +123,7 @@ export class StockHomePage extends PlatformPage {
                                 <th>${this.t('fields.state')}</th>
                             </tr></thead>
                             <tbody>
-                                ${(pulse.transfers || []).map((row) => html`
+                                ${(pulse.transfers || []).map((row: PulseTransferRow) => html`
                                     <tr>
                                         <td>${row.name}</td>
                                         <td>${row.operation_code}</td>

@@ -1,14 +1,18 @@
 /**
- * Список переводов склада.
+ * Номенклатура склада: продукты и метод оценки карточки.
  */
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import '@platform/lib/components/platform-button.js';
 
-export class StockTransfersPage extends PlatformPage {
+export class StockProductsPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    static styles = [
+    private _products: ResourceController;
+
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
@@ -20,48 +24,44 @@ export class StockTransfersPage extends PlatformPage {
                 border-bottom: 1px solid var(--glass-border-subtle); color: var(--text-primary);
             }
             th { color: var(--text-tertiary); font-weight: var(--font-medium); }
-            tr[data-id] { cursor: pointer; }
-            tr[data-id]:hover td { background: var(--surface-hover); }
+            .num { text-align: right; font-variant-numeric: tabular-nums; }
             .empty { padding: var(--space-8); text-align: center; color: var(--text-tertiary); }
         `,
     ];
 
     constructor() {
         super();
-        this._transfers = this.useResource('stock/transfers');
+        this._products = this.useResource('stock/products');
     }
 
-    async onRouteActive() {
-        await this._transfers.load();
+    async onRouteActive(): Promise<void> {
+        await this._products.load();
     }
 
-    _open(event) {
-        const id = event.currentTarget.getAttribute('data-id');
-        if (typeof id === 'string' && id !== '') {
-            this.navigate('stock_transfer', { transferId: id });
-        }
-    }
-
-    render() {
-        const items = this._transfers.items;
+    override render() {
+        const items = this._products.items;
         return html`
             <div class="wrap">
-                <h1>${this.t('transfers.title')}</h1>
+                <h1>${this.t('products.title')}</h1>
                 ${items.length === 0
-                    ? html`<div class="empty">${this.t('transfers.empty')}</div>`
+                    ? html`<div class="empty">${this.t('products.empty')}</div>`
                     : html`
                         <table>
                             <thead><tr>
+                                <th>${this.t('fields.sku')}</th>
                                 <th>${this.t('fields.name')}</th>
-                                <th>${this.t('fields.state')}</th>
-                                <th>${this.t('fields.scheduled')}</th>
+                                <th>${this.t('fields.valuation_method')}</th>
+                                <th class="num">${this.t('fields.standard_price')}</th>
+                                <th>${this.t('fields.tracking')}</th>
                             </tr></thead>
                             <tbody>
                                 ${items.map((row) => html`
-                                    <tr data-id=${row.transfer_id} @click=${this._open}>
+                                    <tr>
+                                        <td>${row.sku}</td>
                                         <td>${row.name}</td>
-                                        <td>${row.state}</td>
-                                        <td>${row.scheduled_at || ''}</td>
+                                        <td>${row.valuation_method}</td>
+                                        <td class="num">${row.standard_price}</td>
+                                        <td>${row.tracking}</td>
                                     </tr>
                                 `)}
                             </tbody>
@@ -72,4 +72,4 @@ export class StockTransfersPage extends PlatformPage {
     }
 }
 
-customElements.define('stock-transfers-page', StockTransfersPage);
+customElements.define('stock-products-page', StockProductsPage);

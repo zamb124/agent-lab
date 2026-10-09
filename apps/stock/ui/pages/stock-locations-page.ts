@@ -4,11 +4,14 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
 
 export class StockLocationsPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    static styles = [
+    private _locations: ResourceController;
+
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
@@ -29,11 +32,11 @@ export class StockLocationsPage extends PlatformPage {
         this._locations = this.useResource('stock/locations');
     }
 
-    async onRouteActive() {
+    async onRouteActive(): Promise<void> {
         await this._locations.load();
     }
 
-    render() {
+    override render() {
         const items = this._locations.items;
         return html`
             <div class="wrap">

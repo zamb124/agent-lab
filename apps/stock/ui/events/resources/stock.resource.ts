@@ -7,6 +7,8 @@
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
 
+type EventPayload = Record<string, unknown>;
+
 export const stockProductsResource = createResourceCollection({
     name: 'stock/products',
     baseUrl: '/stock/api/v1/products',
@@ -14,7 +16,6 @@ export const stockProductsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => state,
 });
@@ -26,11 +27,10 @@ export const stockLocationsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => {
         if (event.type !== 'stock/container/moved' || !event.payload) return state;
-        const payload = event.payload;
+        const payload = event.payload as EventPayload;
         const index = state.items.findIndex((row) => row && row.location_id === payload.container_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
@@ -47,7 +47,6 @@ export const stockWarehousesResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => state,
 });
@@ -59,11 +58,11 @@ export const stockTransfersResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => {
-        if (event.type === 'stock/transfer/done' && event.payload && event.payload.transfer_id) {
-            const id = event.payload.transfer_id;
+        const donePayload = event.payload as EventPayload | null;
+        if (event.type === 'stock/transfer/done' && donePayload && donePayload.transfer_id) {
+            const id = donePayload.transfer_id;
             const index = state.items.findIndex((row) => row && row.transfer_id === id);
             if (index === -1) return state;
             const items = state.items.map((row, position) => (
@@ -82,11 +81,10 @@ export const stockQuantsResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => {
         if (event.type !== 'stock/quant/changed' || !event.payload) return state;
-        const payload = event.payload;
+        const payload = event.payload as EventPayload;
         const index = state.items.findIndex((row) => row && row.quant_id === payload.quant_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
@@ -105,15 +103,15 @@ export const stockQueueResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     restMirror: {
         list: { method: 'POST', path: '/stock/api/v1/move-lines/queue' },
     },
     extraReducer: (state, event) => {
-        if (!event.payload || !event.payload.move_line_id) return state;
+        const movePayload = event.payload as EventPayload | null;
+        if (!movePayload || !movePayload.move_line_id) return state;
         if (event.type === 'stock/move_line/assigned') {
-            const payload = event.payload;
+            const payload = movePayload;
             const index = state.items.findIndex((row) => row && row.move_line_id === payload.move_line_id);
             const patch = {
                 assigned_user_id: payload.assigned_user_id,
@@ -126,7 +124,7 @@ export const stockQueueResource = createResourceCollection({
         }
         if (event.type === 'stock/move_line/exception') {
             const items = state.items.filter(
-                (row) => row && row.move_line_id !== event.payload.move_line_id,
+                (row) => row && row.move_line_id !== movePayload.move_line_id,
             );
             return { ...state, items };
         }
@@ -141,14 +139,13 @@ export const stockWavesResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     restMirror: {
         list: { method: 'POST', path: '/stock/api/v1/waves/list' },
     },
     extraReducer: (state, event) => {
         if (event.type !== 'stock/wave/released' || !event.payload) return state;
-        const payload = event.payload;
+        const payload = event.payload as EventPayload;
         const index = state.items.findIndex((row) => row && row.wave_id === payload.wave_id);
         if (index === -1) return state;
         const items = state.items.map((row, position) => (
@@ -167,7 +164,6 @@ export const stockValuationResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => {
         if (event.type !== 'stock/valuation/changed' || !event.payload) return state;

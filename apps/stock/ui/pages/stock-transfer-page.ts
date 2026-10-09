@@ -4,17 +4,37 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+interface TransferDetail {
+    transfer?: { name?: unknown; state?: unknown };
+    lines?: {
+        product_id?: unknown;
+        location_id?: unknown;
+        location_dest_id?: unknown;
+        quantity?: unknown;
+        done_quantity?: unknown;
+    }[];
+}
 import '@platform/lib/components/platform-button.js';
 
 export class StockTransferPage extends PlatformPage {
     static i18nNamespace = 'stock';
 
-    static properties = {
+    declare transferId: string;
+    declare _detail: TransferDetail | null;
+    private _item: OpController;
+    private _confirm: OpController;
+    private _assign: OpController;
+    private _validate: OpController;
+    private _cancel: OpController;
+
+    static override properties = {
         transferId: { attribute: 'transfer-id' },
         _detail: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host { display: block; height: 100%; overflow-y: auto; }
@@ -35,6 +55,7 @@ export class StockTransferPage extends PlatformPage {
     constructor() {
         super();
         this.transferId = '';
+        this._detail = null;
         this._item = this.useOp('stock/transfer_item');
         this._confirm = this.useOp('stock/transfer_confirm');
         this._assign = this.useOp('stock/transfer_assign');
@@ -42,37 +63,37 @@ export class StockTransferPage extends PlatformPage {
         this._cancel = this.useOp('stock/transfer_cancel');
     }
 
-    async onRouteActive() {
+    async onRouteActive(): Promise<void> {
         await this._reload();
     }
 
-    async _reload() {
+    private async _reload(): Promise<void> {
         if (this.transferId === '') return;
-        this._detail = await this._item.run({ transfer_id: this.transferId });
+        this._detail = await this._item.run({ transfer_id: this.transferId }) as TransferDetail | null;
     }
 
-    async _act(op, event) {
+    private async _act(op: OpController, event: Event): Promise<void> {
         event.preventDefault();
         await op.run({ transfer_id: this.transferId });
         await this._reload();
     }
 
-    render() {
+    override render() {
         const detail = this._detail;
         if (!detail || !detail.transfer) {
             return html`<div class="wrap"><h1>${this.t('transfer.loading')}</h1></div>`;
         }
         const transfer = detail.transfer;
-        const lines = detail.lines || [];
+        const lines: NonNullable<TransferDetail['lines']> = detail.lines || [];
         return html`
             <div class="wrap">
                 <h1>${transfer.name}</h1>
                 <div class="state">${this.t('fields.state')}: ${transfer.state}</div>
                 <div class="actions">
-                    <platform-button @click=${(e) => this._act(this._confirm, e)}>${this.t('transfer.confirm')}</platform-button>
-                    <platform-button @click=${(e) => this._act(this._assign, e)}>${this.t('transfer.assign')}</platform-button>
-                    <platform-button @click=${(e) => this._act(this._validate, e)}>${this.t('transfer.validate')}</platform-button>
-                    <platform-button @click=${(e) => this._act(this._cancel, e)}>${this.t('transfer.cancel')}</platform-button>
+                    <platform-button @click=${(e: Event) => this._act(this._confirm, e)}>${this.t('transfer.confirm')}</platform-button>
+                    <platform-button @click=${(e: Event) => this._act(this._assign, e)}>${this.t('transfer.assign')}</platform-button>
+                    <platform-button @click=${(e: Event) => this._act(this._validate, e)}>${this.t('transfer.validate')}</platform-button>
+                    <platform-button @click=${(e: Event) => this._act(this._cancel, e)}>${this.t('transfer.cancel')}</platform-button>
                 </div>
                 <table>
                     <thead><tr>
