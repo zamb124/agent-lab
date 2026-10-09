@@ -20,6 +20,7 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { classMap } from 'lit/directives/class-map.js';
 import { PlatformElement } from '../platform-element/index.js';
 import { CoreEvents } from '../events/contract.js';
@@ -28,6 +29,26 @@ import { buildCompanySubdomainUrl } from '../utils/company-url.js';
 import { COMPANY_SWITCH_STORAGE_KEY } from '../events/effects/auth-company-navigation.effect.js';
 import { buildScenarioDocumentationUrl } from '../utils/documentation-url.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
+import type { SelectController } from '../events/select-controller.js';
+
+interface AuthUserRecord {
+    id?: string;
+    name?: string;
+    company_id?: string;
+    raw?: Record<string, unknown>;
+}
+
+interface AuthSliceView {
+    status?: string;
+    user?: AuthUserRecord;
+    activeCompanyId?: string | null;
+}
+
+interface CompanyRecord {
+    company_id?: string;
+    name?: string;
+    role?: unknown;
+}
 import './platform-icon.js';
 import './platform-popover.js';
 import './platform-calendar-modal.js';
@@ -36,7 +57,7 @@ import './platform-mail-modal.js';
 export class PlatformUser extends PlatformElement {
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         block: { type: Boolean, reflect: true },
         documentationTag: { type: String, attribute: 'documentation-tag' },
         _menuOpen: { state: true },
@@ -54,39 +75,41 @@ export class PlatformUser extends PlatformElement {
         this._avatarFallbackLevel = 0;
         this._menuAvatarSig = '';
 
-        this._authSelect = this.select((s) => ({
-            status: s.auth.status,
-            user: s.auth.user,
-            activeCompanyId: s.auth.activeCompanyId,
-        }));
-        this._companiesSelect = this.select((s) => s.companies.list);
-        this._themeSelect = this.select((s) => s.theme.mode);
-        this._localeSelect = this.select((s) => s.i18n.locale);
+        this._authSelect = this.select((s): AuthSliceView => {
+            const auth = s.auth as AuthSliceView;
+            return {
+                status: auth.status,
+                user: auth.user,
+                activeCompanyId: auth.activeCompanyId,
+            };
+        });
+        this._companiesSelect = this.select((s) => (s.companies as { list?: CompanyRecord[] }).list);
+        this._themeSelect = this.select((s) => (s.theme as { mode?: string }).mode);
+        this._localeSelect = this.select((s) => (s.i18n as { locale?: string }).locale);
 
         this._companiesLoaded = false;
 
-        /** @type {HTMLElement | null} */
         this._anchor = null;
         this._onDocumentClick = this._onDocumentClick.bind(this);
         this._onStorage = this._onStorage.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         document.addEventListener('click', this._onDocumentClick);
         window.addEventListener('storage', this._onStorage);
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         document.removeEventListener('click', this._onDocumentClick);
         window.removeEventListener('storage', this._onStorage);
         super.disconnectedCallback();
     }
 
-    updated(changedProperties) {
-        super.updated(changedProperties);
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
 
-        const auth = this._authSelect.value;
+        const auth = this._authSelect.value || {};
         if (auth.status === 'authenticated' && auth.user && !this._companiesLoaded) {
             this._companiesLoaded = true;
             this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null);
@@ -94,7 +117,7 @@ export class PlatformUser extends PlatformElement {
 
         const menuUser = auth.user;
         if (menuUser) {
-            const raw = menuUser.raw;
+            const raw = menuUser.raw as { user_id?: unknown } | undefined;
             const uid = raw && typeof raw.user_id === 'string' ? raw.user_id : '';
             const url = this._avatarUrl(menuUser);
             const sig = `${uid}|${url || ''}`;
@@ -111,11 +134,12 @@ export class PlatformUser extends PlatformElement {
             }
         }
         if (this._menuOpen) {
-            this.renderRoot?.querySelector('platform-popover')?.reposition();
+            const popover = this.renderRoot?.querySelector('platform-popover') as { reposition?: () => void } | null;
+            popover?.reposition?.();
         }
     }
 
-    _onDocumentClick(e) {
+    _onDocumentClick(e: Event) {
         if (!this._menuOpen) return;
         const path = e.composedPath();
         if (!path.includes(this)) {
@@ -124,7 +148,7 @@ export class PlatformUser extends PlatformElement {
         }
     }
 
-    _toggleMenu(e) {
+    _toggleMenu(e: Event): void {
         e.stopPropagation();
         const next = !this._menuOpen;
         this._menuOpen = next;
@@ -133,28 +157,28 @@ export class PlatformUser extends PlatformElement {
         }
     }
 
-    _closeMenu() {
+    _closeMenu(): void {
         this._menuOpen = false;
         this._companySelectorOpen = false;
     }
 
-    _toggleCompanySelector(e) {
+    _toggleCompanySelector(e: Event): void {
         e.stopPropagation();
         this._companySelectorOpen = !this._companySelectorOpen;
     }
 
-    _switchCompany(companyId, e) {
+    _switchCompany(companyId: string | undefined, e: Event): void {
         e.stopPropagation();
-        const auth = this._authSelect.value;
+        const auth = this._authSelect.value || {};
         const currentCompanyId = this._currentCompanyId(auth);
-        if (companyId === currentCompanyId) {
+        if (!companyId || companyId === currentCompanyId) {
             this._companySelectorOpen = false;
             return;
         }
         this.switchCompany(companyId);
     }
 
-    _onStorage(event) {
+    _onStorage(event: StorageEvent): void {
         if (event.key !== COMPANY_SWITCH_STORAGE_KEY || !event.newValue) return;
         const parts = event.newValue.split('|');
         if (parts.length !== 3) return;
@@ -163,44 +187,44 @@ export class PlatformUser extends PlatformElement {
         this._redirectToSubdomain(targetSubdomain);
     }
 
-    _redirectToSubdomain(subdomain) {
+    _redirectToSubdomain(subdomain: string): void {
         const targetPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
         const targetUrl = buildCompanySubdomainUrl(subdomain, targetPath);
         if (targetUrl === window.location.href) return;
         window.location.href = targetUrl;
     }
 
-    _setLocale(locale, e) {
+    _setLocale(locale: string, e: Event): void {
         e.stopPropagation();
         this.setLocale(locale);
     }
 
-    _toggleTheme() {
+    _toggleTheme(): void {
         const next = this._themeSelect.value === 'dark' ? 'light' : 'dark';
         this.setTheme(next);
     }
 
-    _openUserInfo() {
+    _openUserInfo(): void {
         this._menuOpen = false;
-        const auth = this._authSelect.value;
+        const auth = this._authSelect.value || {};
         const user = auth.user;
         if (!user) return;
-        const userId = (user.raw && user.raw.user_id) || user.id;
+        const userId = (user.raw && user.raw.user_id as string | undefined) || user.id;
         if (!userId) return;
         this.openModal('platform.user_info', { userId });
     }
 
-    _openCalendar() {
+    _openCalendar(): void {
         this._menuOpen = false;
         this.openModal('platform.calendar', {});
     }
 
-    _openMail() {
+    _openMail(): void {
         this._menuOpen = false;
         this.openModal('platform.mail', {});
     }
 
-    _openDocumentation() {
+    _openDocumentation(): void {
         this._menuOpen = false;
         const tag = (typeof this.documentationTag === 'string' && this.documentationTag.trim())
             ? this.documentationTag.trim()
@@ -212,69 +236,71 @@ export class PlatformUser extends PlatformElement {
         window.open(url, '_blank', 'noopener,noreferrer');
     }
 
-    _openServicesHub(e) {
+    _openServicesHub(e: Event): void {
         e.stopPropagation();
         this._menuOpen = false;
         this.openModal('platform.services', {});
     }
 
-    _openCreateCompany(e) {
+    _openCreateCompany(e: Event): void {
         e.stopPropagation();
         this._menuOpen = false;
         this._companySelectorOpen = false;
         this.openModal('platform.company_create', null);
     }
 
-    _isOwnerOfCompany(companyRecord) {
+    _isOwnerOfCompany(companyRecord: CompanyRecord | undefined): boolean {
         if (!companyRecord || !Array.isArray(companyRecord.role)) {
             return false;
         }
-        return companyRecord.role.includes('owner');
+        return (companyRecord.role as unknown[]).includes('owner');
     }
 
-    _logout() {
+    _logout(): void {
         this._menuOpen = false;
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
     }
 
-    _currentCompanyId(auth) {
+    _currentCompanyId(auth: AuthSliceView): string | null {
         if (auth.activeCompanyId) return auth.activeCompanyId;
         const raw = auth.user && auth.user.raw;
         if (raw) {
-            if (raw.active_company_id) return raw.active_company_id;
-            if (raw.company_id) return raw.company_id;
+            if (typeof raw.active_company_id === 'string' && raw.active_company_id) return raw.active_company_id;
+            if (typeof raw.company_id === 'string' && raw.company_id) return raw.company_id;
         }
         return auth.user && auth.user.company_id ? auth.user.company_id : null;
     }
 
-    _companyName(companyId) {
+    _companyName(companyId: string | null): string {
         if (!companyId) return '';
-        const company = this._companiesSelect.value.find((c) => c.company_id === companyId);
-        return company ? company.name : '';
+        const company = (this._companiesSelect.value || []).find((c) => c.company_id === companyId);
+        return company && company.name ? company.name : '';
     }
 
-    _displayName(user) {
+    _displayName(user: AuthUserRecord): string {
         if (user.name) return user.name;
         const raw = user.raw;
-        if (raw && raw.name) return raw.name;
+        if (raw && typeof raw.name === 'string' && raw.name) return raw.name;
         return this.t('menu.user_fallback');
     }
 
-    _displayEmail(user) {
+    _displayEmail(user: AuthUserRecord): string {
         const raw = user.raw;
         if (!raw) return '';
-        if (Array.isArray(raw.emails) && raw.emails.length > 0) return raw.emails[0];
+        if (Array.isArray(raw.emails) && raw.emails.length > 0 && typeof raw.emails[0] === 'string') {
+            return raw.emails[0];
+        }
         return '';
     }
 
-    _avatarUrl(user) {
+    _avatarUrl(user: AuthUserRecord): string | null {
         const raw = user.raw;
         if (!raw || typeof raw.avatar_url !== 'string') return null;
         const trimmed = raw.avatar_url.trim();
         return trimmed === '' ? null : trimmed;
     }
 
-    _avatarLetter(user) {
+    _avatarLetter(user: AuthUserRecord): string {
         const sources = [user.name, user.raw && user.raw.name, this._displayEmail(user)];
         for (const src of sources) {
             if (typeof src === 'string' && src.trim().length > 0) {
@@ -284,8 +310,8 @@ export class PlatformUser extends PlatformElement {
         return '?';
     }
 
-    _onMenuAvatarError() {
-        const auth = this._authSelect.value;
+    _onMenuAvatarError(): void {
+        const auth = this._authSelect.value || {};
         const user = auth.user;
         if (!user) return;
         const url = this._avatarUrl(user);
@@ -296,12 +322,12 @@ export class PlatformUser extends PlatformElement {
         }
     }
 
-    render() {
-        const auth = this._authSelect.value;
+    override render(): TemplateResult {
+        const auth = this._authSelect.value || {};
         const user = auth.user;
         if (!user) return html``;
 
-        const companies = this._companiesSelect.value;
+        const companies = this._companiesSelect.value || [];
         const currentCompanyId = this._currentCompanyId(auth);
         const currentCompanyName = this._companyName(currentCompanyId);
         const hasCompaniesMenu = companies.length >= 1;
@@ -361,7 +387,7 @@ export class PlatformUser extends PlatformElement {
             ${this._menuOpen ? html`
                 <div
                     class="user-menu"
-                    @click=${(e) => e.stopPropagation()}
+                    @click=${(e: Event) => e.stopPropagation()}
                 >
                     <button class="menu-item" type="button" data-menu-action="apps" @click=${this._openServicesHub}>
                         <platform-icon class="menu-icon" name="apps" size="18"></platform-icon>
@@ -391,7 +417,7 @@ export class PlatformUser extends PlatformElement {
                                     <button
                                         class=${classMap({ 'company-item': true, active: company.company_id === currentCompanyId })}
                                         type="button"
-                                        @click=${(e) => this._switchCompany(company.company_id, e)}
+                                        @click=${(e: Event) => this._switchCompany(company.company_id, e)}
                                     >
                                         <span class="company-item-name">
                                             <platform-icon name="building-one" size="14"></platform-icon>
@@ -443,13 +469,13 @@ export class PlatformUser extends PlatformElement {
                             <button
                                 class=${classMap({ 'lang-option': true, active: locale === 'en' })}
                                 data-locale="en"
-                                @click=${(e) => this._setLocale('en', e)}
+                                @click=${(e: Event) => this._setLocale('en', e)}
                             >en</button>
                             <span class="lang-separator">|</span>
                             <button
                                 class=${classMap({ 'lang-option': true, active: locale === 'ru' })}
                                 data-locale="ru"
-                                @click=${(e) => this._setLocale('ru', e)}
+                                @click=${(e: Event) => this._setLocale('ru', e)}
                             >ru</button>
                         </span>
                     </div>
@@ -472,8 +498,21 @@ export class PlatformUser extends PlatformElement {
             </platform-popover>
         `;
     }
+    declare block: boolean;
+    declare documentationTag: string | null;
+    declare _menuOpen: boolean;
+    declare _anchor: HTMLElement | null;
+    declare _companySelectorOpen: boolean;
+    declare _avatarFallbackLevel: number;
 
-    static styles = [
+    private _menuAvatarSig: string;
+    private _authSelect: SelectController<AuthSliceView>;
+    private _companiesSelect: SelectController<CompanyRecord[] | undefined>;
+    private _themeSelect: SelectController<string | undefined>;
+    private _localeSelect: SelectController<string | undefined>;
+    private _companiesLoaded: boolean;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         css`
             :host { display: inline-block; position: relative; }

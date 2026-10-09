@@ -1,4 +1,5 @@
 import { html, css, unsafeCSS, nothing } from '../lit-shim.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformElement } from '../platform-element/index.js';
 import './platform-icon.js';
 import './platform-popover.js';
@@ -9,25 +10,25 @@ const DATETIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 const TIME_PATTERN = /^(\d{2}):(\d{2})$/;
 const DAYS_IN_WEEK = 7;
 
-function pad2(value) {
+function pad2(value: number | string): string {
     return String(value).padStart(2, '0');
 }
 
-function assertEnumValue(fieldName, value, allowedValues) {
+function assertEnumValue(fieldName: string, value: unknown, allowedValues: readonly unknown[]): void {
     if (!allowedValues.includes(value)) {
         throw new Error(`${fieldName} must be one of: ${allowedValues.join(', ')}`);
     }
 }
 
-function cloneDate(date) {
+function cloneDate(date: Date): Date {
     return new Date(date.getTime());
 }
 
-function startOfDay(date) {
+function startOfDay(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function parseIsoDate(value) {
+function parseIsoDate(value: string): Date {
     const match = DATE_PATTERN.exec(value);
     if (match) {
         const year = Number(match[1]);
@@ -42,7 +43,7 @@ function parseIsoDate(value) {
     return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
 }
 
-function parseIsoDateTime(value) {
+function parseIsoDateTime(value: string): Date {
     const match = DATETIME_PATTERN.exec(value);
     if (match) {
         const year = Number(match[1]);
@@ -67,7 +68,7 @@ function parseIsoDateTime(value) {
     );
 }
 
-function parseIsoTime(value) {
+function parseIsoTime(value: string): number {
     const match = TIME_PATTERN.exec(value);
     if (!match) {
         throw new Error(`Invalid time format: ${value}`);
@@ -83,31 +84,31 @@ function parseIsoTime(value) {
     return (hours * 60) + minutes;
 }
 
-function formatIsoDate(date) {
+function formatIsoDate(date: Date): string {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
-function formatIsoDateTime(date) {
+function formatIsoDateTime(date: Date): string {
     return `${formatIsoDate(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
-function formatIsoTime(totalMinutes) {
+function formatIsoTime(totalMinutes: number): string {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${pad2(hours)}:${pad2(minutes)}`;
 }
 
-function minutesToDate(totalMinutes) {
+function minutesToDate(totalMinutes: number): Date {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return new Date(1970, 0, 1, hours, minutes, 0, 0);
 }
 
-function dateToMinutes(date) {
+function dateToMinutes(date: Date): number {
     return (date.getHours() * 60) + date.getMinutes();
 }
 
-function compareDateOnly(left, right) {
+function compareDateOnly(left: Date, right: Date): number {
     const leftValue = startOfDay(left).getTime();
     const rightValue = startOfDay(right).getTime();
     if (leftValue < rightValue) {
@@ -119,7 +120,7 @@ function compareDateOnly(left, right) {
     return 0;
 }
 
-function dateAtWeekStart(date) {
+function dateAtWeekStart(date: Date): Date {
     const result = startOfDay(date);
     const day = result.getDay();
     const shift = day === 0 ? 6 : day - 1;
@@ -127,20 +128,20 @@ function dateAtWeekStart(date) {
     return result;
 }
 
-function normalizeDateForMode(mode, date) {
+function normalizeDateForMode(mode: string, date: Date): Date {
     if (mode === 'date') {
         return startOfDay(date);
     }
     return cloneDate(date);
 }
 
-function applyMinutes(date, minutes) {
+function applyMinutes(date: Date, minutes: number): Date {
     const target = cloneDate(date);
     target.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
     return target;
 }
 
-function toRangeValue(startValue, endValue, valueFormat) {
+function toRangeValue(startValue: unknown, endValue: unknown, valueFormat: string): { start: unknown; end: unknown } {
     if (valueFormat === 'date') {
         return {
             start: startValue,
@@ -235,8 +236,16 @@ const DATE_PICKER_POPUP_CSS = `
         .dp-portal-popup .divider { color: var(--text-tertiary, #999); font-size: var(--text-sm, 14px); }
     `;
 
+type TimeTarget = 'single' | 'start' | 'end';
+
+interface CalendarCell {
+    date: Date;
+    iso: string;
+    inCurrentMonth: boolean;
+}
+
 export class PlatformDatePicker extends PlatformElement {
-    static properties = {
+    static override properties: PropertyDeclarations = {
         mode: { type: String, reflect: true },
         selection: { type: String, reflect: true },
         valueFormat: { type: String, attribute: 'value-format', reflect: true },
@@ -266,8 +275,39 @@ export class PlatformDatePicker extends PlatformElement {
         _rangeStartTime: { state: true },
         _rangeEndTime: { state: true },
     };
+    declare mode: string;
+    declare selection: string;
+    declare valueFormat: string;
+    declare value: unknown;
+    declare min: string;
+    declare max: string;
+    declare step: number;
+    declare locale: string;
+    declare disabled: boolean;
+    declare readonly: boolean;
+    declare required: boolean;
+    declare placeholder: string;
+    declare label: string;
+    declare leadingIcon: string;
+    declare embedded: boolean;
+    declare hideTriggerIcon: boolean;
+    declare compact: boolean;
+    declare open: boolean;
+    declare _viewYear: number;
+    declare _viewMonth: number;
+    declare _focusedDateIso: string;
+    declare _activeTimeTarget: TimeTarget;
+    declare _singleDate: Date | null;
+    declare _rangeStart: Date | null;
+    declare _rangeEnd: Date | null;
+    declare _singleTime: number | null;
+    declare _rangeStartTime: number | null;
+    declare _rangeEndTime: number | null;
 
-    static styles = [
+    private _updatingFromExternal: boolean;
+    private _anchor: HTMLElement | null;
+
+    static override styles: CSSResultGroup = [
         PlatformElement.styles,
         unsafeCSS(DATE_PICKER_POPUP_CSS),
         css`
@@ -431,11 +471,10 @@ export class PlatformDatePicker extends PlatformElement {
         this._rangeEndTime = null;
 
         this._updatingFromExternal = false;
-        /** @type {HTMLElement | null} */
         this._anchor = null;
     }
 
-    requestOpen() {
+    requestOpen(): void {
         if (this.disabled) {
             throw new Error('PlatformDatePicker.requestOpen: picker is disabled');
         }
@@ -443,7 +482,7 @@ export class PlatformDatePicker extends PlatformElement {
     }
 
 
-    _renderPopup() {
+    _renderPopup(): unknown {
         if (!this.open) {
             return nothing;
         }
@@ -465,7 +504,7 @@ export class PlatformDatePicker extends PlatformElement {
         `;
     }
 
-    _focusFocusedDay() {
+    _focusFocusedDay(): void {
         const dayButton = this.renderRoot?.querySelector(
             `.day-btn[data-date="${this._focusedDateIso}"]`,
         );
@@ -474,29 +513,29 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    willUpdate(changedProperties) {
-        if (changedProperties.has('mode')) {
+    override willUpdate(changed: PropertyValues<this>): void {
+        if (changed.has('mode')) {
             assertEnumValue('mode', this.mode, ['date', 'datetime', 'time']);
         }
-        if (changedProperties.has('selection')) {
+        if (changed.has('selection')) {
             assertEnumValue('selection', this.selection, ['single', 'range']);
         }
-        if (changedProperties.has('valueFormat')) {
+        if (changed.has('valueFormat')) {
             assertEnumValue('value-format', this.valueFormat, ['iso', 'date']);
         }
-        if (changedProperties.has('value')) {
+        if (changed.has('value')) {
             this._syncInternalFromExternalValue();
         }
     }
 
-    willUpdateOpenState() {
+    willUpdateOpenState(): void {
         const anchorDate = this._singleDate ?? this._rangeStart ?? this._rangeEnd ?? new Date();
         this._viewYear = anchorDate.getFullYear();
         this._viewMonth = anchorDate.getMonth();
         this._focusedDateIso = formatIsoDate(anchorDate);
     }
 
-    updated(changedProperties) {
+    override updated(changed: PropertyValues<this>): void {
         if (this._anchor === null) {
             const trigger = this.renderRoot?.querySelector('platform-field-shell')
                 ?? this.renderRoot?.querySelector('.trigger');
@@ -508,13 +547,14 @@ export class PlatformDatePicker extends PlatformElement {
             return;
         }
         // Календарь меняет высоту при переключении месяца и режима времени.
-        this.renderRoot?.querySelector('platform-popover')?.reposition();
-        if (changedProperties.has('open')) {
+        const popover = this.renderRoot?.querySelector('platform-popover') as { reposition?: () => void } | null;
+        popover?.reposition?.();
+        if (changed.has('open')) {
             this._focusFocusedDay();
         }
     }
 
-    _syncInternalFromExternalValue() {
+    _syncInternalFromExternalValue(): void {
         this._updatingFromExternal = true;
         this._singleDate = null;
         this._rangeStart = null;
@@ -538,13 +578,14 @@ export class PlatformDatePicker extends PlatformElement {
             throw new Error('Range value must be object {start, end}');
         }
 
-        const startValue = this.value.start ?? null;
-        const endValue = this.value.end ?? null;
+        const range = this.value as { start?: unknown; end?: unknown };
+        const startValue = range.start ?? null;
+        const endValue = range.end ?? null;
         this._syncRangeValue(startValue, endValue);
         this._updatingFromExternal = false;
     }
 
-    _syncSingleValue(value) {
+    _syncSingleValue(value: unknown): void {
         if (this.mode === 'time') {
             this._singleTime = this._parseIncomingTime(value);
             return;
@@ -556,7 +597,7 @@ export class PlatformDatePicker extends PlatformElement {
         this._focusedDateIso = formatIsoDate(parsedDate);
     }
 
-    _syncRangeValue(startValue, endValue) {
+    _syncRangeValue(startValue: unknown, endValue: unknown): void {
         if (this.mode === 'time') {
             this._rangeStartTime = startValue === null ? null : this._parseIncomingTime(startValue);
             this._rangeEndTime = endValue === null ? null : this._parseIncomingTime(endValue);
@@ -574,7 +615,7 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    _parseIncomingDateLike(value) {
+    _parseIncomingDateLike(value: unknown): Date {
         if (this.valueFormat === 'date') {
             if (!(value instanceof Date)) {
                 throw new Error('Value must be Date when value-format=date');
@@ -593,7 +634,7 @@ export class PlatformDatePicker extends PlatformElement {
         throw new Error('Date-like parser is unavailable for mode=time');
     }
 
-    _parseIncomingTime(value) {
+    _parseIncomingTime(value: unknown): number {
         if (this.valueFormat === 'date') {
             if (!(value instanceof Date)) {
                 throw new Error('Time value must be Date when value-format=date');
@@ -606,7 +647,7 @@ export class PlatformDatePicker extends PlatformElement {
         return parseIsoTime(value);
     }
 
-    _togglePopup() {
+    _togglePopup(): void {
         if (this.disabled || this.readonly) {
             return;
         }
@@ -616,18 +657,18 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    _closePopup() {
+    _closePopup(): void {
         this.open = false;
     }
 
-    _shiftMonth(delta) {
+    _shiftMonth(delta: number): void {
         const base = new Date(this._viewYear, this._viewMonth, 1);
         base.setMonth(base.getMonth() + delta);
         this._viewYear = base.getFullYear();
         this._viewMonth = base.getMonth();
     }
 
-    _monthLabel() {
+    _monthLabel(): string {
         const date = new Date(this._viewYear, this._viewMonth, 1);
         return date.toLocaleDateString(this.locale, {
             month: 'long',
@@ -635,8 +676,8 @@ export class PlatformDatePicker extends PlatformElement {
         });
     }
 
-    _weekdayLabels() {
-        const labels = [];
+    _weekdayLabels(): string[] {
+        const labels: string[] = [];
         const monday = dateAtWeekStart(new Date(2025, 0, 6));
         for (let index = 0; index < DAYS_IN_WEEK; index += 1) {
             const value = new Date(monday);
@@ -646,10 +687,10 @@ export class PlatformDatePicker extends PlatformElement {
         return labels;
     }
 
-    _calendarCells() {
+    _calendarCells(): CalendarCell[] {
         const firstDay = new Date(this._viewYear, this._viewMonth, 1);
         const firstWeekDate = dateAtWeekStart(firstDay);
-        const cells = [];
+        const cells: CalendarCell[] = [];
         for (let index = 0; index < 42; index += 1) {
             const cellDate = new Date(firstWeekDate);
             cellDate.setDate(firstWeekDate.getDate() + index);
@@ -662,7 +703,7 @@ export class PlatformDatePicker extends PlatformElement {
         return cells;
     }
 
-    _isSelected(cellDate) {
+    _isSelected(cellDate: Date): boolean {
         if (this.selection === 'single') {
             if (this.mode === 'time') {
                 return false;
@@ -685,7 +726,7 @@ export class PlatformDatePicker extends PlatformElement {
         return false;
     }
 
-    _isInRange(cellDate) {
+    _isInRange(cellDate: Date): boolean {
         if (this.selection !== 'range' || !this._rangeStart || !this._rangeEnd) {
             return false;
         }
@@ -694,12 +735,12 @@ export class PlatformDatePicker extends PlatformElement {
         return compareStart > 0 && compareEnd < 0;
     }
 
-    _isToday(cellDate) {
+    _isToday(cellDate: Date): boolean {
         const today = new Date();
         return compareDateOnly(cellDate, today) === 0;
     }
 
-    _commitDateSelection(date, finalize = true) {
+    _commitDateSelection(date: Date, finalize = true): void {
         if (this.selection === 'single') {
             this._singleDate = normalizeDateForMode(this.mode, date);
             this._setExposedValueFromInternal();
@@ -740,7 +781,7 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    _onDayClick(cell) {
+    _onDayClick(cell: CalendarCell): void {
         if (!cell.inCurrentMonth) {
             this._viewYear = cell.date.getFullYear();
             this._viewMonth = cell.date.getMonth();
@@ -749,7 +790,7 @@ export class PlatformDatePicker extends PlatformElement {
         this._commitDateSelection(cell.date, true);
     }
 
-    _onGridKeyDown(event) {
+    _onGridKeyDown(event: KeyboardEvent): void {
         const focused = parseIsoDate(this._focusedDateIso);
         if (event.key === 'Escape') {
             event.preventDefault();
@@ -810,7 +851,7 @@ export class PlatformDatePicker extends PlatformElement {
         this._viewMonth = focused.getMonth();
     }
 
-    _setTimeValue(minutesValue, target) {
+    _setTimeValue(minutesValue: number | null, target: TimeTarget): void {
         if (this.mode === 'datetime') {
             if (minutesValue === null) {
                 return;
@@ -860,7 +901,7 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    _targetTimeValue(target) {
+    _targetTimeValue(target: TimeTarget): number | null {
         if (this.mode === 'datetime') {
             if (this.selection === 'single') {
                 return this._singleDate ? dateToMinutes(this._singleDate) : null;
@@ -879,8 +920,8 @@ export class PlatformDatePicker extends PlatformElement {
         return this._rangeEndTime;
     }
 
-    _onTimePartInput(target, part, event) {
-        const raw = event.target.value;
+    _onTimePartInput(target: TimeTarget, part: 'hours' | 'minutes', event: Event): void {
+        const raw = (event.target as HTMLInputElement).value;
         if (raw === '') {
             return;
         }
@@ -907,7 +948,7 @@ export class PlatformDatePicker extends PlatformElement {
         this._emitValueEvent('input');
     }
 
-    _applyTimeChanges() {
+    _applyTimeChanges(): void {
         this._setExposedValueFromInternal();
         this._emitValueEvent('change');
         if (this.mode === 'time' || this.mode === 'datetime') {
@@ -915,7 +956,7 @@ export class PlatformDatePicker extends PlatformElement {
         }
     }
 
-    _selectToday() {
+    _selectToday(): void {
         if (this.mode === 'time') {
             const now = new Date();
             const value = (now.getHours() * 60) + now.getMinutes();
@@ -947,7 +988,7 @@ export class PlatformDatePicker extends PlatformElement {
         this._commitDateSelection(now, true);
     }
 
-    _clearValue() {
+    _clearValue(): void {
         this._singleDate = null;
         this._rangeStart = null;
         this._rangeEnd = null;
@@ -959,21 +1000,21 @@ export class PlatformDatePicker extends PlatformElement {
         this._emitValueEvent('change');
     }
 
-    _setExposedValueFromInternal() {
+    _setExposedValueFromInternal(): void {
         const previousFlag = this._updatingFromExternal;
         this._updatingFromExternal = true;
         this.value = this._buildExternalValue();
         this._updatingFromExternal = previousFlag;
     }
 
-    _buildExternalValue() {
+    _buildExternalValue(): unknown {
         if (this.selection === 'single') {
             return this._buildExternalSingleValue();
         }
         return this._buildExternalRangeValue();
     }
 
-    _buildExternalSingleValue() {
+    _buildExternalSingleValue(): unknown {
         if (this.mode === 'time') {
             if (this._singleTime === null) {
                 return null;
@@ -996,7 +1037,7 @@ export class PlatformDatePicker extends PlatformElement {
         return formatIsoDateTime(this._singleDate);
     }
 
-    _buildExternalRangeValue() {
+    _buildExternalRangeValue(): unknown {
         if (this.mode === 'time') {
             const startValue = this._rangeStartTime === null
                 ? null
@@ -1022,7 +1063,7 @@ export class PlatformDatePicker extends PlatformElement {
         return toRangeValue(startValue, endValue, this.valueFormat);
     }
 
-    _emitValueEvent(eventName) {
+    _emitValueEvent(eventName: 'input' | 'change'): void {
         if (this._updatingFromExternal) {
             return;
         }
@@ -1038,14 +1079,14 @@ export class PlatformDatePicker extends PlatformElement {
         }));
     }
 
-    _displayValue() {
+    _displayValue(): string {
         if (this.selection === 'single') {
             return this._displaySingleValue();
         }
         return this._displayRangeValue();
     }
 
-    _displaySingleValue() {
+    _displaySingleValue(): string {
         if (this.mode === 'time') {
             if (this._singleTime === null) {
                 return '';
@@ -1061,7 +1102,7 @@ export class PlatformDatePicker extends PlatformElement {
         return `${this._singleDate.toLocaleDateString(this.locale)} ${pad2(this._singleDate.getHours())}:${pad2(this._singleDate.getMinutes())}`;
     }
 
-    _displayRangeValue() {
+    _displayRangeValue(): string {
         if (this.mode === 'time') {
             const start = this._rangeStartTime === null ? '' : formatIsoTime(this._rangeStartTime);
             const end = this._rangeEndTime === null ? '' : formatIsoTime(this._rangeEndTime);
@@ -1082,7 +1123,7 @@ export class PlatformDatePicker extends PlatformElement {
         return `${start || '...'} - ${end || '...'}`;
     }
 
-    _placeholderValue() {
+    _placeholderValue(): string {
         if (this.placeholder) {
             return this.placeholder;
         }
@@ -1104,7 +1145,7 @@ export class PlatformDatePicker extends PlatformElement {
         return 'Выберите дату';
     }
 
-    _rangeStatusLabel() {
+    _rangeStatusLabel(): string {
         if (this.selection !== 'range') {
             return '';
         }
@@ -1117,7 +1158,7 @@ export class PlatformDatePicker extends PlatformElement {
         return 'Диапазон выбран';
     }
 
-    _renderCalendarSection() {
+    _renderCalendarSection(): TemplateResult | null {
         if (this.mode === 'time') {
             return null;
         }
@@ -1135,7 +1176,7 @@ export class PlatformDatePicker extends PlatformElement {
                     </button>
                 </div>
             </div>
-            <div class="calendar-grid" role="grid" aria-label="Календарь" @keydown=${(e) => this._onGridKeyDown(e)}>
+            <div class="calendar-grid" role="grid" aria-label="Календарь" @keydown=${(e: KeyboardEvent) => this._onGridKeyDown(e)}>
                 ${weekLabels.map((label) => html`<div class="weekday">${label}</div>`)}
                 ${cells.map((cell) => {
                     const classes = [
@@ -1162,7 +1203,7 @@ export class PlatformDatePicker extends PlatformElement {
         `;
     }
 
-    _renderTimeField(target, label) {
+    _renderTimeField(target: TimeTarget, label: string): TemplateResult {
         const value = this._targetTimeValue(target);
         const hours = value === null ? '' : String(Math.floor(value / 60));
         const minutes = value === null ? '' : String(value % 60);
@@ -1178,7 +1219,7 @@ export class PlatformDatePicker extends PlatformElement {
                             min="0"
                             max="23"
                             .value=${hours}
-                            @input=${(event) => this._onTimePartInput(target, 'hours', event)}
+                            @input=${(event: Event) => this._onTimePartInput(target, 'hours', event)}
                         />
                     </label>
                     <label class="time-field">
@@ -1189,7 +1230,7 @@ export class PlatformDatePicker extends PlatformElement {
                             min="0"
                             max="59"
                             .value=${minutes}
-                            @input=${(event) => this._onTimePartInput(target, 'minutes', event)}
+                            @input=${(event: Event) => this._onTimePartInput(target, 'minutes', event)}
                         />
                     </label>
                 </div>
@@ -1197,7 +1238,7 @@ export class PlatformDatePicker extends PlatformElement {
         `;
     }
 
-    _renderTimeSection() {
+    _renderTimeSection(): TemplateResult | null {
         if (this.mode !== 'time' && this.mode !== 'datetime') {
             return null;
         }
@@ -1210,7 +1251,7 @@ export class PlatformDatePicker extends PlatformElement {
         `;
     }
 
-    render() {
+    override render(): TemplateResult {
         const displayValue = this._displayValue();
         const hasLabel = typeof this.label === 'string' && this.label.trim().length > 0;
         const inShell = hasLabel && !this.embedded;

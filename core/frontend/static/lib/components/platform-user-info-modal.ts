@@ -41,11 +41,76 @@
  */
 
 import { html, css } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformFormModal } from './glass-form-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { hasFactory } from '../events/factory-registry.js';
 import { httpRequest } from '../events/http.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { ResourceController, OpController } from '../base/use-resource.js';
+
+interface AuthUserRecord {
+    id?: string;
+    user_id?: string;
+    name?: string;
+    canAdmin?: boolean;
+    raw?: Record<string, unknown>;
+}
+
+interface AuthSliceView {
+    status?: string;
+    user?: AuthUserRecord;
+}
+
+interface TeamMemberRecord {
+    user_id?: string;
+    name?: string;
+    email?: string;
+    avatar_url?: string;
+    roles?: unknown;
+    joined_at?: string;
+    is_flow_employee?: boolean;
+    flow_id?: string;
+    curator_user_ids?: unknown;
+}
+
+interface TeamSliceView {
+    members?: TeamMemberRecord[];
+    loading?: boolean;
+}
+
+interface WorkCountsView {
+    total_open_count?: number;
+}
+
+interface UserInfoUser {
+    user_id: string;
+    name: string;
+    first_name?: string;
+    last_name?: string;
+    bio?: string;
+    email?: string | null;
+    avatar_url?: string | null;
+    roles: string[];
+    joined_at?: string | null;
+    language?: string;
+    ui_preferences?: Record<string, unknown>;
+    is_flow_employee?: boolean;
+    flow_id?: string | null;
+    curator_user_ids?: string[];
+}
+
+interface ResolvedUser {
+    isOwn: boolean;
+    source: string;
+    user: UserInfoUser | null;
+}
+
+interface SharedChannelRecord {
+    channel_id: string;
+    [key: string]: unknown;
+}
 
 import { CoreEvents } from '../events/contract.js';
 import { resolveAvatarImageSrc } from '../utils/placeholder-avatar.js';
@@ -62,7 +127,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
     static modalKind = 'platform.user_info';
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformFormModal.properties,
         userId: { type: String, attribute: 'user-id' },
         _roles: { state: true },
@@ -72,9 +137,26 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         _sharedChannelsLoading: { state: true },
         _sharedChannelsError: { state: true },
     };
+    declare userId: string;
+    declare _roles: Set<string>;
+    declare _rolesDirty: boolean;
+    declare _avatarLgFallback: number;
+    declare _sharedChannels: SharedChannelRecord[];
+    declare _sharedChannelsLoading: boolean;
+    declare _sharedChannelsError: string;
 
-    static styles = [
-        ...PlatformFormModal.styles,
+    private _avatarLgSig: string;
+    private _sharedChannelsPeerId: string;
+    private _sharedChannelsOp: OpController | null;
+    private _teamSel: SelectController<TeamSliceView | undefined>;
+    private _authSel: SelectController<AuthSliceView | undefined>;
+    private _localeSel: SelectController<string | undefined>;
+    private _workCountsSel: SelectController<WorkCountsView | undefined>;
+    private _loadDispatched: boolean;
+    private _members: ResourceController | null;
+
+    static override styles: CSSResultGroup = [
+        ...(Array.isArray(PlatformFormModal.styles) ? PlatformFormModal.styles : [PlatformFormModal.styles]),
         css`
             .user-card {
                 display: flex;
@@ -294,10 +376,10 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._sharedChannelsError = '';
         this._sharedChannelsPeerId = '';
         this._sharedChannelsOp = null;
-        this._teamSel = this.select((s) => s.team);
-        this._authSel = this.select((s) => s.auth);
-        this._localeSel = this.select((s) => s.i18n.locale);
-        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts);
+        this._teamSel = this.select((s) => s.team as TeamSliceView | undefined);
+        this._authSel = this.select((s) => s.auth as AuthSliceView | undefined);
+        this._localeSel = this.select((s) => (s.i18n as { locale?: string }).locale);
+        this._workCountsSel = this.select((s) => s.worktrackerWorkItemCounts as WorkCountsView | undefined);
         this._loadDispatched = false;
         // Редактирование ролей живёт в фабрике сервиса frontend
         // (`frontend/team_members`). В сервисах без админ-панели команд
@@ -307,29 +389,30 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._members = null;
     }
 
-    _ensureTeamMembersResource() {
+    _ensureTeamMembersResource(): ResourceController | null {
         if (this._members) return this._members;
         if (!hasFactory(TEAM_MEMBERS_RESOURCE_NAME)) return null;
         this._members = this.useResource(TEAM_MEMBERS_RESOURCE_NAME);
         return this._members;
     }
 
-    _ensureSharedChannelsOp() {
+    _ensureSharedChannelsOp(): OpController | null {
         if (this._sharedChannelsOp) return this._sharedChannelsOp;
         if (!hasFactory(SYNC_SHARED_CHANNELS_OP_NAME)) return null;
         this._sharedChannelsOp = this.useOp(SYNC_SHARED_CHANNELS_OP_NAME);
         return this._sharedChannelsOp;
     }
 
-    updated(changed) {
+    override updated(changed: PropertyValues<this>): void {
         super.updated(changed);
         const auth = this._authSel.value;
         const team = this._teamSel.value;
+        const members = team?.members || [];
         if (
             !this._loadDispatched
-            && auth.status === 'authenticated'
-            && team.members.length === 0
-            && team.loading === false
+            && auth?.status === 'authenticated'
+            && members.length === 0
+            && team?.loading === false
         ) {
             this._loadDispatched = true;
             this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
@@ -344,14 +427,14 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             this._sharedChannelsPeerId = '';
             const resolved = this._resolveUser();
             if (resolved && !resolved.isOwn && resolved.user) {
-                this._roles = new Set(resolved.user.roles);
+                this._roles = new Set<string>(resolved.user.roles);
             } else if (resolved && !resolved.isOwn && !resolved.user) {
                 this._roles = new Set();
             }
         } else if (!this._rolesDirty) {
             const resolved = this._resolveUser();
             if (resolved && !resolved.isOwn && resolved.user) {
-                const incoming = new Set(resolved.user.roles);
+                const incoming = new Set<string>(resolved.user.roles);
                 if (incoming.size !== this._roles.size
                     || Array.from(incoming).some((r) => !this._roles.has(r))) {
                     this._roles = incoming;
@@ -371,7 +454,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._maybeLoadSharedChannels(resolvedAvatar);
     }
 
-    _maybeLoadSharedChannels(resolved) {
+    _maybeLoadSharedChannels(resolved: ResolvedUser | null): void {
         if (!resolved || resolved.isOwn || !resolved.user) return;
         const peerId = typeof resolved.user.user_id === 'string' ? resolved.user.user_id : '';
         if (peerId === '') return;
@@ -385,24 +468,24 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._loadSharedChannels(peerId, op);
     }
 
-    async _loadSharedChannels(peerId, op) {
+    async _loadSharedChannels(peerId: string, op: OpController): Promise<void> {
         try {
             const result = await op.run({ peer_user_id: peerId });
             if (this.userId !== peerId || this._sharedChannelsPeerId !== peerId) return;
             const source = result && typeof result === 'object' ? result : op.lastResult;
-            const items = source && Array.isArray(source.items)
-                ? source.items
+            const items = source && typeof source === 'object' && Array.isArray((source as { items?: unknown }).items)
+                ? (source as { items: unknown[] }).items
                 : (Array.isArray(source) ? source : []);
-            this._sharedChannels = items.filter((channel) => (
-                channel
+            this._sharedChannels = items.filter((channel): channel is SharedChannelRecord => (
+                Boolean(channel)
                 && typeof channel === 'object'
-                && typeof channel.channel_id === 'string'
-                && channel.channel_id !== ''
+                && typeof (channel as SharedChannelRecord).channel_id === 'string'
+                && (channel as SharedChannelRecord).channel_id !== ''
             ));
         } catch (err) {
             if (this.userId === peerId && this._sharedChannelsPeerId === peerId) {
                 this._sharedChannels = [];
-                this._sharedChannelsError = err && typeof err.message === 'string'
+                this._sharedChannelsError = err instanceof Error && typeof err.message === 'string'
                     ? err.message
                     : 'failed';
             }
@@ -413,61 +496,67 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }
     }
 
-    _resolveUser() {
+    _resolveUser(): ResolvedUser | null {
         const userId = this.userId;
         if (typeof userId !== 'string' || userId.length === 0) {
             return null;
         }
         const auth = this._authSel.value;
-        const currentUser = auth.user;
+        const currentUser = auth?.user;
+        const rawRecord = currentUser?.raw;
         const currentId = currentUser
-            ? ((currentUser.raw && currentUser.raw.user_id) || currentUser.id)
+            ? ((rawRecord && typeof rawRecord.user_id === 'string' ? rawRecord.user_id : undefined) || currentUser.id)
             : null;
         if (currentUser && currentId === userId) {
-            const raw = currentUser.raw || {};
+            const raw = rawRecord || {};
+            const prefs = typeof raw.ui_preferences === 'object' && raw.ui_preferences !== null
+                ? raw.ui_preferences as Record<string, unknown>
+                : {};
+            const prefLanguage = typeof prefs.language === 'string' ? prefs.language : undefined;
+            const emails = Array.isArray(raw.emails) ? raw.emails : [];
             return {
                 isOwn: true,
                 source: 'auth',
                 user: {
                     user_id: userId,
-                    name: currentUser.name || raw.name || this.t('user_chip.you'),
-                    first_name: raw.first_name || '',
-                    last_name: raw.last_name || '',
-                    bio: raw.bio || '',
-                    email: Array.isArray(raw.emails) && raw.emails.length > 0 ? raw.emails[0] : null,
+                    name: currentUser.name || (typeof raw.name === 'string' ? raw.name : '') || this.t('user_chip.you'),
+                    first_name: typeof raw.first_name === 'string' ? raw.first_name : '',
+                    last_name: typeof raw.last_name === 'string' ? raw.last_name : '',
+                    bio: typeof raw.bio === 'string' ? raw.bio : '',
+                    email: emails.length > 0 && typeof emails[0] === 'string' ? emails[0] : null,
                     avatar_url: typeof raw.avatar_url === 'string' && raw.avatar_url.length > 0 ? raw.avatar_url : null,
-                    roles: Array.isArray(raw.roles) ? raw.roles : [],
-                    joined_at: raw.created_at || null,
-                    language: (raw.ui_preferences && raw.ui_preferences.language)
-                        ? raw.ui_preferences.language
-                        : this._localeSel.value,
-                    ui_preferences: raw.ui_preferences || {},
+                    roles: Array.isArray(raw.roles) ? raw.roles.filter((r): r is string => typeof r === 'string') : [],
+                    joined_at: typeof raw.created_at === 'string' ? raw.created_at : null,
+                    language: prefLanguage || this._localeSel.value,
+                    ui_preferences: prefs,
                 },
             };
         }
         const team = this._teamSel.value;
-        const member = team.members.find((m) => m.user_id === userId);
+        const member = (team?.members || []).find((m) => m.user_id === userId);
         if (member) {
             return {
                 isOwn: false,
                 source: 'team',
                 user: {
-                    user_id: member.user_id,
-                    name: member.name,
+                    user_id: member.user_id || '',
+                    name: member.name || '',
                     email: member.email,
                     avatar_url: member.avatar_url,
-                    roles: Array.isArray(member.roles) ? member.roles : [],
+                    roles: Array.isArray(member.roles) ? member.roles.filter((r): r is string => typeof r === 'string') : [],
                     joined_at: member.joined_at || null,
                     is_flow_employee: member.is_flow_employee === true,
                     flow_id: typeof member.flow_id === 'string' ? member.flow_id : null,
-                    curator_user_ids: Array.isArray(member.curator_user_ids) ? member.curator_user_ids : [],
+                    curator_user_ids: Array.isArray(member.curator_user_ids)
+                        ? member.curator_user_ids.filter((c): c is string => typeof c === 'string')
+                        : [],
                 },
             };
         }
         return { isOwn: false, source: 'unknown', user: null };
     }
 
-    _onAvatarLgError() {
+    _onAvatarLgError(): void {
         const resolved = this._resolveUser();
         if (!resolved || !resolved.user) return;
         const u = resolved.user;
@@ -479,29 +568,29 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }
     }
 
-    _renderAvatarLg(user) {
+    _renderAvatarLg(user: UserInfoUser): TemplateResult {
         if (this._avatarLgFallback >= 2) {
             return html`<div class="avatar-lg">${(user.name || '?').trim().charAt(0).toUpperCase()}</div>`;
         }
         const hadUrl = typeof user.avatar_url === 'string' && user.avatar_url.length > 0;
         const resolved = resolveAvatarImageSrc({
-            avatarUrl: this._avatarLgFallback === 0 && hadUrl ? user.avatar_url : null,
+            avatarUrl: this._avatarLgFallback === 0 && hadUrl ? user.avatar_url || null : null,
             seed: user.user_id,
         });
         return html`<div class="avatar-lg"><img src=${resolved.src} alt=${user.name} @error=${this._onAvatarLgError} /></div>`;
     }
 
-    _canEditRoles() {
+    _canEditRoles(): boolean {
         if (!hasFactory(TEAM_MEMBERS_RESOURCE_NAME)) return false;
         const auth = this._authSel.value;
-        const user = auth.user;
+        const user = auth?.user;
         return Boolean(user && user.canAdmin === true);
     }
 
-    _canActAs(user) {
+    _canActAs(user: UserInfoUser | null): boolean {
         if (!user || user.is_flow_employee !== true) return false;
         const auth = this._authSel.value;
-        const current = auth.user;
+        const current = auth?.user;
         if (!current) return false;
         const currentId = current.user_id || current.id;
         const curators = Array.isArray(user.curator_user_ids) ? user.curator_user_ids : [];
@@ -509,11 +598,11 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return current.canAdmin === true;
     }
 
-    _isMemberOwner(memberRoles) {
+    _isMemberOwner(memberRoles: unknown): boolean {
         return Array.isArray(memberRoles) && memberRoles.includes('owner');
     }
 
-    _roleLabel(role) {
+    _roleLabel(role: string): string {
         if (role === 'owner')     return this.t('user_info_modal.role_owner');
         if (role === 'admin')     return this.t('user_info_modal.role_admin');
         if (role === 'developer') return this.t('user_info_modal.role_developer');
@@ -521,8 +610,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return role;
     }
 
-    _formatJoinedAt(value) {
-        if (!value) return null;
+    _formatJoinedAt(value: unknown): string | null {
+        if (typeof value !== 'string' && typeof value !== 'number' && !(value instanceof Date)) return null;
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return null;
         const locale = this._localeSel.value === 'ru' ? 'ru-RU' : 'en-US';
@@ -533,16 +622,19 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }).format(date);
     }
 
-    renderHeader() {
+    override renderHeader(): string {
         return this.t('user_info_modal.header');
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         const resolved = this._resolveUser();
         if (!resolved) {
             return html`<div class="empty">${this.t('user_chip.unknown')}</div>`;
         }
         if (resolved.isOwn) {
+            if (!resolved.user) {
+                return html`<div class="empty">${this.t('user_chip.unknown')}</div>`;
+            }
             return this._renderOwnForm(resolved.user);
         }
         if (!resolved.user) {
@@ -551,7 +643,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         return this._renderOtherCard(resolved.user);
     }
 
-    _renderOwnForm(user) {
+    _renderOwnForm(user: UserInfoUser): TemplateResult {
         return html`
             <div class="user-card">
                 ${this._renderAvatarLg(user)}
@@ -646,7 +738,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    _renderOtherCard(user) {
+    _renderOtherCard(user: UserInfoUser): TemplateResult {
         const joined = this._formatJoinedAt(user.joined_at);
         const showRolesEditor = this._canEditRoles();
         return html`
@@ -685,7 +777,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    _renderEmployeeSection(user) {
+    _renderEmployeeSection(user: UserInfoUser): TemplateResult {
         const curators = Array.isArray(user.curator_user_ids) ? user.curator_user_ids : [];
         return html`
             <div class="channels-section">
@@ -699,7 +791,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                     ? html`<div class="curators">
                             <div class="meta-label">${this.t('user_info_modal.flow_employee_curators')}</div>
                             <div class="curators-chips">
-                                ${curators.map((cid) => html`<platform-user-chip user-id=${cid}></platform-user-chip>`)}
+                                ${curators.map((cid: string) => html`<platform-user-chip user-id=${cid}></platform-user-chip>`)}
                             </div>
                           </div>`
                     : null}
@@ -707,7 +799,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    async _actAs(user) {
+    async _actAs(user: UserInfoUser | null): Promise<void> {
         if (!user || typeof user.user_id !== 'string' || user.user_id === '') return;
         try {
             await httpRequest({
@@ -721,7 +813,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         }
     }
 
-    _renderSharedChannels() {
+    _renderSharedChannels(): TemplateResult | null {
         if (!hasFactory(SYNC_SHARED_CHANNELS_OP_NAME)) return null;
         return html`
             <div class="channels-section">
@@ -734,7 +826,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                             ? html`<div class="channels-empty">${this.t('user_info_modal.shared_channels_empty')}</div>`
                             : html`
                                 <div class="channels-grid">
-                                    ${this._sharedChannels.map((channel) => html`
+                                    ${this._sharedChannels.map((channel: SharedChannelRecord) => html`
                                         <button
                                             type="button"
                                             class="channel-cell"
@@ -749,12 +841,12 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    _renderActiveTasks(user, isOwn) {
+    _renderActiveTasks(user: UserInfoUser, isOwn: boolean): TemplateResult | null {
         if (!isOwn) {
             return null;
         }
         const counts = this._workCountsSel.value;
-        const total = typeof counts.total_open_count === 'number' ? counts.total_open_count : 0;
+        const total = typeof counts?.total_open_count === 'number' ? counts.total_open_count : 0;
         return html`
             <div class="channels-section">
                 <div class="channels-section-title">${this.t('user_info_modal.active_tasks_title')}</div>
@@ -765,7 +857,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    _renderRolesEditor(user) {
+    _renderRolesEditor(user: UserInfoUser): TemplateResult {
         const memberIsOwner = this._isMemberOwner(user.roles);
         return html`
             <div class="roles-section">
@@ -795,7 +887,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    _toggleRole(role) {
+    _toggleRole(role: string): void {
         const resolved = this._resolveUser();
         if (!resolved || !resolved.user) return;
         if (role === 'owner' && this._isMemberOwner(resolved.user.roles)) return;
@@ -805,7 +897,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this._rolesDirty = true;
     }
 
-    _saveRoles() {
+    _saveRoles(): void {
         const resolved = this._resolveUser();
         if (!resolved || resolved.isOwn || !resolved.user) return;
         if (this._roles.size === 0) {
@@ -824,26 +916,31 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this.close();
     }
 
-    validateForm() {
-        const errors = {};
+    override validateForm(): Record<string, string> {
+        const errors: Record<string, string> = {};
         const data = this.getFormData();
-        if (!data.name || data.name.trim().length === 0) {
+        const name = typeof data.name === 'string' ? data.name : '';
+        if (name.trim().length === 0) {
             errors.name = this.t('user_info_modal.error_name_required');
         }
         return errors;
     }
 
-    handleSubmit(data) {
+    override async handleSubmit(data: Record<string, FormDataEntryValue>): Promise<void> {
         const resolved = this._resolveUser();
-        if (!resolved || !resolved.isOwn) return;
+        if (!resolved || !resolved.isOwn || !resolved.user) return;
+        const field = (key: string): string => {
+            const v = data[key];
+            return typeof v === 'string' ? v : '';
+        };
         const updates = {
-            name: data.name.trim(),
-            first_name: data.first_name && data.first_name.trim() ? data.first_name.trim() : null,
-            last_name: data.last_name && data.last_name.trim() ? data.last_name.trim() : null,
-            bio: data.bio && data.bio.trim() ? data.bio.trim() : null,
+            name: field('name').trim(),
+            first_name: field('first_name').trim() ? field('first_name').trim() : null,
+            last_name: field('last_name').trim() ? field('last_name').trim() : null,
+            bio: field('bio').trim() ? field('bio').trim() : null,
             ui_preferences: {
                 ...resolved.user.ui_preferences,
-                language: data.language,
+                language: field('language'),
             },
         };
         this.dispatch('auth/profile/update_requested', { updates });
@@ -851,34 +948,34 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         this.closeAfterSave();
     }
 
-    _logout() {
+    _logout(): void {
         this.dispatch(CoreEvents.AUTH_LOGOUT_REQUESTED, null);
         super.close();
     }
 
-    _openSync() {
+    _openSync(): void {
         if (typeof this.userId !== 'string' || this.userId.length === 0) return;
         window.location.href = `/sync?direct=${encodeURIComponent(this.userId)}`;
     }
 
-    _openTeamPage() {
+    _openTeamPage(): void {
         if (typeof this.userId !== 'string' || this.userId.length === 0) return;
         window.location.href = `/frontend/team?focus=${encodeURIComponent(this.userId)}`;
     }
 
-    _openAccess() {
+    _openAccess(): void {
         if (typeof this.userId !== 'string' || this.userId.length === 0) return;
         super.close();
         window.location.href = `/access?user_id=${encodeURIComponent(this.userId)}`;
     }
 
-    _openSharedChannel(channel) {
+    _openSharedChannel(channel: SharedChannelRecord): void {
         if (!channel || typeof channel.channel_id !== 'string' || channel.channel_id === '') return;
         super.close();
         this.navigate('channel', { channelId: channel.channel_id });
     }
 
-    _copyId() {
+    _copyId(): void {
         if (typeof this.userId !== 'string' || this.userId.length === 0) return;
         this.copyToClipboard(this.userId, {
             success_i18n_key: 'platform:user_info_modal.toast_copied',
@@ -886,7 +983,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         });
     }
 
-    renderHeaderActions() {
+    override renderHeaderActions(): TemplateResult {
         if (typeof this.userId !== 'string' || this.userId.length === 0) {
             return html``;
         }
@@ -904,7 +1001,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter(): TemplateResult {
         const resolved = this._resolveUser();
         if (!resolved) {
             return html`
@@ -950,7 +1047,8 @@ export class PlatformUserInfoModal extends PlatformFormModal {
             `;
         }
         const showSave = this._canEditRoles() && this._rolesDirty;
-        const showActAs = this._canActAs(resolved.user);
+        const otherUser = resolved.user;
+        const showActAs = this._canActAs(otherUser);
         return html`
             <div class="actions ${showSave ? 'with-save' : ''}">
                 ${showSave ? html`
@@ -976,7 +1074,7 @@ export class PlatformUserInfoModal extends PlatformFormModal {
                     </platform-button>
                 ` : null}
                 ${showActAs ? html`
-                    <platform-button variant="ghost" @click=${() => this._actAs(resolved.user)}>
+                    <platform-button variant="ghost" @click=${() => this._actAs(otherUser)}>
                         ${this.t('user_info_modal.action_act_as')}
                     </platform-button>
                 ` : null}

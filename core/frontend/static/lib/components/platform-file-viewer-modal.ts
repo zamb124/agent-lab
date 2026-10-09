@@ -1,14 +1,16 @@
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformModal } from './glass-modal.js';
 import { registerModalKind } from '../utils/modal-registry.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
+import type { PlatformEvent } from '../events/contract.js';
 import { resolveFileIconKey } from '../utils/file-icons.js';
 import './platform-icon.js';
 import './platform-document-viewer-host.js';
 
 const SYNC_TIMEOUT_MS = 20000;
 
-function _asNonEmptyString(value) {
+function _asNonEmptyString(value: unknown): string {
     return typeof value === 'string' && value.length > 0 ? value : '';
 }
 
@@ -16,7 +18,7 @@ export class PlatformFileViewerModal extends PlatformModal {
     static modalKind = 'platform.file_viewer';
     static i18nNamespace = 'platform';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
         fileId: { type: String, attribute: 'file-id' },
         file: { type: Object },
@@ -30,9 +32,24 @@ export class PlatformFileViewerModal extends PlatformModal {
         _viewMode: { state: true },
         _viewModeFileId: { state: true },
     };
+    declare fileId: string;
+    declare file: Record<string, unknown> | null;
+    declare config: Record<string, unknown> | null;
+    declare minimized: boolean;
+    declare _dirty: boolean | null;
+    declare _syncing: boolean;
+    declare _error: string;
+    declare _closeSyncComplete: boolean;
+    declare _headerDragging: boolean;
+    declare _viewMode: string;
+    declare _viewModeFileId: string;
 
-    static styles = [
-        ...PlatformModal.styles,
+    private _headerDragState: { dx: number; dy: number; width: number; height: number } | null;
+    private _boundHeaderMouseMove: (e: MouseEvent) => void;
+    private _boundHeaderMouseUp: () => void;
+
+    static override styles: CSSResultGroup = [
+        ...(Array.isArray(PlatformModal.styles) ? PlatformModal.styles : [PlatformModal.styles]),
         css`
             :host([open]),
             :host([closing]) {
@@ -411,43 +428,49 @@ export class PlatformFileViewerModal extends PlatformModal {
         this._boundHeaderMouseUp = this._handleHeaderMouseUp.bind(this);
     }
 
-    willUpdate(changed) {
+    override willUpdate(changed: PropertyValues<this>): void {
         super.willUpdate?.(changed);
         if (changed.has('config') || changed.has('fileId') || changed.has('file')) {
             this._syncViewModeFromConfig();
         }
     }
 
-    _isDataTable() {
+    _isDataTable(): boolean {
         const config = this.config;
         return Boolean(config && config.handler === 'data_table' && config.data_table);
     }
 
-    _textPresentation() {
+    _textPresentation(): string {
         const config = this.config;
-        if (!config || config.handler !== 'text' || !config.text || typeof config.text !== 'object') {
+        const text = config && typeof config.text === 'object' && config.text !== null
+            ? config.text as Record<string, unknown>
+            : null;
+        if (!config || config.handler !== 'text' || !text) {
             return '';
         }
-        const presentation = config.text.presentation;
+        const presentation = text.presentation;
         if (presentation === 'html' || presentation === 'markdown') {
             return presentation;
         }
         return '';
     }
 
-    _defaultViewModeFromConfig() {
+    _defaultViewModeFromConfig(): 'preview' | 'source' {
         const config = this.config;
-        if (!config || !config.text || typeof config.text !== 'object') {
+        const text = config && typeof config.text === 'object' && config.text !== null
+            ? config.text as Record<string, unknown>
+            : null;
+        if (!text) {
             return 'source';
         }
-        const mode = config.text.default_view_mode;
+        const mode = text.default_view_mode;
         if (mode === 'preview' || mode === 'source') {
             return mode;
         }
         return 'source';
     }
 
-    _syncViewModeFromConfig() {
+    _syncViewModeFromConfig(): void {
         const fileId = this._resolvedFileId();
         const presentation = this._textPresentation();
         if (!presentation) {
@@ -461,7 +484,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         }
     }
 
-    _setViewMode(mode) {
+    _setViewMode(mode: string): void {
         if (mode !== 'preview' && mode !== 'source') {
             throw new Error(`platform-file-viewer-modal: invalid viewMode ${mode}`);
         }
@@ -471,18 +494,18 @@ export class PlatformFileViewerModal extends PlatformModal {
         this._viewMode = mode;
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         this._endHeaderDrag();
         super.disconnectedCallback();
     }
 
-    _resolvedFileId() {
+    _resolvedFileId(): string {
         return _asNonEmptyString(this.fileId)
             || _asNonEmptyString(this.file?.file_id)
             || _asNonEmptyString(this.file?.id);
     }
 
-    _fileName() {
+    _fileName(): string {
         const file = this.file || {};
         return _asNonEmptyString(file.original_name)
             || _asNonEmptyString(file.filename)
@@ -491,7 +514,7 @@ export class PlatformFileViewerModal extends PlatformModal {
             || 'file';
     }
 
-    _toggleMinimized() {
+    _toggleMinimized(): void {
         if (this._syncing) return;
         const next = !this.minimized;
         this.minimized = next;
@@ -500,7 +523,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         }
     }
 
-    _eventStartedOnInteractiveNode(event) {
+    _eventStartedOnInteractiveNode(event: Event): boolean {
         for (const node of event.composedPath()) {
             if (node === this.shadowRoot || node === this) {
                 break;
@@ -522,7 +545,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         return false;
     }
 
-    _handleMouseDown(event) {
+    override _handleMouseDown(event: MouseEvent): void {
         if (this.minimized) {
             super._handleMouseDown(event);
             return;
@@ -548,7 +571,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         event.preventDefault();
     }
 
-    _handleHeaderMouseMove(event) {
+    _handleHeaderMouseMove(event: MouseEvent): void {
         if (!this._headerDragging || !this._headerDragState) {
             return;
         }
@@ -562,7 +585,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         this.style.setProperty('--file-viewer-header-right', 'auto');
     }
 
-    _handleMouseMove(event) {
+    override _handleMouseMove(event: MouseEvent): void {
         if (this.minimized && this._isDragging) {
             const modal = this.shadowRoot?.querySelector('.modal');
             const rect = modal instanceof HTMLElement ? modal.getBoundingClientRect() : null;
@@ -585,11 +608,11 @@ export class PlatformFileViewerModal extends PlatformModal {
         super._handleMouseMove(event);
     }
 
-    _handleHeaderMouseUp() {
+    _handleHeaderMouseUp(): void {
         this._endHeaderDrag();
     }
 
-    _endHeaderDrag() {
+    _endHeaderDrag(): void {
         if (!this._headerDragging && !this._headerDragState) {
             return;
         }
@@ -600,42 +623,44 @@ export class PlatformFileViewerModal extends PlatformModal {
         document.removeEventListener('mouseup', this._boundHeaderMouseUp);
     }
 
-    _onEditorError(event) {
+    _onEditorError(event: CustomEvent<{ detail?: unknown; code?: unknown }>): void {
         const detail = event.detail || {};
         const message = _asNonEmptyString(detail.detail) || _asNonEmptyString(detail.code) || this.t('file_viewer.close_failed');
         this._error = message;
         this.toast('file_viewer.open_failed', { type: 'error', namespace: 'platform', vars: { message } });
     }
 
-    _onDocumentState(event) {
+    _onDocumentState(event: CustomEvent<{ dirty?: unknown }>): void {
         const detail = event.detail || {};
         this._dirty = Boolean(detail.dirty);
     }
 
-    _requestEditorSync({ close, settleMs }) {
+    _requestEditorSync({ close, settleMs }: { close?: boolean; settleMs?: number }): Promise<unknown> {
         const fileId = this._resolvedFileId();
         if (!fileId) {
             return Promise.reject(new Error('file_id required'));
         }
         const correlation = `file_viewer_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
-            let doneUnsub = null;
-            let failUnsub = null;
-            let timer = null;
+            let doneUnsub: (() => void) | null = null;
+            let failUnsub: (() => void) | null = null;
+            let timer: number | null = null;
             const cleanup = () => {
                 if (doneUnsub) doneUnsub();
                 if (failUnsub) failUnsub();
                 if (timer !== null) window.clearTimeout(timer);
             };
-            doneUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_COMPLETED, (event) => {
+            doneUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_COMPLETED, (event: PlatformEvent) => {
                 if (event.meta?.correlation_id !== correlation) return;
                 cleanup();
-                resolve(event.payload?.result || null);
+                const payload = event.payload as { result?: unknown } | null;
+                resolve(payload?.result || null);
             });
-            failUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_FAILED, (event) => {
+            failUnsub = this.bus.subscribeType(FILES_EVENTS.EDITOR_SYNC_FAILED, (event: PlatformEvent) => {
                 if (event.meta?.correlation_id !== correlation) return;
                 cleanup();
-                reject(new Error(event.payload?.message || this.t('file_viewer.close_failed')));
+                const payload = event.payload as { message?: string } | null;
+                reject(new Error(payload?.message || this.t('file_viewer.close_failed')));
             });
             timer = window.setTimeout(() => {
                 cleanup();
@@ -654,9 +679,9 @@ export class PlatformFileViewerModal extends PlatformModal {
         });
     }
 
-    async _syncBeforeClose() {
+    async _syncBeforeClose(): Promise<void> {
         if (this._closeSyncComplete || !this.config) return;
-        const capabilities = this.config.capabilities;
+        const capabilities = this.config.capabilities as { sync_on_close?: unknown } | undefined;
         if (!capabilities || capabilities.sync_on_close !== true) {
             this._closeSyncComplete = true;
             return;
@@ -671,7 +696,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         }
     }
 
-    close() {
+    override close(): void {
         if (this._syncing) return;
         void (async () => {
             try {
@@ -684,7 +709,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         })();
     }
 
-    async requestPlatformClose() {
+    override async requestPlatformClose(): Promise<void> {
         if (!this._closeSyncComplete && this.config) {
             try {
                 await this._syncBeforeClose();
@@ -695,14 +720,14 @@ export class PlatformFileViewerModal extends PlatformModal {
         return super.requestPlatformClose();
     }
 
-    _getModalStyle() {
+    override _getModalStyle(): string {
         if (this.minimized && this._position.x !== null && this._position.y !== null) {
             return `position: fixed !important; left: ${this._position.x}px !important; top: ${this._position.y}px !important; right: auto !important; bottom: auto !important; z-index: 2; transform: translate(-50%, -50%) scale(1) !important;`;
         }
         return super._getModalStyle();
     }
 
-    renderHeader() {
+    override renderHeader(): TemplateResult {
         const name = this._fileName();
         const mimeType = _asNonEmptyString(this.file?.content_type) || _asNonEmptyString(this.file?.mime_type);
         return html`
@@ -714,7 +739,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         `;
     }
 
-    _resolveDownloadUrl() {
+    _resolveDownloadUrl(): string {
         const config = this.config;
         if (!config || typeof config !== 'object') {
             return '';
@@ -722,13 +747,14 @@ export class PlatformFileViewerModal extends PlatformModal {
         if (typeof config.download_url === 'string' && config.download_url.length > 0) {
             return config.download_url;
         }
-        if (config.binary && typeof config.binary.download_url === 'string' && config.binary.download_url.length > 0) {
-            return config.binary.download_url;
+        const binary = config.binary as { download_url?: unknown } | undefined;
+        if (binary && typeof binary.download_url === 'string' && binary.download_url.length > 0) {
+            return binary.download_url;
         }
         return '';
     }
 
-    _onDownloadClick() {
+    _onDownloadClick(): void {
         const downloadUrl = this._resolveDownloadUrl();
         if (downloadUrl.length === 0) {
             return;
@@ -736,7 +762,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     }
 
-    _renderTypeHeaderActions() {
+    _renderTypeHeaderActions(): unknown {
         if (this._isDataTable()) {
             return nothing;
         }
@@ -771,7 +797,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         `;
     }
 
-    renderHeaderActions() {
+    override renderHeaderActions(): TemplateResult {
         const title = this.minimized ? this.t('file_viewer.restore') : this.t('file_viewer.minimize');
         const downloadUrl = this._resolveDownloadUrl();
         return html`
@@ -801,7 +827,7 @@ export class PlatformFileViewerModal extends PlatformModal {
         `;
     }
 
-    renderBody() {
+    override renderBody(): TemplateResult {
         const fileId = this._resolvedFileId();
         const presentation = this._textPresentation();
         const viewMode = presentation
