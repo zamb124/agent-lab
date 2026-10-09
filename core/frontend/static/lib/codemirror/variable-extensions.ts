@@ -32,8 +32,20 @@ export interface CmDecoration {
     range(from: number, to: number): CmRange;
 }
 
+export interface CmSelectionRangeLike {
+    from: number;
+    to: number;
+    head: number;
+}
+
+export interface CmDocLike {
+    toString(): string;
+    length: number;
+    lineAt(pos: number): { from: number; to: number };
+}
+
 export interface CmViewLike {
-    state: { doc: { toString(): string; length: number } };
+    state: { doc: CmDocLike };
 }
 
 export interface CmUpdateLike {
@@ -56,15 +68,31 @@ export interface CmPluginInstance {
 
 export interface CmEditorViewLike extends CmViewLike {
     state: {
-        doc: { toString(): string; length: number };
+        doc: CmDocLike;
         readOnly: boolean;
         replaceSelection(text: string): unknown;
+        selection: { main: CmSelectionRangeLike };
+        sliceDoc(from?: number, to?: number): string;
     };
+    dom: HTMLElement;
     root: Document | ShadowRoot;
     dispatch(spec: object): void;
     destroy(): void;
     requestMeasure(): void;
     setRoot(root: Document | ShadowRoot): void;
+    focus(): void;
+    hasFocus(): boolean;
+}
+
+export interface CmViewUpdateLike {
+    docChanged: boolean;
+    focusChanged: boolean;
+    view: CmEditorViewLike;
+    state: {
+        doc: CmDocLike;
+        selection: { main: CmSelectionRangeLike };
+        sliceDoc(from?: number, to?: number): string;
+    };
 }
 
 export interface CmCompartmentLike {
@@ -113,7 +141,7 @@ export interface CmModule {
             root?: Document | ShadowRoot;
         }): CmEditorViewLike;
         theme(spec: Record<string, unknown>, options?: { dark?: boolean }): unknown;
-        updateListener: { of(fn: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void): unknown };
+        updateListener: { of(fn: (update: CmViewUpdateLike) => void): unknown };
         lineWrapping: unknown;
     };
     Compartment: new () => CmCompartmentLike;
@@ -122,6 +150,8 @@ export interface CmModule {
     defaultKeymap: unknown[];
     historyKeymap: unknown[];
     lineNumbers(): unknown;
+    highlightActiveLine(): unknown;
+    highlightActiveLineGutter(): unknown;
     json(): unknown;
     python?(): unknown;
     javascript?(options?: { typescript?: boolean }): unknown;

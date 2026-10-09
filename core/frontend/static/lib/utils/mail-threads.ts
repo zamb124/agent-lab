@@ -9,7 +9,7 @@ const SUBJECT_PREFIX_RE = /^\s*((re|fw|fwd|sv|aw|antw|ответ|пересл)\s
  * @param {string} raw
  * @returns {string}
  */
-export interface MailMessageLike {
+export interface MailMessageLike extends Record<string, unknown> {
     uid: string;
     rag_index_status?: string;
     body_text?: string | null;
@@ -237,7 +237,7 @@ export function groupMailThreads(messages: MailMessageLike[]): MailThread[] {
  * @param {string} uid
  * @returns {ReturnType<typeof groupMailThreads>[number] | null}
  */
-export function findThreadByUid(threads: Array<{ messages: MailMessageLike[] }>, uid: string) {
+export function findThreadByUid<T extends { messages: MailMessageLike[] }>(threads: T[], uid: string): T | null {
     if (!Array.isArray(threads) || typeof uid !== 'string' || !uid) {
         return null;
     }

@@ -1,4 +1,5 @@
 import { html, css, nothing } from 'lit';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from '../lit-shim.js';
 import { PlatformModal } from './glass-modal.js';
 import { formStyles } from '../styles/shared/form.styles.js';
 import { buttonStyles } from '../styles/shared/button.styles.js';
@@ -16,6 +17,12 @@ import { TEAM_EVENTS } from '../events/reducers/team.js';
 import { FILES_EVENTS } from '../events/reducers/files.js';
 import { buildCalendarEventFileCreateSpecJson } from '../utils/file-create-spec.js';
 import { registerModalKind } from '../utils/modal-registry.js';
+import type { SelectController } from '../events/select-controller.js';
+import type { PlatformEvent } from '../events/contract.js';
+import type { CalendarState } from '../events/reducers/calendar.js';
+import type { MailState } from '../events/reducers/mail.js';
+import type { TeamState, TeamMemberRecord } from '../events/reducers/team.js';
+import type { I18nState } from '../events/reducers/i18n.js';
 
 import { COLOR_PALETTE, resolvePaletteColor } from '@platform/lib/utils/color-palette.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
@@ -38,9 +45,9 @@ const SERVICE_APP_TAG_SELECTORS = [
  * Публичные URL календаря вида /{сервис}/api/calendar (см. core/app/factory.py).
  * Модалка при открытии может портироваться в body, поэтому ищем корневой *-app в document.
  */
-function serviceBaseUrlForCalendar() {
+function serviceBaseUrlForCalendar(): string {
     for (const sel of SERVICE_APP_TAG_SELECTORS) {
-        const el = document.querySelector(sel);
+        const el = document.querySelector(sel) as (Element & { getBaseUrl?: () => string }) | null;
         if (el && el.isConnected && typeof el.getBaseUrl === 'function') {
             const base = el.getBaseUrl();
             if (typeof base === 'string' && base.length > 0) {
@@ -51,11 +58,11 @@ function serviceBaseUrlForCalendar() {
     throw new Error('platform-calendar-modal: root service app (getBaseUrl) not found');
 }
 
-function pad2(value) {
+function pad2(value: unknown): string {
     return String(value).padStart(2, '0');
 }
 
-function toDateInputValue(date) {
+function toDateInputValue(date: Date): string {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
@@ -64,7 +71,7 @@ function toDateInputValue(date) {
  * а new Date('YYYY-MM-DD') в движке — полночь UTC, из‑за чего сетка дня и фильтр событий
  * расходятся с подписью периода (особенно при отрицательном смещении от UTC).
  */
-function parseDateInputLocal(isoDate) {
+function parseDateInputLocal(isoDate: string): Date {
     if (typeof isoDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
         const parsed = new Date(isoDate);
         if (Number.isNaN(parsed.getTime())) {
@@ -78,17 +85,17 @@ function parseDateInputLocal(isoDate) {
     return new Date(y, m, d, 0, 0, 0, 0);
 }
 
-function toDateTimeInputValue(date) {
+function toDateTimeInputValue(date: Date): string {
     return `${toDateInputValue(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
-function addDays(date, amount) {
+function addDays(date: Date, amount: number): Date {
     const copy = new Date(date.getTime());
     copy.setDate(copy.getDate() + amount);
     return copy;
 }
 
-function startOfWeek(date) {
+function startOfWeek(date: Date): Date {
     const copy = new Date(date.getTime());
     const day = copy.getDay();
     const shift = day === 0 ? 6 : day - 1;
@@ -97,21 +104,21 @@ function startOfWeek(date) {
     return copy;
 }
 
-function endOfWeek(date) {
+function endOfWeek(date: Date): Date {
     const start = startOfWeek(date);
     return addDays(start, 7);
 }
 
-function startOfMonth(date) {
+function startOfMonth(date: Date): Date {
     const copy = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
     return copy;
 }
 
-function endOfMonth(date) {
+function endOfMonth(date: Date): Date {
     return new Date(date.getFullYear(), date.getMonth() + 1, 1, 0, 0, 0, 0);
 }
 
-function isSameDay(left, right) {
+function isSameDay(left: Date, right: Date): boolean {
     return left.getFullYear() === right.getFullYear()
         && left.getMonth() === right.getMonth()
         && left.getDate() === right.getDate();
@@ -119,11 +126,18 @@ function isSameDay(left, right) {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function normalizeEmail(value) {
+function normalizeEmail(value: unknown): string {
     return String(value || '').trim().toLowerCase();
 }
 
-function toAttendeeTag(entry) {
+interface AttendeeTag {
+    attendee_id: string;
+    email: string;
+    display_name: string;
+    response_status: string;
+}
+
+function toAttendeeTag(entry: { email?: unknown; display_name?: unknown; attendee_id?: unknown }): AttendeeTag {
     if (!entry || typeof entry !== 'object') {
         throw new Error('Attendee entry must be object');
     }
@@ -148,7 +162,7 @@ function toAttendeeTag(entry) {
     };
 }
 
-function recurrenceToRule(value) {
+function recurrenceToRule(value: string): string | null {
     if (value === 'none') {
         return null;
     }
@@ -164,7 +178,15 @@ function recurrenceToRule(value) {
     throw new Error(`Unsupported recurrence value: ${value}`);
 }
 
-function parseEventAttachments(metadata) {
+interface EventAttachment {
+    file_id: string;
+    name: string;
+    url: string;
+    content_type: string;
+    file_size: number;
+}
+
+function parseEventAttachments(metadata: { attachments?: unknown } | null | undefined): EventAttachment[] {
     if (!metadata) {
         return [];
     }
@@ -179,31 +201,32 @@ function parseEventAttachments(metadata) {
     if (!Array.isArray(parsed)) {
         throw new Error('metadata.attachments must be a JSON array');
     }
-    return parsed.map((item) => {
+    return parsed.map((item: unknown) => {
+        const record = item as { file_id?: unknown; name?: unknown; url?: unknown; content_type?: unknown; file_size?: unknown };
         if (!item || typeof item !== 'object') {
             throw new Error('Attachment item must be an object');
         }
-        if (typeof item.file_id !== 'string' || item.file_id === '') {
+        if (typeof record.file_id !== 'string' || record.file_id === '') {
             throw new Error('Attachment file_id is required');
         }
-        if (typeof item.name !== 'string' || item.name === '') {
+        if (typeof record.name !== 'string' || record.name === '') {
             throw new Error('Attachment name is required');
         }
-        if (typeof item.url !== 'string' || item.url === '') {
+        if (typeof record.url !== 'string' || record.url === '') {
             throw new Error('Attachment url is required');
         }
         return {
-            file_id: item.file_id,
-            name: item.name,
-            url: item.url,
-            content_type: typeof item.content_type === 'string' ? item.content_type : '',
-            file_size: Number.isFinite(item.file_size) ? item.file_size : 0,
+            file_id: record.file_id,
+            name: record.name,
+            url: record.url,
+            content_type: typeof record.content_type === 'string' ? record.content_type : '',
+            file_size: typeof record.file_size === 'number' && Number.isFinite(record.file_size) ? record.file_size : 0,
         };
     });
 }
 
-function buildEventMetadata(baseMetadata, attachments) {
-    const nextMetadata = {};
+function buildEventMetadata(baseMetadata: Record<string, unknown> | null | undefined, attachments: EventAttachment[]): Record<string, string> {
+    const nextMetadata: Record<string, string> = {};
     for (const [key, value] of Object.entries(baseMetadata || {})) {
         if (typeof value !== 'string') {
             throw new Error(`Event metadata value for key '${key}' must be string`);
@@ -218,11 +241,11 @@ function buildEventMetadata(baseMetadata, attachments) {
     return nextMetadata;
 }
 
-function isKnownEventColor(colorKey) {
+function isKnownEventColor(colorKey: string): boolean {
     return EVENT_COLOR_OPTIONS.some((color) => color.key === colorKey);
 }
 
-function normalizeEventColor(colorKey) {
+function normalizeEventColor(colorKey: string | null | undefined): string {
     if (!colorKey) {
         return DEFAULT_EVENT_COLOR;
     }
@@ -232,7 +255,7 @@ function normalizeEventColor(colorKey) {
     return DEFAULT_EVENT_COLOR;
 }
 
-function eventMetadataHasSyncMeeting(metadata) {
+function eventMetadataHasSyncMeeting(metadata: { sync_meeting?: unknown; sync_link_token?: unknown } | null | undefined): boolean {
     if (!metadata || typeof metadata !== 'object') {
         return false;
     }
@@ -243,11 +266,64 @@ const SYNC_LOGO_SRC = '/static/core/assets/service_logos/sync_logo.svg';
 const CALENDAR_VIEW_STORAGE_KEY = platformStorageKey('core', 'calendar_view');
 const VALID_VIEWS = ['day', 'week', 'month'];
 
+interface CalendarEventRecord {
+    event_id: string;
+    title?: string;
+    description?: string;
+    location?: string;
+    timezone?: string;
+    all_day?: boolean;
+    start_at: string;
+    end_at: string;
+    kind?: string;
+    source?: string;
+    source_id?: string;
+    series_id?: string;
+    recurrence_id?: string;
+    recurrence_rule?: string | null;
+    attendees?: AttendeeTag[];
+    metadata?: Record<string, string>;
+    deep_link?: string;
+    namespace?: string;
+    status?: string;
+    mailbox_binding_id?: string;
+    target?: unknown;
+    key?: string;
+    [key: string]: unknown;
+}
+
+interface EventFormState {
+    kind: string;
+    color: string;
+    title: string;
+    description: string;
+    location: string;
+    timezone: string;
+    all_day: boolean;
+    start_at: string;
+    end_at: string;
+    attendees: AttendeeTag[];
+    recurrence: string;
+    [key: string]: unknown;
+}
+
+interface IntegrationFormState {
+    username: string;
+    app_password: string;
+    default_calendar_id: string;
+    caldav_base_url: string;
+    sync_enabled: boolean;
+    sync_inbound_enabled: boolean;
+    sync_outbound_enabled: boolean;
+    notifications_enabled: boolean;
+    [key: string]: unknown;
+}
+
 export class PlatformCalendarModal extends PlatformModal {
     static modalKind = 'platform.calendar';
     static i18nNamespace = 'calendar';
 
-    static properties = {
+    static override properties: PropertyDeclarations = {
         ...PlatformModal.properties,
         _view: { state: true },
         _anchorDate: { state: true },
@@ -279,8 +355,51 @@ export class PlatformCalendarModal extends PlatformModal {
         _dragGhostLeft: { state: true },
         _pendingAttachmentUploads: { state: true },
     };
+    declare _view: 'day' | 'week' | 'month';
+    declare _anchorDate: string;
+    declare _saving: boolean;
+    declare _syncing: boolean;
+    declare _selectedEventId: string | null;
+    declare _activeProvider: string;
+    declare _activeIntegrationId: string | null;
+    declare _integrationsMenuOpen: boolean;
+    declare _integrationModalProvider: string | null;
+    declare _eventDialogOpen: boolean;
+    declare _showDescriptionField: boolean;
+    declare _uploadingAttachments: boolean;
+    declare _eventAttachments: EventAttachment[];
+    declare _eventMetadata: Record<string, string>;
+    declare _selectedEventSource: string;
+    declare _selectedEventKind: string;
+    declare _selectedEventNamespace: string | null;
+    declare _attendeeDraft: string;
+    declare _attendeeDropdownOpen: boolean;
+    declare _eventForm: EventFormState;
+    declare _integrationForm: IntegrationFormState;
+    declare _isCompactLayout: boolean;
+    declare _dateSheetOpen: boolean;
+    declare _dateSheetMonthRef: string;
+    declare _eventDeepLink: string | null;
+    declare _dragEvent: CalendarEventRecord | null;
+    declare _dragGhostTop: number;
+    declare _dragGhostLeft: number;
+    declare _pendingAttachmentUploads: Map<string, { name: string }>;
+    _dragOrigin: { x: number; y: number; started: boolean } | null = null;
+    _dragPointerId: number | null = null;
+    _dragJustFinished = false;
+    _onDragMoveBound: EventListener;
+    _onDragUpBound: EventListener;
+    _onDocumentClickBound: ((event: Event) => void) | null = null;
+    _eventsSelect: SelectController<CalendarEventRecord[]>;
+    _integrationsSelect: SelectController<CalendarState['integrations']>;
+    _calendarLoadingSelect: SelectController<boolean>;
+    _calendarSyncingSelect: SelectController<boolean>;
+    _teamMembersSelect: SelectController<TeamMemberRecord[]>;
+    _localeSelect: SelectController<string>;
+    _mailSelect: SelectController<MailState>;
+    _resizeObserver: ResizeObserver | null = null;
 
-    static styles = [
+    static override styles: CSSResultGroup = [
         PlatformModal.styles,
         formStyles,
         buttonStyles,
@@ -2139,7 +2258,7 @@ export class PlatformCalendarModal extends PlatformModal {
     constructor() {
         super();
         const savedView = storageGet(CALENDAR_VIEW_STORAGE_KEY);
-        this._view = VALID_VIEWS.includes(savedView) ? savedView : 'month';
+        this._view = savedView === 'day' || savedView === 'week' || savedView === 'month' ? savedView : 'month';
         this._anchorDate = toDateInputValue(new Date());
         this._saving = false;
         this._syncing = false;
@@ -2159,13 +2278,13 @@ export class PlatformCalendarModal extends PlatformModal {
         this._attendeeDraft = '';
         this._attendeeDropdownOpen = false;
         this._pendingAttachmentUploads = new Map();
-        this._eventsSelect = this.select((s) => s.calendar.events);
-        this._integrationsSelect = this.select((s) => s.calendar.integrations);
-        this._calendarLoadingSelect = this.select((s) => s.calendar.loading);
-        this._calendarSyncingSelect = this.select((s) => s.calendar.syncing);
-        this._teamMembersSelect = this.select((s) => s.team.members);
-        this._localeSelect = this.select((s) => s.i18n.locale);
-        this._mailSelect = this.select((s) => s.mail);
+        this._eventsSelect = this.select((s) => ((s.calendar || {}) as CalendarState).events as CalendarEventRecord[] || []);
+        this._integrationsSelect = this.select((s) => ((s.calendar || {}) as CalendarState).integrations || []);
+        this._calendarLoadingSelect = this.select((s) => Boolean(((s.calendar || {}) as CalendarState).loading));
+        this._calendarSyncingSelect = this.select((s) => Boolean(((s.calendar || {}) as CalendarState).syncing));
+        this._teamMembersSelect = this.select((s) => ((s.team || {}) as TeamState).members || []);
+        this._localeSelect = this.select((s) => ((s.i18n || {}) as I18nState).locale || 'en');
+        this._mailSelect = this.select((s) => (s.mail || {}) as MailState);
         const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
         const now = new Date();
         const defaultEnd = addDays(now, 0);
@@ -2203,15 +2322,15 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dragGhostLeft = 0;
         this._dragOrigin = null;
         this._dragPointerId = null;
-        this._onDragMoveBound = this._onDragMove.bind(this);
-        this._onDragUpBound = this._onDragUp.bind(this);
+        this._onDragMoveBound = this._onDragMove.bind(this) as EventListener;
+        this._onDragUpBound = this._onDragUp.bind(this) as EventListener;
         this._dragJustFinished = false;
     }
 
-    willUpdate(changedProperties) {
-        super.willUpdate(changedProperties);
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
         this.title = this.t('title');
-        if (changedProperties.has('open')) {
+        if (changed.has('open')) {
             if (this.open) {
                 this._onModalOpened();
             } else {
@@ -2232,12 +2351,13 @@ export class PlatformCalendarModal extends PlatformModal {
         this.size = 'full';
         this._isFullscreen = true;
         if (!this._onDocumentClickBound) {
-            this._onDocumentClickBound = (e) => {
+            this._onDocumentClickBound = (e: Event) => {
                 if (!this._integrationsMenuOpen) {
                     return;
                 }
                 const anchor = this.renderRoot?.querySelector('.integrations-menu-anchor');
-                if (anchor && !anchor.contains(e.composedPath()[0])) {
+                const pathTarget = e.composedPath()[0];
+                if (anchor && pathTarget instanceof Node && !anchor.contains(pathTarget)) {
                     this._integrationsMenuOpen = false;
                 }
             };
@@ -2257,7 +2377,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventDialogOpen = false;
     }
 
-    _calT(key, params = {}) {
+    _calT(key: string, params: Record<string, string | number> = {}): string {
         return this.t(key, params);
     }
 
@@ -2268,8 +2388,8 @@ export class PlatformCalendarModal extends PlatformModal {
     _kickInitialLoad() {
         const range = this._viewRange();
         this.dispatch(TEAM_EVENTS.MEMBERS_LOAD_REQUESTED, null);
-        const mail = this._mailSelect.value;
-        if (!Array.isArray(mail.bindings) || mail.bindings.length === 0) {
+        const bindings = this._mailSelect.value?.bindings;
+        if (!Array.isArray(bindings) || bindings.length === 0) {
             this.dispatch(MAIL_EVENTS.BINDINGS_LOAD_REQUESTED, null);
         }
         this.dispatch(CALENDAR_EVENTS.INTEGRATIONS_LOAD_REQUESTED, null);
@@ -2284,14 +2404,14 @@ export class PlatformCalendarModal extends PlatformModal {
         }
     }
 
-    _mailboxRibbonStyle(event) {
+    _mailboxRibbonStyle(event: CalendarEventRecord) {
         const mailboxBindingId = event && event.mailbox_binding_id;
         if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
             return nothing;
         }
-        const mail = this._mailSelect.value;
-        const binding = Array.isArray(mail.bindings)
-            ? mail.bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
+        const bindings = this._mailSelect.value?.bindings;
+        const binding = Array.isArray(bindings)
+            ? bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
             : null;
         if (!binding || typeof binding.calendar_color !== 'string') {
             return nothing;
@@ -2317,38 +2437,38 @@ export class PlatformCalendarModal extends PlatformModal {
         }
     }
 
-    connectedCallback() {
+    override connectedCallback(): void {
         super.connectedCallback();
         this.useEvent(CALENDAR_EVENTS.EVENTS_LOAD_FAILED, (e) => {
-            this.toast('err_load_events', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_load_events', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_CREATE_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_save_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_save_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_UPDATE_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_save_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_save_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_DELETE_FAILED, (e) => {
-            this.toast('err_delete_event', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_delete_event', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATIONS_LOAD_FAILED, (e) => {
-            this.toast('err_load_integrations', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_load_integrations', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECT_FAILED, (e) => {
             this._saving = false;
-            this.toast('err_connect_integration', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_connect_integration', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_FAILED, (e) => {
-            this.toast('err_disconnect_integration', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_disconnect_integration', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.SYNC_FAILED, (e) => {
             this._syncing = false;
-            this.toast('err_sync', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_sync', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(TEAM_EVENTS.MEMBERS_LOAD_FAILED, (e) => {
-            this.toast('err_load_team', { type: 'error', vars: { message: e.payload?.message || '' } });
+            this.toast('err_load_team', { type: 'error', vars: { message: ((e.payload || {}) as { message?: string }).message || '' } });
         });
         this.useEvent(CALENDAR_EVENTS.EVENT_CREATED, () => {
             this._saving = false;
@@ -2361,11 +2481,11 @@ export class PlatformCalendarModal extends PlatformModal {
         this.useEvent(CALENDAR_EVENTS.EVENT_DELETED, () => this._resetEventFormAfterSave());
         this.useEvent(CALENDAR_EVENTS.SYNC_COMPLETED, () => { this._syncing = false; });
         this.useEvent(CALENDAR_EVENTS.INTEGRATION_CONNECTED, () => { this._saving = false; });
-        this.useEvent(FILES_EVENTS.UPLOAD_COMPLETED, (e) => this._onFileUploadCompleted(e));
-        this.useEvent(FILES_EVENTS.UPLOAD_FAILED, (e) => this._onFileUploadFailed(e));
+        this.useEvent(FILES_EVENTS.UPLOAD_COMPLETED, (e: PlatformEvent) => this._onFileUploadCompleted(e));
+        this.useEvent(FILES_EVENTS.UPLOAD_FAILED, (e: PlatformEvent) => this._onFileUploadFailed(e));
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback(): void {
         if (this._onDocumentClickBound) {
             document.removeEventListener('click', this._onDocumentClickBound);
         }
@@ -2407,7 +2527,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return anchor.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
     }
 
-    async _movePeriod(delta) {
+    async _movePeriod(delta: number): Promise<void> {
         const anchor = parseDateInputLocal(this._anchorDate);
         if (this._view === 'day') {
             anchor.setDate(anchor.getDate() + delta);
@@ -2420,7 +2540,7 @@ export class PlatformCalendarModal extends PlatformModal {
         await this._reload();
     }
 
-    _onViewChange(view) {
+    _onViewChange(view: 'day' | 'week' | 'month'): void {
         this._view = view;
         storageSet(CALENDAR_VIEW_STORAGE_KEY, view);
         this._reload();
@@ -2455,10 +2575,10 @@ export class PlatformCalendarModal extends PlatformModal {
         container.scrollTop = targetHour * hourPx;
     }
 
-    _onDragStart(event, pointerEvent) {
+    _onDragStart(event: CalendarEventRecord, pointerEvent: PointerEvent): void {
         pointerEvent.preventDefault();
         pointerEvent.stopPropagation();
-        const target = pointerEvent.currentTarget;
+        const target = pointerEvent.currentTarget as HTMLElement;
         target.setPointerCapture(pointerEvent.pointerId);
         this._dragPointerId = pointerEvent.pointerId;
         this._dragOrigin = { x: pointerEvent.clientX, y: pointerEvent.clientY, started: false };
@@ -2468,23 +2588,27 @@ export class PlatformCalendarModal extends PlatformModal {
         target.addEventListener('pointercancel', this._onDragUpBound);
     }
 
-    _onDragMove(pointerEvent) {
+    _onDragMove(pointerEvent: PointerEvent): void {
         if (!this._dragEvent) {
             return;
         }
-        const dx = pointerEvent.clientX - this._dragOrigin.x;
-        const dy = pointerEvent.clientY - this._dragOrigin.y;
-        if (!this._dragOrigin.started && Math.abs(dx) + Math.abs(dy) < 8) {
+        const origin = this._dragOrigin;
+        if (!origin) {
             return;
         }
-        this._dragOrigin.started = true;
+        const dx = pointerEvent.clientX - origin.x;
+        const dy = pointerEvent.clientY - origin.y;
+        if (!origin.started && Math.abs(dx) + Math.abs(dy) < 8) {
+            return;
+        }
+        origin.started = true;
         this._dragGhostTop = pointerEvent.clientY;
         this._dragGhostLeft = pointerEvent.clientX;
         this._updateDropTarget(pointerEvent.clientX, pointerEvent.clientY);
     }
 
-    _onDragUp(pointerEvent) {
-        const target = pointerEvent.currentTarget;
+    _onDragUp(pointerEvent: PointerEvent): void {
+        const target = pointerEvent.currentTarget as HTMLElement;
         target.removeEventListener('pointermove', this._onDragMoveBound);
         target.removeEventListener('pointerup', this._onDragUpBound);
         target.removeEventListener('pointercancel', this._onDragUpBound);
@@ -2510,7 +2634,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._clearDropTargets();
     }
 
-    _updateDropTarget(clientX, clientY) {
+    _updateDropTarget(clientX: number, clientY: number): void {
         this._clearDropTargets();
         const el = this._findDropElement(clientX, clientY);
         if (el) {
@@ -2526,7 +2650,7 @@ export class PlatformCalendarModal extends PlatformModal {
         root.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
     }
 
-    _findDropElement(clientX, clientY) {
+    _findDropElement(clientX: number, clientY: number): Element | null {
         const root = this.renderRoot;
         if (!root) {
             return null;
@@ -2564,7 +2688,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return null;
     }
 
-    _findDropTarget(clientX, clientY) {
+    _findDropTarget(clientX: number, clientY: number): { date: string; minutes?: number } | null {
         const root = this.renderRoot;
         if (!root) {
             return null;
@@ -2574,7 +2698,7 @@ export class PlatformCalendarModal extends PlatformModal {
             for (const cell of cells) {
                 const rect = cell.getBoundingClientRect();
                 if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-                    const iso = cell.dataset.iso;
+                    const iso = (cell as HTMLElement).dataset.iso;
                     if (iso) {
                         return { date: iso };
                     }
@@ -2586,6 +2710,9 @@ export class PlatformCalendarModal extends PlatformModal {
             const cols = root.querySelectorAll('.week-day-col');
             for (let i = 0; i < cols.length; i += 1) {
                 const col = cols[i];
+                if (!(col instanceof HTMLElement)) {
+                    continue;
+                }
                 const rect = col.getBoundingClientRect();
                 if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
                     const iso = col.dataset.iso;
@@ -2625,7 +2752,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return null;
     }
 
-    _applyDrop(event, dropTarget) {
+    _applyDrop(event: CalendarEventRecord, dropTarget: { date: string; minutes?: number }): void {
         const eventStart = new Date(event.start_at);
         const eventEnd = new Date(event.end_at);
         const durationMs = eventEnd.getTime() - eventStart.getTime();
@@ -2672,10 +2799,10 @@ export class PlatformCalendarModal extends PlatformModal {
         });
     }
 
-    _eventsForDate(date) {
+    _eventsForDate(date: Date): CalendarEventRecord[] {
         const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
         const dayEnd = addDays(dayStart, 1);
-        const events = this._eventsSelect.value;
+        const events = this._eventsSelect.value || [];
         return events.filter((event) => {
             const start = new Date(event.start_at);
             const end = new Date(event.end_at);
@@ -2726,7 +2853,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dateSheetOpen = false;
     }
 
-    _shiftDateSheetMonth(delta) {
+    _shiftDateSheetMonth(delta: number): void {
         const ref = new Date(this._dateSheetMonthRef);
         if (Number.isNaN(ref.getTime())) {
             throw new Error(`Invalid date sheet month ref: ${this._dateSheetMonthRef}`);
@@ -2735,7 +2862,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._dateSheetMonthRef = toDateInputValue(shifted);
     }
 
-    _selectDateFromSheet(iso) {
+    _selectDateFromSheet(iso: unknown): void {
         if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
             throw new Error(`Invalid sheet date: ${iso}`);
         }
@@ -2783,7 +2910,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const monthTitle = sheetMonth.toLocaleDateString(this._calendarLocaleTag(), { month: 'long', year: 'numeric' });
         return html`
             <div class="date-sheet-overlay" @click=${() => this._closeDateSheet()}>
-                <div class="date-sheet-card" @click=${(e) => e.stopPropagation()}>
+                <div class="date-sheet-card" @click=${(e: Event) => e.stopPropagation()}>
                     <div class="date-sheet-header">
                         <span class="date-sheet-title">${monthTitle}</span>
                         <div class="date-sheet-nav">
@@ -2896,7 +3023,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                         ?data-dragging=${this._dragEvent?.event_id === event.event_id}
                                         style=${style}
                                         @click=${() => this._fillFormFromEvent(event)}
-                                        @pointerdown=${(e) => this._onDragStart(event, e)}
+                                        @pointerdown=${(e: PointerEvent) => this._onDragStart(event, e)}
                                     >
                                         <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                         <span class="event-chip-title">${event.title}</span>
@@ -2911,11 +3038,11 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _sourceKey(source) {
+    _sourceKey(source: unknown): string {
         return String(source || '').toLowerCase();
     }
 
-    _isCalDavProvider(provider) {
+    _isCalDavProvider(provider: unknown): boolean {
         return provider === 'yandex' || provider === 'mailru' || provider === 'caldav';
     }
 
@@ -2930,7 +3057,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return 'calendar';
     }
 
-    _providerDisplayLabel(provider) {
+    _providerDisplayLabel(provider: unknown): string {
         if (provider === 'google') {
             return 'Google';
         }
@@ -2943,14 +3070,14 @@ export class PlatformCalendarModal extends PlatformModal {
         if (provider === 'caldav') {
             return this._calT('integration_caldav');
         }
-        return provider ? provider.toUpperCase() : '';
+        return typeof provider === 'string' && provider ? provider.toUpperCase() : '';
     }
 
-    _kindKey(kind) {
+    _kindKey(kind: unknown): string {
         return String(kind || '').toLowerCase();
     }
 
-    _sourceLabel(source) {
+    _sourceLabel(source: unknown): string {
         const key = this._sourceKey(source);
         if (key === 'platform') {
             return this._calT('source_platform');
@@ -2979,7 +3106,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return key ? key.toUpperCase() : this._calT('unknown');
     }
 
-    _kindLabel(kind) {
+    _kindLabel(kind: unknown): string {
         const key = this._kindKey(kind);
         if (key === 'event') {
             return this._calT('kind_event');
@@ -2999,11 +3126,11 @@ export class PlatformCalendarModal extends PlatformModal {
         return key ? key : this._calT('kind_generic');
     }
 
-    _isEventEditable(source) {
+    _isEventEditable(source: unknown): boolean {
         return this._sourceKey(source) === 'platform';
     }
 
-    _formatWallClockFromMs(ms) {
+    _formatWallClockFromMs(ms: number): string {
         const instant = new Date(ms);
         if (Number.isNaN(instant.getTime())) {
             throw new Error('Invalid instant for wall clock');
@@ -3014,7 +3141,7 @@ export class PlatformCalendarModal extends PlatformModal {
         });
     }
 
-    _eventStartTimeLabel(event) {
+    _eventStartTimeLabel(event: CalendarEventRecord): string {
         const startDate = new Date(event.start_at);
         if (Number.isNaN(startDate.getTime())) {
             throw new Error('event.start_at must be valid datetime');
@@ -3022,7 +3149,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._formatWallClockFromMs(startDate.getTime());
     }
 
-    _fillFormFromEvent(event) {
+    _fillFormFromEvent(event: CalendarEventRecord): void {
         if (this._dragJustFinished) {
             return;
         }
@@ -3052,7 +3179,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._eventDialogOpen = true;
     }
 
-    _ruleToRecurrence(rule) {
+    _ruleToRecurrence(rule: string | null | undefined): string {
         if (!rule) {
             return 'none';
         }
@@ -3068,8 +3195,8 @@ export class PlatformCalendarModal extends PlatformModal {
         return 'none';
     }
 
-    _onEventFormChange(field, value) {
-        const form = { ...this._eventForm, [field]: value };
+    _onEventFormChange(field: string, value: unknown): void {
+        const form: EventFormState = { ...this._eventForm, [field]: value };
 
         if (field === 'start_at' || field === 'end_at') {
             const startMs = new Date(form.start_at).getTime();
@@ -3095,7 +3222,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._eventForm.attendees.map((entry) => toAttendeeTag(entry));
     }
 
-    _addAttendeeByEmail(emailValue) {
+    _addAttendeeByEmail(emailValue: unknown): void {
         const normalized = normalizeEmail(emailValue);
         if (!normalized) {
             return;
@@ -3123,7 +3250,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._attendeeDropdownOpen = false;
     }
 
-    _addTeamMemberAsAttendee(member) {
+    _addTeamMemberAsAttendee(member: TeamMemberRecord): void {
         if (!member || typeof member !== 'object') {
             throw new Error('Team member is required');
         }
@@ -3150,7 +3277,7 @@ export class PlatformCalendarModal extends PlatformModal {
         this._attendeeDropdownOpen = false;
     }
 
-    _removeAttendee(emailValue) {
+    _removeAttendee(emailValue: unknown): void {
         const email = normalizeEmail(emailValue);
         const nextAttendees = this._attendeeTags().filter((item) => item.email !== email);
         this._onEventFormChange('attendees', nextAttendees);
@@ -3159,7 +3286,7 @@ export class PlatformCalendarModal extends PlatformModal {
     _attendeeSuggestions() {
         const query = this._attendeeDraft.trim().toLowerCase();
         const selectedEmails = new Set(this._attendeeTags().map((item) => item.email));
-        const membersWithEmail = this._teamMembersSelect.value
+        const membersWithEmail = (this._teamMembersSelect.value || [])
             .filter((member) => normalizeEmail(member.email) !== '')
             .filter((member) => !selectedEmails.has(normalizeEmail(member.email)));
         if (!query) {
@@ -3174,7 +3301,7 @@ export class PlatformCalendarModal extends PlatformModal {
             .slice(0, 8);
     }
 
-    _onAttendeeInputKeyDown(event) {
+    _onAttendeeInputKeyDown(event: KeyboardEvent): void {
         if (event.key === 'Enter' || event.key === ',') {
             event.preventDefault();
             this._addAttendeeByEmail(this._attendeeDraft);
@@ -3185,11 +3312,11 @@ export class PlatformCalendarModal extends PlatformModal {
             if (tags.length === 0) {
                 return;
             }
-            this._removeAttendee(tags[tags.length - 1].email);
+            this._removeAttendee(tags[tags.length - 1]?.email);
         }
     }
 
-    _openCreateEventDialog(date) {
+    _openCreateEventDialog(date?: unknown): void {
         if (this._dragJustFinished) {
             return;
         }
@@ -3239,15 +3366,16 @@ export class PlatformCalendarModal extends PlatformModal {
 
     _triggerAttachmentSelect() {
         const fileInput = this.renderRoot?.querySelector('#calendar-event-file-input');
-        if (!fileInput) {
+        if (!(fileInput instanceof HTMLInputElement)) {
             throw new Error('Attachment input not found');
         }
         fileInput.value = '';
         fileInput.click();
     }
 
-    _onAttachmentInputChange(event) {
-        const files = Array.from(event.target.files || []);
+    _onAttachmentInputChange(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input.files || []);
         if (files.length === 0) {
             return;
         }
@@ -3259,7 +3387,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 {
                     file,
                     name: file.name,
-                    spec: buildCalendarEventFileCreateSpecJson({ eventId: this._selectedEventId }),
+                    spec: buildCalendarEventFileCreateSpecJson({ eventId: this._selectedEventId || '' }),
                 },
                 { correlation_id, source: 'local' },
             );
@@ -3268,13 +3396,13 @@ export class PlatformCalendarModal extends PlatformModal {
         this.requestUpdate();
     }
 
-    _onFileUploadCompleted(event) {
+    _onFileUploadCompleted(event: PlatformEvent): void {
         const correlation_id = event.meta?.correlation_id;
         if (!correlation_id || !this._pendingAttachmentUploads.has(correlation_id)) {
             return;
         }
         this._pendingAttachmentUploads.delete(correlation_id);
-        const file = event.payload?.file;
+        const file = ((event.payload || {}) as { file?: Record<string, unknown> }).file;
         if (!file || typeof file.file_id !== 'string' || file.file_id === '') {
             this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
             this.toast('err_upload_attachment', { type: 'error', vars: { message: 'invalid file payload' } });
@@ -3288,25 +3416,25 @@ export class PlatformCalendarModal extends PlatformModal {
                 name: typeof file.original_name === 'string' && file.original_name ? file.original_name : file.file_id,
                 url: typeof file.url === 'string' ? file.url : '',
                 content_type: typeof file.content_type === 'string' ? file.content_type : '',
-                file_size: Number.isFinite(file.file_size) ? file.file_size : 0,
+                file_size: typeof file.file_size === 'number' && Number.isFinite(file.file_size) ? file.file_size : 0,
             }];
         }
         this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
         this.requestUpdate();
     }
 
-    _onFileUploadFailed(event) {
+    _onFileUploadFailed(event: PlatformEvent): void {
         const correlation_id = event.meta?.correlation_id;
         if (!correlation_id || !this._pendingAttachmentUploads.has(correlation_id)) {
             return;
         }
         this._pendingAttachmentUploads.delete(correlation_id);
         this._uploadingAttachments = this._pendingAttachmentUploads.size > 0;
-        this.toast('err_upload_attachment', { type: 'error', vars: { message: event.payload?.message || '' } });
+        this.toast('err_upload_attachment', { type: 'error', vars: { message: ((event.payload || {}) as { message?: string }).message || '' } });
         this.requestUpdate();
     }
 
-    _removeAttachment(fileId) {
+    _removeAttachment(fileId: string): void {
         this._eventAttachments = this._eventAttachments.filter((item) => item.file_id !== fileId);
     }
 
@@ -3338,7 +3466,7 @@ export class PlatformCalendarModal extends PlatformModal {
             this.toast('err_edit_remote', { type: 'error', vars: { label: this._sourceLabel(this._selectedEventSource) } });
             return;
         }
-        const activeMailboxBindingId = this._mailSelect.value.activeMailboxBindingId;
+        const activeMailboxBindingId = this._mailSelect.value?.activeMailboxBindingId;
         if (typeof activeMailboxBindingId !== 'string' || activeMailboxBindingId.length === 0) {
             this.toast('err_mailbox_required', { type: 'error' });
             return;
@@ -3450,14 +3578,14 @@ export class PlatformCalendarModal extends PlatformModal {
         window.location.assign(connectUrl);
     }
 
-    _disconnectIntegration(integrationId) {
+    _disconnectIntegration(integrationId: unknown): void {
         if (typeof integrationId !== 'string' || integrationId.length === 0) {
             throw new Error('platform-calendar-modal: integration_id required to disconnect');
         }
         this.dispatch(CALENDAR_EVENTS.INTEGRATION_DISCONNECT_REQUESTED, { integration_id: integrationId });
     }
 
-    _runSync(integrationId) {
+    _runSync(integrationId: unknown): void {
         if (typeof integrationId !== 'string' || integrationId.length === 0) {
             throw new Error('platform-calendar-modal: integration_id required to sync');
         }
@@ -3471,40 +3599,40 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _activeIntegration() {
-        const integrations = this._integrationsSelect.value;
+        const integrations = this._integrationsSelect.value || [];
         if (this._activeIntegrationId) {
             return integrations.find((item) => item.integration_id === this._activeIntegrationId) || null;
         }
         return integrations.find((item) => item.provider === this._activeProvider) || null;
     }
 
-    _mailboxLabelForIntegration(integration) {
+    _mailboxLabelForIntegration(integration: CalendarState['integrations'][number] | null | undefined): string | null {
         const mailboxBindingId = integration && integration.mailbox_binding_id;
         if (typeof mailboxBindingId !== 'string' || mailboxBindingId.length === 0) {
             return null;
         }
-        const mail = this._mailSelect.value;
-        const binding = Array.isArray(mail.bindings)
-            ? mail.bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
+        const bindings = this._mailSelect.value?.bindings;
+        const binding = Array.isArray(bindings)
+            ? bindings.find((item) => item.mailbox_binding_id === mailboxBindingId)
             : null;
         return binding ? binding.email_address : mailboxBindingId;
     }
 
-    _onIntegrationProviderSelect(provider, integrationId = null) {
+    _onIntegrationProviderSelect(provider: string, integrationId: string | null = null): void {
         this._activeProvider = provider;
         this._activeIntegrationId = integrationId;
         const activeIntegration = this._activeIntegration();
         if (!this._isCalDavProvider(provider) || !activeIntegration) {
             return;
         }
-        const settings = activeIntegration.settings || {};
+        const settings = (activeIntegration.settings || {}) as Record<string, unknown>;
         this._integrationForm = {
             ...this._integrationForm,
             username: activeIntegration.mailbox_binding_id
                 ? (this._mailboxLabelForIntegration(activeIntegration) || '')
                 : this._integrationForm.username,
-            default_calendar_id: settings.default_calendar_id || '',
-            caldav_base_url: settings.caldav_base_url || '',
+            default_calendar_id: typeof settings.default_calendar_id === 'string' ? settings.default_calendar_id : '',
+            caldav_base_url: typeof settings.caldav_base_url === 'string' ? settings.caldav_base_url : '',
             sync_enabled: settings.sync_enabled !== false,
             sync_inbound_enabled: settings.sync_inbound_enabled !== false,
             sync_outbound_enabled: settings.sync_outbound_enabled !== false,
@@ -3540,7 +3668,7 @@ export class PlatformCalendarModal extends PlatformModal {
 
         const hasAllDay = days.some((d) => d.events.some((e) => e.all_day));
 
-        const layoutForDay = (day) => {
+        const layoutForDay = (day: { date: Date; events: CalendarEventRecord[] }) => {
             const timed = day.events.filter((e) => !e.all_day);
             const dayStart = new Date(day.date.getFullYear(), day.date.getMonth(), day.date.getDate(), 0, 0, 0, 0);
             const dayEndMs = addDays(dayStart, 1).getTime();
@@ -3629,7 +3757,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                                 ?data-dragging=${this._dragEvent?.event_id === event.event_id}
                                                 style=${style}
                                                 @click=${() => this._fillFormFromEvent(event)}
-                                                @pointerdown=${(e) => this._onDragStart(event, e)}
+                                                @pointerdown=${(e: PointerEvent) => this._onDragStart(event, e)}
                                             >
                                                 <span class="event-chip-time">${this._formatWallClockFromMs(visibleStartMs)}</span>
                                                 <span class="event-chip-title">${event.title}</span>
@@ -3673,11 +3801,11 @@ export class PlatformCalendarModal extends PlatformModal {
                                     data-color=${normalizeEventColor(event.metadata?.[EVENT_COLOR_KEY])}
                                     ?data-dragging=${this._dragEvent?.event_id === event.event_id}
                                     type="button"
-                                    @click=${(e) => {
+                                    @click=${(e: Event) => {
                                         e.stopPropagation();
                                         this._fillFormFromEvent(event);
                                     }}
-                                    @pointerdown=${(e) => this._onDragStart(event, e)}
+                                    @pointerdown=${(e: PointerEvent) => this._onDragStart(event, e)}
                                     title=${`${this._sourceLabel(event.source)} • ${this._kindLabel(event.kind)}`}
                                     style=${style}
                                 >
@@ -3708,7 +3836,7 @@ export class PlatformCalendarModal extends PlatformModal {
         const submitLabel = this._saving
             ? this._calT('compose_saving')
             : (this._selectedEventId ? this._calT('compose_save') : this._calT('compose_create'));
-        const c = (key, params) => this._calT(key, params);
+        const c = (key: string, params?: Record<string, string | number>) => this._calT(key, params);
         return html`
             <div class="event-compose">
                 <div class="event-compose-row">
@@ -3717,7 +3845,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <input
                             class="event-compose-title-input"
                             .value=${this._eventForm.title}
-                            @input=${(e) => this._onEventFormChange('title', e.target.value)}
+                            @input=${(e: Event) => this._onEventFormChange('title', (e.target as HTMLInputElement).value)}
                         />
                     </div>
                 </div>
@@ -3784,7 +3912,7 @@ export class PlatformCalendarModal extends PlatformModal {
                                 class="event-compose-textarea"
                                 rows="3"
                                 .value=${this._eventForm.description}
-                                @input=${(e) => this._onEventFormChange('description', e.target.value)}
+                                @input=${(e: Event) => this._onEventFormChange('description', (e.target as HTMLTextAreaElement).value)}
                             ></textarea>
                         </div>
                     </div>
@@ -3817,18 +3945,18 @@ export class PlatformCalendarModal extends PlatformModal {
                                             this._attendeeDropdownOpen = false;
                                         }, 120);
                                     }}
-                                    @input=${(event) => {
-                                        this._attendeeDraft = event.target.value;
+                                    @input=${(event: Event) => {
+                                        this._attendeeDraft = (event.target as HTMLInputElement).value;
                                         this._attendeeDropdownOpen = true;
                                     }}
-                                    @keydown=${(event) => this._onAttendeeInputKeyDown(event)}
+                                    @keydown=${(event: KeyboardEvent) => this._onAttendeeInputKeyDown(event)}
                                     placeholder=${c('attendee_placeholder')}
                                 />
                             </div>
                             ${this._attendeeDropdownOpen && this._attendeeSuggestions().length > 0 ? html`
                                 <div class="attendees-dropdown">
                                     ${this._attendeeSuggestions().map((member) => html`
-                                        <button class="attendee-option" type="button" @mousedown=${(event) => event.preventDefault()} @click=${() => this._addTeamMemberAsAttendee(member)}>
+                                        <button class="attendee-option" type="button" @mousedown=${(event: Event) => event.preventDefault()} @click=${() => this._addTeamMemberAsAttendee(member)}>
                                             <span class="attendee-option-name">${member.name || member.email}</span>
                                             <span class="attendee-option-email">${member.email}</span>
                                         </button>
@@ -3847,14 +3975,14 @@ export class PlatformCalendarModal extends PlatformModal {
                                 mode="datetime"
                                 value-format="iso"
                                 .value=${this._eventForm.start_at}
-                                @change=${(e) => this._onEventFormChange('start_at', e.target.value)}
+                                @change=${(e: Event) => this._onEventFormChange('start_at', (e.target as HTMLInputElement).value)}
                             ></platform-date-picker>
                             <div class="event-compose-time-sep">-</div>
                             <platform-date-picker
                                 mode="datetime"
                                 value-format="iso"
                                 .value=${this._eventForm.end_at}
-                                @change=${(e) => this._onEventFormChange('end_at', e.target.value)}
+                                @change=${(e: Event) => this._onEventFormChange('end_at', (e.target as HTMLInputElement).value)}
                             ></platform-date-picker>
                         </div>
                         <div class="event-compose-options">
@@ -3862,20 +3990,20 @@ export class PlatformCalendarModal extends PlatformModal {
                                 <platform-switch
                                     .checked=${Boolean(this._eventForm.all_day)}
                                     .label=${c('all_day')}
-                                    @change=${(e) => this._onEventFormChange('all_day', e.detail.value)}
+                                    @change=${(e: Event) => this._onEventFormChange('all_day', (e as CustomEvent).detail?.value)}
                                 ></platform-switch>
                             </div>
                             <div class="event-compose-switch">
                                 <platform-switch
                                     .checked=${this._eventForm.recurrence !== 'none'}
                                     .label=${c('repeat')}
-                                    @change=${(e) => this._onEventFormChange('recurrence', e.detail.value ? 'weekly' : 'none')}
+                                    @change=${(e: Event) => this._onEventFormChange('recurrence', (e as CustomEvent).detail?.value ? 'weekly' : 'none')}
                                 ></platform-switch>
                             </div>
                             <platform-timezone-picker
                                 class="event-compose-tz"
                                 .value=${this._eventForm.timezone}
-                                @change=${(e) => this._onEventFormChange('timezone', e.detail.value)}
+                                @change=${(e: Event) => this._onEventFormChange('timezone', (e as CustomEvent).detail?.value)}
                             ></platform-timezone-picker>
                         </div>
                     </div>
@@ -3904,7 +4032,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <select
                             class="event-compose-select"
                             .value=${this._eventForm.kind}
-                            @change=${(e) => this._onEventFormChange('kind', e.target.value)}
+                            @change=${(e: Event) => this._onEventFormChange('kind', (e.target as HTMLSelectElement).value)}
                             ?disabled=${this._selectedEventId && !this._isEventEditable(this._selectedEventSource)}
                         >
                             <option value="meeting">${c('kind_meeting')}</option>
@@ -3924,7 +4052,7 @@ export class PlatformCalendarModal extends PlatformModal {
                         <input
                             class="event-compose-input"
                             .value=${this._eventForm.location}
-                            @input=${(e) => this._onEventFormChange('location', e.target.value)}
+                            @input=${(e: Event) => this._onEventFormChange('location', (e.target as HTMLInputElement).value)}
                             placeholder=${c('location_placeholder')}
                         />
                     </div>
@@ -3979,7 +4107,7 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _openIntegrationModal(provider, integrationId = null) {
+    _openIntegrationModal(provider: string, integrationId: string | null = null): void {
         this._integrationsMenuOpen = false;
         this._onIntegrationProviderSelect(provider, integrationId);
         this._integrationModalProvider = provider;
@@ -3994,11 +4122,11 @@ export class PlatformCalendarModal extends PlatformModal {
         if (!this._integrationModalProvider) {
             return html``;
         }
-        const c = (key, params) => this._calT(key, params);
+        const c = (key: string, params?: Record<string, string | number>) => this._calT(key, params);
         const providerLabel = this._providerDisplayLabel(this._integrationModalProvider);
         return html`
             <div class="integration-modal-overlay" @click=${() => this._closeIntegrationModal()}>
-                <div class="integration-modal" @click=${(e) => e.stopPropagation()}>
+                <div class="integration-modal" @click=${(e: Event) => e.stopPropagation()}>
                     <div class="integration-modal-header">
                         <div class="integration-modal-title">
                             <platform-icon name=${this._integrationModalIconName()} size="20" colored></platform-icon>
@@ -4015,7 +4143,7 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderIntegrationContent() {
-        const c = (key, params) => this._calT(key, params);
+        const c = (key: string, params?: Record<string, string | number>) => this._calT(key, params);
         const activeIntegration = this._activeIntegration();
 
         if (this._activeProvider === 'google') {
@@ -4024,14 +4152,14 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._renderCalDavIntegration(c, activeIntegration, this._activeProvider);
     }
 
-    _renderGoogleIntegration(c, activeIntegration) {
+    _renderGoogleIntegration(c: (key: string, params?: Record<string, string | number>) => string, activeIntegration: CalendarState['integrations'][number] | null) {
         return html`
             <div class="hint">${c('google_oauth_hint')}</div>
             <div class="hint">${c('autosync_hint')}</div>
             ${activeIntegration ? html`
                 <div class="hint">
                     ${c('notifications_label', {
-                        state: activeIntegration.settings?.notifications_enabled === false
+                        state: (activeIntegration.settings as Record<string, unknown> | undefined)?.notifications_enabled === false
                             ? c('notifications_off')
                             : c('notifications_on'),
                     })}
@@ -4044,7 +4172,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <button
                     class="btn btn-secondary"
                     type="button"
-                    @click=${() => this._runSync(activeIntegration.integration_id)}
+                    @click=${() => this._runSync(activeIntegration?.integration_id)}
                     ?disabled=${this._syncing || !activeIntegration}
                 >
                     ${this._syncing ? c('syncing') : c('sync')}
@@ -4059,7 +4187,7 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _renderCalDavIntegration(c, activeIntegration, provider) {
+    _renderCalDavIntegration(c: (key: string, params?: Record<string, string | number>) => string, activeIntegration: CalendarState['integrations'][number] | null, provider: string) {
         const isCustom = provider === 'caldav';
         const usernamePlaceholder = provider === 'mailru'
             ? 'login@mail.ru'
@@ -4081,7 +4209,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.caldav_base_url}
-                    @input=${(e) => this._integrationForm = { ...this._integrationForm, caldav_base_url: e.target.value }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, caldav_base_url: (e.target as HTMLInputElement).value }; }}
                     placeholder=${baseUrlPlaceholder}
                 />
             </div>
@@ -4090,7 +4218,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.username}
-                    @input=${(e) => this._integrationForm = { ...this._integrationForm, username: e.target.value }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, username: (e.target as HTMLInputElement).value }; }}
                     placeholder=${usernamePlaceholder}
                 />
             </div>
@@ -4099,7 +4227,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.app_password}
-                    @input=${(e) => this._integrationForm = { ...this._integrationForm, app_password: e.target.value }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, app_password: (e.target as HTMLInputElement).value }; }}
                     placeholder=${c('yandex_password_placeholder')}
                 />
             </div>
@@ -4108,7 +4236,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <input
                     class="form-input"
                     .value=${this._integrationForm.default_calendar_id}
-                    @input=${(e) => this._integrationForm = { ...this._integrationForm, default_calendar_id: e.target.value }}
+                    @input=${(e: Event) => { this._integrationForm = { ...this._integrationForm, default_calendar_id: (e.target as HTMLInputElement).value }; }}
                     placeholder=${calendarIdPlaceholder}
                 />
             </div>
@@ -4116,8 +4244,8 @@ export class PlatformCalendarModal extends PlatformModal {
                 <platform-switch
                     .checked=${Boolean(this._integrationForm.notifications_enabled)}
                     .label=${c('notifications_new_events')}
-                    @change=${(e) => {
-                        this._integrationForm = { ...this._integrationForm, notifications_enabled: e.detail.value };
+                    @change=${(e: Event) => {
+                        this._integrationForm = { ...this._integrationForm, notifications_enabled: Boolean((e as CustomEvent).detail?.value) };
                     }}
                 ></platform-switch>
             </div>
@@ -4129,7 +4257,7 @@ export class PlatformCalendarModal extends PlatformModal {
                 <button
                     class="btn btn-secondary"
                     type="button"
-                    @click=${() => this._runSync(activeIntegration.integration_id)}
+                    @click=${() => this._runSync(activeIntegration?.integration_id)}
                     ?disabled=${this._syncing || !activeIntegration}
                 >
                     ${this._syncing ? c('syncing') : c('sync')}
@@ -4145,27 +4273,27 @@ export class PlatformCalendarModal extends PlatformModal {
     }
 
     _renderIntegrationList() {
-        const c = (key, params) => this._calT(key, params);
+        const c = (key: string, params?: Record<string, string | number>) => this._calT(key, params);
         return html`
             <div class="integration-list">
-                ${this._integrationsSelect.value.map((integration) => {
+                ${(this._integrationsSelect.value || []).map((integration) => {
                     const mailboxLabel = this._mailboxLabelForIntegration(integration);
                     const title = mailboxLabel
                         ? `${this._providerDisplayLabel(integration.provider)} / ${mailboxLabel}`
-                        : `${this._providerDisplayLabel(integration.provider)} / ${integration.settings?.default_calendar_id || c('integration_no_calendar')}`;
+                        : `${this._providerDisplayLabel(integration.provider)} / ${(integration.settings as Record<string, unknown> | undefined)?.default_calendar_id || c('integration_no_calendar')}`;
                     return html`
                         <div class="integration-item">
                             <div>
                                 <div>${title}</div>
                                 <div class="hint">${c('integration_updated_at', {
-                                    value: formatPlatformDateTime(integration.updated_at, this._localeSelect.value),
+                                    value: formatPlatformDateTime(integration.updated_at as string, this._localeSelect.value || 'en'),
                                 })}</div>
                             </div>
                             <div class="actions">
                                 <button
                                     class="btn btn-secondary"
                                     type="button"
-                                    @click=${() => this._openIntegrationModal(integration.provider, integration.integration_id)}
+                                    @click=${() => this._openIntegrationModal(integration.provider as string, (integration.integration_id as string | undefined) || null)}
                                 >${c('integration_configure')}</button>
                                 <button
                                     class="btn btn-danger"
@@ -4187,7 +4315,7 @@ export class PlatformCalendarModal extends PlatformModal {
         }
         return html`
             <div class="event-dialog-overlay" @click=${() => this._closeEventDialog()}>
-                <section class="event-dialog" @click=${(e) => e.stopPropagation()}>
+                <section class="event-dialog" @click=${(e: Event) => e.stopPropagation()}>
                     <div class="event-dialog-header">
                         <div>
                             <div class="event-dialog-title">${this._selectedEventId ? this._calT('dialog_edit') : this._calT('dialog_new')}</div>
@@ -4230,7 +4358,7 @@ export class PlatformCalendarModal extends PlatformModal {
         return this._renderWeekGrid();
     }
 
-    _renderIntegrationsMenuBlock(v, headerStyle = false) {
+    _renderIntegrationsMenuBlock(v: (key: string) => string, headerStyle = false) {
         const btnClass = headerStyle ? 'header-btn' : 'btn-icon';
         const iconSize = '16';
         return html`
@@ -4244,7 +4372,7 @@ export class PlatformCalendarModal extends PlatformModal {
                     <platform-icon name="more-vert" size=${iconSize}></platform-icon>
                 </button>
                 ${this._integrationsMenuOpen ? html`
-                    <div class="integrations-dropdown" @click=${(e) => e.stopPropagation()}>
+                    <div class="integrations-dropdown" @click=${(e: Event) => e.stopPropagation()}>
                         <button class="dropdown-item" type="button" @click=${() => this._openIntegrationModal('google')}>
                             <platform-icon name="google" size="16" colored></platform-icon>
                             <span>${v('integration_google')}</span>
@@ -4267,7 +4395,7 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    _renderCompactHeaderDateNav(v) {
+    _renderCompactHeaderDateNav(v: (key: string) => string) {
         return html`
             <div class="calendar-header-date-nav">
                 <button class="btn-icon" type="button" @click=${() => { void this._movePeriod(-1); }} aria-label=${v('sheet_prev_day')}>
@@ -4283,8 +4411,8 @@ export class PlatformCalendarModal extends PlatformModal {
         `;
     }
 
-    renderBody() {
-        const v = (key) => this._calT(key);
+    override renderBody() {
+        const v = (key: string) => this._calT(key);
         const compact = this._isCompactLayout;
         return html`
             <div class="calendar-shell-wrap">

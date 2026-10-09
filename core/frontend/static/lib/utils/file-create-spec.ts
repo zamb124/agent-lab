@@ -160,7 +160,7 @@ export function buildCalendarEventFileCreateSpecJson({ eventId }: { eventId: str
     });
 }
 
-export function buildPlatformAuxiliaryFileCreateSpecJson({ retentionKind, metadata }: { retentionKind: string; metadata?: Record<string, unknown> }): string {
+export function buildPlatformAuxiliaryFileCreateSpecJson({ retentionKind, metadata }: { retentionKind?: string; metadata?: Record<string, unknown> }): string {
     return buildFileCreateSpecJson({
         sourceKind: 'platform_auxiliary',
         sourceRef: {},
