@@ -231,7 +231,7 @@ describe('drawer geometry stays in the embed host', () => {
                 return [];
             }
             return readdirSync(dir)
-                .filter((name) => name.endsWith('-app.js'))
+                .filter((name) => name.endsWith('-app.js') || name.endsWith('-app.ts'))
                 .map((name) => join(dir, name));
         });
         expect(appFiles.length).toBeGreaterThan(5);

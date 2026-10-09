@@ -1,0 +1,177 @@
+/**
+ * OfficeCatalogEditModal — изменение каталога (title + company_visible).
+ *
+ * props (`UI_MODAL_OPEN.payload.props`): { catalogId, title, companyVisible }.
+ * `useForm('office/catalog_edit_form')` openForm с props в connectedCallback.
+ * Отправка диспатчит `catalogsResource.events.UPDATE_REQUESTED`.
+ * После UPDATED — closeAfterSave.
+ */
+
+import { html, css } from 'lit';
+import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
+import '@platform/lib/components/platform-switch.js';
+import '@platform/lib/components/fields/platform-field.js';
+import type { CSSResultGroup, PropertyDeclarations, PropertyValues, TemplateResult } from 'lit';
+import type { FormController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+const FORM_NAME = 'office/catalog_edit_form';
+const CATALOGS_NAME = 'office/catalogs';
+
+export class OfficeCatalogEditModal extends PlatformFormModal {
+    static modalKind = 'office.catalog_edit';
+    static i18nNamespace = 'documents';
+
+    static override properties: PropertyDeclarations = {
+        ...PlatformFormModal.properties,
+        catalogId: { type: String },
+        title: { type: String },
+        companyVisible: { type: Boolean },
+    }
+    declare catalogId: string;
+    declare title: string;
+    declare companyVisible: boolean;
+
+
+    static override styles: CSSResultGroup = [
+        PlatformFormModal.styles,
+        css`
+            .form-grid { display: grid; gap: var(--space-4); }
+            .switch-row {
+                display: flex; align-items: center; justify-content: space-between;
+                gap: var(--space-3);
+            }
+            .switch-label { font-size: var(--text-sm); color: var(--text-primary); font-weight: 500; }
+            .hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-top: var(--space-1);
+            }
+            .footer-actions {
+                display: flex; gap: var(--space-3);
+                justify-content: flex-end;
+                width: 100%;
+            }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this.size = 'sm';
+        this.headerSavePrimary = true;
+        this.catalogId = '';
+        this.title = '';
+        this.companyVisible = false;
+        this._catalogs = this.useResource(CATALOGS_NAME);
+        this._form = this.useForm(FORM_NAME);
+        this._seeded = false;
+    }
+    private _catalogs: ResourceController;
+    private _form: FormController;
+    private _seeded: boolean;
+
+
+    override connectedCallback(): void {
+        super.connectedCallback();
+        this.useEvent(this._catalogs.resource.events.UPDATED, () => this.closeAfterSave());
+    }
+
+    override disconnectedCallback(): void {
+        this._form.close();
+        super.disconnectedCallback();
+    }
+
+    override willUpdate(changed: PropertyValues<this>): void {
+        super.willUpdate(changed);
+        if (!this._seeded && typeof this.catalogId === 'string' && this.catalogId.length > 0) {
+            this._form.openForm({
+                catalog_id: this.catalogId,
+                title: this.title,
+                company_visible: Boolean(this.companyVisible),
+            });
+            this._seeded = true;
+        }
+        const draft = this._form.draft;
+        const dirty_title = typeof draft.title === 'string' && draft.title !== this.title;
+        const dirty_company_visible = Boolean(draft.company_visible) !== Boolean(this.companyVisible);
+        this.isDirty = dirty_title || dirty_company_visible;
+    }
+
+    _onTitleChange(e: CustomEvent<{ value?: unknown }>) {
+        const v = e.detail && typeof e.detail.value === 'string' ? e.detail.value : '';
+        this._form.setField('title', v);
+    }
+    _onCompanyVisibleChange(e: CustomEvent<{ value?: unknown }>) { this._form.setField('company_visible', Boolean(e.detail.value)); }
+
+    override async _performSave() { this._form.submit(); }
+
+    override _saveHeaderTitle() {
+        return this._form.submitting
+            ? this.t('catalog_edit_modal.saving')
+            : this.t('catalog_edit_modal.submit');
+    }
+
+    override renderHeader() { return this.t('catalog_edit_modal.header'); }
+
+    override renderSaveHeaderButton() {
+        const draft = this._form.draft;
+        const has_title = typeof draft.title === 'string' && draft.title.trim().length > 0;
+        return this._renderHeaderSaveIcon({
+            onClick: () => { void this._performSave(); },
+            disabled: this._form.submitting || !has_title || !this.isDirty,
+            title: this._saveHeaderTitle(),
+        });
+    }
+
+    override renderBody() {
+        const draft = this._form.draft;
+        const titleErrorKey = this._form.errors.title;
+        return html`
+            <form class="form-grid" @submit=${(e: SubmitEvent) => { e.preventDefault(); void this._performSave(); }}>
+                <platform-field
+                    type="string"
+                    mode="edit"
+                    .label=${this.t('catalog_edit_modal.label_title')}
+                    .value=${draft.title}
+                    .error=${titleErrorKey ? this.t(titleErrorKey) : ''}
+                    ?disabled=${this._form.submitting}
+                    @change=${this._onTitleChange}
+                ></platform-field>
+                <div class="form-group">
+                    <div class="switch-row">
+                        <span class="switch-label">${this.t('catalog_edit_modal.switch_company_visible')}</span>
+                        <platform-switch
+                            ?checked=${Boolean(draft.company_visible)}
+                            @change=${this._onCompanyVisibleChange}
+                        ></platform-switch>
+                    </div>
+                    <div class="hint">
+                        ${draft.company_visible
+                            ? this.t('catalog_edit_modal.members_company_visible_hint')
+                            : this.t('catalog_edit_modal.members_private_hint')}
+                    </div>
+                </div>
+            </form>
+        `;
+    }
+
+    override renderFooter() {
+        return html`
+            <div class="footer-actions">
+                <button type="button" class="btn btn-secondary" @click=${() => this.close()}>
+                    ${this.t('catalog_edit_modal.cancel')}
+                </button>
+                <button type="button" class="btn btn-primary"
+                        ?disabled=${this._form.submitting}
+                        @click=${() => { void this._performSave(); }}>
+                    ${this._form.submitting
+                        ? this.t('catalog_edit_modal.saving')
+                        : this.t('catalog_edit_modal.submit')}
+                </button>
+            </div>
+        `;
+    }
+}
+
+customElements.define('office-catalog-edit-modal', OfficeCatalogEditModal);
+registerModalKind(OfficeCatalogEditModal.modalKind, 'office-catalog-edit-modal');
