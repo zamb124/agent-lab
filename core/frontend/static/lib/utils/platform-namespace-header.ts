@@ -18,14 +18,15 @@ import { getActivePlatformNamespaceName } from './platform-namespace.js';
  * @param {string} [explicitNamespace] явное пространство (перемещение между ними)
  * @returns {{ 'X-Platform-Namespace': string }}
  */
-export function platformNamespaceHeader(ctx: { getState: () => { auth: { user: { company_id?: string } | null } } }, explicitNamespace = ''): { 'X-Platform-Namespace': string } {
+export function platformNamespaceHeader(ctx: { getState: () => unknown }, explicitNamespace = ''): { 'X-Platform-Namespace': string } {
     if (typeof explicitNamespace === 'string' && explicitNamespace.trim().length > 0) {
         return { 'X-Platform-Namespace': explicitNamespace.trim() };
     }
     if (!ctx || typeof ctx.getState !== 'function') {
         throw new Error('platformNamespaceHeader: требуется ctx с getState()');
     }
-    const user = ctx.getState().auth.user;
+    const state = ctx.getState() as { auth?: { user?: { company_id?: unknown } | null } };
+    const user = state.auth ? state.auth.user : null;
     const companyId = user && typeof user.company_id === 'string' ? user.company_id : '';
     return { 'X-Platform-Namespace': getActivePlatformNamespaceName(companyId) };
 }
