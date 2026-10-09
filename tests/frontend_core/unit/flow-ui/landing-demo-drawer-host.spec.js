@@ -1,16 +1,19 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
+const readSource = (rel) => {
+    const jsPath = join(root, rel);
+    const tsPath = jsPath.replace(/\.js$/, '.ts');
+    return readFileSync(existsSync(jsPath) ? jsPath : tsPath, 'utf8');
+};
+
 describe('Landing public demo Flow UI host', () => {
     it('home demo agents mounts flow-ui-drawer with embed_public contract', () => {
-        const source = readFileSync(
-            join(root, 'apps/frontend/ui/components/landing/landing-home-demo-agents.js'),
-            'utf8',
-        );
+        const source = readSource('apps/frontend/ui/components/landing/landing-home-demo-agents.js');
         expect(source).toContain("import '@platform/lib/flow-ui/shell/drawer.js'");
         expect(source).toContain('<flow-ui-drawer');
         expect(source).toContain("profile: 'embed_public'");
@@ -26,10 +29,7 @@ describe('Landing public demo Flow UI host', () => {
     });
 
     it('digital workers page mounts the same drawer host', () => {
-        const source = readFileSync(
-            join(root, 'apps/frontend/ui/pages/landing-digital-workers-page.js'),
-            'utf8',
-        );
+        const source = readSource('apps/frontend/ui/pages/landing-digital-workers-page.js');
         expect(source).toContain('<flow-ui-drawer');
         expect(source).toContain("profile: 'embed_public'");
         expect(source).toContain("companyId: 'system'");
@@ -39,10 +39,7 @@ describe('Landing public demo Flow UI host', () => {
     });
 
     it('drawer forwards credentials, voice host props and isolated toggleEventName', () => {
-        const source = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/drawer.ts'),
-            'utf8',
-        );
+        const source = readSource('core/frontend/static/lib/flow-ui/shell/drawer.js');
         expect(source).toContain('credentials=${this._credentials(c)}');
         expect(source).toContain('company-id=${companyId}');
         expect(source).toContain('voice-base-url=${voiceBaseUrl}');

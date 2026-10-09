@@ -312,10 +312,15 @@ def _iter_python_files() -> list[Path]:
     return out
 
 
+def _ui_source(path: Path) -> Path:
+    ts = path.with_suffix(".ts")
+    return ts if path.suffix == ".js" and ts.exists() else path
+
+
 def _company_ai_ui_files() -> tuple[Path, ...]:
     return (
-        REPO_ROOT / "core/frontend/static/lib/components/llm/llm-config-editor.js",
-        REPO_ROOT / "apps/frontend/ui/pages/settings/settings-page.js",
+        _ui_source(REPO_ROOT / "core/frontend/static/lib/components/llm/llm-config-editor.js"),
+        _ui_source(REPO_ROOT / "apps/frontend/ui/pages/settings/settings-page.js"),
         REPO_ROOT / "core/i18n/translations/en/frontend.json",
         REPO_ROOT / "core/i18n/translations/ru/frontend.json",
         REPO_ROOT / "core/i18n/generated/en.json",
@@ -336,7 +341,7 @@ def _humanitec_models_ui_surface_files() -> list[Path]:
         if not root.exists():
             continue
         for path in root.rglob("*"):
-            if path.suffix in {".js", ".json", ".html"}:
+            if path.suffix in {".js", ".ts", ".json", ".html"}:
                 out.append(path)
     return out
 
@@ -372,8 +377,8 @@ def _check_ai_provider_error_canon(failures: list[str]) -> None:
     error_classes = {member.value for member in AIProviderErrorClass}
     availabilities = {member.value for member in LLMModelAvailability}
 
-    resource_path = REPO_ROOT / "apps/frontend/ui/events/resources/llm-model-scores.resource.js"
-    strip_path = REPO_ROOT / "apps/frontend/ui/components/llm-provider-status-strip.js"
+    resource_path = _ui_source(REPO_ROOT / "apps/frontend/ui/events/resources/llm-model-scores.resource.js")
+    strip_path = _ui_source(REPO_ROOT / "apps/frontend/ui/components/llm-provider-status-strip.js")
     resource_text = resource_path.read_text(encoding="utf-8")
     strip_text = strip_path.read_text(encoding="utf-8")
 
