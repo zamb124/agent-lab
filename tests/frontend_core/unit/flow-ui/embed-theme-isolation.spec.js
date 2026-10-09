@@ -7,11 +7,11 @@ import { resolveFlowUITheme } from '../../../../core/frontend/static/lib/flow-ui
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const HOST_SOURCE = readFileSync(
-    path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.js'),
+    path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.ts'),
     'utf8',
 );
 const HOST_STYLES = readFileSync(
-    path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.styles.js'),
+    path.join(REPO_ROOT, 'core/frontend/static/lib/flow-ui/components/platform-flow-ui.styles.ts'),
     'utf8',
 );
 

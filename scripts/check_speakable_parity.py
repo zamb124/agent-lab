@@ -12,7 +12,7 @@ from _paths import js_or_ts
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY_PATH = ROOT / "apps" / "flows" / "src" / "streaming" / "speakable.py"
-JS_PATH = js_or_ts(ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.js")
+JS_PATH = js_or_ts(ROOT / "core" / "frontend" / "static" / "lib" / "voice" / "speakable.ts")
 
 
 def _artifact_names_from_python(path: pathlib.Path) -> set[str]:
@@ -51,7 +51,7 @@ def _artifact_names_from_python(path: pathlib.Path) -> set[str]:
 def _artifact_names_from_js(path: pathlib.Path) -> set[str]:
     raw = path.read_text(encoding="utf-8")
     match = re.search(
-        r"SPEAKABLE_ARTIFACT_NAMES\s*=\s*Object\.freeze\(new\s+Set\(\[([\s\S]*?)\]\)\)",
+        r"SPEAKABLE_ARTIFACT_NAMES(?:\s*:\s*[^=]+)?\s*=\s*(?:Object\.freeze\()?new\s+Set(?:<string>)?\(\[([\s\S]*?)\]\)(?:\)\))?",
         raw,
     )
     if match is None:
@@ -68,14 +68,14 @@ def _artifact_names_from_js(path: pathlib.Path) -> set[str]:
 
 def main() -> int:
     py_names = _artifact_names_from_python(PY_PATH)
-    js_names = _artifact_names_from_js(JS_PATH)
-    if py_names != js_names:
+    ts_names = _artifact_names_from_js(JS_PATH)
+    if py_names != ts_names:
         only_py = sorted(py_names - js_names)
-        only_js = sorted(js_names - py_names)
+        only_ts = sorted(ts_names - py_names)
         print(
             "speakable parity failed:\n"
             f"  python only: {only_py}\n"
-            f"  js only:     {only_js}",
+            f"  ts only:     {only_ts}",
             file=sys.stderr,
         )
         return 1

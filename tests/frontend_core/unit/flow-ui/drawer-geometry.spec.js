@@ -246,7 +246,7 @@ describe('drawer geometry stays in the embed host', () => {
 
     it('embed autoload keeps launcherPosition as the initial corner only', () => {
         const autoload = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-autoload.js'),
+            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-autoload.ts'),
             'utf8',
         );
         expect(autoload).toContain('launcherPosition');
@@ -255,7 +255,7 @@ describe('drawer geometry stays in the embed host', () => {
         expect(autoload).not.toContain('drawer-geometry');
 
         const hostApi = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-host-api.js'),
+            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-host-api.ts'),
             'utf8',
         );
         expect(hostApi).not.toContain('moveCluster');

@@ -40,7 +40,7 @@ describe('Landing public demo Flow UI host', () => {
 
     it('drawer forwards credentials, voice host props and isolated toggleEventName', () => {
         const source = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/drawer.js'),
+            join(root, 'core/frontend/static/lib/flow-ui/shell/drawer.ts'),
             'utf8',
         );
         expect(source).toContain('credentials=${this._credentials(c)}');

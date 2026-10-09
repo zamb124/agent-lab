@@ -17,7 +17,7 @@ function read(relativePath) {
 
 describe('flow-ui-drawer expand', () => {
     it('drawer reflects expanded and listens to host expand/close events', () => {
-        const drawer = read('core/frontend/static/lib/flow-ui/shell/drawer.js');
+        const drawer = read('core/frontend/static/lib/flow-ui/shell/drawer.ts');
         expect(drawer).toContain('expanded: { type: Boolean, reflect: true }');
         expect(drawer).toContain("this.addEventListener('flow-ui-drawer-expand-toggle', this._onExpandToggle)");
         expect(drawer).toContain('flow-ui-drawer-close');
@@ -27,7 +27,7 @@ describe('flow-ui-drawer expand', () => {
     });
 
     it('drawer styles cover fullscreen expanded state and narrow viewports', () => {
-        const styles = read('core/frontend/static/lib/flow-ui/shell/drawer.styles.js');
+        const styles = read('core/frontend/static/lib/flow-ui/shell/drawer.styles.ts');
         expect(styles).toContain(':host([expanded][open])');
         expect(styles).toContain('resize-handle');
         expect(styles).toContain('@media (max-width: 520px)');
@@ -35,7 +35,7 @@ describe('flow-ui-drawer expand', () => {
     });
 
     it('host exposes expand and close only for display=drawer and keeps drawer chrome minimal', () => {
-        const host = read('core/frontend/static/lib/flow-ui/components/platform-flow-ui.js');
+        const host = read('core/frontend/static/lib/flow-ui/components/platform-flow-ui.ts');
         expect(host).toContain("drawerExpanded: { type: Boolean, attribute: 'drawer-expanded', reflect: true }");
         expect(host).toContain("this._emit('flow-ui-drawer-expand-toggle', { expanded: !this.drawerExpanded })");
         expect(host).toContain("this._emit('flow-ui-drawer-close')");

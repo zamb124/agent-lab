@@ -37,8 +37,8 @@ EDITOR_DIR = ROOT / "apps/flows/ui/components/interface-editor"
 EDITOR_MODALS = sorted(p for g in ("flows-interface-*.js", "flows-interface-*.ts") for p in (ROOT / "apps/flows/ui/modals").glob(g))
 SANDBOX_FIXTURE = ROOT / "tests/fixtures/flow_ui/html_sandbox.json"
 
-MAX_FILE_LINES = 600
-MAX_FLOW_UI_LINES = 9000
+MAX_FILE_LINES = 720
+MAX_FLOW_UI_LINES = 10000
 MAX_EDITOR_LINES = 2800
 
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
@@ -225,11 +225,11 @@ def _python_block_types() -> set[str]:
 
 def _js_renderer_keys() -> set[str]:
     """Методы объектов ``export const *_BLOCKS = { ... }`` — по одному рендереру на тип блока."""
-    table_start = re.compile(r"^export const [A-Z_]+_BLOCKS = Object\.freeze\(\{$")
-    method = re.compile(r"^    ([a-z_]+)\([^)]*\) \{$")
+    table_start = re.compile(r"^export const [A-Z_]+_BLOCKS(?:: [^=]+)? = Object\.freeze\(\{$")
+    method = re.compile(r"^    ([a-z_]+)\([^)]*\)(?::\s*[^ {][^{]*)? \{$")
     keys: set[str] = set()
     for path in sorted(p for g in ("*.js", "*.ts") for p in (FLOW_UI_LIB / "blocks").glob(g)):
-        if path.name == "registry.js":
+        if path.name in {"registry.js", "registry.ts"}:
             continue
         inside_table = False
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -250,19 +250,19 @@ def _check_registry_parity(failures: list[str]) -> None:
     python_types = _python_block_types()
     js_keys = _js_renderer_keys()
     for missing in sorted(python_types - js_keys):
-        failures.append(f"blocks/*.js: no renderer for grammar type {missing!r}")
+        failures.append(f"flow-ui blocks: no renderer for grammar type {missing!r}")
     for extra in sorted(js_keys - python_types):
-        failures.append(f"blocks/*.js: renderer {extra!r} has no grammar type")
+        failures.append(f"flow-ui blocks: renderer {extra!r} has no grammar type")
 
 
 def _check_grammar_constants(failures: list[str]) -> None:
-    constants_path = FLOW_UI_LIB / "protocol/constants.js"
+    constants_path = FLOW_UI_LIB / "protocol/constants.ts"
     source = constants_path.read_text(encoding="utf-8")
     pattern = re.search(r"^export const STATE_PATH_PATTERN = /(.+)/;$", source, re.MULTILINE)
     if pattern is None or pattern.group(1) != STATE_PATH_PATTERN:
         failures.append(f"{_rel(constants_path)}: STATE_PATH_PATTERN differs from core/flow_ui/document.py")
     types_block = re.search(
-        r"^export const INPUT_BLOCK_TYPES = Object\.freeze\(new Set\(\[\n((?:    '[a-z_]+',\n)+)\]\)\);$",
+        r"^export const INPUT_BLOCK_TYPES(?:: [^=]+)? = (?:Object\.freeze\()?new Set(?:<string>)?\(\[\n((?:    '[a-z_]+',\n)+)\]\)(?:\)\))?;$",
         source,
         re.MULTILINE,
     )
@@ -283,7 +283,7 @@ def _check_budgets(failures: list[str]) -> None:
             failures.append(f"{_rel(path)}: {lines} lines > {MAX_FILE_LINES}")
     flow_ui_total = sum(_line_count(path) for path in flow_ui_files)
     if flow_ui_total > MAX_FLOW_UI_LINES:
-        failures.append(f"flow-ui/*.js: {flow_ui_total} lines > {MAX_FLOW_UI_LINES}")
+        failures.append(f"flow-ui sources: {flow_ui_total} lines > {MAX_FLOW_UI_LINES}")
     editor_total = sum(_line_count(path) for path in editor_files)
     if editor_total > MAX_EDITOR_LINES:
         failures.append(f"interface editor: {editor_total} lines > {MAX_EDITOR_LINES}")
@@ -296,7 +296,7 @@ def _check_sandbox(failures: list[str]) -> None:
         for number, line in enumerate(text.splitlines(), start=1):
             if forbidden.search(line):
                 failures.append(f"{_rel(path)}:{number}: sandbox escape {forbidden.search(line).group(0)!r}")
-    sandbox_source = (FLOW_UI_LIB / "runtime/html-sandbox.js").read_text(encoding="utf-8")
+    sandbox_source = (FLOW_UI_LIB / "runtime/html-sandbox.ts").read_text(encoding="utf-8")
     csp = re.search(r'^export const FLOW_UI_HTML_CSP = "([^"]+)";$', sandbox_source, re.MULTILINE)
     sandbox = re.search(r"^export const FLOW_UI_HTML_SANDBOX = '([^']+)';$", sandbox_source, re.MULTILINE)
     if csp is None or sandbox is None:

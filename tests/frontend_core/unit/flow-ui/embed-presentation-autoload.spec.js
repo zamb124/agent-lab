@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 describe('Flow UI embed autoload presentation', () => {
     it('branches drawer vs page hosts', () => {
         const source = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-autoload.js'),
+            join(root, 'core/frontend/static/lib/flow-ui/shell/embed-autoload.ts'),
             'utf8',
         );
         expect(source).toContain("import './page-host.js'");
@@ -27,7 +27,7 @@ describe('Flow UI embed autoload presentation', () => {
 
     it('page host mounts display=page profile=embed_public', () => {
         const source = readFileSync(
-            join(root, 'core/frontend/static/lib/flow-ui/shell/page-host.js'),
+            join(root, 'core/frontend/static/lib/flow-ui/shell/page-host.ts'),
             'utf8',
         );
         expect(source).toContain('display="page"');

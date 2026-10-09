@@ -46,9 +46,9 @@ const SOURCE_EXTS = new Set(['.ts', '.js', '.mjs', '.cjs', '.tsx', '.jsx']);
 const LIB_DIR = path.join(CORE_STATIC, 'lib');
 const EMBED_DIST = path.join(ROOT, 'core', 'frontend', 'embed-dist');
 const EMBED_ENTRYPOINTS = [
-    'embed-flow-ui/flow-ui-embed-autoload.js',
-    'flow-ui/shell/embed-autoload.js',
-    'embed-chat/humanitec-embed-autoload.js',
+    'embed-flow-ui/flow-ui-embed-autoload.ts',
+    'flow-ui/shell/embed-autoload.ts',
+    'embed-chat/humanitec-embed-autoload.ts',
 ];
 
 /** Единый lit/@capacitor/vendored-resolver: предотвращает дубли модулей в бандле. */
@@ -203,11 +203,16 @@ async function buildApp({ svc, uiDir, entry, outDir }) {
  * путь в lib/, чтобы spa.py мог отдать бандл по стабильному URL.
  */
 async function buildEmbed() {
-    const entries = EMBED_ENTRYPOINTS.map((rel) => path.join(LIB_DIR, rel)).filter(existsSync);
+    const entries = EMBED_ENTRYPOINTS
+        .map((rel) => {
+            const abs = path.join(LIB_DIR, rel);
+            return existsSync(abs) ? abs : path.join(LIB_DIR, rel.replace(/\.ts$/, '.js'));
+        })
+        .filter(existsSync);
     if (!entries.length) return;
     rmSync(EMBED_DIST, { recursive: true, force: true });
     for (const entry of entries) {
-        const rel = path.relative(LIB_DIR, entry);
+        const rel = path.relative(LIB_DIR, entry).replace(/\.ts$/, '.js');
         await esbuild.build({
             entryPoints: [entry],
             bundle: true,

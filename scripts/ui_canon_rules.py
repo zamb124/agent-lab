@@ -223,9 +223,9 @@ def iter_scope_files(scope: str) -> list[Path]:
 
 
 _EMBED_ENTRYPOINTS = (
-    "core/frontend/static/lib/embed-flow-ui/flow-ui-embed-autoload.js",
-    "core/frontend/static/lib/flow-ui/shell/embed-autoload.js",
-    "core/frontend/static/lib/embed-chat/humanitec-embed-autoload.js",
+    "core/frontend/static/lib/embed-flow-ui/flow-ui-embed-autoload.ts",
+    "core/frontend/static/lib/flow-ui/shell/embed-autoload.ts",
+    "core/frontend/static/lib/embed-chat/humanitec-embed-autoload.ts",
 )
 
 _EMBED_IMPORT_RE = re.compile(

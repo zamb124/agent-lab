@@ -28,9 +28,9 @@ LIB = STATIC_ROOT / "lib"
 ENTRYPOINTS = tuple(
     LIB / rel
     for rel in (
-        Path("embed-flow-ui/flow-ui-embed-autoload.js"),
-        Path("flow-ui/shell/embed-autoload.js"),
-        Path("embed-chat/humanitec-embed-autoload.js"),
+        Path("embed-flow-ui/flow-ui-embed-autoload.ts"),
+        Path("flow-ui/shell/embed-autoload.ts"),
+        Path("embed-chat/humanitec-embed-autoload.ts"),
     )
 )
 
