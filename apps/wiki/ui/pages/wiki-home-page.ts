@@ -4,6 +4,9 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -13,7 +16,11 @@ const RECENT_LIMIT = 12;
 export class WikiHomePage extends PlatformPage {
     static i18nNamespace = 'wiki';
 
-    static styles = [
+    private _pages: ResourceController;
+    private _createPage: OpController;
+    private _locale: SelectController<unknown>;
+
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -112,31 +119,32 @@ export class WikiHomePage extends PlatformPage {
         super();
         this._pages = this.useResource('wiki/pages');
         this._createPage = this.useOp('wiki/page_create');
-        this._locale = this.select((state) => state.i18n.locale);
+        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
     }
 
-    async _createRootPage() {
-        const created = await this._createPage.run({ title: '' });
-        if (created === null) {
+    private async _createRootPage(): Promise<void> {
+        const created = await this._createPage.run({ title: '' }) as { page?: { wiki_page_id?: string } } | null;
+        const pageId = created && created.page && created.page.wiki_page_id;
+        if (typeof pageId !== 'string' || pageId === '') {
             return;
         }
         await this._pages.load();
-        this.navigate('wiki_page', { pageId: created.page.wiki_page_id });
+        this.navigate('wiki_page', { pageId });
     }
 
-    _recent() {
+    private _recent(): ResourceItem[] {
         return [...this._pages.items]
             .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))
             .slice(0, RECENT_LIMIT);
     }
 
-    render() {
+    override render() {
         const recent = this._recent();
         return html`
             <div class="wrap">
                 <h1 class="title">${this.t('home.title')}</h1>
                 <p class="subtitle">${this.t('home.subtitle')}</p>
-                <platform-button variant="primary" data-wiki-home-create @click=${this._createRootPage}>
+                <platform-button variant="primary" data-wiki-home-create @click=${() => this._createRootPage()}>
                     ${this.t('home.create_page')}
                 </platform-button>
 
@@ -152,7 +160,7 @@ export class WikiHomePage extends PlatformPage {
                                 class="card"
                                 type="button"
                                 data-wiki-home-page=${page.wiki_page_id}
-                                @click=${() => this.navigate('wiki_page', { pageId: page.wiki_page_id })}
+                                @click=${() => this.navigate('wiki_page', { pageId: String(page.wiki_page_id ?? '') })}
                             >
                                 <span class="card-icon">
                                     ${page.icon === ''
@@ -164,7 +172,7 @@ export class WikiHomePage extends PlatformPage {
                                         ${page.title === '' ? this.t('page.untitled') : page.title}
                                     </span>
                                     <span class="card-meta">
-                                        ${formatPlatformDateTime(new Date(page.updated_at), this._locale.value)}
+                                        ${formatPlatformDateTime(new Date(String(page.updated_at ?? '')), String(this._locale.value ?? ''))}
                                     </span>
                                 </span>
                             </button>

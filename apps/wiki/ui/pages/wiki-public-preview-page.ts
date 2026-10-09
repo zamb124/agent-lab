@@ -12,7 +12,34 @@
  */
 
 import { html, css, nothing } from 'lit';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+interface WikiPublicPage {
+    title?: unknown;
+    icon?: unknown;
+    cover_url?: unknown;
+    is_full_width?: unknown;
+    content?: unknown;
+    parent_page_id?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiPublicTreeItem {
+    wiki_page_id?: string;
+    parent_page_id?: unknown;
+    title?: unknown;
+    icon?: unknown;
+    has_children?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiPublicTree {
+    items?: WikiPublicTreeItem[];
+    root_page_id?: string;
+    [key: string]: unknown;
+}
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-breadcrumbs.js';
 import '@platform/lib/components/platform-icon.js';
@@ -22,7 +49,16 @@ import '@platform/lib/components/platform-tree.js';
 export class WikiPublicPreviewPage extends PlatformPage {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare token: string;
+    declare pageId: string;
+    declare _page: WikiPublicPage | null;
+    declare _tree: WikiPublicTree | null;
+    declare _failed: boolean;
+    private _publicPage: OpController;
+    private _publicSitePage: OpController;
+    private _publicTree: OpController;
+
+    static override properties = {
         token: { type: String },
         /** Пусто на корне сайта: там страницу отдаёт сам токен. */
         pageId: { type: String, attribute: 'page-id' },
@@ -31,7 +67,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
         _failed: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -178,28 +214,27 @@ export class WikiPublicPreviewPage extends PlatformPage {
         this._publicPage = this.useOp('wiki/public_page');
         this._publicSitePage = this.useOp('wiki/public_site_page');
         this._publicTree = this.useOp('wiki/public_tree');
-        this._onTreeSelect = this._onTreeSelect.bind(this);
-        this._openTreeSheet = this._openTreeSheet.bind(this);
+
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>) {
+        super.updated(changed);
         if ((changed.has('token') || changed.has('pageId')) && this.token !== '') {
             void this._load();
         }
     }
 
-    async _load() {
+    private async _load(): Promise<void> {
         this._failed = false;
         this._page = null;
         try {
-            this._page = this.pageId === ''
+            this._page = (this.pageId === ''
                 ? await this._publicPage.run({ link_token: this.token })
                 : await this._publicSitePage.run({
                     link_token: this.token,
                     wiki_page_id: this.pageId,
-                });
-            this._tree = await this._publicTree.run({ link_token: this.token });
+                })) as WikiPublicPage | null;
+            this._tree = await this._publicTree.run({ link_token: this.token }) as WikiPublicTree | null;
         } catch {
             // Отключённая ссылка, черновик или страница вне раздела — обычный
             // сценарий чтения, а не сбой: объясняем вместо тоста ошибки.
@@ -208,22 +243,22 @@ export class WikiPublicPreviewPage extends PlatformPage {
         document.title = this._failed ? this.t('public.not_found') : this._pageTitle();
     }
 
-    _pageTitle() {
+    private _pageTitle() {
         if (this._page === null || this._page.title === '') {
             return this.t('page.untitled');
         }
-        return this._page.title;
+        return String(this._page.title ?? '');
     }
 
-    _treeItems() {
-        if (this._tree === null) {
+    private _treeItems(): WikiPublicTreeItem[] {
+        if (this._tree === null || !Array.isArray(this._tree.items)) {
             return [];
         }
         return this._tree.items;
     }
 
-    _treeNodes() {
-        return this._treeItems().map((item) => ({
+    private _treeNodes(): Record<string, unknown>[] {
+        return this._treeItems().map((item: WikiPublicTreeItem) => ({
             id: item.wiki_page_id,
             parent_id: item.parent_page_id,
             label: item.title === '' ? this.t('page.untitled') : item.title,
@@ -234,7 +269,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
     }
 
     /** Корень открывается коротким адресом ссылки, потомки — вложенным. */
-    _openPage(wikiPageId) {
+    private _openPage(wikiPageId: string) {
         if (this._tree !== null && wikiPageId === this._tree.root_page_id) {
             this.navigate('wiki_public_preview', { token: this.token });
             return;
@@ -242,29 +277,29 @@ export class WikiPublicPreviewPage extends PlatformPage {
         this.navigate('wiki_public_page', { token: this.token, pageId: wikiPageId });
     }
 
-    _onTreeSelect(event) {
-        this._openPage(event.detail.id);
+    private _onTreeSelect(event: CustomEvent<{ id?: unknown }>) {
+        this._openPage(String(event.detail.id ?? ''));
     }
 
-    _openTreeSheet() {
+    private _openTreeSheet() {
         this.openBottomSheet('wiki.public_tree', {
             nodes: this._treeNodes(),
             selectedId: this._selectedId(),
-            onSelect: (wikiPageId) => this._openPage(wikiPageId),
+            onSelect: (wikiPageId: string) => this._openPage(wikiPageId),
         });
     }
 
-    _selectedId() {
+    private _selectedId() {
         if (this.pageId !== '') {
             return this.pageId;
         }
-        return this._tree === null ? '' : this._tree.root_page_id;
+        return this._tree === null ? '' : String(this._tree.root_page_id ?? '');
     }
 
-    _breadcrumbTrail() {
+    private _breadcrumbTrail() {
         const byId = new Map(this._treeItems().map((item) => [item.wiki_page_id, item]));
-        const chain = [];
-        let parentId = this._page.parent_page_id;
+        const chain: WikiPublicTreeItem[] = [];
+        let parentId = this._page ? this._page.parent_page_id : null;
         while (
             typeof parentId === 'string'
             && parentId !== ''
@@ -272,20 +307,21 @@ export class WikiPublicPreviewPage extends PlatformPage {
             && !chain.some((item) => item.wiki_page_id === parentId)
         ) {
             const parent = byId.get(parentId);
+            if (!parent) break;
             chain.unshift(parent);
             parentId = parent.parent_page_id;
         }
         const rootPageId = this._tree === null ? '' : this._tree.root_page_id;
-        return chain.map((item) => ({
+        return chain.map((item: WikiPublicTreeItem) => ({
             label: item.title === '' ? this.t('page.untitled') : item.title,
             routeKey: item.wiki_page_id === rootPageId ? 'wiki_public_preview' : 'wiki_public_page',
             params: item.wiki_page_id === rootPageId
                 ? { token: this.token }
-                : { token: this.token, pageId: item.wiki_page_id },
+                : { token: this.token, pageId: String(item.wiki_page_id ?? '') },
         }));
     }
 
-    render() {
+    override render() {
         if (this._failed) {
             return html`<div class="state">
                 ${this.t('public.not_found')}
@@ -302,7 +338,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
                         .nodes=${this._treeNodes()}
                         selected-id=${this._selectedId()}
                         aria-label=${this.t('public.site_nav')}
-                        @tree-select=${this._onTreeSelect}
+                        @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this._onTreeSelect(event)}
                     ></platform-tree>
                 </div>
                 <div class="scroll">
@@ -318,7 +354,7 @@ export class WikiPublicPreviewPage extends PlatformPage {
                             data-wiki-public-nav
                             aria-label=${this.t('public.site_nav')}
                             title=${this.t('public.site_nav')}
-                            @click=${this._openTreeSheet}
+                            @click=${() => this._openTreeSheet()}
                         >
                             <platform-icon name="trace-tree" size="16"></platform-icon>
                         </button>

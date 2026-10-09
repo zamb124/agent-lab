@@ -15,6 +15,40 @@
 
 import { html, css } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
+
+interface WikiPageItem extends ResourceItem {
+    wiki_page_id?: unknown;
+    parent_page_id?: unknown;
+    title?: unknown;
+    icon?: unknown;
+    has_children?: unknown;
+    updated_at?: unknown;
+    namespace?: unknown;
+}
+
+interface WikiTreeNode {
+    id: unknown;
+    parent_id: unknown;
+    label: unknown;
+    emoji: unknown;
+    icon: string;
+    has_children: unknown;
+}
+
+interface WikiSidebarMenuItem {
+    id: string;
+    label?: string;
+    icon?: string;
+    kind?: string;
+    danger?: boolean;
+}
+
+interface AuthSliceUser {
+    user?: { company_id?: unknown } | null;
+}
 import { CoreEvents } from '@platform/lib/events/contract.js';
 import {
     getPlatformNamespaceSidebarSelection,
@@ -38,7 +72,19 @@ const RECENT_STORAGE_KEY = platformStorageKey('wiki', 'sidebar.recent');
 export class WikiSidebar extends PlatformElement {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare activePageId: string;
+    declare collapsed: boolean;
+    declare mobileOpen: boolean;
+    declare _filter: string;
+    declare _recentCollapsed: boolean;
+    private _pages: ResourceController;
+    private _createPage: OpController;
+    private _movePage: OpController;
+    private _deletePage: OpController;
+    private _namespaces: ResourceController;
+    private _authSelect: SelectController<{ company_id?: unknown } | null | undefined>;
+
+    static override properties = {
         activePageId: { type: String, attribute: 'active-page-id' },
         collapsed: { type: Boolean, reflect: true },
         mobileOpen: { type: Boolean, attribute: 'mobile-open' },
@@ -46,7 +92,7 @@ export class WikiSidebar extends PlatformElement {
         _recentCollapsed: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -212,7 +258,7 @@ export class WikiSidebar extends PlatformElement {
         this._createPage = this.useOp('wiki/page_create');
         this._movePage = this.useOp('wiki/page_move');
         this._deletePage = this.useOp('wiki/page_delete');
-        this._authSelect = this.select((state) => state.auth.user);
+        this._authSelect = this.select((state) => (state.auth as AuthSliceUser).user);
         this._namespaces = this.useResource('wiki/namespaces', { autoload: true });
         this._treeMenuItems = this._treeMenuItems.bind(this);
         this.useEvent(CoreEvents.UI_NAMESPACE_CHANGED, () => {
@@ -220,37 +266,37 @@ export class WikiSidebar extends PlatformElement {
         });
     }
 
-    _readRecentCollapsed() {
+    private _readRecentCollapsed(): boolean {
         const stored = storageGet(RECENT_STORAGE_KEY);
         if (stored === null) {
             return false;
         }
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as { collapsed?: unknown };
         if (typeof parsed.collapsed !== 'boolean') {
             throw new Error(`wiki-sidebar: битое состояние recent ${stored}`);
         }
         return parsed.collapsed;
     }
 
-    _persistRecentCollapsed() {
+    private _persistRecentCollapsed() {
         storageSetJson(RECENT_STORAGE_KEY, { collapsed: this._recentCollapsed });
     }
 
-    _toggleRecent() {
+    private _toggleRecent() {
         this._recentCollapsed = !this._recentCollapsed;
         this._persistRecentCollapsed();
     }
 
-    _companyId() {
+    private _companyId(): string {
         const user = this._authSelect.value;
         return user && typeof user.company_id === 'string' ? user.company_id : '';
     }
 
     /** Страницы пространства как узлы дерева. */
-    _nodes() {
-        const pages = this._pages.items;
+    private _nodes(): WikiTreeNode[] {
+        const pages = this._pages.items as WikiPageItem[];
         const visible = this._filter.trim() === '' ? pages : this._filteredPages(pages);
-        return visible.map((page) => ({
+        return visible.map((page: WikiPageItem) => ({
             id: page.wiki_page_id,
             parent_id: page.parent_page_id,
             label: page.title === '' ? this.t('page.untitled') : page.title,
@@ -261,16 +307,16 @@ export class WikiSidebar extends PlatformElement {
     }
 
     /** Совпадения плюс их предки: иначе найденная страница потеряет ветку. */
-    _filteredPages(pages) {
+    private _filteredPages(pages: WikiPageItem[]): WikiPageItem[] {
         const query = this._filter.trim().toLowerCase();
         const byId = new Map(pages.map((page) => [page.wiki_page_id, page]));
-        const keep = new Set();
+        const keep = new Set<unknown>();
         for (const page of pages) {
-            if (!page.title.toLowerCase().includes(query)) {
+            if (!String(page.title ?? '').toLowerCase().includes(query)) {
                 continue;
             }
             keep.add(page.wiki_page_id);
-            let parentId = page.parent_page_id;
+            let parentId: unknown = page.parent_page_id;
             while (parentId && !keep.has(parentId)) {
                 keep.add(parentId);
                 const parent = byId.get(parentId);
@@ -280,32 +326,33 @@ export class WikiSidebar extends PlatformElement {
         return pages.filter((page) => keep.has(page.wiki_page_id));
     }
 
-    _recentPages() {
+    private _recentPages(): WikiPageItem[] {
         return [...this._pages.items]
             .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))
             .slice(0, RECENT_LIMIT);
     }
 
-    _namespaceConfig() {
+    private _namespaceConfig(): { values: { value: string; label: string }[] } {
         const items = this._namespaces.items;
-        const values = items.map((namespace) => ({ value: namespace.name, label: namespace.name }));
+        const values = items.map((namespace: ResourceItem) => ({ value: String(namespace.name ?? ''), label: String(namespace.name ?? '') }));
         return { values };
     }
 
-    _namespaceValue() {
+    private _namespaceValue(): string {
         const selection = getPlatformNamespaceSidebarSelection(this._companyId());
         const items = this._namespaces.items;
-        if (selection !== 'all' && items.some((namespace) => namespace.name === selection)) {
+        if (selection !== 'all' && items.some((namespace: ResourceItem) => namespace.name === selection)) {
             return selection;
         }
-        return items.length > 0 ? items[0].name : '';
+        const first = items[0];
+        return first ? String(first.name ?? '') : '';
     }
 
     /**
      * Wiki не умеет режим «все пространства»: страница всегда в одном NS.
      * Если в storage `all` или чужой namespace (из CRM), фиксируем workspace из списка.
      */
-    _ensureExplicitNamespace(items, sidebarSel, companyId) {
+    private _ensureExplicitNamespace(items: readonly ResourceItem[], sidebarSel: string, companyId: string): void {
         if (companyId === '') {
             return;
         }
@@ -320,43 +367,45 @@ export class WikiSidebar extends PlatformElement {
             setPlatformNamespaceSelection(companyId, first.name);
             return;
         }
-        if (!items.some((namespace) => namespace.name === sidebarSel)) {
+        if (!items.some((namespace: ResourceItem) => namespace.name === sidebarSel)) {
             setPlatformNamespaceSelection(companyId, first.name);
         }
     }
 
-    _onNamespaceChange(event) {
+    private _onNamespaceChange(event: CustomEvent<{ value?: unknown }>) {
         const companyId = this._companyId();
-        const name = String(event.detail.value).trim();
+        const name = String(event.detail.value ?? '').trim();
         if (companyId === '' || name === '') {
             return;
         }
         setPlatformNamespaceSelection(companyId, name);
     }
 
-    _onFilterInput(event) {
-        this._filter = event.target.value;
+    private _onFilterInput(event: Event) {
+        this._filter = (event.target as HTMLInputElement).value;
     }
 
-    async _createRootPage() {
-        const created = await this._createPage.run({ title: '' });
-        if (created === null) {
+    private async _createRootPage(): Promise<void> {
+        const created = await this._createPage.run({ title: '' }) as { page?: { wiki_page_id?: string } } | null;
+        const pageId = created && created.page && created.page.wiki_page_id;
+        if (typeof pageId !== 'string' || pageId === '') {
             return;
         }
         await this._pages.load();
-        this.navigate('wiki_page', { pageId: created.page.wiki_page_id });
+        this.navigate('wiki_page', { pageId });
     }
 
-    async _createChildPage(parentPageId) {
-        const created = await this._createPage.run({ title: '', parent_page_id: parentPageId });
-        if (created === null) {
+    private async _createChildPage(parentPageId: string): Promise<void> {
+        const created = await this._createPage.run({ title: '', parent_page_id: parentPageId }) as { page?: { wiki_page_id?: string } } | null;
+        const pageId = created && created.page && created.page.wiki_page_id;
+        if (typeof pageId !== 'string' || pageId === '') {
             return;
         }
         await this._pages.load();
-        this.navigate('wiki_page', { pageId: created.page.wiki_page_id });
+        this.navigate('wiki_page', { pageId });
     }
 
-    _treeMenuItems() {
+    private _treeMenuItems(): WikiSidebarMenuItem[] {
         return [
             { id: 'open', label: this.t('tree_menu.open'), icon: 'external-link' },
             { id: 'create_child', label: this.t('tree_menu.create_child'), icon: 'plus' },
@@ -369,8 +418,9 @@ export class WikiSidebar extends PlatformElement {
         ];
     }
 
-    async _onTreeAction(event) {
-        const { action, id } = event.detail;
+    private async _onTreeAction(event: CustomEvent<{ action?: string; id?: unknown }>): Promise<void> {
+        const { action } = event.detail;
+        const id = String(event.detail.id ?? '');
         if (action === 'open') {
             this.navigate('wiki_page', { pageId: id });
             return;
@@ -407,11 +457,11 @@ export class WikiSidebar extends PlatformElement {
         throw new Error(`wiki-sidebar: неизвестное действие дерева ${action}`);
     }
 
-    async _onTreeMove(event) {
+    private async _onTreeMove(event: CustomEvent<{ id?: unknown; parent_id?: unknown; position?: string; target_id?: unknown }>): Promise<void> {
         const { id, parent_id: parentId, position, target_id: targetId } = event.detail;
         // «Внутрь» кладёт страницу первой в разделе, «между» — рядом с целью.
-        const siblings = this._pages.items.filter((page) => page.parent_page_id === parentId);
-        const targetIndex = siblings.findIndex((page) => page.wiki_page_id === targetId);
+        const siblings = this._pages.items.filter((page: WikiPageItem) => page.parent_page_id === parentId);
+        const targetIndex = siblings.findIndex((page: WikiPageItem) => page.wiki_page_id === targetId);
         const nextPosition = position === 'inside'
             ? 0
             : Math.max(0, position === 'after' ? targetIndex + 1 : targetIndex);
@@ -423,7 +473,7 @@ export class WikiSidebar extends PlatformElement {
         await this._pages.load();
     }
 
-    render() {
+    override render() {
         const items = this._namespaces.items;
         const companyId = this._companyId();
         const sidebarSel = getPlatformNamespaceSidebarSelection(companyId);
@@ -438,8 +488,8 @@ export class WikiSidebar extends PlatformElement {
                 ?logo-opens-services=${true}
                 ?collapsed=${this.collapsed}
                 ?mobile-open=${this.mobileOpen}
-                @collapse-change=${(event) => { this.collapsed = event.detail.collapsed; }}
-                @mobile-change=${(event) => { this.mobileOpen = event.detail.open; }}
+                @collapse-change=${(event: CustomEvent<{ collapsed: boolean }>) => { this.collapsed = event.detail.collapsed; }}
+                @mobile-change=${(event: CustomEvent<{ open: boolean }>) => { this.mobileOpen = event.detail.open; }}
             >
                 <div slot="header">
                     <platform-sidebar-namespace-select
@@ -447,7 +497,7 @@ export class WikiSidebar extends PlatformElement {
                         .value=${this._namespaceValue()}
                         .config=${this._namespaceConfig()}
                         ?show-edit=${false}
-                        @change=${this._onNamespaceChange}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => this._onNamespaceChange(event)}
                     ></platform-sidebar-namespace-select>
                     <div class="tools">
                         <input
@@ -459,7 +509,7 @@ export class WikiSidebar extends PlatformElement {
                             aria-label=${this.t('sidebar.search_placeholder')}
                             placeholder=${this.t('sidebar.search_placeholder')}
                             .value=${this._filter}
-                            @input=${this._onFilterInput}
+                            @input=${(event: Event) => this._onFilterInput(event)}
                         />
                         <button
                             class="create-btn"
@@ -467,7 +517,7 @@ export class WikiSidebar extends PlatformElement {
                             data-wiki-create-page
                             title=${this.t('sidebar.create_page')}
                             aria-label=${this.t('sidebar.create_page')}
-                            @click=${this._createRootPage}
+                            @click=${() => this._createRootPage()}
                         >
                             <platform-icon name="plus" size="16"></platform-icon>
                         </button>
@@ -495,7 +545,7 @@ export class WikiSidebar extends PlatformElement {
                                     class="recent-item"
                                     type="button"
                                     data-recent-page=${page.wiki_page_id}
-                                    @click=${() => this.navigate('wiki_page', { pageId: page.wiki_page_id })}
+                                    @click=${() => this.navigate('wiki_page', { pageId: String(page.wiki_page_id ?? '') })}
                                 >
                                     <platform-icon name="clock" size="13"></platform-icon>
                                     <span>${page.title === '' ? this.t('page.untitled') : page.title}</span>
@@ -520,9 +570,9 @@ export class WikiSidebar extends PlatformElement {
                               draggable-nodes
                               aria-label=${this.t('sidebar.pages')}
                               .menuItems=${this._treeMenuItems}
-                              @tree-select=${(event) => this.navigate('wiki_page', { pageId: event.detail.id })}
-                              @tree-action=${this._onTreeAction}
-                              @tree-move=${this._onTreeMove}
+                              @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') })}
+                              @tree-action=${(event: CustomEvent<{ action?: string; id?: unknown }>) => this._onTreeAction(event)}
+                              @tree-move=${(event: CustomEvent<{ id?: unknown; parent_id?: unknown; position?: string; target_id?: unknown }>) => this._onTreeMove(event)}
                           ></platform-tree>`}
                 </div>
 

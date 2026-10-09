@@ -8,6 +8,8 @@
 
 import { html, css } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/fields/platform-field.js';
 import '@platform/lib/components/platform-button.js';
@@ -16,14 +18,25 @@ export class WikiMovePageModal extends PlatformModal {
     static modalKind = 'wiki.move_page';
     static i18nNamespace = 'wiki';
 
-    static properties = {
-        pageId: { type: String, attribute: 'page-id' },
-        _namespace: { state: true },
-        _parentPageId: { state: true },
-    };
+    declare pageId: string;
+    declare _namespace: string;
+    declare _parentPageId: string;
+    private _pages: ResourceController;
+    private _namespaces: ResourceController;
+    private _move: OpController;
+    private _moveNamespace: OpController;
 
-    static styles = [
-        ...PlatformModal.styles,
+    static override get properties() {
+        return {
+            ...PlatformModal.properties,
+            pageId: { type: String, attribute: 'page-id' },
+            _namespace: { state: true },
+            _parentPageId: { state: true },
+        };
+    }
+
+    static override styles = [
+        PlatformModal.styles,
         css`
             .form-grid {
                 display: grid;
@@ -44,45 +57,48 @@ export class WikiMovePageModal extends PlatformModal {
         this._moveNamespace = this.useOp('wiki/page_move_namespace');
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         const page = this._pages.byId[this.pageId];
         if (page) {
-            this._namespace = page.namespace;
-            this._parentPageId = page.parent_page_id === null ? '' : page.parent_page_id;
+            this._namespace = String(page.namespace ?? '');
+            this._parentPageId = page.parent_page_id === null ? '' : String(page.parent_page_id ?? '');
         }
     }
 
-    _namespaceConfig() {
-        return { values: this._namespaces.items.map((item) => ({ value: item.name, label: item.name })) };
+    private _namespaceConfig(): { values: { value: string; label: string }[] } {
+        return { values: this._namespaces.items.map((item: ResourceItem) => ({ value: String(item.name ?? ''), label: String(item.name ?? '') })) };
     }
 
     /** Родителем не может быть ни сама страница, ни её потомок. */
-    _parentConfig() {
-        const values = [{ value: '', label: this.t('move.parent_root') }];
+    private _parentConfig(): { values: { value: string; label: unknown }[] } {
+        const values: { value: string; label: unknown }[] = [{ value: '', label: this.t('move.parent_root') }];
         const forbidden = this._descendantIds();
         for (const page of this._pages.items) {
-            if (forbidden.has(page.wiki_page_id)) {
+            const id = String(page.wiki_page_id ?? '');
+            if (forbidden.has(id)) {
                 continue;
             }
             values.push({
-                value: page.wiki_page_id,
+                value: id,
                 label: page.title === '' ? this.t('page.untitled') : page.title,
             });
         }
         return { values };
     }
 
-    _descendantIds() {
-        const blocked = new Set([this.pageId]);
+    private _descendantIds(): Set<string> {
+        const blocked = new Set<string>([this.pageId]);
         let grew = true;
         while (grew) {
             grew = false;
             for (const page of this._pages.items) {
+                const id = String(page.wiki_page_id ?? '');
+                const parent = String(page.parent_page_id ?? '');
                 if (page.parent_page_id !== null
-                    && blocked.has(page.parent_page_id)
-                    && !blocked.has(page.wiki_page_id)) {
-                    blocked.add(page.wiki_page_id);
+                    && blocked.has(parent)
+                    && !blocked.has(id)) {
+                    blocked.add(id);
                     grew = true;
                 }
             }
@@ -90,7 +106,7 @@ export class WikiMovePageModal extends PlatformModal {
         return blocked;
     }
 
-    async _submit() {
+    private async _submit(): Promise<void> {
         const page = this._pages.byId[this.pageId];
         const parentPageId = this._parentPageId === '' ? null : this._parentPageId;
         if (page && this._namespace !== page.namespace) {
@@ -107,14 +123,14 @@ export class WikiMovePageModal extends PlatformModal {
             });
         }
         await this._pages.load();
-        this.close();
+        void this.close();
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('move.title');
     }
 
-    renderBody() {
+    override renderBody() {
         return html`
             <div class="form-grid">
                 <platform-field
@@ -123,7 +139,7 @@ export class WikiMovePageModal extends PlatformModal {
                     label=${this.t('move.namespace_label')}
                     .value=${this._namespace}
                     .config=${this._namespaceConfig()}
-                    @change=${(event) => { this._namespace = event.detail.value; }}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._namespace = String(event.detail.value ?? ''); }}
                 ></platform-field>
                 <platform-field
                     type="enum"
@@ -131,15 +147,15 @@ export class WikiMovePageModal extends PlatformModal {
                     label=${this.t('move.parent_label')}
                     .value=${this._parentPageId}
                     .config=${this._parentConfig()}
-                    @change=${(event) => { this._parentPageId = event.detail.value; }}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => { this._parentPageId = String(event.detail.value ?? ''); }}
                 ></platform-field>
             </div>
         `;
     }
 
-    renderFooter() {
+    override renderFooter() {
         return html`
-            <platform-button variant="primary" data-wiki-move-submit @click=${this._submit}>
+            <platform-button variant="primary" data-wiki-move-submit @click=${() => this._submit()}>
                 ${this.t('move.submit')}
             </platform-button>
         `;

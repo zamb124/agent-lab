@@ -11,17 +11,26 @@ import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
 
+interface ImportNotice {
+    kind?: string;
+    detail?: unknown;
+    line?: unknown;
+    [key: string]: unknown;
+}
+
 export class WikiImportReportModal extends PlatformModal {
     static modalKind = 'wiki.import_report';
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare notices: ImportNotice[];
+
+    static override properties = {
         /** `{ kind, detail, line }[]` из ответа импорта. */
         notices: { attribute: false },
     };
 
-    static styles = [
-        ...PlatformModal.styles,
+    static override styles = [
+        PlatformModal.styles,
         css`
             .intro {
                 margin-bottom: var(--space-4);
@@ -70,15 +79,15 @@ export class WikiImportReportModal extends PlatformModal {
         this.notices = [];
     }
 
-    _items() {
+    private _items(): ImportNotice[] {
         return Array.isArray(this.notices) ? this.notices : [];
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('import_report.title');
     }
 
-    renderBody() {
+    override renderBody() {
         const items = this._items();
         return html`
             <div class="intro">${this.t('import_report.intro', { count: items.length })}</div>
@@ -96,7 +105,7 @@ export class WikiImportReportModal extends PlatformModal {
         `;
     }
 
-    renderFooter() {
+    override renderFooter() {
         return html`
             <platform-button variant="primary" data-wiki-report-close @click=${() => this.close()}>
                 ${this.t('import_report.close')}

@@ -12,6 +12,38 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+interface WikiOutlineItem {
+    level: number;
+    text: string;
+    pos: number;
+    [key: string]: unknown;
+}
+
+interface WikiBacklinkItem {
+    wiki_page_id?: unknown;
+    title?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiCommentItem {
+    wiki_comment_id?: string;
+    author_user_id?: string;
+    body_markdown?: unknown;
+    resolved_at?: unknown;
+    created_at?: string | number | Date;
+    [key: string]: unknown;
+}
+
+interface WikiRevisionItem {
+    wiki_revision_id?: string;
+    author_user_id?: string;
+    created_at?: string | number | Date;
+    [key: string]: unknown;
+}
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -25,7 +57,22 @@ export const WIKI_PANEL_TABS = Object.freeze(['outline', 'backlinks', 'comments'
 export class WikiPagePanel extends PlatformElement {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare pageId: string;
+    declare tab: string;
+    declare outline: WikiOutlineItem[];
+    declare embedded: boolean;
+    declare _commentDraft: string;
+    declare _selectedRevisionId: string;
+    private _backlinks: OpController;
+    private _commentsOp: OpController;
+    private _commentCreate: OpController;
+    private _commentResolve: OpController;
+    private _revisions: OpController;
+    private _revisionRead: OpController;
+    private _revisionRestore: OpController;
+    private _locale: SelectController<unknown>;
+
+    static override properties = {
         pageId: { type: String, attribute: 'page-id' },
         tab: { type: String, reflect: true },
         /** `{ level, text, pos }[]` из `platform-rich-editor.getOutline()`. */
@@ -36,7 +83,7 @@ export class WikiPagePanel extends PlatformElement {
         _selectedRevisionId: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformElement.styles,
         css`
             :host {
@@ -252,16 +299,16 @@ export class WikiPagePanel extends PlatformElement {
         this._revisions = this.useOp('wiki/revisions');
         this._revisionRead = this.useOp('wiki/revision_read');
         this._revisionRestore = this.useOp('wiki/revision_restore');
-        this._locale = this.select((state) => state.i18n.locale);
+        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this._loadTab();
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>) {
+        super.updated(changed);
         if (changed.has('pageId')) {
             this._selectedRevisionId = '';
         }
@@ -271,7 +318,7 @@ export class WikiPagePanel extends PlatformElement {
     }
 
     /** Каждая вкладка тянет только своё: панель открывается точечно. */
-    _loadTab() {
+    private _loadTab() {
         if (this.pageId === '') {
             return;
         }
@@ -288,7 +335,7 @@ export class WikiPagePanel extends PlatformElement {
         }
     }
 
-    _tabItems() {
+    private _tabItems() {
         return [
             { value: 'outline', icon: 'list', title: this.t('page.outline') },
             { value: 'backlinks', icon: 'link', title: this.t('page.backlinks') },
@@ -302,12 +349,12 @@ export class WikiPagePanel extends PlatformElement {
         ];
     }
 
-    _onTabChange(event) {
-        this.tab = event.detail.value;
+    private _onTabChange(event: CustomEvent<{ value?: string }>) {
+        this.tab = String(event.detail.value ?? '');
         this.emit('panel-tab-change', { tab: this.tab });
     }
 
-    render() {
+    override render() {
         return html`
             <div class="head">
                 <platform-segmented-control
@@ -316,7 +363,7 @@ export class WikiPagePanel extends PlatformElement {
                     aria-label=${this.t('panel.tabs')}
                     .items=${this._tabItems()}
                     value=${this.tab}
-                    @change=${this._onTabChange}
+                    @change=${(event: CustomEvent<{ value?: string }>) => this._onTabChange(event)}
                 ></platform-segmented-control>
                 ${this.embedded
                     ? nothing
@@ -335,7 +382,7 @@ export class WikiPagePanel extends PlatformElement {
         `;
     }
 
-    _renderTab() {
+    private _renderTab() {
         if (this.tab === 'outline') {
             return this._renderOutline();
         }
@@ -353,12 +400,12 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- оглавление ---
 
-    _renderOutline() {
+    private _renderOutline() {
         if (!Array.isArray(this.outline) || this.outline.length === 0) {
             return html`<div class="muted">${this.t('page.outline_empty')}</div>`;
         }
         return html`
-            ${this.outline.map((item) => html`
+            ${this.outline.map((item: WikiOutlineItem) => html`
                 <button
                     class="outline-item"
                     type="button"
@@ -376,24 +423,24 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- обратные ссылки ---
 
-    _renderBacklinks() {
-        const result = this._backlinks.lastResult;
+    private _renderBacklinks() {
+        const result = this._backlinks.lastResult as { items?: unknown } | null;
         if (result === null) {
             return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
         }
         if (typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('wiki backlinks: lastResult.items required');
         }
-        const links = result.items;
+        const links = result.items as WikiBacklinkItem[];
         if (links.length === 0) {
             return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
         }
         return html`
-            ${links.map((link) => html`
+            ${links.map((link: WikiBacklinkItem) => html`
                 <a
                     class="backlink"
                     data-wiki-backlink=${link.wiki_page_id}
-                    @click=${() => this.navigate('wiki_page', { pageId: link.wiki_page_id })}
+                    @click=${() => this.navigate('wiki_page', { pageId: String(link.wiki_page_id ?? '') })}
                 >${link.title === '' ? this.t('page.untitled') : link.title}</a>
             `)}
         `;
@@ -401,18 +448,18 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- комментарии ---
 
-    _commentItems() {
-        const result = this._commentsOp.lastResult;
+    private _commentItems(): WikiCommentItem[] {
+        const result = this._commentsOp.lastResult as { items?: unknown } | null;
         if (result === null) {
             return [];
         }
         if (typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('wiki comments: lastResult.items required');
         }
-        return result.items;
+        return result.items as WikiCommentItem[];
     }
 
-    async _sendComment() {
+    private async _sendComment(): Promise<void> {
         const body = this._commentDraft.trim();
         if (body === '') {
             return;
@@ -422,17 +469,17 @@ export class WikiPagePanel extends PlatformElement {
         void this._commentsOp.run({ wiki_page_id: this.pageId });
     }
 
-    async _resolveComment(commentId) {
+    private async _resolveComment(commentId: string): Promise<void> {
         await this._commentResolve.run({ wiki_comment_id: commentId, resolved: true });
         void this._commentsOp.run({ wiki_page_id: this.pageId });
     }
 
-    _renderComments() {
+    private _renderComments() {
         const comments = this._commentItems();
         return html`
             ${comments.length === 0
                 ? html`<div class="muted">${this.t('page.comments_empty')}</div>`
-                : comments.map((comment) => html`
+                : comments.map((comment: WikiCommentItem) => html`
                       <div class="comment" data-wiki-comment=${comment.wiki_comment_id}>
                           <platform-user-chip
                               user-id=${comment.author_user_id}
@@ -443,11 +490,11 @@ export class WikiPagePanel extends PlatformElement {
                               ? html`<button
                                     class="ghost-btn"
                                     type="button"
-                                    @click=${() => this._resolveComment(comment.wiki_comment_id)}
+                                    @click=${() => this._resolveComment(String(comment.wiki_comment_id ?? ''))}
                                 >${this.t('page.comment_resolve')}</button>`
                               : html`<span class="comment-resolved">${this.t('page.comment_resolved')}</span>`}
                           <div class="muted">
-                              ${formatPlatformDateTime(new Date(comment.created_at), this._locale.value)}
+                              ${formatPlatformDateTime(new Date(comment.created_at ?? ''), String(this._locale.value ?? ''))}
                           </div>
                       </div>
                   `)}
@@ -458,9 +505,9 @@ export class WikiPagePanel extends PlatformElement {
                     aria-label=${this.t('page.comment_placeholder')}
                     placeholder=${this.t('page.comment_placeholder')}
                     .value=${this._commentDraft}
-                    @input=${(event) => { this._commentDraft = event.target.value; }}
+                    @input=${(event: Event) => { this._commentDraft = (event.target as HTMLTextAreaElement).value; }}
                 ></textarea>
-                <button class="ghost-btn" type="button" data-wiki-comment-send @click=${this._sendComment}>
+                <button class="ghost-btn" type="button" data-wiki-comment-send @click=${() => this._sendComment()}>
                     ${this.t('page.comment_send')}
                 </button>
             </div>
@@ -469,23 +516,23 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- история версий ---
 
-    _revisionItems() {
-        const result = this._revisions.lastResult;
+    private _revisionItems(): WikiRevisionItem[] {
+        const result = this._revisions.lastResult as { items?: unknown } | null;
         if (result === null) {
             return [];
         }
         if (typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('wiki revisions: lastResult.items required');
         }
-        return result.items;
+        return result.items as WikiRevisionItem[];
     }
 
-    async _selectRevision(revisionId) {
+    private async _selectRevision(revisionId: string): Promise<void> {
         this._selectedRevisionId = revisionId;
         await this._revisionRead.run({ wiki_revision_id: revisionId });
     }
 
-    async _restoreRevision() {
+    private async _restoreRevision(): Promise<void> {
         const confirmed = await platformConfirm(this.t('history.restore_confirm_body'), {
             title: this.t('history.restore_confirm_title'),
         });
@@ -498,22 +545,22 @@ export class WikiPagePanel extends PlatformElement {
         this.emit('revision-restored', null);
     }
 
-    _renderHistory() {
+    private _renderHistory() {
         const revisions = this._revisionItems();
         if (revisions.length === 0) {
             return html`<div class="muted">${this.t('history.empty')}</div>`;
         }
         return html`
-            ${revisions.map((revision) => html`
+            ${revisions.map((revision: WikiRevisionItem) => html`
                 <button
                     class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
                     type="button"
                     data-wiki-revision=${revision.wiki_revision_id}
-                    @click=${() => this._selectRevision(revision.wiki_revision_id)}
+                    @click=${() => this._selectRevision(String(revision.wiki_revision_id ?? ''))}
                 >
                     <platform-user-chip user-id=${revision.author_user_id} size="sm"></platform-user-chip>
                     <div class="revision-meta">
-                        ${formatPlatformDateTime(new Date(revision.created_at), this._locale.value)}
+                        ${formatPlatformDateTime(new Date(revision.created_at ?? ''), String(this._locale.value ?? ''))}
                     </div>
                 </button>
                 ${revision.wiki_revision_id === this._selectedRevisionId
@@ -523,11 +570,11 @@ export class WikiPagePanel extends PlatformElement {
         `;
     }
 
-    _renderRevisionDetails() {
+    private _renderRevisionDetails() {
         if (this._revisionRead.busy) {
             return html`<div class="muted"><glass-spinner size="sm"></glass-spinner></div>`;
         }
-        const revision = this._revisionRead.lastResult;
+        const revision = this._revisionRead.lastResult as { text_markdown?: unknown } | null;
         if (!revision) {
             return nothing;
         }
@@ -537,7 +584,7 @@ export class WikiPagePanel extends PlatformElement {
                     variant="primary"
                     size="sm"
                     data-wiki-revision-restore
-                    @click=${this._restoreRevision}
+                    @click=${() => this._restoreRevision()}
                 >${this.t('history.restore')}</platform-button>
                 <platform-button
                     variant="ghost"

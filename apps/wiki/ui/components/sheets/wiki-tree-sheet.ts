@@ -9,6 +9,23 @@
 
 import { html, css } from 'lit';
 import { PlatformBottomSheet } from '@platform/lib/components/layout/platform-bottom-sheet.js';
+import type { ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
+
+interface WikiTreeNode {
+    id: unknown;
+    parent_id: unknown;
+    label: unknown;
+    emoji: unknown;
+    icon: string;
+    has_children: unknown;
+}
+
+interface WikiTreeMenuItem {
+    id: string;
+    label: string;
+    icon: string;
+}
 import { registerBottomSheetKind } from '@platform/lib/utils/bottom-sheet-registry.js';
 import '@platform/lib/components/platform-tree.js';
 
@@ -16,12 +33,15 @@ export class WikiTreeSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'wiki.tree';
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare activePageId: string;
+    private _pages: ResourceController;
+
+    static override properties = {
         ...PlatformBottomSheet.properties,
         activePageId: { type: String, attribute: 'active-page-id' },
     };
 
-    static styles = [
+    static override styles = [
         PlatformBottomSheet.styles,
         css`
             platform-tree {
@@ -45,13 +65,13 @@ export class WikiTreeSheet extends PlatformBottomSheet {
         this._treeMenuItems = this._treeMenuItems.bind(this);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this.heading = this.t('sidebar.pages');
     }
 
-    _nodes() {
-        return this._pages.items.map((page) => ({
+    private _nodes(): WikiTreeNode[] {
+        return this._pages.items.map((page: ResourceItem) => ({
             id: page.wiki_page_id,
             parent_id: page.parent_page_id,
             label: page.title === '' ? this.t('page.untitled') : page.title,
@@ -61,7 +81,7 @@ export class WikiTreeSheet extends PlatformBottomSheet {
         }));
     }
 
-    _treeMenuItems() {
+    private _treeMenuItems(): WikiTreeMenuItem[] {
         return [
             { id: 'open', label: this.t('tree_menu.open'), icon: 'external-link' },
             { id: 'move', label: this.t('tree_menu.move'), icon: 'swap-horiz' },
@@ -69,32 +89,33 @@ export class WikiTreeSheet extends PlatformBottomSheet {
         ];
     }
 
-    _onSelect(event) {
-        this.navigate('wiki_page', { pageId: event.detail.id });
-        this.close();
+    private _onSelect(event: CustomEvent<{ id?: unknown }>) {
+        this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') });
+        this._requestClose();
     }
 
-    _onAction(event) {
+    private _onAction(event: CustomEvent<{ action?: string; id?: unknown }>) {
         const { action, id } = event.detail;
+        const pageId = String(id ?? '');
         if (action === 'open') {
-            this.navigate('wiki_page', { pageId: id });
-            this.close();
+            this.navigate('wiki_page', { pageId });
+            this._requestClose();
             return;
         }
         if (action === 'move') {
-            this.close();
-            this.openModal('wiki.move_page', { pageId: id });
+            this._requestClose();
+            this.openModal('wiki.move_page', { pageId });
             return;
         }
         if (action === 'access') {
-            this.close();
-            this.openModal('wiki.page_access', { pageId: id });
+            this._requestClose();
+            this.openModal('wiki.page_access', { pageId });
             return;
         }
         throw new Error(`wiki-tree-sheet: неизвестное действие ${action}`);
     }
 
-    renderBody() {
+    override renderBody() {
         const nodes = this._nodes();
         if (nodes.length === 0) {
             return html`<div class="empty">${this.t('sidebar.empty')}</div>`;
@@ -105,8 +126,8 @@ export class WikiTreeSheet extends PlatformBottomSheet {
                 selected-id=${this.activePageId}
                 aria-label=${this.t('sidebar.pages')}
                 .menuItems=${this._treeMenuItems}
-                @tree-select=${this._onSelect}
-                @tree-action=${this._onAction}
+                @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this._onSelect(event)}
+                @tree-action=${(event: CustomEvent<{ action?: string; id?: unknown }>) => this._onAction(event)}
             ></platform-tree>
         `;
     }

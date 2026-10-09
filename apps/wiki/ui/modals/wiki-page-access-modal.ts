@@ -13,6 +13,32 @@
 
 import { html, css, nothing } from 'lit';
 import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+
+interface WikiAccessState {
+    members?: { user_id?: string; relation?: string; [key: string]: unknown }[];
+    company_visible?: boolean;
+    inherited_from_page_id?: unknown;
+    link_enabled?: boolean;
+    link_permission?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiPageRecord {
+    is_published?: boolean;
+    [key: string]: unknown;
+}
+
+interface WikiLinkResult {
+    url?: unknown;
+    [key: string]: unknown;
+}
+
+interface TeamSlice {
+    members?: { user_id?: unknown; name?: unknown; [key: string]: unknown }[];
+    loading?: boolean;
+}
 import { registerModalKind } from '@platform/lib/utils/modal-registry.js';
 import { TEAM_EVENTS } from '@platform/lib/events/index.js';
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
@@ -29,16 +55,34 @@ export class WikiPageAccessModal extends PlatformModal {
     static modalKind = 'wiki.page_access';
     static i18nNamespace = 'wiki';
 
-    static properties = {
-        pageId: { type: String, attribute: 'page-id' },
-        _newMemberId: { state: true },
-        _newRelation: { state: true },
-        /** Адрес известен только в этой сессии — сразу после выпуска ссылки. */
-        _issuedLinkUrl: { state: true },
-    };
+    declare pageId: string;
+    declare _newMemberId: string;
+    declare _newRelation: string;
+    declare _issuedLinkUrl: string;
+    private _access: OpController;
+    private _page: OpController;
+    private _companyVisible: OpController;
+    private _memberAdd: OpController;
+    private _memberRemove: OpController;
+    private _publicLink: OpController;
+    private _properties: OpController;
+    private _pages: ResourceController;
+    private _teamMembersSel: SelectController<TeamSlice['members']>;
+    private _teamLoadingSel: SelectController<boolean | undefined>;
 
-    static styles = [
-        ...PlatformModal.styles,
+    static override get properties() {
+        return {
+            ...PlatformModal.properties,
+            pageId: { type: String, attribute: 'page-id' },
+            _newMemberId: { state: true },
+            _newRelation: { state: true },
+            /** Адрес известен только в этой сессии — сразу после выпуска ссылки. */
+            _issuedLinkUrl: { state: true },
+        };
+    }
+
+    static override styles = [
+        PlatformModal.styles,
         css`
             .grid {
                 display: grid;
@@ -143,11 +187,11 @@ export class WikiPageAccessModal extends PlatformModal {
         this._publicLink = this.useOp('wiki/public_link');
         this._properties = this.useOp('wiki/page_properties');
         this._pages = this.useResource('wiki/pages');
-        this._teamMembersSel = this.select((s) => s.team.members);
-        this._teamLoadingSel = this.select((s) => s.team.loading);
+        this._teamMembersSel = this.select((s) => (s.team as TeamSlice).members);
+        this._teamLoadingSel = this.select((s) => (s.team as TeamSlice).loading);
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         void this._access.run({ wiki_page_id: this.pageId });
         void this._page.run({ wiki_page_id: this.pageId });
@@ -158,54 +202,54 @@ export class WikiPageAccessModal extends PlatformModal {
         }
     }
 
-    _accessState() {
-        return this._access.lastResult;
+    private _accessState(): WikiAccessState | null {
+        return this._access.lastResult as WikiAccessState | null;
     }
 
-    _members() {
+    private _members(): NonNullable<WikiAccessState['members']> {
         const access = this._accessState();
         return access && Array.isArray(access.members) ? access.members : [];
     }
 
-    _isRestricted() {
+    private _isRestricted() {
         const access = this._accessState();
-        return Boolean(access) && access.company_visible === false;
+        return access !== null && access.company_visible === false;
     }
 
     /** Ограничение с предка снимается только на самом предке. */
-    _inheritedFromAncestorId() {
+    private _inheritedFromAncestorId(): string {
         const access = this._accessState();
         if (!access || typeof access.inherited_from_page_id !== 'string') {
             return '';
         }
-        return access.inherited_from_page_id === this.pageId ? '' : access.inherited_from_page_id;
+        return access.inherited_from_page_id === this.pageId ? '' : String(access.inherited_from_page_id);
     }
 
-    _isPublished() {
-        const page = this._page.lastResult;
-        return Boolean(page) && page.is_published === true;
+    private _isPublished() {
+        const page = this._page.lastResult as WikiPageRecord | null;
+        return page !== null && page.is_published === true;
     }
 
-    _linkEnabled() {
+    private _linkEnabled() {
         const access = this._accessState();
-        return Boolean(access) && access.link_enabled === true;
+        return access !== null && access.link_enabled === true;
     }
 
-    _linkPermission() {
+    private _linkPermission(): string {
         const access = this._accessState();
         return access && typeof access.link_permission === 'string'
             ? access.link_permission
             : LINK_PERMISSION_VIEWER;
     }
 
-    async _reload() {
+    private async _reload(): Promise<void> {
         await this._access.run({ wiki_page_id: this.pageId });
         void this._pages.load();
     }
 
     // --- публикация ---
 
-    async _onPublishToggle(event) {
+    private async _onPublishToggle(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         await this._properties.run({
             wiki_page_id: this.pageId,
             is_published: Boolean(event.detail.value),
@@ -216,7 +260,7 @@ export class WikiPageAccessModal extends PlatformModal {
 
     // --- участники ---
 
-    async _onRestrictedToggle(event) {
+    private async _onRestrictedToggle(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         await this._companyVisible.run({
             wiki_page_id: this.pageId,
             company_visible: !Boolean(event.detail.value),
@@ -224,7 +268,7 @@ export class WikiPageAccessModal extends PlatformModal {
         await this._reload();
     }
 
-    async _addMember() {
+    private async _addMember(): Promise<void> {
         if (this._newMemberId === '') {
             return;
         }
@@ -237,36 +281,37 @@ export class WikiPageAccessModal extends PlatformModal {
         await this._reload();
     }
 
-    async _removeMember(userId) {
+    private async _removeMember(userId: string): Promise<void> {
         await this._memberRemove.run({ wiki_page_id: this.pageId, member_user_id: userId });
         await this._reload();
     }
 
     // --- публичная ссылка ---
 
-    async _onLinkToggle(event) {
+    private async _onLinkToggle(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         const result = await this._publicLink.run({
             wiki_page_id: this.pageId,
             enabled: Boolean(event.detail.value),
             permission: this._linkPermission(),
             origin: location.origin,
         });
-        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        this._issuedLinkUrl = result && typeof (result as WikiLinkResult | null)?.url === 'string' ? (result as WikiLinkResult).url as string : '';
         await this._reload();
     }
 
-    async _onLinkPermissionChange(event) {
+    private async _onLinkPermissionChange(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         const result = await this._publicLink.run({
             wiki_page_id: this.pageId,
             enabled: true,
             permission: event.detail.value,
             origin: location.origin,
         });
-        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        const linkResult = result as WikiLinkResult | null;
+        this._issuedLinkUrl = linkResult && typeof linkResult.url === 'string' ? linkResult.url : '';
         await this._reload();
     }
 
-    async _rotateLink() {
+    private async _rotateLink(): Promise<void> {
         const confirmed = await platformConfirm(this.t('access.link_rotate_confirm_body'), {
             title: this.t('access.link_rotate_confirm_title'),
         });
@@ -279,19 +324,19 @@ export class WikiPageAccessModal extends PlatformModal {
             permission: this._linkPermission(),
             origin: location.origin,
         });
-        this._issuedLinkUrl = result && typeof result.url === 'string' ? result.url : '';
+        this._issuedLinkUrl = result && typeof (result as WikiLinkResult | null)?.url === 'string' ? (result as WikiLinkResult).url as string : '';
         await this._reload();
     }
 
     /** Сайт открывается отдельной вкладкой: в текущей остаётся редактирование. */
-    _openSite() {
+    private _openSite() {
         if (this._issuedLinkUrl === '') {
             return;
         }
         window.open(this._issuedLinkUrl, '_blank', 'noopener');
     }
 
-    _copyLink() {
+    private _copyLink() {
         if (this._issuedLinkUrl === '') {
             return;
         }
@@ -303,7 +348,7 @@ export class WikiPageAccessModal extends PlatformModal {
 
     // --- справочники полей ---
 
-    _relationConfig() {
+    private _relationConfig() {
         return {
             values: [
                 { value: 'viewer', label: this.t('access.relation_viewer') },
@@ -312,7 +357,7 @@ export class WikiPageAccessModal extends PlatformModal {
         };
     }
 
-    _linkPermissionConfig() {
+    private _linkPermissionConfig() {
         return {
             values: [
                 { value: 'viewer', label: this.t('access.link_permission_viewer') },
@@ -321,28 +366,28 @@ export class WikiPageAccessModal extends PlatformModal {
         };
     }
 
-    _memberConfig() {
+    private _memberConfig(): { values: { value: string; label: string }[] } {
         const granted = new Set(this._members().map((member) => member.user_id));
         const team = this._teamMembersSel.value;
         if (!Array.isArray(team)) {
             throw new Error('wiki page access: state.team.members must be array');
         }
-        const values = team
+        const values = (team as NonNullable<TeamSlice['members']>)
             .filter((member) => member && typeof member.user_id === 'string' && !granted.has(member.user_id))
             .map((member) => ({
-                value: member.user_id,
+                value: member.user_id as string,
                 label: typeof member.name === 'string' && member.name.length > 0
                     ? member.name
-                    : member.user_id,
+                    : member.user_id as string,
             }));
         return { values };
     }
 
-    renderHeader() {
+    override renderHeader() {
         return this.t('access.title');
     }
 
-    renderBody() {
+    override renderBody() {
         if (!this._accessState()) {
             return html`<div class="muted">${this.t('access.loading')}</div>`;
         }
@@ -356,7 +401,7 @@ export class WikiPageAccessModal extends PlatformModal {
         `;
     }
 
-    _renderPublish() {
+    private _renderPublish() {
         return html`
             <div>
                 <div class="section-title">${this.t('access.publish_title')}</div>
@@ -365,7 +410,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         data-wiki-publish
                         ?checked=${this._isPublished()}
                         label=${this.t('access.publish_label')}
-                        @change=${this._onPublishToggle}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => this._onPublishToggle(event)}
                     ></platform-switch>
                 </div>
                 <div class="hint">${this.t('access.publish_hint')}</div>
@@ -373,7 +418,7 @@ export class WikiPageAccessModal extends PlatformModal {
         `;
     }
 
-    _renderVisibility() {
+    private _renderVisibility() {
         const inheritedFrom = this._inheritedFromAncestorId();
         return html`
             <div>
@@ -384,7 +429,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         ?checked=${this._isRestricted()}
                         ?disabled=${inheritedFrom !== ''}
                         label=${this.t('access.visibility_restricted')}
-                        @change=${this._onRestrictedToggle}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => this._onRestrictedToggle(event)}
                     ></platform-switch>
                 </div>
                 <div class="hint">
@@ -401,7 +446,7 @@ export class WikiPageAccessModal extends PlatformModal {
                               size="sm"
                               data-wiki-inherited-open
                               @click=${() => {
-                                  this.close();
+                                  void this.close();
                                   this.navigate('wiki_page', { pageId: inheritedFrom });
                               }}
                           >${this.t('access.inherited_open')}</platform-button>
@@ -410,7 +455,7 @@ export class WikiPageAccessModal extends PlatformModal {
         `;
     }
 
-    _renderMembers() {
+    private _renderMembers() {
         const members = this._members();
         return html`
             <div>
@@ -426,7 +471,7 @@ export class WikiPageAccessModal extends PlatformModal {
                               <platform-button
                                   variant="ghost"
                                   size="sm"
-                                  @click=${() => this._removeMember(member.user_id)}
+                                  @click=${() => this._removeMember(String(member.user_id ?? ''))}
                               >${this.t('access.member_remove')}</platform-button>
                           </div>
                       `)}
@@ -437,7 +482,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         label=${this.t('access.member_add')}
                         .value=${this._newMemberId}
                         .config=${this._memberConfig()}
-                        @change=${(event) => { this._newMemberId = event.detail.value; }}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newMemberId = String(event.detail.value ?? ''); }}
                     ></platform-field>
                     <platform-field
                         type="enum"
@@ -445,9 +490,9 @@ export class WikiPageAccessModal extends PlatformModal {
                         label=${this.t('access.relation_label')}
                         .value=${this._newRelation}
                         .config=${this._relationConfig()}
-                        @change=${(event) => { this._newRelation = event.detail.value; }}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => { this._newRelation = String(event.detail.value ?? ''); }}
                     ></platform-field>
-                    <platform-button variant="primary" data-wiki-member-add @click=${this._addMember}>
+                    <platform-button variant="primary" data-wiki-member-add @click=${() => this._addMember()}>
                         <platform-icon name="plus" size="16"></platform-icon>
                     </platform-button>
                 </div>
@@ -455,7 +500,7 @@ export class WikiPageAccessModal extends PlatformModal {
         `;
     }
 
-    _renderPublicLink() {
+    private _renderPublicLink() {
         const enabled = this._linkEnabled();
         return html`
             <div>
@@ -465,7 +510,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         data-wiki-public-link
                         ?checked=${enabled}
                         label=${this.t('access.link_enable')}
-                        @change=${this._onLinkToggle}
+                        @change=${(event: CustomEvent<{ value?: unknown }>) => this._onLinkToggle(event)}
                     ></platform-switch>
                     ${enabled ? nothing : html`<span class="muted">${this.t('access.link_disabled')}</span>`}
                 </div>
@@ -474,7 +519,7 @@ export class WikiPageAccessModal extends PlatformModal {
         `;
     }
 
-    _renderLinkDetails() {
+    private _renderLinkDetails() {
         return html`
             <platform-field
                 type="enum"
@@ -482,7 +527,7 @@ export class WikiPageAccessModal extends PlatformModal {
                 label=${this.t('access.link_permission_label')}
                 .value=${this._linkPermission()}
                 .config=${this._linkPermissionConfig()}
-                @change=${this._onLinkPermissionChange}
+                @change=${(event: CustomEvent<{ value?: unknown }>) => this._onLinkPermissionChange(event)}
             ></platform-field>
             <div class="hint">${this.t('access.link_subtree_hint')}</div>
             ${this._isPublished() ? nothing : html`<div class="warning">${this.t('access.link_draft_warning')}</div>`}
@@ -493,7 +538,7 @@ export class WikiPageAccessModal extends PlatformModal {
                         variant="ghost"
                         size="sm"
                         data-wiki-rotate-link
-                        @click=${this._rotateLink}
+                        @click=${() => this._rotateLink()}
                     >${this.t('access.link_rotate')}</platform-button>
                 `
                 : html`
@@ -507,7 +552,7 @@ export class WikiPageAccessModal extends PlatformModal {
                                 data-wiki-copy-link
                                 title=${this.t('access.link_copy')}
                                 aria-label=${this.t('access.link_copy')}
-                                @click=${this._copyLink}
+                                @click=${() => this._copyLink()}
                             >
                                 <platform-icon name="copy" size="16"></platform-icon>
                             </platform-button>
@@ -518,7 +563,7 @@ export class WikiPageAccessModal extends PlatformModal {
                                 data-wiki-open-site
                                 title=${this.t('access.link_open_site')}
                                 aria-label=${this.t('access.link_open_site')}
-                                @click=${this._openSite}
+                                @click=${() => this._openSite()}
                             >
                                 <platform-icon name="external-link" size="16"></platform-icon>
                             </platform-button>

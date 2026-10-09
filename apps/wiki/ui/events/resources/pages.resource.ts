@@ -9,6 +9,11 @@
  */
 
 import { createAsyncOp, createResourceCollection } from '@platform/lib/events/index.js';
+import type { AsyncOpSlice } from '@platform/lib/events/factories/async-op.js';
+import type { PlatformEvent } from '@platform/lib/events/contract.js';
+import type { ResourceCollectionSlice, ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
+
+type EventPayload = Record<string, unknown>;
 
 export const WIKI_PAGE_EVENTS = [
     'wiki/page/created',
@@ -20,23 +25,24 @@ export const WIKI_PAGE_EVENTS = [
     'wiki/page/access_changed',
 ];
 
-function mergeSummary(state, summary) {
+function mergeSummary(state: ResourceCollectionSlice, summary: ResourceItem): ResourceCollectionSlice {
     const id = summary.wiki_page_id;
     const index = state.items.findIndex((item) => item && item.wiki_page_id === id);
     const items = index === -1
         ? [...state.items, summary]
-        : state.items.map((item, position) => (position === index ? summary : item));
-    return { ...state, items, byId: { ...state.byId, [id]: summary } };
+        : state.items.map((item: ResourceItem, position: number) => (position === index ? summary : item));
+    return { ...state, items, byId: { ...state.byId, [String(id)]: summary } };
 }
 
-function unwrapWikiPageResult(state, event, events) {
+function unwrapWikiPageResult(state: AsyncOpSlice, event: PlatformEvent, events: Readonly<Record<string, string>>): AsyncOpSlice {
     if (event.type !== events.SUCCEEDED) {
         return state;
     }
-    if (!event.payload || !('result' in event.payload)) {
+    const payload = event.payload as EventPayload | null;
+    if (!payload || !('result' in payload)) {
         throw new Error('wiki pages: SUCCEEDED payload.result required');
     }
-    const result = event.payload.result;
+    const result = payload.result as { page?: unknown } | null;
     if (
         !result
         || typeof result !== 'object'
@@ -55,27 +61,27 @@ export const wikiPagesResource = createResourceCollection({
     operations: ['list'],
     transport: 'ws',
     wsTimeoutMs: 8_000,
-    itemsPath: 'items',
     listQuery: () => ({}),
     extraReducer: (state, event) => {
+        const payload = event.payload as EventPayload | null;
         if (
             WIKI_PAGE_EVENTS.includes(event.type)
             && event.type !== 'wiki/page/deleted'
             && event.type !== 'wiki/page/access_changed'
         ) {
-            if (!event.payload || typeof event.payload.page !== 'object' || event.payload.page === null) {
+            if (!payload || typeof payload.page !== 'object' || payload.page === null) {
                 throw new Error(`${event.type}: payload.page required`);
             }
-            return mergeSummary(state, event.payload.page);
+            return mergeSummary(state, payload.page as ResourceItem);
         }
         if (event.type === 'wiki/page/deleted') {
-            if (!event.payload || !Array.isArray(event.payload.affected_page_ids)) {
+            if (!payload || !Array.isArray(payload.affected_page_ids)) {
                 throw new Error('wiki/page/deleted: payload.affected_page_ids required');
             }
-            const removed = new Set(event.payload.affected_page_ids);
+            const removed = new Set(payload.affected_page_ids as unknown[]);
             const items = state.items.filter((item) => item && !removed.has(item.wiki_page_id));
             const byId = { ...state.byId };
-            for (const id of removed) delete byId[id];
+            for (const id of removed) delete byId[String(id)];
             return { ...state, items, byId };
         }
         return state;

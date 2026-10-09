@@ -6,7 +6,22 @@
  */
 
 import { html, css } from 'lit';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+export interface WikiLineDiffRow {
+    kind: 'same' | 'added' | 'removed';
+    text: string;
+}
+
+interface WikiRevisionItem {
+    wiki_revision_id?: string;
+    title?: unknown;
+    created_at?: string | number | Date;
+    [key: string]: unknown;
+}
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
 import '@platform/lib/components/glass-spinner.js';
@@ -22,23 +37,23 @@ import '@platform/lib/components/platform-user-chip.js';
  * @param {string} after
  * @returns {{ kind: 'same' | 'added' | 'removed', text: string }[]}
  */
-export function buildLineDiff(before, after) {
+export function buildLineDiff(before: string, after: string): WikiLineDiffRow[] {
     const beforeLines = before.split('\n');
     const afterLines = after.split('\n');
-    const beforeCounts = new Map();
+    const beforeCounts = new Map<string, number>();
     for (const line of beforeLines) {
         beforeCounts.set(line, (beforeCounts.get(line) ?? 0) + 1);
     }
-    const afterCounts = new Map();
+    const afterCounts = new Map<string, number>();
     for (const line of afterLines) {
         afterCounts.set(line, (afterCounts.get(line) ?? 0) + 1);
     }
 
-    const rows = [];
+    const rows: WikiLineDiffRow[] = [];
     for (const line of beforeLines) {
         const inAfter = (afterCounts.get(line) ?? 0) > 0;
         if (inAfter) {
-            afterCounts.set(line, afterCounts.get(line) - 1);
+            afterCounts.set(line, (afterCounts.get(line) ?? 0) - 1);
             rows.push({ kind: 'same', text: line });
         } else {
             rows.push({ kind: 'removed', text: line });
@@ -46,7 +61,7 @@ export function buildLineDiff(before, after) {
     }
     for (const line of afterLines) {
         if ((beforeCounts.get(line) ?? 0) > 0) {
-            beforeCounts.set(line, beforeCounts.get(line) - 1);
+            beforeCounts.set(line, (beforeCounts.get(line) ?? 0) - 1);
             continue;
         }
         rows.push({ kind: 'added', text: line });
@@ -57,13 +72,22 @@ export function buildLineDiff(before, after) {
 export class WikiHistoryPage extends PlatformPage {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare pageId: string;
+    declare _selectedRevisionId: string;
+    declare _diffRows: WikiLineDiffRow[];
+    private _revisions: OpController;
+    private _revisionRead: OpController;
+    private _revisionRestore: OpController;
+    private _markdown: OpController;
+    private _locale: SelectController<unknown>;
+
+    static override properties = {
         pageId: { type: String, attribute: 'page-id' },
         _selectedRevisionId: { state: true },
         _diffRows: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -173,40 +197,40 @@ export class WikiHistoryPage extends PlatformPage {
         this._revisionRead = this.useOp('wiki/revision_read');
         this._revisionRestore = this.useOp('wiki/revision_restore');
         this._markdown = this.useOp('wiki/page_markdown');
-        this._locale = this.select((state) => state.i18n.locale);
+        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>) {
+        super.updated(changed);
         if (changed.has('pageId') && this.pageId !== '') {
             void this._revisions.run({ wiki_page_id: this.pageId });
             void this._markdown.run({ wiki_page_id: this.pageId });
         }
     }
 
-    _revisionItems() {
-        const state = this._revisions.lastResult;
+    private _revisionItems(): WikiRevisionItem[] {
+        const state = this._revisions.lastResult as { items?: unknown } | null;
         if (state === null) {
             return [];
         }
         if (typeof state !== 'object' || !Array.isArray(state.items)) {
             throw new Error('wiki revisions: lastResult.items required');
         }
-        return state.items;
+        return state.items as WikiRevisionItem[];
     }
 
-    async _selectRevision(revisionId) {
+    private async _selectRevision(revisionId: string): Promise<void> {
         this._selectedRevisionId = revisionId;
-        const revision = await this._revisionRead.run({ wiki_revision_id: revisionId });
-        const current = this._markdown.lastResult;
-        const currentText = current === null ? '' : current.markdown;
+        const revision = await this._revisionRead.run({ wiki_revision_id: revisionId }) as { text_markdown?: unknown } | null;
+        const current = this._markdown.lastResult as { markdown?: unknown } | null;
+        const currentText = current === null || typeof current.markdown !== 'string' ? '' : current.markdown;
         const revisionText = revision !== null && typeof revision.text_markdown === 'string'
             ? revision.text_markdown
             : '';
         this._diffRows = buildLineDiff(revisionText, currentText);
     }
 
-    async _restore() {
+    private async _restore(): Promise<void> {
         const confirmed = await platformConfirm(this.t('history.restore_confirm_body'), {
             title: this.t('history.restore_confirm_title'),
         });
@@ -217,7 +241,7 @@ export class WikiHistoryPage extends PlatformPage {
         this.navigate('wiki_page', { pageId: this.pageId });
     }
 
-    render() {
+    override render() {
         const revisions = this._revisionItems();
         return html`
             <div class="layout">
@@ -238,13 +262,13 @@ export class WikiHistoryPage extends PlatformPage {
                                   class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
                                   type="button"
                                   data-wiki-revision=${revision.wiki_revision_id}
-                                  @click=${() => this._selectRevision(revision.wiki_revision_id)}
+                                  @click=${() => this._selectRevision(String(revision.wiki_revision_id ?? ''))}
                               >
                                   <div class="revision-title">
                                       ${revision.title === '' ? this.t('page.untitled') : revision.title}
                                   </div>
                                   <div class="revision-meta">
-                                      ${formatPlatformDateTime(new Date(revision.created_at), this._locale.value)}
+                                      ${formatPlatformDateTime(new Date(revision.created_at ?? ''), String(this._locale.value ?? ''))}
                                   </div>
                               </button>
                           `)}
@@ -254,7 +278,7 @@ export class WikiHistoryPage extends PlatformPage {
         `;
     }
 
-    _renderDiff() {
+    private _renderDiff() {
         if (this._selectedRevisionId === '') {
             return html`<div class="state">${this.t('history.current')}</div>`;
         }
@@ -262,7 +286,7 @@ export class WikiHistoryPage extends PlatformPage {
             return html`<div class="state"><glass-spinner size="sm"></glass-spinner></div>`;
         }
         return html`
-            <platform-button variant="primary" size="sm" data-wiki-restore @click=${this._restore}>
+            <platform-button variant="primary" size="sm" data-wiki-restore @click=${() => this._restore()}>
                 ${this.t('history.restore')}
             </platform-button>
             ${this._diffRows.map((row) => html`

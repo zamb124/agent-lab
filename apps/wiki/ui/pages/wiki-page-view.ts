@@ -33,6 +33,67 @@ import '@platform/lib/components/platform-rich-editor.js';
 import '@platform/lib/components/platform-switch.js';
 import '@platform/lib/components/platform-user-chip.js';
 import { WIKI_PANEL_TABS } from '../components/wiki-page-panel.js';
+import type { PropertyValues } from '@platform/lib/lit-shim.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { PlatformRichEditor } from '@platform/lib/components/platform-rich-editor.js';
+import type { PopoverAnchor } from '@platform/lib/components/platform-popover.js';
+
+interface WikiPageDoc {
+    wiki_page_id?: string;
+    title?: string;
+    content?: { content?: { type?: string; content?: unknown[] }[] } | null;
+    icon?: string;
+    cover_url?: string;
+    namespace?: string;
+    is_full_width?: boolean;
+    is_published?: boolean;
+    last_edited_by_user_id?: string;
+    updated_at?: string | number | Date;
+    parent_page_id?: string;
+    [key: string]: unknown;
+}
+
+interface WikiPageResponse {
+    page?: WikiPageDoc;
+    [key: string]: unknown;
+}
+
+interface WikiSearchHit {
+    wiki_page_id?: string;
+    title?: string;
+    [key: string]: unknown;
+}
+
+interface WikiImportResult {
+    page?: WikiPageDoc;
+    notices?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiParseResult {
+    document?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiFileItem {
+    file_id?: unknown;
+    original_name?: unknown;
+    content_type?: unknown;
+    [key: string]: unknown;
+}
+
+interface WikiMentionItem {
+    id: string;
+    kind: string;
+    label: string;
+}
+
+interface WikiOutlineEntry {
+    level: number;
+    text: string;
+    pos: number;
+}
 import '../components/wiki-page-panel.js';
 
 const SAVE_DEBOUNCE_MS = 900;
@@ -49,7 +110,30 @@ const SAVE_FAILED = 'failed';
 export class WikiPageView extends PlatformPage {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare pageId: string;
+    declare _page: WikiPageDoc | null;
+    declare _saveState: string;
+    declare _outline: WikiOutlineEntry[];
+    declare _iconAnchor: PopoverAnchor;
+    declare _menuAnchor: PopoverAnchor;
+    declare _panelOpen: boolean;
+    declare _panelTab: string;
+    private _saveTimer: number | null;
+    private _pendingContent: unknown;
+    private _pendingTitle: string | null;
+    private _read: OpController;
+    private _save: OpController;
+    private _properties: OpController;
+    private _deletePage: OpController;
+    private _search: OpController;
+    private _markdownImport: OpController;
+    private _markdownParse: OpController;
+    private _pages: ResourceController;
+    private _locale: SelectController<unknown>;
+    private _routerSearchSel: SelectController<unknown>;
+    private _accessModalOpened: boolean;
+
+    static override properties = {
         pageId: { type: String, attribute: 'page-id' },
         _page: { state: true },
         _saveState: { state: true },
@@ -60,7 +144,7 @@ export class WikiPageView extends PlatformPage {
         _panelTab: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -306,7 +390,7 @@ export class WikiPageView extends PlatformPage {
         this._markdownImport = this.useOp('wiki/page_markdown_import');
         this._markdownParse = this.useOp('wiki/markdown_parse');
         this._pages = this.useResource('wiki/pages');
-        this._locale = this.select((state) => state.i18n.locale);
+        this._locale = this.select((state) => (state.i18n as Record<string, unknown>).locale);
         this._mentionProvider = this._mentionProvider.bind(this);
         this._openPanelSheet = this._openPanelSheet.bind(this);
         this._parseMarkdown = this._parseMarkdown.bind(this);
@@ -317,12 +401,12 @@ export class WikiPageView extends PlatformPage {
                 void this._loadPage();
             }
         });
-        this._routerSearchSel = this.select((s) => s.router.search);
+        this._routerSearchSel = this.select((s) => (s.router as Record<string, unknown>).search);
         this._accessModalOpened = false;
     }
 
-    updated(changed) {
-        super.updated?.(changed);
+    override updated(changed: PropertyValues<this>) {
+        super.updated(changed);
         if (changed.has('pageId') && this.pageId !== '') {
             const previousPageId = changed.get('pageId');
             if (typeof previousPageId === 'string' && previousPageId !== '') {
@@ -336,7 +420,7 @@ export class WikiPageView extends PlatformPage {
         this._maybeOpenAccessModal();
     }
 
-    _maybeOpenAccessModal() {
+    private _maybeOpenAccessModal() {
         if (this._accessModalOpened) {
             return;
         }
@@ -353,12 +437,12 @@ export class WikiPageView extends PlatformPage {
         this.openModal('wiki.page_access', { pageId: this.pageId });
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         this._flushPendingSave();
     }
 
-    async _loadPage() {
+    private async _loadPage(): Promise<void> {
         const pageId = this.pageId;
         if (pageId === '') {
             return;
@@ -374,14 +458,14 @@ export class WikiPageView extends PlatformPage {
         }
         // Ответ команды — WikiPageResponse { page, can_edit, can_admin }:
         // на экране живёт сама WikiPage.
-        this._page = response === null ? null : response.page;
+        this._page = response === null ? null : (response as WikiPageResponse).page ?? null;
         await this.updateComplete;
         await this._refreshOutlineWhenEditorReady();
     }
 
-    async _refreshOutlineWhenEditorReady() {
+    private async _refreshOutlineWhenEditorReady(): Promise<void> {
         for (let attempt = 0; attempt < 60; attempt += 1) {
-            const editor = this.renderRoot.querySelector('platform-rich-editor');
+            const editor = this.renderRoot.querySelector<PlatformRichEditor>('platform-rich-editor');
             if (editor && editor.isReady) {
                 this._outline = editor.getOutline();
                 return;
@@ -396,7 +480,7 @@ export class WikiPageView extends PlatformPage {
     // --- боковая панель ---
 
     /** Раскладка панели переживает переход между страницами и перезагрузку. */
-    _restorePanelState() {
+    private _restorePanelState() {
         const stored = storageGet(PANEL_STORAGE_KEY);
         if (stored === null) {
             return;
@@ -409,12 +493,12 @@ export class WikiPageView extends PlatformPage {
         this._panelTab = parsed.tab;
     }
 
-    _persistPanelState() {
+    private _persistPanelState() {
         storageSetJson(PANEL_STORAGE_KEY, { open: this._panelOpen, tab: this._panelTab });
     }
 
     /** Кнопка в шапке: та же вкладка закрывает панель, другая переключает. */
-    _togglePanel(tab) {
+    private _togglePanel(tab: string) {
         if (window.matchMedia('(max-width: 1100px)').matches) {
             this._panelTab = tab;
             this._persistPanelState();
@@ -427,25 +511,25 @@ export class WikiPageView extends PlatformPage {
         this._refreshOutline();
     }
 
-    _closePanel() {
+    private _closePanel() {
         this._panelOpen = false;
         this._persistPanelState();
     }
 
-    _onPanelTabChange(event) {
-        this._panelTab = event.detail.tab;
+    private _onPanelTabChange(event: CustomEvent<{ tab?: string }>) {
+        this._panelTab = String(event.detail.tab ?? PANEL_DEFAULT_TAB);
         this._persistPanelState();
     }
 
-    _openPanelSheet() {
+    private _openPanelSheet() {
         this._refreshOutline();
         // Прокрутку делает страница: только у неё есть ссылка на редактор.
         this.openBottomSheet('wiki.outline', {
             pageId: this.pageId,
             tab: this._panelTab,
             outline: this._outline,
-            onPick: (item) => this._scrollToHeading(item),
-            onTabChange: (tab) => {
+            onPick: (item: WikiOutlineEntry) => this._scrollToHeading(item),
+            onTabChange: (tab: string) => {
                 this._panelTab = tab;
                 this._persistPanelState();
             },
@@ -454,7 +538,7 @@ export class WikiPageView extends PlatformPage {
 
     // --- сохранение ---
 
-    _scheduleSave() {
+    private _scheduleSave() {
         this._saveState = SAVE_PENDING;
         if (this._saveTimer !== null) {
             clearTimeout(this._saveTimer);
@@ -466,7 +550,7 @@ export class WikiPageView extends PlatformPage {
     }
 
     /** Досохранить при уходе со страницы, иначе последние правки потеряются. */
-    _flushPendingSave(pageId = this.pageId) {
+    private _flushPendingSave(pageId = this.pageId) {
         if (this._saveTimer === null) {
             return;
         }
@@ -475,19 +559,19 @@ export class WikiPageView extends PlatformPage {
         void this._commitSave(pageId);
     }
 
-    async _commitSave(pageId = this.pageId) {
+    private async _commitSave(pageId = this.pageId): Promise<void> {
         if (this._page === null) {
             this._saveState = SAVE_FAILED;
             return;
         }
         const content = this._pendingContent === null ? this._page.content : this._pendingContent;
         const title = this._pendingTitle === null ? this._page.title : this._pendingTitle;
-        const saved = await this._save.run({
+        const saved = (await this._save.run({
             wiki_page_id: pageId,
             content,
             title,
             create_revision: true,
-        });
+        })) as WikiPageResponse | null;
         // Неудача резолвится в null (контракт OpController).
         if (saved === null) {
             if (pageId !== this.pageId) {
@@ -516,10 +600,11 @@ export class WikiPageView extends PlatformPage {
         }
         // Ответ команды — WikiPageResponse { page, can_edit, can_admin };
         // свежие pending-правки поверх сохранённого снимка не затираются.
+        const savedDoc = saved.page ?? {};
         this._page = {
-            ...saved.page,
-            content: this._pendingContent === null ? saved.page.content : this._pendingContent,
-            title: this._pendingTitle === null ? saved.page.title : this._pendingTitle,
+            ...savedDoc,
+            content: this._pendingContent === null ? savedDoc.content : this._pendingContent,
+            title: this._pendingTitle === null ? savedDoc.title : this._pendingTitle,
         };
         if (this._pendingContent === null && this._pendingTitle === null) {
             this._saveState = SAVE_DONE;
@@ -528,7 +613,7 @@ export class WikiPageView extends PlatformPage {
         void this._pages.load();
     }
 
-    _onEditorChange(event) {
+    private _onEditorChange(event: CustomEvent<{ content?: unknown }>) {
         // Редактор в light DOM: native `change` с select языка / file input
         // тоже всплывает сюда без detail — их игнорируем.
         const detail = event.detail;
@@ -548,34 +633,35 @@ export class WikiPageView extends PlatformPage {
         this._refreshOutline();
     }
 
-    _onTitleInput(event) {
-        this._pendingTitle = event.target.value;
+    private _onTitleInput(event: Event) {
+        this._pendingTitle = (event.target as HTMLInputElement).value;
         this._scheduleSave();
     }
 
-    _refreshOutline() {
-        const editor = this.renderRoot.querySelector('platform-rich-editor');
+    private _refreshOutline() {
+        const editor = this.renderRoot.querySelector<PlatformRichEditor>('platform-rich-editor');
         this._outline = editor ? editor.getOutline() : [];
     }
 
     // --- иконка, обложка, меню ---
 
-    _onIconSelect(event) {
-        void this._properties.run({ wiki_page_id: this.pageId, icon: event.detail.emoji });
-        this._page = { ...this._page, icon: event.detail.emoji };
+    private _onIconSelect(event: CustomEvent<{ emoji?: string }>) {
+        const emoji = String(event.detail.emoji ?? '');
+        void this._properties.run({ wiki_page_id: this.pageId, icon: emoji });
+        this._page = { ...this._page, icon: emoji };
         this._iconAnchor = null;
         void this._pages.load();
     }
 
-    _onIconClear() {
+    private _onIconClear() {
         void this._properties.run({ wiki_page_id: this.pageId, icon: '' });
         this._page = { ...this._page, icon: '' };
         this._iconAnchor = null;
         void this._pages.load();
     }
 
-    _pageMenuItems() {
-        const hasCover = this._page.cover_url !== '';
+    private _pageMenuItems() {
+        const hasCover = this._page !== null && this._page.cover_url !== '';
         return [
             { id: 'history', label: this.t('page.history_link'), icon: 'history' },
             { id: 'access', label: this.t('tree_menu.access'), icon: 'lock' },
@@ -594,7 +680,7 @@ export class WikiPageView extends PlatformPage {
         ];
     }
 
-    async _onPageMenuSelect(event) {
+    private async _onPageMenuSelect(event: CustomEvent<{ id?: string }>): Promise<void> {
         const action = event.detail.id;
         this._menuAnchor = null;
         if (action === 'history') {
@@ -642,7 +728,7 @@ export class WikiPageView extends PlatformPage {
         throw new Error(`wiki-page-view: неизвестное действие страницы ${action}`);
     }
 
-    _wikiFileCreateSpec(metadata) {
+    private _wikiFileCreateSpec(metadata: Record<string, unknown>) {
         if (!this._page || typeof this._page.namespace !== 'string' || this._page.namespace.length === 0) {
             throw new Error('wiki-page-view: page.namespace required for file create');
         }
@@ -656,7 +742,11 @@ export class WikiPageView extends PlatformPage {
         });
     }
 
-    _openFilePicker({ acceptMimePrefix, metadata, onSelect }) {
+    private _openFilePicker({ acceptMimePrefix, metadata, onSelect }: {
+        acceptMimePrefix: string;
+        metadata: Record<string, unknown>;
+        onSelect: (file: WikiFileItem) => void;
+    }) {
         this.openModal('platform.file_picker', {
             acceptMimePrefix,
             uploadOpName: 'platform/file_create',
@@ -668,31 +758,31 @@ export class WikiPageView extends PlatformPage {
         });
     }
 
-    _openCoverPicker() {
+    private _openCoverPicker() {
         this._openFilePicker({
             acceptMimePrefix: 'image/',
             metadata: { purpose: 'wiki_cover' },
-            onSelect: (file) => {
+            onSelect: (file: WikiFileItem) => {
                 void this._applyCover(file);
             },
         });
     }
 
-    async _applyCover(file) {
+    private async _applyCover(file: WikiFileItem): Promise<void> {
         if (!file || typeof file.file_id !== 'string' || file.file_id.length === 0) {
             throw new Error('wiki-page-view: cover file_id required');
         }
-        const coverUrl = buildPlatformFileDownloadUrl(file.file_id);
+        const coverUrl = buildPlatformFileDownloadUrl(String(file.file_id));
         await this._properties.run({ wiki_page_id: this.pageId, cover_url: coverUrl });
         this._page = { ...this._page, cover_url: coverUrl };
     }
 
-    async _removeCover() {
+    private async _removeCover(): Promise<void> {
         await this._properties.run({ wiki_page_id: this.pageId, cover_url: '' });
         this._page = { ...this._page, cover_url: '' };
     }
 
-    _onEditorFilePickRequested(event) {
+    private _onEditorFilePickRequested(event: CustomEvent<{ kind?: string }>) {
         const kind = event.detail && event.detail.kind;
         if (kind !== 'image' && kind !== 'file') {
             throw new Error(`wiki-page-view: unknown file pick kind ${String(kind)}`);
@@ -700,44 +790,44 @@ export class WikiPageView extends PlatformPage {
         this._openFilePicker({
             acceptMimePrefix: kind === 'image' ? 'image/' : '',
             metadata: { purpose: kind === 'image' ? 'wiki_image' : 'wiki_file' },
-            onSelect: (file) => {
+            onSelect: (file: WikiFileItem) => {
                 this._insertPickedEditorFile(kind, file);
             },
         });
     }
 
-    _insertPickedEditorFile(kind, file) {
-        const editor = this.renderRoot.querySelector('platform-rich-editor');
+    private _insertPickedEditorFile(kind: string, file: WikiFileItem) {
+        const editor = this.renderRoot.querySelector<PlatformRichEditor>('platform-rich-editor');
         if (!editor) {
             throw new Error('wiki-page-view: rich editor missing');
         }
         if (kind === 'image') {
             editor.insertImage({
-                fileId: file.file_id,
-                src: buildPlatformFileDownloadUrl(file.file_id),
-                alt: file.original_name,
+                fileId: String(file.file_id ?? ''),
+                src: buildPlatformFileDownloadUrl(String(file.file_id ?? '')),
+                alt: String(file.original_name ?? ''),
             });
             return;
         }
         editor.insertPlatformFile({
-            fileId: file.file_id,
-            originalName: file.original_name,
-            contentType: file.content_type,
+            fileId: String(file.file_id ?? ''),
+            originalName: String(file.original_name ?? ''),
+            contentType: String(file.content_type ?? ''),
         });
     }
 
     // --- упоминания ---
 
     /** Источники упоминаний: страницы базы знаний и участники компании. */
-    async _mentionProvider(query) {
+    private async _mentionProvider(query: string): Promise<WikiMentionItem[]> {
         const trimmed = query.trim();
-        const pages = this._pages.items
-            .filter((page) => trimmed === '' || page.title.toLowerCase().includes(trimmed.toLowerCase()))
+        const pages: WikiMentionItem[] = this._pages.items
+            .filter((page: Record<string, unknown>) => trimmed === '' || String(page.title ?? '').toLowerCase().includes(trimmed.toLowerCase()))
             .slice(0, 6)
-            .map((page) => ({
-                id: page.wiki_page_id,
+            .map((page: Record<string, unknown>) => ({
+                id: String(page.wiki_page_id ?? ''),
                 kind: 'wiki_page',
-                label: page.title === '' ? this.t('page.untitled') : page.title,
+                label: page.title === '' ? this.t('page.untitled') : String(page.title ?? ''),
             }));
         if (trimmed === '') {
             return pages;
@@ -746,19 +836,20 @@ export class WikiPageView extends PlatformPage {
         if (found === null) {
             return pages;
         }
-        if (typeof found !== 'object' || !Array.isArray(found.items)) {
+        const foundResult = found as { items?: unknown };
+        if (!Array.isArray(foundResult.items)) {
             throw new Error('wiki mention search: result.items required');
         }
-        const hits = found.items;
-        const extra = hits
+        const hits = foundResult.items as WikiSearchHit[];
+        const extra: WikiMentionItem[] = hits
             .filter((hit) => !pages.some((page) => page.id === hit.wiki_page_id))
-            .map((hit) => ({ id: hit.wiki_page_id, kind: 'wiki_page', label: hit.title }));
+            .map((hit) => ({ id: String(hit.wiki_page_id ?? ''), kind: 'wiki_page', label: String(hit.title ?? '') }));
         return [...pages, ...extra];
     }
 
     // --- markdown ---
 
-    _openMarkdownPicker() {
+    private _openMarkdownPicker() {
         const input = this.renderRoot.querySelector('[data-wiki-markdown-input]');
         if (!(input instanceof HTMLInputElement)) {
             throw new Error('wiki-page-view: markdown file input missing');
@@ -767,9 +858,9 @@ export class WikiPageView extends PlatformPage {
         input.click();
     }
 
-    async _onMarkdownFileSelected(event) {
-        const input = event.target;
-        const file = input.files && input.files.length > 0 ? input.files[0] : null;
+    private async _onMarkdownFileSelected(event: Event): Promise<void> {
+        const input = event.target as HTMLInputElement;
+        const file = input.files && input.files.length > 0 ? input.files.item(0) : null;
         if (file === null) {
             return;
         }
@@ -781,7 +872,7 @@ export class WikiPageView extends PlatformPage {
      * спрашивается подтверждение: отменить импорт можно только через историю
      * версий, а это неочевидно.
      */
-    async _importMarkdownFile(file) {
+    private async _importMarkdownFile(file: File): Promise<void> {
         const markdown = await file.text();
         if (markdown.trim() === '') {
             this.toast('toast.markdown.empty_file', { type: 'warning' });
@@ -805,27 +896,28 @@ export class WikiPageView extends PlatformPage {
         if (result === null) {
             return;
         }
-        this._page = result.page;
+        this._page = (result as WikiImportResult).page ?? null;
         this._pendingContent = null;
         this._pendingTitle = null;
         this._saveState = SAVE_IDLE;
         void this._pages.load();
         this._refreshOutline();
-        if (Array.isArray(result.notices) && result.notices.length > 0) {
-            this.openModal('wiki.import_report', { notices: result.notices });
+        const notices = (result as WikiImportResult).notices;
+        if (Array.isArray(notices) && notices.length > 0) {
+            this.openModal('wiki.import_report', { notices });
         }
     }
 
     /** Есть ли на странице что-то, кроме единственного пустого абзаца. */
-    _hasContent() {
-        const content = this._page.content;
+    private _hasContent(): boolean {
+        const content = this._page?.content;
         if (!content || !Array.isArray(content.content)) {
             return false;
         }
         if (content.content.length !== 1) {
             return content.content.length > 1;
         }
-        const only = content.content[0];
+        const only = content.content[0]!;
         return only.type !== 'paragraph' || Array.isArray(only.content) && only.content.length > 0;
     }
 
@@ -833,7 +925,7 @@ export class WikiPageView extends PlatformPage {
      * Выгрузка идёт обычной ссылкой на роут файла: это не изменение состояния,
      * а браузеру нужны его же заголовки вложения.
      */
-    _downloadMarkdown() {
+    private _downloadMarkdown() {
         const anchor = document.createElement('a');
         anchor.href = `/wiki/api/v1/pages/${encodeURIComponent(this.pageId)}/markdown/file`;
         anchor.download = '';
@@ -841,16 +933,20 @@ export class WikiPageView extends PlatformPage {
     }
 
     /** Разбор markdown живёт на сервере; редактор получает только эту функцию. */
-    async _parseMarkdown(markdown) {
+    private async _parseMarkdown(markdown: string): Promise<unknown> {
         const result = await this._markdownParse.run({ markdown });
-        return result === null ? null : result.document;
+        return result === null ? null : (result as WikiParseResult).document;
     }
 
-    _onMarkdownFileDrop(event) {
-        void this._importMarkdownFile(event.detail.file);
+    private _onMarkdownFileDrop(event: CustomEvent<{ file?: File }>) {
+        const file = event.detail.file;
+        if (!(file instanceof File)) {
+            throw new Error('wiki-page-view: markdown-file-drop without File');
+        }
+        void this._importMarkdownFile(file);
     }
 
-    render() {
+    override render() {
         if (this._page === null) {
             return html`<div class="state">
                 ${this._read.busy
@@ -900,7 +996,7 @@ export class WikiPageView extends PlatformPage {
                                 aria-label=${this.t('page.title_placeholder')}
                                 placeholder=${this.t('page.title_placeholder')}
                                 .value=${this._page.title}
-                                @input=${this._onTitleInput}
+                                @input=${(event: Event) => this._onTitleInput(event)}
                             />
                         </div>
                         <div class="save-state" data-state=${this._saveState}>${this._saveLabel()}</div>
@@ -909,16 +1005,16 @@ export class WikiPageView extends PlatformPage {
                             .mentionProvider=${this._mentionProvider}
                             .markdownParser=${this._parseMarkdown}
                             placeholder=${this.t('editor.placeholder', null, 'platform')}
-                            @change=${this._onEditorChange}
-                            @markdown-file-drop=${this._onMarkdownFileDrop}
-                            @file-pick-requested=${this._onEditorFilePickRequested}
+                            @change=${(event: CustomEvent<{ content?: unknown }>) => this._onEditorChange(event)}
+                            @markdown-file-drop=${(event: CustomEvent<{ file?: File }>) => this._onMarkdownFileDrop(event)}
+                            @file-pick-requested=${(event: CustomEvent<{ kind?: string }>) => this._onEditorFilePickRequested(event)}
                         ></platform-rich-editor>
                         <input
                             type="file"
                             hidden
                             data-wiki-markdown-input
                             accept=".md,.markdown,text/markdown"
-                            @change=${this._onMarkdownFileSelected}
+                            @change=${(event: Event) => this._onMarkdownFileSelected(event)}
                         />
                     </div>
                 </div>
@@ -927,9 +1023,9 @@ export class WikiPageView extends PlatformPage {
                           page-id=${this.pageId}
                           tab=${this._panelTab}
                           .outline=${this._outline}
-                          @panel-close=${this._closePanel}
-                          @panel-tab-change=${this._onPanelTabChange}
-                          @outline-pick=${(event) => this._scrollToHeading(event.detail)}
+                          @panel-close=${() => this._closePanel()}
+                          @panel-tab-change=${(event: CustomEvent<{ tab?: string }>) => this._onPanelTabChange(event)}
+                          @outline-pick=${(event: CustomEvent<WikiOutlineEntry>) => this._scrollToHeading(event.detail)}
                           @revision-restored=${() => this._loadPage()}
                       ></wiki-page-panel>`
                     : nothing}
@@ -939,30 +1035,30 @@ export class WikiPageView extends PlatformPage {
         `;
     }
 
-    _saveLabel() {
+    private _saveLabel() {
         if (this._saveState === SAVE_PENDING) return this.t('page.saving');
         if (this._saveState === SAVE_DONE) return this.t('page.saved');
         if (this._saveState === SAVE_FAILED) return this.t('page.save_failed');
         return '';
     }
 
-    _renderTopbar() {
+    private _renderTopbar() {
         return html`
             <div class="topbar">
                 <platform-breadcrumbs
-                    current-label=${this._page.title === '' ? this.t('page.untitled') : this._page.title}
+                    current-label=${this._page!.title === '' ? this.t('page.untitled') : this._page!.title}
                     .trail=${this._breadcrumbTrail()}
                 ></platform-breadcrumbs>
                 <span class="spacer"></span>
                 ${this._renderEditedBy()}
-                <span>${this._page.is_published ? this.t('page.published') : this.t('page.draft')}</span>
+                <span>${this._page!.is_published ? this.t('page.published') : this.t('page.draft')}</span>
                 <platform-switch
                     class="full-width-switch"
                     size="sm"
                     data-wiki-full-width
-                    ?checked=${this._page.is_full_width === true}
+                    ?checked=${this._page!.is_full_width === true}
                     label=${this.t('page.full_width')}
-                    @change=${this._onFullWidthChange}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => this._onFullWidthChange(event)}
                 ></platform-switch>
                 <button
                     class="ghost-btn"
@@ -989,7 +1085,7 @@ export class WikiPageView extends PlatformPage {
                     type="button"
                     data-wiki-page-menu
                     aria-label=${this.t('tree_menu.open')}
-                    @click=${(event) => { this._menuAnchor = event.currentTarget; }}
+                    @click=${(event: Event) => { this._menuAnchor = event.currentTarget as HTMLElement; }}
                 >
                     <platform-icon name="more-vert" size="16"></platform-icon>
                 </button>
@@ -997,7 +1093,7 @@ export class WikiPageView extends PlatformPage {
         `;
     }
 
-    async _onFullWidthChange(event) {
+    private async _onFullWidthChange(event: CustomEvent<{ value?: unknown }>): Promise<void> {
         const detail = event.detail;
         if (detail === null || typeof detail !== 'object' || typeof detail.value !== 'boolean') {
             throw new Error('wiki-page-view: full width switch change without boolean value');
@@ -1008,7 +1104,7 @@ export class WikiPageView extends PlatformPage {
     }
 
     /** Автор последней правки — вход в историю версий: иначе её не видно. */
-    _renderEditedBy() {
+    private _renderEditedBy() {
         return html`
             <button
                 class="edited"
@@ -1018,8 +1114,8 @@ export class WikiPageView extends PlatformPage {
                 @click=${() => this._togglePanel('history')}
             >
                 <span>${this.t('page.edited_label')}</span>
-                <platform-user-chip user-id=${this._page.last_edited_by_user_id} size="sm"></platform-user-chip>
-                <span>${formatPlatformDateTime(new Date(this._page.updated_at), this._locale.value)}</span>
+                <platform-user-chip user-id=${this._page!.last_edited_by_user_id} size="sm"></platform-user-chip>
+                <span>${formatPlatformDateTime(new Date(this._page!.updated_at ?? ''), String(this._locale.value ?? ''))}</span>
             </button>
         `;
     }
@@ -1028,43 +1124,43 @@ export class WikiPageView extends PlatformPage {
      * Путь от корня пространства до текущей страницы: маршруты роутера
      * вложенность страниц не выражают, её знает только дерево.
      */
-    _breadcrumbTrail() {
-        const byId = new Map(this._pages.items.map((page) => [page.wiki_page_id, page]));
-        const chain = [];
-        let parentId = this._page.parent_page_id;
+    private _breadcrumbTrail() {
+        const byId = new Map<string, Record<string, unknown>>(this._pages.items.map((page: Record<string, unknown>) => [String(page.wiki_page_id ?? ''), page]));
+        const chain: Record<string, unknown>[] = [];
+        let parentId = this._page?.parent_page_id;
         while (typeof parentId === 'string' && parentId !== '' && !chain.some((page) => page.wiki_page_id === parentId)) {
             const parent = byId.get(parentId);
             if (parent === undefined) {
                 break;
             }
             chain.unshift(parent);
-            parentId = parent.parent_page_id;
+            parentId = typeof parent.parent_page_id === 'string' ? parent.parent_page_id : undefined;
         }
         return chain.map((page) => ({
-            label: page.title === '' ? this.t('page.untitled') : page.title,
+            label: page.title === '' ? this.t('page.untitled') : String(page.title ?? ''),
             routeKey: 'wiki_page',
-            params: { pageId: page.wiki_page_id },
+            params: { pageId: String(page.wiki_page_id ?? '') },
         }));
     }
 
-    _renderIcon() {
+    private _renderIcon() {
         return html`
             <button
                 class="icon-btn"
                 type="button"
                 data-wiki-icon
-                title=${this._page.icon === '' ? this.t('page.add_icon') : this.t('page.change_icon')}
-                aria-label=${this._page.icon === '' ? this.t('page.add_icon') : this.t('page.change_icon')}
-                @click=${(event) => { this._iconAnchor = event.currentTarget; }}
+                title=${this._page!.icon === '' ? this.t('page.add_icon') : this.t('page.change_icon')}
+                aria-label=${this._page!.icon === '' ? this.t('page.add_icon') : this.t('page.change_icon')}
+                @click=${(event: Event) => { this._iconAnchor = event.currentTarget as HTMLElement; }}
             >
-                ${this._page.icon === ''
+                ${this._page!.icon === ''
                     ? html`<platform-icon name="smile" size="48"></platform-icon>`
-                    : this._page.icon}
+                    : this._page!.icon}
             </button>
         `;
     }
 
-    _renderIconPopover() {
+    private _renderIconPopover() {
         return html`
             <platform-popover
                 trigger="manual"
@@ -1077,16 +1173,16 @@ export class WikiPageView extends PlatformPage {
             >
                 ${this._iconAnchor !== null
                     ? html`<platform-emoji-picker
-                          value=${this._page.icon}
-                          @emoji-select=${this._onIconSelect}
-                          @emoji-clear=${this._onIconClear}
+                          value=${this._page!.icon}
+                          @emoji-select=${(event: CustomEvent<{ emoji?: string }>) => this._onIconSelect(event)}
+                          @emoji-clear=${() => this._onIconClear()}
                       ></platform-emoji-picker>`
                     : nothing}
             </platform-popover>
         `;
     }
 
-    _renderPageMenu() {
+    private _renderPageMenu() {
         return html`
             <platform-popover
                 trigger="manual"
@@ -1101,18 +1197,18 @@ export class WikiPageView extends PlatformPage {
                     ? html`<platform-menu
                           compact
                           .items=${this._pageMenuItems()}
-                          @menu-select=${this._onPageMenuSelect}
+                          @menu-select=${(event: CustomEvent<{ id?: string }>) => this._onPageMenuSelect(event)}
                       ></platform-menu>`
                     : nothing}
             </platform-popover>
         `;
     }
 
-    _scrollToHeading(target) {
+    private _scrollToHeading(target: WikiOutlineEntry) {
         if (!target || typeof target !== 'object') {
             throw new Error('wiki-page-view: outline target required');
         }
-        const editor = this.renderRoot.querySelector('platform-rich-editor');
+        const editor = this.renderRoot.querySelector<PlatformRichEditor>('platform-rich-editor');
         if (!editor) {
             throw new Error('wiki-page-view: rich editor missing');
         }

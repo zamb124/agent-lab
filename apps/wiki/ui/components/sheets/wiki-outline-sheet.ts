@@ -17,7 +17,13 @@ export class WikiOutlineSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'wiki.outline';
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare pageId: string;
+    declare tab: string;
+    declare outline: { level: number; text: string; pos: number }[];
+    declare onPick: ((pos: number) => void) | null;
+    declare onTabChange: ((tab: string) => void) | null;
+
+    static override properties = {
         ...PlatformBottomSheet.properties,
         pageId: { attribute: false },
         /** Активная вкладка панели — та же, что на широком экране. */
@@ -30,7 +36,7 @@ export class WikiOutlineSheet extends PlatformBottomSheet {
         onTabChange: { attribute: false },
     };
 
-    static styles = [
+    static override styles = [
         PlatformBottomSheet.styles,
         css`
             wiki-page-panel {
@@ -49,20 +55,20 @@ export class WikiOutlineSheet extends PlatformBottomSheet {
         this.snap = 'half';
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this.heading = this.t('panel.title');
     }
 
-    _onPick(event) {
+    private _onPick(event: CustomEvent<number>) {
         if (typeof this.onPick !== 'function') {
             throw new Error('wiki-outline-sheet: требуется onPick');
         }
         this.onPick(event.detail);
-        this.close();
+        this._requestClose();
     }
 
-    _onTabChange(event) {
+    private _onTabChange(event: CustomEvent<{ tab: string }>) {
         if (typeof this.onTabChange !== 'function') {
             throw new Error('wiki-outline-sheet: требуется onTabChange');
         }
@@ -70,15 +76,15 @@ export class WikiOutlineSheet extends PlatformBottomSheet {
         this.onTabChange(this.tab);
     }
 
-    renderBody() {
+    override renderBody() {
         return html`
             <wiki-page-panel
                 embedded
                 page-id=${this.pageId}
                 tab=${this.tab}
                 .outline=${this.outline}
-                @outline-pick=${this._onPick}
-                @panel-tab-change=${this._onTabChange}
+                @outline-pick=${(event: CustomEvent<number>) => this._onPick(event)}
+                @panel-tab-change=${(event: CustomEvent<{ tab: string }>) => this._onTabChange(event)}
             ></wiki-page-panel>
         `;
     }

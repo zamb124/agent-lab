@@ -8,6 +8,8 @@
 
 import { html, css } from 'lit';
 import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import type { OpController, ResourceController } from '@platform/lib/base/use-resource.js';
+import type { ResourceItem } from '@platform/lib/events/factories/resource-collection.js';
 import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
 import { readShellSidebarCollapsed } from '@platform/lib/utils/shell-sidebar-preference.js';
 
@@ -139,11 +141,18 @@ export class WikiApp extends PlatformApp {
         platformFileCreateOp,
     ];
 
-    static properties = {
-        _treeCollapsed: { state: true },
-    };
+    declare _treeCollapsed: boolean;
+    private _search: OpController;
+    private _pages: ResourceController;
 
-    static styles = [
+    static override get properties() {
+        return {
+            ...PlatformApp.properties,
+            _treeCollapsed: { state: true },
+        };
+    }
+
+    static override styles = [
         PlatformApp.styles,
         css`
             :host {
@@ -208,24 +217,21 @@ export class WikiApp extends PlatformApp {
         this._search = this.useOp('wiki/search');
         this._pages = this.useResource('wiki/pages');
         this._treeCollapsed = readShellSidebarCollapsed();
-        this._onPaletteSelect = this._onPaletteSelect.bind(this);
-        this._paletteProvider = this._paletteProvider.bind(this);
-        this._onSidebarCollapseChange = this._onSidebarCollapseChange.bind(this);
     }
 
-    getBaseUrl() { return '/wiki'; }
+    override getBaseUrl() { return '/wiki'; }
 
-    getRoutes() { return []; }
+    override getRoutes() { return []; }
 
-    getServiceEffects() {
+    override getServiceEffects() {
         return [createRouterEffect({ baseUrl: '/wiki', routes: WIKI_ROUTES })];
     }
 
-    shouldRenderPlatformAssistant(routeKey) {
-        return !PUBLIC_ROUTE_KEYS.includes(routeKey);
+    override shouldRenderPlatformAssistant(routeKey: string | null) {
+        return !PUBLIC_ROUTE_KEYS.includes(routeKey ?? '');
     }
 
-    getPlatformAssistantContextVariables(routeKey, params) {
+    override async getPlatformAssistantContextVariables(routeKey: string | null, params: Record<string, string>) {
         return {
             wiki_route: routeKey,
             wiki_page_id: typeof params.pageId === 'string' ? params.pageId : '',
@@ -233,36 +239,37 @@ export class WikiApp extends PlatformApp {
     }
 
     /** Быстрый переход по Cmd+K: страницы дерева плюс переход к поиску. */
-    async _paletteProvider(query) {
+    /** Быстрый переход по Cmd+K: страницы дерева плюс переход к поиску. */
+    private _paletteProvider = async (query: string) => {
         const trimmed = query.trim();
         if (trimmed === '') {
-            return this._pages.items.slice(0, 12).map((page) => ({
-                id: page.wiki_page_id,
+            return this._pages.items.slice(0, 12).map((page: ResourceItem) => ({
+                id: String(page.wiki_page_id ?? ''),
                 label: page.title,
                 icon: 'file',
                 group: this.t('palette.recent'),
             }));
         }
-        const result = await this._search.run({ query: trimmed, mode: 'auto', limit: 12 });
+        const result = await this._search.run({ query: trimmed, mode: 'auto', limit: 12 }) as { items?: unknown } | null;
         if (!result || typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('wiki search: result.items required');
         }
-        const items = result.items;
+        const items = result.items as { wiki_page_id?: unknown; title?: unknown; snippet?: unknown }[];
         return items.map((item) => ({
-            id: item.wiki_page_id,
+            id: String(item.wiki_page_id ?? ''),
             label: item.title,
             description: item.snippet,
             icon: 'file',
             group: this.t('palette.pages'),
         }));
-    }
+    };
 
-    _onPaletteSelect(event) {
-        this.navigate('wiki_page', { pageId: event.detail.id });
+    private _onPaletteSelect(event: CustomEvent<{ id?: unknown }>) {
+        this.navigate('wiki_page', { pageId: String(event.detail.id ?? '') });
     }
 
     /** Свёрнутое дерево отдаёт свою ширину странице: split сжимается до полосы с логотипом. */
-    _onSidebarCollapseChange(event) {
+    private _onSidebarCollapseChange(event: CustomEvent<{ collapsed?: unknown }>) {
         const collapsed = event.detail.collapsed;
         if (typeof collapsed !== 'boolean') {
             throw new Error('wiki-app: collapse-change ожидает detail.collapsed boolean');
@@ -270,8 +277,8 @@ export class WikiApp extends PlatformApp {
         this._treeCollapsed = collapsed;
     }
 
-    renderRoute(routeKey, params) {
-        if (PUBLIC_ROUTE_KEYS.includes(routeKey)) {
+    override renderRoute(routeKey: string | null, params: Record<string, string>) {
+        if (PUBLIC_ROUTE_KEYS.includes(String(routeKey ?? ''))) {
             const publicPageId = typeof params.pageId === 'string' ? params.pageId : '';
             return html`
                 <div class="public">
@@ -296,7 +303,7 @@ export class WikiApp extends PlatformApp {
                 <div class="sidebar" slot="side">
                     <wiki-sidebar
                         active-page-id=${pageId}
-                        @collapse-change=${this._onSidebarCollapseChange}
+                        @collapse-change=${(event: CustomEvent<{ collapsed?: unknown }>) => this._onSidebarCollapseChange(event)}
                     ></wiki-sidebar>
                 </div>
                 <div class="main">
@@ -307,13 +314,13 @@ export class WikiApp extends PlatformApp {
             </platform-resizable-split>
             <platform-command-palette
                 .provider=${this._paletteProvider}
-                @palette-select=${this._onPaletteSelect}
+                @palette-select=${(event: CustomEvent<{ id?: unknown }>) => this._onPaletteSelect(event)}
             ></platform-command-palette>
             <wiki-tree-sheet active-page-id=${pageId}></wiki-tree-sheet>
         `;
     }
 
-    _renderPage(routeKey, params) {
+    private _renderPage(routeKey: string | null, params: Record<string, string>) {
         switch (routeKey) {
             case 'wiki_page':
                 return html`<wiki-page-view page-id=${params.pageId}></wiki-page-view>`;

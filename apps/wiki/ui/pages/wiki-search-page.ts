@@ -8,6 +8,14 @@
 
 import { html, css } from 'lit';
 import { PlatformPage } from '@platform/lib/base/PlatformPage.js';
+import type { OpController } from '@platform/lib/base/use-resource.js';
+
+interface WikiSearchHit {
+    wiki_page_id?: unknown;
+    title?: unknown;
+    snippet?: unknown;
+    [key: string]: unknown;
+}
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-icon.js';
 import '@platform/lib/components/platform-segmented-control.js';
@@ -20,13 +28,20 @@ const RESULT_LIMIT = 30;
 export class WikiSearchPage extends PlatformPage {
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare _query: string;
+    declare _mode: string;
+    declare _items: WikiSearchHit[];
+    private _timer: number | null;
+    private _seq: number;
+    private _search: OpController;
+
+    static override properties = {
         _query: { state: true },
         _mode: { state: true },
         _items: { state: true },
     };
 
-    static styles = [
+    static override styles = [
         PlatformPage.styles,
         css`
             :host {
@@ -128,7 +143,7 @@ export class WikiSearchPage extends PlatformPage {
         this._search = this.useOp('wiki/search');
     }
 
-    disconnectedCallback() {
+    override disconnectedCallback() {
         super.disconnectedCallback();
         if (this._timer !== null) {
             clearTimeout(this._timer);
@@ -136,17 +151,17 @@ export class WikiSearchPage extends PlatformPage {
         }
     }
 
-    _onInput(event) {
-        this._query = event.target.value;
+    private _onInput(event: Event) {
+        this._query = (event.target as HTMLInputElement).value;
         this._schedule();
     }
 
-    _onModeChange(event) {
-        this._mode = event.detail.value;
+    private _onModeChange(event: CustomEvent<{ value?: unknown }>) {
+        this._mode = String(event.detail.value ?? '');
         this._schedule();
     }
 
-    _schedule() {
+    private _schedule() {
         if (this._timer !== null) {
             clearTimeout(this._timer);
         }
@@ -156,7 +171,7 @@ export class WikiSearchPage extends PlatformPage {
         }, SEARCH_DEBOUNCE_MS);
     }
 
-    async _run() {
+    private async _run(): Promise<void> {
         const query = this._query.trim();
         if (query === '') {
             this._items = [];
@@ -164,7 +179,7 @@ export class WikiSearchPage extends PlatformPage {
         }
         this._seq += 1;
         const seq = this._seq;
-        const result = await this._search.run({ query, mode: this._mode, limit: RESULT_LIMIT });
+        const result = await this._search.run({ query, mode: this._mode, limit: RESULT_LIMIT }) as { items?: unknown } | null;
         // Ответ на прошлый префикс не должен подменять текущую выдачу.
         if (seq !== this._seq) {
             return;
@@ -176,17 +191,17 @@ export class WikiSearchPage extends PlatformPage {
         if (typeof result !== 'object' || !Array.isArray(result.items)) {
             throw new Error('wiki search: result.items required');
         }
-        this._items = result.items;
+        this._items = result.items as WikiSearchHit[];
     }
 
-    _modeOptions() {
+    private _modeOptions() {
         return [
             { value: MODE_LEXICAL, label: this.t('search.mode_lexical') },
             { value: MODE_SEMANTIC, label: this.t('search.mode_semantic') },
         ];
     }
 
-    render() {
+    override render() {
         return html`
             <div class="wrap">
                 <h1 class="title">${this.t('search.title')}</h1>
@@ -201,14 +216,14 @@ export class WikiSearchPage extends PlatformPage {
                         aria-label=${this.t('search.placeholder')}
                         placeholder=${this.t('search.placeholder')}
                         .value=${this._query}
-                        @input=${this._onInput}
+                        @input=${(event: Event) => this._onInput(event)}
                     />
                 </div>
                 <platform-segmented-control
                     density="compact"
                     .value=${this._mode}
                     .options=${this._modeOptions()}
-                    @change=${this._onModeChange}
+                    @change=${(event: CustomEvent<{ value?: unknown }>) => this._onModeChange(event)}
                 ></platform-segmented-control>
 
                 ${this._renderResults()}
@@ -216,7 +231,7 @@ export class WikiSearchPage extends PlatformPage {
         `;
     }
 
-    _renderResults() {
+    private _renderResults() {
         if (this._query.trim() === '') {
             return html`<div class="state">${this.t('search.hint')}</div>`;
         }
@@ -233,7 +248,7 @@ export class WikiSearchPage extends PlatformPage {
                     class="hit"
                     type="button"
                     data-wiki-hit=${hit.wiki_page_id}
-                    @click=${() => this.navigate('wiki_page', { pageId: hit.wiki_page_id })}
+                    @click=${() => this.navigate('wiki_page', { pageId: String(hit.wiki_page_id ?? '') })}
                 >
                     <div class="hit-title">${hit.title === '' ? this.t('page.untitled') : hit.title}</div>
                     ${hit.snippet === '' ? '' : html`<div class="hit-snippet">${hit.snippet}</div>`}

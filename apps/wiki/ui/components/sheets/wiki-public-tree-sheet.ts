@@ -16,7 +16,11 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
     static bottomSheetKind = 'wiki.public_tree';
     static i18nNamespace = 'wiki';
 
-    static properties = {
+    declare nodes: Record<string, unknown>[];
+    declare selectedId: string;
+    declare onSelect: ((wikiPageId: string) => void) | null;
+
+    static override properties = {
         ...PlatformBottomSheet.properties,
         /** Узлы `platform-tree`, собранные страницей сайта. */
         nodes: { attribute: false },
@@ -25,7 +29,7 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
         onSelect: { attribute: false },
     };
 
-    static styles = [
+    static override styles = [
         PlatformBottomSheet.styles,
         css`
             platform-tree {
@@ -49,20 +53,20 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
         this.snap = 'full';
     }
 
-    connectedCallback() {
+    override connectedCallback() {
         super.connectedCallback();
         this.heading = this.t('public.site_nav');
     }
 
-    _onSelect(event) {
+    private _onSelect(event: CustomEvent<{ id?: unknown }>) {
         if (typeof this.onSelect !== 'function') {
             throw new Error('wiki-public-tree-sheet: требуется onSelect');
         }
-        this.onSelect(event.detail.id);
-        this.close();
+        this.onSelect(String(event.detail.id ?? ''));
+        this._requestClose();
     }
 
-    renderBody() {
+    override renderBody() {
         if (this.nodes.length === 0) {
             return html`<div class="empty">${this.t('sidebar.empty')}</div>`;
         }
@@ -71,7 +75,7 @@ export class WikiPublicTreeSheet extends PlatformBottomSheet {
                 .nodes=${this.nodes}
                 selected-id=${this.selectedId}
                 aria-label=${this.t('public.site_nav')}
-                @tree-select=${this._onSelect}
+                @tree-select=${(event: CustomEvent<{ id?: unknown }>) => this._onSelect(event)}
             ></platform-tree>
         `;
     }
