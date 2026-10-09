@@ -1,0 +1,526 @@
+/**
+ * CRMApp — корневой компонент сервиса CRM на event-driven канон.
+ *
+ * Маршрутизация — через core router.effect. CRM-сервис отдаёт SPA на путях
+ * `/crm`, `/crm/<route>`, поэтому router-effect собирается с `baseUrl: '/crm'`.
+ */
+
+import { html, css } from 'lit';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { createRouterEffect } from '@platform/lib/events/effects/router.effect.js';
+
+import {
+    namespacesResource,
+    namespaceUpdateOp,
+    namespaceEditabilityOp,
+    namespaceCreateForm,
+    namespaceEditForm,
+} from '../events/resources/namespaces.resource.js';
+import {
+    namespaceIntegrationsListOp,
+    namespaceIntegrationAuthorizeOp,
+    namespaceIntegrationEntitiesSyncOp,
+    namespaceIntegrationAutoSyncOp,
+    namespaceIntegrationAutoNoteAiOp,
+    namespaceIntegrationCustomFieldsSyncOp,
+} from '../events/resources/namespace-integrations.resource.js';
+import {
+    templatesResource,
+    templateUpdateOp,
+    templateSchemaOptionsOp,
+    templateTypeUpsertOp,
+    templateTypeDeleteOp,
+} from '../events/resources/templates.resource.js';
+import {
+    entityTypesResource,
+    entityTypeUpdateOp,
+    entityTypePublicFieldsOp,
+} from '../events/resources/entity-types.resource.js';
+import { relationshipTypesResource } from '../events/resources/relationship-types.resource.js';
+import {
+    entitiesResource,
+    entityCardOp,
+    entityUpdateOp,
+    entitiesListResource,
+    entityMergeOp,
+    entityBulkDeleteOp,
+    entityBulkUpdateOp,
+    entityAggregateOp,
+    entitySearchOp,
+    entitiesLookupOp,
+    entityCreateForm,
+    entityEditForm,
+} from '../events/resources/entities.resource.js';
+import {
+    notesListResource,
+    noteLatestRangeOp,
+    noteAnalysisDraftDiscardOp,
+    noteAnalysisDraftRepairOp,
+    noteAnalysisDraftSaveOp,
+    noteAnalysisErrorDismissOp,
+    noteAnalyzeStartOp,
+    noteMarkdownFormatOp,
+    noteSearchOp,
+    entityCardsBulkOp,
+} from '../events/resources/notes.resource.js';
+import {
+    dailySummaryOp,
+    periodSummaryOp,
+} from '../events/resources/summaries.resource.js';
+import {
+    relationshipsResource,
+    relationshipsListResource,
+} from '../events/resources/relationships.resource.js';
+import {
+    tasksResource,
+    taskGetOp,
+    taskCreatedEntitiesOp,
+    taskKnowledgeImportStartOp,
+    taskDailySummaryStartOp,
+    taskPeriodSummaryStartOp,
+    taskReviewCompleteOp,
+    taskCancelOp,
+    taskRollbackOp,
+    taskRetryOp,
+} from '../events/resources/tasks.resource.js';
+import {
+    activityTaskCreateOp,
+    activityTasksListOp,
+    activityTaskCreateForm,
+} from '../events/resources/activity-tasks.resource.js';
+import {
+    suggestsListOp,
+    suggestResolveOp,
+    suggestDismissOp,
+} from '../events/resources/suggests.resource.js';
+import {
+    grantsListOp,
+    grantCreateOp,
+    grantItemOp,
+    grantRevokeOp,
+} from '../events/resources/grants.resource.js';
+import { accessRequestsResource, accessRequestUpdateOp } from '../events/resources/access-requests.resource.js';
+import { teamSearchFacets } from '../events/resources/team-search.resource.js';
+import {
+    overviewGraphOp,
+    influenceGraphOp,
+    relatedEntitiesOp,
+    entityRelationshipsOp,
+    exclusiveRelatedOp,
+    shortestPathOp,
+    timelineBoundsOp,
+    personEntitySelfOp,
+} from '../events/resources/graph.resource.js';
+import { laraSummaryOp } from '../events/resources/namespace-summary.resource.js';
+import {
+    attachmentsListOp,
+    attachmentUploadOp,
+    attachmentDeleteOp,
+} from '../events/resources/attachments.resource.js';
+import { platformFileCreateOp } from '@platform/lib/events/factories/platform-file-create.js';
+
+import '../components/crm-sidebar.js';
+import '../components/sheets/crm-workspace-picker-sheet.js';
+import '../pages/settings-hub-page.js';
+import '../pages/daily-notes-page.js';
+import '../pages/entities-page.js';
+import '../pages/tasks-page.js';
+import '../pages/graph-page.js';
+import '../pages/suggests-page.js';
+import '../pages/templates-page.js';
+import '../pages/namespace-tasks-page.js';
+import '../pages/relationship-types-page.js';
+import '../pages/note-page.js';
+import '../pages/entity-detail-page.js';
+import '../pages/entity-create-page.js';
+import '../pages/access-requests-page.js';
+import '../pages/namespaces-page.js';
+import '../pages/namespace-detail-page.js';
+import '../pages/namespace-integrations-page.js';
+
+import '../modals/namespace-modal.js';
+import '../modals/share-modal.js';
+import '../modals/access-request-modal.js';
+import '../modals/ai-analysis-modal.js';
+import '../modals/entity-merge-modal.js';
+import '../modals/note-graph-modal.js';
+import '../modals/entity-delete-modal.js';
+import '../modals/knowledge-import-modal.js';
+import '../modals/entity-type-create-mode-modal.js';
+import '../modals/entity-type-preset-picker-modal.js';
+import '../modals/activity-task-create-modal.js';
+
+import { graphUiSlice } from '../events/resources/graph-ui.resource.js';
+import { graphViewSlice } from '../events/resources/graph-view.resource.js';
+import { dailyNotesUiSlice } from '../events/resources/daily-notes-ui.resource.js';
+import { noteComposeSlice } from '../events/resources/note-compose.resource.js';
+import { createCrmPersistEffect } from '../events/crm-persist.effect.js';
+import { createCrmGraphLegacyRoutesEffect } from '../events/crm-graph-legacy-routes.effect.js';
+import { applyCompanyHostRedirectIfNeeded } from '@platform/lib/utils/company-host-guard.js';
+import type { CompanyListEntry } from '@platform/lib/utils/company-host-guard.js';
+import { getPlatformBus } from '@platform/lib/events/bus-singleton.js';
+import { CoreEvents } from '@platform/lib/events/contract.js';
+import {
+    getActivePlatformNamespaceName,
+    getPlatformNamespaceSidebarSelection,
+} from '@platform/lib/utils/platform-namespace.js';
+import { COMPANIES_EVENTS } from '@platform/lib/events/reducers/companies.js';
+
+import '@platform/lib/components/layout/platform-island.js';
+import type {
+    CSSResultGroup,
+    PropertyValues,
+    TemplateResult,
+} from 'lit';
+import type {
+    OpController,
+} from '@platform/lib/base/use-resource.js';
+import type { SelectController } from '@platform/lib/events/select-controller.js';
+
+const CRM_ROUTES = [
+    { key: 'notes',               path: '',                 titleKey: 'routes.notes' },
+    { key: 'platform_services',   path: 'services',         parent: 'notes', titleKey: 'routes.platform_services' },
+    { key: 'settings',            path: 'settings',         titleKey: 'routes.settings' },
+    { key: 'notes',               path: 'notes',            titleKey: 'routes.notes' },
+    { key: 'note',                path: 'notes/:itemId',    parent: 'notes', titleKey: 'routes.note' },
+    { key: 'entities',            path: 'entities',         titleKey: 'routes.entities' },
+    { key: 'entity_new',          path: 'entities/new',     parent: 'entities', titleKey: 'routes.entity_new' },
+    { key: 'entity',              path: 'entities/:itemId', parent: 'entities', titleKey: 'routes.entity' },
+    { key: 'tasks',               path: 'tasks',            titleKey: 'routes.tasks' },
+    { key: 'task',                path: 'tasks/:workItemId', parent: 'tasks', titleKey: 'routes.task' },
+    { key: 'graph',               path: 'graph',            titleKey: 'routes.graph' },
+    { key: 'suggests',            path: 'suggests',         titleKey: 'routes.suggests' },
+    { key: 'access_requests',     path: 'access-requests',  titleKey: 'routes.access_requests' },
+    { key: 'namespaces',              path: 'namespaces',           parent: 'settings', titleKey: 'routes.namespaces' },
+    { key: 'namespace',               path: 'namespaces/:itemId',   parent: 'namespaces', titleKey: 'routes.namespace' },
+    { key: 'namespace_integrations',  path: 'namespaces/:itemId/integrations', parent: 'namespace', titleKey: 'routes.namespace_integrations' },
+    { key: 'templates',           path: 'templates',        parent: 'settings', titleKey: 'routes.templates' },
+    { key: 'namespace_imports',   path: 'namespace_imports', parent: 'settings', titleKey: 'routes.namespace_imports' },
+    { key: 'relationship_types',  path: 'relationship_types', parent: 'settings', titleKey: 'routes.relationship_types' },
+];
+
+/**
+ * Нижняя навигация (mobile shell 2026): 4 первичных вкладки сервиса + профиль (service-switcher).
+ * Видна только на ≤767px. На fullscreen-маршрутах (нет таких в CRM сегодня) скрывается через bottomNavHideOnRoutes.
+ */
+const CRM_BOTTOM_NAV_ITEMS = [
+    { key: 'notes',    routeKey: 'notes',    icon: 'note',         labelKey: 'bottom_nav.notes' },
+    { key: 'tasks',    routeKey: 'tasks',    icon: 'checklist',    labelKey: 'bottom_nav.tasks' },
+    { key: 'graph',    routeKey: 'graph',    icon: 'share',        labelKey: 'bottom_nav.graph' },
+    { key: 'profile',  sheet: 'platform.service_switcher', icon: 'user', labelKey: 'bottom_nav.profile' },
+];
+
+export class CRMApp extends PlatformApp {
+    static defaultI18nNamespace = 'crm';
+    static bottomNavItems = CRM_BOTTOM_NAV_ITEMS;
+    static bottomNavHideOnRoutes = [];
+    static platformAssistant = {
+        serviceId: 'crm',
+        branchId: 'crm',
+        showLauncher: true,
+    };
+
+    private _companiesListSel: SelectController<Record<string, any> | undefined>;
+    private _companiesLoadingSel: SelectController<Record<string, any> | undefined>;
+    private _laraActiveCompanySel: SelectController<string | null>;
+    private _laraSummary: OpController;
+    private _crmMql: MediaQueryList | null;
+    private _onCrmMobileMql: (() => void) | null;
+    private _crmMobile: boolean;
+
+    constructor() {
+        super();
+        this._companiesListSel = this.select((s: Record<string, any>) => s.companies.list);
+        this._companiesLoadingSel = this.select((s: Record<string, any>) => s.companies.loading);
+        this._laraActiveCompanySel = this.select((s: Record<string, any>) => s.auth.activeCompanyId);
+        this._laraSummary = this.useOp('crm/lara_summary');
+        this._crmMql = null;
+        this._onCrmMobileMql = null;
+        this._crmMobile =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    override async connectedCallback(): Promise<void> {
+        await super.connectedCallback();
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+            return;
+        }
+        this._crmMql = window.matchMedia('(max-width: 767px)');
+        this._onCrmMobileMql = () => {
+            const next = this._crmMql!.matches;
+            if (next !== this._crmMobile) {
+                this._crmMobile = next;
+                this.requestUpdate();
+            }
+        };
+        this._crmMql.addEventListener('change', this._onCrmMobileMql);
+        const next = this._crmMql.matches;
+        if (next !== this._crmMobile) {
+            this._crmMobile = next;
+            this.requestUpdate();
+        }
+    }
+
+    override disconnectedCallback(): void {
+        if (this._crmMql && this._onCrmMobileMql) {
+            this._crmMql.removeEventListener('change', this._onCrmMobileMql);
+        }
+        super.disconnectedCallback();
+    }
+
+    static factories = [
+        namespacesResource,
+        namespaceUpdateOp,
+        namespaceEditabilityOp,
+        namespaceCreateForm,
+        namespaceEditForm,
+        namespaceIntegrationsListOp,
+        namespaceIntegrationAuthorizeOp,
+        namespaceIntegrationEntitiesSyncOp,
+        namespaceIntegrationAutoSyncOp,
+        namespaceIntegrationAutoNoteAiOp,
+        namespaceIntegrationCustomFieldsSyncOp,
+        templatesResource,
+        templateUpdateOp,
+        templateSchemaOptionsOp,
+        templateTypeUpsertOp,
+        templateTypeDeleteOp,
+        entityTypesResource,
+        entityTypeUpdateOp,
+        entityTypePublicFieldsOp,
+        relationshipTypesResource,
+        entitiesResource,
+        entityCardOp,
+        entityUpdateOp,
+        entitiesListResource,
+        entityMergeOp,
+        entityBulkDeleteOp,
+        entityBulkUpdateOp,
+        entityAggregateOp,
+        entitySearchOp,
+        entitiesLookupOp,
+        entityCreateForm,
+        entityEditForm,
+        notesListResource,
+        noteLatestRangeOp,
+        noteAnalysisDraftSaveOp,
+        noteAnalysisDraftDiscardOp,
+        noteAnalysisErrorDismissOp,
+        noteAnalysisDraftRepairOp,
+        noteAnalyzeStartOp,
+        noteMarkdownFormatOp,
+        noteSearchOp,
+        entityCardsBulkOp,
+        dailySummaryOp,
+        periodSummaryOp,
+        relationshipsResource,
+        relationshipsListResource,
+        tasksResource,
+        activityTaskCreateOp,
+        activityTasksListOp,
+        activityTaskCreateForm,
+        taskGetOp,
+        taskCreatedEntitiesOp,
+        taskKnowledgeImportStartOp,
+        taskDailySummaryStartOp,
+        taskPeriodSummaryStartOp,
+        taskReviewCompleteOp,
+        taskCancelOp,
+        taskRollbackOp,
+        taskRetryOp,
+        suggestsListOp,
+        suggestResolveOp,
+        suggestDismissOp,
+        grantsListOp,
+        grantCreateOp,
+        grantItemOp,
+        grantRevokeOp,
+        accessRequestsResource,
+        accessRequestUpdateOp,
+        teamSearchFacets,
+        overviewGraphOp,
+        influenceGraphOp,
+        relatedEntitiesOp,
+        entityRelationshipsOp,
+        exclusiveRelatedOp,
+        shortestPathOp,
+        timelineBoundsOp,
+        personEntitySelfOp,
+        laraSummaryOp,
+        attachmentsListOp,
+        attachmentUploadOp,
+        attachmentDeleteOp,
+        platformFileCreateOp,
+        graphUiSlice,
+        graphViewSlice,
+        dailyNotesUiSlice,
+        noteComposeSlice,
+    ];
+
+    static override styles: CSSResultGroup = [
+        PlatformApp.styles,
+        css`
+            :host {
+                display: flex;
+                flex-direction: row;
+                width: var(--app-vw, 100vw);
+                height: var(--app-vh, 100vh);
+                overflow: hidden;
+                background: var(--bg-gradient);
+            }
+            .sidebar {
+                height: var(--app-vh, 100vh);
+                flex-shrink: 0;
+                background: transparent;
+            }
+            .main {
+                flex: 1;
+                min-width: 0;
+                height: var(--app-vh, 100vh);
+                display: flex;
+                flex-direction: column;
+                padding: var(--space-4);
+                overflow: hidden;
+            }
+            platform-island {
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+            }
+            @media (max-width: 767px) {
+                .main { padding: 0; }
+                .sidebar { position: absolute; width: 0; height: 0; overflow: visible; }
+            }
+        `,
+    ];
+
+    override getBaseUrl() { return '/crm'; }
+
+    override getRoutes() { return []; }
+
+    override getServiceEffects() {
+        return [
+            createRouterEffect({ baseUrl: '/crm', routes: CRM_ROUTES }),
+            createCrmGraphLegacyRoutesEffect(),
+            createCrmPersistEffect(),
+        ];
+    }
+
+    override updated(changed: PropertyValues<this>): void {
+        super.updated(changed);
+        const auth = this._authSelect.value;
+        applyCompanyHostRedirectIfNeeded(
+            auth,
+            (this._companiesListSel.value ?? []) as ReadonlyArray<CompanyListEntry>,
+            Boolean(this._companiesLoadingSel.value),
+            { loadCompanies: () => this.dispatch(COMPANIES_EVENTS.LOAD_REQUESTED, null) },
+        );
+        this._hydrateCrmNamespaceSelection(auth);
+    }
+
+    /**
+     * Сайдбар читает выбор из localStorage сразу; state.ui.namespace заполняется здесь.
+     * Страницы с **`CRMNamespacePage`** берут фильтр через **`selectCrmApiNamespace`** (тот же
+     * тот же источник), чтобы первый запрос после F5 совпадал с сайдбаром.
+     */
+    _hydrateCrmNamespaceSelection(auth: { status: string; user: { company_id?: unknown } | null } | null | undefined) {
+        if (!auth || auth.status !== 'authenticated' || !auth.user) {
+            return;
+        }
+        const cid: unknown = auth.user.company_id;
+        if (typeof cid !== 'string' || cid.trim().length === 0) {
+            return;
+        }
+        const trimmed = cid.trim();
+        const bus = getPlatformBus();
+        const map = (bus.getState() as { ui?: { namespace?: { selectionByCompany?: unknown } } }).ui?.namespace?.selectionByCompany;
+        if (map != null && typeof map === 'object' && Object.prototype.hasOwnProperty.call(map, trimmed)) {
+            return;
+        }
+        const selection = getPlatformNamespaceSidebarSelection(trimmed);
+        this.dispatch(
+            CoreEvents.UI_NAMESPACE_CHANGED,
+            { company_id: trimmed, selection },
+            { source: 'local' },
+        );
+    }
+
+    override async getPlatformAssistantContextVariables(routeKey: string, params: Record<string, string>): Promise<Record<string, unknown>> {
+        const companyId = this._laraActiveCompanySel.value;
+        if (typeof companyId !== 'string' || companyId.trim() === '') {
+            throw new Error('CRM Lara context requires active company_id');
+        }
+        const namespace = getActivePlatformNamespaceName(companyId.trim());
+        const summary = await this._laraSummary.run({ namespace });
+        if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+            throw new Error('CRM Lara summary request failed');
+        }
+        const s = summary as Record<string, unknown>;
+        const context = {
+            namespace,
+            crm_knowledge_imports_awaiting_review: s.knowledge_imports_awaiting_review,
+            crm_knowledge_imports_in_progress: s.knowledge_imports_in_progress,
+            crm_notes_analysis_draft_not_applied: s.notes_with_analysis_draft_not_applied,
+            crm_lara_summary_json: JSON.stringify(summary),
+        };
+        if (routeKey === 'note' && typeof params.itemId === 'string' && params.itemId !== '') {
+            return { ...context, note_id: params.itemId };
+        }
+        if (routeKey === 'entity' && typeof params.itemId === 'string' && params.itemId !== '') {
+            return { ...context, entity_id: params.itemId };
+        }
+        if (
+            (routeKey === 'namespace' || routeKey === 'namespace_integrations')
+            && typeof params.itemId === 'string'
+            && params.itemId !== ''
+        ) {
+            return { ...context, namespace_id: params.itemId };
+        }
+        return context;
+    }
+
+    override renderRoute(routeKey: string | null, params: Record<string, string>): TemplateResult {
+        let content;
+        switch (routeKey) {
+            case 'platform_services':
+                content = html`<platform-services-page></platform-services-page>`;
+                break;
+            case 'settings':            content = html`<crm-settings-hub-page></crm-settings-hub-page>`; break;
+            case 'notes':               content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
+            case 'note':                content = html`<crm-note-page .noteId=${params.itemId}></crm-note-page>`; break;
+            case 'entities':            content = html`<crm-entities-page></crm-entities-page>`; break;
+            case 'entity_new':         content = html`<crm-entity-create-page></crm-entity-create-page>`; break;
+            case 'entity':              content = html`<crm-entity-detail-page .itemId=${params.itemId}></crm-entity-detail-page>`; break;
+            case 'tasks':               content = html`<crm-tasks-page></crm-tasks-page>`; break;
+            case 'task':                content = html`<crm-tasks-page></crm-tasks-page>`; break;
+            case 'graph':               content = html`<crm-graph-page></crm-graph-page>`; break;
+            case 'suggests':            content = html`<crm-suggests-page></crm-suggests-page>`; break;
+            case 'access_requests':     content = html`<crm-access-requests-page></crm-access-requests-page>`; break;
+            case 'namespaces':              content = html`<crm-namespaces-page></crm-namespaces-page>`; break;
+            case 'namespace':               content = html`<crm-namespace-detail-page .itemId=${params.itemId}></crm-namespace-detail-page>`; break;
+            case 'namespace_integrations':  content = html`<crm-namespace-integrations-page .itemId=${params.itemId}></crm-namespace-integrations-page>`; break;
+            case 'templates':           content = html`<crm-templates-page></crm-templates-page>`; break;
+            case 'namespace_imports':   content = html`<crm-namespace-tasks-page></crm-namespace-tasks-page>`; break;
+            case 'relationship_types':  content = html`<crm-relationship-types-page></crm-relationship-types-page>`; break;
+            default:                    content = html`<crm-daily-notes-page></crm-daily-notes-page>`; break;
+        }
+        const mobileIslandFullBleed = this._crmMobile;
+        const graphIslandFullBleed = routeKey === 'graph';
+        const islandPadding = mobileIslandFullBleed || graphIslandFullBleed ? 'none' : 'md';
+        const islandContentNoScroll = graphIslandFullBleed || routeKey === 'entities' || routeKey === 'entity' || routeKey === 'tasks' || routeKey === 'task';
+        return html`
+            <div class="sidebar"><crm-sidebar></crm-sidebar></div>
+            <div class="main">
+                <platform-island
+                    padding=${islandPadding}
+                    ?safe-bottom=${mobileIslandFullBleed}
+                    ?content-no-scroll=${islandContentNoScroll}
+                >${content}</platform-island>
+            </div>
+        `;
+    }
+}
+
+customElements.define('crm-app', CRMApp);

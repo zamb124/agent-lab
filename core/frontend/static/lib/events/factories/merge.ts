@@ -55,11 +55,11 @@ export function removeItem<S extends CollectionStateLike>(state: S, id: unknown,
     return { ...state, items: state.items.filter((existing) => !existing || existing[idField] !== id), byId } as S;
 }
 
-export function rerunLastRequest(ctx: EffectCtx<Record<string, OpSliceLike>>, op: AsyncOpFactoryLike, { when }: { when?: (payload: unknown) => boolean } = {}): boolean {
+export function rerunLastRequest(ctx: EffectCtx, op: AsyncOpFactoryLike, { when }: { when?: (payload: unknown) => boolean } = {}): boolean {
     if (!op || op.kind !== 'async-op') {
         throw new Error('rerunLastRequest: async-op factory required');
     }
-    const slice = ctx.getState()[op.sliceKey];
+    const slice = (ctx.getState() as Record<string, OpSliceLike | undefined>)[op.sliceKey];
     if (!slice || !slice.lastRequest) {
         return false;
     }
@@ -70,11 +70,11 @@ export function rerunLastRequest(ctx: EffectCtx<Record<string, OpSliceLike>>, op
     return true;
 }
 
-export function reloadLastList(ctx: EffectCtx<Record<string, CollectionStateLike>>, resource: ResourceCollectionFactoryLike, { when }: { when?: (payload: unknown) => boolean } = {}): boolean {
+export function reloadLastList(ctx: EffectCtx, resource: ResourceCollectionFactoryLike, { when }: { when?: (payload: unknown) => boolean } = {}): boolean {
     if (!resource || resource.kind !== 'resource-collection') {
         throw new Error('reloadLastList: resource-collection factory required');
     }
-    const slice = ctx.getState()[resource.sliceKey];
+    const slice = (ctx.getState() as Record<string, CollectionStateLike | undefined>)[resource.sliceKey];
     if (!slice || !slice.lastListQuery) {
         return false;
     }

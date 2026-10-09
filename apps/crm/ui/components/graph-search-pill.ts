@@ -1,0 +1,304 @@
+/**
+ * graph-search-pill — поиск + режим (text/semantic/hybrid) + minScore + view-mode
+ * (influence/related/path) для граф-страницы.
+ *
+ * Композиционный child-компонент: эмитит DOM-события `search-input`, `search-clear`,
+ * `search-submit`, `search-mode-change`, `min-score-change`, `mode-change`, `refresh`.
+ */
+
+import { html, css } from 'lit';
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import '@platform/lib/components/platform-icon.js';
+import type {
+    CSSResultGroup,
+    PropertyDeclarations,
+    TemplateResult,
+} from 'lit';
+
+const SEARCH_MODES = ['text', 'semantic', 'hybrid'];
+
+export class CRMGraphSearchPill extends PlatformElement {
+    static i18nNamespace = 'crm';
+
+    static override properties: PropertyDeclarations = {
+        query: { type: String },
+        viewMode: { type: String, attribute: 'view-mode' },
+        modes: { type: Array },
+        searchMode: { type: String, attribute: 'search-mode' },
+        minScore: { type: Number, attribute: 'min-score' },
+    };
+    declare query: string;
+    declare viewMode: string;
+    declare modes: string[];
+    declare searchMode: string;
+    declare minScore: number;
+
+    static override styles: CSSResultGroup = [
+        PlatformElement.styles,
+        css`
+            :host {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                pointer-events: none;
+            }
+
+            .pill {
+                display: flex;
+                align-items: center;
+                gap: 0;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: 999px;
+                overflow: hidden;
+                pointer-events: auto;
+                backdrop-filter: blur(6px);
+            }
+
+            .pill input {
+                border: none;
+                background: transparent;
+                color: var(--text-primary);
+                font-size: 13px;
+                padding: 8px 14px;
+                width: 180px;
+                outline: none;
+            }
+
+            .pill input::placeholder { color: var(--text-tertiary); }
+
+            .pill-icon-btn {
+                width: 32px;
+                height: 32px;
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            .pill-icon-btn:hover { color: var(--text-primary); }
+
+            .mode-pills {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                pointer-events: auto;
+            }
+
+            .mode-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 5px 10px;
+                border-radius: 999px;
+                border: 1px solid var(--glass-border-subtle);
+                background: var(--glass-solid-subtle);
+                backdrop-filter: blur(6px);
+                color: var(--text-secondary);
+                font-size: 12px;
+                cursor: pointer;
+                transition: background 0.14s, color 0.14s;
+            }
+
+            .mode-pill:hover {
+                background: var(--glass-solid-medium);
+                color: var(--text-primary);
+            }
+
+            .mode-pill.active {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--text-primary);
+            }
+
+            .search-mode-toggle {
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                pointer-events: auto;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: 999px;
+                padding: 2px;
+                backdrop-filter: blur(6px);
+            }
+
+            .search-mode-btn {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 9px;
+                border-radius: 999px;
+                border: none;
+                background: transparent;
+                color: var(--text-secondary);
+                font-size: 11px;
+                cursor: pointer;
+                transition: background 0.14s, color 0.14s;
+            }
+
+            .search-mode-btn:hover {
+                color: var(--text-primary);
+                background: var(--glass-solid-medium);
+            }
+
+            .search-mode-btn.active {
+                background: var(--accent-subtle);
+                color: var(--text-primary);
+            }
+
+            .score-threshold {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                pointer-events: auto;
+                background: var(--glass-solid-subtle);
+                border: 1px solid var(--glass-border-subtle);
+                border-radius: 999px;
+                padding: 4px 12px;
+                backdrop-filter: blur(6px);
+            }
+
+            .score-threshold-label {
+                font-size: 11px;
+                color: var(--text-secondary);
+                white-space: nowrap;
+                min-width: 30px;
+                text-align: right;
+            }
+
+            .score-threshold input[type="range"] {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 72px;
+                height: 3px;
+                border-radius: 2px;
+                background: var(--glass-border-subtle);
+                outline: none;
+                cursor: pointer;
+            }
+
+            .score-threshold input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                background: var(--accent);
+                cursor: pointer;
+            }
+
+            @media (max-width: 1199px) {
+                .pill input { width: 140px; }
+            }
+
+            @media (max-width: 767px) {
+                :host { flex-wrap: wrap; }
+                .pill input { width: 100px; }
+                .mode-pills { gap: 3px; }
+                .mode-pill { font-size: 11px; padding: 4px 8px; }
+            }
+        `,
+    ];
+
+    constructor() {
+        super();
+        this.query = '';
+        this.viewMode = 'influence';
+        this.modes = ['influence', 'related', 'path'];
+        this.searchMode = 'hybrid';
+        this.minScore = 0.0;
+    }
+
+    _onInput(e: Event) {
+        this.emit('search-input', { query: (e.target as HTMLInputElement).value });
+    }
+
+    _onKeydown(e: KeyboardEvent) {
+        if (e.key === 'Escape') {
+            this.emit('search-clear');
+        }
+        if (e.key === 'Enter') {
+            this.emit('search-submit');
+        }
+    }
+
+    _onSearchModeChange(mode: string) {
+        this.emit('search-mode-change', { mode });
+    }
+
+    _onMinScoreChange(e: Event) {
+        this.emit('min-score-change', { minScore: parseFloat((e.target as HTMLInputElement).value) });
+    }
+
+    _onClear() {
+        this.emit('search-clear');
+    }
+
+    _onRefresh() {
+        this.emit('refresh');
+    }
+
+    _onModeChange(mode: string) {
+        this.emit('mode-change', { mode });
+    }
+
+    override render(): TemplateResult {
+        const hasQuery = this.query.trim().length > 0;
+
+        return html`
+            <div class="pill">
+                <input
+                    type="text"
+                    data-canon="search-as-you-type"
+                    .value=${this.query}
+                    placeholder=${this.t('graph.search_placeholder_short')}
+                    @input=${this._onInput}
+                    @keydown=${this._onKeydown}
+                />
+                ${hasQuery
+                    ? html`<button class="pill-icon-btn" type="button" title=${this.t('graph.search_clear')} @click=${this._onClear}>
+                        <platform-icon name="close" size="16"></platform-icon>
+                    </button>`
+                    : html`<button class="pill-icon-btn" type="button" title=${this.t('graph.search_refresh_graph')} @click=${this._onRefresh}>
+                        <platform-icon name="refresh" size="16"></platform-icon>
+                    </button>`
+                }
+            </div>
+            <div class="score-threshold" title=${this.t('graph.search_min_score')}>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    .value=${String(this.minScore)}
+                    @input=${this._onMinScoreChange}
+                />
+                <span class="score-threshold-label">≥ ${Math.round(this.minScore * 100)}%</span>
+            </div>
+            <div class="search-mode-toggle">
+                ${SEARCH_MODES.map((mode) => html`
+                    <button
+                        class="search-mode-btn ${this.searchMode === mode ? 'active' : ''}"
+                        type="button"
+                        title=${this.t(`graph.search_mode_${mode}`)}
+                        @click=${() => this._onSearchModeChange(mode)}
+                    >${this.t(`entities.search_modes.${mode}`)}</button>
+                `)}
+            </div>
+            <div class="mode-pills">
+                ${this.modes.map((mode) => html`
+                    <button
+                        class="mode-pill ${this.viewMode === mode ? 'active' : ''}"
+                        type="button"
+                        @click=${() => this._onModeChange(mode)}
+                    >${this.t(`graph.view_mode_${mode}`)}</button>
+                `)}
+            </div>
+        `;
+    }
+}
+
+customElements.define('crm-graph-search-pill', CRMGraphSearchPill);
