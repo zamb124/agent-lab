@@ -46,6 +46,7 @@ interface WikiRevisionItem {
 }
 import { platformConfirm } from '@platform/lib/components/platform-confirm-modal.js';
 import { formatPlatformDateTime } from '@platform/lib/utils/format-platform-date.js';
+import { isPlainRecord } from '@platform/lib/events/payload.js';
 import '@platform/lib/components/glass-spinner.js';
 import '@platform/lib/components/platform-button.js';
 import '@platform/lib/components/platform-icon.js';
@@ -55,6 +56,20 @@ import '@platform/lib/components/platform-user-chip.js';
 function missingAsEmpty(value: unknown): string {
     if (value === undefined || value === null) return '';
     return String(value);
+}
+
+function itemRecords(value: unknown, label: string): Record<string, unknown>[] {
+    if (!isPlainRecord(value) || !Array.isArray(value.items)) {
+        throw new Error(`${label}: lastResult.items required`);
+    }
+    const items: Record<string, unknown>[] = [];
+    for (const item of value.items) {
+        if (!isPlainRecord(item)) {
+            throw new Error(`${label}: item must be an object`);
+        }
+        items.push(item);
+    }
+    return items;
 }
 
 
@@ -430,19 +445,16 @@ export class WikiPagePanel extends PlatformElement {
     // --- обратные ссылки ---
 
     private _renderBacklinks() {
-        const result = this._backlinks.lastResult as { items?: unknown } | null;
+        const result = this._backlinks.lastResult;
         if (result === null) {
             return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
         }
-        if (typeof result !== 'object' || !Array.isArray(result.items)) {
-            throw new Error('wiki backlinks: lastResult.items required');
-        }
-        const links = result.items as WikiBacklinkItem[];
+        const links = itemRecords(result, 'wiki backlinks');
         if (links.length === 0) {
             return html`<div class="muted">${this.t('page.backlinks_empty')}</div>`;
         }
         return html`
-            ${links.map((link: WikiBacklinkItem) => html`
+            ${links.map((link) => html`
                 <a
                     class="backlink"
                     data-wiki-backlink=${link.wiki_page_id}
@@ -454,15 +466,12 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- комментарии ---
 
-    private _commentItems(): WikiCommentItem[] {
-        const result = this._commentsOp.lastResult as { items?: unknown } | null;
+    private _commentItems(): Record<string, unknown>[] {
+        const result = this._commentsOp.lastResult;
         if (result === null) {
             return [];
         }
-        if (typeof result !== 'object' || !Array.isArray(result.items)) {
-            throw new Error('wiki comments: lastResult.items required');
-        }
-        return result.items as WikiCommentItem[];
+        return itemRecords(result, 'wiki comments');
     }
 
     private async _sendComment(): Promise<void> {
@@ -511,7 +520,13 @@ export class WikiPagePanel extends PlatformElement {
                     aria-label=${this.t('page.comment_placeholder')}
                     placeholder=${this.t('page.comment_placeholder')}
                     .value=${this._commentDraft}
-                    @input=${(event: Event) => { this._commentDraft = (event.target as HTMLTextAreaElement).value; }}
+                    @input=${(event: Event) => {
+                        const input = event.target;
+                        if (!(input instanceof HTMLTextAreaElement)) {
+                            throw new Error('wiki-page-panel: comment input required');
+                        }
+                        this._commentDraft = input.value;
+                    }}
                 ></textarea>
                 <button class="ghost-btn" type="button" data-wiki-comment-send @click=${() => this._sendComment()}>
                     ${this.t('page.comment_send')}
@@ -522,15 +537,12 @@ export class WikiPagePanel extends PlatformElement {
 
     // --- история версий ---
 
-    private _revisionItems(): WikiRevisionItem[] {
-        const result = this._revisions.lastResult as { items?: unknown } | null;
+    private _revisionItems(): Record<string, unknown>[] {
+        const result = this._revisions.lastResult;
         if (result === null) {
             return [];
         }
-        if (typeof result !== 'object' || !Array.isArray(result.items)) {
-            throw new Error('wiki revisions: lastResult.items required');
-        }
-        return result.items as WikiRevisionItem[];
+        return itemRecords(result, 'wiki revisions');
     }
 
     private async _selectRevision(revisionId: string): Promise<void> {
@@ -557,7 +569,7 @@ export class WikiPagePanel extends PlatformElement {
             return html`<div class="muted">${this.t('history.empty')}</div>`;
         }
         return html`
-            ${revisions.map((revision: WikiRevisionItem) => html`
+            ${revisions.map((revision) => html`
                 <button
                     class="revision ${revision.wiki_revision_id === this._selectedRevisionId ? 'is-selected' : ''}"
                     type="button"
@@ -580,7 +592,7 @@ export class WikiPagePanel extends PlatformElement {
         if (this._revisionRead.busy) {
             return html`<div class="muted"><glass-spinner size="sm"></glass-spinner></div>`;
         }
-        const revision = this._revisionRead.lastResult as { text_markdown?: unknown } | null;
+        const revision = isPlainRecord(this._revisionRead.lastResult) ? this._revisionRead.lastResult : null;
         if (!revision) {
             return nothing;
         }
